@@ -189,7 +189,7 @@ def test_start_batch_run_leaves_no_trajectory_file_open(
 
     Run under `engine_backend="generational"` so the replicate stores are
     built in this process, where they can be inspected; a `lineal` batch
-    builds them in worker processes (they close in `fim.engine._run_one`).
+    builds them in worker processes (they close in `fim.engine.lineal.run_one`).
     """
     params = replace(batch_params, engine_backend="generational")
     output_directory = tmp_path / "batch"
@@ -314,7 +314,7 @@ def test_start_batch_run_prunes_orphan_replicate_directories(
     Direct mirror of `cli.py`'s own
     `test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_
     directories`: under real parallelism,
-    `fim.engine._run_batch_parallel` applies an adaptive
+    `fim.engine.lineal.run_batch_parallel` applies an adaptive
     early stop only after a whole concurrent worker wave
     completes, in ascending replicate order — a worker beyond the
     replicate that triggered the stop still runs to completion and fully

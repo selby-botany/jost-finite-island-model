@@ -289,7 +289,7 @@ completely ordinary, successful operation.
 
 ## 9. Performance discipline
 
-`fim.engine._run_one`'s own generation loop (`doc/fim-simulator-
+`fim.engine.lineal.run_one`'s own generation loop (`doc/fim-simulator-
 design.md` §5) is the single hottest path in this codebase — a large
 run advances thousands of generations, each doing real array work.
 Two rules keep logging from measurably slowing it down:
@@ -336,7 +336,7 @@ actual call sites were read rather than assumed from their names:
 
 - **The finite-alleles-capacity and unpicklable-argument guards
   (`fim.model.allele.FiniteAlleleRegistry`/`FiniteAlleleSpace`,
-  `fim.engine._require_picklable`) stay hard errors, never
+  `fim.engine.lineal.require_picklable`) stay hard errors, never
   `warnings.warn`.** Each one raises `ValueError`/`RuntimeError`
   precisely because the run cannot correctly continue past it (an
   overrun finite-allele capacity, an argument that cannot cross a

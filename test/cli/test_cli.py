@@ -1522,7 +1522,7 @@ def test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_directories
 ) -> None:
     """A parallel batch's published `replicate-*` set exactly matches the manifest.
 
-    Regression test for S1: `fim.engine._run_batch_parallel` applies an
+    Regression test for S1: `fim.engine.lineal.run_batch_parallel` applies an
     adaptive early stop only after a whole concurrent
     worker batch completes, in ascending replicate order — a worker
     beyond the replicate that triggered the stop still runs to

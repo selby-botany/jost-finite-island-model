@@ -354,7 +354,7 @@ descriptor live from the first frame to `close`, so the lifecycle rules matter:
   progress. `close` is optional on the protocol (`ClosableStore`,
   `fim.persistence.store.close_store`); `InMemoryTrajectoryStore` has a
   no-op one.
-- The engine closes what it writes: `fim.engine._run_one` closes the store
+- The engine closes what it writes: `fim.engine.lineal.run_one` closes the store
   when a replicate ends (or raises), `ReplicateFanoutStore.close_run` closes
   a generational lane's store the moment it finishes (a batch holds open
   only its running lanes, so a large batch cannot exhaust file descriptors),

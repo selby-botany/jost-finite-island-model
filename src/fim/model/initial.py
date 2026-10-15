@@ -311,7 +311,7 @@ class EquilibriumSplitInitialCondition:
     seed, so a batch's replicates stay genuinely independent trials.
 
     Supports `mutation_model="infinite_alleles"` (the default) only.
-    `"finite_alleles"` needs `fim.engine._build_finite_allele_spaces`,
+    `"finite_alleles"` needs `fim.engine.lanes.build_finite_allele_spaces`,
     which `fim.engine` itself imports `generate_initial_state` from this
     module — importing it back here would be circular. Raises a clear
     `ValueError` for that combination rather than silently ignoring the

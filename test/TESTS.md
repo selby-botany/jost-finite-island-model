@@ -1815,7 +1815,7 @@ def test_launcher_honors_fim_logging_config_over_fim_log_level(
 log_level`'s own equivalent test, this one *must* stub it: the real
 `gui_main` reconfigures logging all over again from `FIM_LOG_LEVEL`
 directly when called with no `--logging-config` argv of its own
-(`_launch_gui`'s own `gui_main([])` call), which would both open a
+(`launch_gui`'s own `gui_main([])` call), which would both open a
 real window and (since `FIM_LOG_LEVEL="verbose"` here is otherwise
 invalid) mask this dispatcher's own first, correct configuration
 with a second, failing one -- caught the hard way, confirmed live,
@@ -5317,7 +5317,7 @@ def test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_directories
 
 A parallel batch's published `replicate-*` set exactly matches the manifest.
 
-Regression test for S1: `fim.engine._run_batch_parallel` applies an
+Regression test for S1: `fim.engine.lineal.run_batch_parallel` applies an
 adaptive early stop only after a whole concurrent
 worker batch completes, in ascending replicate order — a worker
 beyond the replicate that triggered the stop still runs to
@@ -6050,7 +6050,7 @@ def test_batch_run_closes_every_replicates_handles(
 A `fim run` batch closes every replicate's handles on each engine path.
 
 A `--workers` batch builds its stores in worker processes, which this
-process cannot see; those close in `fim.engine._run_one`, which the
+process cannot see; those close in `fim.engine.lineal.run_one`, which the
 engine-level tests in `test/persistence/test_jsonl_lifecycle.py` cover.
 
 
@@ -7923,7 +7923,7 @@ def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows(
 
 No abandoned lane's own rows survive an adaptive stop in a shared store.
 
-Regression test for `FIM-49`: `_build_replica_lane` writes each
+Regression test for `FIM-49`: `build_replica_lane` writes each
 lane's own generation zero eagerly, before `run_batch`'s own
 generation-first loop ever runs — so even a lane the loop never
 gets to advance at all (never finalized, no `RunResult`) still has
@@ -7944,7 +7944,7 @@ def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
 
 Regression test for `FIM-45`/`FIM-48`: `run_batch` now builds lanes
 lazily, only as an earlier lane's own slot frees up, rather than all
-`n_replicates` of them up front. Instruments `_build_replica_lane`/
+`n_replicates` of them up front. Instruments `build_replica_lane`/
 `_finalize_replica_lane` (both still calling through to the real
 implementation) to track the running "built but not yet finalized"
 count directly, rather than trusting only the final result count —
@@ -8139,7 +8139,7 @@ A statistic shorter than `convergence_generations` is dropped, not guessed at.
 
 `ConvergenceMonitor.record` can genuinely omit one tracked statistic
 on some round without omitting the others (`G_ST`, whenever every
-tracked locus is currently monomorphic -- `_convergence_values`'s
+tracked locus is currently monomorphic -- `convergence_values`'s
 own docstring), leaving that one statistic's own history shorter
 than `convergence_generations` for that one replicate. Without a
 per-statistic generation list (`ConvergenceMonitor` does not track
@@ -8182,7 +8182,7 @@ def test_parallel_batch_derives_valid_seeds_at_the_seed_zero_boundary(
 The `max_workers` batch path derives the same boundary seeds.
 
 Parallel replicates are constructed identically to the sequential
-loop (`fim.engine._run_batch_parallel`) but cross a process
+loop (`fim.engine.lineal.run_batch_parallel`) but cross a process
 boundary, so this is checked independently rather than assumed to
 follow from the sequential case above.
 
@@ -8854,7 +8854,7 @@ def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses(
 
 The convergence monitor's own `D`/`G_ST` match `report_for_state`'s, always.
 
-Before this fix, `_convergence_values` (and its vectorized
+Before this fix, `convergence_values` (and its vectorized
 counterpart) always aggregated `D`/`G_ST` across loci via a plain
 per-locus mean (`"mean_of_ratios"`), regardless of `params.
 locus_aggregation` — `report_for_state`'s own `D`/`G_ST` fields, by
@@ -8880,7 +8880,7 @@ def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None
 
 The array-native convergence path gets the identical `FIM-10` fix.
 
-`_convergence_values_vectorized` shares `_watched_statistic_values`
+`convergence_values_vectorized` shares `_watched_statistic_values`
 with the dict-based path above — this only needs to confirm the
 `VectorBlock`-specific plumbing (the kernel's per-locus table and its
 own aggregation) agrees with it, not re-litigate the aggregation math
@@ -8895,7 +8895,7 @@ def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
         monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-`_convergence_values` never computes `E_ST`/`K_ST` when nothing watches them.
+`convergence_values` never computes `E_ST`/`K_ST` when nothing watches them.
 
 `FIM-24`/`FIM-32` (Phase 7 item 4,
 `20260904-claude-sonnet-5-fim-engine-review-remediations.md`): an
@@ -8919,7 +8919,7 @@ def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watche
 The array-native convergence path gets the identical `FIM-24`/`FIM-32` fix.
 
 Mirrors `test_convergence_values_skips_e_st_and_k_st_when_only_d_
-is_watched` above, through `_convergence_values_vectorized` instead
+is_watched` above, through `convergence_values_vectorized` instead
 — proves the array-native path skips the same
 work, not just the dict-based path.
 
@@ -9440,7 +9440,7 @@ def test_build_engine_backend_generational_vector_requires_numba(
 
 A numba-less install fails at config time, not on the first `advance()`.
 
-Monkeypatches `fim.engine._numba_is_available` directly rather than
+Monkeypatches `fim.engine.backends.numba_is_available` directly rather than
 actually uninstalling numba from the test environment — see that
 function's own docstring for why it exists as a separate, mockable
 unit. Before this guard existed, `build_engine_backend` happily
@@ -9479,7 +9479,7 @@ def test_build_engine_backend_generational_vector_accepts_numba_present(
 
 The positive case, alongside the two negative ones above.
 
-Confirms the new `_numba_is_available` guard is not itself firing a
+Confirms the new `numba_is_available` guard is not itself firing a
 false positive in this dev environment's own normal state (numba
 installed, per `pip install fim[jit]`) — without this, the two
 monkeypatched tests above could both pass for the wrong reason if the
@@ -9783,7 +9783,7 @@ def test_fim_streams_the_ancestral_phase_beside_the_trajectory(
 An equilibrium-split run writes `equilibrium_trajectory.tlog`.
 
 Both engine paths that support equilibrium-split (`_run_one` and
-`_build_replica_lane`) write it, beside `trajectory.tlog`, in the
+`build_replica_lane`) write it, beside `trajectory.tlog`, in the
 same row schema: the one ancestral deme at every generation of its
 own counter, `0` through `equilibrium_generation_count`, ending on
 exactly the heterozygosity the manifest records for the split.
@@ -10163,7 +10163,7 @@ this also exercises a real multi-generation, multi-replicate batch end
 to end, not a mocked-out one.
 
 `lane.state` (`ModelState`) itself is checked too: it must stay
-exactly the generation-zero object `_build_replica_lane` built,
+exactly the generation-zero object `build_replica_lane` built,
 completely untouched, for every tick before a lane stops — proof
 that nothing mid-run reassigns it via some other path than the one
 counted call above.
@@ -12998,7 +12998,7 @@ Both answers are reported honestly, without uninstalling anything.
 
 Exercises approach A3's own real case — a source checkout installed
 without the `[jit]` extra — through the monkeypatch hook
-`fim.engine._numba_is_available`'s own docstring exists to provide.
+`fim.engine.backends.numba_is_available`'s own docstring exists to provide.
 A `from ... import` of that function in `fim.gui.app` would bind a
 copy at import time and silently defeat this; going through the
 module does not, which is exactly what this parametrization proves.
@@ -15796,7 +15796,7 @@ def test_main_honors_fim_logging_config_env_var_with_no_flag(
 
 `FIM_LOGGING_CONFIG` alone (no `--logging-config`) is honored.
 
-Regression test: `_launch_gui`'s own `gui_main([])` call means
+Regression test: `launch_gui`'s own `gui_main([])` call means
 `arguments.logging_config` is always `None` for every `fim.launcher`-
 dispatched GUI launch -- before this env-var check existed here,
 that call path silently reconfigured logging from `FIM_LOG_LEVEL`
@@ -16597,7 +16597,7 @@ A finished GUI batch has closed every replicate's trajectory handle.
 
 Run under `engine_backend="generational"` so the replicate stores are
 built in this process, where they can be inspected; a `lineal` batch
-builds them in worker processes (they close in `fim.engine._run_one`).
+builds them in worker processes (they close in `fim.engine.lineal.run_one`).
 
 <a id="gui.test_batch_runner.test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success"></a>
 
@@ -16652,7 +16652,7 @@ The published `replicate-*` set matches the manifest, adaptive stop included.
 Direct mirror of `cli.py`'s own
 `test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_
 directories`: under real parallelism,
-`fim.engine._run_batch_parallel` applies an adaptive
+`fim.engine.lineal.run_batch_parallel` applies an adaptive
 early stop only after a whole concurrent worker wave
 completes, in ascending replicate order — a worker beyond the
 replicate that triggered the stop still runs to completion and fully
@@ -20708,7 +20708,7 @@ the two shapes can differ row by row:
 - An interval carrying neither states neither, falling back to
   exactly the `mean [low, high] -- caption` text this project
   already shipped. `fim.gui.app._interval_payload` omits the two keys
-  together for an interval built by `fim.engine._bootstrap_interval`,
+  together for an interval built by `fim.engine.summary._bootstrap_interval`,
   whose own `half_width` is "a symmetrized summary kept only for
   display consistency" rather than the authoritative interval shape
   — so stating it would state something its own constructor
@@ -25513,7 +25513,7 @@ this needs a real pywebview window.
 Before `_install_shutdown_signal_handlers` existed, none of these three
 signals had any handler at all, so each one terminated the process
 immediately -- no Python code ran, not even a `finally` block, and any
-live `ProcessPoolExecutor` batch worker (`fim.engine._run_batch_parallel`)
+live `ProcessPoolExecutor` batch worker (`fim.engine.lineal.run_batch_parallel`)
 was simply abandoned as an orphan (investigation recorded in
 `20260928-claude-sonnet-5-shutdown-signal-handling-design.md`,
 `selby/restricted`). The end-to-end test below sends a real `SIGTERM` to
@@ -25901,7 +25901,7 @@ def test_live_progress_store_is_picklable(tmp_path: Path) -> None
 
 `LiveProgressStore` survives a real pickle round trip.
 
-The exact property `fim.engine._require_picklable` checks on a
+The exact property `fim.engine.lineal.require_picklable` checks on a
 `store_factory` before ever spawning a `ProcessPoolExecutor` worker
 — a `LiveProgressStore` built inside one worker never itself crosses
 the process boundary, but this proves the class *could*, and is a
@@ -28504,7 +28504,7 @@ They joined `_CONVERGENCE_STATISTICS` on a real, reported request,
 reversing this same session's own earlier choice to exclude them as
 display-only "bonus" measurements with no convergence claim
 attached — same real, generation-scale compute cost either way
-(`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`'s own docstring), so
+(`fim.engine.tracking._EXPENSIVE_OPT_IN_STATISTICS`'s own docstring), so
 watching one of them for convergence, not merely opting into its
 display, is a choice this project leaves to the caller.
 
@@ -31621,7 +31621,7 @@ A zero-size deme is a named `ValueError`, not a silent `NaN`.
 
 `counts / sizes[:, None]` divides by `0` for that deme whenever
 `sizes` contains a non-positive entry — `fim.model.operators.drift`'s
-own dict-based path already rejects this via `_population_sizes`;
+own dict-based path already rejects this via `expand_population_sizes`;
 this function took `sizes` directly, unvalidated (this project's own
 multi-model engine review, 2026-09-04, `FIM-15`). Unreachable via a
 validated `SimulationParams` (every `N` value must be a positive
@@ -37400,7 +37400,7 @@ def test_manifest_auto_derived_fields_default_to_none_and_round_trip(
 
 `auto_derived`/`relaxation_time` round-trip, `None` for an older manifest.
 
-For the two fields `fim.engine._run_one`/
+For the two fields `fim.engine.lineal.run_one`/
 `_finalize_replica_lane` stamp from `SimulationParams.auto_derived`/
 `relaxation_time` so a reopened run can recover whether its own
 `convergence_window`/`max_generations` were auto-derived
@@ -40626,7 +40626,7 @@ names `engine_backend: auto`, the choice the botanist is encouraged to use,
 unless the point of the example is to show one engine. The committed output
 was produced by the backend `auto` resolved to (the manifests record it).
 
-`auto` never resolves to `lineal` (`fim.engine._resolve_auto_engine_backend`),
+`auto` never resolves to `lineal` (`fim.engine.backends.resolve_auto_engine_backend`),
 but `generational` and `generational-vector` reproduce `lineal` bit for bit
 for the same seed under either mutation model, adaptive batches included
 (`GenerationalBackend`'s own docstring and `test/engine/test_vector_parity.py`).

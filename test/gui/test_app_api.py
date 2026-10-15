@@ -29,7 +29,6 @@ from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
 from fim import cli, paths, update
-from fim import engine as engine_module
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.limits import MAXIMUM_RECURSION_DEMES
 from fim.engine import (
@@ -39,6 +38,7 @@ from fim.engine import (
     replicate_summary,
     report_for_state,
 )
+from fim.engine import backends as engine_backends
 from fim.engine import fim as engine_fim
 from fim.gui import app as app_module
 from fim.gui import batch_runner
@@ -602,7 +602,7 @@ def test_get_default_max_workers_matches_batch_runner_directly() -> None:
 def test_get_engine_backend_availability_matches_the_engine_probe_directly() -> None:
     """The selector's numba answer is `fim.engine`'s own, never a second probe."""
     assert Api().get_engine_backend_availability() == {
-        "numba": engine_module._numba_is_available()
+        "numba": engine_backends.numba_is_available()
     }
 
 
@@ -614,13 +614,13 @@ def test_get_engine_backend_availability_follows_a_numba_less_install(
 
     Exercises approach A3's own real case — a source checkout installed
     without the `[jit]` extra — through the monkeypatch hook
-    `fim.engine._numba_is_available`'s own docstring exists to provide.
+    `fim.engine.backends.numba_is_available`'s own docstring exists to provide.
     A `from ... import` of that function in `fim.gui.app` would bind a
     copy at import time and silently defeat this; going through the
     module does not, which is exactly what this parametrization proves.
     """
     monkeypatch.setattr(
-        engine_module, "_numba_is_available", lambda: available, raising=True
+        engine_backends, "numba_is_available", lambda: available, raising=True
     )
 
     assert Api().get_engine_backend_availability() == {"numba": available}
@@ -5313,7 +5313,7 @@ def test_main_honors_fim_logging_config_env_var_with_no_flag(
 ) -> None:
     """`FIM_LOGGING_CONFIG` alone (no `--logging-config`) is honored.
 
-    Regression test: `_launch_gui`'s own `gui_main([])` call means
+    Regression test: `launch_gui`'s own `gui_main([])` call means
     `arguments.logging_config` is always `None` for every `fim.launcher`-
     dispatched GUI launch -- before this env-var check existed here,
     that call path silently reconfigured logging from `FIM_LOG_LEVEL`

@@ -170,8 +170,8 @@ import numpy as np
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.operators import (
-    _GRID_TOLERANCE,
-    _jit_mutate_event_counts_batched,
+    GRID_TOLERANCE,
+    jit_mutate_event_counts_batched,
 )
 from fim.model.state import ModelState
 
@@ -993,7 +993,7 @@ def mutate_vectorized(
         return locus_state
     scaled = locus_state.frequencies * sizes[:, None]
     counts = np.rint(scaled).astype(np.int64)
-    if np.any(np.abs(scaled - counts) > _GRID_TOLERANCE) or np.any(
+    if np.any(np.abs(scaled - counts) > GRID_TOLERANCE) or np.any(
         counts.sum(axis=1) != sizes
     ):
         raise ValueError(
@@ -1011,7 +1011,7 @@ def mutate_vectorized(
         size = int(sizes[deme])
         present = np.flatnonzero(counts[deme])
         present_counts = counts[deme, present]
-        mutant_counts = _jit_mutate_event_counts_batched(
+        mutant_counts = jit_mutate_event_counts_batched(
             rng, present_counts, np.full(present.shape[0], rate, dtype=np.float64)
         )
         if not mutant_counts.any():

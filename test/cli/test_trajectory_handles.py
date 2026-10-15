@@ -82,7 +82,7 @@ def test_batch_run_closes_every_replicates_handles(
     """A `fim run` batch closes every replicate's handles on each engine path.
 
     A `--workers` batch builds its stores in worker processes, which this
-    process cannot see; those close in `fim.engine._run_one`, which the
+    process cannot see; those close in `fim.engine.lineal.run_one`, which the
     engine-level tests in `test/persistence/test_jsonl_lifecycle.py` cover.
     """
     config = tmp_path / "run.yaml"

@@ -754,7 +754,7 @@ def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
     - An interval carrying neither states neither, falling back to
       exactly the `mean [low, high] -- caption` text this project
       already shipped. `fim.gui.app._interval_payload` omits the two keys
-      together for an interval built by `fim.engine._bootstrap_interval`,
+      together for an interval built by `fim.engine.summary._bootstrap_interval`,
       whose own `half_width` is "a symmetrized summary kept only for
       display consistency" rather than the authoritative interval shape
       — so stating it would state something its own constructor

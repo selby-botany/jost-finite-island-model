@@ -381,7 +381,7 @@ def test_manifest_auto_derived_fields_default_to_none_and_round_trip(
 ) -> None:
     """`auto_derived`/`relaxation_time` round-trip, `None` for an older manifest.
 
-    For the two fields `fim.engine._run_one`/
+    For the two fields `fim.engine.lineal.run_one`/
     `_finalize_replica_lane` stamp from `SimulationParams.auto_derived`/
     `relaxation_time` so a reopened run can recover whether its own
     `convergence_window`/`max_generations` were auto-derived

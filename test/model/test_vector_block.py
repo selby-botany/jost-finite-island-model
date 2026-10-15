@@ -26,7 +26,7 @@ from vector_support import (
 
 pytest.importorskip("numba")
 
-from fim.engine import _build_finite_allele_spaces
+from fim.engine.lanes import build_finite_allele_spaces
 from fim.model.allele import (
     MINTED_ID_START,
     AlleleRegistry,
@@ -90,7 +90,7 @@ def _assert_block_follows_operators(params: SimulationParams, generations: int) 
     block_rng = np.random.Generator(np.random.PCG64(params.seed))
     generate_initial_state(params, block_rng)
     finite = (
-        FiniteAlleleRegistry(_build_finite_allele_spaces(state, params))
+        FiniteAlleleRegistry(build_finite_allele_spaces(state, params))
         if params.mutation_model == "finite_alleles"
         else None
     )

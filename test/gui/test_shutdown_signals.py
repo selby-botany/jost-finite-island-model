@@ -6,7 +6,7 @@ this needs a real pywebview window.
 Before `_install_shutdown_signal_handlers` existed, none of these three
 signals had any handler at all, so each one terminated the process
 immediately -- no Python code ran, not even a `finally` block, and any
-live `ProcessPoolExecutor` batch worker (`fim.engine._run_batch_parallel`)
+live `ProcessPoolExecutor` batch worker (`fim.engine.lineal.run_batch_parallel`)
 was simply abandoned as an orphan (investigation recorded in
 `20260928-claude-sonnet-5-shutdown-signal-handling-design.md`,
 `selby/restricted`). The end-to-end test below sends a real `SIGTERM` to

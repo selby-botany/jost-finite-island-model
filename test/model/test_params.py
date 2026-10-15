@@ -317,7 +317,7 @@ def test_convergence_statistic_accepts_the_expensive_bonus_measurements() -> Non
     reversing this same session's own earlier choice to exclude them as
     display-only "bonus" measurements with no convergence claim
     attached — same real, generation-scale compute cost either way
-    (`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`'s own docstring), so
+    (`fim.engine.tracking._EXPENSIVE_OPT_IN_STATISTICS`'s own docstring), so
     watching one of them for convergence, not merely opting into its
     display, is a choice this project leaves to the caller.
     """

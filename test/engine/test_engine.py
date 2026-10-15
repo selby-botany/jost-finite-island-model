@@ -27,14 +27,12 @@ from fim.engine import (
     SequentialAdvancer,
     ThreadedAdvancer,
     VectorizedAdvancer,
-    _build_replica_lane,
-    _convergence_values,
-    _convergence_values_vectorized,
     bootstrap_replicate_summary,
     build_engine_backend,
     deterministic_run_id,
     fim,
     history_free_statistic_values,
+    lanes,
     pair_statistic_values,
     pooled_convergence_histories,
     replicate_summary,
@@ -42,10 +40,14 @@ from fim.engine import (
     reports_summary,
     run_batch,
 )
+from fim.engine import backends as engine_backends
+from fim.engine import batch as engine_batch
+from fim.engine.lanes import build_replica_lane
+from fim.engine.tracking import convergence_values, convergence_values_vectorized
 from fim.model.allele import MINTED_ID_START, AlleleId
 from fim.model.initial import _mean_h_s, generate_initial_state
 from fim.model.locus import LocusSpec, finite_allele_capacity
-from fim.model.operators import _population_sizes
+from fim.model.operators import expand_population_sizes
 from fim.model.params import ConvergenceCombinator, EngineBackend, SimulationParams
 from fim.model.state import ModelState
 from fim.model.vector_block import (
@@ -63,8 +65,8 @@ from fim.persistence.store import (
 from fim.statistics import differentiation
 from fim.statistics.catalog import report_keys
 from fim.statistics.differentiation import (
-    _jost_d_from_within_and_total,
     derived_differentiation,
+    jost_d_from_within_and_total,
 )
 from fim.statistics.genetic_distance import (
     NEI_DENOMINATORS,
@@ -286,7 +288,7 @@ def test_a_generous_precision_can_stop_the_batch_before_the_cap() -> None:
 def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows() -> None:
     """No abandoned lane's own rows survive an adaptive stop in a shared store.
 
-    Regression test for `FIM-49`: `_build_replica_lane` writes each
+    Regression test for `FIM-49`: `build_replica_lane` writes each
     lane's own generation zero eagerly, before `run_batch`'s own
     generation-first loop ever runs — so even a lane the loop never
     gets to advance at all (never finalized, no `RunResult`) still has
@@ -336,7 +338,7 @@ def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
 
     Regression test for `FIM-45`/`FIM-48`: `run_batch` now builds lanes
     lazily, only as an earlier lane's own slot frees up, rather than all
-    `n_replicates` of them up front. Instruments `_build_replica_lane`/
+    `n_replicates` of them up front. Instruments `build_replica_lane`/
     `_finalize_replica_lane` (both still calling through to the real
     implementation) to track the running "built but not yet finalized"
     count directly, rather than trusting only the final result count —
@@ -354,8 +356,8 @@ def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
     concurrently_active = 0
     peak_concurrently_active = 0
     build_call_count = 0
-    real_build = engine._build_replica_lane
-    real_finalize = engine._finalize_replica_lane
+    real_build = lanes.build_replica_lane
+    real_finalize = lanes.finalize_replica_lane
 
     def _counting_build(
         params: SimulationParams,
@@ -380,8 +382,8 @@ def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
         concurrently_active -= 1
         return result
 
-    monkeypatch.setattr(engine, "_build_replica_lane", _counting_build)
-    monkeypatch.setattr(engine, "_finalize_replica_lane", _counting_finalize)
+    monkeypatch.setattr(engine_batch, "build_replica_lane", _counting_build)
+    monkeypatch.setattr(engine_batch, "finalize_replica_lane", _counting_finalize)
 
     output = fim(
         params.gene_copies, params.m, params.mu, params.d, params=params, clock=_clock
@@ -762,7 +764,7 @@ def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
 
     `ConvergenceMonitor.record` can genuinely omit one tracked statistic
     on some round without omitting the others (`G_ST`, whenever every
-    tracked locus is currently monomorphic -- `_convergence_values`'s
+    tracked locus is currently monomorphic -- `convergence_values`'s
     own docstring), leaving that one statistic's own history shorter
     than `convergence_generations` for that one replicate. Without a
     per-statistic generation list (`ConvergenceMonitor` does not track
@@ -821,7 +823,7 @@ def test_parallel_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:
     """The `max_workers` batch path derives the same boundary seeds.
 
     Parallel replicates are constructed identically to the sequential
-    loop (`fim.engine._run_batch_parallel`) but cross a process
+    loop (`fim.engine.lineal.run_batch_parallel`) but cross a process
     boundary, so this is checked independently rather than assumed to
     follow from the sequential case above.
     """
@@ -1566,7 +1568,7 @@ def test_single_statistic_report_shape_is_the_multi_statistic_special_case(
     assert result.report["converged_on"] == "D"
     assert isinstance(result.report["converged_on"], str)
     # `D`/`G_ST`/`H_S`/`H_T`/`H_ST` are always present now, regardless of
-    # what is actually watched (`fim.engine._ALWAYS_TRACKED_STATISTICS`)
+    # what is actually watched (`fim.engine.tracking.ALWAYS_TRACKED_STATISTICS`)
     # — a display-only superset of the single watched statistic (`D`
     # here), which never itself changes what `converged_on` reports.
     assert set(result.convergence_histories) == {"D", "G_ST", "H_S", "H_T", "H_ST"}
@@ -2187,7 +2189,7 @@ def _vector_block_for(state: ModelState, params: SimulationParams) -> VectorBloc
 def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses() -> None:
     """The convergence monitor's own `D`/`G_ST` match `report_for_state`'s, always.
 
-    Before this fix, `_convergence_values` (and its vectorized
+    Before this fix, `convergence_values` (and its vectorized
     counterpart) always aggregated `D`/`G_ST` across loci via a plain
     per-locus mean (`"mean_of_ratios"`), regardless of `params.
     locus_aggregation` — `report_for_state`'s own `D`/`G_ST` fields, by
@@ -2218,7 +2220,7 @@ def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses() -> None
         report = report_for_state(
             state, params, run_id="run-a", converged=False, reason="test"
         )
-        watched = _convergence_values(state, params)
+        watched = convergence_values(state, params)
         assert report["G_ST"] is not None
         assert watched["D"] == pytest.approx(report["D"])
         assert watched["G_ST"] == pytest.approx(report["G_ST"])
@@ -2227,7 +2229,7 @@ def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses() -> None
 def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
     """The array-native convergence path gets the identical `FIM-10` fix.
 
-    `_convergence_values_vectorized` shares `_watched_statistic_values`
+    `convergence_values_vectorized` shares `_watched_statistic_values`
     with the dict-based path above — this only needs to confirm the
     `VectorBlock`-specific plumbing (the kernel's per-locus table and its
     own aggregation) agrees with it, not re-litigate the aggregation math
@@ -2247,7 +2249,7 @@ def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
         state, params, run_id="run-a", converged=False, reason="test"
     )
     vectorized_state = _vector_block_for(state, params)
-    watched = _convergence_values_vectorized(vectorized_state, params)
+    watched = convergence_values_vectorized(vectorized_state, params)
     assert report["G_ST"] is not None
     assert watched["D"] == pytest.approx(report["D"])
     assert watched["G_ST"] == pytest.approx(report["G_ST"])
@@ -2256,7 +2258,7 @@ def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
 def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`_convergence_values` never computes `E_ST`/`K_ST` when nothing watches them.
+    """`convergence_values` never computes `E_ST`/`K_ST` when nothing watches them.
 
     `FIM-24`/`FIM-32` (Phase 7 item 4,
     `20260904-claude-sonnet-5-fim-engine-review-remediations.md`): an
@@ -2296,7 +2298,7 @@ def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
     monkeypatch.setattr(differentiation, "_e_st_from_demes", counting_e_st)
     monkeypatch.setattr(differentiation, "_k_st_from_demes", counting_k_st)
 
-    watched = _convergence_values(state, params)
+    watched = convergence_values(state, params)
 
     assert e_st_calls == 0
     assert k_st_calls == 0
@@ -2309,7 +2311,7 @@ def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watche
     """The array-native convergence path gets the identical `FIM-24`/`FIM-32` fix.
 
     Mirrors `test_convergence_values_skips_e_st_and_k_st_when_only_d_
-    is_watched` above, through `_convergence_values_vectorized` instead
+    is_watched` above, through `convergence_values_vectorized` instead
     — proves the array-native path skips the same
     work, not just the dict-based path.
     """
@@ -2342,7 +2344,7 @@ def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watche
     monkeypatch.setattr(differentiation, "_e_st_from_demes", counting_e_st)
     monkeypatch.setattr(differentiation, "_k_st_from_demes", counting_k_st)
 
-    watched = _convergence_values_vectorized(vectorized_state, params)
+    watched = convergence_values_vectorized(vectorized_state, params)
 
     assert e_st_calls == 0
     assert k_st_calls == 0
@@ -2373,7 +2375,7 @@ def test_convergence_values_always_includes_the_always_tracked_four() -> None:
         convergence_statistic="D",
     )
 
-    values = _convergence_values(state, params)
+    values = convergence_values(state, params)
 
     assert set(values) == {"D", "G_ST", "H_S", "H_T", "H_ST"}
 
@@ -2392,7 +2394,7 @@ def test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t() -> None:
     )
     vectorized_state = _vector_block_for(state, params)
 
-    values = _convergence_values_vectorized(vectorized_state, params)
+    values = convergence_values_vectorized(vectorized_state, params)
 
     assert set(values) == {"D", "G_ST", "H_S", "H_T", "H_ST"}
 
@@ -2438,7 +2440,7 @@ def test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched(
     monkeypatch.setattr(differentiation, "_e_st_from_demes", counting_e_st)
     monkeypatch.setattr(differentiation, "_k_st_from_demes", counting_k_st)
 
-    values = _convergence_values(state, params)
+    values = convergence_values(state, params)
 
     assert e_st_calls > 0
     assert k_st_calls > 0
@@ -2490,7 +2492,7 @@ def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
     monkeypatch.setattr(differentiation, "_e_st_from_demes", counting_e_st)
     monkeypatch.setattr(differentiation, "_k_st_from_demes", counting_k_st)
 
-    values = _convergence_values_vectorized(vectorized_state, params)
+    values = convergence_values_vectorized(vectorized_state, params)
 
     assert e_st_calls > 0
     assert k_st_calls > 0
@@ -2561,7 +2563,7 @@ def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
     monkeypatch.setattr(differentiation, "_gregorius_delta_from_demes", counting_delta)
     monkeypatch.setattr(differentiation, "_mutual_information_from_demes", counting_mi)
 
-    values = _convergence_values(state, params)
+    values = convergence_values(state, params)
 
     assert a_cgd_calls > 0
     assert delta_calls > 0
@@ -3073,7 +3075,7 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
     assert [result.run_id for result in first] == [result.run_id for result in second]
     assert len(first) == 2
     # An explicit `run_id` derives each lane's own id as `<run_id>-r<NNN>`
-    # (`_build_replica_lane`) — asserting these exact ids doubles as
+    # (`build_replica_lane`) — asserting these exact ids doubles as
     # confirmation that ties broke in ascending `replica_index` order:
     # only replicates 0 and 1 (`-r001`/`-r002`) ever got processed.
     assert [result.run_id for result in first] == ["batch-r001", "batch-r002"]
@@ -3328,7 +3330,7 @@ def test_fim_engine_backend_generational_matches_default(
     assert generational_result.final_state == lineal_result.final_state
     # The always-tracked-statistics fix (`fim.engine._ALWAYS_TRACKED_
     # STATISTICS`) reaches `"generational"`'s own per-lane monitor
-    # (`_build_replica_lane`) through the identical `_convergence_values`
+    # (`build_replica_lane`) through the identical `convergence_values`
     # call `"lineal"`'s `_run_one` already makes — no separate wiring was
     # needed for the batch/generational-backend path, confirmed here
     # rather than merely assumed.
@@ -3443,7 +3445,7 @@ def test_params_and_engine_accept_stochastic_migrants_on_the_vector_backend(
         )
     stochastic = replace(tiny_params, migrant_sampling="stochastic")
     store = InMemoryTrajectoryStore()
-    lane = _build_replica_lane(stochastic, 0, None, store, _clock)
+    lane = build_replica_lane(stochastic, 0, None, store, _clock)
     VectorizedAdvancer().advance([lane], store)
     assert lane.vectorized_state is not None
     assert lane.vectorized_state.generation == 1
@@ -3515,7 +3517,7 @@ def test_build_engine_backend_generational_vector_requires_numba(
 ) -> None:
     """A numba-less install fails at config time, not on the first `advance()`.
 
-    Monkeypatches `fim.engine._numba_is_available` directly rather than
+    Monkeypatches `fim.engine.backends.numba_is_available` directly rather than
     actually uninstalling numba from the test environment — see that
     function's own docstring for why it exists as a separate, mockable
     unit. Before this guard existed, `build_engine_backend` happily
@@ -3525,7 +3527,7 @@ def test_build_engine_backend_generational_vector_requires_numba(
     zero had already been persisted to the trajectory store (this
     project's own multi-model engine review, 2026-09-04, `FIM-01`).
     """
-    monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
+    monkeypatch.setattr(engine_backends, "numba_is_available", lambda: False)
     with pytest.raises(ValueError, match="numba"):
         build_engine_backend("generational-vector")
 
@@ -3542,7 +3544,7 @@ def test_build_engine_backend_auto_falls_back_to_generational_without_numba(
     still raises (the test above), because the caller named a backend that
     cannot run.
     """
-    monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
+    monkeypatch.setattr(engine_backends, "numba_is_available", lambda: False)
     params = replace(_finite_alleles_vector_params(d=40), mutation_model=model)
     params = replace(params, loci=(LocusSpec(1, 2),))
     backend = build_engine_backend("auto", params=params, auto_vector_min_d=35)
@@ -3553,7 +3555,7 @@ def test_build_engine_backend_auto_falls_back_to_generational_without_numba(
 def test_build_engine_backend_generational_vector_accepts_numba_present() -> None:
     """The positive case, alongside the two negative ones above.
 
-    Confirms the new `_numba_is_available` guard is not itself firing a
+    Confirms the new `numba_is_available` guard is not itself firing a
     false positive in this dev environment's own normal state (numba
     installed, per `pip install fim[jit]`) — without this, the two
     monkeypatched tests above could both pass for the wrong reason if the
@@ -3812,7 +3814,7 @@ def test_fim_engine_backend_auto_records_generational_without_numba(
     The same run, same seed: only the provenance differs from the run
     above, because Backend V and Backend G produce identical output.
     """
-    monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
+    monkeypatch.setattr(engine_backends, "numba_is_available", lambda: False)
     result = fim(
         tiny_params.gene_copies,
         tiny_params.m,
@@ -3975,7 +3977,7 @@ def test_fim_streams_the_ancestral_phase_beside_the_trajectory(
     """An equilibrium-split run writes `equilibrium_trajectory.tlog`.
 
     Both engine paths that support equilibrium-split (`_run_one` and
-    `_build_replica_lane`) write it, beside `trajectory.tlog`, in the
+    `build_replica_lane`) write it, beside `trajectory.tlog`, in the
     same row schema: the one ancestral deme at every generation of its
     own counter, `0` through `equilibrium_generation_count`, ending on
     exactly the heterozygosity the manifest records for the split.
@@ -4282,7 +4284,7 @@ def test_threaded_advancer_reuses_its_own_executor_across_ticks(
     advancer = ThreadedAdvancer(max_workers=2)
     store = InMemoryTrajectoryStore()
     lanes = [
-        _build_replica_lane(params, index, None, store, _clock)
+        build_replica_lane(params, index, None, store, _clock)
         for index in range(params.n_replicates)
     ]
 
@@ -4597,7 +4599,7 @@ def test_generational_vector_backend_bounds_capacity_and_stays_valid() -> None:
     rows = list(result.store.read(result.run_id))
     assert {int(row["allele_id"]) for row in rows} <= set(range(capacity))
     result.final_state.validate_support(
-        tuple(_population_sizes(params.gene_copies, params.d))
+        tuple(expand_population_sizes(params.gene_copies, params.d))
     )
 
 
@@ -4654,7 +4656,7 @@ def test_finalize_replica_lane_releases_vectorized_state(
     pytest.importorskip("numba")
     params = _finite_alleles_vector_params()
     had_cache_before_release = False
-    real_finalize = engine._finalize_replica_lane
+    real_finalize = lanes.finalize_replica_lane
 
     def _spying_finalize(
         lane: ReplicaLane, clock: Clock, store: TrajectoryStore
@@ -4665,7 +4667,7 @@ def test_finalize_replica_lane_releases_vectorized_state(
         assert lane.vectorized_state is None
         return result
 
-    monkeypatch.setattr(engine, "_finalize_replica_lane", _spying_finalize)
+    monkeypatch.setattr(engine_batch, "finalize_replica_lane", _spying_finalize)
 
     GenerationalBackend(VectorizedAdvancer()).run(
         params, InMemoryTrajectoryStore(), None, _clock
@@ -4761,7 +4763,7 @@ def test_vectorized_advancer_builds_a_lanes_state_only_once_each_way(
     to end, not a mocked-out one.
 
     `lane.state` (`ModelState`) itself is checked too: it must stay
-    exactly the generation-zero object `_build_replica_lane` built,
+    exactly the generation-zero object `build_replica_lane` built,
     completely untouched, for every tick before a lane stops — proof
     that nothing mid-run reassigns it via some other path than the one
     counted call above.
@@ -4793,7 +4795,7 @@ def test_vectorized_advancer_builds_a_lanes_state_only_once_each_way(
     advancer = VectorizedAdvancer()
     store = InMemoryTrajectoryStore()
     lanes = [
-        _build_replica_lane(params, index, None, store, _clock)
+        build_replica_lane(params, index, None, store, _clock)
         for index in range(params.n_replicates)
     ]
     initial_model_states = {lane.replica_index: lane.state for lane in lanes}
@@ -4846,7 +4848,7 @@ def test_vectorized_advancer_builds_a_migration_plan_once_per_lane() -> None:
     matrix = ((0.8, 0.1, 0.1), (0.1, 0.8, 0.1), (0.1, 0.1, 0.8))
     params = _finite_alleles_vector_params(m=matrix, max_generations=3)
     store = InMemoryTrajectoryStore()
-    lane = _build_replica_lane(params, 0, None, store, _clock)
+    lane = build_replica_lane(params, 0, None, store, _clock)
     advancer = VectorizedAdvancer()
 
     advancer.advance([lane], store)
@@ -4872,7 +4874,7 @@ def test_vectorized_advancer_builds_no_matrix_for_a_scalar_rate() -> None:
     pytest.importorskip("numba")
     params = _finite_alleles_vector_params(max_generations=3)
     store = InMemoryTrajectoryStore()
-    lane = _build_replica_lane(params, 0, None, store, _clock)
+    lane = build_replica_lane(params, 0, None, store, _clock)
     advancer = VectorizedAdvancer()
 
     for _ in range(3):
@@ -5243,7 +5245,7 @@ def test_a_value_of_means_batch_pools_the_identities_before_the_statistic() -> N
     windows = [r.report["window_statistics"] for r in output]
     mean_s = statistics.fmean(w["H_S"]["mean"] for w in windows)
     mean_t = statistics.fmean(w["H_T"]["mean"] for w in windows)
-    expected = _jost_d_from_within_and_total(2, mean_s, mean_t)
+    expected = jost_d_from_within_and_total(2, mean_s, mean_t)
     assert summary["D"]["mean"] == pytest.approx(expected, abs=1e-12)
     per_replicate = statistics.fmean(w["D"]["value_of_means"]["mean"] for w in windows)
     assert summary["D"]["mean"] != pytest.approx(per_replicate, abs=1e-15)

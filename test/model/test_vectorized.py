@@ -387,7 +387,7 @@ def test_drift_vectorized_rejects_a_zero_size_deme() -> None:
 
     `counts / sizes[:, None]` divides by `0` for that deme whenever
     `sizes` contains a non-positive entry — `fim.model.operators.drift`'s
-    own dict-based path already rejects this via `_population_sizes`;
+    own dict-based path already rejects this via `expand_population_sizes`;
     this function took `sizes` directly, unvalidated (this project's own
     multi-model engine review, 2026-09-04, `FIM-15`). Unreachable via a
     validated `SimulationParams` (every `N` value must be a positive

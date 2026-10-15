@@ -11,7 +11,7 @@ system, they look like nothing more than "this same program got run with
 these particular arguments (or none)." This file is the very first code
 that runs either way — its only job is figuring out which of the three
 situations just happened and handing off to the right place: the desktop
-app (`_launch_gui`) or the ordinary command-line parser
+app (`launch_gui`) or the ordinary command-line parser
 (`fim.cli.main`).
 
 The
@@ -87,13 +87,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else list(argv)
     if not arguments:
         logger.debug("dispatching to the GUI (zero-argument launch)")
-        return _launch_gui(detach=False)
+        return launch_gui(detach=False)
     if arguments == ["--graphical"]:
         logger.debug("dispatching to the GUI (--graphical)")
-        return _launch_gui(detach=False)
+        return launch_gui(detach=False)
     if arguments in (["--graphical", "--detach"], ["--detach", "--graphical"]):
         logger.debug("dispatching to the GUI (--graphical --detach)")
-        return _launch_gui(detach=True)
+        return launch_gui(detach=True)
     if "--detach" in arguments and "--graphical" not in arguments:
         # A clear, argparse-style usage error rather than a silent no-op
         # — the same pattern `run`'s existing `--workers`/`--sequential`
@@ -104,14 +104,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Deferred, not because this branch is rare (it is the most common
     # one — every ordinary `fim run`/`fim init`/... invocation reaches
     # it) but so that the GUI branches above never pay for importing
-    # `fim.cli` at all, symmetric with `_launch_gui` deferring
+    # `fim.cli` at all, symmetric with `launch_gui` deferring
     # `fim.gui.app` below for the opposite reason.
     from fim.cli import main as cli_main  # noqa: PLC0415
 
     return cli_main(arguments)
 
 
-def _launch_gui(*, detach: bool) -> int:
+def launch_gui(*, detach: bool) -> int:
     """Start the GUI, either in this process or as a detached one.
 
     "Detached" means started as its own separate, independent process

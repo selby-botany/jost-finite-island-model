@@ -1,7 +1,7 @@
 """Progress reporting and cancellation for a background run (§7 of the GUI design doc).
 
 `fim.persistence.store.TrajectoryStore` is a `Protocol` (structural
-typing, not an ABC), and `fim.engine._run_one`'s generation loop already
+typing, not an ABC), and `fim.engine.lineal.run_one`'s generation loop already
 calls `store.write_generation(...)` unconditionally, every generation,
 with no `try`/`except` around it — a clean, pre-existing extension point
 `GuiProgressStore`/`LiveProgressStore` decorate rather than a change to
@@ -358,7 +358,7 @@ def write_progress_sidecar(progress_path: Path, generation: int) -> None:
     # write_generation` (`doc/fim-logging-design.md` §9): called once
     # per generation for the life of a replicate. This runs inside a
     # `ProcessPoolExecutor` worker process for a batch replicate — see
-    # `fim.engine._run_replicate_worker`'s own docstring for why whether
+    # `fim.engine.lineal._run_replicate_worker`'s own docstring for why whether
     # this line actually reaches a handler depends on the worker's start
     # method (fork inherits the parent's configured logging; spawn does
     # not).

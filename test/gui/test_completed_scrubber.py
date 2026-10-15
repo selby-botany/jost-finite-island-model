@@ -193,7 +193,7 @@ def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
     assert at1["statDTitle"].startswith("D = ")
     assert at0["statDTitle"] != at1["statDTitle"]
     # `G_ST` is never watched here either, but it is one of the four
-    # always-tracked statistics (`fim.engine._ALWAYS_TRACKED_STATISTICS`)
+    # always-tracked statistics (`fim.engine.tracking.ALWAYS_TRACKED_STATISTICS`)
     # -- it shows a real, per-generation value too, the same shape `D`
     # does, not "not known."
     assert at0["statGSTTitle"].startswith("G_ST = ")
@@ -264,7 +264,7 @@ def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_mark
             # watched nor `track_expensive_statistics`-opted-in here) is
             # the one used for this check, not `G_ST` -- `G_ST` is one of
             # the four always-tracked statistics
-            # (`fim.engine._ALWAYS_TRACKED_STATISTICS`) and so never
+            # (`fim.engine.tracking.ALWAYS_TRACKED_STATISTICS`) and so never
             # reads "not known" at any generation any more, which would
             # otherwise spin this poll out to its own full timeout.
             # A prefix match: the title goes on to describe the

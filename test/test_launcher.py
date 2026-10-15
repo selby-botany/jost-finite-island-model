@@ -68,7 +68,7 @@ def test_launcher_dispatches_empty_argv_to_the_gui(
     status = launcher.main([])
 
     assert status == 0
-    # `[]`, not `None` -- `_launch_gui`'s own comment on why `gui_main`
+    # `[]`, not `None` -- `launch_gui`'s own comment on why `gui_main`
     # must never be left to parse the real `sys.argv` itself here (still
     # `["--graphical", ...]` at this point, which `gui_main`'s own
     # parser does not recognize).
@@ -284,7 +284,7 @@ def test_launcher_honors_fim_logging_config_over_fim_log_level(
     log_level`'s own equivalent test, this one *must* stub it: the real
     `gui_main` reconfigures logging all over again from `FIM_LOG_LEVEL`
     directly when called with no `--logging-config` argv of its own
-    (`_launch_gui`'s own `gui_main([])` call), which would both open a
+    (`launch_gui`'s own `gui_main([])` call), which would both open a
     real window and (since `FIM_LOG_LEVEL="verbose"` here is otherwise
     invalid) mask this dispatcher's own first, correct configuration
     with a second, failing one -- caught the hard way, confirmed live,

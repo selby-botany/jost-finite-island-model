@@ -9,8 +9,8 @@ point, where nothing is half-written, so a caller can observe a pause or
 cancel request and capture a checkpoint.
 
 The session reuses the generation-first lane machinery
-(`fim.engine.ReplicaLane`, `_build_replica_lane`, `SequentialAdvancer`,
-`VectorizedAdvancer`, `_finalize_replica_lane`) that the golden-parity
+(`fim.engine.ReplicaLane`, `build_replica_lane`, `SequentialAdvancer`,
+`VectorizedAdvancer`, `finalize_replica_lane`) that the golden-parity
 tests already prove is bit-identical to the lineal reference loop for the
 same seed. Every single-replicate backend is supported: ``lineal`` and
 ``generational`` step a `ModelState`; ``generational-vector`` steps a
@@ -46,19 +46,20 @@ from fim.engine import (
     RunResult,
     SequentialAdvancer,
     VectorizedAdvancer,
-    _build_replica_lane,
-    _burn_in_monitor,
-    _equilibrium_frame_layout,
-    _finalize_replica_lane,
-    _frame_layout,
-    _numba_is_available,
-    _resolve_auto_engine_backend,
-    _utc_now,
     build_engine_backend,
 )
+from fim.engine.backends import numba_is_available, resolve_auto_engine_backend
+from fim.engine.lanes import (
+    build_replica_lane,
+    equilibrium_frame_layout,
+    finalize_replica_lane,
+    frame_layout,
+)
+from fim.engine.monitors import burn_in_monitor
+from fim.engine.records import utc_now
 from fim.model.allele import AlleleRegistry
 from fim.model.initial import EquilibrationOutcome
-from fim.model.operators import _population_sizes
+from fim.model.operators import expand_population_sizes
 from fim.model.params import SimulationParams
 from fim.model.vector_block import VectorBlock, VectorMigration
 from fim.persistence import tlog
@@ -220,10 +221,10 @@ class ScalarSession:
                 itself refuses.
         """
         engine_backend = check_session_support(params)
-        run_clock = clock if clock is not None else _utc_now
+        run_clock = clock if clock is not None else utc_now
         trajectory_store = store if store is not None else InMemoryTrajectoryStore()
         try:
-            lane = _build_replica_lane(params, 0, run_id, trajectory_store, run_clock)
+            lane = build_replica_lane(params, 0, run_id, trajectory_store, run_clock)
         except BaseException:
             close_store(trajectory_store)
             raise
@@ -281,7 +282,7 @@ class ScalarSession:
                 f"{_lane_generation(lane)}, not the committed generation "
                 f"{checkpoint.reference.committed_generation}"
             )
-        run_clock = clock if clock is not None else _utc_now
+        run_clock = clock if clock is not None else utc_now
         return cls(lane, store, run_clock, backend, jit)
 
     @property
@@ -419,7 +420,7 @@ class ScalarSession:
                 f"run {self.run_id} has not stopped at generation {self.generation}"
             )
         try:
-            result = _finalize_replica_lane(self._lane, self._clock, self._store)
+            result = finalize_replica_lane(self._lane, self._clock, self._store)
         finally:
             self.close()
         self._result = replace(
@@ -585,7 +586,7 @@ def resolve_session_backend(params: SimulationParams) -> SessionBackend:
     """
     backend = params.engine_backend
     if backend == "auto":
-        backend = _resolve_auto_engine_backend(
+        backend = resolve_auto_engine_backend(
             params,
             params.auto_vector_min_d,
             params.auto_vector_max_capacity,
@@ -641,7 +642,7 @@ def check_payload_identity(
         raise SessionRestoreError(
             f"checkpoint backend {backend!r} is not one a session can resume"
         )
-    if backend == "generational-vector" and not _numba_is_available():
+    if backend == "generational-vector" and not numba_is_available():
         raise SessionRestoreError(
             "the run was started on the generational-vector backend, which "
             "needs the optional numba dependency; install it with "
@@ -731,7 +732,7 @@ def _restore_equilibration(
         raise SnapshotError("the ancestral-phase store is not a binary log")
     ancestral.resume(
         run_id,
-        _equilibrium_frame_layout(params),
+        equilibrium_frame_layout(params),
         _position_from_json(recorded.get("trajectory")),
     )
     return outcome, ancestral
@@ -773,7 +774,7 @@ def restore_lane(
     if not isinstance(run_id, str) or not isinstance(started_at, str):
         raise SnapshotError("run_id and started_at must be strings")
     rng = import_rng(payload["rng"])
-    monitor = _burn_in_monitor(params, awaiting_window=awaiting_window)
+    monitor = burn_in_monitor(params, awaiting_window=awaiting_window)
     try:
         monitor.restore_state(payload["monitor"], _select(arrays, "monitor."))
     except (ValueError, RuntimeError) as error:
@@ -800,7 +801,7 @@ def restore_lane(
     if not monitor.generations or monitor.generations[-1] != state.generation:
         raise SnapshotError("the monitor's last generation is not the population's")
     store.resume(
-        run_id, _frame_layout(params), _position_from_json(payload["trajectory"])
+        run_id, frame_layout(params), _position_from_json(payload["trajectory"])
     )
     outcome, ancestral = _restore_equilibration(params, payload, arrays, store, run_id)
     return ReplicaLane(
@@ -845,7 +846,7 @@ def _restore_block(
             metadata,
             block_arrays,
             loci=params.loci,
-            sizes=_population_sizes(params.gene_copies, deme_count),
+            sizes=expand_population_sizes(params.gene_copies, deme_count),
             mutation_rates=params.mutation_rates,
             migration=VectorMigration.from_parameter(
                 params.m,

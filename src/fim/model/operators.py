@@ -78,7 +78,7 @@ _MAX_JIT_FINITE_ALLELE_CAPACITY = 2**20
 
 # `mutate` acts on whole gene copies: a frequency times its deme's `N`
 # farther than this from a whole number is not a post-drift state.
-_GRID_TOLERANCE = 1e-6
+GRID_TOLERANCE = 1e-6
 
 
 def _inversion_binomial(rng: np.random.Generator, n: int, p: float) -> int:
@@ -823,7 +823,7 @@ def drift(
     Returns:
         The next generation with frequencies on a ``1 / N`` grid.
     """
-    sizes = _population_sizes(population_size, state.deme_count)
+    sizes = expand_population_sizes(population_size, state.deme_count)
     if jit:
         allele_ids_per_pair, ns, offsets, probabilities_flat = (
             _build_flat_drift_buffers(state, sizes)
@@ -971,7 +971,7 @@ def migrate(
                     f"entries, got {len(row)}"
                 )
     matrix_sizes: tuple[int, ...] | None = (
-        _population_sizes(population_size, state.deme_count)
+        expand_population_sizes(population_size, state.deme_count)
         if population_size is not None
         else None
     )
@@ -1091,7 +1091,7 @@ def _mutate_event_counts_batched(
     return counts
 
 
-def _jit_mutate_event_counts_batched(
+def jit_mutate_event_counts_batched(
     rng: np.random.Generator,
     ns: np.ndarray,
     ps: np.ndarray,
@@ -1128,7 +1128,7 @@ def _gene_copy_counts(
     `mutate` acts on gene copies, so its input must be a state whose
     frequencies are whole copies out of `size` — what `drift` produces
     (`count / size`). Rounding `frequency * size` recovers each count
-    exactly; anything farther than `_GRID_TOLERANCE` from a whole number,
+    exactly; anything farther than `GRID_TOLERANCE` from a whole number,
     or counts that do not add up to `size`, means the caller passed a
     continuous (pre-drift) state, which has no gene copies to mutate.
 
@@ -1153,7 +1153,7 @@ def _gene_copy_counts(
         count=len(allele_ids),
     )
     counts = np.rint(scaled).astype(np.int64)
-    if np.any(np.abs(scaled - counts) > _GRID_TOLERANCE) or int(counts.sum()) != size:
+    if np.any(np.abs(scaled - counts) > GRID_TOLERANCE) or int(counts.sum()) != size:
         raise ValueError(
             "mutate needs whole gene copies: every frequency must be a "
             f"multiple of 1/{size} (a state produced by drift)"
@@ -1293,7 +1293,7 @@ def _draw_mutant_counts(
 
     One `_inversion_binomial` draw per allele, in the given (ascending
     allele-id) order; with `jit`, the same draws through the compiled
-    `_jit_mutate_event_counts_batched` kernel in one call — identical
+    `jit_mutate_event_counts_batched` kernel in one call — identical
     counts from identical stream positions either way.
 
     Args:
@@ -1306,7 +1306,7 @@ def _draw_mutant_counts(
         One mutant count per allele, each in `[0, copy_counts[i]]`.
     """
     if jit:
-        return _jit_mutate_event_counts_batched(
+        return jit_mutate_event_counts_batched(
             rng, copy_counts, np.full(copy_counts.shape[0], rate, dtype=np.float64)
         )
     return np.fromiter(
@@ -1389,7 +1389,7 @@ def mutate(
             (`finite_alleles is None`): every `(deme, locus, allele)`
             mutant count of the whole call is drawn in one
             Numba-JIT-compiled, `nogil=True` call
-            (`_jit_mutate_event_counts_batched`), in the same
+            (`jit_mutate_event_counts_batched`), in the same
             deme-major, locus, ascending-allele order the unjitted loop
             uses, and every fresh identity the call needs is reserved in
             one `AlleleRegistry.next_k_ids` call — safe because minting
@@ -1418,7 +1418,7 @@ def mutate(
     if isinstance(mu, float) and mu == 0.0:
         return state
     mutation_rates = mu if isinstance(mu, tuple) else (mu,) * state.locus_count
-    sizes = _population_sizes(population_size, state.deme_count)
+    sizes = expand_population_sizes(population_size, state.deme_count)
 
     # Every pair's own gene-copy counts, deme-major, locus-minor,
     # alleles ascending: the visiting order of every draw below.
@@ -1447,7 +1447,7 @@ def mutate(
                 for (_ids, counts), _size, _locus, rate in pairs
             ]
         )
-        mutant_counts_flat = _jit_mutate_event_counts_batched(
+        mutant_counts_flat = jit_mutate_event_counts_batched(
             rng, copy_counts_flat, rates_flat
         )
         minted_ids = registry.next_k_ids(int(mutant_counts_flat.sum()))
@@ -2147,7 +2147,7 @@ def _normalize(
     return {allele_id: frequency / total for allele_id, frequency in positive.items()}
 
 
-def _population_sizes(
+def expand_population_sizes(
     value: PopulationSize,
     deme_count: int,
 ) -> tuple[int, ...]:

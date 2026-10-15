@@ -20,7 +20,7 @@ from fim.convergence.window_statistics import (
     select_form,
     value_of_means_statistics,
 )
-from fim.engine import _identity_statistics
+from fim.engine.tracking import identity_statistics
 from fim.model.params import SimulationParams
 
 DEMES = 4
@@ -32,7 +32,7 @@ def identity() -> dict[str, IdentityStatistic]:
     params = SimulationParams.from_mapping(
         {"N": 20, "ploidy": "haploid", "d": DEMES, "m": 0.1, "mu": 0.01, "seed": 1}
     )
-    return _identity_statistics(params)
+    return identity_statistics(params)
 
 
 def _heterozygosities(

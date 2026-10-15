@@ -25,7 +25,7 @@ SCANNED = (
     *sorted((SOURCE / "convergence").glob("*.py")),
     *sorted((SOURCE / "statistics").glob("*.py")),
     SOURCE / "model" / "params.py",
-    SOURCE / "engine.py",
+    *sorted((SOURCE / "engine").glob("*.py")),
     SOURCE / "gui" / "animation.py",
 )
 

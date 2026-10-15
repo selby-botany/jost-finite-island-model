@@ -194,7 +194,7 @@ INITIAL_CONDITIONS_FIELDS: Final[tuple[FormField, ...]] = (
 # "all six report statistics" display, `20260904-claude-sonnet-5-fim-
 # engine-review-remediations.md` Phase 7 item 4/`b12679b`'s own
 # performance split): `D`/`G_ST`/`H_S`/`H_T`/`H_ST` are always tracked
-# for free (`fim.engine._ALWAYS_TRACKED_STATISTICS`); this opts the five
+# for free (`fim.engine.tracking.ALWAYS_TRACKED_STATISTICS`); this opts the five
 # expensive ones in. Configure has no control for it: the desktop app
 # sets it from Settings' "Statistics shown" on every submission
 # (`Api._merge_default_run_settings`). It stays a plain "bool" field so

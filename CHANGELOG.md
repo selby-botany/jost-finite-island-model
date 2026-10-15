@@ -992,6 +992,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`fim.engine` is a package.** The 5,000-line `engine.py` became
+  `fim/engine/` with `records`, `identity`, `tracking`, `report`, `summary`,
+  `monitors`, `lanes`, `batch`, `lineal`, `backends`, and `api` modules. Every
+  public name is still importable from `fim.engine` (it now declares
+  `__all__`), and no trajectory, report, or manifest changed. Helpers that
+  other modules imported by an underscore name are now public in their module
+  (for example `fim.engine.lanes.build_replica_lane`,
+  `fim.engine.backends.numba_is_available`, `fim.model.operators.
+  expand_population_sizes`), and a new test (`test/test_public_surface.py`)
+  fails on any new cross-module underscore import.
 - **A run stops when its average is known to the precision you asked for:
   burn in, then average.** The old rule watched a trailing window and stopped
   when it looked flat, which a short window can do by chance: an earlier

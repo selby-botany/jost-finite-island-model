@@ -101,7 +101,7 @@ class RunManifest:
     """Capture everything needed to identify, verify, and replay a run.
 
     `artifacts` is `None` for a manifest as the engine constructs it —
-    `fim.engine._run_one` returns a `RunResult` without ever writing to
+    `fim.engine.lineal.run_one` returns a `RunResult` without ever writing to
     disk, so it cannot yet know a durable file's content digest. A
     manifest actually persisted to disk (`fim.cli._write_run_artifacts`)
     is written only once every other artifact (`trajectory.tlog`,

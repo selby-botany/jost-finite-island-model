@@ -226,12 +226,12 @@ Gregorius's delta, and Sherwin mutual information) joined this set on a
 real, reported request, reversing this same session's own earlier
 choice to keep them display-only "bonus" measurements with no
 convergence claim attached. They still cost the same real, generation-
-scale compute either way (`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`'s
+scale compute either way (`fim.engine.tracking._EXPENSIVE_OPT_IN_STATISTICS`'s
 own docstring) — watching one for convergence, not merely opting into
 its display, forces that cost on every generation of the run, exactly
 as watching `E_ST`/`K_ST` already does.
 
-`fim.engine._report_statistic` is this set's own convergence-time
+`fim.engine.tracking._report_statistic` is this set's own convergence-time
 counterpart; keep both in sync.
 """
 

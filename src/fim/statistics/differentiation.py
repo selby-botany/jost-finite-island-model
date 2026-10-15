@@ -68,12 +68,7 @@ from fim.config.numerics import (
 # frequency`'s own runtime `TypeError`. `int` frequencies stay legal
 # (mypy promotes `int` to `float`, so a deme fixed for one allele can
 # still be written `{0: 1}`), and so does `numpy.float64`, which
-# subclasses `float` — the two forms this project's own callers actually
-# produce (`fim.engine._statistics_for_locus`, `_statistics_for_locus_
-# vectorized`). The narrowing this costs is real but unexercised: a
-# `fractions.Fraction` or `numpy.float32` frequency is accepted at
-# runtime (both are `numbers.Real`) and is now a type error, and nothing
-# in `src/` or `test/` passes either.
+# subclasses `float`.
 #
 # The *key* half must stay `Any`, and that is a measured constraint
 # rather than an unfinished job: `Mapping`'s key parameter is invariant,
@@ -617,7 +612,7 @@ def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     return _h_t_from_demes(demes, weights)
 
 
-def _gd_from_within_and_total(within: float, total: float, deme_count: int) -> float:
+def gd_from_within_and_total(within: float, total: float, deme_count: int) -> float:
     """``Gd``'s own real math, given already-computed ``H_S``/``H_T``.
 
     ``Gd = (d * (1 - H_T) - (1 - H_S)) / (d - 1)`` — `dev/doc/apps/
@@ -661,7 +656,7 @@ def gs(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
 def gd(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     """Return the between-deme gene identity ``Gd`` (Ryman & Leimar's ``J_1``).
 
-    See `_gd_from_within_and_total`'s own docstring for the formula.
+    See `gd_from_within_and_total`'s own docstring for the formula.
     Needs at least two demes (the `d - 1` denominator is undefined for
     one), the same requirement `g_st`/`h_st` already carry.
     """
@@ -670,13 +665,13 @@ def gd(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     weights = _validate_weights(len(demes), deme_weights)
     within = _h_s_from_demes(demes, weights)
     total = _h_t_from_demes(demes, weights)
-    return _gd_from_within_and_total(within, total, len(demes))
+    return gd_from_within_and_total(within, total, len(demes))
 
 
 def _h_st_from_within_and_total(total: float, within: float) -> float:
     """`h_st`'s own real math, given already-computed `H_T`/`H_S`.
 
-    Split out for the identical reason `_g_st_from_demes`'s own
+    Split out for the identical reason `g_st_from_demes`'s own
     docstring gives — `statistics_report`, below, computes `H_S`/`H_T`
     once and passes the two resulting floats straight in here, rather
     than calling the public `h_st`, which would revalidate and
@@ -790,7 +785,7 @@ def within_hill_number(
     return float(power_sum ** (1.0 / (1.0 - validated_order)))
 
 
-def _g_st_from_demes(total: float, within: float) -> float | None:
+def g_st_from_demes(total: float, within: float) -> float | None:
     """`g_st`'s own real math, given already-computed `H_T`/`H_S`.
 
     Split out for the identical reason `_h_s_from_demes`'s own docstring
@@ -828,7 +823,7 @@ def g_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float | Non
     weights = _validate_weights(len(demes), deme_weights)
     within = _h_s_from_demes(demes, weights)
     total = _h_t_from_demes(demes, weights)
-    return _g_st_from_demes(total, within)
+    return g_st_from_demes(total, within)
 
 
 def d_m(table: FrequencyTable) -> float:
@@ -1100,14 +1095,12 @@ def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float:
     return g_st_value / g_st_max(h_s, deme_count)
 
 
-def _jost_d_from_within_and_total(
-    deme_count: int, within: float, total: float
-) -> float:
+def jost_d_from_within_and_total(deme_count: int, within: float, total: float) -> float:
     """`jost_d`'s own real math, given already-computed `H_S`/`H_T`.
 
-    Split out for the identical reason `_g_st_from_demes`'s own
+    Split out for the identical reason `g_st_from_demes`'s own
     docstring gives. Takes `deme_count` directly rather than the full
-    `demes` tuple `_g_st_from_demes` takes — this function's own
+    `demes` tuple `g_st_from_demes` takes — this function's own
     `d / (d - 1)` rescaling only ever needed the count, never the
     frequency content, so a caller that already has a deme count on
     hand but no reason to construct a `demes` tuple (`fim.engine.
@@ -1140,7 +1133,7 @@ def jost_d(table: FrequencyTable) -> float:
     weights = _validate_weights(len(demes), None)
     within = _h_s_from_demes(demes, weights)
     total = _h_t_from_demes(demes, weights)
-    return _jost_d_from_within_and_total(len(demes), within, total)
+    return jost_d_from_within_and_total(len(demes), within, total)
 
 
 def _e_st_from_demes(
@@ -2509,8 +2502,8 @@ def statistics_report(
         "H_S": within,
         "H_T": total,
         "H_ST": _h_st_from_within_and_total(total, within),
-        "G_ST": _g_st_from_demes(total, within),
-        "D": _jost_d_from_within_and_total(len(demes), within, total),
+        "G_ST": g_st_from_demes(total, within),
+        "D": jost_d_from_within_and_total(len(demes), within, total),
         "E_ST": e_st,
         "K_ST": _k_st_from_demes(demes) if wants_k_st else nan,
         "A_CGD": _allelic_distance_from_demes(demes) if wants_a_cgd else nan,
@@ -2525,7 +2518,7 @@ def statistics_report(
             else nan
         ),
         "Gs": (1.0 - within) if wants_gs else nan,
-        "Gd": _gd_from_within_and_total(within, total, len(demes)) if wants_gd else nan,
+        "Gd": gd_from_within_and_total(within, total, len(demes)) if wants_gd else nan,
     }
 
 

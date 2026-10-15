@@ -214,7 +214,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/fim/engine.py" = ["N803"]
+"src/fim/engine/*.py" = ["N803"]
 "dev/bin/benchmark-engines" = ["N803"]
 # `SimulationParams.__post_init__` validates every field, one at a
 # time, in one flat function by design (its own docstring: "validate

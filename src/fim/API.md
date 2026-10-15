@@ -195,42 +195,92 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [select\_form](#fim.convergence.window_statistics.select_form)
   * [value\_of\_means\_statistics](#fim.convergence.window_statistics.value_of_means_statistics)
 * [fim.engine](#fim.engine)
-  * [FinalReport](#fim.engine.FinalReport)
-  * [RunResult](#fim.engine.RunResult)
-  * [EngineBackend](#fim.engine.EngineBackend)
-    * [run](#fim.engine.EngineBackend.run)
-  * [LinealBackend](#fim.engine.LinealBackend)
-    * [\_\_init\_\_](#fim.engine.LinealBackend.__init__)
-    * [run](#fim.engine.LinealBackend.run)
-  * [ReplicaLane](#fim.engine.ReplicaLane)
-  * [Advancer](#fim.engine.Advancer)
-    * [advance](#fim.engine.Advancer.advance)
-  * [SequentialAdvancer](#fim.engine.SequentialAdvancer)
-    * [\_\_init\_\_](#fim.engine.SequentialAdvancer.__init__)
-    * [advance](#fim.engine.SequentialAdvancer.advance)
-  * [ThreadedAdvancer](#fim.engine.ThreadedAdvancer)
-    * [\_\_init\_\_](#fim.engine.ThreadedAdvancer.__init__)
-    * [advance](#fim.engine.ThreadedAdvancer.advance)
-  * [VectorizedAdvancer](#fim.engine.VectorizedAdvancer)
-    * [\_\_init\_\_](#fim.engine.VectorizedAdvancer.__init__)
-    * [advance](#fim.engine.VectorizedAdvancer.advance)
-  * [run\_batch](#fim.engine.run_batch)
-  * [GenerationalBackend](#fim.engine.GenerationalBackend)
-    * [\_\_init\_\_](#fim.engine.GenerationalBackend.__init__)
-    * [run](#fim.engine.GenerationalBackend.run)
-  * [build\_engine\_backend](#fim.engine.build_engine_backend)
-  * [fim](#fim.engine.fim)
-  * [deterministic\_run\_id](#fim.engine.deterministic_run_id)
-  * [report\_for\_state](#fim.engine.report_for_state)
-  * [reports\_summary](#fim.engine.reports_summary)
-  * [replicate\_summary](#fim.engine.replicate_summary)
-  * [pooled\_convergence\_histories](#fim.engine.pooled_convergence_histories)
-  * [pooled\_convergence\_histories\_from\_pairs](#fim.engine.pooled_convergence_histories_from_pairs)
-  * [bootstrap\_replicate\_summary](#fim.engine.bootstrap_replicate_summary)
-  * [tracked\_statistic\_values](#fim.engine.tracked_statistic_values)
-  * [pair\_statistic\_values](#fim.engine.pair_statistic_values)
-  * [history\_free\_statistic\_values](#fim.engine.history_free_statistic_values)
-  * [report\_statistic](#fim.engine.report_statistic)
+* [fim.engine.api](#fim.engine.api)
+  * [fim](#fim.engine.api.fim)
+* [fim.engine.backends](#fim.engine.backends)
+  * [EngineBackend](#fim.engine.backends.EngineBackend)
+    * [run](#fim.engine.backends.EngineBackend.run)
+  * [GenerationalBackend](#fim.engine.backends.GenerationalBackend)
+    * [\_\_init\_\_](#fim.engine.backends.GenerationalBackend.__init__)
+    * [run](#fim.engine.backends.GenerationalBackend.run)
+  * [resolve\_auto\_engine\_backend](#fim.engine.backends.resolve_auto_engine_backend)
+  * [numba\_is\_available](#fim.engine.backends.numba_is_available)
+  * [build\_engine\_backend](#fim.engine.backends.build_engine_backend)
+* [fim.engine.batch](#fim.engine.batch)
+  * [run\_batch](#fim.engine.batch.run_batch)
+  * [waiting\_for\_window](#fim.engine.batch.waiting_for_window)
+* [fim.engine.identity](#fim.engine.identity)
+  * [deterministic\_run\_id](#fim.engine.identity.deterministic_run_id)
+  * [params\_for\_replicate](#fim.engine.identity.params_for_replicate)
+  * [derive\_replicate\_run\_id](#fim.engine.identity.derive_replicate_run_id)
+* [fim.engine.lanes](#fim.engine.lanes)
+  * [ReplicaLane](#fim.engine.lanes.ReplicaLane)
+  * [Advancer](#fim.engine.lanes.Advancer)
+    * [advance](#fim.engine.lanes.Advancer.advance)
+  * [SequentialAdvancer](#fim.engine.lanes.SequentialAdvancer)
+    * [\_\_init\_\_](#fim.engine.lanes.SequentialAdvancer.__init__)
+    * [advance](#fim.engine.lanes.SequentialAdvancer.advance)
+  * [ThreadedAdvancer](#fim.engine.lanes.ThreadedAdvancer)
+    * [\_\_init\_\_](#fim.engine.lanes.ThreadedAdvancer.__init__)
+    * [advance](#fim.engine.lanes.ThreadedAdvancer.advance)
+  * [VectorizedAdvancer](#fim.engine.lanes.VectorizedAdvancer)
+    * [\_\_init\_\_](#fim.engine.lanes.VectorizedAdvancer.__init__)
+    * [advance](#fim.engine.lanes.VectorizedAdvancer.advance)
+  * [frame\_layout](#fim.engine.lanes.frame_layout)
+  * [equilibrium\_frame\_layout](#fim.engine.lanes.equilibrium_frame_layout)
+  * [persist\_state](#fim.engine.lanes.persist_state)
+  * [build\_replica\_lane](#fim.engine.lanes.build_replica_lane)
+  * [finalize\_replica\_lane](#fim.engine.lanes.finalize_replica_lane)
+  * [generate\_initial\_state\_with\_outcome](#fim.engine.lanes.generate_initial_state_with_outcome)
+  * [initial\_condition\_mode](#fim.engine.lanes.initial_condition_mode)
+  * [build\_finite\_allele\_spaces](#fim.engine.lanes.build_finite_allele_spaces)
+* [fim.engine.lineal](#fim.engine.lineal)
+  * [LinealBackend](#fim.engine.lineal.LinealBackend)
+    * [\_\_init\_\_](#fim.engine.lineal.LinealBackend.__init__)
+    * [run](#fim.engine.lineal.LinealBackend.run)
+  * [require\_picklable](#fim.engine.lineal.require_picklable)
+  * [run\_batch\_parallel](#fim.engine.lineal.run_batch_parallel)
+  * [run\_one](#fim.engine.lineal.run_one)
+* [fim.engine.monitors](#fim.engine.monitors)
+  * [burn\_in\_monitor](#fim.engine.monitors.burn_in_monitor)
+  * [batch\_window\_planner](#fim.engine.monitors.batch_window_planner)
+  * [window\_noise](#fim.engine.monitors.window_noise)
+  * [replicate\_monitor](#fim.engine.monitors.replicate_monitor)
+  * [replicate\_stopping\_values](#fim.engine.monitors.replicate_stopping_values)
+* [fim.engine.records](#fim.engine.records)
+  * [FinalReport](#fim.engine.records.FinalReport)
+  * [RunResult](#fim.engine.records.RunResult)
+  * [format\_timestamp](#fim.engine.records.format_timestamp)
+  * [utc\_now](#fim.engine.records.utc_now)
+* [fim.engine.report](#fim.engine.report)
+  * [window\_statistics\_payload](#fim.engine.report.window_statistics_payload)
+  * [report\_for\_state](#fim.engine.report.report_for_state)
+  * [replicate\_statistic](#fim.engine.report.replicate_statistic)
+  * [final\_report\_statistic](#fim.engine.report.final_report_statistic)
+  * [report\_statistic](#fim.engine.report.report_statistic)
+* [fim.engine.summary](#fim.engine.summary)
+  * [reports\_summary](#fim.engine.summary.reports_summary)
+  * [replicate\_summary](#fim.engine.summary.replicate_summary)
+  * [pooled\_convergence\_histories](#fim.engine.summary.pooled_convergence_histories)
+  * [pooled\_convergence\_histories\_from\_pairs](#fim.engine.summary.pooled_convergence_histories_from_pairs)
+  * [bootstrap\_replicate\_summary](#fim.engine.summary.bootstrap_replicate_summary)
+* [fim.engine.tracking](#fim.engine.tracking)
+  * [identity\_statistics](#fim.engine.tracking.identity_statistics)
+  * [identity\_statistics\_for](#fim.engine.tracking.identity_statistics_for)
+  * [derived\_fields](#fim.engine.tracking.derived_fields)
+  * [nei\_all\_demes\_fields](#fim.engine.tracking.nei_all_demes_fields)
+  * [ALWAYS\_TRACKED\_STATISTICS](#fim.engine.tracking.ALWAYS_TRACKED_STATISTICS)
+  * [UNBOUNDED\_STATISTICS](#fim.engine.tracking.UNBOUNDED_STATISTICS)
+  * [extra\_tracked\_statistics](#fim.engine.tracking.extra_tracked_statistics)
+  * [convergence\_values](#fim.engine.tracking.convergence_values)
+  * [tracked\_statistic\_values](#fim.engine.tracking.tracked_statistic_values)
+  * [convergence\_values\_vectorized](#fim.engine.tracking.convergence_values_vectorized)
+  * [pair\_statistic\_values](#fim.engine.tracking.pair_statistic_values)
+  * [history\_free\_statistic\_values](#fim.engine.tracking.history_free_statistic_values)
+  * [mean](#fim.engine.tracking.mean)
+  * [mean\_g\_st\_across\_loci](#fim.engine.tracking.mean_g_st_across_loci)
+  * [pooled\_g\_st\_and\_d](#fim.engine.tracking.pooled_g_st_and_d)
+  * [statistics\_for\_locus](#fim.engine.tracking.statistics_for_locus)
 * [fim.examples](#fim.examples)
 * [fim.examples.artifacts](#fim.examples.artifacts)
   * [archive\_target](#fim.examples.artifacts.archive_target)
@@ -610,6 +660,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [sampled\_statistic\_history](#fim.gui.trajectory_history.sampled_statistic_history)
 * [fim.launcher](#fim.launcher)
   * [main](#fim.launcher.main)
+  * [launch\_gui](#fim.launcher.launch_gui)
 * [fim.logging\_setup](#fim.logging_setup)
   * [resolve\_level](#fim.logging_setup.resolve_level)
   * [log\_file\_streams](#fim.logging_setup.log_file_streams)
@@ -663,8 +714,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.operators](#fim.model.operators)
   * [drift](#fim.model.operators.drift)
   * [migrate](#fim.model.operators.migrate)
+  * [jit\_mutate\_event\_counts\_batched](#fim.model.operators.jit_mutate_event_counts_batched)
   * [mutate](#fim.model.operators.mutate)
   * [step](#fim.model.operators.step)
+  * [expand\_population\_sizes](#fim.model.operators.expand_population_sizes)
 * [fim.model.params](#fim.model.params)
   * [PLOIDY\_WORDS](#fim.model.params.PLOIDY_WORDS)
   * [AUTO\_CONVERGENCE](#fim.model.params.AUTO_CONVERGENCE)
@@ -1278,11 +1331,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [effective\_allele\_count](#fim.statistics.differentiation.effective_allele_count)
   * [h\_s](#fim.statistics.differentiation.h_s)
   * [h\_t](#fim.statistics.differentiation.h_t)
+  * [gd\_from\_within\_and\_total](#fim.statistics.differentiation.gd_from_within_and_total)
   * [gs](#fim.statistics.differentiation.gs)
   * [gd](#fim.statistics.differentiation.gd)
   * [h\_st](#fim.statistics.differentiation.h_st)
   * [total\_hill\_number](#fim.statistics.differentiation.total_hill_number)
   * [within\_hill\_number](#fim.statistics.differentiation.within_hill_number)
+  * [g\_st\_from\_demes](#fim.statistics.differentiation.g_st_from_demes)
   * [g\_st](#fim.statistics.differentiation.g_st)
   * [d\_m](#fim.statistics.differentiation.d_m)
   * [r\_st](#fim.statistics.differentiation.r_st)
@@ -1290,6 +1345,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [g\_st\_max](#fim.statistics.differentiation.g_st_max)
   * [derived\_differentiation](#fim.statistics.differentiation.derived_differentiation)
   * [g\_st\_prime](#fim.statistics.differentiation.g_st_prime)
+  * [jost\_d\_from\_within\_and\_total](#fim.statistics.differentiation.jost_d_from_within_and_total)
   * [jost\_d](#fim.statistics.differentiation.jost_d)
   * [e\_st](#fim.statistics.differentiation.e_st)
   * [k\_st](#fim.statistics.differentiation.k_st)
@@ -5069,960 +5125,13 @@ gets its own seed, deterministically derived from the base seed (`params.
 seed + replicate_index`), so a batch of replicates is itself fully
 reproducible too, not just each individual replicate in isolation.
 
-<a id="fim.engine.FinalReport"></a>
+<a id="fim.engine.api"></a>
 
-## FinalReport Objects
+# fim.engine.api
 
-```python
-class FinalReport(TypedDict)
-```
+The `fim()` entry point.
 
-Final run-level scalar report.
-
-The one-paragraph summary of a finished run: how differentiated the
-simulated population had become when the run stopped, plus the
-bookkeeping needed to explain *why* it stopped there. `report_for_
-state` builds one of these from whatever generation a run actually
-ended on (the last generation reached, whether that was because the
-statistics stabilized or because the hard generation cap was hit);
-`RunResult.report` carries it as part of a completed run's full
-result. This is a `TypedDict` (a plain Python dictionary, but one
-whose exact set of keys and each key's value type is declared up
-front) rather than a class with named attributes, because it is
-written to disk as JSON verbatim (see
-`fim.persistence.report.write_report`) — a dictionary already has
-the shape JSON needs, with nothing extra to convert.
-
-Fields:
-    run_id: This run's own identifier — either supplied by the
-        caller, or (see `deterministic_run_id`) computed from the
-        run's own parameters, so the exact same configuration always
-        gets the exact same id.
-    generation: The generation number the run actually stopped at —
-        not necessarily `SimulationParams.max_generations`; see
-        `converged` and `reason` below for why it may have stopped
-        earlier or later.
-    converged: Whether the run stopped because its watched
-        statistic(s) settled down on their own (`True`), or because
-        it hit the hard generation cap without ever settling
-        (`False`) — see this module's own docstring, above, for
-        what "settled down" (convergence) means here.
-    converged_on: Which watched statistic(s) had actually settled
-        when the run stopped — not merely which were watched (that
-        is `SimulationParams.convergence_statistic`, recorded in the
-        manifest). The configured statistic's own name when a single
-        statistic is watched; a list when several are, holding every
-        one under `convergence_combinator: all` but only the ones
-        that had passed under `any`. `None` whenever `converged` is
-        `False`: a run that hit its cap converged on nothing, and a
-        state with no run behind it (a preview, a progress tick, an
-        earlier generation re-analyzed) has no stop to describe.
-    reason: A short, human-readable phrase naming the specific
-        reason the run stopped (e.g. "statistic converged" or "hit
-        the cap") — meant to be read directly by a person looking at
-        a results table, not parsed by code.
-    G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The core differentiation/
-        heterozygosity measures this project reports (see this
-        module's own docstring for what each name means, in outline,
-        and the linked
-        [differentiation-measures guide](../../doc/jost-differentiation-measures.md)
-        for the full explanation), each averaged across every
-        genetic locus the run tracked (see `report_for_state`).
-        `G_ST` alone can be `None`: it is undefined at a locus with
-        no genetic variation left to measure (see
-        `_mean_g_st_across_loci`), and if *every* tracked locus is in
-        that state, there is no defined value left to average at
-        all. Every other field is always a real number.
-    Gs, Gd: The within- and between-deme gene identities (Ryman &
-        Leimar's `J_0`/`J_1`) `H_S`/`H_T`/`G_ST`/`D` are themselves
-        derived from — `fim.statistics.differentiation.gs`/`gd`'s
-        own docstrings have the exact formulas and `fim`'s own
-        with-replacement identity convention. Added by this
-        project's own Ryman & Leimar remediation, `R4`
-        (`dev/doc/apps/selby/jost-finite-island-model/20260903-
-        claude-opus-5-gene-identity-recursion-fim-implications.md`
-        §9). Both linear in `H_S`/`H_T`, so — unlike `G_ST`/`D` —
-        averaging across loci or replicates never needs a ratio-of-
-        means-versus-mean-of-ratios decision; there is only one
-        answer.
-    A_CGD, Delta, MI: Literature-derived supplemental statistics
-        added for Phase 4 GUI visual interpretation: Caballero-
-        Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
-        mutual information.
-    D_m, R_ST, G_ST_NEI_LOG, G_ST_HEDRICK, F_ST: Nei's (1973) mean
-        pairwise between-deme diversity and its ratio to `H_S`, Nei's
-        logarithmic and Hedrick's standardized `G'_ST`, and coancestry
-        `F_ST` (`fim.statistics.differentiation.
-        derived_differentiation`), each one ratio of the pooled
-        `H_S`/`H_T` (whatever `locus_aggregation` says, which governs
-        `D` and `G_ST` only). ``None`` where undefined.
-    NEI_D_ALL_GEO, NEI_D_ALL_GEO_LOCUS_MEAN, NEI_D_ALL_ARITH,
-        NEI_D_ALL_ARITH_LOCUS_MEAN: Nei's genetic distance across all
-        demes, ``-ln(J_between / mean(J_k))``, with the geometric
-        (Nei 1972) or arithmetic (Jost, L. (2026) private
-        communication) mean of the within-deme identities, loci
-        combined by Nei's pooled rule or by averaging per-locus
-        distances (`fim.statistics.genetic_distance`). ``None`` when
-        infinite (no allele shared between any pair of demes), since
-        the report is written as strict JSON. The geometric forms can
-        be negative; see `nei_all_demes_identity`.
-    NEI_I_ALL_GEO, NEI_I_ALL_GEO_LOCUS_MEAN, NEI_I_ALL_ARITH,
-        NEI_I_ALL_ARITH_LOCUS_MEAN: The matching identities ``I``
-        (``D = -ln(I)``). Always finite, so they are the lossless
-        record when a distance is ``None``. The arithmetic pooled
-        identity equals ``Gd / Gs``.
-    window_statistics: How precisely each recorded statistic's own
-        trailing-window mean was actually known at the generation this
-        run stopped at — `{name: {"mean", "standard_error",
-        "standard_deviation", "effective_sample_size", "window",
-        "noise_adequate"}}`, one entry per statistic `report_for_state`
-        was given a monitor history for (`fim.convergence.window_
-        statistics.WindowStatistics`, `_window_statistics_payload`).
-        Each entry also carries `selected_form` (`"mean_of_values"` or
-        `"value_of_means"`, the form the headline `mean` and the stop
-        use), `undefined_generations` (window generations in which the
-        statistic had no value, dropped by the first form), and
-        `mean_of_values`/`value_of_means`, each `{"mean",
-        "standard_error"}` — `value_of_means` only for `D` and `G_ST`,
-        the statistics that are functions of `H_S` and `H_T`. Every entry
-        describes the one evidence window all statistics share:
-        `window_start`, `window_end`, `burn_in`, the `minimum_ess` floor
-        and `target_standard_error` the window was judged against, and
-        `geweke_z` (start of the window against its end; a large
-        absolute value means the burn-in may have been too short).
-        Empty for a state with no monitored run behind it at all (a GUI
-        preview, a re-analysis) — this is *not* the same thing as `D`/
-        `G_ST`/etc. above, which are always this state's own point
-        values, computed directly from its allele frequencies; this
-        field is instead the *history leading up to* that state, the
-        answer to "how much can this run's own last window of noise be
-        trusted," which the point value alone cannot say. `"statistic
-        converged"` (see `reason`, above) means the watched statistic's
-        own `noise_adequate` was `True` at the stopping generation
-        (`fim.convergence.monitor.ConvergenceMonitor`'s own noise-
-        adequacy gate, `20260927-claude-sonnet-5-noise-aware-
-        convergence-design.md`, `selby/restricted`); `converged=False`
-        (the generation cap was hit first) can still show a real,
-        informative `standard_error` here for whichever statistic was
-        watched — "capped, and here is how far off the estimate still
-        is" — even though `noise_adequate` for it is `False`.
-
-<a id="fim.engine.RunResult"></a>
-
-## RunResult Objects
-
-```python
-@dataclass(frozen=True, slots=True)
-class RunResult()
-```
-
-Everything one finished simulation run produced.
-
-Whatever calls `fim()` gets back one of these per run (one, or a
-tuple of them for a multi-replicate batch — see `fim`'s own
-docstring). It bundles four different things a caller might want,
-each aimed at a different next step:
-
-Fields:
-    run_id: This run's own identifier — the same value as
-        `report["run_id"]`, repeated here directly so a caller never
-        has to reach into `report` just to find out which run this
-        was.
-    params: The exact, fully validated configuration this run
-        actually used (population size, migration rate, mutation
-        rate, and everything else) — kept alongside the result so
-        the run remains self-describing without a caller needing to
-        have hung onto the original configuration separately.
-    final_state: The complete simulated population as it stood at
-        the very last generation — every deme's allele frequencies,
-        at every locus. This is what a scatter plot of the final
-        state (`fim.viz.scatter`) is drawn from.
-    report: The `FinalReport` summarizing that final state into the
-        handful of named numbers a person actually wants to read —
-        see `FinalReport`'s own docstring.
-    convergence_generations: Every generation number at which the
-        convergence check actually recorded an observation (see
-        `_run_one`) — together with `convergence_history`/
-        `convergence_histories` below, this is the run's own
-        "trajectory," letting a caller plot how a watched statistic
-        moved over time on its way to its final value, not just what
-        that final value turned out to be.
-    convergence_history: The single watched statistic's own value at
-        each of those generations, in the common case of watching
-        just one statistic — see `SimulationParams.
-        convergence_statistic`.
-    convergence_histories: The same per-generation history as
-        `convergence_history`, but keyed by statistic name — no
-        longer only the watched subset. `D`/`G_ST`/`H_S`/`H_T` are
-        always present (`fim.engine._ALWAYS_TRACKED_STATISTICS`),
-        regardless of what `SimulationParams.convergence_statistic`
-        actually watches, since all four cost nothing extra to
-        compute or aggregate either way; `E_ST`/`K_ST` are present
-        when either is actually watched, or when
-        `SimulationParams.track_expensive_statistics` opts into
-        paying their own real, per-generation cost for a display
-        value (that field's own docstring has the measured
-        tradeoff). Only the watched subset ever influenced *why* the
-        run stopped (see `FinalReport.converged_on`) — every other
-        name here is present for a caller (a GUI trajectory panel,
-        design doc §6.2) that wants to plot more than just the
-        statistic that happened to be watched, never because it
-        factored into the stop decision itself. A run's own
-        `manifest.software_version` predating this change has
-        neither guarantee: its own persisted trajectory (were one
-        read back some other way) genuinely has no history at all
-        for a statistic that was not watched at the time, which is
-        not a defect to guard against, only an honest reflection of
-        what that older run actually recorded.
-    manifest: The `RunManifest` recording this run's own bookkeeping
-        metadata — when it started and ended, what software version
-        produced it, and (once written to disk) the checksums
-        proving the persisted files have not been altered since.
-        See `fim.persistence.manifest`.
-    store: The `TrajectoryStore` this run wrote its per-generation
-        state to as it went — kept here so a caller that wants to
-        read that trajectory back later (to animate it, or re-
-        analyze an earlier generation) already has a handle to it,
-        without needing to separately track down which store this
-        particular run used.
-    equilibrium_store: Where an equilibrium-split run streamed its
-        ancestral phase (`fim.model.initial.
-        EquilibriumSplitInitialCondition`): every generation of the
-        one-deme ancestral population, in `store`'s own row schema,
-        read back with `equilibrium_store.read(run_id)`. Numbered by
-        the ancestral phase's own counter, `0` through
-        `manifest.equilibrium_generation_count`; the split demes'
-        generation zero follows its last generation. Beside
-        `trajectory.tlog` as `equilibrium_trajectory.tlog` when
-        `store` is a file (`fim.persistence.store.
-        equilibrium_store_for`). `None` for every other initial
-        condition.
-
-<a id="fim.engine.EngineBackend"></a>
-
-## EngineBackend Objects
-
-```python
-class EngineBackend(Protocol)
-```
-
-One way of actually running a batch of replicates to completion.
-
-`fim()` (below) validates its own public arguments, then hands off to
-exactly one backend's own `run` — today, always `LinealBackend`, the
-only implementation. This split exists ahead of a second backend
-actually landing because the engine is already planned to grow more
-than one way of running the same simulation: a thread-based,
-generation-first scheduler and a vectorized, array-based one are both
-designed but not yet built. Naming today's existing behavior as an
-explicit `EngineBackend` now means a future caller picks among
-backends through an ordinary keyword argument once those exist,
-rather than `fim()` growing an ever-larger hardcoded dispatch of its
-own.
-
-Every backend takes exactly the same four "what to run, where"
-arguments — anything about *how* a given backend actually computes
-(worker-process counts, thread pools, which array representation) is
-that backend's own constructor's business, not part of this shared
-contract.
-
-<a id="fim.engine.EngineBackend.run"></a>
-
-#### run
-
-```python
-def run(params: SimulationParams, store: TrajectoryStore | None,
-        run_id: str | None, clock: Clock) -> SimulationOutput
-```
-
-Run every replicate `params` describes; return the result(s).
-
-<a id="fim.engine.LinealBackend"></a>
-
-## LinealBackend Objects
-
-```python
-class LinealBackend()
-```
-
-Today's engine: one replica's whole trajectory, start to finish,
-computed before any cross-replicate bookkeeping happens — either one
-at a time, or `max_workers` at a time across real OS processes. See
-`fim()`'s own docstring, below, for the full behavior; this class's
-own `run` is that same behavior, unchanged, moved behind
-`EngineBackend`'s shared contract rather than living directly inside
-`fim()`.
-
-<a id="fim.engine.LinealBackend.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(
-        *,
-        max_workers: int | None = None,
-        store_factory: Callable[[str], TrajectoryStore] | None = None) -> None
-```
-
-Configure this backend's own concurrency and per-replicate storage.
-
-**Arguments**:
-
-- `max_workers` - See `fim()`'s own docstring.
-- `store_factory` - See `fim()`'s own docstring.
-
-<a id="fim.engine.LinealBackend.run"></a>
-
-#### run
-
-```python
-def run(params: SimulationParams, store: TrajectoryStore | None,
-        run_id: str | None, clock: Clock) -> SimulationOutput
-```
-
-Run `params`'s own replicate(s); see `fim()`'s own docstring.
-
-<a id="fim.engine.ReplicaLane"></a>
-
-## ReplicaLane Objects
-
-```python
-@dataclass(slots=True)
-class ReplicaLane()
-```
-
-One replica's own mutable working state, mid-batch.
-
-Exactly what `_run_one`'s own local variables already are (`state`,
-`rng`, `registry`, `finite_alleles`, `monitor`) — a structural change,
-promoting one function's stack frame into an explicit, named,
-per-replica object so a batch can hold several side by side and
-advance them together one generation at a time, rather than running
-each replica's entire trajectory before starting the next (see
-`GenerationalBackend`, below). Nothing about what any one lane
-computes changes because of this.
-
-`vectorized_state` is a `VectorizedAdvancer`-only cache — the live
-`fim.model.vector_block.VectorBlock` this lane is actually stepping,
-carried forward generation to generation, with `state` (the
-`ModelState` below) left untouched mid-run rather than reconstructed
-from it every tick. The block is what carries everything a
-`ModelState` cannot: the identity of every column, the counter that
-mints new allele identities (infinite alleles), and each locus's
-minted-state bookkeeping (finite alleles — re-deriving it from `state`
-alone, every generation, would forget any allele minted and then
-driven extinct, the normal fate of a fresh low-frequency mutant).
-`_convergence_values_vectorized` reads statistics straight from the
-block's arrays, so `state` only needs rebuilding once, when the lane
-actually stops. Unused by every other `Advancer`; stays `None` for the
-whole run under those. Released (set back to `None`) by
-`_finalize_replica_lane` the instant a lane stops, not held for the
-rest of the batch's own run — see that function's own docstring
-(`FIM-48`).
-
-`equilibration_outcome` is set once, by `_build_replica_lane`
-(`_generate_initial_state_with_outcome`'s own return value), and
-only when this lane's own `params` configured equilibrium-split —
-`None` for every other initial-condition mode. `_finalize_replica_
-lane` reads it to populate this lane's own manifest fields.
-`equilibrium_store` is set alongside it: where `_build_replica_lane`
-already streamed the ancestral phase's own trajectory (the
-`equilibrium_trajectory.tlog` artifact), handed on to
-`RunResult.equilibrium_store`.
-
-<a id="fim.engine.Advancer"></a>
-
-## Advancer Objects
-
-```python
-class Advancer(Protocol)
-```
-
-Steps every currently-active lane forward by exactly one generation.
-
-The single fan-out point `run_batch` (below) delegates to — never
-calls `step()` itself. `SequentialAdvancer` is currently the only
-implementation: a plain loop, visiting lanes one at a time, in order.
-A future thread-pool-backed advancer can implement this same
-protocol without `run_batch` itself ever changing.
-
-<a id="fim.engine.Advancer.advance"></a>
-
-#### advance
-
-```python
-def advance(active_lanes: Sequence[ReplicaLane],
-            store: TrajectoryStore) -> list[ReplicaLane]
-```
-
-Advance every lane in `active_lanes` by one generation.
-
-Returns whichever of them just stopped — including a lane whose
-monitor already reported stopped *before* this call (the
-generation-zero edge case, where convergence is already
-satisfied before any generation past zero ever runs), which is
-returned without being stepped at all.
-
-<a id="fim.engine.SequentialAdvancer"></a>
-
-## SequentialAdvancer Objects
-
-```python
-class SequentialAdvancer()
-```
-
-The default `Advancer`: a plain loop, one lane at a time.
-
-Always correct, with zero new thread-safety surface — a single
-thread visiting lanes one at a time in a `for` loop cannot race with
-itself. This is what makes `GenerationalBackend` bit-identical to
-`LinealBackend` for the same seed (proof: each lane's own generation
-sequence, RNG draws, and allele-id minting depend only on that
-lane's own prior state, never on any other lane or on wall-clock
-order — reordering *when* one lane's generation is computed relative
-to another's changes nothing about that lane's own result).
-
-<a id="fim.engine.SequentialAdvancer.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(*, jit: bool = False) -> None
-```
-
-Configure whether this advancer's own lanes step with JIT.
-
-**Arguments**:
-
-- `jit` - Passed through to `fim.model.operators.step`'s own
-  `jit` argument on every call — see its docstring.
-  `False` (the default) is every prior release's own
-  behavior, unchanged, and needs no `numba` install at
-  all; `True` still produces a bit-identical trajectory to
-  `False`, for the same seed (`drift`'s own docstring),
-  only with the GIL released during the drift step.
-
-<a id="fim.engine.SequentialAdvancer.advance"></a>
-
-#### advance
-
-```python
-def advance(active_lanes: Sequence[ReplicaLane],
-            store: TrajectoryStore) -> list[ReplicaLane]
-```
-
-Step every active lane by exactly one generation.
-
-Mirrors one potential iteration of `_run_one`'s own `while not
-monitor.should_stop():` loop, per lane, in order.
-
-<a id="fim.engine.ThreadedAdvancer"></a>
-
-## ThreadedAdvancer Objects
-
-```python
-class ThreadedAdvancer()
-```
-
-Fans `SequentialAdvancer`'s own per-lane stepping out across threads.
-
-Partitions whichever lanes are active this tick into up to
-`max_workers` contiguous blocks (`_partition_into_blocks`) and steps
-each block — sequentially, in order, exactly what `SequentialAdvancer`
-already does — inside its own thread, via `ThreadPoolExecutor`.
-Blocks are disjoint (every lane belongs to exactly one), so no two
-threads ever touch the same lane's own state, RNG, or allele
-registry at once; the one thing genuinely shared across threads is
-`store`, made safe by the `threading.Lock` both
-`fim.persistence.store.InMemoryTrajectoryStore` and
-`fim.persistence.binary_store.BinaryLogStore` now hold around
-their own `write_generation`.
-
-Whether this delivers real wall-clock speedup over
-`SequentialAdvancer` depends on how much of each generation's own
-work happens inside NumPy/JIT calls that release the GIL versus
-pure-Python loop overhead — measured, not merely open, as of
-`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§10 items 10a/10c: at this project's own reference scale, `drift`'s
-own `_inversion_binomial` primitive (needed to keep this backend
-bit-identical to `LinealBackend`, see below) is pure Python and
-holds the GIL for nearly all of `drift`'s own wall-clock time. That
-measurement predates §10 item 10e's own stages 1-3b (2026-09-03):
-`migrate`'s own scalar-rate, continuous-migration path and `mutate`'s
-own event-count draw, whole-generation minting, source attribution,
-and (below a per-locus capacity bound) target selection are now
-`nogil`-compiled too, under `jit=True` — the "unjitted and GIL-bound
-regardless of `jit`" claim this paragraph made through 2026-09-02 is
-no longer an accurate description of the code. Whether that
-translates into real wall-clock thread scaling is a genuinely
-different, re-measured-not-yet question — `20260903-claude-sonnet-
-5-fim-vg-performance-campaign-design.md` §6.3 item 1 schedules the
-re-sweep this claim now depends on; until that lands, treat this
-class's own real-world thread-scaling behavior as unmeasured against
-the current code, not as either the old regression or a new win.
-What this class does guarantee, unconditionally:
-identical results to `SequentialAdvancer` for the same seed, since
-the actual per-lane computation is the same code
-(`SequentialAdvancer.advance` itself, called once per block), only
-fanned out across threads rather than run in one.
-
-Block assignment is computed fresh every tick from whichever lanes
-happen to be active (`_partition_into_blocks`), not a persistent,
-static assignment decided once at batch start — worth revisiting as
-a later, separately-measured optimization once lane membership is
-treated as fixed-and-masked rather than genuinely shrinking, but not
-this class's own current scope.
-
-<a id="fim.engine.ThreadedAdvancer.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(max_workers: int | None = None,
-             *,
-             jit: JitOption = "off") -> None
-```
-
-Configure how many blocks/threads this advancer fans out across.
-
-**Arguments**:
-
-- `max_workers` - Defaults to `os.cpu_count()` (or 1 if that
-  cannot be determined) — the same default reasoning
-  `concurrent.futures.ThreadPoolExecutor` itself uses.
-  Deliberately not the same `max_workers` `fim()`'s own
-  public signature accepts — that one is `LinealBackend`-
-  only (a process count); reusing the name for a thread
-  count here was flagged, not settled, by the design this
-  implements, so this constructor's own parameter is
-  reachable only by building a `GenerationalBackend`
-  directly, not yet through `fim()` itself.
-- `jit` - Passed through to each block's own `SequentialAdvancer`
-  — see its docstring. ``"numba"`` JIT-compiles `drift`'s
-  own multinomial draw (`fim.model.operators.drift`'s own
-  docstring) — bit-identical, and no longer regresses
-  wall-clock time the way an earlier, per-pair-call version
-  measurably did, but is not yet shown to be a clear
-  standalone win either: `drift`'s own dominant cost at
-  this project's reference scale is marshaling to and from
-  `ModelState`'s sparse representation, not the compiled
-  draw itself, so this setting alone should not be assumed
-  to speed up `ThreadedAdvancer`'s own thread fan-out in
-  practice. `migrate`/`mutate`'s RNG calls stay unjitted
-  and GIL-bound regardless of this setting either way.
-
-
-**Raises**:
-
-- `ValueError` - If `max_workers` is given and is less than 1.
-
-<a id="fim.engine.ThreadedAdvancer.advance"></a>
-
-#### advance
-
-```python
-def advance(active_lanes: Sequence[ReplicaLane],
-            store: TrajectoryStore) -> list[ReplicaLane]
-```
-
-Step every active lane by one generation, fanned out across threads.
-
-<a id="fim.engine.VectorizedAdvancer"></a>
-
-## VectorizedAdvancer Objects
-
-```python
-class VectorizedAdvancer()
-```
-
-Steps every currently-active lane forward by one generation, array-native.
-
-Backend V's `Advancer`. Each lane's generation-zero `ModelState` is
-converted exactly once, the first tick the lane is advanced, into a
-dense `fim.model.vector_block.VectorBlock` cached on the lane
-(`ReplicaLane.vectorized_state`); from then on every generation is one
-compiled kernel call over every locus, with no `ModelState` in
-between. Trajectory rows are written straight from the arrays,
-convergence statistics are read from them, and a real `ModelState` is
-rebuilt once per lane, when its monitor reports it has stopped, for
-the report and `RunResult` machinery that needs one.
-
-**Both mutation models** run on the block, in the same stage and draw
-order as `fim.model.operators.step`, with the arithmetic of the
-dictionary-based operators ported operation for operation. For the same
-seed on the same platform the trajectory rows, report and final state
-are therefore identical to Backend L's and G's, every allele identity
-and frequency bit. Under infinite alleles the lane's `AlleleRegistry`
-counter is brought up to the identities the block handed out when the
-lane stops; under finite alleles the K-allele target draws are made in
-the kernel, interleaved with the next pair's mutation counts exactly as
-`operators.mutate` does. The convergence statistics `D`, `G_ST`, `H_S`,
-`H_T` and `H_ST` are computed inside the kernel and equal
-`statistics_report`'s bits; the opt-in expensive statistics (`E_ST`,
-`K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
-
-Both migrant sampling modes run in the kernel. Under
-`migrant_sampling="stochastic"` the kernel draws one binomial migrant
-count per destination deme per generation, shared by every locus and
-ahead of drift, exactly as `operators.migrate` does with a generator.
-A genuine caller-supplied `(d, d)` migration matrix is supported (one
-exact sum per cell in the continuous case).
-
-**Arguments**:
-
-- `memory_ceiling_bytes` - Per-lane ceiling on the table, in bytes;
-  `None` uses the 2 GiB default or the
-  `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable
-  (`fim.model.vector_block.resolve_memory_ceiling`). A lane
-  whose table would exceed it raises
-  `fim.model.vector_block.VectorMemoryCeilingError`, naming
-  what to change.
-
-<a id="fim.engine.VectorizedAdvancer.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(*, memory_ceiling_bytes: int | None = None) -> None
-```
-
-Remember the per-lane memory ceiling for new tables.
-
-**Arguments**:
-
-- `memory_ceiling_bytes` - See the class docstring.
-
-<a id="fim.engine.VectorizedAdvancer.advance"></a>
-
-#### advance
-
-```python
-def advance(active_lanes: Sequence[ReplicaLane],
-            store: TrajectoryStore) -> list[ReplicaLane]
-```
-
-Step every active lane by one generation, array-native.
-
-Builds each lane's block on its first tick, steps it, writes the
-generation's rows, and records the convergence statistics. When a
-lane's monitor reports stopped, `lane.state` (stale until now) is
-rebuilt from the block and the lane's registry counter is brought
-up to the identities the block minted.
-
-**Arguments**:
-
-- `active_lanes` - The lanes still running.
-- `store` - Where each lane's rows for the new generation go.
-
-
-**Returns**:
-
-  The lanes whose monitor reports stopped, including one that was
-  already stopped before this call and is returned unstepped.
-
-<a id="fim.engine.run_batch"></a>
-
-#### run\_batch
-
-```python
-def run_batch(params: SimulationParams, store: TrajectoryStore,
-              run_id: str | None, clock: Clock,
-              advancer: Advancer) -> tuple[RunResult, ...]
-```
-
-Run every replicate `params` describes, generation-first.
-
-The generation-first counterpart to `LinealBackend`'s own
-replica-first dispatch: every currently-active lane's own generation
-*g* is advanced before any of them moves on to generation *g + 1*
-(via `advancer.advance`), rather than one replica's entire trajectory
-running to completion before the next starts.
-
-An adaptive early stop (`SimulationParams.
-stop_batch_early`; see `_replicate_monitor`) is judged on an
-*accepted prefix*, in replicate order, exactly as `LinealBackend`'s
-own sequential loop judges it: replicate *i* is fed to the cross-
-replica monitor only once it and every lower-numbered replicate have
-finished, so the monitor sees replicates 1, 2, 3, ... in that order
-regardless of which lane happened to converge first. The stop fires
-at the same replicate, on the same values, as `LinealBackend` for
-the same seed, so both backends keep the same replicates and report
-the same summary. Feeding the monitor in finishing order instead
-(this function's own behavior through 2026-10-06) kept whichever
-replicates converged soonest; convergence time correlates with the
-statistics being estimated (in the adaptive worked example, the
-replicates that converge earliest have lower `D`), so that order
-biased the batch's own estimate rather than merely reordering it.
-
-Waiting for a slow, low-numbered replicate costs only time, never
-correctness: every lane keeps advancing, generation by generation,
-while the prefix waits. A lane that finishes ahead of the prefix is
-finalized immediately (its `RunResult` held until the prefix reaches
-it, the same memory every kept replicate already uses) and its
-window slot (`max_concurrent_replicates`) is reused at once. Once the
-stop fires, every lane past the stopping replicate — still running,
-or finished but not yet admitted — is discarded, exactly as
-`LinealBackend` never runs, and `_run_batch_parallel` discards,
-replicates past its own stopping point.
-
-Every lane owns its own, never-shared `np.random.Generator` and its
-own `AlleleRegistry` — nothing here ever reads or writes another
-lane's state, which is what makes the traversal order above safe:
-reordering *when* one lane's generation is computed relative to
-another's never changes that lane's own result, and the accepted-
-prefix rule above means it never changes *which* lanes are kept.
-
-An adaptive stop's own discarded lanes have their own rows discarded
-from `store` before returning, not left behind as orphaned data no
-returned `RunResult` accounts for (this project's own multi-model
-engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
-1). `_build_replica_lane` already wrote each lane's own generation
-zero eagerly, before this loop ever runs, so even a lane the
-generation-first loop below never advances past that point still
-has rows to discard, not merely lanes that got partway through.
-
-At most `params.max_concurrent_replicates` lanes are ever alive at
-once — `None` (the default) means every requested replicate, exactly
-every prior release's own behavior, since `min(window_size,
-n_replicates)` below then equals `n_replicates` itself and every
-lane is built up front as before. A smaller window instead builds
-lanes lazily: only the window's own worth exist up front, and a
-lane is constructed for replicate index *i* only once some earlier
-lane's own slot frees up, immediately before advancing past that
-point — never merely reserved. This is `FIM-45`/`P-04`/`P2-7`'s own
-fix (a replicate `run_batch` never gets to before an adaptive stop
-now never pays for that replicate's own setup either, on any
-`Advancer`) and, for `VectorizedAdvancer` specifically,
-`FIM-48`'s own fix too: that advancer's cached `VectorBlock`
-(`ReplicaLane.vectorized_state`, released immediately once a lane
-finalizes — see `_finalize_replica_lane`) is held by every
-concurrently active lane at once, so bounding how many lanes are
-ever active at once directly bounds this backend's own steady-state
-memory, independent of `n_replicates` itself. A replacement lane is
-built only *after* confirming the cross-replica monitor has not
-just decided to stop — building one first and discarding it a line
-later would reintroduce exactly the wasted setup this fix exists to
-remove.
-
-<a id="fim.engine.GenerationalBackend"></a>
-
-## GenerationalBackend Objects
-
-```python
-class GenerationalBackend()
-```
-
-`run_batch`, driven by an injectable `Advancer`.
-
-Reorders *when* generations are computed (§4.2 of the design this
-implements) without changing *what* is computed: with the default
-`SequentialAdvancer`, every replicate's own trajectory is
-bit-identical to what `LinealBackend` produces for the same seed
-(proven by `run_batch`'s own docstring; checked directly by this
-project's own golden-parity tests). A future thread-pool-backed
-`Advancer` can be passed here to add real concurrency without this
-class itself changing at all.
-
-<a id="fim.engine.GenerationalBackend.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(
-        advancer: Advancer | None = None,
-        *,
-        store_factory: Callable[[str], TrajectoryStore] | None = None) -> None
-```
-
-Configure which `Advancer` drives this backend's own batches.
-
-**Arguments**:
-
-- `advancer` - Defaults to `SequentialAdvancer()` — no new
-  concurrency, matching `LinealBackend`'s own trajectories
-  exactly for the same seed.
-- `store_factory` - See `fim()`'s own docstring. Unlike
-  `LinealBackend`, this backend never needs a process
-  pool to use one — `run_batch` already writes every
-  replicate's own rows through one shared `store`
-  argument, keyed by that replicate's own `run_id`
-  (`fim.persistence.store.TrajectoryStore`'s own
-  contract), so wrapping `store_factory` in a
-  `ReplicateFanoutStore` (below) and handing *that* to
-  `run_batch` as its one `store` gives every replicate a
-  real, independent file — the same outcome
-  `LinealBackend`'s own `store_factory` path already
-  produces — with no change to `run_batch`, `ReplicaLane`,
-  or any `Advancer` implementation at all
-  (`20260914-claude-sonnet-5-non-lineal-batch-execution-
-  design.md`, `selby/restricted`, §5.1-§5.2).
-
-<a id="fim.engine.GenerationalBackend.run"></a>
-
-#### run
-
-```python
-def run(params: SimulationParams, store: TrajectoryStore | None,
-        run_id: str | None, clock: Clock) -> SimulationOutput
-```
-
-Run `params`'s own replicate(s); see `fim()`'s own docstring.
-
-<a id="fim.engine.build_engine_backend"></a>
-
-#### build\_engine\_backend
-
-```python
-def build_engine_backend(
-    engine_backend: EngineBackendChoice,
-    *,
-    jit: JitOption = "off",
-    max_workers: int | None = None,
-    store_factory: Callable[[str], TrajectoryStore] | None = None,
-    params: SimulationParams | None = None,
-    auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D,
-    auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY
-) -> EngineBackend
-```
-
-Return the configured backend `fim()` should run against.
-
-One function, not a class hierarchy: Python's own first-class
-functions make a `ConcreteFactory` subclass per backend unnecessary
-ceremony here — a plain function that reads a choice and returns an
-object satisfying `EngineBackend`'s shape does the same job with no
-class tree to maintain.
-
-**Arguments**:
-
-- `engine_backend` - Which backend to build. `"generational"` builds
-  `GenerationalBackend(ThreadedAdvancer())` — real thread-based
-  parallelism, not merely the structural reshuffle
-  `SequentialAdvancer` alone would give (still directly
-  available by constructing `GenerationalBackend()` without
-  going through this factory, if a caller wants zero new
-  thread-safety surface). `"generational-vector"` builds
-  `GenerationalBackend(VectorizedAdvancer())` — array-native,
-  one compiled kernel call per generation over every locus
-  (`fim.model.vector_block`); runs both mutation models,
-  both migrant sampling modes — needs the optional `numba`
-  dependency unconditionally (see `jit`, below, for why that is
-  not the same thing as `jit="numba"`).
-  `"auto"` picks between `"generational"` and
-  `"generational-vector"` using `params`/`auto_vector_min_d`
-  (below) — never `"lineal"`, since no data yet characterizes
-  where that boundary sits (see `auto_vector_min_d`'s own
-  entry for why only the L-vs-V axis is automated so far).
-  `_resolve_auto_engine_backend` lists the conditions: V for
-  continuous migration when `numba` is importable and `d` is
-  large enough (and, for finite alleles, the capacity small
-  enough), otherwise G. The output is identical either way.
-- `jit` - Whether the chosen backend should JIT-compile its own
-  operators. Under `"generational"`, `"numba"` JIT-compiles
-  `drift`'s own multinomial draw (`fim.model.operators.drift`'s
-  own docstring) — bit-identical output to `"off"`, for the
-  same seed, *on the same machine*: that claim (and every
-  "generational-vector" trajectory's own reliance on `numba`,
-  unconditionally, further below) rests on `numba`'s own
-  compiled math matching CPython's own `libm` bit for bit,
-  verified only on this project's own development platform so
-  far, not across the different `libm` implementations a
-  different operating system or CPU architecture can ship
-  (this project's own multi-model engine review, 2026-09-04,
-  `FIM-22`/finding Kimi-FIM-22) — a portability caveat to keep
-  in mind before treating a `jit="numba"`/"generational-
-  vector" result as reproducible across machines the way
-  every `jit="off"` result already is, not a known, confirmed
-  divergence. Not yet shown to be a standalone wall-clock win,
-- `though` - it fixes a real, separately measured regression an
-  earlier, per-pair-call version had, but `drift`'s own
-  dominant cost at this project's reference scale is
-  marshaling to and from `ModelState`'s sparse representation,
-  not the compiled draw itself (`drift`'s own docstring has
-  the full measurement). `migrate`/`mutate`'s own RNG calls
-  are not JIT-compiled at all. Needs the optional `numba`
-  dependency installed (``pip install fim[jit]``) — not
-  imported at all unless `jit="numba"` is actually requested.
-  `"generational-vector"` has no separate toggle for this yet
-  — its own mutate step always requires `numba` internally,
-  regardless of this argument, so only `jit="off"` (the
-  default) is accepted there; passing `jit="numba"` raises
-  `ValueError`, not a silent no-op. `"lineal"` never accepts
-  anything but `"off"` — a permanent restriction, not a
-  temporary gap: `LinealBackend` stays the untouched golden
-  reference every other backend's own parity tests are checked
-  against (see its own docstring).
-- `max_workers` - `LinealBackend`-only; ignored by every other
-  backend, since there is no process pool anywhere else for it
-  to size — `ThreadedAdvancer`'s own thread count is a
-  separate, not-yet-publicly-reachable knob (see its own
-  docstring for why this name is not reused for it there);
-  `run_batch`'s own `max_concurrent_replicates` is the
-  `"generational"`/`"generational-vector"` equivalent
-  concurrency/memory-bounding control, a real `SimulationParams`
-  field rather than a `build_engine_backend` argument.
-- `store_factory` - Every backend accepts this the same way now — one
-  real, independent store per replicate, keyed by that
-  replicate's own run id. `LinealBackend` uses it directly (a
-  worker process needs its own store; nothing else could be
-  shared across a process boundary). `GenerationalBackend`
-  wraps it in a `ReplicateFanoutStore` instead
-  (`GenerationalBackend`'s own docstring) — no process pool
-  involved, but the same one-store-per-replicate outcome.
-- `params` - The run this backend is actually being built for —
-  required, and only actually read, when `engine_backend ==
-  "auto"`, to look at `params.d`/`params.mutation_model`/
-  `params.migrant_sampling` and decide. Every other choice
-  ignores it entirely (a caller building a `"lineal"`/
-  `"generational"`/`"generational-vector"` backend directly
-  never needs to pass a real `SimulationParams` here at all).
-- `auto_vector_min_d` - The deme-count cutover `"auto"` uses to
-  decide between `"generational"` and `"generational-vector"`
-  — irrelevant, and unused, under every other `engine_backend`
-  value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (`2`), this
-  project's own best current estimate from a real benchmark
-  sweep (see that constant's own docstring for the full
-  finding, including its cross-environment caveats) —
-  deliberately a parameter, not a hardcoded constant, because
-  a follow-on check (the same sweep, run inside a Docker
-  container instead of natively) found the threshold does
-  *not* port cleanly across platforms: the qualitative
-  direction held, but neither the exact crossover point nor
-  the performance magnitude did. A deployment on
-  meaningfully different hardware should re-run that same
-  characterization and pass its own measured value here
-  rather than trust this default blindly.
-- `auto_vector_max_capacity` - The per-locus capacity ceiling
-  `"auto"` uses alongside `auto_vector_min_d` — the largest
-  capacity across every locus in `params.loci` must be at
-  most this value, in addition to `d >= auto_vector_min_d`,
-  for `"auto"` to pick `"generational-vector"` — under
-  `mutation_model="finite_alleles"` only (an infinite-alleles
-  table is as wide as the alleles alive at once, not
-  `4 ** length`); irrelevant, and unused, under every other
-  `engine_backend` value.
-  Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
-  see that constant's own docstring for the measured finding
-  behind it and the same cross-environment/cross-fix
-  staleness caveats `auto_vector_min_d` already carries.
-
-
-**Raises**:
-
-- `ValueError` - If `engine_backend == "lineal"` and `jit != "off"`,
-  `engine_backend == "generational-vector"` (or `"auto"`
-  resolves to it) and `jit != "off"`, `engine_backend ==
-  "generational-vector"` (or `"auto"` resolves to it) and the
-  optional `numba` dependency is not installed, `engine_backend
-  == "generational-vector"` and `params` uses `mutation_model ==
-  "finite_alleles"` and names a locus whose capacity exceeds
-  `auto_vector_max_capacity` (checked only when `params` is
-  given; `"auto"` already refuses an over-capacity config on its
-  own, before ever reaching this branch),
-  `engine_backend == "auto"` and `params` is `None`, or
-  `engine_backend` names something unrecognized.
-
-<a id="fim.engine.fim"></a>
+<a id="fim.engine.api.fim"></a>
 
 #### fim
 
@@ -6270,7 +5379,470 @@ silently disagree.
   (or under `"generational-vector"`, including when `"auto"`
   resolves to it — see `build_engine_backend`'s own docstring).
 
-<a id="fim.engine.deterministic_run_id"></a>
+<a id="fim.engine.backends"></a>
+
+# fim.engine.backends
+
+Backend protocol, the generational backend, and the factory.
+
+<a id="fim.engine.backends.EngineBackend"></a>
+
+## EngineBackend Objects
+
+```python
+class EngineBackend(Protocol)
+```
+
+One way of actually running a batch of replicates to completion.
+
+`fim()` (below) validates its own public arguments, then hands off to
+exactly one backend's own `run` — today, always `LinealBackend`, the
+only implementation. This split exists ahead of a second backend
+actually landing because the engine is already planned to grow more
+than one way of running the same simulation: a thread-based,
+generation-first scheduler and a vectorized, array-based one are both
+designed but not yet built. Naming today's existing behavior as an
+explicit `EngineBackend` now means a future caller picks among
+backends through an ordinary keyword argument once those exist,
+rather than `fim()` growing an ever-larger hardcoded dispatch of its
+own.
+
+Every backend takes exactly the same four "what to run, where"
+arguments — anything about *how* a given backend actually computes
+(worker-process counts, thread pools, which array representation) is
+that backend's own constructor's business, not part of this shared
+contract.
+
+<a id="fim.engine.backends.EngineBackend.run"></a>
+
+#### run
+
+```python
+def run(params: SimulationParams, store: TrajectoryStore | None,
+        run_id: str | None, clock: Clock) -> SimulationOutput
+```
+
+Run every replicate `params` describes; return the result(s).
+
+<a id="fim.engine.backends.GenerationalBackend"></a>
+
+## GenerationalBackend Objects
+
+```python
+class GenerationalBackend()
+```
+
+`run_batch`, driven by an injectable `Advancer`.
+
+Reorders *when* generations are computed (§4.2 of the design this
+implements) without changing *what* is computed: with the default
+`SequentialAdvancer`, every replicate's own trajectory is
+bit-identical to what `LinealBackend` produces for the same seed
+(proven by `run_batch`'s own docstring; checked directly by this
+project's own golden-parity tests). A future thread-pool-backed
+`Advancer` can be passed here to add real concurrency without this
+class itself changing at all.
+
+<a id="fim.engine.backends.GenerationalBackend.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(
+        advancer: Advancer | None = None,
+        *,
+        store_factory: Callable[[str], TrajectoryStore] | None = None) -> None
+```
+
+Configure which `Advancer` drives this backend's own batches.
+
+**Arguments**:
+
+- `advancer` - Defaults to `SequentialAdvancer()` — no new
+  concurrency, matching `LinealBackend`'s own trajectories
+  exactly for the same seed.
+- `store_factory` - See `fim()`'s own docstring. Unlike
+  `LinealBackend`, this backend never needs a process
+  pool to use one — `run_batch` already writes every
+  replicate's own rows through one shared `store`
+  argument, keyed by that replicate's own `run_id`
+  (`fim.persistence.store.TrajectoryStore`'s own
+  contract), so wrapping `store_factory` in a
+  `ReplicateFanoutStore` (below) and handing *that* to
+  `run_batch` as its one `store` gives every replicate a
+  real, independent file — the same outcome
+  `LinealBackend`'s own `store_factory` path already
+  produces — with no change to `run_batch`, `ReplicaLane`,
+  or any `Advancer` implementation at all
+  (`20260914-claude-sonnet-5-non-lineal-batch-execution-
+  design.md`, `selby/restricted`, §5.1-§5.2).
+
+<a id="fim.engine.backends.GenerationalBackend.run"></a>
+
+#### run
+
+```python
+def run(params: SimulationParams, store: TrajectoryStore | None,
+        run_id: str | None, clock: Clock) -> SimulationOutput
+```
+
+Run `params`'s own replicate(s); see `fim()`'s own docstring.
+
+<a id="fim.engine.backends.resolve_auto_engine_backend"></a>
+
+#### resolve\_auto\_engine\_backend
+
+```python
+def resolve_auto_engine_backend(
+        params: SimulationParams,
+        auto_vector_min_d: int,
+        auto_vector_max_capacity: int,
+        jit: JitOption = "off"
+) -> Literal["generational", "generational-vector"]
+```
+
+Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
+
+Shared by `build_engine_backend` (to know which backend to actually
+construct) and `fim()` (to know what to record in the run's own
+manifest as provenance, `RunManifest.engine_backend`) — kept in one
+place so the two can never silently drift apart on what `"auto"`
+actually picked for a given `params`. Never resolves to `"lineal"`
+— see `build_engine_backend`'s own `engine_backend` Args entry for
+why only the generational-vs-vector axis is automated so far.
+
+`"generational-vector"` is chosen when all of these hold:
+
+- `jit` is `"off"`: Backend V has no `jit` toggle, only Backend G
+  offers one, and a caller who asked for it gets it (the output is the
+  same either way);
+- `numba` is importable. Backend V's output is identical to
+  Backend G's, so a missing `numba` costs only speed: `"auto"` falls
+  back to `"generational"` instead of raising, as an explicit
+  `"generational-vector"` choice does;
+- `params.d >= auto_vector_min_d`;
+- under `mutation_model="finite_alleles"` only, the largest locus
+  capacity (`4 ** length`) is at most `auto_vector_max_capacity`: a
+  finite-alleles table is `capacity` columns wide however few states
+  are in use. Under infinite alleles the table is as wide as the
+  alleles alive at once, so there is no such ceiling (the table's own
+  memory ceiling, `fim.model.vector_block`, guards the rest).
+
+Otherwise `"generational"`. Because V reproduces G bit for bit, the
+choice changes how fast a run finishes and nothing in its output but
+the manifest's `engine_backend` field.
+
+<a id="fim.engine.backends.numba_is_available"></a>
+
+#### numba\_is\_available
+
+```python
+def numba_is_available() -> bool
+```
+
+Return whether the optional `numba` dependency can actually be imported.
+
+`importlib.util.find_spec` locates the module without importing it —
+cheap enough to call on every `"generational-vector"` construction,
+and it never pays numba's own (non-trivial) import cost just to
+answer "is it there at all."
+
+`build_engine_backend` calls this before constructing a
+`VectorizedAdvancer` — `fim.model.vectorized`'s own mutate step
+imports `numba` unconditionally on first use (its own module
+docstring), with no pure-Python fallback, so a numba-less install
+used to fail on the *first `advance()` call*, after generation zero
+had already been built and persisted to the trajectory store — a
+real, previously unguarded gap (this project's own multi-model
+engine review, 2026-09-04, `FIM-01`/finding C-03/finding P1-3,
+independently found by three of four reviewers). Checking here
+instead turns that into a named `ValueError` at config time, before
+anything has been written.
+
+A module-level function, not inlined into `build_engine_backend`,
+specifically so a test can monkeypatch it directly (`fim.engine.
+numba_is_available`) to exercise the numba-less path without
+actually uninstalling numba from the test environment.
+
+<a id="fim.engine.backends.build_engine_backend"></a>
+
+#### build\_engine\_backend
+
+```python
+def build_engine_backend(
+    engine_backend: EngineBackendChoice,
+    *,
+    jit: JitOption = "off",
+    max_workers: int | None = None,
+    store_factory: Callable[[str], TrajectoryStore] | None = None,
+    params: SimulationParams | None = None,
+    auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D,
+    auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY
+) -> EngineBackend
+```
+
+Return the configured backend `fim()` should run against.
+
+One function, not a class hierarchy: Python's own first-class
+functions make a `ConcreteFactory` subclass per backend unnecessary
+ceremony here — a plain function that reads a choice and returns an
+object satisfying `EngineBackend`'s shape does the same job with no
+class tree to maintain.
+
+**Arguments**:
+
+- `engine_backend` - Which backend to build. `"generational"` builds
+  `GenerationalBackend(ThreadedAdvancer())` — real thread-based
+  parallelism, not merely the structural reshuffle
+  `SequentialAdvancer` alone would give (still directly
+  available by constructing `GenerationalBackend()` without
+  going through this factory, if a caller wants zero new
+  thread-safety surface). `"generational-vector"` builds
+  `GenerationalBackend(VectorizedAdvancer())` — array-native,
+  one compiled kernel call per generation over every locus
+  (`fim.model.vector_block`); runs both mutation models,
+  both migrant sampling modes — needs the optional `numba`
+  dependency unconditionally (see `jit`, below, for why that is
+  not the same thing as `jit="numba"`).
+  `"auto"` picks between `"generational"` and
+  `"generational-vector"` using `params`/`auto_vector_min_d`
+  (below) — never `"lineal"`, since no data yet characterizes
+  where that boundary sits (see `auto_vector_min_d`'s own
+  entry for why only the L-vs-V axis is automated so far).
+  `resolve_auto_engine_backend` lists the conditions: V for
+  continuous migration when `numba` is importable and `d` is
+  large enough (and, for finite alleles, the capacity small
+  enough), otherwise G. The output is identical either way.
+- `jit` - Whether the chosen backend should JIT-compile its own
+  operators. Under `"generational"`, `"numba"` JIT-compiles
+  `drift`'s own multinomial draw (`fim.model.operators.drift`'s
+  own docstring) — bit-identical output to `"off"`, for the
+  same seed, *on the same machine*: that claim (and every
+  "generational-vector" trajectory's own reliance on `numba`,
+  unconditionally, further below) rests on `numba`'s own
+  compiled math matching CPython's own `libm` bit for bit,
+  verified only on this project's own development platform so
+  far, not across the different `libm` implementations a
+  different operating system or CPU architecture can ship
+  (this project's own multi-model engine review, 2026-09-04,
+  `FIM-22`/finding Kimi-FIM-22) — a portability caveat to keep
+  in mind before treating a `jit="numba"`/"generational-
+  vector" result as reproducible across machines the way
+  every `jit="off"` result already is, not a known, confirmed
+  divergence. Not yet shown to be a standalone wall-clock win,
+- `though` - it fixes a real, separately measured regression an
+  earlier, per-pair-call version had, but `drift`'s own
+  dominant cost at this project's reference scale is
+  marshaling to and from `ModelState`'s sparse representation,
+  not the compiled draw itself (`drift`'s own docstring has
+  the full measurement). `migrate`/`mutate`'s own RNG calls
+  are not JIT-compiled at all. Needs the optional `numba`
+  dependency installed (``pip install fim[jit]``) — not
+  imported at all unless `jit="numba"` is actually requested.
+  `"generational-vector"` has no separate toggle for this yet
+  — its own mutate step always requires `numba` internally,
+  regardless of this argument, so only `jit="off"` (the
+  default) is accepted there; passing `jit="numba"` raises
+  `ValueError`, not a silent no-op. `"lineal"` never accepts
+  anything but `"off"` — a permanent restriction, not a
+  temporary gap: `LinealBackend` stays the untouched golden
+  reference every other backend's own parity tests are checked
+  against (see its own docstring).
+- `max_workers` - `LinealBackend`-only; ignored by every other
+  backend, since there is no process pool anywhere else for it
+  to size — `ThreadedAdvancer`'s own thread count is a
+  separate, not-yet-publicly-reachable knob (see its own
+  docstring for why this name is not reused for it there);
+  `run_batch`'s own `max_concurrent_replicates` is the
+  `"generational"`/`"generational-vector"` equivalent
+  concurrency/memory-bounding control, a real `SimulationParams`
+  field rather than a `build_engine_backend` argument.
+- `store_factory` - Every backend accepts this the same way now — one
+  real, independent store per replicate, keyed by that
+  replicate's own run id. `LinealBackend` uses it directly (a
+  worker process needs its own store; nothing else could be
+  shared across a process boundary). `GenerationalBackend`
+  wraps it in a `ReplicateFanoutStore` instead
+  (`GenerationalBackend`'s own docstring) — no process pool
+  involved, but the same one-store-per-replicate outcome.
+- `params` - The run this backend is actually being built for —
+  required, and only actually read, when `engine_backend ==
+  "auto"`, to look at `params.d`/`params.mutation_model`/
+  `params.migrant_sampling` and decide. Every other choice
+  ignores it entirely (a caller building a `"lineal"`/
+  `"generational"`/`"generational-vector"` backend directly
+  never needs to pass a real `SimulationParams` here at all).
+- `auto_vector_min_d` - The deme-count cutover `"auto"` uses to
+  decide between `"generational"` and `"generational-vector"`
+  — irrelevant, and unused, under every other `engine_backend`
+  value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (`2`), this
+  project's own best current estimate from a real benchmark
+  sweep (see that constant's own docstring for the full
+  finding, including its cross-environment caveats) —
+  deliberately a parameter, not a hardcoded constant, because
+  a follow-on check (the same sweep, run inside a Docker
+  container instead of natively) found the threshold does
+  *not* port cleanly across platforms: the qualitative
+  direction held, but neither the exact crossover point nor
+  the performance magnitude did. A deployment on
+  meaningfully different hardware should re-run that same
+  characterization and pass its own measured value here
+  rather than trust this default blindly.
+- `auto_vector_max_capacity` - The per-locus capacity ceiling
+  `"auto"` uses alongside `auto_vector_min_d` — the largest
+  capacity across every locus in `params.loci` must be at
+  most this value, in addition to `d >= auto_vector_min_d`,
+  for `"auto"` to pick `"generational-vector"` — under
+  `mutation_model="finite_alleles"` only (an infinite-alleles
+  table is as wide as the alleles alive at once, not
+  `4 ** length`); irrelevant, and unused, under every other
+  `engine_backend` value.
+  Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
+  see that constant's own docstring for the measured finding
+  behind it and the same cross-environment/cross-fix
+  staleness caveats `auto_vector_min_d` already carries.
+
+
+**Raises**:
+
+- `ValueError` - If `engine_backend == "lineal"` and `jit != "off"`,
+  `engine_backend == "generational-vector"` (or `"auto"`
+  resolves to it) and `jit != "off"`, `engine_backend ==
+  "generational-vector"` (or `"auto"` resolves to it) and the
+  optional `numba` dependency is not installed, `engine_backend
+  == "generational-vector"` and `params` uses `mutation_model ==
+  "finite_alleles"` and names a locus whose capacity exceeds
+  `auto_vector_max_capacity` (checked only when `params` is
+  given; `"auto"` already refuses an over-capacity config on its
+  own, before ever reaching this branch),
+  `engine_backend == "auto"` and `params` is `None`, or
+  `engine_backend` names something unrecognized.
+
+<a id="fim.engine.batch"></a>
+
+# fim.engine.batch
+
+The generation-first batch driver and its adaptive stop.
+
+<a id="fim.engine.batch.run_batch"></a>
+
+#### run\_batch
+
+```python
+def run_batch(params: SimulationParams, store: TrajectoryStore,
+              run_id: str | None, clock: Clock,
+              advancer: Advancer) -> tuple[RunResult, ...]
+```
+
+Run every replicate `params` describes, generation-first.
+
+The generation-first counterpart to `LinealBackend`'s own
+replica-first dispatch: every currently-active lane's own generation
+*g* is advanced before any of them moves on to generation *g + 1*
+(via `advancer.advance`), rather than one replica's entire trajectory
+running to completion before the next starts.
+
+An adaptive early stop (`SimulationParams.
+stop_batch_early`; see `replicate_monitor`) is judged on an
+*accepted prefix*, in replicate order, exactly as `LinealBackend`'s
+own sequential loop judges it: replicate *i* is fed to the cross-
+replica monitor only once it and every lower-numbered replicate have
+finished, so the monitor sees replicates 1, 2, 3, ... in that order
+regardless of which lane happened to converge first. The stop fires
+at the same replicate, on the same values, as `LinealBackend` for
+the same seed, so both backends keep the same replicates and report
+the same summary. Feeding the monitor in finishing order instead
+(this function's own behavior through 2026-10-06) kept whichever
+replicates converged soonest; convergence time correlates with the
+statistics being estimated (in the adaptive worked example, the
+replicates that converge earliest have lower `D`), so that order
+biased the batch's own estimate rather than merely reordering it.
+
+Waiting for a slow, low-numbered replicate costs only time, never
+correctness: every lane keeps advancing, generation by generation,
+while the prefix waits. A lane that finishes ahead of the prefix is
+finalized immediately (its `RunResult` held until the prefix reaches
+it, the same memory every kept replicate already uses) and its
+window slot (`max_concurrent_replicates`) is reused at once. Once the
+stop fires, every lane past the stopping replicate — still running,
+or finished but not yet admitted — is discarded, exactly as
+`LinealBackend` never runs, and `run_batch_parallel` discards,
+replicates past its own stopping point.
+
+Every lane owns its own, never-shared `np.random.Generator` and its
+own `AlleleRegistry` — nothing here ever reads or writes another
+lane's state, which is what makes the traversal order above safe:
+reordering *when* one lane's generation is computed relative to
+another's never changes that lane's own result, and the accepted-
+prefix rule above means it never changes *which* lanes are kept.
+
+An adaptive stop's own discarded lanes have their own rows discarded
+from `store` before returning, not left behind as orphaned data no
+returned `RunResult` accounts for (this project's own multi-model
+engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
+1). `build_replica_lane` already wrote each lane's own generation
+zero eagerly, before this loop ever runs, so even a lane the
+generation-first loop below never advances past that point still
+has rows to discard, not merely lanes that got partway through.
+
+At most `params.max_concurrent_replicates` lanes are ever alive at
+once — `None` (the default) means every requested replicate, exactly
+every prior release's own behavior, since `min(window_size,
+n_replicates)` below then equals `n_replicates` itself and every
+lane is built up front as before. A smaller window instead builds
+lanes lazily: only the window's own worth exist up front, and a
+lane is constructed for replicate index *i* only once some earlier
+lane's own slot frees up, immediately before advancing past that
+point — never merely reserved. This is `FIM-45`/`P-04`/`P2-7`'s own
+fix (a replicate `run_batch` never gets to before an adaptive stop
+now never pays for that replicate's own setup either, on any
+`Advancer`) and, for `VectorizedAdvancer` specifically,
+`FIM-48`'s own fix too: that advancer's cached `VectorBlock`
+(`ReplicaLane.vectorized_state`, released immediately once a lane
+finalizes — see `finalize_replica_lane`) is held by every
+concurrently active lane at once, so bounding how many lanes are
+ever active at once directly bounds this backend's own steady-state
+memory, independent of `n_replicates` itself. A replacement lane is
+built only *after* confirming the cross-replica monitor has not
+just decided to stop — building one first and discarding it a line
+later would reintroduce exactly the wasted setup this fix exists to
+remove.
+
+<a id="fim.engine.batch.waiting_for_window"></a>
+
+#### waiting\_for\_window
+
+```python
+def waiting_for_window(lane: ReplicaLane,
+                       planner: BatchWindowPlanner | None) -> bool
+```
+
+Return whether a replicate must pause until its window is known.
+
+A replicate past the first wave learns its averaging window only when the
+wave has been measured. It may average until the shortest window it could
+be given, `BatchWindowPlanner.earliest_window`; beyond that it would risk
+overshooting its window, which would make its result depend on how far it
+had run when the wave ended, and so on the backend. It pauses there.
+
+**Arguments**:
+
+- `lane` - A running lane.
+- `planner` - The batch's planner, or `None`.
+
+
+**Returns**:
+
+  `True` when the lane is waiting for its window and has reached the
+  earliest generation it may stop at.
+
+<a id="fim.engine.identity"></a>
+
+# fim.engine.identity
+
+Run and replicate identity: IDs and per-replicate parameters.
+
+<a id="fim.engine.identity.deterministic_run_id"></a>
 
 #### deterministic\_run\_id
 
@@ -6291,7 +5863,1246 @@ having to coordinate — a convenient side effect of this project's
 own emphasis on determinism (see this module's own docstring, above)
 rather than something engineered for its own sake.
 
-<a id="fim.engine.report_for_state"></a>
+<a id="fim.engine.identity.params_for_replicate"></a>
+
+#### params\_for\_replicate
+
+```python
+def params_for_replicate(params: SimulationParams,
+                         replicate_index: int,
+                         window: int | None = None) -> SimulationParams
+```
+
+Return the configuration of one replicate of a batch.
+
+The replicate is an independent single run with its own seed. Its
+`precision_method` is reset (a single run has no interval across
+replicates, so `planned_replicates` would be refused) and its averaging
+window, when the batch assigned one, is written into the parameters, so
+the replicate's manifest says exactly what it ran.
+
+**Arguments**:
+
+- `params` - The batch's configuration.
+- `replicate_index` - The replicate's zero-based index.
+- `window` - The averaging window the batch assigned, in generations, or
+  `None` to keep the batch's own setting.
+
+
+**Returns**:
+
+  The replicate's configuration.
+
+<a id="fim.engine.identity.derive_replicate_run_id"></a>
+
+#### derive\_replicate\_run\_id
+
+```python
+def derive_replicate_run_id(params: SimulationParams, replicate_index: int,
+                            run_id: str | None) -> str
+```
+
+Return the run ID of one replicate of a batch.
+
+**Arguments**:
+
+- `params` - The batch's configuration.
+- `replicate_index` - The replicate's zero-based index.
+- `run_id` - The batch's ID, or `None` to derive one from the parameters.
+
+
+**Returns**:
+
+  `<run_id>-rNNN` for a named batch. Otherwise the deterministic ID of
+  the replicate's configuration *with the batch's own averaging-window
+  setting*, not the window it was assigned: every backend learns that
+  window at a different moment, and the same replicate must get the same
+  ID whichever one runs it.
+
+<a id="fim.engine.lanes"></a>
+
+# fim.engine.lanes
+
+Replicate lanes, advancers, and lane construction and finalization.
+
+<a id="fim.engine.lanes.ReplicaLane"></a>
+
+## ReplicaLane Objects
+
+```python
+@dataclass(slots=True)
+class ReplicaLane()
+```
+
+One replica's own mutable working state, mid-batch.
+
+Exactly what `run_one`'s own local variables already are (`state`,
+`rng`, `registry`, `finite_alleles`, `monitor`) — a structural change,
+promoting one function's stack frame into an explicit, named,
+per-replica object so a batch can hold several side by side and
+advance them together one generation at a time, rather than running
+each replica's entire trajectory before starting the next (see
+`GenerationalBackend`, below). Nothing about what any one lane
+computes changes because of this.
+
+`vectorized_state` is a `VectorizedAdvancer`-only cache — the live
+`fim.model.vector_block.VectorBlock` this lane is actually stepping,
+carried forward generation to generation, with `state` (the
+`ModelState` below) left untouched mid-run rather than reconstructed
+from it every tick. The block is what carries everything a
+`ModelState` cannot: the identity of every column, the counter that
+mints new allele identities (infinite alleles), and each locus's
+minted-state bookkeeping (finite alleles — re-deriving it from `state`
+alone, every generation, would forget any allele minted and then
+driven extinct, the normal fate of a fresh low-frequency mutant).
+`convergence_values_vectorized` reads statistics straight from the
+block's arrays, so `state` only needs rebuilding once, when the lane
+actually stops. Unused by every other `Advancer`; stays `None` for the
+whole run under those. Released (set back to `None`) by
+`finalize_replica_lane` the instant a lane stops, not held for the
+rest of the batch's own run — see that function's own docstring
+(`FIM-48`).
+
+`equilibration_outcome` is set once, by `build_replica_lane`
+(`generate_initial_state_with_outcome`'s own return value), and
+only when this lane's own `params` configured equilibrium-split —
+`None` for every other initial-condition mode. `_finalize_replica_
+lane` reads it to populate this lane's own manifest fields.
+`equilibrium_store` is set alongside it: where `build_replica_lane`
+already streamed the ancestral phase's own trajectory (the
+`equilibrium_trajectory.tlog` artifact), handed on to
+`RunResult.equilibrium_store`.
+
+<a id="fim.engine.lanes.Advancer"></a>
+
+## Advancer Objects
+
+```python
+class Advancer(Protocol)
+```
+
+Steps every currently-active lane forward by exactly one generation.
+
+The single fan-out point `run_batch` (below) delegates to — never
+calls `step()` itself. `SequentialAdvancer` is currently the only
+implementation: a plain loop, visiting lanes one at a time, in order.
+A future thread-pool-backed advancer can implement this same
+protocol without `run_batch` itself ever changing.
+
+<a id="fim.engine.lanes.Advancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Advance every lane in `active_lanes` by one generation.
+
+Returns whichever of them just stopped — including a lane whose
+monitor already reported stopped *before* this call (the
+generation-zero edge case, where convergence is already
+satisfied before any generation past zero ever runs), which is
+returned without being stepped at all.
+
+<a id="fim.engine.lanes.SequentialAdvancer"></a>
+
+## SequentialAdvancer Objects
+
+```python
+class SequentialAdvancer()
+```
+
+The default `Advancer`: a plain loop, one lane at a time.
+
+Always correct, with zero new thread-safety surface — a single
+thread visiting lanes one at a time in a `for` loop cannot race with
+itself. This is what makes `GenerationalBackend` bit-identical to
+`LinealBackend` for the same seed (proof: each lane's own generation
+sequence, RNG draws, and allele-id minting depend only on that
+lane's own prior state, never on any other lane or on wall-clock
+order — reordering *when* one lane's generation is computed relative
+to another's changes nothing about that lane's own result).
+
+<a id="fim.engine.lanes.SequentialAdvancer.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*, jit: bool = False) -> None
+```
+
+Configure whether this advancer's own lanes step with JIT.
+
+**Arguments**:
+
+- `jit` - Passed through to `fim.model.operators.step`'s own
+  `jit` argument on every call — see its docstring.
+  `False` (the default) is every prior release's own
+  behavior, unchanged, and needs no `numba` install at
+  all; `True` still produces a bit-identical trajectory to
+  `False`, for the same seed (`drift`'s own docstring),
+  only with the GIL released during the drift step.
+
+<a id="fim.engine.lanes.SequentialAdvancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Step every active lane by exactly one generation.
+
+Mirrors one potential iteration of `run_one`'s own `while not
+monitor.should_stop():` loop, per lane, in order.
+
+<a id="fim.engine.lanes.ThreadedAdvancer"></a>
+
+## ThreadedAdvancer Objects
+
+```python
+class ThreadedAdvancer()
+```
+
+Fans `SequentialAdvancer`'s own per-lane stepping out across threads.
+
+Partitions whichever lanes are active this tick into up to
+`max_workers` contiguous blocks (`_partition_into_blocks`) and steps
+each block — sequentially, in order, exactly what `SequentialAdvancer`
+already does — inside its own thread, via `ThreadPoolExecutor`.
+Blocks are disjoint (every lane belongs to exactly one), so no two
+threads ever touch the same lane's own state, RNG, or allele
+registry at once; the one thing genuinely shared across threads is
+`store`, made safe by the `threading.Lock` both
+`fim.persistence.store.InMemoryTrajectoryStore` and
+`fim.persistence.binary_store.BinaryLogStore` now hold around
+their own `write_generation`.
+
+Whether this delivers real wall-clock speedup over
+`SequentialAdvancer` depends on how much of each generation's own
+work happens inside NumPy/JIT calls that release the GIL versus
+pure-Python loop overhead — measured, not merely open, as of
+`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+§10 items 10a/10c: at this project's own reference scale, `drift`'s
+own `_inversion_binomial` primitive (needed to keep this backend
+bit-identical to `LinealBackend`, see below) is pure Python and
+holds the GIL for nearly all of `drift`'s own wall-clock time. That
+measurement predates §10 item 10e's own stages 1-3b (2026-09-03):
+`migrate`'s own scalar-rate, continuous-migration path and `mutate`'s
+own event-count draw, whole-generation minting, source attribution,
+and (below a per-locus capacity bound) target selection are now
+`nogil`-compiled too, under `jit=True` — the "unjitted and GIL-bound
+regardless of `jit`" claim this paragraph made through 2026-09-02 is
+no longer an accurate description of the code. Whether that
+translates into real wall-clock thread scaling is a genuinely
+different, re-measured-not-yet question — `20260903-claude-sonnet-
+5-fim-vg-performance-campaign-design.md` §6.3 item 1 schedules the
+re-sweep this claim now depends on; until that lands, treat this
+class's own real-world thread-scaling behavior as unmeasured against
+the current code, not as either the old regression or a new win.
+What this class does guarantee, unconditionally:
+identical results to `SequentialAdvancer` for the same seed, since
+the actual per-lane computation is the same code
+(`SequentialAdvancer.advance` itself, called once per block), only
+fanned out across threads rather than run in one.
+
+Block assignment is computed fresh every tick from whichever lanes
+happen to be active (`_partition_into_blocks`), not a persistent,
+static assignment decided once at batch start — worth revisiting as
+a later, separately-measured optimization once lane membership is
+treated as fixed-and-masked rather than genuinely shrinking, but not
+this class's own current scope.
+
+<a id="fim.engine.lanes.ThreadedAdvancer.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(max_workers: int | None = None,
+             *,
+             jit: JitOption = "off") -> None
+```
+
+Configure how many blocks/threads this advancer fans out across.
+
+**Arguments**:
+
+- `max_workers` - Defaults to `os.cpu_count()` (or 1 if that
+  cannot be determined) — the same default reasoning
+  `concurrent.futures.ThreadPoolExecutor` itself uses.
+  Deliberately not the same `max_workers` `fim()`'s own
+  public signature accepts — that one is `LinealBackend`-
+  only (a process count); reusing the name for a thread
+  count here was flagged, not settled, by the design this
+  implements, so this constructor's own parameter is
+  reachable only by building a `GenerationalBackend`
+  directly, not yet through `fim()` itself.
+- `jit` - Passed through to each block's own `SequentialAdvancer`
+  — see its docstring. ``"numba"`` JIT-compiles `drift`'s
+  own multinomial draw (`fim.model.operators.drift`'s own
+  docstring) — bit-identical, and no longer regresses
+  wall-clock time the way an earlier, per-pair-call version
+  measurably did, but is not yet shown to be a clear
+  standalone win either: `drift`'s own dominant cost at
+  this project's reference scale is marshaling to and from
+  `ModelState`'s sparse representation, not the compiled
+  draw itself, so this setting alone should not be assumed
+  to speed up `ThreadedAdvancer`'s own thread fan-out in
+  practice. `migrate`/`mutate`'s RNG calls stay unjitted
+  and GIL-bound regardless of this setting either way.
+
+
+**Raises**:
+
+- `ValueError` - If `max_workers` is given and is less than 1.
+
+<a id="fim.engine.lanes.ThreadedAdvancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Step every active lane by one generation, fanned out across threads.
+
+<a id="fim.engine.lanes.VectorizedAdvancer"></a>
+
+## VectorizedAdvancer Objects
+
+```python
+class VectorizedAdvancer()
+```
+
+Steps every currently-active lane forward by one generation, array-native.
+
+Backend V's `Advancer`. Each lane's generation-zero `ModelState` is
+converted exactly once, the first tick the lane is advanced, into a
+dense `fim.model.vector_block.VectorBlock` cached on the lane
+(`ReplicaLane.vectorized_state`); from then on every generation is one
+compiled kernel call over every locus, with no `ModelState` in
+between. Trajectory rows are written straight from the arrays,
+convergence statistics are read from them, and a real `ModelState` is
+rebuilt once per lane, when its monitor reports it has stopped, for
+the report and `RunResult` machinery that needs one.
+
+**Both mutation models** run on the block, in the same stage and draw
+order as `fim.model.operators.step`, with the arithmetic of the
+dictionary-based operators ported operation for operation. For the same
+seed on the same platform the trajectory rows, report and final state
+are therefore identical to Backend L's and G's, every allele identity
+and frequency bit. Under infinite alleles the lane's `AlleleRegistry`
+counter is brought up to the identities the block handed out when the
+lane stops; under finite alleles the K-allele target draws are made in
+the kernel, interleaved with the next pair's mutation counts exactly as
+`operators.mutate` does. The convergence statistics `D`, `G_ST`, `H_S`,
+`H_T` and `H_ST` are computed inside the kernel and equal
+`statistics_report`'s bits; the opt-in expensive statistics (`E_ST`,
+`K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
+
+Both migrant sampling modes run in the kernel. Under
+`migrant_sampling="stochastic"` the kernel draws one binomial migrant
+count per destination deme per generation, shared by every locus and
+ahead of drift, exactly as `operators.migrate` does with a generator.
+A genuine caller-supplied `(d, d)` migration matrix is supported (one
+exact sum per cell in the continuous case).
+
+**Arguments**:
+
+- `memory_ceiling_bytes` - Per-lane ceiling on the table, in bytes;
+  `None` uses the 2 GiB default or the
+  `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable
+  (`fim.model.vector_block.resolve_memory_ceiling`). A lane
+  whose table would exceed it raises
+  `fim.model.vector_block.VectorMemoryCeilingError`, naming
+  what to change.
+
+<a id="fim.engine.lanes.VectorizedAdvancer.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*, memory_ceiling_bytes: int | None = None) -> None
+```
+
+Remember the per-lane memory ceiling for new tables.
+
+**Arguments**:
+
+- `memory_ceiling_bytes` - See the class docstring.
+
+<a id="fim.engine.lanes.VectorizedAdvancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Step every active lane by one generation, array-native.
+
+Builds each lane's block on its first tick, steps it, writes the
+generation's rows, and records the convergence statistics. When a
+lane's monitor reports stopped, `lane.state` (stale until now) is
+rebuilt from the block and the lane's registry counter is brought
+up to the identities the block minted.
+
+**Arguments**:
+
+- `active_lanes` - The lanes still running.
+- `store` - Where each lane's rows for the new generation go.
+
+
+**Returns**:
+
+  The lanes whose monitor reports stopped, including one that was
+  already stopped before this call and is returned unstepped.
+
+<a id="fim.engine.lanes.frame_layout"></a>
+
+#### frame\_layout
+
+```python
+def frame_layout(params: SimulationParams) -> FrameLayout
+```
+
+Return the frame layout of a run: its locus ids and gene copies per deme.
+
+**Arguments**:
+
+- `params` - The run's parameters.
+
+
+**Returns**:
+
+  The layout a `FrameStore` is told through `begin_store_run`.
+
+<a id="fim.engine.lanes.equilibrium_frame_layout"></a>
+
+#### equilibrium\_frame\_layout
+
+```python
+def equilibrium_frame_layout(params: SimulationParams) -> FrameLayout
+```
+
+Return the frame layout of a run's ancestral (equilibrium-split) phase.
+
+One panmictic ancestral population of every deme's gene copies together
+(`EquilibriumSplitInitialCondition`), so its frames have one deme of that
+size.
+
+**Arguments**:
+
+- `params` - The run's parameters.
+
+
+**Returns**:
+
+  The layout the ancestral-phase store is told through `begin_store_run`.
+
+<a id="fim.engine.lanes.persist_state"></a>
+
+#### persist\_state
+
+```python
+def persist_state(store: TrajectoryStore, run_id: str,
+                  state: ModelState) -> None
+```
+
+Write a `ModelState` generation (Backends L and G) to `store`.
+
+The rows or frame are built by this module, from a state whose own
+construction validated every value, so they are written unvalidated.
+
+**Arguments**:
+
+- `store` - The run's store.
+- `run_id` - The run being written.
+- `state` - The generation.
+
+<a id="fim.engine.lanes.build_replica_lane"></a>
+
+#### build\_replica\_lane
+
+```python
+def build_replica_lane(
+        params: SimulationParams,
+        replica_index: int,
+        run_id: str | None,
+        store: TrajectoryStore,
+        clock: Clock,
+        planner: BatchWindowPlanner | None = None) -> ReplicaLane
+```
+
+Build and seed one replica lane through generation zero.
+
+Mirrors `run_one`'s own setup exactly — seed derivation, registry
+start, finite-alleles construction, generation-zero persistence and
+convergence recording, in the same order — so a `ReplicaLane`'s
+subsequent generations, advanced one at a time by an `Advancer`, are
+bit-identical to what `run_one` alone would have produced for the
+same replica. `run_id`/`params` naming for a multi-replicate batch
+exactly matches `LinealBackend`'s own sequential-batch branch, so the
+two backends' own run ids agree for the same configuration.
+
+<a id="fim.engine.lanes.finalize_replica_lane"></a>
+
+#### finalize\_replica\_lane
+
+```python
+def finalize_replica_lane(lane: ReplicaLane, clock: Clock,
+                          store: TrajectoryStore) -> RunResult
+```
+
+Build this lane's own `RunResult`, once its monitor has stopped.
+
+Mirrors the tail of `run_one` exactly — same report/manifest
+construction, from this lane's own final state and monitor history.
+
+Also releases `lane.vectorized_state` (a `VectorizedAdvancer`-only
+cache — see `ReplicaLane`'s own docstring) the moment it stops being
+needed: `VectorizedAdvancer.
+advance` already rebuilt `lane.state` (the `ModelState` the
+`RunResult` below actually reads) from `lane.vectorized_state`
+before ever calling this function, so the dense array itself is
+pure dead weight from here on — `run_batch`'s own `lanes` list still
+holds this `ReplicaLane` until the whole batch returns, so without
+this, a finished lane's own cached state would stay alive for the
+rest of the batch's run for nothing. `FIM-48` (this project's own
+multi-model engine review, 2026-09-04): the fix `run_batch`'s own
+bounded window bounds how many lanes hold this cache *concurrently*;
+this releases *each one's own copy* the instant its lane is done,
+independent of whether a window is configured at all. A no-op for
+every other `Advancer`, whose lanes never populate either field to
+begin with.
+
+<a id="fim.engine.lanes.generate_initial_state_with_outcome"></a>
+
+#### generate\_initial\_state\_with\_outcome
+
+```python
+def generate_initial_state_with_outcome(
+    params: SimulationParams, rng: np.random.Generator, store: TrajectoryStore,
+    run_id: str
+) -> tuple[ModelState, EquilibrationOutcome | None, TrajectoryStore | None]
+```
+
+Generate generation zero, capturing the equilibration outcome when relevant.
+
+`generate_initial_state` itself always discards `EquilibriumSplit
+InitialCondition`'s own richer `EquilibrationOutcome` (see that
+function's own docstring) — `build_replica_lane`/`run_one`, this
+function's own two callers, are the ones that actually need it, to
+persist it into this run's own manifest (`20260907-claude-sonnet-5-
+equilibrium-split-design.md`, decision 5). Every engine path —
+`LinealBackend` through `run_one`, `GenerationalBackend` through
+`build_replica_lane` — reaches the ancestral phase here
+(the ancestral phase runs on the dictionary-based operators under
+every backend; `generational-vector` then continues from its
+founding state), so this is also the one place its trajectory is
+persisted: each
+ancestral generation is written, as it is
+simulated, to `store`'s ancestral-phase companion
+(`fim.persistence.store.equilibrium_store_for`; beside a JSONL
+`trajectory.tlog`, that is `equilibrium_trajectory.tlog`), keyed
+by `run_id` and numbered by the ancestral phase's own counter. That
+companion is returned third, `None` when there was no ancestral
+phase. The dispatch condition below intentionally
+mirrors `generate_initial_state`'s own: `SimulationParams.
+__post_init__` guarantees all three `equilibrium_*` fields are set
+together or not at all, so checking all three here (rather than
+reusing that function's own boolean result) is what actually lets
+the fields be passed to `EquilibriumSplitInitialCondition` below
+without a further, unchecked `None` for type-checking purposes.
+
+<a id="fim.engine.lanes.initial_condition_mode"></a>
+
+#### initial\_condition\_mode
+
+```python
+def initial_condition_mode(params: SimulationParams) -> str
+```
+
+Return this run's own resolved initial-condition strategy name.
+
+`RunManifest.initial_condition_mode`'s own value — computed here
+rather than stored as a matching `SimulationParams` field, the same
+"record the resolved runtime choice, not a repeated copy of the
+dispatch rule" shape `engine_backend`'s own manifest field already
+uses for `engine_backend="auto"`.
+
+<a id="fim.engine.lanes.build_finite_allele_spaces"></a>
+
+#### build\_finite\_allele\_spaces
+
+```python
+def build_finite_allele_spaces(
+        state: ModelState,
+        params: SimulationParams) -> dict[int, FiniteAlleleSpace]
+```
+
+Construct one finite-allele state space per locus, seeded from generation zero.
+
+By default, a new mutation always creates a brand-new allele
+identity that has never existed before in the run (the "infinite
+alleles" model — a standard simplifying assumption in population
+genetics, reasonable when mutations are rare enough that the same
+exact mutation recurring twice by chance is negligible). This
+project also supports an opt-in alternative, the "finite alleles" (or
+"K-allele") model (`SimulationParams.mutation_model ==
+"finite_alleles"`, design §9): at each locus, only a fixed, finite
+set of allele identities can ever exist — every distinct DNA
+sequence of that locus's own length is one possible allele, so a
+locus `n` bases long admits `4**n` of them, one possibility per base
+for each of the four DNA letters (see `finite_allele_capacity`). A
+mutation instead picks uniformly among whichever of that fixed set
+is not the current allele, which lets the *same* allele recur
+independently at different points in the run, closer to how a real,
+physically limited genetic sequence actually behaves. This function
+builds the
+bookkeeping (`FiniteAlleleSpace`, one per locus) that tracks and
+enforces that fixed set for a single run, seeded from whichever
+alleles are already present in the population at generation zero.
+
+**Arguments**:
+
+- `state` - The run's generated generation-zero state.
+- `params` - Validated run parameters.
+
+
+**Returns**:
+
+  One `FiniteAlleleSpace` per locus, keyed by `LocusSpec.locus_id`.
+
+<a id="fim.engine.lineal"></a>
+
+# fim.engine.lineal
+
+The lineal (reference) backend and its single-replicate loop.
+
+<a id="fim.engine.lineal.LinealBackend"></a>
+
+## LinealBackend Objects
+
+```python
+class LinealBackend()
+```
+
+Today's engine: one replica's whole trajectory, start to finish,
+computed before any cross-replicate bookkeeping happens — either one
+at a time, or `max_workers` at a time across real OS processes. See
+`fim()`'s own docstring, below, for the full behavior; this class's
+own `run` is that same behavior, unchanged, moved behind
+`EngineBackend`'s shared contract rather than living directly inside
+`fim()`.
+
+<a id="fim.engine.lineal.LinealBackend.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(
+        *,
+        max_workers: int | None = None,
+        store_factory: Callable[[str], TrajectoryStore] | None = None) -> None
+```
+
+Configure this backend's own concurrency and per-replicate storage.
+
+**Arguments**:
+
+- `max_workers` - See `fim()`'s own docstring.
+- `store_factory` - See `fim()`'s own docstring.
+
+<a id="fim.engine.lineal.LinealBackend.run"></a>
+
+#### run
+
+```python
+def run(params: SimulationParams, store: TrajectoryStore | None,
+        run_id: str | None, clock: Clock) -> SimulationOutput
+```
+
+Run `params`'s own replicate(s); see `fim()`'s own docstring.
+
+<a id="fim.engine.lineal.require_picklable"></a>
+
+#### require\_picklable
+
+```python
+def require_picklable(name: str, value: object) -> None
+```
+
+Reject an unpicklable `max_workers` argument before any worker spawns.
+
+"Pickling" is Python's own built-in way of converting an object into
+a stream of bytes that can be sent somewhere else and turned back
+into an equivalent object later — the mechanism `ProcessPoolExecutor`
+uses under the hood to hand `clock` and `store_factory` (see `fim`'s
+own docstring) across the boundary from this process into each
+separate worker process it starts. Most ordinary Python values (and
+ordinary, named functions) can be pickled without any trouble; a
+closure (a function defined inside another function, capturing some
+of that outer function's own local state) or a `lambda` generally
+cannot, since there is no way to describe "the specific place in the
+code where this was defined, plus whatever local variables it
+captured" as a self-contained stream of bytes. Without this check,
+handing in an unpicklable value would fail anyway — but only later,
+silently, deep inside worker-process spawn machinery, surfacing as
+raw pickling error noise with no indication of which of `fim`'s own
+arguments was actually at fault. Checking here instead fails
+immediately at the call site, before a single worker process is
+even started, naming the exact offending argument by name.
+
+**Arguments**:
+
+- `name` - The public keyword argument's name, for the error message.
+- `value` - The callable to verify.
+
+
+**Raises**:
+
+- `ValueError` - If `value` cannot be pickled.
+
+<a id="fim.engine.lineal.run_batch_parallel"></a>
+
+#### run\_batch\_parallel
+
+```python
+def run_batch_parallel(
+        params: SimulationParams, max_workers: int,
+        store_factory: Callable[[str], TrajectoryStore] | None,
+        run_id: str | None, clock: Clock,
+        monitor: ConvergenceMonitor | None) -> tuple[RunResult, ...]
+```
+
+Run replicates in parallel worker-process batches of `max_workers`.
+
+This is `fim`'s own `max_workers` path — see that function's
+docstring for why real, separate operating-system processes are used
+at all here rather than something lighter-weight. This function's
+own job is just the bookkeeping around that: hand out replicates
+`max_workers` at a time to a pool of worker processes
+(`ProcessPoolExecutor`, from Python's own standard library), collect
+each one's result as it finishes, and — if an adaptive replicate
+stop is configured (`monitor`; see this module's own docstring,
+above) — decide after each whole batch of workers finishes whether
+enough replicates have now run to stop early.
+
+Replicates run in these fixed-size batches, rather than all being
+submitted to the worker pool at once, specifically so that adaptive
+stopping decision stays meaningful: the decision is always applied
+strictly in ascending replicate order (replicate 1's result seen
+before replicate 2's, and so on), the exact same order the
+sequential (non-parallel) loop already uses, so parallelizing the
+*computation* never reorders which replicate's own values actually
+fed the stopping decision. The one real trade-off for that
+guarantee: a batch can overshoot the exact minimal replicate count
+by up to ``max_workers - 1`` extra replicates, since the whole batch
+a stopping replicate happened to fall in has already been started by
+the time the decision is made.
+
+That overshoot's own compute is unavoidable — every future in the
+current batch was submitted to a pool sized exactly `max_workers`,
+so by the time a stop is decided, the rest have almost always
+already started running, and `Future.cancel()` cannot interrupt a
+worker process once it has (this project's own multi-model engine
+review, 2026-09-04, `FIM-50`/finding P2-1 case 2, confirms the
+compute cost is already documented and accepted). What is not
+accepted: `store_factory`, when given, makes each overshoot
+replicate's own worker write a real, persistent trajectory — those
+artifacts used to be left behind with no `RunResult` in this
+function's own return value to account for them, discoverable only
+by a reader of the store noticing a `run_id` that does not belong to
+any of the results actually returned. Now: `cancel()` is still tried
+first (a genuine, if rare, win for a future that has not started
+yet), then each overshoot future is waited on and, if `store_
+factory` is real, its own artifacts are discarded — never left
+orphaned regardless of whether the worker itself succeeded, raised,
+or was actually cancelled in time.
+
+<a id="fim.engine.lineal.run_one"></a>
+
+#### run\_one
+
+```python
+def run_one(params: SimulationParams, store: TrajectoryStore, run_id: str,
+            clock: Clock) -> RunResult
+```
+
+Execute one scalar replicate, then release the store's open files.
+
+Runs `_simulate_one` and closes `store` (and its ancestral-phase
+companion) afterwards, whether the run finished or raised — a
+cancelled GUI run, for one, must not leave a file open inside a
+directory `fim.paths.atomic_directory` is about to remove, which
+Windows refuses. Closing never loses data and never makes the store
+unusable: the returned `RunResult.store` still reads, and a later
+write re-opens its file.
+
+<a id="fim.engine.monitors"></a>
+
+# fim.engine.monitors
+
+Construction of convergence monitors and batch window planners.
+
+<a id="fim.engine.monitors.burn_in_monitor"></a>
+
+#### burn\_in\_monitor
+
+```python
+def burn_in_monitor(params: SimulationParams,
+                    *,
+                    awaiting_window: bool = False) -> BurnInMonitor
+```
+
+Build the burn-in-then-average monitor one run is judged by.
+
+**Arguments**:
+
+- `params` - The run's own configuration: `convergence_burn_in` (zero means
+  the fractional burn-in, for a model with no relaxation time),
+  `precision`, `confidence`, the watched statistics and their
+  combinator, `max_generations`, and the Expert Settings. A
+  positive `replicate_averaging_window` makes the run a fixed-window
+  run (burn in, average that long, stop).
+- `awaiting_window` - Build a window-mode monitor whose window is not known
+  yet, for a replicate waiting for its batch's first wave.
+
+
+**Returns**:
+
+  An empty monitor.
+
+<a id="fim.engine.monitors.batch_window_planner"></a>
+
+#### batch\_window\_planner
+
+```python
+def batch_window_planner(
+        params: SimulationParams) -> BatchWindowPlanner | None
+```
+
+Build the planner that sets each replicate's averaging window.
+
+A batch's replicates burn in and then average for a window matched to the
+batch (`fim.convergence.batch_window`). A model with no burn-in (no
+relaxation time, so only the fractional burn-in exists) cannot do that, and
+neither can a batch with no relaxation time to size the first wave by; its
+replicates keep the within-run rule.
+
+How many replicates "run at once" sets the first wave the windows are
+matched from. It comes from the configuration (`max_concurrent_replicates`,
+else the Expert Setting `batch_width`), never from the machine, so the
+same configuration gives the same windows, and the same results, on any
+hardware and under every backend.
+
+**Arguments**:
+
+- `params` - The batch's configuration.
+
+
+**Returns**:
+
+  The planner, or `None` for a single run or when the replicates keep
+  the within-run rule.
+
+<a id="fim.engine.monitors.window_noise"></a>
+
+#### window\_noise
+
+```python
+def window_noise(report: FinalReport,
+                 statistics: Sequence[str]) -> dict[str, WindowNoise]
+```
+
+Return how noisy each watched statistic was over a replicate's window.
+
+**Arguments**:
+
+- `report` - A finished replicate's report.
+- `statistics` - The watched statistics.
+
+
+**Returns**:
+
+  The standard deviation and integrated autocorrelation time per
+  statistic the report has a window for; the planner measures the first
+  wave from these.
+
+<a id="fim.engine.monitors.replicate_monitor"></a>
+
+#### replicate\_monitor
+
+```python
+def replicate_monitor(params: SimulationParams) -> ConvergenceMonitor | None
+```
+
+Return the adaptive replicate-batch monitor, or ``None`` when unused.
+
+This is the *other* kind of stopping this module implements — see
+this module's own docstring, above, for why "convergence" (one
+population's own generations settling down) and "the adaptive
+replicate stop" (a whole batch of independent replicates deciding
+it has run enough of them) are two different, unrelated ideas,
+despite both being built out of the same underlying `ConvergenceMonitor`
+machinery here (a `ConfidenceIntervalCriterion` in place of the
+`TrailingWindowCriterion` `run_one` uses for the first kind — the
+same monitor class, watching a different kind of stability).
+
+Returns ``None`` whenever `SimulationParams.stop_batch_early` is off
+(`SimulationParams.batch_precision` is `None`): always run exactly
+`n_replicates` replicates, never stop early.
+
+<a id="fim.engine.monitors.replicate_stopping_values"></a>
+
+#### replicate\_stopping\_values
+
+```python
+def replicate_stopping_values(result: RunResult,
+                              statistics: Sequence[str]) -> dict[str, float]
+```
+
+Return each watched statistic's value for this replicate, for the batch monitor.
+
+Feeds `replicate_monitor`'s own monitor exactly the way
+`convergence_values` feeds `run_one`'s within-run monitor — the
+same "one observation per unit being watched" pattern, just applied
+to a whole finished replicate's own final report here instead of one
+generation's own current state.
+
+A statistic this replicate leaves undefined (only ``G_ST``, and only
+when every one of this replicate's tracked loci was monomorphic — see
+`mean_g_st_across_loci`) is omitted rather than raised or
+substituted: this replicate simply contributes nothing to that
+statistic's own stopping-criterion window this round, exactly as
+`ConvergenceMonitor.record` already treats any statistic missing from
+its ``value`` mapping. This is deliberately the same rule
+`replicate_summary` uses for the *published* interval — drop an
+undefined replicate from that statistic's own sample rather than
+fabricate a value — so the stopping decision is judged against the
+same sample the summary will report, never a different one.
+
+<a id="fim.engine.records"></a>
+
+# fim.engine.records
+
+Result records and shared aliases for the engine.
+
+<a id="fim.engine.records.FinalReport"></a>
+
+## FinalReport Objects
+
+```python
+class FinalReport(TypedDict)
+```
+
+Final run-level scalar report.
+
+The one-paragraph summary of a finished run: how differentiated the
+simulated population had become when the run stopped, plus the
+bookkeeping needed to explain *why* it stopped there. `report_for_
+state` builds one of these from whatever generation a run actually
+ended on (the last generation reached, whether that was because the
+statistics stabilized or because the hard generation cap was hit);
+`RunResult.report` carries it as part of a completed run's full
+result. This is a `TypedDict` (a plain Python dictionary, but one
+whose exact set of keys and each key's value type is declared up
+front) rather than a class with named attributes, because it is
+written to disk as JSON verbatim (see
+`fim.persistence.report.write_report`) — a dictionary already has
+the shape JSON needs, with nothing extra to convert.
+
+Fields:
+    run_id: This run's own identifier — either supplied by the
+        caller, or (see `deterministic_run_id`) computed from the
+        run's own parameters, so the exact same configuration always
+        gets the exact same id.
+    generation: The generation number the run actually stopped at —
+        not necessarily `SimulationParams.max_generations`; see
+        `converged` and `reason` below for why it may have stopped
+        earlier or later.
+    converged: Whether the run stopped because its watched
+        statistic(s) settled down on their own (`True`), or because
+        it hit the hard generation cap without ever settling
+        (`False`) — see this module's own docstring, above, for
+        what "settled down" (convergence) means here.
+    converged_on: Which watched statistic(s) had actually settled
+        when the run stopped — not merely which were watched (that
+        is `SimulationParams.convergence_statistic`, recorded in the
+        manifest). The configured statistic's own name when a single
+        statistic is watched; a list when several are, holding every
+        one under `convergence_combinator: all` but only the ones
+        that had passed under `any`. `None` whenever `converged` is
+        `False`: a run that hit its cap converged on nothing, and a
+        state with no run behind it (a preview, a progress tick, an
+        earlier generation re-analyzed) has no stop to describe.
+    reason: A short, human-readable phrase naming the specific
+        reason the run stopped (e.g. "statistic converged" or "hit
+        the cap") — meant to be read directly by a person looking at
+        a results table, not parsed by code.
+    G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The core differentiation/
+        heterozygosity measures this project reports (see this
+        module's own docstring for what each name means, in outline,
+        and the linked
+        [differentiation-measures guide](../../doc/jost-differentiation-measures.md)
+        for the full explanation), each averaged across every
+        genetic locus the run tracked (see `report_for_state`).
+        `G_ST` alone can be `None`: it is undefined at a locus with
+        no genetic variation left to measure (see
+        `mean_g_st_across_loci`), and if *every* tracked locus is in
+        that state, there is no defined value left to average at
+        all. Every other field is always a real number.
+    Gs, Gd: The within- and between-deme gene identities (Ryman &
+        Leimar's `J_0`/`J_1`) `H_S`/`H_T`/`G_ST`/`D` are themselves
+        derived from — `fim.statistics.differentiation.gs`/`gd`'s
+        own docstrings have the exact formulas and `fim`'s own
+        with-replacement identity convention. Added by this
+        project's own Ryman & Leimar remediation, `R4`
+        (`dev/doc/apps/selby/jost-finite-island-model/20260903-
+        claude-opus-5-gene-identity-recursion-fim-implications.md`
+        §9). Both linear in `H_S`/`H_T`, so — unlike `G_ST`/`D` —
+        averaging across loci or replicates never needs a ratio-of-
+        means-versus-mean-of-ratios decision; there is only one
+        answer.
+    A_CGD, Delta, MI: Literature-derived supplemental statistics
+        added for Phase 4 GUI visual interpretation: Caballero-
+        Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
+        mutual information.
+    D_m, R_ST, G_ST_NEI_LOG, G_ST_HEDRICK, F_ST: Nei's (1973) mean
+        pairwise between-deme diversity and its ratio to `H_S`, Nei's
+        logarithmic and Hedrick's standardized `G'_ST`, and coancestry
+        `F_ST` (`fim.statistics.differentiation.
+        derived_differentiation`), each one ratio of the pooled
+        `H_S`/`H_T` (whatever `locus_aggregation` says, which governs
+        `D` and `G_ST` only). ``None`` where undefined.
+    NEI_D_ALL_GEO, NEI_D_ALL_GEO_LOCUS_MEAN, NEI_D_ALL_ARITH,
+        NEI_D_ALL_ARITH_LOCUS_MEAN: Nei's genetic distance across all
+        demes, ``-ln(J_between / mean(J_k))``, with the geometric
+        (Nei 1972) or arithmetic (Jost, L. (2026) private
+        communication) mean of the within-deme identities, loci
+        combined by Nei's pooled rule or by averaging per-locus
+        distances (`fim.statistics.genetic_distance`). ``None`` when
+        infinite (no allele shared between any pair of demes), since
+        the report is written as strict JSON. The geometric forms can
+        be negative; see `nei_all_demes_identity`.
+    NEI_I_ALL_GEO, NEI_I_ALL_GEO_LOCUS_MEAN, NEI_I_ALL_ARITH,
+        NEI_I_ALL_ARITH_LOCUS_MEAN: The matching identities ``I``
+        (``D = -ln(I)``). Always finite, so they are the lossless
+        record when a distance is ``None``. The arithmetic pooled
+        identity equals ``Gd / Gs``.
+    window_statistics: How precisely each recorded statistic's own
+        trailing-window mean was actually known at the generation this
+        run stopped at — `{name: {"mean", "standard_error",
+        "standard_deviation", "effective_sample_size", "window",
+        "noise_adequate"}}`, one entry per statistic `report_for_state`
+        was given a monitor history for (`fim.convergence.window_
+        statistics.WindowStatistics`, `window_statistics_payload`).
+        Each entry also carries `selected_form` (`"mean_of_values"` or
+        `"value_of_means"`, the form the headline `mean` and the stop
+        use), `undefined_generations` (window generations in which the
+        statistic had no value, dropped by the first form), and
+        `mean_of_values`/`value_of_means`, each `{"mean",
+        "standard_error"}` — `value_of_means` only for `D` and `G_ST`,
+        the statistics that are functions of `H_S` and `H_T`. Every entry
+        describes the one evidence window all statistics share:
+        `window_start`, `window_end`, `burn_in`, the `minimum_ess` floor
+        and `target_standard_error` the window was judged against, and
+        `geweke_z` (start of the window against its end; a large
+        absolute value means the burn-in may have been too short).
+        Empty for a state with no monitored run behind it at all (a GUI
+        preview, a re-analysis) — this is *not* the same thing as `D`/
+        `G_ST`/etc. above, which are always this state's own point
+        values, computed directly from its allele frequencies; this
+        field is instead the *history leading up to* that state, the
+        answer to "how much can this run's own last window of noise be
+        trusted," which the point value alone cannot say. `"statistic
+        converged"` (see `reason`, above) means the watched statistic's
+        own `noise_adequate` was `True` at the stopping generation
+        (`fim.convergence.monitor.ConvergenceMonitor`'s own noise-
+        adequacy gate, `20260927-claude-sonnet-5-noise-aware-
+        convergence-design.md`, `selby/restricted`); `converged=False`
+        (the generation cap was hit first) can still show a real,
+        informative `standard_error` here for whichever statistic was
+        watched — "capped, and here is how far off the estimate still
+        is" — even though `noise_adequate` for it is `False`.
+
+<a id="fim.engine.records.RunResult"></a>
+
+## RunResult Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RunResult()
+```
+
+Everything one finished simulation run produced.
+
+Whatever calls `fim()` gets back one of these per run (one, or a
+tuple of them for a multi-replicate batch — see `fim`'s own
+docstring). It bundles four different things a caller might want,
+each aimed at a different next step:
+
+Fields:
+    run_id: This run's own identifier — the same value as
+        `report["run_id"]`, repeated here directly so a caller never
+        has to reach into `report` just to find out which run this
+        was.
+    params: The exact, fully validated configuration this run
+        actually used (population size, migration rate, mutation
+        rate, and everything else) — kept alongside the result so
+        the run remains self-describing without a caller needing to
+        have hung onto the original configuration separately.
+    final_state: The complete simulated population as it stood at
+        the very last generation — every deme's allele frequencies,
+        at every locus. This is what a scatter plot of the final
+        state (`fim.viz.scatter`) is drawn from.
+    report: The `FinalReport` summarizing that final state into the
+        handful of named numbers a person actually wants to read —
+        see `FinalReport`'s own docstring.
+    convergence_generations: Every generation number at which the
+        convergence check actually recorded an observation (see
+        `run_one`) — together with `convergence_history`/
+        `convergence_histories` below, this is the run's own
+        "trajectory," letting a caller plot how a watched statistic
+        moved over time on its way to its final value, not just what
+        that final value turned out to be.
+    convergence_history: The single watched statistic's own value at
+        each of those generations, in the common case of watching
+        just one statistic — see `SimulationParams.
+        convergence_statistic`.
+    convergence_histories: The same per-generation history as
+        `convergence_history`, but keyed by statistic name — no
+        longer only the watched subset. `D`/`G_ST`/`H_S`/`H_T` are
+        always present (`fim.engine.ALWAYS_TRACKED_STATISTICS`),
+        regardless of what `SimulationParams.convergence_statistic`
+        actually watches, since all four cost nothing extra to
+        compute or aggregate either way; `E_ST`/`K_ST` are present
+        when either is actually watched, or when
+        `SimulationParams.track_expensive_statistics` opts into
+        paying their own real, per-generation cost for a display
+        value (that field's own docstring has the measured
+        tradeoff). Only the watched subset ever influenced *why* the
+        run stopped (see `FinalReport.converged_on`) — every other
+        name here is present for a caller (a GUI trajectory panel,
+        design doc §6.2) that wants to plot more than just the
+        statistic that happened to be watched, never because it
+        factored into the stop decision itself. A run's own
+        `manifest.software_version` predating this change has
+        neither guarantee: its own persisted trajectory (were one
+        read back some other way) genuinely has no history at all
+        for a statistic that was not watched at the time, which is
+        not a defect to guard against, only an honest reflection of
+        what that older run actually recorded.
+    manifest: The `RunManifest` recording this run's own bookkeeping
+        metadata — when it started and ended, what software version
+        produced it, and (once written to disk) the checksums
+        proving the persisted files have not been altered since.
+        See `fim.persistence.manifest`.
+    store: The `TrajectoryStore` this run wrote its per-generation
+        state to as it went — kept here so a caller that wants to
+        read that trajectory back later (to animate it, or re-
+        analyze an earlier generation) already has a handle to it,
+        without needing to separately track down which store this
+        particular run used.
+    equilibrium_store: Where an equilibrium-split run streamed its
+        ancestral phase (`fim.model.initial.
+        EquilibriumSplitInitialCondition`): every generation of the
+        one-deme ancestral population, in `store`'s own row schema,
+        read back with `equilibrium_store.read(run_id)`. Numbered by
+        the ancestral phase's own counter, `0` through
+        `manifest.equilibrium_generation_count`; the split demes'
+        generation zero follows its last generation. Beside
+        `trajectory.tlog` as `equilibrium_trajectory.tlog` when
+        `store` is a file (`fim.persistence.store.
+        equilibrium_store_for`). `None` for every other initial
+        condition.
+
+<a id="fim.engine.records.format_timestamp"></a>
+
+#### format\_timestamp
+
+```python
+def format_timestamp(value: datetime) -> str
+```
+
+Return an unambiguous UTC ISO-8601 timestamp.
+
+Used for the `started_at`/`ended_at` fields `run_one` records in a
+run's own manifest. ISO-8601 (`2026-08-26T12:00:00Z`) is a widely
+used, sortable, unambiguous way to write a specific moment in time,
+including its timezone — writing every timestamp in UTC (Coordinated
+Universal Time, the "Z" suffix) specifically means a run started on
+one machine, in one timezone, is directly comparable to a run
+started on a different machine in a different timezone, with no
+conversion needed and no risk of the two being silently
+misinterpreted as if they shared a timezone when they do not.
+
+<a id="fim.engine.records.utc_now"></a>
+
+#### utc\_now
+
+```python
+def utc_now() -> datetime
+```
+
+Return the current UTC time for manifest metadata only.
+
+`fim`'s own default for its `clock` argument (see that function's
+docstring for why a caller — almost always just a test — would ever
+supply a different one). Wrapped in its own named function, rather
+than passing `datetime.now` directly with `UTC` bound some other
+way, specifically so this remains a plain, ordinary, picklable
+module-level function — required whenever `max_workers` is set (see
+`require_picklable`), since this is exactly the kind of value that
+check exists to accept.
+
+<a id="fim.engine.report"></a>
+
+# fim.engine.report
+
+The final report of a run and report-level statistic access.
+
+<a id="fim.engine.report.window_statistics_payload"></a>
+
+#### window\_statistics\_payload
+
+```python
+def window_statistics_payload(
+        monitor: BurnInMonitor) -> dict[str, dict[str, Any]]
+```
+
+Compute `report_for_state`'s own `window_statistics` from a stopped monitor.
+
+Every recorded statistic, watched or not, gets its statistics over the
+same evidence window, from the monitor's window start to the stop (design
+6.1), so the report is consistent whichever statistic decided the stop.
+
+**Arguments**:
+
+- `monitor` - The just-stopped monitor driving this run.
+
+
+**Returns**:
+
+  One entry per statistic whose evidence window held at least three
+  defined values, keyed by name: the window mean, standard error,
+  standard deviation, effective sample size, length, the generation the
+  window starts and ends at, the burn-in, the effective-sample-size
+  floor and standard-error target it was judged against, the estimator
+  that produced it, `noise_adequate` (whether the requested precision
+  was reached), Geweke's `z` for the window's start against its end
+  (when the window is long enough and the `z` finite) and both
+  expected-value forms (`_estimate_forms_payload`). A
+  statistic with no such window (the run ended inside its burn-in) is
+  simply omitted: nothing to show, nothing fabricated.
+
+<a id="fim.engine.report.report_for_state"></a>
 
 #### report\_for\_state
 
@@ -6313,8 +7124,8 @@ This is the function that actually builds a `FinalReport` (see that
 class's own docstring for what each field in the result means) from
 a simulated population state — reading off its allele frequencies at
 every locus, computing every named differentiation statistic at each
-one (`_statistics_for_locus`), and averaging each statistic across
-loci into the single reported number. `_run_one` calls this once, at
+one (`statistics_for_locus`), and averaging each statistic across
+loci into the single reported number. `run_one` calls this once, at
 the very end of a run, to build that run's own final report; the
 GUI also calls it directly to describe the *starting* population
 (generation zero, before any migration/mutation/drift has happened
@@ -6329,7 +7140,7 @@ that produced it, not a whole run in progress.
   statistic(s) were being watched (the shape of
   `converged_on`, in the result) and how demes should be
   weighted when averaging (`SimulationParams.deme_weighting`;
-  see `_statistics_for_locus`).
+  see `statistics_for_locus`).
 - `run_id` - This run's own identifier, copied into the report
   verbatim so the report is self-describing on its own,
   without needing to be paired with anything else to know
@@ -6339,7 +7150,7 @@ that produced it, not a whole run in progress.
   simply hit its generation cap — see `FinalReport.converged`.
 - `reason` - The short, human-readable phrase explaining why the run
   stopped where it did — see `FinalReport.reason`.
-- `window_statistics` - `_window_statistics_payload`'s own result — how
+- `window_statistics` - `window_statistics_payload`'s own result — how
   precisely each recorded statistic's trailing-window mean was
   actually known when the run stopped (`fim.convergence.window_
   statistics`), keyed by statistic name; `None` for a caller with
@@ -6367,7 +7178,90 @@ that produced it, not a whole run in progress.
   statistic, each already averaged across every genetic locus the
   run tracked.
 
-<a id="fim.engine.reports_summary"></a>
+<a id="fim.engine.report.replicate_statistic"></a>
+
+#### replicate\_statistic
+
+```python
+def replicate_statistic(report: FinalReport, statistic: str) -> float | None
+```
+
+Read one statistic's value for a replicate of a batch.
+
+A replicate that averaged contributes its window mean, in the form it
+selected, not the last generation's value: the last generation is one
+noisy draw, the window mean is what the replicate measured (design 6.7).
+For a statistic that is recorded every generation (`D`, `G_ST`, `H_S`,
+`H_T`, `H_ST` and anything watched) a replicate with a window but no
+defined window mean contributes nothing, as an undefined replicate always
+has. Any other statistic, and any report with no window at all (a live
+progress report), contributes its final-state value.
+
+**Arguments**:
+
+- `report` - The replicate's report.
+- `statistic` - A statistic name.
+
+
+**Returns**:
+
+  The value, or `None` when the replicate leaves it undefined.
+
+<a id="fim.engine.report.final_report_statistic"></a>
+
+#### final\_report\_statistic
+
+```python
+def final_report_statistic(report: FinalReport,
+                           statistic: str) -> float | None
+```
+
+Read one named statistic from a final run report.
+
+Checked against `fim.statistics.catalog.report_keys` rather than
+indexing the `TypedDict` directly: `statistic` is an arbitrary string
+(ultimately from user-supplied configuration, by way of
+`SimulationParams.convergence_statistics`), and a name that is not a
+report field should raise this specific, named-statistic error, not
+Python's own generic `KeyError`.
+
+<a id="fim.engine.report.report_statistic"></a>
+
+#### report\_statistic
+
+```python
+def report_statistic(report: FinalReport, statistic: str) -> float | None
+```
+
+Return one named global statistic from a final report.
+
+The public form of the engine's own lookup, for callers that iterate
+`fim.statistics.catalog.report_keys` rather than naming each field.
+
+**Arguments**:
+
+- `report` - A `FinalReport`.
+- `statistic` - A key from `fim.statistics.catalog.report_keys`.
+
+
+**Returns**:
+
+  The value; ``None`` where the statistic is undefined (`G_ST` at a
+  monomorphic locus) or infinite (a Nei distance with no allele
+  shared).
+
+
+**Raises**:
+
+- `ValueError` - If `statistic` is not a report statistic.
+
+<a id="fim.engine.summary"></a>
+
+# fim.engine.summary
+
+Across-replicate summaries and pooled histories.
+
+<a id="fim.engine.summary.reports_summary"></a>
 
 #### reports\_summary
 
@@ -6443,7 +7337,7 @@ at all" case too.
   the mathematically correct interval for them too, not a
   placeholder standing in for one.
 
-<a id="fim.engine.replicate_summary"></a>
+<a id="fim.engine.summary.replicate_summary"></a>
 
 #### replicate\_summary
 
@@ -6509,7 +7403,7 @@ docstring for why it does not raise this same case itself).
 
 - `ValueError` - If fewer than two results are supplied.
 
-<a id="fim.engine.pooled_convergence_histories"></a>
+<a id="fim.engine.summary.pooled_convergence_histories"></a>
 
 #### pooled\_convergence\_histories
 
@@ -6560,7 +7454,7 @@ per point rather than sharing one external generation list the way
 `RunResult.convergence_generations` does for a single replicate:
 a statistic can go undefined for some *interior* stretch of a
 replicate's own history (`G_ST`, whenever every tracked locus is
-currently monomorphic — `_convergence_values`'s own docstring), not
+currently monomorphic — `convergence_values`'s own docstring), not
 only trail off at the end the way a stopped replicate does: without
 knowing *which* generations were skipped, this function cannot
 safely reconstruct a generation-aligned history for that one
@@ -6601,7 +7495,7 @@ future version place these correctly instead of dropping them.
   `replicate_summary` already applies to its own single-value
   case.
 
-<a id="fim.engine.pooled_convergence_histories_from_pairs"></a>
+<a id="fim.engine.summary.pooled_convergence_histories_from_pairs"></a>
 
 #### pooled\_convergence\_histories\_from\_pairs
 
@@ -6640,7 +7534,7 @@ exactly this pair and nothing else a `RunResult` would carry.
 
 - `ValueError` - If fewer than two replicates are supplied.
 
-<a id="fim.engine.bootstrap_replicate_summary"></a>
+<a id="fim.engine.summary.bootstrap_replicate_summary"></a>
 
 #### bootstrap\_replicate\_summary
 
@@ -6704,7 +7598,7 @@ fundamentally different treatment, not as a general replacement.
 
 - ``{"D"` - ..., "G_ST": ...}`, both as `ConfidenceInterval`s built
   by `_bootstrap_interval` — `"G_ST"` omitted if it is undefined
-  (`_g_st_from_demes` returns `None`) for the observed batch's own
+  (`g_st_from_demes` returns `None`) for the observed batch's own
   point estimate, or for every one of its bootstrap resamples.
 
 
@@ -6713,7 +7607,199 @@ fundamentally different treatment, not as a general replacement.
 - `ValueError` - If fewer than two results are supplied, `confidence`
   is not in `(0, 1)`, or `bootstrap_samples` is not positive.
 
-<a id="fim.engine.tracked_statistic_values"></a>
+<a id="fim.engine.tracking"></a>
+
+# fim.engine.tracking
+
+Per-generation statistic extraction for the convergence monitor.
+
+<a id="fim.engine.tracking.identity_statistics"></a>
+
+#### identity\_statistics
+
+```python
+def identity_statistics(
+        params: SimulationParams) -> dict[str, IdentityStatistic]
+```
+
+Describe `D` and `G_ST` as functions of `H_S` and `H_T` for `params`.
+
+**Arguments**:
+
+- `params` - The run's configuration.
+
+
+**Returns**:
+
+  `identity_statistics_for` its deme count.
+
+<a id="fim.engine.tracking.identity_statistics_for"></a>
+
+#### identity\_statistics\_for
+
+```python
+def identity_statistics_for(deme_count: int) -> dict[str, IdentityStatistic]
+```
+
+Describe `D` and `G_ST` as functions of `H_S` and `H_T` (design 6.11).
+
+The values are the engine's own formulas (`jost_d_from_within_and_total`,
+`g_st_from_demes`), so "value of means" is exactly what a generation's own
+`D`/`G_ST` would be had the window's averaged identities been the state.
+The gradients are those formulas' derivatives, for the delta-method
+standard error; a test checks them against finite differences.
+
+**Arguments**:
+
+- `deme_count` - The number of demes, which sets `D`'s scaling.
+
+
+**Returns**:
+
+- ``{"D"` - ..., "G_ST": ...}`.
+
+<a id="fim.engine.tracking.derived_fields"></a>
+
+#### derived\_fields
+
+```python
+def derived_fields(h_s: float, h_t: float, deme_count: int) -> _DerivedFields
+```
+
+Return `derived_differentiation` for the pooled heterozygosities.
+
+<a id="fim.engine.tracking.nei_all_demes_fields"></a>
+
+#### nei\_all\_demes\_fields
+
+```python
+def nei_all_demes_fields(state: ModelState) -> _NeiAllDemesFields
+```
+
+Return the all-demes Nei identities and distances for `state`.
+
+One O(d * alleles) pass per locus (`deme_gene_identities`) feeds all
+eight values (`nei_family_from_identities`). An infinite distance is
+reported as ``None`` because reports are strict JSON; the identity
+beside it is always finite.
+
+<a id="fim.engine.tracking.ALWAYS_TRACKED_STATISTICS"></a>
+
+#### ALWAYS\_TRACKED\_STATISTICS
+
+Derived from `fim.statistics.catalog` (`history == "always"`).
+
+Statistics `_watched_statistic_values` always returns, regardless of
+`params.convergence_statistics`/`track_expensive_statistics`.
+
+`fim.statistics.differentiation.statistics_report`'s own `statistics`
+parameter already computes these five unconditionally, no matter what is
+passed in (each is either the shared `H_S`/`H_T` input every other field
+derives from, or an O(1) step once those are known) — before this
+constant existed, `_watched_statistic_values`'s own final filtering step
+still discarded whichever of these were not actually watched, so a GUI
+trajectory panel/live statistics table watching only `D` (this project's
+own stated default) never had a real history to show for `G_ST`/`H_S`/
+`H_T` even though computing them cost nothing extra. Design doc §6.2
+(`20260907-claude-sonnet-5-botanist-gui-redesign.md`) already describes
+the trajectory panel as plotting "all six report statistics" — this
+constant is what makes five of those six always real, for free, closing
+that gap. `H_ST` joined this tuple later than the other four (found
+live: a real, reported "most statistics stopped scrubbing" investigation
+that turned out to be `track_expensive_statistics` correctly gating
+`E_ST`/`K_ST`/`A_CGD`/`Delta`/`MI`, plus this one genuine, separate gap
+— `H_ST` fell into neither this tuple nor `_EXPENSIVE_OPT_IN_STATISTICS`,
+so it had no per-generation history at all unless directly watched, the
+trajectory-history-side twin of the exact watchability gap `FIM-51`
+already closed for it once). `E_ST`/`K_ST` are deliberately excluded: each
+is a genuine, independent O(total allele entries) pass `statistics_
+report` only pays for statistics named in the collection passed to it
+(commit `b12679b`, `FIM-24`/`FIM-32`, measured a ~38% reduction skipping
+both at a many-alleles configuration) — `SimulationParams.track_expensive_
+statistics` is the opt-in a caller sets to pay that cost back
+deliberately, in exchange for a real, continuously updated display value
+for those two as well (see `_statistics_to_compute`, below).
+
+<a id="fim.engine.tracking.UNBOUNDED_STATISTICS"></a>
+
+#### UNBOUNDED\_STATISTICS
+
+Statistics with an open end, judged by a relative precision by default.
+
+<a id="fim.engine.tracking.extra_tracked_statistics"></a>
+
+#### extra\_tracked\_statistics
+
+```python
+def extra_tracked_statistics(params: SimulationParams) -> tuple[str, ...]
+```
+
+Return the `ConvergenceMonitor.extra_statistics` for a within-run monitor.
+
+`build_replica_lane`/`run_one` both construct their own within-run
+`ConvergenceMonitor` with `statistics=params.convergence_statistics`
+(the subset that actually gates stopping) — this returns every other
+name `_watched_statistic_values` can hand that monitor's own
+`record()` this run (`ALWAYS_TRACKED_STATISTICS`, always;
+`_EXPENSIVE_OPT_IN_STATISTICS` too, when `params.track_expensive_
+statistics` opts in), minus whichever of those are already in
+`statistics` (a name cannot appear in both — `ConvergenceMonitor.
+__init__` rejects a repeat). Kept as its own function, not inlined at
+each of those two call sites, so the two can never independently
+drift out of sync with `_watched_statistic_values`'s own actual
+return keys.
+
+<a id="fim.engine.tracking.convergence_values"></a>
+
+#### convergence\_values
+
+```python
+def convergence_values(state: ModelState,
+                       params: SimulationParams) -> dict[str, float]
+```
+
+Return every currently-defined tracked statistic's value, averaged across loci.
+
+Called once per generation by `run_one`'s own main loop, to feed
+the convergence monitor whatever it needs to judge "has this
+settled down yet" (see this module's own docstring, above, for what
+convergence means here) — and, since `ALWAYS_TRACKED_STATISTICS`
+below, also to give a GUI a real, continuously updated history for
+`D`/`G_ST`/`H_S`/`H_T`/`H_ST` regardless of what `params.
+convergence_statistics` actually watches (design doc §6.2). Only the
+watched subset (`params.convergence_statistics`) — usually just one
+(`D`, most commonly), but this project also supports watching several
+at once and requiring either all of them, or any one of them, to
+settle before calling the run converged (`SimulationParams.
+convergence_combinator`, design §9) — ever influences the stop
+decision; every other name this function returns is along for the
+ride, never gating anything (`ConvergenceMonitor`'s own
+`extra_statistics`).
+
+Computes each locus's full differentiation report exactly once and reads
+every tracked statistic from that same cached set of reports, rather than
+recomputing per-locus statistics once per tracked name — the several-
+statistic case costs one extra dictionary lookup per statistic per
+locus this way, not another whole pass over the state.
+
+A tracked statistic that is undefined this generation (only ``G_ST``
+can be, and only when every tracked locus is currently
+"monomorphic" — has only a single allele left, with no genetic
+variation remaining to measure at all; see `mean_g_st_across_loci`)
+is omitted from the returned mapping rather than represented by a
+substitute value; `ConvergenceMonitor` treats an omitted statistic as
+simply not advancing its own trailing window this generation, which
+is honest about there being no observation to add, rather than
+fabricating one.
+
+``D``/``G_ST`` are aggregated across loci per `params.
+locus_aggregation` (`_watched_statistic_values`), the identical
+estimator `report_for_state` uses for its own ``D``/``G_ST`` fields —
+every other tracked statistic (``E_ST``, ``K_ST``, ``H_S``, ``H_T``)
+is unaffected by that choice and stays a plain per-locus mean either
+way (`pooled_g_st_and_d`'s own docstring).
+
+<a id="fim.engine.tracking.tracked_statistic_values"></a>
 
 #### tracked\_statistic\_values
 
@@ -6724,7 +7810,7 @@ def tracked_statistic_values(state: ModelState,
 
 Return one state's tracked statistic values, as a live run records them.
 
-The public entry point to `_convergence_values`, for callers
+The public entry point to `convergence_values`, for callers
 rebuilding a convergence history from a persisted trajectory rather
 than watching one being produced (`fim.reanalyze.replicate_
 convergence_history`). Sharing the private function outright, rather
@@ -6738,7 +7824,7 @@ would diverge the first time either changed.
 - `state` - The population state to summarize.
 - `params` - The run's own validated parameters -- `convergence_
   statistics`/`track_expensive_statistics` decide which names
-  beyond `_ALWAYS_TRACKED_STATISTICS` are computed at all.
+  beyond `ALWAYS_TRACKED_STATISTICS` are computed at all.
 
 
 **Returns**:
@@ -6749,7 +7835,45 @@ would diverge the first time either changed.
   present as a placeholder, matching what the live monitor
   records for that same generation.
 
-<a id="fim.engine.pair_statistic_values"></a>
+<a id="fim.engine.tracking.convergence_values_vectorized"></a>
+
+#### convergence\_values\_vectorized
+
+```python
+def convergence_values_vectorized(
+        block: VectorBlock, params: SimulationParams) -> dict[str, float]
+```
+
+`convergence_values`'s array-native counterpart, mostly inside the kernel.
+
+`VectorizedAdvancer.advance` calls this instead of `_convergence_
+values`, so a whole generation's convergence check never has to
+rebuild a `ModelState`.
+
+`D`, `G_ST`, `H_S`, `H_T` and `H_ST`, the statistics every run tracks
+and the ones the convergence monitor usually watches, are computed for
+every locus by one compiled call (`VectorBlock.locus_statistics`),
+which reproduces `statistics_report` bit for bit; the cross-locus
+aggregation then follows `_watched_statistic_values` exactly. The
+expensive opt-in statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`)
+have no kernel form, so a run that watches or tracks any of them
+builds each locus's frequency maps and uses `statistics_report`. So
+does the one generation in which the kernel flags a value that
+`statistics_report` would have refused (outside `[0, 1]`), so the
+Python implementation raises its own, specific error.
+
+**Arguments**:
+
+- `block` - The replicate's current table.
+- `params` - The run's parameters (`convergence_statistics`,
+  `track_expensive_statistics`, `locus_aggregation`).
+
+
+**Returns**:
+
+  The same mapping `convergence_values` returns for the same state.
+
+<a id="fim.engine.tracking.pair_statistic_values"></a>
 
 #### pair\_statistic\_values
 
@@ -6784,7 +7908,7 @@ that deme is fixed).
 
 - `ValueError` - For a deme index outside the state.
 
-<a id="fim.engine.history_free_statistic_values"></a>
+<a id="fim.engine.tracking.history_free_statistic_values"></a>
 
 #### history\_free\_statistic\_values
 
@@ -6812,35 +7936,119 @@ expensive statistic. `Gs` and `Gd` equal `report_for_state`'s.
 
 - ```{key` - value}`` keyed as in `FinalReport`.
 
-<a id="fim.engine.report_statistic"></a>
+<a id="fim.engine.tracking.mean"></a>
 
-#### report\_statistic
+#### mean
 
 ```python
-def report_statistic(report: FinalReport, statistic: str) -> float | None
+def mean(values: Sequence[float]) -> float
 ```
 
-Return one named global statistic from a final report.
+Return an accurate mean of a nonempty float sequence.
 
-The public form of the engine's own lookup, for callers that iterate
-`fim.statistics.catalog.report_keys` rather than naming each field.
+Uses `math.fsum` rather than Python's plain `sum`, then divides:
+ordinary floating-point addition accumulates small rounding errors
+as more numbers are added together, and `fsum` specifically avoids
+that by tracking the arithmetic more carefully internally — for the
+typically small handful of values averaged in this module (loci, or
+replicates), the difference is negligible either way, but there is
+no real cost to always using the more careful version.
 
-**Arguments**:
+<a id="fim.engine.tracking.mean_g_st_across_loci"></a>
 
-- `report` - A `FinalReport`.
-- `statistic` - A key from `fim.statistics.catalog.report_keys`.
+#### mean\_g\_st\_across\_loci
 
+```python
+def mean_g_st_across_loci(
+        locus_reports: Sequence[DifferentiationReport]) -> float | None
+```
 
-**Returns**:
+Return ``G_ST`` averaged across loci, dropping any locus where it is undefined.
 
-  The value; ``None`` where the statistic is undefined (`G_ST` at a
-  monomorphic locus) or infinite (a Nei distance with no allele
-  shared).
+``g_st`` is undefined at a locus whose total heterozygosity (``H_T``)
+is zero — a fully monomorphic locus has nothing to differentiate. Such
+a locus contributes nothing to the average, rather than a fabricated
+``0.0`` (which would understate real differentiation at the other,
+genuinely polymorphic, loci) or voiding the whole multi-locus average
+over a single monomorphic locus among several. Returns ``None`` only
+when *every* locus is undefined, since there is then no defined value
+left to average — the honest reading of "this run/replicate has no
+G_ST", matching the rule `fim.engine.replicate_summary` already
+applies when building the published cross-replicate sample.
 
+<a id="fim.engine.tracking.pooled_g_st_and_d"></a>
 
-**Raises**:
+#### pooled\_g\_st\_and\_d
 
-- `ValueError` - If `statistic` is not a report statistic.
+```python
+def pooled_g_st_and_d(
+        locus_reports: Sequence[DifferentiationReport], *, mean_h_s: float,
+        mean_h_t: float, deme_count: int,
+        locus_aggregation: LocusAggregation) -> tuple[float | None, float]
+```
+
+Return ``(G_ST, D)``, aggregated across loci per `locus_aggregation`.
+
+Two genuinely different estimators of the same two named statistics
+(`SimulationParams.locus_aggregation`'s own docstring has the full
+argument for why they differ and which this project recommends):
+
+- `"ratio_of_means"` (the default): pool `H_S`/`H_T` across loci
+  first — `mean_h_s`/`mean_h_t`, already computed by the caller for
+  the report's own `H_S`/`H_T` fields, reused here rather than
+  recomputed — then compute one `G_ST`/`D` from those pooled values,
+  via the identical private cores `g_st`/`jost_d` use internally
+  (`g_st_from_demes`/`jost_d_from_within_and_total`), so this
+  function does not re-derive either formula independently.
+- `"mean_of_ratios"` (this project's own original behavior): average
+  each locus's own already-computed `G_ST`/`D` — unchanged from
+  before this function existed.
+
+`E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST` are unaffected by either choice
+(`SimulationParams.locus_aggregation`'s own docstring again) and stay
+a plain per-locus mean regardless, computed by the caller.
+
+<a id="fim.engine.tracking.statistics_for_locus"></a>
+
+#### statistics\_for\_locus
+
+```python
+def statistics_for_locus(
+        state: ModelState,
+        params: SimulationParams,
+        locus_index: int,
+        *,
+        statistics: Collection[str] | None = None) -> DifferentiationReport
+```
+
+Compute one locus's scalar statistics.
+
+Builds the input `fim.statistics.differentiation.statistics_report`
+actually expects — one dictionary per deme, mapping each allele
+identity present at this locus to its frequency (what fraction of
+that deme's gene copies at this locus currently carry it) — from
+this state's own internal representation, then hands that off to do
+the actual math. This function itself computes nothing statistical;
+it only reshapes data.
+
+`deme_weighting` controls whether every deme counts equally toward
+the reported statistics regardless of its own population size
+(`params.deme_weighting == "equal"`), or whether a larger deme
+counts proportionally more than a smaller one (`"size"`, the
+default, weighting by `params.population_sizes`) — the same
+"should a bigger group's own numbers count for more" choice that
+comes up whenever averaging across groups of unequal size, with no
+universally correct answer; which is more appropriate depends on the
+actual scientific question being asked.
+
+`statistics`: forwarded verbatim to `statistics_report` — `None`
+(the default) for `report_for_state`'s own final-report call, which
+needs every field; `convergence_values`'s own per-generation call
+passes `params.convergence_statistics` instead, so the fields no
+watched statistic ever reads are skipped rather than computed and
+discarded every generation (Phase 7 item 4, `FIM-24`/`FIM-32`; see
+`statistics_report`'s own `statistics` parameter for the full
+contract).
 
 <a id="fim.examples"></a>
 
@@ -7546,8 +8754,8 @@ point, where nothing is half-written, so a caller can observe a pause or
 cancel request and capture a checkpoint.
 
 The session reuses the generation-first lane machinery
-(`fim.engine.ReplicaLane`, `_build_replica_lane`, `SequentialAdvancer`,
-`VectorizedAdvancer`, `_finalize_replica_lane`) that the golden-parity
+(`fim.engine.ReplicaLane`, `build_replica_lane`, `SequentialAdvancer`,
+`VectorizedAdvancer`, `finalize_replica_lane`) that the golden-parity
 tests already prove is bit-identical to the lineal reference loop for the
 same seed. Every single-replicate backend is supported: ``lineal`` and
 ``generational`` step a `ModelState`; ``generational-vector`` steps a
@@ -10193,7 +11401,7 @@ reason all four are listed in the first place (GUI engine-backend
 selector design doc `20260911-claude-sonnet-5-gui-engine-backend-
 selector-design.md`, approach A3 alongside B3).
 
-Delegates to `fim.engine._numba_is_available` through the module
+Delegates to `fim.engine.backends.numba_is_available` through the module
 rather than importing the function by name, deliberately: that
 function is module-level "specifically so a test can monkeypatch
 it directly" (its own docstring), and a `from ... import` would
@@ -12311,7 +13519,7 @@ else `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` (`doc/fim-logging-design.md`
 `selby/restricted`, §9) again here, independently of `fim.launcher.
 main`'s own call — reached only via `fim.launcher`'s GUI branches in
 practice, where the environment was already validated once (and
-`_launch_gui`'s own `gui_main([])` call means `arguments.logging_
+`launch_gui`'s own `gui_main([])` call means `arguments.logging_
 config` is always `None` at that point, so it is `FIM_LOGGING_
 CONFIG` alone, not the flag, that keeps that first, already-correct
 configuration from being silently thrown away and replaced by a
@@ -12326,7 +13534,7 @@ at all.
 
 - `argv` - Arguments excluding the program name (`_gui_argument_
   parser`'s own tiny flag set), or `None` for `sys.argv`.
-  `fim.launcher._launch_gui` always passes `[]` explicitly —
+  `fim.launcher.launch_gui` always passes `[]` explicitly —
   see that call site's own comment for why `None`'s default
   behavior (reading the *real* `sys.argv`, still holding
   `--graphical` at that point) would be wrong there.
@@ -12378,7 +13586,7 @@ Writes the same artifacts `cli._command_run_batch`'s own default
 pruning `cli._prune_orphan_replicate_directories` performs: under
 `max_workers`, an adaptive early stop is applied only
 after a whole concurrent worker batch completes
-(`fim.engine._run_batch_parallel`), so a worker beyond the replicate that
+(`fim.engine.lineal.run_batch_parallel`), so a worker beyond the replicate that
 triggered the stop can still have fully written its own `replicate-NNN/`
 directory even though its result is discarded, never appearing in the
 tuple `fim` returns. Without pruning, `fim.paths.atomic_directory` would
@@ -15159,7 +16367,7 @@ instead of shared.
 Progress reporting and cancellation for a background run (§7 of the GUI design doc).
 
 `fim.persistence.store.TrajectoryStore` is a `Protocol` (structural
-typing, not an ABC), and `fim.engine._run_one`'s generation loop already
+typing, not an ABC), and `fim.engine.lineal.run_one`'s generation loop already
 calls `store.write_generation(...)` unconditionally, every generation,
 with no `try`/`except` around it — a clean, pre-existing extension point
 `GuiProgressStore`/`LiveProgressStore` decorate rather than a change to
@@ -15787,7 +16995,7 @@ system, they look like nothing more than "this same program got run with
 these particular arguments (or none)." This file is the very first code
 that runs either way — its only job is figuring out which of the three
 situations just happened and handing off to the right place: the desktop
-app (`_launch_gui`) or the ordinary command-line parser
+app (`launch_gui`) or the ordinary command-line parser
 (`fim.cli.main`).
 
 The
@@ -15831,6 +17039,44 @@ through to the unmodified CLI parser.
 **Returns**:
 
   The dispatched entry point's own process-style exit status.
+
+<a id="fim.launcher.launch_gui"></a>
+
+#### launch\_gui
+
+```python
+def launch_gui(*, detach: bool) -> int
+```
+
+Start the GUI, either in this process or as a detached one.
+
+"Detached" means started as its own separate, independent process
+that keeps running after this one exits — the same idea as starting
+a program from a terminal with a trailing `&` on Unix, so the
+terminal itself becomes free to accept new commands immediately
+instead of waiting for that program to finish. Used only when
+something explicitly asks for the GUI via `--graphical --detach`
+(see `main`, above) — a shortcut or launcher script that wants to
+open the desktop app and immediately return control to whatever
+launched it, rather than blocking until the app window is closed.
+
+**Arguments**:
+
+- `detach` - When true, relaunch this same executable/script with
+  `--graphical` as an independent, detached process and
+  return immediately; the calling shell is never blocked
+  waiting for the GUI window to close. When false, run the
+  GUI in this process — the correct default, since silently
+  backgrounding a command a terminal user typed would be
+  more surprising than simply blocking until the window
+  closes.
+
+
+**Returns**:
+
+  0 for a detached launch (the child's own exit status is not
+  this process's concern); the foreground GUI's own exit status
+  otherwise.
 
 <a id="fim.logging_setup"></a>
 
@@ -16957,7 +18203,7 @@ replicate's own equilibration derives from *that replicate's own*
 seed, so a batch's replicates stay genuinely independent trials.
 
 Supports `mutation_model="infinite_alleles"` (the default) only.
-`"finite_alleles"` needs `fim.engine._build_finite_allele_spaces`,
+`"finite_alleles"` needs `fim.engine.lanes.build_finite_allele_spaces`,
 which `fim.engine` itself imports `generate_initial_state` from this
 module — importing it back here would be circular. Raises a clear
 `ValueError` for that combination rather than silently ignoring the
@@ -17442,6 +18688,30 @@ are designed to quantify.
   or if a matrix ``m`` does not have exactly one row, and one
   entry per row, for every deme in ``state``.
 
+<a id="fim.model.operators.jit_mutate_event_counts_batched"></a>
+
+#### jit\_mutate\_event\_counts\_batched
+
+```python
+def jit_mutate_event_counts_batched(rng: np.random.Generator, ns: np.ndarray,
+                                    ps: np.ndarray) -> np.ndarray
+```
+
+`_mutate_event_counts_batched`, JIT-compiled with `nogil=True`.
+
+Lazily imports and compiles `numba` exactly like `_jit_drift_
+counts_batched` does, and for the same reason (including
+`cache=True` -- see `_jit_multinomial_via_binomial`'s own docstring
+for the measured cross-process benefit and the confirmed-safe
+read-only-install fallback). `numba` is an optional dependency
+(``pip install fim[jit]``) — only a caller that explicitly requests
+`mutate(..., jit=True)` ever pays its import/compilation cost or
+needs it installed at all.
+
+**Raises**:
+
+- `ImportError` - If `numba` is not installed.
+
 <a id="fim.model.operators.mutate"></a>
 
 #### mutate
@@ -17521,7 +18791,7 @@ of uniforms per draw, the primitive every backend shares.
   (`finite_alleles is None`): every `(deme, locus, allele)`
   mutant count of the whole call is drawn in one
   Numba-JIT-compiled, `nogil=True` call
-  (`_jit_mutate_event_counts_batched`), in the same
+  (`jit_mutate_event_counts_batched`), in the same
   deme-major, locus, ascending-allele order the unjitted loop
   uses, and every fresh identity the call needs is reserved in
   one `AlleleRegistry.next_k_ids` call — safe because minting
@@ -17615,6 +18885,17 @@ docstring for why that was not the textbook model.
 **Returns**:
 
   The next generation.
+
+<a id="fim.model.operators.expand_population_sizes"></a>
+
+#### expand\_population\_sizes
+
+```python
+def expand_population_sizes(value: PopulationSize,
+                            deme_count: int) -> tuple[int, ...]
+```
+
+Expand and validate a population-size argument.
 
 <a id="fim.model.params"></a>
 
@@ -23011,7 +24292,7 @@ class RunManifest()
 Capture everything needed to identify, verify, and replay a run.
 
 `artifacts` is `None` for a manifest as the engine constructs it —
-`fim.engine._run_one` returns a `RunResult` without ever writing to
+`fim.engine.lineal.run_one` returns a `RunResult` without ever writing to
 disk, so it cannot yet know a durable file's content digest. A
 manifest actually persisted to disk (`fim.cli._write_run_artifacts`)
 is written only once every other artifact (`trajectory.tlog`,
@@ -29027,7 +30308,7 @@ actually is.
 (`fim.statistics.differentiation.differentiation_q` raises if
 weights are passed at any other order) — the same order that
 matches `E_ST`. Deriving the weights the same way
-`fim.engine._statistics_for_locus` does keeps `Differentiation_1`
+`fim.engine.tracking.statistics_for_locus` does keeps `Differentiation_1`
 here identical to the report's own `E_ST`, rather than the two
 silently disagreeing whenever `deme_weighting` is `"size"`.
 
@@ -30272,6 +31553,32 @@ diverse than any one of them was alone), `H_T` is always at least as
 large as `H_S` — the gap between them, `H_T - H_S`, is the raw
 material every differentiation measure in this module works with.
 
+<a id="fim.statistics.differentiation.gd_from_within_and_total"></a>
+
+#### gd\_from\_within\_and\_total
+
+```python
+def gd_from_within_and_total(within: float, total: float,
+                             deme_count: int) -> float
+```
+
+``Gd``'s own real math, given already-computed ``H_S``/``H_T``.
+
+``Gd = (d * (1 - H_T) - (1 - H_S)) / (d - 1)`` — `dev/doc/apps/
+selby/jost-finite-island-model/20260903-claude-opus-5-gene-identity-
+recursion-fim-implications.md` §4.4, inverted from ``H_S = 1 - Gs``
+and ``H_T``'s own pooled-identity relationship. Linear in ``H_S``/
+``H_T``, unlike `G_ST`/`D` — so averaging `Gd` across loci commutes
+exactly with averaging `H_S`/`H_T` first (`fim.engine.
+report_for_state` relies on this directly, computing `Gd` once from
+already-pooled means rather than averaging a per-locus `Gd`
+separately). Split out from `gd`, below, for the identical reason
+`_h_s_from_demes`'s own docstring gives: `statistics_report` needs
+this exact computation without repeating `H_S`/`H_T`, which it has
+already computed. Requires ``deme_count >= 2``, unchecked here —
+`gd`/`statistics_report`, its own two call sites, both guarantee it
+first (`_require_multiple_demes`).
+
 <a id="fim.statistics.differentiation.gs"></a>
 
 #### gs
@@ -30306,7 +31613,7 @@ def gd(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
 
 Return the between-deme gene identity ``Gd`` (Ryman & Leimar's ``J_1``).
 
-See `_gd_from_within_and_total`'s own docstring for the formula.
+See `gd_from_within_and_total`'s own docstring for the formula.
 Needs at least two demes (the `d - 1` denominator is undefined for
 one), the same requirement `g_st`/`h_st` already carry.
 
@@ -30371,6 +31678,25 @@ average diversity *within* a typical site), as distinct from "beta
 diversity" (how much diversity is added by comparing *between*
 sites — see `differentiation_q`'s own docstring, below, for where
 that shows up in this module).
+
+<a id="fim.statistics.differentiation.g_st_from_demes"></a>
+
+#### g\_st\_from\_demes
+
+```python
+def g_st_from_demes(total: float, within: float) -> float | None
+```
+
+`g_st`'s own real math, given already-computed `H_T`/`H_S`.
+
+Split out for the identical reason `_h_s_from_demes`'s own docstring
+gives — `statistics_report` computes `H_S`/`H_T` exactly once
+(`_h_s_from_demes`/`_h_t_from_demes`, above) and passes the two
+resulting floats straight in here, rather than this function
+recomputing them a second time (which the previous version of `g_st`
+did, by calling the public `h_s`/`h_t` — themselves each a fresh
+`_validate_table` call over data `statistics_report`'s own caller
+had already validated once).
 
 <a id="fim.statistics.differentiation.g_st"></a>
 
@@ -30633,6 +31959,28 @@ interpreting this statistic, not a defect in computing it.
 
 - `ValueError` - If `g_st_value` is not finite, or `h_s`/`deme_count`
   fail `g_st_max`'s own validation.
+
+<a id="fim.statistics.differentiation.jost_d_from_within_and_total"></a>
+
+#### jost\_d\_from\_within\_and\_total
+
+```python
+def jost_d_from_within_and_total(deme_count: int, within: float,
+                                 total: float) -> float
+```
+
+`jost_d`'s own real math, given already-computed `H_S`/`H_T`.
+
+Split out for the identical reason `g_st_from_demes`'s own
+docstring gives. Takes `deme_count` directly rather than the full
+`demes` tuple `g_st_from_demes` takes — this function's own
+`d / (d - 1)` rescaling only ever needed the count, never the
+frequency content, so a caller that already has a deme count on
+hand but no reason to construct a `demes` tuple (`fim.engine.
+report_for_state`'s own `"ratio_of_means"` cross-locus aggregation,
+which pools `H_S`/`H_T` across loci rather than working from any one
+locus's own frequency table) does not have to build one just to
+satisfy this signature.
 
 <a id="fim.statistics.differentiation.jost_d"></a>
 

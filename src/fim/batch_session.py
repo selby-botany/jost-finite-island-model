@@ -43,17 +43,17 @@ from fim.engine import (
     RunResult,
     SequentialAdvancer,
     VectorizedAdvancer,
-    _batch_window_planner,
-    _build_replica_lane,
-    _finalize_replica_lane,
-    _replicate_monitor,
-    _replicate_params,
-    _replicate_run_id,
-    _replicate_stopping_values,
-    _utc_now,
-    _waiting_for_window,
-    _window_noise,
 )
+from fim.engine.batch import waiting_for_window
+from fim.engine.identity import derive_replicate_run_id, params_for_replicate
+from fim.engine.lanes import build_replica_lane, finalize_replica_lane
+from fim.engine.monitors import (
+    batch_window_planner,
+    replicate_monitor,
+    replicate_stopping_values,
+    window_noise,
+)
+from fim.engine.records import utc_now
 from fim.execution import (
     SessionBackend,
     SessionCapture,
@@ -154,8 +154,8 @@ class BatchSession:
             if engine_backend == "generational-vector"
             else SequentialAdvancer(jit=params.jit == "numba")
         )
-        self._planner: BatchWindowPlanner | None = _batch_window_planner(params)
-        self._cross_monitor: ConvergenceMonitor | None = _replicate_monitor(params)
+        self._planner: BatchWindowPlanner | None = batch_window_planner(params)
+        self._cross_monitor: ConvergenceMonitor | None = replicate_monitor(params)
         self._lanes: list[ReplicaLane] = []
         self._windows: list[int | None] = []
         self._finished: dict[int, _FinishedLane | None] = {}
@@ -205,7 +205,7 @@ class BatchSession:
             params,
             ReplicateFanoutStore(store_factory),
             run_id,
-            clock if clock is not None else _utc_now,
+            clock if clock is not None else utc_now,
             engine_backend,
         )
         try:
@@ -262,7 +262,7 @@ class BatchSession:
             params,
             ReplicateFanoutStore(store_factory),
             run_id,
-            clock if clock is not None else _utc_now,
+            clock if clock is not None else utc_now,
             backend,
         )
         try:
@@ -518,7 +518,7 @@ class BatchSession:
             self._admitted_count += 1
             outcome = monitor.record(
                 self._admitted_count,
-                _replicate_stopping_values(
+                replicate_stopping_values(
                     admitted, self._params.convergence_statistics
                 ),
             )
@@ -534,10 +534,10 @@ class BatchSession:
             # checkpoint; its log would block a fresh one.
             _discard_run(
                 self._store,
-                _replicate_run_id(self._params, index, self._run_id),
+                derive_replicate_run_id(self._params, index, self._run_id),
             )
         window = self._planner.window_for(index) if self._planner is not None else None
-        lane = _build_replica_lane(
+        lane = build_replica_lane(
             self._params, index, self._run_id, self._store, self._clock, self._planner
         )
         self._lanes.append(lane)
@@ -565,7 +565,7 @@ class BatchSession:
             state, arrays = export_lane(lane, self._store.store_for(lane.run_id))
         except UnsupportedSessionError:
             state, arrays = None, None
-        lane.result = _finalize_replica_lane(lane, self._clock, self._store)
+        lane.result = finalize_replica_lane(lane, self._clock, self._store)
         self._finished[lane.replica_index] = (
             _FinishedLane(state, arrays, lane.result.manifest.ended_at)
             if state is not None and arrays is not None
@@ -579,7 +579,7 @@ class BatchSession:
             return
         matched = planner.record(
             lane.replica_index,
-            _window_noise(
+            window_noise(
                 _require_result(lane).report, self._params.convergence_statistics
             ),
         )
@@ -624,7 +624,7 @@ class BatchSession:
         if accepted is not None and len(entries) != accepted:
             raise SnapshotError("a stopped batch lists exactly its accepted lanes")
         past_stop = {
-            _replicate_run_id(params, index, self._run_id)
+            derive_replicate_run_id(params, index, self._run_id)
             for index in range(len(entries), params.n_replicates)
         }
         if not set(discarded) <= past_stop or len(set(discarded)) != len(discarded):
@@ -651,7 +651,7 @@ class BatchSession:
             raise SnapshotError(f"lane {index} window is malformed")
         if self._planner is None and window is not None:
             raise SnapshotError(f"lane {index} has a window but the batch has none")
-        run_id = _replicate_run_id(params, index, self._run_id)
+        run_id = derive_replicate_run_id(params, index, self._run_id)
         if entry.get("run_id") != run_id:
             raise SnapshotError(f"lane {index} is not replicate {run_id!r}")
         status = entry.get("status")
@@ -670,7 +670,7 @@ class BatchSession:
             if name.startswith(prefix)
         }
         lane = restore_lane(
-            _replicate_params(params, index, window),
+            params_for_replicate(params, index, window),
             state,
             lane_arrays,
             child,
@@ -686,7 +686,7 @@ class BatchSession:
             if not lane.monitor.should_stop():
                 raise SnapshotError(f"lane {index} is finished but not stopped")
             lane.active = False
-            result = _finalize_replica_lane(lane, self._clock, self._store)
+            result = finalize_replica_lane(lane, self._clock, self._store)
             lane.result = replace(
                 result, manifest=replace(result.manifest, ended_at=ended_at)
             )
@@ -704,7 +704,7 @@ class BatchSession:
                 if lane.result is not None:
                     planner.record(
                         lane.replica_index,
-                        _window_noise(
+                        window_noise(
                             lane.result.report, self._params.convergence_statistics
                         ),
                     )
@@ -731,7 +731,7 @@ class BatchSession:
                 raise SnapshotError(f"admitted replicate {count} has not finished")
             outcome = monitor.record(
                 count,
-                _replicate_stopping_values(
+                replicate_stopping_values(
                     _require_result(self._lanes[count - 1]),
                     self._params.convergence_statistics,
                 ),
@@ -749,7 +749,7 @@ class BatchSession:
         running = [
             lane
             for lane in self._lanes
-            if lane.active and not _waiting_for_window(lane, planner)
+            if lane.active and not waiting_for_window(lane, planner)
         ]
         newly_stopped = self._advancer.advance(running, self._store)
         for lane in sorted(newly_stopped, key=lambda lane: lane.replica_index):

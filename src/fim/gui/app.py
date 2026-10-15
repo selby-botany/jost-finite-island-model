@@ -65,7 +65,6 @@ from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __dev_commit__ as fim_dev_commit
 from fim import __version__ as fim_version
-from fim import engine as engine_module
 from fim import group_lifecycle, logging_setup, paths, update
 from fim.cli import load_config
 from fim.config.expert import describe_expert_settings
@@ -85,6 +84,7 @@ from fim.engine import (
     report_for_state,
     reports_summary,
 )
+from fim.engine import backends as engine_backends
 from fim.examples import seed
 from fim.examples.artifacts import materialize_outputs
 from fim.gui import (
@@ -625,7 +625,7 @@ def _interval_payload(interval: Mapping[str, Any], digits: int) -> dict[str, Any
     (sample-standard-deviation tooltip design `20260912-claude-sonnet-5-
     sample-std-dev-tooltip-design.md`, `selby/restricted`, approaches A1
     and B1). `sample_std` is `None` exactly when the interval came from
-    `fim.engine._bootstrap_interval`, whose own docstring says its
+    `fim.engine.summary._bootstrap_interval`, whose own docstring says its
     `half_width` is "a symmetrized summary kept only for display
     consistency" and not the authoritative interval shape — so stating
     *either* number for such an interval would state something its own
@@ -780,7 +780,7 @@ def _effective_allele_interval_summary(
     all — an `H`-scale plus-or-minus does not become the equivalent
     `D`-scale plus-or-minus by simple carry-over — so `_interval_payload`
     omits both here exactly like it already does for an interval that
-    came from `fim.engine._bootstrap_interval`.
+    came from `fim.engine.summary._bootstrap_interval`.
 
     Args:
         raw_summary: `replicate_summary`'s own return value (or `{}`).
@@ -4360,7 +4360,7 @@ class Api:
         selector design doc `20260911-claude-sonnet-5-gui-engine-backend-
         selector-design.md`, approach A3 alongside B3).
 
-        Delegates to `fim.engine._numba_is_available` through the module
+        Delegates to `fim.engine.backends.numba_is_available` through the module
         rather than importing the function by name, deliberately: that
         function is module-level "specifically so a test can monkeypatch
         it directly" (its own docstring), and a `from ... import` would
@@ -4370,7 +4370,7 @@ class Api:
             `{"numba": True}` when the optional `numba` dependency can be
             imported in this install, `{"numba": False}` otherwise.
         """
-        return {"numba": engine_module._numba_is_available()}
+        return {"numba": engine_backends.numba_is_available()}
 
     @_log_bridge_call
     def get_significant_digits(self) -> int:
@@ -8163,7 +8163,7 @@ def _worker_ping() -> str:
     """Module-level, picklable — the target of `Api.ping_from_worker`'s worker call.
 
     Must be module-level, not a closure or a bound method: the same
-    picklability discipline `fim.engine._require_picklable` enforces on
+    picklability discipline `fim.engine.lineal.require_picklable` enforces on
     every real `store_factory` (`fim.gui.batch_runner._replicate_store_
     factory`, `src/fim/cli.py:404`), checked here for the bridge's own
     dispatcher itself.
@@ -8959,7 +8959,7 @@ def _install_shutdown_signal_handlers(api: Api, timeout_seconds: float) -> None:
     immediately, running no Python code at all, not even a `finally`
     block. That is a materially worse outcome here than an ordinary
     window close: any live batch run's `ProcessPoolExecutor` worker
-    processes (`fim.engine._run_batch_parallel`) are simply abandoned,
+    processes (`fim.engine.lineal.run_batch_parallel`) are simply abandoned,
     orphaned to `launchd`/`init`, with nothing left to ever collect or
     stop them — and since `fim.convergence.defaults.
     MINIMUM_MAX_GENERATIONS` now lets a single replicate legitimately
@@ -9033,7 +9033,7 @@ def _gui_argument_parser() -> argparse.ArgumentParser:
     for the one GUI entry point that never goes through `fim.cli` at
     all (`fim-gui`, a separate `[project.scripts]` console script).
     `fim --graphical` deliberately does *not* carry these through
-    (`fim.launcher._launch_gui`'s own comment on that decision) — the
+    (`fim.launcher.launch_gui`'s own comment on that decision) — the
     matching `FIM_*` environment variables already cover that launch
     path uniformly, with no flag needed.
     """
@@ -9089,7 +9089,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     `selby/restricted`, §9) again here, independently of `fim.launcher.
     main`'s own call — reached only via `fim.launcher`'s GUI branches in
     practice, where the environment was already validated once (and
-    `_launch_gui`'s own `gui_main([])` call means `arguments.logging_
+    `launch_gui`'s own `gui_main([])` call means `arguments.logging_
     config` is always `None` at that point, so it is `FIM_LOGGING_
     CONFIG` alone, not the flag, that keeps that first, already-correct
     configuration from being silently thrown away and replaced by a
@@ -9103,7 +9103,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     Args:
         argv: Arguments excluding the program name (`_gui_argument_
             parser`'s own tiny flag set), or `None` for `sys.argv`.
-            `fim.launcher._launch_gui` always passes `[]` explicitly —
+            `fim.launcher.launch_gui` always passes `[]` explicitly —
             see that call site's own comment for why `None`'s default
             behavior (reading the *real* `sys.argv`, still holding
             `--graphical` at that point) would be wrong there.
@@ -9489,9 +9489,9 @@ if __name__ == "__main__":
     _args, _ = _p.parse_known_args()
     if _args.no_detach:
         raise SystemExit(main())
-    # Detached default: reuse launcher._launch_gui so the subprocess
+    # Detached default: reuse launcher.launch_gui so the subprocess
     # mechanics (frozen-vs-source, start_new_session, DEVNULL fds) live
     # in exactly one place.
-    from fim.launcher import _launch_gui
+    from fim.launcher import launch_gui
 
-    raise SystemExit(_launch_gui(detach=True))
+    raise SystemExit(launch_gui(detach=True))

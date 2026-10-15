@@ -22,7 +22,6 @@ from fim.model.operators import (
     _inversion_binomial,
     _jit_migrate_symmetric_blend,
     _jit_multinomial_via_binomial,
-    _jit_mutate_event_counts_batched,
     _jit_mutate_targets_batched,
     _migrate_symmetric_blend_batched,
     _mint_infinite_allele_ids,
@@ -30,6 +29,7 @@ from fim.model.operators import (
     _mutate_event_counts_batched,
     _mutate_targets_batched,
     drift,
+    jit_mutate_event_counts_batched,
     migrate,
     mutate,
     step,
@@ -576,7 +576,7 @@ def test_jit_mutate_event_counts_batched_matches_plain_decomposition() -> None:
         plain = _mutate_event_counts_batched(
             np.random.Generator(np.random.PCG64(seed)), ns, ps
         )
-        jitted = _jit_mutate_event_counts_batched(
+        jitted = jit_mutate_event_counts_batched(
             np.random.Generator(np.random.PCG64(seed)), ns, ps
         )
         assert plain.tolist() == list(jitted)
@@ -856,7 +856,7 @@ def _finite_alleles_for(
 ) -> FiniteAlleleRegistry:
     """Build one fresh `FiniteAlleleSpace` per locus, seeded from `state`.
 
-    Mirrors `fim.engine._build_finite_allele_spaces` without importing
+    Mirrors `fim.engine.lanes.build_finite_allele_spaces` without importing
     `fim.engine` into this test module. Every call returns a brand new
     registry, never a shared one — `FiniteAlleleSpace` mutates its own
     internal state as a side effect, so two separately-compared

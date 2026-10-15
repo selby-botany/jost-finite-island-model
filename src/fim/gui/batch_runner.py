@@ -30,7 +30,7 @@ Writes the same artifacts `cli._command_run_batch`'s own default
 pruning `cli._prune_orphan_replicate_directories` performs: under
 `max_workers`, an adaptive early stop is applied only
 after a whole concurrent worker batch completes
-(`fim.engine._run_batch_parallel`), so a worker beyond the replicate that
+(`fim.engine.lineal.run_batch_parallel`), so a worker beyond the replicate that
 triggered the stop can still have fully written its own `replicate-NNN/`
 directory even though its result is discarded, never appearing in the
 tuple `fim` returns. Without pruning, `fim.paths.atomic_directory` would
@@ -440,7 +440,7 @@ def _prune_orphan_replicate_directories(
     (`src/fim/cli.py:355`) — not a shared
     import, per this module's established front-end-boundary convention.
     Necessary now that this module calls `fim(..., max_workers=N)`: under
-    real parallelism, `fim.engine._run_batch_parallel` submits a whole
+    real parallelism, `fim.engine.lineal.run_batch_parallel` submits a whole
     worker wave and applies an adaptive early stop only
     afterward, in ascending replicate order, so a worker beyond the
     replicate that triggered the stop can still run to completion — its

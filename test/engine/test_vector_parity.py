@@ -34,14 +34,9 @@ from vector_support import (
 
 pytest.importorskip("numba")
 
-from fim import engine
-from fim.engine import (
-    RunResult,
-    VectorizedAdvancer,
-    _build_replica_lane,
-    fim,
-    replicate_summary,
-)
+from fim.engine import RunResult, VectorizedAdvancer, fim, replicate_summary
+from fim.engine import backends as engine_backends
+from fim.engine.lanes import build_replica_lane
 from fim.model.params import SimulationParams
 from fim.model.vector_block import VectorBlock, VectorMemoryCeilingError
 from fim.persistence.binary_store import BinaryLogStore
@@ -363,7 +358,7 @@ def test_a_stopped_lane_hands_its_identity_counter_back_to_the_registry() -> Non
     """
     params = make_params(40, loci=loci(2), mu=0.02, m=0.05)
     store = InMemoryTrajectoryStore()
-    lane = _build_replica_lane(params, 0, None, store, _clock)
+    lane = build_replica_lane(params, 0, None, store, _clock)
     start = lane.registry.next_value
     advancer = VectorizedAdvancer()
     while not lane.monitor.should_stop():
@@ -380,7 +375,7 @@ def test_the_advancer_enforces_its_memory_ceiling_with_an_actionable_message() -
     """A table that cannot fit fails at the first tick, naming the remedies."""
     params = make_params(10, loci=loci(2), mu=0.02, m=0.05)
     store = InMemoryTrajectoryStore()
-    lane = _build_replica_lane(params, 0, None, store, _clock)
+    lane = build_replica_lane(params, 0, None, store, _clock)
     with pytest.raises(VectorMemoryCeilingError, match="FIM_VECTOR_MEMORY_CEILING"):
         VectorizedAdvancer(memory_ceiling_bytes=64).advance([lane], store)
 
@@ -517,7 +512,7 @@ def test_auto_without_numba_falls_back_to_generational_with_identical_output(
     vector_store = InMemoryTrajectoryStore()
     vector = _run(params, "auto", vector_store)
     assert vector[0].manifest.engine_backend == "generational-vector"
-    monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
+    monkeypatch.setattr(engine_backends, "numba_is_available", lambda: False)
     fallback_store = InMemoryTrajectoryStore()
     fallback = _run(params, "auto", fallback_store)
     assert fallback[0].manifest.engine_backend == "generational"

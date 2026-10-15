@@ -25,7 +25,8 @@ from fim.batch_session import (
     BatchSession,
     check_batch_session_support,
 )
-from fim.engine import RunResult, _replicate_run_id, fim
+from fim.engine import RunResult, fim
+from fim.engine.identity import derive_replicate_run_id
 from fim.execution import (
     ScalarSession,
     SessionRestoreError,
@@ -351,7 +352,7 @@ def test_the_coordinator_records_the_accepted_prefix_in_replicate_order(
         accepted = session.capture().payload["accepted_count"]
         results = session.finalize()
     assert [result.run_id for result in results] == [
-        _replicate_run_id(params, index, None) for index in range(accepted)
+        derive_replicate_run_id(params, index, None) for index in range(accepted)
     ]
 
 

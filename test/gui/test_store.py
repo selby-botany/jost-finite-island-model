@@ -332,7 +332,7 @@ def test_progress_stores_hand_out_the_inner_ancestral_store_undecorated(
 def test_live_progress_store_is_picklable(tmp_path: Path) -> None:
     """`LiveProgressStore` survives a real pickle round trip.
 
-    The exact property `fim.engine._require_picklable` checks on a
+    The exact property `fim.engine.lineal.require_picklable` checks on a
     `store_factory` before ever spawning a `ProcessPoolExecutor` worker
     — a `LiveProgressStore` built inside one worker never itself crosses
     the process boundary, but this proves the class *could*, and is a

@@ -5,7 +5,7 @@ names `engine_backend: auto`, the choice the botanist is encouraged to use,
 unless the point of the example is to show one engine. The committed output
 was produced by the backend `auto` resolved to (the manifests record it).
 
-`auto` never resolves to `lineal` (`fim.engine._resolve_auto_engine_backend`),
+`auto` never resolves to `lineal` (`fim.engine.backends.resolve_auto_engine_backend`),
 but `generational` and `generational-vector` reproduce `lineal` bit for bit
 for the same seed under either mutation model, adaptive batches included
 (`GenerationalBackend`'s own docstring and `test/engine/test_vector_parity.py`).

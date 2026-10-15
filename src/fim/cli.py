@@ -692,7 +692,7 @@ def _command_run_batch(
 
     Under `max_workers` (parallel, the default), an adaptive
     early stop is only ever applied after a whole
-    concurrent worker batch completes (`fim.engine._run_batch_parallel`),
+    concurrent worker batch completes (`fim.engine.lineal.run_batch_parallel`),
     so a worker whose replicate is not among the returned results can
     still have fully written its own `replicate-*` directory before the
     stop was decided. `_prune_orphan_replicate_directories` removes any
@@ -1217,7 +1217,7 @@ def _cpu_count() -> int:
 def _format_timestamp(value: datetime) -> str:
     """Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`.
 
-    See `fim.engine._format_timestamp`'s own docstring for what this
+    See `fim.engine.records.format_timestamp`'s own docstring for what this
     format is and why every timestamp in this project is recorded in
     UTC. This is a separate, tiny copy of that same formatting rather
     than a shared import specifically because a `BatchManifest`'s own
@@ -1239,7 +1239,7 @@ def _prune_orphan_replicate_directories(
     internal tracked-issue numbering calls it S1, kept here purely as a
     cross-reference, not something you need to look up to follow this
     docstring's own explanation: under `max_workers` (parallel, the default),
-    `fim.engine._run_batch_parallel` submits a whole worker batch and
+    `fim.engine.lineal.run_batch_parallel` submits a whole worker batch and
     applies an adaptive precision stop only afterward, in
     ascending replicate order. A worker beyond the replicate that
     triggered the stop still runs to completion — its `store_factory`
@@ -1296,7 +1296,7 @@ def _replicate_store_factory(
 
     Module-level, closed over only via `functools.partial` (never a
     closure or lambda), so a parallel `max_workers` worker process can
-    pickle a reference to it — see `fim.engine._require_picklable`'s
+    pickle a reference to it — see `fim.engine.lineal.require_picklable`'s
     own docstring for what "picklable" means and why it matters here.
     """
     directory = _replicate_output_directory(
@@ -1342,7 +1342,7 @@ def _convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
 
     A statistic whose own history is shorter than `result.convergence_
     generations` (only `G_ST` can be, at a currently-monomorphic locus
-    -- `fim.engine._convergence_values`'s own docstring) is left out of
+    -- `fim.engine.tracking.convergence_values`'s own docstring) is left out of
     every row entirely, not partially included: which specific
     generations it is missing is not recoverable from the monitor's own
     recorded shape (a name simply not appended that round, `fim.
@@ -1378,7 +1378,7 @@ def _terminable(command: Callable[[], int]) -> int:
 def _utc_now() -> datetime:
     """Return the current UTC time for batch-manifest timestamps only.
 
-    The `_command_run_batch` counterpart to `fim.engine._utc_now` —
+    The `_command_run_batch` counterpart to `fim.engine.records.utc_now` —
     see that function's own docstring for why this small wrapper exists
     at all rather than calling `datetime.now(UTC)` inline.
     """

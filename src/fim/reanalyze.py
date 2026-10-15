@@ -103,7 +103,7 @@ def differentiation_q_for_state(
     (`fim.statistics.differentiation.differentiation_q` raises if
     weights are passed at any other order) — the same order that
     matches `E_ST`. Deriving the weights the same way
-    `fim.engine._statistics_for_locus` does keeps `Differentiation_1`
+    `fim.engine.tracking.statistics_for_locus` does keeps `Differentiation_1`
     here identical to the report's own `E_ST`, rather than the two
     silently disagreeing whenever `deme_weighting` is `"size"`.
     """
