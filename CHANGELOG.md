@@ -8,6 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Result types (`fim.results`).** A run returns a `Result` holding its
+  `Replicate` tuple, an across-replicate `Summary` (statistic ID to interval),
+  why the batch stopped (`BatchStop`), and a `Provenance` (versions, platform,
+  requested and resolved backend, derived burn-in and cap). A replicate has a
+  `Stop`, a `Report` (a read-only mapping of catalog statistic IDs with
+  `D`, `G_ST`, `H_S`, and `H_T` as attributes, and `to_dict()` giving exactly
+  `report.json`), aligned `Histories`, its final state, and a read-only
+  `TrajectoryReader`. A single replicate is a `Result` of length one
+  (`Result.only()`). `result_from_runs` builds one from the engine's output;
+  the entry point that calls it is added in the next change.
 - **Configuration codec for the grouped specification.** `fim.spec.to_params`
   compiles a `RunSpec` with its `Execution` and `Recording` into the engine's
   validated `SimulationParams`; `from_params` reads one back; `RunConfig` and

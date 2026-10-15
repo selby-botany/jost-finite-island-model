@@ -1289,6 +1289,38 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [Comparison](#fim.reproducibility.Comparison)
     * [to\_dict](#fim.reproducibility.Comparison.to_dict)
   * [compare\_runs](#fim.reproducibility.compare_runs)
+* [fim.results](#fim.results)
+  * [BatchStop](#fim.results.BatchStop)
+  * [Stop](#fim.results.Stop)
+  * [Report](#fim.results.Report)
+    * [\_\_init\_\_](#fim.results.Report.__init__)
+    * [\_\_getitem\_\_](#fim.results.Report.__getitem__)
+    * [\_\_iter\_\_](#fim.results.Report.__iter__)
+    * [\_\_len\_\_](#fim.results.Report.__len__)
+    * [\_\_repr\_\_](#fim.results.Report.__repr__)
+    * [D](#fim.results.Report.D)
+    * [G\_ST](#fim.results.Report.G_ST)
+    * [H\_S](#fim.results.Report.H_S)
+    * [H\_T](#fim.results.Report.H_T)
+    * [windows](#fim.results.Report.windows)
+    * [to\_dict](#fim.results.Report.to_dict)
+  * [Histories](#fim.results.Histories)
+    * [\_\_getitem\_\_](#fim.results.Histories.__getitem__)
+    * [names](#fim.results.Histories.names)
+  * [TrajectoryReader](#fim.results.TrajectoryReader)
+    * [\_\_init\_\_](#fim.results.TrajectoryReader.__init__)
+    * [run\_id](#fim.results.TrajectoryReader.run_id)
+    * [rows](#fim.results.TrajectoryReader.rows)
+  * [Replicate](#fim.results.Replicate)
+  * [Summary](#fim.results.Summary)
+    * [\_\_init\_\_](#fim.results.Summary.__init__)
+    * [\_\_getitem\_\_](#fim.results.Summary.__getitem__)
+    * [\_\_iter\_\_](#fim.results.Summary.__iter__)
+    * [\_\_len\_\_](#fim.results.Summary.__len__)
+  * [Provenance](#fim.results.Provenance)
+  * [Result](#fim.results.Result)
+    * [only](#fim.results.Result.only)
+  * [result\_from\_runs](#fim.results.result_from_runs)
 * [fim.run\_service](#fim.run_service)
   * [DEFAULT\_CHECKPOINT\_GENERATIONS](#fim.run_service.DEFAULT_CHECKPOINT_GENERATIONS)
   * [DEFAULT\_CHECKPOINT\_SECONDS](#fim.run_service.DEFAULT_CHECKPOINT_SECONDS)
@@ -30757,6 +30789,435 @@ Compare two run directories of the same configuration.
 
 - `OSError` - A manifest cannot be read.
 - `ValueError` - A manifest is not valid JSON.
+
+<a id="fim.results"></a>
+
+# fim.results
+
+What a run returns: one `Result` holding its replicates and their summary.
+
+A run always returns a `Result`, whether it had one replicate or two hundred.
+Each replicate is a `Replicate` with its `Stop` (why it ended), its `Report`
+(the statistics at its last generation), its `Histories` (how the watched
+statistics moved), and its final state. The batch as a whole has a `Summary`
+(the across-replicate intervals), a `BatchStop` (why no more replicates were
+added), and a `Provenance` (what produced the numbers).
+
+These are plain frozen values. They hold no open files: a replicate's saved
+trajectory is read through a `TrajectoryReader`, which cannot write.
+
+<a id="fim.results.BatchStop"></a>
+
+#### BatchStop
+
+Why a batch ended: it had one replicate, reached its precision before the
+replicate cap, or ran every replicate it was allowed.
+
+<a id="fim.results.Stop"></a>
+
+## Stop Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Stop()
+```
+
+Why one replicate ended.
+
+**Arguments**:
+
+- `converged` - Whether the watched statistics settled, rather than the
+  generation cap ending the run.
+- `reason` - The stop reason as the engine names it.
+- `generation` - The last generation reached.
+- `watched` - The statistics whose stability ended the run (empty if it
+  hit the cap).
+
+<a id="fim.results.Report"></a>
+
+## Report Objects
+
+```python
+class Report(Mapping[str, float | None])
+```
+
+The statistics of one replicate at its last generation.
+
+Behaves as a read-only mapping from statistic ID (as listed in the
+statistics catalog, for example ``"D"`` or ``"G_ST"``) to its value;
+``None`` means the statistic is undefined for this replicate (``G_ST``
+when a locus is monomorphic everywhere). `to_dict` returns exactly the
+contents of the run's `report.json`.
+
+The four statistics every run tracks are also attributes: `D`, `G_ST`,
+`H_S`, and `H_T`.
+
+<a id="fim.results.Report.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(final: Mapping[str, Any]) -> None
+```
+
+Wrap a final report.
+
+**Arguments**:
+
+- `final` - A `FinalReport`, or the same mapping read back from JSON.
+
+<a id="fim.results.Report.__getitem__"></a>
+
+#### \_\_getitem\_\_
+
+```python
+def __getitem__(key: str) -> float | None
+```
+
+Return a statistic's value, or raise `KeyError` naming valid IDs.
+
+<a id="fim.results.Report.__iter__"></a>
+
+#### \_\_iter\_\_
+
+```python
+def __iter__() -> Iterator[str]
+```
+
+Iterate statistic IDs in catalog order.
+
+<a id="fim.results.Report.__len__"></a>
+
+#### \_\_len\_\_
+
+```python
+def __len__() -> int
+```
+
+Return the number of statistics reported.
+
+<a id="fim.results.Report.__repr__"></a>
+
+#### \_\_repr\_\_
+
+```python
+def __repr__() -> str
+```
+
+Return a short summary of the headline statistics.
+
+<a id="fim.results.Report.D"></a>
+
+#### D
+
+```python
+@property
+def D() -> float | None
+```
+
+Jost's differentiation `D`.
+
+<a id="fim.results.Report.G_ST"></a>
+
+#### G\_ST
+
+```python
+@property
+def G_ST() -> float | None
+```
+
+Nei's `G_ST`; `None` where it is undefined.
+
+<a id="fim.results.Report.H_S"></a>
+
+#### H\_S
+
+```python
+@property
+def H_S() -> float | None
+```
+
+Mean within-deme heterozygosity.
+
+<a id="fim.results.Report.H_T"></a>
+
+#### H\_T
+
+```python
+@property
+def H_T() -> float | None
+```
+
+Total heterozygosity.
+
+<a id="fim.results.Report.windows"></a>
+
+#### windows
+
+```python
+@property
+def windows() -> Mapping[str, Mapping[str, Any]]
+```
+
+Return the evidence-window statistics, by statistic ID.
+
+<a id="fim.results.Report.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, Any]
+```
+
+Return the report as the dict written to `report.json`.
+
+<a id="fim.results.Histories"></a>
+
+## Histories Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Histories()
+```
+
+How the tracked statistics moved over one replicate.
+
+**Arguments**:
+
+- `generations` - The generations at which the convergence check
+  recorded an observation.
+- `series` - For each tracked statistic ID, its value at each of those
+  generations.
+
+<a id="fim.results.Histories.__getitem__"></a>
+
+#### \_\_getitem\_\_
+
+```python
+def __getitem__(name: str) -> tuple[float, ...]
+```
+
+Return one statistic's values, aligned with `generations`.
+
+<a id="fim.results.Histories.names"></a>
+
+#### names
+
+```python
+@property
+def names() -> tuple[str, ...]
+```
+
+Return the tracked statistic IDs.
+
+<a id="fim.results.TrajectoryReader"></a>
+
+## TrajectoryReader Objects
+
+```python
+class TrajectoryReader()
+```
+
+Read-only access to the rows a replicate stored.
+
+**Arguments**:
+
+- `store` - The store the replicate wrote to.
+- `run_id` - The replicate's run ID in that store.
+
+<a id="fim.results.TrajectoryReader.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(store: TrajectoryStore, run_id: str) -> None
+```
+
+Remember where the rows are.
+
+<a id="fim.results.TrajectoryReader.run_id"></a>
+
+#### run\_id
+
+```python
+@property
+def run_id() -> str
+```
+
+Return the replicate's run ID.
+
+<a id="fim.results.TrajectoryReader.rows"></a>
+
+#### rows
+
+```python
+def rows() -> Iterator[TrajectoryRow]
+```
+
+Yield the stored rows in order.
+
+<a id="fim.results.Replicate"></a>
+
+## Replicate Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Replicate()
+```
+
+One independently seeded replicate.
+
+**Arguments**:
+
+- `index` - Position in the batch, from 0.
+- `seed` - The seed this replicate used.
+- `run_id` - The replicate's run ID.
+- `stop` - Why it ended.
+- `report` - Its statistics at the last generation.
+- `histories` - How its tracked statistics moved.
+- `final_state` - The population at the last generation.
+- `trajectory` - Reader over its stored rows.
+
+<a id="fim.results.Summary"></a>
+
+## Summary Objects
+
+```python
+class Summary(Mapping[str, ConfidenceInterval])
+```
+
+The across-replicate interval of each statistic.
+
+A read-only mapping from statistic ID to its `ConfidenceInterval`. It is
+empty for a single replicate, and a statistic with fewer than two defined
+replicates is absent.
+
+<a id="fim.results.Summary.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(intervals: Mapping[str, ConfidenceInterval]) -> None
+```
+
+Wrap a mapping of intervals.
+
+<a id="fim.results.Summary.__getitem__"></a>
+
+#### \_\_getitem\_\_
+
+```python
+def __getitem__(key: str) -> ConfidenceInterval
+```
+
+Return a statistic's interval.
+
+<a id="fim.results.Summary.__iter__"></a>
+
+#### \_\_iter\_\_
+
+```python
+def __iter__() -> Iterator[str]
+```
+
+Iterate statistic IDs.
+
+<a id="fim.results.Summary.__len__"></a>
+
+#### \_\_len\_\_
+
+```python
+def __len__() -> int
+```
+
+Return the number of statistics with an interval.
+
+<a id="fim.results.Provenance"></a>
+
+## Provenance Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Provenance()
+```
+
+What produced a result's numbers.
+
+**Arguments**:
+
+- `software_version` - The `fim` version.
+- `python` - The Python version.
+- `numpy` - The NumPy version.
+- `platform` - The operating system and machine.
+- `requested` - The `Execution` that was asked for.
+- `backend` - The backend that actually ran (never ``"auto"``).
+- `jit` - The JIT setting that ran.
+- `started_at` - When the first replicate started (UTC text).
+- `ended_at` - When the last replicate ended (UTC text).
+- `derived` - Values the engine derived from ``"auto"`` settings, by name.
+
+<a id="fim.results.Result"></a>
+
+## Result Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Result()
+```
+
+Everything a run produced.
+
+**Arguments**:
+
+- `run_id` - The run's ID (see `fim.spec.run_identity`).
+- `spec` - What was simulated.
+- `replicates` - The replicates, in order.
+- `summary` - Across-replicate intervals.
+- `batch_stop` - Why no more replicates were added.
+- `provenance` - What produced the numbers.
+
+<a id="fim.results.Result.only"></a>
+
+#### only
+
+```python
+def only() -> Replicate
+```
+
+Return the sole replicate.
+
+**Raises**:
+
+- `ValueError` - The run had more than one replicate.
+
+<a id="fim.results.result_from_runs"></a>
+
+#### result\_from\_runs
+
+```python
+def result_from_runs(output: RunResult | Sequence[RunResult],
+                     *,
+                     run_id: str,
+                     params: Any,
+                     spec: RunSpec | None = None) -> Result
+```
+
+Build a `Result` from what the engine returned.
+
+**Arguments**:
+
+- `output` - One engine result, or one per replicate.
+- `run_id` - The run's ID.
+- `params` - The `SimulationParams` the run was started with (the batch's,
+  not a replicate's).
+- `spec` - The specification the caller wrote, with its ``"auto"`` values
+  as written. If omitted it is read back from `params`, which
+  reports derived values as numbers.
+
+
+**Returns**:
+
+  The `Result`.
 
 <a id="fim.run_service"></a>
 

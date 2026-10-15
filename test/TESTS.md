@@ -30,6 +30,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_public_surface`](#test.test_public_surface)
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_reproducibility`](#test.test_reproducibility)
+  - [`test_results`](#test.test_results)
   - [`test_run_service`](#test.test_run_service)
   - [`test_run_service_batch`](#test.test_run_service_batch)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
@@ -3359,6 +3360,119 @@ A run that ends before the thinning start is not thinned at all.
 # test.test\_reproducibility
 
 Tests for `fim.reproducibility`: comparing two runs of one configuration.
+
+<a id="test.test_results"></a>
+
+# test.test\_results
+
+The result types a run returns, built from what the engine produces.
+
+<a id="test.test_results.test_a_single_replicate_is_a_result_of_length_one"></a>
+
+#### test\_a\_single\_replicate\_is\_a\_result\_of\_length\_one
+
+```python
+def test_a_single_replicate_is_a_result_of_length_one() -> None
+```
+
+There is one return shape, whatever the replicate count.
+
+<a id="test.test_results.test_only_refuses_a_batch"></a>
+
+#### test\_only\_refuses\_a\_batch
+
+```python
+def test_only_refuses_a_batch() -> None
+```
+
+`only()` says how many replicates there were.
+
+<a id="test.test_results.test_report_is_a_read_only_mapping_of_catalog_statistics"></a>
+
+#### test\_report\_is\_a\_read\_only\_mapping\_of\_catalog\_statistics
+
+```python
+def test_report_is_a_read_only_mapping_of_catalog_statistics() -> None
+```
+
+Report keys are catalog IDs and its dict form is the report.json shape.
+
+<a id="test.test_results.test_an_unknown_statistic_names_the_valid_ones"></a>
+
+#### test\_an\_unknown\_statistic\_names\_the\_valid\_ones
+
+```python
+def test_an_unknown_statistic_names_the_valid_ones() -> None
+```
+
+A typo fails with the catalog's IDs in the message.
+
+<a id="test.test_results.test_report_round_trips_every_shipped_example_report"></a>
+
+#### test\_report\_round\_trips\_every\_shipped\_example\_report
+
+```python
+@pytest.mark.parametrize(
+    "report_path",
+    sorted(EXAMPLES.glob("*/report.json")) +
+    sorted(EXAMPLES.glob("*/replicate-001/report.json")),
+    ids=lambda p: f"{p.parent.name}/{p.name}",
+)
+def test_report_round_trips_every_shipped_example_report(
+        report_path: Path) -> None
+```
+
+Wrapping a committed report.json and writing it back changes nothing.
+
+<a id="test.test_results.test_stop_and_histories_describe_the_replicate"></a>
+
+#### test\_stop\_and\_histories\_describe\_the\_replicate
+
+```python
+def test_stop_and_histories_describe_the_replicate() -> None
+```
+
+The stop and the aligned histories come from the engine's result.
+
+<a id="test.test_results.test_the_trajectory_reader_reads_the_stored_rows"></a>
+
+#### test\_the\_trajectory\_reader\_reads\_the\_stored\_rows
+
+```python
+def test_the_trajectory_reader_reads_the_stored_rows() -> None
+```
+
+Rows come back through a reader that has no way to write.
+
+<a id="test.test_results.test_a_batch_has_replicates_with_their_own_seeds_and_a_summary"></a>
+
+#### test\_a\_batch\_has\_replicates\_with\_their\_own\_seeds\_and\_a\_summary
+
+```python
+def test_a_batch_has_replicates_with_their_own_seeds_and_a_summary() -> None
+```
+
+Replicates are seeded from the run's seed; the summary has intervals.
+
+<a id="test.test_results.test_a_batch_that_reaches_its_precision_says_so"></a>
+
+#### test\_a\_batch\_that\_reaches\_its\_precision\_says\_so
+
+```python
+def test_a_batch_that_reaches_its_precision_says_so() -> None
+```
+
+Stopping before the replicate cap is reported as precision reached.
+
+<a id="test.test_results.test_provenance_records_the_backend_that_ran"></a>
+
+#### test\_provenance\_records\_the\_backend\_that\_ran
+
+```python
+def test_provenance_records_the_backend_that_ran() -> None
+```
+
+`auto` is resolved to a real backend in the provenance.
 
 <a id="test.test_run_service"></a>
 
