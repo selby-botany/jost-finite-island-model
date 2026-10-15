@@ -1068,6 +1068,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Replicate seeds come from `SeedSequence`.** Replicate `i` of a batch uses
+  child `i` of `numpy.random.SeedSequence(seed)` (a 64-bit integer), not
+  `seed + i`. Two batches with nearby seeds used to share replicates (`seed=100`'s
+  replicate 2 repeated `seed=102`'s replicate 0); now they share none. A single
+  run still uses `seed` itself, and a replicate's seed no longer depends on the
+  batch size. **Every batch's numbers change** (the batch's first replicate no
+  longer equals the single run with the same seed), so example outputs are
+  regenerated. A seeded test of the Ryman and Leimar ancestral-heterozygosity
+  effect had passed only because of the old seeds' luck on a step smaller than
+  its own interval; it now checks the claim it can support.
 - **The engine entry point states a configuration once.** `fim.engine.fim`
   (renamed `simulate_params`) repeated `gene_copies`, `m`, `mu`, and `d`
   beside `params`, with a check that the two agreed, and accepted

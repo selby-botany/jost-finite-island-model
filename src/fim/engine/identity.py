@@ -6,6 +6,8 @@ import hashlib
 import json
 from dataclasses import replace
 
+import numpy as np
+
 from fim.model.params import SimulationParams
 
 
@@ -37,12 +39,32 @@ def deterministic_run_id(params: SimulationParams) -> str:
     return f"run-{hashlib.sha256(canonical).hexdigest()[:16]}"
 
 
+def replicate_seed(seed: int, replicate_index: int) -> int:
+    """Return the seed of one replicate of a batch.
+
+    Replicate `i` uses child `i` of `numpy.random.SeedSequence(seed)`, reduced
+    to a 64-bit integer. Children of one seed are statistically independent
+    and, unlike `seed + i`, cannot collide with another batch's replicate:
+    two batches with nearby seeds share no replicate.
+
+    Args:
+        seed: The batch's seed.
+        replicate_index: The replicate's zero-based index.
+
+    Returns:
+        A non-negative integer seed for the replicate.
+    """
+    child = np.random.SeedSequence(entropy=seed, spawn_key=(replicate_index,))
+    return int(child.generate_state(1, dtype=np.uint64)[0])
+
+
 def params_for_replicate(
     params: SimulationParams, replicate_index: int, window: int | None = None
 ) -> SimulationParams:
     """Return the configuration of one replicate of a batch.
 
-    The replicate is an independent single run with its own seed. Its
+    The replicate is an independent single run with its own seed
+    (`replicate_seed`). Its
     `precision_method` is reset (a single run has no interval across
     replicates, so `planned_replicates` would be refused) and its averaging
     window, when the batch assigned one, is written into the parameters, so
@@ -59,7 +81,7 @@ def params_for_replicate(
     """
     return replace(
         params,
-        seed=params.seed + replicate_index,
+        seed=replicate_seed(params.seed, replicate_index),
         n_replicates=1,
         precision_method="interval",
         replicate_averaging_window=window or params.replicate_averaging_window,

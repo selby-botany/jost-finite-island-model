@@ -236,7 +236,9 @@ ones, so it is part of the identity.
 assert fim.run_identity(spec) == result.run_id
 ```
 
-Replicate `i` of a batch uses the seed `seed + i`.
+Replicate `i` of a batch uses child `i` of `numpy.random.SeedSequence(seed)`,
+so two batches with nearby seeds share no replicate. A single run uses `seed`
+itself.
 
 ## Where to go next
 

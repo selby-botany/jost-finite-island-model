@@ -459,9 +459,8 @@ class BatchManifest:
         """Return the number of published replicates.
 
         Every replicate in a batch shares the exact same
-        `SimulationParams` except its own seed (`seed + replicate_
-        index` — see `fim.model.params.SimulationParams`'s own
-        docstring for why that is always non-negative); this is simply
+        `SimulationParams` except its own seed
+        (`fim.engine.identity.replicate_seed`); this is simply
         how many of them actually completed and were published.
         """
         return len(self.replicate_run_ids)

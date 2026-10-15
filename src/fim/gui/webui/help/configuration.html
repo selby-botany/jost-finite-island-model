@@ -887,8 +887,8 @@ locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
 <li><strong>Type:</strong> positive integer</li>
 <li><strong>Default:</strong> <code>200</code></li>
 </ul>
-<p>n<sub>replicates</sub> runs that many independently seeded scalar runs — seeds
-<code>seed</code>, <code>seed + 1</code>, and so on — through both the library API
+<p>n<sub>replicates</sub> runs that many independently seeded scalar runs — replicate
+<code>i</code> uses child <code>i</code> of <code>numpy.random.SeedSequence(seed)</code> — through both the library API
 (<code>fim.engine.simulate_params</code>, returning one <code>RunResult</code> per replicate) and the CLI
 (<code>fim run</code>, writing one <code>replicate-NNN/</code> subdirectory per replicate; see
 <a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">Using <code>fim</code></a>). This is a hard cap, not a

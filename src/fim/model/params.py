@@ -289,26 +289,13 @@ class SimulationParams:
             rejects a negative seed with no equivalent upper bound (its
             `SeedSequence` hashes an arbitrarily large non-negative
             integer into a fixed-size entropy pool rather than rejecting
-            it), so this is the whole legal range. A batch replicate's
-            seed is `seed + replicate_index`, which is therefore also
-            always non-negative and always in range: see the
-            `_require_integer` call site for why no separate bound on
-            that derived value is needed. This plain-addition scheme
-            can *alias*: `seed=100`'s own replicate `2` and `seed=102`'s
-            own replicate `0` compute the identical derived seed (`102`)
-            and therefore the identical replicate trajectory, if both
-            configurations are ever run side by side (this project's
-            own multi-model engine review, 2026-09-04, `FIM-21`/finding
-            Kimi-FIM-21). A documented tradeoff, not fixed here:
-            `numpy.random.SeedSequence(seed).spawn(n)` would remove the
-            aliasing by construction, but at the cost of changing every
-            already-published replicate's own derived seed for every
-            `n_replicates > 1` configuration ever run under this
-            scheme — a reproducibility break with no matching benefit
-            for the ordinary case (two configurations sharing a
-            handful of small, round `seed` values run side by side),
-            not a decision to make silently as part of an unrelated
-            hardening pass.
+            it), so this is the whole legal range. Replicate `i` of a batch
+            uses `fim.engine.identity.replicate_seed(seed, i)`: child `i`
+            of `numpy.random.SeedSequence(seed)`, a non-negative 64-bit
+            integer. Children of one seed are independent, and two batches
+            with nearby seeds share no replicate (the earlier `seed + i`
+            rule let `seed=100`'s replicate 2 repeat `seed=102`'s replicate
+            0). A single run (`n_replicates=1`) uses `seed` itself.
         loci: Nonempty ordered locus descriptions.
         initial_allele_count: Founding allele count per locus.
         initial_concentration: Symmetric Dirichlet concentration.
@@ -653,16 +640,12 @@ class SimulationParams:
         # ever caught deep inside `simulate_params()`, when NumPy's PCG64 raises —
         # potentially after CLI output directories already exist. Reject
         # it here instead, at construction time. This one bound is also
-        # sufficient for every batch replicate's derived seed
-        # (`seed + replicate_index` in `fim.engine`): `replicate_index`
-        # ranges over `0 .. n_replicates - 1`, `n_replicates` is already
-        # required to be at least 1 below, and Python integers never
-        # overflow, so `seed >= 0` guarantees `seed + replicate_index >=
-        # 0` for every replicate without a further check. PCG64 has no
-        # enforced upper bound to check against in turn (verified up to
-        # a 1024-bit seed): `SeedSequence` hashes any non-negative
-        # integer into a fixed-size entropy pool rather than rejecting
-        # large values, so non-negativity is the entire legal range.
+        # sufficient: a batch replicate's seed is derived from it with
+        # `SeedSequence` (`fim.engine.identity.replicate_seed`), and PCG64
+        # has no enforced upper bound (verified up to a 1024-bit seed):
+        # `SeedSequence` hashes any non-negative integer into a fixed-size
+        # entropy pool rather than rejecting large values, so
+        # non-negativity is the entire legal range.
         _require_integer("seed", self.seed, minimum=0)
 
         population_sizes = _normalize_population_sizes(self.gene_copies, self.d)

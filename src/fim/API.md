@@ -213,6 +213,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [waiting\_for\_window](#fim.engine.batch.waiting_for_window)
 * [fim.engine.identity](#fim.engine.identity)
   * [deterministic\_run\_id](#fim.engine.identity.deterministic_run_id)
+  * [replicate\_seed](#fim.engine.identity.replicate_seed)
   * [params\_for\_replicate](#fim.engine.identity.params_for_replicate)
   * [derive\_replicate\_run\_id](#fim.engine.identity.derive_replicate_run_id)
 * [fim.engine.lanes](#fim.engine.lanes)
@@ -5294,8 +5295,8 @@ trajectory, on any machine, every time. That is not a performance detail
 — it is what makes a result reproducible and verifiable by someone else,
 which for simulated *scientific* results is exactly as important as
 being able to show your work for a hand calculation. Every replicate
-gets its own seed, deterministically derived from the base seed (`params.
-seed + replicate_index`), so a batch of replicates is itself fully
+gets its own seed, deterministically derived from the base seed
+(`fim.engine.identity.replicate_seed`), so a batch of replicates is itself fully
 reproducible too, not just each individual replicate in isolation.
 
 <a id="fim.engine.api"></a>
@@ -5870,6 +5871,31 @@ settings that do not change the numbers (engine, JIT, trajectory
 retention, storage tuning), so one scientific configuration has one ID
 whichever backend ran it.
 
+<a id="fim.engine.identity.replicate_seed"></a>
+
+#### replicate\_seed
+
+```python
+def replicate_seed(seed: int, replicate_index: int) -> int
+```
+
+Return the seed of one replicate of a batch.
+
+Replicate `i` uses child `i` of `numpy.random.SeedSequence(seed)`, reduced
+to a 64-bit integer. Children of one seed are statistically independent
+and, unlike `seed + i`, cannot collide with another batch's replicate:
+two batches with nearby seeds share no replicate.
+
+**Arguments**:
+
+- `seed` - The batch's seed.
+- `replicate_index` - The replicate's zero-based index.
+
+
+**Returns**:
+
+  A non-negative integer seed for the replicate.
+
 <a id="fim.engine.identity.params_for_replicate"></a>
 
 #### params\_for\_replicate
@@ -5882,7 +5908,8 @@ def params_for_replicate(params: SimulationParams,
 
 Return the configuration of one replicate of a batch.
 
-The replicate is an independent single run with its own seed. Its
+The replicate is an independent single run with its own seed
+(`replicate_seed`). Its
 `precision_method` is reset (a single run has no interval across
 replicates, so `planned_replicates` would be refused) and its averaging
 window, when the batch assigned one, is written into the parameters, so
@@ -18187,7 +18214,7 @@ sequence); a spawned child stream is decorrelated from its own
 plain-seed sibling by design, while remaining fully deterministic —
 the same parent seed always yields the same child, so reproducibility
 is unaffected, and it composes for free with a batch's own
-per-replicate seed (`params.seed + replicate_index`): each
+per-replicate seed (`fim.engine.identity.replicate_seed`): each
 replicate's own equilibration derives from *that replicate's own*
 seed, so a batch's replicates stay genuinely independent trials.
 
@@ -18988,26 +19015,13 @@ functions that actually use each one.
   rejects a negative seed with no equivalent upper bound (its
   `SeedSequence` hashes an arbitrarily large non-negative
   integer into a fixed-size entropy pool rather than rejecting
-  it), so this is the whole legal range. A batch replicate's
-  seed is `seed + replicate_index`, which is therefore also
-  always non-negative and always in range: see the
-  `_require_integer` call site for why no separate bound on
-  that derived value is needed. This plain-addition scheme
-  can *alias*: `seed=100`'s own replicate `2` and `seed=102`'s
-  own replicate `0` compute the identical derived seed (`102`)
-  and therefore the identical replicate trajectory, if both
-  configurations are ever run side by side (this project's
-  own multi-model engine review, 2026-09-04, `FIM-21`/finding
-  Kimi-FIM-21). A documented tradeoff, not fixed here:
-  `numpy.random.SeedSequence(seed).spawn(n)` would remove the
-  aliasing by construction, but at the cost of changing every
-  already-published replicate's own derived seed for every
-  `n_replicates > 1` configuration ever run under this
-  scheme — a reproducibility break with no matching benefit
-  for the ordinary case (two configurations sharing a
-  handful of small, round `seed` values run side by side),
-  not a decision to make silently as part of an unrelated
-  hardening pass.
+  it), so this is the whole legal range. Replicate `i` of a batch
+  uses `fim.engine.identity.replicate_seed(seed, i)`: child `i`
+  of `numpy.random.SeedSequence(seed)`, a non-negative 64-bit
+  integer. Children of one seed are independent, and two batches
+  with nearby seeds share no replicate (the earlier `seed + i`
+  rule let `seed=100`'s replicate 2 repeat `seed=102`'s replicate
+  0). A single run (`n_replicates=1`) uses `seed` itself.
 - `loci` - Nonempty ordered locus descriptions.
 - `initial_allele_count` - Founding allele count per locus.
 - `initial_concentration` - Symmetric Dirichlet concentration.
@@ -24658,9 +24672,8 @@ def replicate_count() -> int
 Return the number of published replicates.
 
 Every replicate in a batch shares the exact same
-`SimulationParams` except its own seed (`seed + replicate_
-index` — see `fim.model.params.SimulationParams`'s own
-docstring for why that is always non-negative); this is simply
+`SimulationParams` except its own seed
+(`fim.engine.identity.replicate_seed`); this is simply
 how many of them actually completed and were published.
 
 <a id="fim.persistence.manifest.BatchManifest.params"></a>

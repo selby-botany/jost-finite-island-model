@@ -11,7 +11,7 @@ import pytest
 from vector_support import loci, make_params
 
 from fim.engine import simulate_params
-from fim.engine.identity import deterministic_run_id
+from fim.engine.identity import deterministic_run_id, replicate_seed
 from fim.model.params import SimulationParams
 from fim.persistence.store import InMemoryTrajectoryStore
 from fim.results import Report, Result, result_from_runs
@@ -120,7 +120,9 @@ def test_a_batch_has_replicates_with_their_own_seeds_and_a_summary() -> None:
     """Replicates are seeded from the run's seed; the summary has intervals."""
     params = _small(n_replicates=3, seed=100)
     result = _result(params)
-    assert [r.seed for r in result.replicates] == [100, 101, 102]
+    assert [r.seed for r in result.replicates] == [
+        replicate_seed(100, index) for index in range(3)
+    ]
     assert [r.index for r in result.replicates] == [0, 1, 2]
     assert {"D", "H_S"} <= set(result.summary)
     assert result.summary["D"]["sample_count"] == 3

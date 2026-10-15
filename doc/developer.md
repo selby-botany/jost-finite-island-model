@@ -287,7 +287,7 @@ reasoned about.
 - Preserve first-observed allele order; ordering has no biological meaning but
   stable iteration keeps byte output reproducible.
 - Keep timestamps in manifest metadata and default directory names only.
-- A replicate batch's `seed + i` derivation, and each replicate's own PCG64
+- A replicate batch's `SeedSequence` seed derivation, and each replicate's own PCG64
   generator, are unaffected by execution order or worker count: opt-in
   parallel replicate execution (`fim`'s max_workers) runs each replicate
   in its own worker process, computes exactly the same result as running it

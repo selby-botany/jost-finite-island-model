@@ -306,7 +306,7 @@ class EquilibriumSplitInitialCondition:
     plain-seed sibling by design, while remaining fully deterministic —
     the same parent seed always yields the same child, so reproducibility
     is unaffected, and it composes for free with a batch's own
-    per-replicate seed (`params.seed + replicate_index`): each
+    per-replicate seed (`fim.engine.identity.replicate_seed`): each
     replicate's own equilibration derives from *that replicate's own*
     seed, so a batch's replicates stay genuinely independent trials.
 

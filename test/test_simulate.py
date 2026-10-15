@@ -9,7 +9,7 @@ import pytest
 
 import fim
 from fim.engine import backends as engine_backends
-from fim.engine.identity import deterministic_run_id
+from fim.engine.identity import deterministic_run_id, replicate_seed
 from fim.errors import ConfigurationError, FimError, StoreError, UnsupportedError
 from fim.execution import SessionRestoreError, UnsupportedSessionError
 from fim.group_lifecycle import GroupBusyError
@@ -47,7 +47,9 @@ def test_simulate_returns_a_result_with_the_runs_identity() -> None:
         result.run_id == deterministic_run_id(to_params(spec)) == fim.run_identity(spec)
     )
     assert result.spec == spec
-    assert [replicate.seed for replicate in result.replicates] == [5, 6, 7]
+    assert [replicate.seed for replicate in result.replicates] == [
+        replicate_seed(5, index) for index in range(3)
+    ]
 
 
 def test_every_backend_gives_the_same_numbers_and_the_same_run_id() -> None:

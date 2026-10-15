@@ -155,8 +155,8 @@ class LinealBackend:
             "LinealBackend: dispatching a %d-replicate sequential batch",
             params.n_replicates,
         )
-        # Replicate i is an independent scalar run with seed + i, preserving the
-        # scalar trajectory for the first result and deterministic batch ordering.
+        # Replicate i is an independent scalar run with its own derived seed
+        # (`replicate_seed`), giving a deterministic batch ordering.
         results: list[RunResult] = []
         planner = batch_window_planner(params)
         for replicate_index in range(params.n_replicates):

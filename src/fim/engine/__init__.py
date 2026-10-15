@@ -93,8 +93,8 @@ trajectory, on any machine, every time. That is not a performance detail
 — it is what makes a result reproducible and verifiable by someone else,
 which for simulated *scientific* results is exactly as important as
 being able to show your work for a hand calculation. Every replicate
-gets its own seed, deterministically derived from the base seed (`params.
-seed + replicate_index`), so a batch of replicates is itself fully
+gets its own seed, deterministically derived from the base seed
+(`fim.engine.identity.replicate_seed`), so a batch of replicates is itself fully
 reproducible too, not just each individual replicate in isolation.
 """
 

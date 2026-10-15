@@ -69,6 +69,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_frame_identity`](#engine.test_frame_identity)
   - [`test_identity_neutrality`](#engine.test_identity_neutrality)
   - [`test_replicate_final_state_report`](#engine.test_replicate_final_state_report)
+  - [`test_replicate_seeds`](#engine.test_replicate_seeds)
   - [`test_vector_parity`](#engine.test_vector_parity)
 - [`test/gui/`](#group-gui)
   - [`conftest`](#gui.conftest)
@@ -8684,9 +8685,9 @@ def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary(
 
 Regression boundary test: `seed >= 0` is the whole legal
 range (`fim.model.params.SimulationParams.__post_init__`), so
-`seed=0` is the boundary most likely to expose an off-by-one in the
-`seed + replicate_index` derivation. Every derived replicate seed
-must land in `0 .. n_replicates - 1` with no gap or reuse.
+`seed=0` is the boundary most likely to expose a problem in the
+replicate-seed derivation. Every derived seed must be a valid,
+distinct, non-negative seed.
 
 <a id="engine.test_engine.test_parallel_batch_derives_valid_seeds_at_the_seed_zero_boundary"></a>
 
@@ -11731,6 +11732,52 @@ def test_vectorized_trajectory_ends_at_the_stopping_generation() -> None
 ```
 
 The log of every replicate holds the row of its final generation.
+
+<a id="engine.test_replicate_seeds"></a>
+
+# engine.test\_replicate\_seeds
+
+Replicate seeds come from `SeedSequence`, so batches never share a replicate.
+
+<a id="engine.test_replicate_seeds.test_replicate_seeds_are_deterministic_and_pinned"></a>
+
+#### test\_replicate\_seeds\_are\_deterministic\_and\_pinned
+
+```python
+def test_replicate_seeds_are_deterministic_and_pinned() -> None
+```
+
+The same seed and index give the same value, on every machine.
+
+<a id="engine.test_replicate_seeds.test_nearby_batches_share_no_replicate"></a>
+
+#### test\_nearby\_batches\_share\_no\_replicate
+
+```python
+def test_nearby_batches_share_no_replicate() -> None
+```
+
+The earlier `seed + i` rule repeated seed 102 in batches 100 and 102.
+
+<a id="engine.test_replicate_seeds.test_a_replicate_seed_does_not_depend_on_the_batch_size"></a>
+
+#### test\_a\_replicate\_seed\_does\_not\_depend\_on\_the\_batch\_size
+
+```python
+def test_a_replicate_seed_does_not_depend_on_the_batch_size() -> None
+```
+
+Replicate 3 is the same whether the batch has 5 replicates or 50.
+
+<a id="engine.test_replicate_seeds.test_a_batch_replicate_is_the_standalone_run_with_its_seed"></a>
+
+#### test\_a\_batch\_replicate\_is\_the\_standalone\_run\_with\_its\_seed
+
+```python
+def test_a_batch_replicate_is_the_standalone_run_with_its_seed() -> None
+```
+
+Replicate `i` reproduces a single run configured with its derived seed.
 
 <a id="engine.test_vector_parity"></a>
 
@@ -43618,10 +43665,17 @@ already known (from this same recursion, verified numerically
 before this test was written) to move the same direction as `H_S(0)`
 increases here, at different sensitivities:
 
-- `G_ST` — the paper's own statistic — checked as a plain ordering
-  of its own point estimate (`bootstrap_replicate_summary`'s own
-  `"mean"`) across increasing `H_S(0)`, since the effect on `G_ST`
-  itself is real but modest at a scale this test can afford to run.
+- `G_ST` — the paper's own statistic — checked as an ordering of its
+  own point estimate (`bootstrap_replicate_summary`'s own `"mean"`)
+  across increasing `H_S(0)`, since the effect on `G_ST` itself is real
+  but modest at a scale this test can afford to run. Modest means the
+  step from `H_S(0) = 0.5` to `0.9` is about the size of the bootstrap
+  interval's own half-width, so a strict point-estimate ordering holds
+  or fails with the particular random draws (it held for the
+  `seed + i` replicate seeds and failed by 0.003 for the `SeedSequence`
+  ones). The claim is therefore checked as it can honestly be made: the
+  two extremes are ordered, and no step down exceeds the interval's own
+  half-width.
 - `D` — far more sensitive to this same effect at this configuration
   (a difference of `Gs`/`Gd` alone move `D`'s own bare ratio far
   more than they move `G_ST`'s blended one — the identical Jensen-

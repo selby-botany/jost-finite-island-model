@@ -43,6 +43,7 @@ from fim.engine import (
 )
 from fim.engine import backends as engine_backends
 from fim.engine import batch as engine_batch
+from fim.engine.identity import replicate_seed
 from fim.engine.lanes import build_replica_lane
 from fim.engine.tracking import convergence_values, convergence_values_vectorized
 from fim.model.allele import MINTED_ID_START, AlleleId
@@ -200,8 +201,8 @@ def test_replicates_are_independently_reproducible(
     assert output[0].params.replicate_averaging_window > 0
     assert _run(output[0].params).final_state == output[0].final_state
     assert _run(output[1].params).final_state == output[1].final_state
-    assert output[0].params.seed == tiny_params.seed
-    assert output[1].params.seed == tiny_params.seed + 1
+    assert output[0].params.seed == replicate_seed(tiny_params.seed, 0)
+    assert output[1].params.seed == replicate_seed(tiny_params.seed, 1)
 
 
 def test_the_engine_entry_point_takes_one_source_of_truth() -> None:
@@ -298,7 +299,9 @@ def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows() -> None:
     assert len(output) == 3
     returned_run_ids = {result.run_id for result in output}
     every_possible_run_id = {
-        deterministic_run_id(replace(params, seed=params.seed + index, n_replicates=1))
+        deterministic_run_id(
+            replace(params, seed=replicate_seed(params.seed, index), n_replicates=1)
+        )
         for index in range(params.n_replicates)
     }
     still_present_run_ids = {
@@ -755,16 +758,18 @@ def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> Non
 
     Regression boundary test: `seed >= 0` is the whole legal
     range (`fim.model.params.SimulationParams.__post_init__`), so
-    `seed=0` is the boundary most likely to expose an off-by-one in the
-    `seed + replicate_index` derivation. Every derived replicate seed
-    must land in `0 .. n_replicates - 1` with no gap or reuse.
+    `seed=0` is the boundary most likely to expose a problem in the
+    replicate-seed derivation. Every derived seed must be a valid,
+    distinct, non-negative seed.
     """
     params = SimulationParams.from_mapping(
         {**_tiny_config(), "seed": 0, "n_replicates": 4}
     )
     output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
-    assert [result.params.seed for result in output] == [0, 1, 2, 3]
+    assert [result.params.seed for result in output] == [
+        replicate_seed(0, index) for index in range(4)
+    ]
 
 
 def test_parallel_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:
@@ -780,7 +785,9 @@ def test_parallel_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:
     )
     output = simulate_params(params=params, max_workers=2)
     assert isinstance(output, tuple)
-    assert sorted(result.params.seed for result in output) == [0, 1, 2, 3]
+    assert sorted(result.params.seed for result in output) == sorted(
+        replicate_seed(0, index) for index in range(4)
+    )
 
 
 def test_max_workers_produces_the_same_replicates_as_sequential_execution() -> None:
