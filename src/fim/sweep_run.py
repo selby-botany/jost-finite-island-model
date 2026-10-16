@@ -35,7 +35,7 @@ import queue
 import shutil
 import threading
 from collections.abc import Callable, Mapping
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, replace
@@ -505,14 +505,19 @@ class ProcessPointRunner:
     runs the same in either. Each worker process runs `LocalPointRunner` on
     one point at a time, so a lineal batch inside it starts its own workers.
 
-    A cancel reaches the worker through a shared event, and a worker that
-    dies is reported as a failed point, not a hung sweep.
+    A cancel reaches the worker through a shared event. A worker that dies
+    breaks the whole pool: every point in flight is reported as failed, and
+    the pool is replaced so the points that follow still run, instead of
+    the sweep ending on the first submit to a dead pool.
 
     Args:
         processes: How many points can run at once.
         max_workers: Default worker processes for a lineal batch point.
         pairwise_max_demes: Largest deme count for which each point saves
             every deme pair's Nei identities (`pairwise.json`).
+        executor_factory: Builds the pool from a process count. The default
+            starts spawned worker processes; a test passes a fake that
+            breaks on demand.
     """
 
     def __init__(
@@ -521,12 +526,99 @@ class ProcessPointRunner:
         max_workers: int | None = None,
         *,
         pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        executor_factory: Callable[[int], Executor] | None = None,
     ) -> None:
         context = multiprocessing.get_context("spawn")
         self._manager = context.Manager()
-        self._executor = ProcessPoolExecutor(processes, mp_context=context)
+        self._processes = processes
+        self._factory: Callable[[int], Executor] = executor_factory or (
+            lambda count: ProcessPoolExecutor(count, mp_context=context)
+        )
+        self._lock = threading.Lock()
+        self._executor = self._factory(processes)
         self.max_workers = max_workers
         self.pairwise_max_demes = pairwise_max_demes
+
+    def _replace(self, broken: Executor) -> None:
+        """Swap in a fresh pool for `broken`, once however many threads ask.
+
+        Several point threads see the same dead pool at the same time; only
+        the first finds `broken` still current and replaces it.
+
+        Args:
+            broken: The pool that failed.
+        """
+        with self._lock:
+            if self._executor is not broken:
+                return
+            self._executor = self._factory(self._processes)
+        broken.shutdown(wait=False, cancel_futures=True)
+
+    def _submit(
+        self, function: Callable[..., tuple[str, str]], *args: object
+    ) -> tuple[Future[tuple[str, str]], Executor]:
+        """Submit `function`, replacing a pool that is already broken.
+
+        A pool whose worker died refuses every later submit. One replacement
+        is tried; a second refusal is raised to the caller.
+
+        Args:
+            function: The worker entry point.
+            *args: Its arguments.
+
+        Returns:
+            The future and the pool it was submitted to.
+
+        Raises:
+            BrokenProcessPool: A fresh pool refused the submit as well.
+            RuntimeError: The pool was shut down.
+        """
+        with self._lock:
+            executor = self._executor
+        try:
+            return executor.submit(function, *args), executor
+        except (BrokenProcessPool, RuntimeError):
+            self._replace(executor)
+        with self._lock:
+            executor = self._executor
+        return executor.submit(function, *args), executor
+
+    def _await(
+        self,
+        function: Callable[..., tuple[str, str]],
+        args: tuple[object, ...],
+        cancel_event: threading.Event,
+        shared_cancel: Any,
+    ) -> tuple[str, str]:
+        """Run `function` in the pool and wait, forwarding a cancel.
+
+        Args:
+            function: The worker entry point.
+            args: Its arguments.
+            cancel_event: The sweep's cancel event.
+            shared_cancel: The event the worker process watches.
+
+        Returns:
+            The worker's `(kind, value)`, or `("failure", reason)` if the
+            pool broke before or while the point ran.
+        """
+        try:
+            future, executor = self._submit(function, *args)
+        except (BrokenProcessPool, RuntimeError, OSError) as error:
+            logger.warning("sweep worker pool refused a point: %s", error)
+            return "failure", f"the worker pool could not start the point: {error}"
+        while True:
+            try:
+                return future.result(timeout=0.25)
+            except FutureTimeoutError:
+                if cancel_event.is_set():
+                    shared_cancel.set()
+            except BrokenProcessPool:
+                self._replace(executor)
+                return "failure", "a worker process ended unexpectedly"
+            except Exception as error:
+                logger.warning("sweep worker raised: %s", error)
+                return "failure", str(error) or type(error).__name__
 
     def run_point(
         self,
@@ -538,23 +630,18 @@ class ProcessPointRunner:
         """Run `params` in a worker process; see `PointRunner.run_point`."""
         del on_message  # progress inside a point does not cross processes
         shared_cancel = self._manager.Event()
-        future = self._executor.submit(
+        kind, value = self._await(
             _run_point_in_process,
-            params,
-            str(paths.results_directory()),
-            max_workers if max_workers is not None else self.max_workers,
+            (
+                params,
+                str(paths.results_directory()),
+                max_workers if max_workers is not None else self.max_workers,
+                shared_cancel,
+            ),
+            cancel_event,
             shared_cancel,
         )
-        while True:
-            try:
-                kind, value = future.result(timeout=0.25)
-            except FutureTimeoutError:
-                if cancel_event.is_set():
-                    shared_cancel.set()
-                continue
-            except BrokenProcessPool:
-                return PointFailure("a worker process ended unexpectedly")
-            return Path(value) if kind == "ok" else PointFailure(value)
+        return Path(value) if kind == "ok" else PointFailure(value)
 
     def run_object_point(
         self,
@@ -565,29 +652,26 @@ class ProcessPointRunner:
         """Execute a point's Run object in a worker process."""
         del on_message  # progress inside a point does not cross processes
         shared_cancel = self._manager.Event()
-        future = self._executor.submit(
+        kind, value = self._await(
             _run_object_in_process,
-            object_id,
-            str(paths.results_directory()),
-            self.pairwise_max_demes,
+            (
+                object_id,
+                str(paths.results_directory()),
+                self.pairwise_max_demes,
+                shared_cancel,
+            ),
+            cancel_event,
             shared_cancel,
         )
-        while True:
-            try:
-                kind, value = future.result(timeout=0.25)
-            except FutureTimeoutError:
-                if cancel_event.is_set():
-                    shared_cancel.set()
-                continue
-            except BrokenProcessPool:
-                return PointFailure("a worker process ended unexpectedly")
-            if kind == "ok":
-                return Path(value)
-            return PointPaused(value) if kind == "paused" else PointFailure(value)
+        if kind == "ok":
+            return Path(value)
+        return PointPaused(value) if kind == "paused" else PointFailure(value)
 
     def close(self) -> None:
         """Stop the worker processes and the shared-event server."""
-        self._executor.shutdown(wait=True, cancel_futures=True)
+        with self._lock:
+            executor = self._executor
+        executor.shutdown(wait=True, cancel_futures=True)
         self._manager.shutdown()
 
 

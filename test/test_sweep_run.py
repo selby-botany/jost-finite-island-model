@@ -10,13 +10,15 @@ import json
 import shutil
 import threading
 from collections.abc import Callable, Iterator
+from concurrent.futures import Executor, Future
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
-from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message
+from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message, join_or_fail
 
 from fim import paths
 from fim.gui.sweep_bridge import status_payload
@@ -36,6 +38,7 @@ from fim.sweep_run import (
     Concurrency,
     LocalPointRunner,
     PointFailure,
+    ProcessPointRunner,
     SweepEvent,
     create_sweep_study,
     failures_path,
@@ -1022,3 +1025,140 @@ def test_a_worker_reports_a_cancelled_point_object_as_paused(results: Path) -> N
         read_run_object(created.object_id, results=results).record.state
         is RunState.PAUSED
     )
+
+
+class _FakePool(Executor):
+    """A pool that answers each submit from a script, with no processes.
+
+    Args:
+        refuse: Raise `BrokenProcessPool` from `submit`, as a pool does once
+            a worker has died.
+        outcome: What the returned future holds: a `(kind, value)` result, or
+            an exception to raise from `result()`.
+    """
+
+    def __init__(
+        self,
+        *,
+        refuse: bool = False,
+        outcome: tuple[str, str] | BaseException = ("ok", "/point"),
+    ) -> None:
+        self.refuse = refuse
+        self.outcome = outcome
+        self.submitted = 0
+        self.shut_down = False
+
+    def submit(self, fn: Any, /, *args: Any, **kwargs: Any) -> Future[Any]:
+        del fn, args, kwargs  # the fake answers from its script
+        self.submitted += 1
+        if self.refuse:
+            raise BrokenProcessPool("a worker died")
+        future: Future[Any] = Future()
+        if isinstance(self.outcome, BaseException):
+            future.set_exception(self.outcome)
+        else:
+            future.set_result(self.outcome)
+        return future
+
+    def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+        del wait, cancel_futures
+        self.shut_down = True
+
+
+def _scripted_runner(*pools: _FakePool) -> ProcessPointRunner:
+    """A `ProcessPointRunner` that takes its pools, in order, from `pools`."""
+    supply = iter(pools)
+    return ProcessPointRunner(2, executor_factory=lambda _count: next(supply))
+
+
+def _run_fake_point(runner: ProcessPointRunner) -> Any:
+    """Run one point through `runner`; the fake pool never reads `params`."""
+    return runner.run_point(_params(), threading.Event())
+
+
+def test_a_pool_that_refuses_a_submit_is_replaced_and_the_point_still_runs() -> None:
+    dead, fresh = _FakePool(refuse=True), _FakePool()
+    runner = _scripted_runner(dead, fresh)
+    try:
+        outcome = _run_fake_point(runner)
+    finally:
+        runner.close()
+
+    assert outcome == Path("/point")
+    assert dead.shut_down
+    assert fresh.submitted == 1
+
+
+def test_a_pool_that_stays_broken_fails_the_point_instead_of_raising() -> None:
+    runner = _scripted_runner(_FakePool(refuse=True), _FakePool(refuse=True))
+    try:
+        outcome = _run_fake_point(runner)
+    finally:
+        runner.close()
+
+    assert isinstance(outcome, PointFailure)
+    assert "could not start the point" in outcome.reason
+
+
+def test_a_worker_that_dies_mid_point_fails_it_and_later_points_use_a_new_pool() -> (
+    None
+):
+    dying = _FakePool(outcome=BrokenProcessPool("terminated abruptly"))
+    fresh = _FakePool()
+    runner = _scripted_runner(dying, fresh)
+    try:
+        first = _run_fake_point(runner)
+        second = _run_fake_point(runner)
+    finally:
+        runner.close()
+
+    assert first == PointFailure("a worker process ended unexpectedly")
+    assert second == Path("/point")
+    assert dying.shut_down
+    assert (dying.submitted, fresh.submitted) == (1, 1)
+
+
+def test_an_exception_raised_by_a_worker_fails_that_point_only() -> None:
+    raising = _FakePool(outcome=TypeError("cannot pickle a lock"))
+    runner = _scripted_runner(raising)
+    try:
+        first = _run_fake_point(runner)
+        second = _run_fake_point(runner)
+    finally:
+        runner.close()
+
+    assert first == PointFailure("cannot pickle a lock")
+    assert isinstance(second, PointFailure)
+    assert raising.submitted == 2
+
+
+def test_several_threads_seeing_one_dead_pool_replace_it_once() -> None:
+    dead = _FakePool(outcome=BrokenProcessPool("terminated abruptly"))
+    created: list[_FakePool] = []
+
+    def factory(_count: int) -> _FakePool:
+        pool = dead if not created else _FakePool()
+        created.append(pool)
+        return pool
+
+    runner = ProcessPointRunner(4, executor_factory=factory)
+    outcomes: list[Any] = []
+    barrier = threading.Barrier(3)
+
+    def point() -> None:
+        barrier.wait()
+        outcomes.append(_run_fake_point(runner))
+
+    threads = [threading.Thread(target=point) for _ in range(3)]
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            join_or_fail(thread, "a point thread")
+    finally:
+        runner.close()
+
+    assert len(outcomes) == 3
+    # every submit reached the dead pool or its single replacement: at most
+    # one replacement was built, never one per thread
+    assert len(created) == 2

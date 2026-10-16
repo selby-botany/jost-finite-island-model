@@ -5766,9 +5766,11 @@ class Api:
                     points_at_once=points_at_once,
                     max_workers=max_workers,
                 )
-            except ValueError as error:
-                logger.warning("sweep %s failed: %s", study_id, error)
-                _push_sweep_error(window, str(error))
+            except Exception as error:
+                # A thread that dies silently leaves the page showing a sweep
+                # that never finishes, so every failure becomes an error event.
+                logger.exception("sweep %s failed", study_id)
+                _push_sweep_error(window, str(error) or type(error).__name__)
             finally:
                 self._sweep_cancel_event = None
 

@@ -36855,8 +36855,10 @@ processes. A lineal batch already uses processes for its replicates and
 runs the same in either. Each worker process runs `LocalPointRunner` on
 one point at a time, so a lineal batch inside it starts its own workers.
 
-A cancel reaches the worker through a shared event, and a worker that
-dies is reported as a failed point, not a hung sweep.
+A cancel reaches the worker through a shared event. A worker that dies
+breaks the whole pool: every point in flight is reported as failed, and
+the pool is replaced so the points that follow still run, instead of
+the sweep ending on the first submit to a dead pool.
 
 **Arguments**:
 
@@ -36864,6 +36866,9 @@ dies is reported as a failed point, not a hung sweep.
 - `max_workers` - Default worker processes for a lineal batch point.
 - `pairwise_max_demes` - Largest deme count for which each point saves
   every deme pair's Nei identities (`pairwise.json`).
+- `executor_factory` - Builds the pool from a process count. The default
+  starts spawned worker processes; a test passes a fake that
+  breaks on demand.
 
 <a id="fim.sweep_run.ProcessPointRunner.run_point"></a>
 

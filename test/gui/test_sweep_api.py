@@ -16,11 +16,12 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Iterator
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import poll_or_fail
+from conftest import join_or_fail, poll_or_fail
 
 from fim import paths
 from fim.gui import app as app_module
@@ -508,3 +509,22 @@ def test_a_sweep_runs_each_batch_point_as_one_in_process_run_object(
     assert len(set(objects)) == 2
     assert legacy == []
     assert groups.get_study(started["studyId"]).run_count == 2
+
+
+def test_a_sweep_thread_that_dies_tells_the_page_and_frees_the_guard(
+    api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken_sweep(*args: Any, **kwargs: Any) -> None:
+        raise BrokenProcessPool("a process in the pool was terminated abruptly")
+
+    monkeypatch.setattr(app_module, "run_sweep", broken_sweep)
+
+    started = api.start_sweep(_form(), _request(_D_AXIS))
+    assert started["ok"] is True
+    assert api._sweep_thread is not None
+    join_or_fail(api._sweep_thread, "the sweep thread")
+
+    assert api._sweep_cancel_event is None
+    errors = [s for s in window.pushed if s.startswith("fim.onSweepError(")]
+    assert len(errors) == 1
+    assert "terminated abruptly" in errors[0]
