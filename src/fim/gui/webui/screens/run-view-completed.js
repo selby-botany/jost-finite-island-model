@@ -4302,6 +4302,9 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedReportReason = null;
         completedConvergedOn = null;
         completedWatchedStatistics = [];
+        // A batch's convergence rule is its confidence interval, not a
+        // watched statistic: clear the marks the previous run left.
+        window.fim.setWatchedStatistics([]);
         completedClosedFormComparisons = {};
         completedEstimateSource = null;
         completedConvergenceWindow = null;

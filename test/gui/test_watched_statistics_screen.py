@@ -11,14 +11,21 @@ and for no other.
 from __future__ import annotations
 
 import queue
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+from conftest import wait_or_fail
 
-from .conftest import poll_page
+from fim.gui.app import Api, create_window
+from fim.gui.batch_runner import BatchMessage
+from fim.gui.runner import RunMessage
+
+from .conftest import poll_page, wait_for_run_view_ready
+from .test_batch_results_screen import _SET_TINY_BATCH_FIELDS
 from .test_live_statistic_toggle_screen import _during_a_live_run
 
 pytestmark = pytest.mark.gui
@@ -112,3 +119,56 @@ def test_the_watched_statistics_are_underlined_after_a_run(
 
     webview.start(_drive)
     _assert_default_watch(outcome.get(timeout=120))
+
+
+def test_a_batch_does_not_inherit_the_previous_runs_marks(
+    fast_batch_run_settings: Path,
+) -> None:
+    """Reopening a batch clears the marks a scalar run left behind.
+
+    The marks come from the run on screen, and a batch has no watched
+    statistics (its stop is a confidence interval). The batch's completed
+    payload is captured and shown again after the marks of a scalar run are
+    put back, as opening a saved batch after a scalar run would do.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[list[str]] = queue.Queue(maxsize=1)
+    capture = (
+        "window.__original = window.fim.enterCompletedState;"
+        "window.fim.enterCompletedState = function (payload, isBatch) {"
+        "window.__payload = payload; return window.__original(payload, isBatch);"
+        "};"
+    )
+    reopen = (
+        "window.fim.setWatchedStatistics(['D', 'G_ST']);"
+        "window.__original(window.__payload, true);"
+    )
+    marked = (
+        "Array.from(document.querySelectorAll("
+        "'#batch-results-summary-body tr.stat-watched'))"
+        ".map((row) => row.dataset.trajectoryStatistic)"
+    )
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(capture)
+            window.evaluate_js(
+                _SET_TINY_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
+            window.evaluate_js(reopen)
+            outcome.put(window.evaluate_js(marked))
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+
+    assert outcome.get(timeout=120) == []

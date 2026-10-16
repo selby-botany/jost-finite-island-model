@@ -27220,6 +27220,22 @@ def test_the_watched_statistics_are_underlined_after_a_run(
 
 A finished run keeps the marks.
 
+<a id="gui.test_watched_statistics_screen.test_a_batch_does_not_inherit_the_previous_runs_marks"></a>
+
+#### test\_a\_batch\_does\_not\_inherit\_the\_previous\_runs\_marks
+
+```python
+def test_a_batch_does_not_inherit_the_previous_runs_marks(
+        fast_batch_run_settings: Path) -> None
+```
+
+Reopening a batch clears the marks a scalar run left behind.
+
+The marks come from the run on screen, and a batch has no watched
+statistics (its stop is a confidence interval). The batch's completed
+payload is captured and shown again after the marks of a scalar run are
+put back, as opening a saved batch after a scalar run would do.
+
 <a id="gui.test_webui_global_scope"></a>
 
 # gui.test\_webui\_global\_scope
