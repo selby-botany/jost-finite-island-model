@@ -1041,25 +1041,34 @@ def _equilibrium_reference_payload(
     )
 
 
-def _convergence_reference_payload(params: SimulationParams) -> dict[str, Any]:
-    """Build the convergence settings the trajectory panel computes with.
+def _convergence_reference_payload(
+    params: SimulationParams, generation_count: int | None = None
+) -> dict[str, Any]:
+    """Build the convergence settings the trajectory panel averages with.
 
-    The page's trailing mean and its standard error
-    (`run-view-completed.js`'s own `trailingMeanSeries`/`estimateNote`)
-    average over the same window the convergence monitor judges, and call
-    a mean noise-adequate by the monitor's own rule (standard error at
-    most half the tolerance).
+    The panel's trailing mean, its standard errors and its "cumulative
+    mean" are meant to reproduce what the report says about the run, so
+    they average over the run's evidence window: from the burn-in to the
+    last generation, the span the convergence monitor judged
+    (`report.window_statistics[name].window`).
 
     Args:
-        params: A validated configuration, whose window is already
-            resolved (`SimulationParams.from_mapping` derives an automatic
-            one).
+        params: A validated configuration, whose window and burn-in are
+            already resolved (`SimulationParams.from_mapping` derives
+            automatic ones).
+        generation_count: How many generations the run recorded, for a
+            finished or reopened run; `None` for a run still going, whose
+            evidence window is not yet known.
 
     Returns:
-        `{"window": generations, "tolerance": tolerance}`.
+        `{"window", "burnIn", "tolerance"}`: `window` is the evidence
+        window's length in generations when the run has finished and got
+        past its burn-in, otherwise the span of the monitor's first check
+        (what a live run averages over until its burn-in ends); `burnIn`
+        is where averaging begins; `tolerance` is the precision.
     """
-    # The page averages over the span the monitor first judged: its first
-    # check, `first_check_relaxation_times` of `tau` (at least the floor).
+    # The span the monitor first judged: its first check,
+    # `first_check_relaxation_times` of `tau` (at least the floor).
     window = params.expert.first_check_minimum
     if params.relaxation_time is not None:
         window = max(
@@ -1068,8 +1077,12 @@ def _convergence_reference_payload(params: SimulationParams) -> dict[str, Any]:
                 params.expert.first_check_relaxation_times * params.relaxation_time
             ),
         )
+    # A finished run past its burn-in has one real evidence window.
+    if generation_count is not None and generation_count > params.convergence_burn_in:
+        window = generation_count - params.convergence_burn_in
     return {
         "window": window,
+        "burnIn": params.convergence_burn_in,
         "tolerance": params.precision,
     }
 
@@ -6183,7 +6196,9 @@ class Api:
             # payload`'s own docstring), fresh from the manifest's params.
             "closedForm": _closed_form_trajectory_payload(reanalyzed.params),
             # The window and tolerance the trailing mean is computed with.
-            "convergence": _convergence_reference_payload(reanalyzed.params),
+            "convergence": _convergence_reference_payload(
+                reanalyzed.params, reanalyzed.manifest.generation_count
+            ),
         }
 
     @_log_bridge_call
@@ -7365,7 +7380,9 @@ def _drain_run_messages(
                 # The closed-form D(t)/G_ST(t) curves — same reuse.
                 "closedForm": closed_form,
                 # The window and tolerance the trailing mean is computed with.
-                "convergence": _convergence_reference_payload(result.params),
+                "convergence": _convergence_reference_payload(
+                    result.params, result.manifest.generation_count
+                ),
             }
             _attach_finished_run_to_study(study_id, output_directory, run_details)
             logger.info("run done: %s", output_directory)
@@ -9302,7 +9319,9 @@ def _report_only_run_payload(directory: Path, digits: int) -> dict[str, Any]:
         "equilibrium": _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS),
         "identityRecovery": _identity_recovery_reference_payload(params),
         "closedForm": _closed_form_trajectory_payload(params),
-        "convergence": _convergence_reference_payload(params),
+        "convergence": _convergence_reference_payload(
+            params, manifest.generation_count
+        ),
     }
 
 

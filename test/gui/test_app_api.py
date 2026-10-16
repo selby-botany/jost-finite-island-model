@@ -4323,15 +4323,20 @@ def test_open_run_carries_the_real_closed_form_trajectory(tmp_path: Path) -> Non
 
 
 def test_open_run_carries_the_convergence_window_and_tolerance(tmp_path: Path) -> None:
-    """The trailing mean averages over the run's own window, judged by its tolerance."""
+    """The trailing mean averages over the evidence window, judged by the tolerance."""
     output = _write_run(tmp_path, precision=0.02)
 
     result = Api().open_run({"trajectoryPath": str(output / "trajectory.tlog")})
 
     assert result["ok"] is True
-    # The page averages over the span of the monitor's first check: three
-    # generations under the fast test settings.
-    assert result["convergence"] == {"window": 3, "tolerance": 0.02}
+    # The page averages over the span the monitor judged: from the burn-in
+    # (one generation under the fast test settings) to the last generation.
+    burn_in = 1
+    assert result["convergence"] == {
+        "window": result["generationCount"] - burn_in,
+        "burnIn": burn_in,
+        "tolerance": 0.02,
+    }
 
 
 def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(

@@ -337,7 +337,7 @@ window.fim.setLiveClosedForm = function setLiveClosedForm(closedForm) {
  * convention as `setLiveClosedForm` immediately above (the `convergence`
  * field of `Api.start_run`'s result; absent for a batch).
  *
- * @param {{window: number, tolerance: number}|null|undefined} convergence
+ * @param {{window: number, burnIn: number, tolerance: number}|null|undefined} convergence
  */
 window.fim.setLiveConvergence = function setLiveConvergence(convergence) {
     liveConvergence = convergence ?? null;
@@ -624,7 +624,13 @@ window.fim.onRunProgress = function onRunProgress(payload) {
                 liveIdentityRecoveryReference,
                 liveClosedForm,
                 isLiveHead ? null : f.generation,
-                liveConvergence ? { window: liveConvergence.window, anchors: {} } : null
+                liveConvergence
+                    ? {
+                          window: liveConvergence.window,
+                          burnIn: liveConvergence.burnIn,
+                          anchors: {},
+                      }
+                    : null
             );
         }
         drawProgressPanels(f);

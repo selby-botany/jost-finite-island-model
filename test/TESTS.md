@@ -93,6 +93,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
   - [`test_dark_mode_screen`](#gui.test_dark_mode_screen)
   - [`test_details_screen`](#gui.test_details_screen)
+  - [`test_evidence_window_screen`](#gui.test_evidence_window_screen)
   - [`test_examples_bridge`](#gui.test_examples_bridge)
   - [`test_examples_dialog_screen`](#gui.test_examples_dialog_screen)
   - [`test_examples_screen`](#gui.test_examples_screen)
@@ -15980,7 +15981,7 @@ def test_open_run_carries_the_convergence_window_and_tolerance(
         tmp_path: Path) -> None
 ```
 
-The trailing mean averages over the run's own window, judged by its tolerance.
+The trailing mean averages over the evidence window, judged by the tolerance.
 
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 
@@ -19597,6 +19598,69 @@ def test_a_runs_details_dialog_names_it_without_documentation(
 ```
 
 A run's dialog has no documentation field, and a typed name shows in Home.
+
+<a id="gui.test_evidence_window_screen"></a>
+
+# gui.test\_evidence\_window\_screen
+
+The trajectory panel averages over the run's evidence window.
+
+The convergence monitor judges a run over its evidence window, from the
+burn-in to the last generation, and the report records the mean and the
+standard error it found there (`window_statistics`). The panel's trailing
+mean, cumulative mean and tooltip estimate must reproduce those numbers,
+so a number on screen can always be traced to the report. These tests use
+the shipped Wright-Takahata example, whose saved history and report are
+fixed files, so they are pure functions of the commit.
+
+<a id="gui.test_evidence_window_screen.test_a_live_run_averages_over_the_first_check_until_it_ends"></a>
+
+#### test\_a\_live\_run\_averages\_over\_the\_first\_check\_until\_it\_ends
+
+```python
+def test_a_live_run_averages_over_the_first_check_until_it_ends(
+        tiny_params: SimulationParams) -> None
+```
+
+With no generation count, `window` is the first-check span.
+
+<a id="gui.test_evidence_window_screen.test_a_finished_run_averages_over_its_evidence_window"></a>
+
+#### test\_a\_finished\_run\_averages\_over\_its\_evidence\_window
+
+```python
+def test_a_finished_run_averages_over_its_evidence_window(
+        tiny_params: SimulationParams) -> None
+```
+
+The window is the generations recorded after the burn-in.
+
+<a id="gui.test_evidence_window_screen.test_a_run_that_ended_inside_its_burn_in_keeps_the_first_check_span"></a>
+
+#### test\_a\_run\_that\_ended\_inside\_its\_burn\_in\_keeps\_the\_first\_check\_span
+
+```python
+def test_a_run_that_ended_inside_its_burn_in_keeps_the_first_check_span(
+        tiny_params: SimulationParams) -> None
+```
+
+With nothing recorded past the burn-in there is no evidence window.
+
+<a id="gui.test_evidence_window_screen.test_the_panel_reproduces_the_reports_evidence_window_estimates"></a>
+
+#### test\_the\_panel\_reproduces\_the\_reports\_evidence\_window\_estimates
+
+```python
+@pytest.mark.gui
+def test_the_panel_reproduces_the_reports_evidence_window_estimates(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Every averaged number the panel shows equals the report's.
+
+For each watched statistic: the tooltip estimate, the last point of the
+trailing mean and of the cumulative mean, and where the cumulative mean
+starts, all against `report.json`.
 
 <a id="gui.test_examples_bridge"></a>
 

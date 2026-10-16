@@ -705,15 +705,19 @@ let completedClosedFormComparisons = {};
 let completedEstimateSource = null;
 
 // The completed run's convergence window, in generations: the span the
-// trajectory graph's trailing mean averages over.
+// trajectory graph's trailing mean averages over (its evidence window,
+// from the burn-in to its last generation, once it has finished), and the
+// burn-in where averaging began.
 let completedConvergenceWindow = null;
+let completedConvergenceBurnIn = null;
 
 /**
  * The completed run's averaging settings for the trajectory graph
  * (`renderTrajectory`'s `averaging`): its convergence window, and where
  * its monitor began averaging each statistic it grew a window for.
  *
- * @returns {{window: number, anchors: Object<string, number>}|null}
+ * @returns {{window: number, burnIn: number|null, anchors: Object<string,
+ *     number>}|null}
  */
 function completedAveraging() {
     if (completedConvergenceWindow === null) {
@@ -721,6 +725,7 @@ function completedAveraging() {
     }
     return {
         window: completedConvergenceWindow,
+        burnIn: completedConvergenceBurnIn,
         anchors: completedEstimateSource ? completedEstimateSource.anchors : {},
     };
 }
@@ -1054,13 +1059,14 @@ function firstIndexAtOrAfter(generations, generation) {
  *
  * Where the convergence monitor began averaging it, when a finished
  * run's report says so (`evidenceWindowAnchors`), so the curve ends on
- * the run's own estimate; otherwise after a burn-in of one convergence
- * window (three relaxation times by default), which is about where the
- * monitor begins (its first check needs a full window).
+ * the run's own estimate; otherwise at the run's burn-in, which is where
+ * the monitor begins averaging; with no burn-in known, after one
+ * convergence window.
  *
  * @param {number[]} generations ascending.
  * @param {string} name
- * @param {{window: number, anchors: Object<string, number>}} averaging
+ * @param {{window: number, burnIn?: number|null, anchors: Object<string,
+ *     number>}} averaging
  * @returns {number|null} the first index averaged, or `null` when the run
  *     has not yet passed the burn-in.
  */
@@ -1069,7 +1075,8 @@ function cumulativeStart(generations, name, averaging) {
     if (anchor !== undefined) {
         return anchor;
     }
-    const start = firstIndexAtOrAfter(generations, generations[0] + averaging.window);
+    const burnIn = Number.isFinite(averaging.burnIn) ? averaging.burnIn : averaging.window;
+    const start = firstIndexAtOrAfter(generations, generations[0] + burnIn);
     return start < generations.length ? start : null;
 }
 
@@ -1172,14 +1179,40 @@ function evidenceWindowAnchors(windowStatistics, recordedCount, convergenceWindo
 }
 
 /**
+ * The first index of the window a statistic's estimate averages, at the
+ * shown index `end`.
+ *
+ * Once at least `MINIMUM_WINDOW_ESTIMATE_POINTS` recorded generations lie
+ * past where averaging began, the evidence window: from a finished run's
+ * own grown window (`evidenceWindowAnchors`) or else from the burn-in. At
+ * the last generation that is exactly the estimate the monitor stopped on
+ * and the report records. Before that, the trailing convergence window.
+ *
+ * @param {number[]} generations ascending.
+ * @param {number} end the shown index.
+ * @param {{window: number, burnIn?: number|null}} convergence
+ * @param {number|undefined} anchor the statistic's grown window start.
+ * @returns {number}
+ */
+function estimateStart(generations, end, convergence, anchor) {
+    let first = anchor;
+    if (first === undefined && Number.isFinite(convergence.burnIn)) {
+        first = firstIndexAtOrAfter(generations, convergence.burnIn);
+    }
+    if (first !== undefined && end - first + 1 >= MINIMUM_WINDOW_ESTIMATE_POINTS) {
+        return first;
+    }
+    return trailingWindowStart(generations, end, convergence.window);
+}
+
+/**
  * How well a statistic's mean is known at the shown generation, and how
  * far it lies from the prediction, as a tooltip clause.
  *
- * The mean covers the convergence window ending at the shown generation,
- * except inside a finished run's grown evidence window
- * (`evidenceWindowAnchors`), where it covers everything from that
- * window's start: at the last generation that is exactly the estimate the
- * monitor stopped on. The prediction is averaged over the same
+ * The mean covers the run's evidence window up to the shown generation
+ * (`estimateStart`): at the last generation that is exactly the estimate
+ * the monitor stopped on. Before the burn-in has passed it covers the
+ * convergence window ending there. The prediction is averaged over the same
  * generations (`closedFormComparisons`), so a closed-form trajectory that
  * is still moving is compared like with like.
  *
@@ -1210,9 +1243,12 @@ function estimateNote(source, name, index = null) {
         return "";
     }
     const end = index === null || index < 0 ? generations.length - 1 : index;
-    const trailingStart = trailingWindowStart(generations, end, convergence.window);
-    const anchor = anchors ? anchors[name] : undefined;
-    const start = anchor !== undefined && anchor <= trailingStart ? anchor : trailingStart;
+    const start = estimateStart(
+        generations,
+        end,
+        convergence,
+        anchors ? anchors[name] : undefined
+    );
     if (source.sums && !(name in source.sums)) {
         source.sums[name] = windowSums(values);
     }
@@ -3968,6 +4004,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedClosedFormComparisons = {};
         completedEstimateSource = null;
         completedConvergenceWindow = null;
+        completedConvergenceBurnIn = null;
         completedPair = [1, 2];
         completedFinalPairStatistics = null;
         completedPairFrameStatistics = null;
@@ -4027,6 +4064,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             payload.equilibrium
         );
         completedConvergenceWindow = payload.convergence ? payload.convergence.window : null;
+        completedConvergenceBurnIn = payload.convergence ? payload.convergence.burnIn : null;
         completedEstimateSource =
             payload.convergenceGenerations && payload.convergenceHistories
                 ? {
