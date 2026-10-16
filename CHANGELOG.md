@@ -1586,6 +1586,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   data.** It controls number formatting and checks both grouped and
   ungrouped generation counts, preserving locale-aware application output
   while avoiding a Linux WebKit CI failure.
+- **A sweep stored before a run-id change can be repaired.** When a release
+  changed what a run id covers, every stored sweep refused to run and the only
+  advice was to create it again. The error now names `fim sweep replan
+  STUDY_ID`, which re-identifies the points by their coordinates, moves the
+  recorded failures with them, and leaves the Study's runs alone;
+  `--dry-run` previews it.
 - **Two processes can no longer run one sweep at once.** A second
   `fim sweep resume`, or the app, on a Study that another process is running
   stopped nothing: both wrote the same failure file and raced to create the

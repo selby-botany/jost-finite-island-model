@@ -1600,6 +1600,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [failures\_path](#fim.sweep_run.failures_path)
   * [read\_failures](#fim.sweep_run.read_failures)
   * [read\_point\_objects](#fim.sweep_run.read_point_objects)
+  * [Replan](#fim.sweep_run.Replan)
+  * [replan\_sweep](#fim.sweep_run.replan_sweep)
   * [write\_reproducibility\_note](#fim.sweep_run.write_reproducibility_note)
   * [PointResult](#fim.sweep_run.PointResult)
   * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
@@ -2309,7 +2311,7 @@ def add_sweep_subcommands(
         subcommands: argparse._SubParsersAction[Any]) -> None
 ```
 
-Wire `fim sweep plan/run/resume/report` onto `subcommands`.
+Wire `fim sweep plan/run/resume/replan/report` onto `subcommands`.
 
 <a id="fim.cli_sweep.command_sweep"></a>
 
@@ -37316,6 +37318,73 @@ def read_point_objects(study_id: str,
 ```
 
 Return each point's linked Run object ID by point `run_id`.
+
+<a id="fim.sweep_run.Replan"></a>
+
+## Replan Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Replan()
+```
+
+What `replan_sweep` changed, or would change.
+
+**Attributes**:
+
+- `renamed` - `(old run id, new run id)` for each point whose coordinates
+  are unchanged but whose id differs.
+- `unchanged` - Points whose id already matches.
+- `added` - Run ids of points the stored plan did not have.
+- `removed` - Run ids of stored points that are no longer valid.
+- `orphaned_runs` - Runs still in the Study whose id matches no point of
+  the new plan. They stay attached as ordinary runs, and the
+  points they stood for run again.
+- `failures_moved` - Recorded failures carried over to a new id.
+- `unlinked_objects` - Run objects that were linked to a renamed point.
+  They are left as they are, but no longer continued by the sweep.
+- `written` - Whether the Study was changed (false for a dry run).
+
+<a id="fim.sweep_run.replan_sweep"></a>
+
+#### replan\_sweep
+
+```python
+def replan_sweep(study_id: str,
+                 *,
+                 dry_run: bool = False,
+                 results: Path | None = None) -> Replan
+```
+
+Re-identify a sweep Study's points under this version's run ids.
+
+A run id is a hash of the point's configuration, so a release that
+changes what the hash covers changes every id, and the stored plan then
+no longer matches (`run_sweep` refuses it). The plan is enumerated again
+from the stored specification and each new point is matched to its
+stored one by coordinates, never by id. The stored plan is rewritten, and
+the recorded failures follow their points. Runs already in the Study are
+never touched: one whose id no longer matches any point stays attached as
+an ordinary run, listed in the result, and its point runs again.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `dry_run` - Report what would change and write nothing.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  What changed, or would change.
+
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep, has no valid points, or has
+  points that coordinates cannot tell apart.
+- `ClosedGroupError` - The Study is closed.
+- `SweepLockedError` - A process is running the sweep.
 
 <a id="fim.sweep_run.write_reproducibility_note"></a>
 

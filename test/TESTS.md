@@ -4573,6 +4573,18 @@ def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
 
 A read-only run is never superseded: both runs stay, the sweep succeeds.
 
+<a id="test.test_sweep_run.test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs"></a>
+
+#### test\_a\_sweep\_stored\_under\_old\_ids\_is\_repaired\_and\_then\_runs
+
+```python
+def test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs(
+        results: Path) -> None
+```
+
+The fixture is a Study whose stored plan and failure file use ids from
+before the identity change (2026-10-15), written directly.
+
 <a id="test.test_termination"></a>
 
 # test.test\_termination

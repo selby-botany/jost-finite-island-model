@@ -50,6 +50,7 @@ from fim.sweep_run import (
     failures_path,
     read_failures,
     read_point_objects,
+    replan_sweep,
     resolve_concurrency,
     run_sweep,
     stored_points,
@@ -1396,3 +1397,142 @@ def test_another_process_holding_the_lock_blocks_the_sweep_until_it_dies(
     assert not sweep_lock_held(study_id)
     outcome, _ = _run(study_id, points_at_once=1)
     assert outcome.done == 2
+
+
+def _identity_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make `enumerate_points` hash configurations differently, as a release
+    that changes what the run id covers would."""
+    from fim.engine import deterministic_run_id  # noqa: PLC0415
+
+    monkeypatch.setattr(
+        "fim.sweep.deterministic_run_id", lambda p: "v2-" + deterministic_run_id(p)
+    )
+
+
+def _stored_ids(study_id: str) -> list[str]:
+    """Return the run ids in a Study's stored plan, in grid order."""
+    return [str(e["run_id"]) for e in stored_points(groups.get_study(study_id))]
+
+
+def test_a_stale_plan_names_the_command_that_repairs_it(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    _identity_changes(monkeypatch)
+
+    with pytest.raises(ValueError, match=f"fim sweep replan {study_id}"):
+        _run(study_id)
+
+
+def test_replan_matches_points_by_coordinates_and_rewrites_the_plan(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    old_ids = _stored_ids(study_id)
+    _identity_changes(monkeypatch)
+
+    outcome = replan_sweep(study_id)
+
+    assert outcome.written
+    assert outcome.renamed == tuple((old, "v2-" + old) for old in old_ids)
+    assert (outcome.unchanged, outcome.added, outcome.removed) == (0, (), ())
+    assert _stored_ids(study_id) == ["v2-" + old for old in old_ids]
+    again = replan_sweep(study_id)
+    assert (again.renamed, again.unchanged) == ((), 2)
+
+
+def test_runs_whose_ids_no_longer_match_stay_attached_and_are_listed(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    _run(study_id, points_at_once=1)
+    members = sorted(groups.study_run_directories(groups.get_study(study_id)))
+    _identity_changes(monkeypatch)
+
+    outcome = replan_sweep(study_id)
+
+    assert sorted(outcome.orphaned_runs) == members
+    assert sorted(groups.study_run_directories(groups.get_study(study_id))) == members
+    assert [s.state for s in sweep_point_statuses(groups.get_study(study_id))] == [
+        "waiting",
+        "waiting",
+    ]
+
+
+def test_a_dry_run_reports_the_change_and_writes_nothing(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    before = _stored_ids(study_id)
+    _identity_changes(monkeypatch)
+
+    outcome = replan_sweep(study_id, dry_run=True)
+
+    assert not outcome.written
+    assert len(outcome.renamed) == 2
+    assert _stored_ids(study_id) == before
+    assert not sweep_lock_path(study_id).exists()
+
+
+def test_a_recorded_failure_follows_its_point_to_the_new_id(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    _run(study_id, _Failing(lambda params: params.d == 2), points_at_once=1)
+    (failed_id,) = read_failures(study_id)
+    _identity_changes(monkeypatch)
+
+    outcome = replan_sweep(study_id)
+
+    assert outcome.failures_moved == 1
+    assert list(read_failures(study_id)) == ["v2-" + failed_id]
+
+
+def test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs(
+    results: Path,
+) -> None:
+    """The fixture is a Study whose stored plan and failure file use ids from
+    before the identity change (2026-10-15), written directly."""
+    study_id = _study(results, 2, 3)
+    real = _stored_ids(study_id)
+    study = groups.get_study(study_id)
+    assert study.sweep_spec is not None
+    old = ["a0ld0000000" + str(i) for i in range(len(real))]
+    points = [
+        {**e, "run_id": o} for e, o in zip(stored_points(study), old, strict=True)
+    ]
+    groups.write_study_manifest(
+        groups.study_manifest_path(study_id),
+        replace(study, sweep_spec={**study.sweep_spec, "points": points}),
+    )
+    with pytest.raises(ValueError, match="replan"):
+        _run(study_id)
+
+    outcome = replan_sweep(study_id)
+
+    assert outcome.renamed == tuple(zip(old, real, strict=True))
+    assert _stored_ids(study_id) == real
+    run, _ = _run(study_id, points_at_once=1)
+    assert run.done == 2
+
+
+def test_replan_waits_for_no_one_and_refuses_while_a_sweep_runs(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    _identity_changes(monkeypatch)
+
+    with exclusive_lock(sweep_lock_path(study_id), blocking=False):
+        preview = replan_sweep(study_id, dry_run=True)
+        with pytest.raises(SweepLockedError):
+            replan_sweep(study_id)
+
+    assert len(preview.renamed) == 2
+    assert all(not i.startswith("v2-") for i in _stored_ids(study_id))
+
+
+def test_replan_refuses_a_study_that_is_not_a_sweep(results: Path) -> None:
+    study = groups.create_study("Plain", None)
+
+    with pytest.raises(ValueError, match="not a sweep"):
+        replan_sweep(study.study_id)

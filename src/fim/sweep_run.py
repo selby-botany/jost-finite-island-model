@@ -1434,6 +1434,154 @@ def _write_status(
     paths.replace_with_retry(temporary, path)
 
 
+@dataclass(frozen=True, slots=True)
+class Replan:
+    """What `replan_sweep` changed, or would change.
+
+    Attributes:
+        renamed: `(old run id, new run id)` for each point whose coordinates
+            are unchanged but whose id differs.
+        unchanged: Points whose id already matches.
+        added: Run ids of points the stored plan did not have.
+        removed: Run ids of stored points that are no longer valid.
+        orphaned_runs: Runs still in the Study whose id matches no point of
+            the new plan. They stay attached as ordinary runs, and the
+            points they stood for run again.
+        failures_moved: Recorded failures carried over to a new id.
+        unlinked_objects: Run objects that were linked to a renamed point.
+            They are left as they are, but no longer continued by the sweep.
+        written: Whether the Study was changed (false for a dry run).
+    """
+
+    renamed: tuple[tuple[str, str], ...]
+    unchanged: int
+    added: tuple[str, ...]
+    removed: tuple[str, ...]
+    orphaned_runs: tuple[Path, ...]
+    failures_moved: int
+    unlinked_objects: tuple[str, ...]
+    written: bool
+
+
+def _coordinate_key(coordinates: Mapping[str, Any]) -> str:
+    """Return a text key for a point's coordinates, equal across a JSON round trip."""
+    return json.dumps(dict(coordinates), sort_keys=True, default=str)
+
+
+def replan_sweep(
+    study_id: str, *, dry_run: bool = False, results: Path | None = None
+) -> Replan:
+    """Re-identify a sweep Study's points under this version's run ids.
+
+    A run id is a hash of the point's configuration, so a release that
+    changes what the hash covers changes every id, and the stored plan then
+    no longer matches (`run_sweep` refuses it). The plan is enumerated again
+    from the stored specification and each new point is matched to its
+    stored one by coordinates, never by id. The stored plan is rewritten, and
+    the recorded failures follow their points. Runs already in the Study are
+    never touched: one whose id no longer matches any point stays attached as
+    an ordinary run, listed in the result, and its point runs again.
+
+    Args:
+        study_id: A sweep Study.
+        dry_run: Report what would change and write nothing.
+        results: Optional results-directory override.
+
+    Returns:
+        What changed, or would change.
+
+    Raises:
+        ValueError: The Study is not a sweep, has no valid points, or has
+            points that coordinates cannot tell apart.
+        ClosedGroupError: The Study is closed.
+        SweepLockedError: A process is running the sweep.
+    """
+    study = groups.get_study(study_id, results=results)
+    groups.refuse_closed(study, "re-planned")
+    plan = enumerate_points(sweep_spec_of(study))
+    if not plan.points:
+        raise ValueError("the sweep has no valid points to run")
+    old_entries = stored_points(study)
+    old_by_key = {
+        _coordinate_key(entry.get("coordinates", {})): entry for entry in old_entries
+    }
+    new_keys = [_coordinate_key(point.coordinates) for point in plan.points]
+    if len(old_by_key) != len(old_entries) or len(set(new_keys)) != len(new_keys):
+        raise ValueError("the sweep's points cannot be told apart by coordinates")
+
+    # Pair each new point with its stored one.
+    renamed: list[tuple[str, str]] = []
+    added: list[str] = []
+    unchanged = 0
+    for key, point in zip(new_keys, plan.points, strict=True):
+        entry = old_by_key.pop(key, None)
+        if entry is None:
+            added.append(point.run_id)
+        elif str(entry["run_id"]) == point.run_id:
+            unchanged += 1
+        else:
+            renamed.append((str(entry["run_id"]), point.run_id))
+    removed = tuple(str(entry["run_id"]) for entry in old_by_key.values())
+
+    # Runs that no longer stand for a point, and the status that follows ids.
+    new_ids = {point.run_id for point in plan.points}
+    orphaned = tuple(
+        directory
+        for directory in groups.study_run_directories(study, results=results)
+        if (identity := groups.run_identity_of(directory)) is not None
+        and identity[0] not in new_ids
+    )
+    failures = read_failures(study_id, results=results)
+    moved = {old: new for old, new in renamed if old in failures}
+    objects = read_point_objects(study_id, results=results)
+    unlinked = tuple(objects[old] for old, _new in renamed if old in objects)
+    outcome = Replan(
+        renamed=tuple(renamed),
+        unchanged=unchanged,
+        added=tuple(added),
+        removed=removed,
+        orphaned_runs=orphaned,
+        failures_moved=len(moved),
+        unlinked_objects=unlinked,
+        written=not dry_run,
+    )
+    if dry_run:
+        return outcome
+
+    # Write under the sweep lock, so no sweep reads a half-rewritten plan.
+    try:
+        with exclusive_lock(sweep_lock_path(study_id, results=results), blocking=False):
+            _write_replan(study, plan, renamed, results)
+    except LockUnavailableError:
+        raise SweepLockedError(
+            f"another process is running sweep {study_id}; stop it before re-planning"
+        ) from None
+    return outcome
+
+
+def _write_replan(
+    study: StudyManifest,
+    plan: SweepPlan,
+    renamed: list[tuple[str, str]],
+    results: Path | None,
+) -> None:
+    """Store the new plan and move the failure and object records with it."""
+    assert study.sweep_spec is not None  # checked by `stored_points`
+    points = [point.to_dict() for point in plan.points]
+    updated = replace(study, sweep_spec={**study.sweep_spec, "points": points})
+    groups.write_study_manifest(
+        groups.study_manifest_path(study.study_id, results=results), updated
+    )
+    failures = read_failures(study.study_id, results=results)
+    objects = read_point_objects(study.study_id, results=results)
+    for old, new in renamed:
+        if old in failures:
+            failures[new] = failures.pop(old)
+        objects.pop(old, None)
+    _write_status(study.study_id, results, "failures", failures)
+    _write_status(study.study_id, results, "objects", objects)
+
+
 def _matching_plan(study: StudyManifest, plan: SweepPlan) -> tuple[SweepPoint, ...]:
     """Return the enumerated points, after checking they match the stored plan."""
     stored = [str(entry["run_id"]) for entry in stored_points(study)]
@@ -1441,7 +1589,9 @@ def _matching_plan(study: StudyManifest, plan: SweepPlan) -> tuple[SweepPoint, .
     if stored != current:
         raise ValueError(
             "the stored sweep plan no longer matches this version of the "
-            "program (run ids differ); create the sweep again"
+            "program (run ids differ); re-identify its points with "
+            f"`fim sweep replan {study.study_id}` (add --dry-run to see "
+            "what would change first)"
         )
     return plan.points
 

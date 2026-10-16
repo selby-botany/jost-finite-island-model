@@ -1058,6 +1058,7 @@ fim sweep run sweep.yaml             # create the study and run every point
 fim sweep resume STUDY_ID            # run only the points still missing
 fim sweep resume STUDY_ID --retry-failed
 fim sweep resume STUDY_ID --rerun   # also recompute the completed points
+fim sweep replan STUDY_ID [--dry-run]   # after an upgrade changed run ids
 fim sweep report STUDY_ID --statistic D --csv
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 ```
@@ -1086,6 +1087,14 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   process is running it, instead of both writing the same files. The system
   releases the lock if the process dies, so a crashed sweep never leaves its
   Study locked.
+- A run id is a hash of the point's configuration, so a release that changes
+  what the hash covers makes a stored sweep refuse to run ("the stored sweep
+  plan no longer matches"). `fim sweep replan STUDY_ID` enumerates the points
+  again from the stored specification, matches each to its old entry by its
+  coordinates, and rewrites the plan; recorded failures follow their points.
+  `--dry-run` shows what would change first. Runs already in the Study are not
+  touched: one that no longer matches a point stays attached as an ordinary
+  run, is listed, and its point runs again.
 - A point's run id is a hash of its configuration, so resuming, or running a
   second sweep that overlaps the first, reuses the runs that already exist
   instead of computing them again. Reuse requires identical configurations,

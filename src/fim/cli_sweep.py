@@ -35,6 +35,7 @@ from fim.sweep_run import (
     LocalPointRunner,
     SweepEvent,
     create_sweep_study,
+    replan_sweep,
     run_sweep,
     sweep_point_results,
     sweep_point_statuses,
@@ -42,7 +43,7 @@ from fim.sweep_run import (
 
 
 def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
-    """Wire `fim sweep plan/run/resume/report` onto `subcommands`."""
+    """Wire `fim sweep plan/run/resume/replan/report` onto `subcommands`."""
     sweep_parser = subcommands.add_parser(
         "sweep", help="run a configuration over a parameter space as one study"
     )
@@ -80,6 +81,16 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         "match replaces it, a difference keeps both and is reported",
     )
     _add_concurrency_arguments(resume_parser)
+    replan_parser = sweep_subcommands.add_parser(
+        "replan",
+        help="re-identify a sweep study's points after an upgrade changed run ids",
+    )
+    replan_parser.add_argument("study_id", metavar="STUDY_ID")
+    replan_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would change and write nothing",
+    )
     report_parser = sweep_subcommands.add_parser(
         "report", help="print each point's statistic, with its interval"
     )
@@ -162,6 +173,8 @@ def command_sweep(
         return _run(arguments)
     if command == "resume":
         return _resume(arguments)
+    if command == "replan":
+        return _replan(arguments)
     if command == "report":
         return _report(arguments.study_id, arguments.statistic, as_csv=arguments.csv)
     parser.error("a sweep subcommand is required")
@@ -225,6 +238,36 @@ def _run(arguments: argparse.Namespace) -> int:
     study = create_sweep_study(spec, plan, name, experiment_id=arguments.experiment)
     print(f"Created sweep study {study.study_id}: {study.name}")
     return _execute(study.study_id, arguments)
+
+
+def _replan(arguments: argparse.Namespace) -> int:
+    """Re-identify a sweep study's points and print what changed."""
+    outcome = replan_sweep(arguments.study_id, dry_run=arguments.dry_run)
+    verb = "Would change" if arguments.dry_run else "Changed"
+    print(
+        f"{verb}: {len(outcome.renamed)} point(s) got a new run id, "
+        f"{outcome.unchanged} already matched, {len(outcome.added)} added, "
+        f"{len(outcome.removed)} removed"
+    )
+    for old, new in outcome.renamed:
+        print(f"  {old} -> {new}")
+    if outcome.failures_moved:
+        print(f"{outcome.failures_moved} recorded failure(s) follow their points")
+    if outcome.unlinked_objects:
+        print(
+            f"{len(outcome.unlinked_objects)} run object(s) are no longer "
+            "continued by this sweep: " + ", ".join(outcome.unlinked_objects)
+        )
+    if outcome.orphaned_runs:
+        print(
+            f"{len(outcome.orphaned_runs)} run(s) in the study match no point "
+            "and stay attached as ordinary runs; their points run again:"
+        )
+        for directory in outcome.orphaned_runs:
+            print(f"  {directory}")
+    if not arguments.dry_run:
+        print(f"Continue with: fim sweep resume {arguments.study_id}")
+    return 0
 
 
 def _resume(arguments: argparse.Namespace) -> int:

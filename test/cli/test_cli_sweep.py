@@ -332,3 +332,30 @@ def test_a_sweep_that_is_running_elsewhere_is_a_plain_error(
 
     assert status == 2
     assert "another process is running" in capsys.readouterr().err
+
+
+def test_replan_reports_a_dry_run_then_repairs_a_stale_plan(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fim.engine import deterministic_run_id  # noqa: PLC0415
+
+    _main(tmp_path, "sweep", "run", str(sweep_file))
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    monkeypatch.setattr(
+        "fim.sweep.deterministic_run_id", lambda p: "v2-" + deterministic_run_id(p)
+    )
+    assert _main(tmp_path, "sweep", "resume", study.study_id) == 2
+    assert f"fim sweep replan {study.study_id}" in capsys.readouterr().err
+
+    assert _main(tmp_path, "sweep", "replan", study.study_id, "--dry-run") == 0
+    preview = capsys.readouterr().out
+    assert "Would change: 2 point(s) got a new run id" in preview
+    assert "Continue with" not in preview
+
+    assert _main(tmp_path, "sweep", "replan", study.study_id) == 0
+    changed = capsys.readouterr().out
+    assert "Changed: 2 point(s) got a new run id" in changed
+    assert f"Continue with: fim sweep resume {study.study_id}" in changed
