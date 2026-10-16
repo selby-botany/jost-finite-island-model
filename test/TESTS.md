@@ -111,6 +111,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_literature_visuals`](#gui.test_literature_visuals)
   - [`test_live_statistic_toggle_screen`](#gui.test_live_statistic_toggle_screen)
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
+  - [`test_message_panel_placement_screen`](#gui.test_message_panel_placement_screen)
   - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
   - [`test_n_per_deme_screen`](#gui.test_n_per_deme_screen)
   - [`test_nav_rail`](#gui.test_nav_rail)
@@ -21728,6 +21729,29 @@ tests already use, for the identical reason those tests' own
 docstrings record. `fast_scalar_run_settings` pre-seeds `n_
 replicates`/`max_generations`/the convergence-loop timing pair --
 Settings-only fields now, no longer settable via `_set_field`.
+
+<a id="gui.test_message_panel_placement_screen"></a>
+
+# gui.test\_message\_panel\_placement\_screen
+
+The run messages sit between the graphs and the results tables.
+
+The messages explain a result (why the run stopped, what each statistic's
+average is, what a converged line still does). They used to be the last
+element on the page, below every table, where they were rarely seen. They
+now sit directly under the graph row and above the full-width results
+tables, with `run-reason` still last.
+
+<a id="gui.test_message_panel_placement_screen.test_the_messages_sit_between_the_graphs_and_the_tables"></a>
+
+#### test\_the\_messages\_sit\_between\_the\_graphs\_and\_the\_tables
+
+```python
+def test_the_messages_sit_between_the_graphs_and_the_tables(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Graph row, then messages, then the results tables, then the reason.
 
 <a id="gui.test_migration_matrix_screen"></a>
 

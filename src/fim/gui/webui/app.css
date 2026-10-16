@@ -585,15 +585,20 @@ textarea::placeholder {
  * on its own, reported live as breaking that table's own layout) --
  * consolidation is the point. Same font/color as `.reason` immediately
  * below it in `index.html` (`run-reason`'s own note this list absorbed,
- * design §3.1.4's "always present" note) -- both plain page-width lines
- * at the foot of the run view, not `.hint`'s smaller size. */
+ * design §3.1.4's "always present" note) -- both plain page-width lines,
+ * not `.hint`'s smaller size. The list sits under the graph row and above
+ * the results tables; `run-reason` stays last. */
 .run-messages {
     list-style: none;
-    margin: 0.75rem 0 0;
+    margin: 0.75rem 0;
     padding: 0;
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
+    /* A long list scrolls inside the panel instead of pushing the results
+     * tables off the screen. */
+    max-height: 14rem;
+    overflow-y: auto;
 }
 
 .run-message {
