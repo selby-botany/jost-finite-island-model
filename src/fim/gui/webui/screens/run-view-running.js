@@ -449,8 +449,16 @@ function renderLiveStatistics(statistics, generation) {
                         closedFormNote(comparisons, name, index),
                     ],
                     statisticDescription(name)
-                )
+                ),
+                estimateCellText(estimateSource, name, index)
             )
+        );
+        // Until the burn-in has passed there is no evidence-window average
+        // to show; the row keeps the last value, dimmed.
+        element.classList.toggle(
+            "stat-burn-in",
+            TRAJECTORY_STATISTIC_NAMES.includes(name) &&
+                estimateCellText(estimateSource, name, index) === undefined
         );
         if (typeof decorateTrajectoryStatisticRow === "function") {
             decorateTrajectoryStatisticRow(element, name);

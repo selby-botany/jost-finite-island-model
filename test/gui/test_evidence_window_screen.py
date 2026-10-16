@@ -122,6 +122,7 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
                 trailing: trailing.mean[trailing.mean.length - 1],
                 cumulative: cumulative.mean[cumulative.mean.length - 1],
                 cumulativeStart: start,
+                cell: estimateCellText(source, name),
             }};
         }}
         return result;
@@ -136,6 +137,13 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
         assert shown["cumulativeStart"] == burn_in
         assert shown["trailing"] == pytest.approx(expected["mean"], abs=1e-9)
         assert shown["cumulative"] == pytest.approx(expected["mean"], abs=1e-9)
+        # The statistics cell shows the same mean and standard error: three
+        # decimals under a standard error of 0.01, two otherwise.
+        decimals = 3 if expected["standard_error"] < 0.01 else 2
+        assert shown["cell"] == (
+            f"{expected['mean']:.{decimals}f} \u00b1 "
+            f"{expected['standard_error']:.{decimals}f}"
+        )
         # Four decimals, as the tooltip shows them.
         assert f"mean {expected['mean']:.4f}" in shown["note"]
         assert f"± {expected['standard_error']:.4f}" in shown["note"]

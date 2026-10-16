@@ -1206,28 +1206,27 @@ function estimateStart(generations, end, convergence, anchor) {
 }
 
 /**
- * How well a statistic's mean is known at the shown generation, and how
- * far it lies from the prediction, as a tooltip clause.
- *
- * The mean covers the run's evidence window up to the shown generation
- * (`estimateStart`): at the last generation that is exactly the estimate
- * the monitor stopped on. Before the burn-in has passed it covers the
- * convergence window ending there. The prediction is averaged over the same
- * generations (`closedFormComparisons`), so a closed-form trajectory that
- * is still moving is compared like with like.
+ * How well a statistic's mean is known at the shown generation: the
+ * window it averages, its mean and standard error, and whether the
+ * window is the run's evidence window yet.
  *
  * @param {{generations: number[], histories: Object<string, number[]>,
- *     comparisons: object, convergence: {window: number, tolerance:
- *     number}|null, anchors: Object<string, number>, sums: object}} source
- *     the run's recorded histories and settings; `sums` caches
- *     `windowSums` per statistic.
+ *     convergence: {window: number, burnIn?: number, tolerance:
+ *     number}|null, anchors: Object<string, number>, sums: object,
+ *     tauInt?: Object<string, number|null>}} source the run's recorded
+ *     histories and settings; `sums` caches `windowSums` per statistic.
  * @param {string} name
  * @param {number|null} [index] the shown generation's index; the last
  *     when omitted or negative.
- * @returns {string} the clause, or `""` when there is too little to
- *     average or no convergence window to average over.
+ * @returns {{mean: number, standardError: number, count: number, start:
+ *     number, end: number, known: boolean, adequate: boolean, evidence:
+ *     boolean}|null} `start` and `end` are indexes into the history;
+ *     `evidence` is whether the window starts where averaging began (the
+ *     run's evidence window) rather than being the trailing convergence
+ *     window of a run still in its burn-in; `null` when there is too
+ *     little to average or no convergence window to average over.
  */
-function estimateNote(source, name, index = null) {
+function windowEstimate(source, name, index = null) {
     if (
         !source ||
         !source.convergence ||
@@ -1235,20 +1234,16 @@ function estimateNote(source, name, index = null) {
         !source.generations ||
         !source.histories
     ) {
-        return "";
+        return null;
     }
-    const { generations, histories, comparisons, convergence, anchors } = source;
+    const { generations, histories, convergence, anchors } = source;
     const values = histories[name];
     if (!values || values.length !== generations.length || generations.length === 0) {
-        return "";
+        return null;
     }
     const end = index === null || index < 0 ? generations.length - 1 : index;
-    const start = estimateStart(
-        generations,
-        end,
-        convergence,
-        anchors ? anchors[name] : undefined
-    );
+    const anchor = anchors ? anchors[name] : undefined;
+    const start = estimateStart(generations, end, convergence, anchor);
     if (source.sums && !(name in source.sums)) {
         source.sums[name] = windowSums(values);
     }
@@ -1260,17 +1255,115 @@ function estimateNote(source, name, index = null) {
         source.tauInt ? (source.tauInt[name] ?? null) : null
     );
     if (estimate === null) {
+        return null;
+    }
+    const known = Number.isFinite(estimate.standardError);
+    return {
+        ...estimate,
+        start,
+        end,
+        known,
+        adequate:
+            !known ||
+            !Number.isFinite(convergence.tolerance) ||
+            estimate.standardError <= convergence.tolerance * NOISE_TOLERANCE_FRACTION,
+        evidence:
+            anchor !== undefined ||
+            (Number.isFinite(convergence.burnIn) &&
+                start === firstIndexAtOrAfter(generations, convergence.burnIn)),
+    };
+}
+
+/**
+ * The text a statistics row's value cell shows for an estimate: the mean
+ * and, once known, its standard error ("0.19 ± 0.01"), at three decimals
+ * when the standard error is under 0.01 so it does not round away.
+ *
+ * Only an estimate over the run's evidence window is shown this way; the
+ * row of a statistic still in its burn-in, or without a per-generation
+ * history, keeps its last value (`undefined` is returned).
+ *
+ * @param {object|null} source as `windowEstimate`'s.
+ * @param {string} name
+ * @param {number|null} [index]
+ * @returns {string|undefined}
+ */
+function estimateCellText(source, name, index = null) {
+    const estimate = windowEstimate(source, name, index);
+    if (estimate === null || !estimate.evidence) {
+        return undefined;
+    }
+    return formatEstimate(estimate.mean, estimate.known ? estimate.standardError : NaN);
+}
+
+/**
+ * A mean and its standard error as one cell of text ("0.19 ± 0.01"), at
+ * three decimals when the standard error is under 0.01 so it does not
+ * round away; just the mean when the standard error is unknown or zero.
+ *
+ * @param {number} mean
+ * @param {number} standardError `NaN` or `undefined` when unknown.
+ * @returns {string}
+ */
+function formatEstimate(mean, standardError) {
+    const known = Number.isFinite(standardError) && standardError > 0;
+    const decimals = known && standardError < SMALL_STANDARD_ERROR ? 3 : 2;
+    return known
+        ? `${mean.toFixed(decimals)} ± ${standardError.toFixed(decimals)}`
+        : mean.toFixed(decimals);
+}
+
+/**
+ * The window mean and standard error the completed run's statistics row
+ * shows for `name` at the shown index: from its recorded history, or at the
+ * final generation of a reopened run with none, from the report's own
+ * window estimate.
+ *
+ * @param {string} name
+ * @param {number|null} [index]
+ * @returns {string|undefined} `undefined` when there is none to show.
+ */
+function completedEstimateCellText(name, index = null) {
+    const fromHistory = estimateCellText(completedEstimateSource, name, index);
+    if (fromHistory !== undefined || index !== null) {
+        return fromHistory;
+    }
+    const stats = completedWindowStatistics && completedWindowStatistics[name];
+    if (!stats || !Number.isFinite(stats.mean)) {
+        return undefined;
+    }
+    return formatEstimate(stats.mean, stats.standard_error);
+}
+
+/**
+ * How well a statistic's mean is known at the shown generation, and how
+ * far it lies from the prediction, as a tooltip clause.
+ *
+ * The mean covers the run's evidence window up to the shown generation
+ * (`estimateStart`): at the last generation that is exactly the estimate
+ * the monitor stopped on. Before the burn-in has passed it covers the
+ * convergence window ending there. The prediction is averaged over the
+ * same generations (`closedFormComparisons`), so a closed-form trajectory
+ * that is still moving is compared like with like.
+ *
+ * @param {object|null} source as `windowEstimate`'s, with `comparisons`.
+ * @param {string} name
+ * @param {number|null} [index] the shown generation's index; the last
+ *     when omitted or negative.
+ * @returns {string} the clause, or `""` when there is too little to
+ *     average or no convergence window to average over.
+ */
+function estimateNote(source, name, index = null) {
+    const estimate = windowEstimate(source, name, index);
+    if (estimate === null) {
         return "";
     }
+    const { generations, comparisons } = source;
+    const { start, end, known, adequate } = estimate;
     const decimals = WINDOW_STATISTIC_DECIMALS;
     const span = generations[end] - generations[start] + 1;
     const recorded =
         estimate.count === span ? "" : `, ${estimate.count.toLocaleString()} recorded`;
-    const known = Number.isFinite(estimate.standardError);
-    const adequate =
-        !known ||
-        !Number.isFinite(convergence.tolerance) ||
-        estimate.standardError <= convergence.tolerance * NOISE_TOLERANCE_FRACTION;
     const range =
         `over generations ${generations[start].toLocaleString()}–` +
         `${generations[end].toLocaleString()} ` +
@@ -3452,7 +3545,8 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 buildPointMeter(
                     name,
                     completedFinalStatistics[name],
-                    withNotes(completedRowNotes(name), statisticDescription(name))
+                    withNotes(completedRowNotes(name), statisticDescription(name)),
+                    completedEstimateCellText(name)
                 )
             );
             decorateTrajectoryStatisticRow(element, name);
@@ -3502,7 +3596,8 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                     withNotes(
                         completedRowNotes(name, scrubIndex),
                         statisticDescription(name)
-                    )
+                    ),
+                    completedEstimateCellText(name, scrubIndex)
                 )
             );
         } else {
@@ -4130,7 +4225,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 buildPointMeter(
                     name,
                     value,
-                    withNotes(completedRowNotes(name), statisticDescription(name))
+                    withNotes(completedRowNotes(name), statisticDescription(name)),
+                    completedEstimateCellText(name)
                 )
             );
             decorateTrajectoryStatisticRow(element, name);

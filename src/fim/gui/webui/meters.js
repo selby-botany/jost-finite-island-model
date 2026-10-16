@@ -300,6 +300,12 @@ function buildCiMeter(name, interval, description) {
  * digits; hovering the row shows `"Name = value"` at full
  * `format_statistic` precision.
  *
+ * With `estimateText`, the value column shows that instead (a window mean
+ * and its standard error, `estimateCellText`), since the last generation's
+ * value is one noisy draw while the average is the run's answer; the
+ * tooltip then leads with the estimate and gives the last generation's
+ * value, labeled as such.
+ *
  * @param {string} name - The statistic's own name (`"D"`, `"G_ST"`, ...).
  * @param {string} formattedValue - The already `format_statistic`-formatted
  *     value -- shown in the tooltip verbatim, rounded to two digits for
@@ -307,21 +313,30 @@ function buildCiMeter(name, interval, description) {
  * @param {string} [description] - Overrides the `STATISTIC_DESCRIPTIONS`
  *     lookup, for a row whose `name` is a ready-made HTML label rather
  *     than a key (the two effective-allele rows).
+ * @param {string} [estimateText] - The window mean and standard error to
+ *     show in the value column in place of `formattedValue`.
  * @returns {DocumentFragment}
  */
-function buildPointMeter(name, formattedValue, description) {
+function buildPointMeter(name, formattedValue, description, estimateText) {
     // A Nei distance with no allele shared is infinite; the server sends
     // it as "undefined" because saved results are strict JSON.
     const infinite = isInfiniteStatisticValue(name, formattedValue);
+    const estimated = estimateText !== undefined && !infinite;
     const cells = buildStatCells(
         name,
-        infinite ? "∞" : formatToTwoDigits(formattedValue)
+        infinite ? "∞" : estimated ? estimateText : formatToTwoDigits(formattedValue)
     );
     const plainName = plainStatisticLabel(name);
+    let headline = `${plainName} = ${formattedValue}`;
+    if (infinite) {
+        headline = `${plainName} = infinite (no allele is shared)`;
+    } else if (estimated) {
+        headline =
+            `${plainName} = ${estimateText} (mean ± 1 standard error); ` +
+            `last generation ${formattedValue}`;
+    }
     cells.tooltip = withStatisticDescription(
-        infinite
-            ? `${plainName} = infinite (no allele is shared)`
-            : `${plainName} = ${formattedValue}`,
+        headline,
         description === undefined ? statisticDescription(name) : description
     );
     return cells;

@@ -165,6 +165,10 @@ const CLOSED_FORM_COMPARISON_DIGITS = 3;
 // tooltip, and of a meter's value in the statistics table.
 const WINDOW_STATISTIC_DECIMALS = 4;
 
+// A standard error under this is shown, with its mean, to three decimals
+// instead of two so that it does not round away (`formatEstimate`).
+const SMALL_STANDARD_ERROR = 0.01;
+
 // Decimal places of how many standard errors a window mean lies from its
 // prediction ("+1.2 SE"): one is enough to read "inside or outside two".
 const PREDICTION_DISTANCE_DECIMALS = 1;

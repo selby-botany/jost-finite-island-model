@@ -136,6 +136,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_shutdown_signals`](#gui.test_shutdown_signals)
+  - [`test_statistics_cell_estimate_screen`](#gui.test_statistics_cell_estimate_screen)
   - [`test_statistics_shown_screen`](#gui.test_statistics_shown_screen)
   - [`test_store`](#gui.test_store)
   - [`test_sweep_api`](#gui.test_sweep_api)
@@ -26441,6 +26442,29 @@ child interpreter, not this test's own process, for the same reason
 `test_shutdown_deadman.py`'s wedged-process test uses one: nothing
 here should risk a real termination signal reaching the process
 running this suite.
+
+<a id="gui.test_statistics_cell_estimate_screen"></a>
+
+# gui.test\_statistics\_cell\_estimate\_screen
+
+A finished run's statistics cells show the average, not the last value.
+
+The value in the last generation is one noisy draw (the Wright-Takahata
+example's `D` ends at 0.65 while its average over the evidence window is
+0.29). The statistics panel therefore shows each statistic's window mean and
+standard error, and keeps the last generation's value in the tooltip,
+labeled as such. A statistic without a per-generation history is unchanged.
+
+<a id="gui.test_statistics_cell_estimate_screen.test_a_completed_runs_cells_show_the_average_and_its_standard_error"></a>
+
+#### test\_a\_completed\_runs\_cells\_show\_the\_average\_and\_its\_standard\_error
+
+```python
+def test_a_completed_runs_cells_show_the_average_and_its_standard_error(
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
+```
+
+D's cell reads "mean ± SE" and its tooltip names the last value.
 
 <a id="gui.test_statistics_shown_screen"></a>
 
