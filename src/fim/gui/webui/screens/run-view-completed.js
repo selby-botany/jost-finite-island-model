@@ -865,7 +865,7 @@ function tagStatisticCells(tbody, offset) {
  *     aligned series, what the prediction is, running totals of squared
  *     error and of finite points, so the mean squared error up to any
  *     generation is O(1), and `windowSums` of the prediction, so its mean
- *     over any window is too (`estimateNote`).
+ *     over any window is too (`windowEstimate`).
  */
 function closedFormComparisons(generations, histories, closedForm, equilibrium = null) {
     if (!generations || !histories || generations.length === 0) {
@@ -966,7 +966,7 @@ function predictionSentence(name, entry, estimate) {
 // completed entry and reused by every scrub tick.
 let completedClosedFormComparisons = {};
 
-// What `estimateNote` reads for the completed run (its histories, the
+// What `windowEstimate` reads for the completed run (its histories, the
 // convergence window and tolerance, and where each grown evidence window
 // starts), or `null` for a batch or a run reopened without a history.
 let completedEstimateSource = null;
