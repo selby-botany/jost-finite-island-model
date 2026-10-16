@@ -1558,6 +1558,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A shutdown test no longer depends on the host's old test output.** The
+  nested pytest run in `test_finished_worker_can_wait_for_a_peer_beyond_
+  shutdown_timeout` ended by cleaning the host's shared `pytest-of-<user>`
+  directory, and on a host with enough leftovers from earlier runs that
+  outlasted the 30 s watchdog the test arms, so it failed in about half of
+  full parallel runs. The nested run now has its own temporary directory.
 - Full lineal worked-example replays run in the nightly/on-demand slow
   layer, like the archive replays, instead of using stale automatic-engine
   timings to select per-push tests. Run 38650093650 exhausted the

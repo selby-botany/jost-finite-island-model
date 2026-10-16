@@ -168,6 +168,16 @@ def test_finished_worker_can_wait_for_a_peer_beyond_shutdown_timeout(
         str(tmp_path),
         "--rootdir",
         str(tmp_path),
+        # Its own temporary directory, so the nested session's end-of-run
+        # cleanup of old `pytest-N` directories never walks the host's shared
+        # `pytest-of-<user>` (every earlier suite run's leftovers). That walk
+        # took longer than the 30 s watchdog this test arms whenever the host
+        # had enough old output, so the test's result depended on the host's
+        # history, not on the code under test.
+        "--basetemp",
+        str(tmp_path / "nested-basetemp"),
+        "-p",
+        "no:cacheprovider",
         "test_worker_lifecycle.py",
     ]
     env = {
@@ -391,3 +401,16 @@ def test_a_real_hung_interpreter_is_reported_and_bounded() -> None:
     # 3. The hang became a bounded, non-zero-exit failure rather than an
     #    unbounded stall that gives CI no result at all.
     assert process.returncode != 0
+
+
+def test_nested_worker_run_has_its_own_temporary_directory() -> None:
+    """The nested session must not clean the host's shared pytest directory.
+
+    Static check of `test_finished_worker_can_wait_for_a_peer_beyond_shutdown_
+    timeout`'s command line: without `--basetemp`, the nested controller's
+    end-of-session cleanup walks `pytest-of-<user>` (every earlier suite run's
+    leftovers) and, on a host with enough of them, outlasts the 30 s watchdog
+    the test arms. The failure then reflects the host's history, not the code.
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    assert '"--basetemp"' in source

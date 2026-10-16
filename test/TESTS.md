@@ -4193,6 +4193,22 @@ without a timing budget, since their length depends on machine load
 (about 13 seconds on a loaded machine), not on the commit; only the
 completion-signal backstop (`conftest.readline_or_fail`) bounds them.
 
+<a id="test.test_shutdown_diagnostics.test_nested_worker_run_has_its_own_temporary_directory"></a>
+
+#### test\_nested\_worker\_run\_has\_its\_own\_temporary\_directory
+
+```python
+def test_nested_worker_run_has_its_own_temporary_directory() -> None
+```
+
+The nested session must not clean the host's shared pytest directory.
+
+Static check of `test_finished_worker_can_wait_for_a_peer_beyond_shutdown_
+timeout`'s command line: without `--basetemp`, the nested controller's
+end-of-session cleanup walks `pytest-of-<user>` (every earlier suite run's
+leftovers) and, on a host with enough of them, outlasts the 30 s watchdog
+the test arms. The failure then reflects the host's history, not the code.
+
 <a id="test.test_simulate"></a>
 
 # test.test\_simulate
