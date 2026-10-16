@@ -69,6 +69,16 @@ stand in for that calibration.
 | locus length | 200 | Allele-space size (infinite-alleles model) |
 | seed | 20260825 | Exact RNG seed |
 
+## Why a single run
+
+This example sets `n_replicates: 1` on purpose. A single run is the only kind
+with a trajectory graph, a scrubber and a scatter plot to look at, and
+showing those is the point of this example. The engine's default is
+`n_replicates: 200`, which runs an adaptively stopped batch and reports a
+confidence interval instead. One run's final numbers are one noisy draw: for
+an estimate with an error bar, run a batch (see
+[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
+
 ## Running the example
 
 ```console

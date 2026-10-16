@@ -20,6 +20,23 @@ over the 13,487-generation window that follows gives `G_ST` = 0.193 ± 0.007
 final generation's own value, 0.291, is one noisy draw. `D` is not watched
 here, so its own error bar (0.29 ± 0.06) was never required to be small.
 
+## A settled statistic still wanders
+
+The run judges how precisely each average is known, not how flat the line is.
+`G_ST` settles quickly (its autocorrelation time is about 180 generations) and
+its line stays near 0.19. `D` does not: total diversity swings on a timescale
+of about 1,900 generations and `D` swings with it, between about 0.05 and 0.76
+in this run. That is a property of the model, not a defect, and a longer run
+does not make the line flatter, only the average better known.
+
+Watching `D` instead does not change the picture. A rerun with
+`convergence_statistic: D` reaches the 200,000-generation cap without
+converging: `D` averages 0.341 ± 0.017 (one standard error) over generations
+8,424 to 200,000, against a target of 0.010, and the series is stationary
+(Geweke z = −0.74) and consistent with the closed-form 0.32. At that rate
+`D` would need about 540,000 generations. The statistics panel underlines the
+statistics a run watches, and the run messages explain the others.
+
 ## Why the precision is 0.02
 
 The configuration sets `precision: 0.02`, twice the default.
@@ -43,6 +60,16 @@ infinite-island one.
 
 These works provide the island-model and finite-deme context for the
 correction; see the guide for the calculation used in this example.
+
+## Why a single run
+
+This example sets `n_replicates: 1` on purpose. A single run is the only kind
+with a trajectory graph, a scrubber and a scatter plot to look at, and
+showing those is the point of this example. The engine's default is
+`n_replicates: 200`, which runs an adaptively stopped batch and reports a
+confidence interval instead. One run's final numbers are one noisy draw: for
+an estimate with an error bar, run a batch (see
+[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 
 ## Run
 
