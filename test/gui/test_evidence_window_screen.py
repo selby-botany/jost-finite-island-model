@@ -3,7 +3,7 @@
 The convergence monitor judges a run over its evidence window, from the
 burn-in to the last generation, and the report records the mean and the
 standard error it found there (`window_statistics`). The panel's trailing
-mean, cumulative mean and tooltip estimate must reproduce those numbers,
+mean, cumulative mean and cell estimate must reproduce those numbers,
 so a number on screen can always be traced to the report. These tests use
 the shipped Wright-Takahata example, whose saved history and report are
 fixed files, so they are pure functions of the commit.

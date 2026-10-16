@@ -144,6 +144,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sweep_screen`](#gui.test_sweep_screen)
   - [`test_trailing_mean_screen`](#gui.test_trailing_mean_screen)
   - [`test_trajectory_history`](#gui.test_trajectory_history)
+  - [`test_watched_statistics_screen`](#gui.test_watched_statistics_screen)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
   - [`test_welcome_screen`](#gui.test_welcome_screen)
 - [`test/model/`](#group-model)
@@ -19658,7 +19659,7 @@ The trajectory panel averages over the run's evidence window.
 The convergence monitor judges a run over its evidence window, from the
 burn-in to the last generation, and the report records the mean and the
 standard error it found there (`window_statistics`). The panel's trailing
-mean, cumulative mean and tooltip estimate must reproduce those numbers,
+mean, cumulative mean and cell estimate must reproduce those numbers,
 so a number on screen can always be traced to the report. These tests use
 the shipped Wright-Takahata example, whose saved history and report are
 fixed files, so they are pure functions of the commit.
@@ -27140,6 +27141,41 @@ A trajectory edited after the run completed fails the digest check.
 
 Identical failure mode to `reanalyze_trajectory`'s own equivalent
 test — the same `verify_trajectory_integrity` call underneath.
+
+<a id="gui.test_watched_statistics_screen"></a>
+
+# gui.test\_watched\_statistics\_screen
+
+The statistics table underlines the statistics the run watches.
+
+Bold, dimming and a color swatch already say whether a statistic is plotted.
+A fourth cue says which statistics the convergence rule watches: an
+underline on the row's name, with an explanation on the name cell for
+hover and for assistive technology. It shows during the run and after it,
+for every statistic in `convergence_statistic` (by default `D` and `G_ST`)
+and for no other.
+
+<a id="gui.test_watched_statistics_screen.test_the_watched_statistics_are_underlined_during_a_run"></a>
+
+#### test\_the\_watched\_statistics\_are\_underlined\_during\_a\_run
+
+```python
+def test_the_watched_statistics_are_underlined_during_a_run(
+        unreachable_convergence_run_settings: Path) -> None
+```
+
+A live run marks the statistics its convergence rule watches.
+
+<a id="gui.test_watched_statistics_screen.test_the_watched_statistics_are_underlined_after_a_run"></a>
+
+#### test\_the\_watched\_statistics\_are\_underlined\_after\_a\_run
+
+```python
+def test_the_watched_statistics_are_underlined_after_a_run(
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
+```
+
+A finished run keeps the marks.
 
 <a id="gui.test_webui_global_scope"></a>
 

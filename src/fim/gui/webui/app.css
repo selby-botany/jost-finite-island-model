@@ -1575,6 +1575,13 @@ fieldset.combinator-choice label {
     opacity: 0.55;
 }
 
+/* The statistics the run watches: underlined, a cue that does not depend on
+ * the bold, dimming or color the row already uses. */
+.stats-table tr.stat-watched .stat-name {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
 .stats-table tr.stat-burn-in .stat-value {
     color: var(--fim-muted);
 }

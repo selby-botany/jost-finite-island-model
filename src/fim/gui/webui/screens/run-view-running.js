@@ -341,6 +341,7 @@ window.fim.setLiveClosedForm = function setLiveClosedForm(closedForm) {
  */
 window.fim.setLiveConvergence = function setLiveConvergence(convergence) {
     liveConvergence = convergence ?? null;
+    window.fim.setWatchedStatistics(liveConvergence ? liveConvergence.statistics : []);
 };
 
 function drawProgressPanels(payload) {

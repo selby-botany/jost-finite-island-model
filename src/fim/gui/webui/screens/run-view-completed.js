@@ -89,6 +89,52 @@ let completedConvergedOn = null;
 // messages explain first.
 let completedWatchedStatistics = [];
 
+// The statistics the run on screen watches, live or completed, which the
+// statistics table underlines (`markWatchedStatisticRow`).
+let watchedStatisticNames = [];
+
+/**
+ * Say which statistics the run on screen watches, and underline their rows.
+ *
+ * @param {string[]|null|undefined} names `convergence_statistic`, normalized.
+ */
+window.fim.setWatchedStatistics = function setWatchedStatistics(names) {
+    watchedStatisticNames = Array.isArray(names) ? names : [];
+    for (const row of document.querySelectorAll("[data-trajectory-statistic]")) {
+        markWatchedStatisticRow(row, row.dataset.trajectoryStatistic);
+    }
+};
+
+/**
+ * Underline one statistic's row when the run watches it: the cue that says
+ * which statistics the run stops on, independent of the bold, dimming and
+ * color the row already uses. The row carries a class for the underline;
+ * the name cell carries the explanation, as a title and for assistive
+ * technology.
+ *
+ * @param {HTMLTableRowElement} row
+ * @param {string} name
+ */
+function markWatchedStatisticRow(row, name) {
+    const watched = watchedStatisticNames.includes(name);
+    row.classList.toggle("stat-watched", watched);
+    const cell = row.querySelector(".stat-name");
+    if (cell === null) {
+        return;
+    }
+    if (watched) {
+        const label = plainStatisticLabel(name);
+        const explanation =
+            `The run watches ${label} and stops when its average is known to ` +
+            "the requested precision.";
+        cell.title = explanation;
+        cell.setAttribute("aria-label", `${label}. ${explanation}`);
+    } else {
+        cell.removeAttribute("title");
+        cell.removeAttribute("aria-label");
+    }
+}
+
 // The deme pair the completed view's scatter shows (`[x, y]`, 1-based),
 // its final-generation statistics, and, once fetched, its per-frame
 // statistics for the scrubber (`null` until then; the default pair's
@@ -1604,6 +1650,7 @@ function decorateTrajectoryStatisticRow(row, name) {
         STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
     toggleCell.appendChild(swatch);
     updateTrajectoryStatisticRowState(row, name);
+    markWatchedStatisticRow(row, name);
     return row;
 }
 
@@ -4300,6 +4347,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedConvergedOn = report.converged_on ?? null;
         completedWatchedStatistics =
             (payload.convergence && payload.convergence.statistics) || [];
+        window.fim.setWatchedStatistics(completedWatchedStatistics);
         completedPair = [1, 2];
         completedFinalPairStatistics = payload.pairStatistics || null;
         completedPairFrameStatistics = null;
