@@ -329,15 +329,45 @@ function buildPointMeter(name, formattedValue, description) {
 
 /**
  * Apply a `buildXMeter` fragment's own `.tooltip` to `row`'s `title`
- * attribute, then replace `row`'s children with the fragment's cells.
+ * attribute, then bring `row`'s cells up to date with the fragment's.
  * Every call site needs both steps together (a fragment alone cannot
  * carry the tooltip; `replaceChildren`/`appendChild` alone would drop
  * it) -- centralized here so no call site can do one without the other.
+ *
+ * A row already holding the same cells (the fragment's shape: a color-key
+ * cell, a name cell, a value cell) is updated in place, cell by cell, and
+ * only where the text changed. Replacing the cells on every progress tick
+ * would delete the very element a pointer is pressed on between its press
+ * and its release, and a browser then drops the click -- so a statistic
+ * could not be hidden or shown while a fast run was going. The color-key
+ * cell is never touched here: `decorateTrajectoryStatisticRow` and
+ * `decorateExploreStatisticRow` own its content.
  *
  * @param {HTMLTableRowElement} row
  * @param {DocumentFragment} cells
  */
 function applyStatRow(row, cells) {
-    row.title = cells.tooltip || "";
-    row.replaceChildren(cells);
+    const title = cells.tooltip || "";
+    if (row.title !== title) {
+        row.title = title;
+    }
+    const incoming = Array.from(cells.children);
+    const current = Array.from(row.children);
+    const sameShape =
+        current.length === incoming.length &&
+        current.every(
+            (cell, index) =>
+                cell.tagName === incoming[index].tagName &&
+                cell.className === incoming[index].className
+        );
+    if (!sameShape) {
+        row.replaceChildren(cells);
+        return;
+    }
+    // Index 0 is the color-key cell, which its decorator owns.
+    for (let index = 1; index < incoming.length; index += 1) {
+        if (current[index].innerHTML !== incoming[index].innerHTML) {
+            current[index].innerHTML = incoming[index].innerHTML;
+        }
+    }
 }

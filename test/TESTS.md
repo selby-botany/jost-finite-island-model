@@ -107,6 +107,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_home_hierarchy_screen`](#gui.test_home_hierarchy_screen)
   - [`test_input_screen`](#gui.test_input_screen)
   - [`test_literature_visuals`](#gui.test_literature_visuals)
+  - [`test_live_statistic_toggle_screen`](#gui.test_live_statistic_toggle_screen)
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
   - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
   - [`test_n_per_deme_screen`](#gui.test_n_per_deme_screen)
@@ -21503,6 +21504,51 @@ def test_pooled_isolation_by_distance_payload_counts_pairs_across_states(
 Pooling two identical copies of `_gradient_state` must double every
 distance class's own `pairCount` relative to pooling just one copy,
 since each deme pair now contributes one identity sample per state.
+
+<a id="gui.test_live_statistic_toggle_screen"></a>
+
+# gui.test\_live\_statistic\_toggle\_screen
+
+Headless functional tests: hiding a statistic while a run is still going.
+
+A researcher hides statistics during a run to declutter the trajectory
+graph and follow one of them. The statistics-table row toggle
+(`run-view-completed.js`'s `toggleTrajectoryStatistic`) must therefore
+work on a live run, not only on a finished one, and a hidden statistic
+must stay hidden as later progress ticks redraw the graph and rebuild the
+table rows.
+
+The run is real (a background thread pushes `fim.onRunProgress`), and the
+tests wait on Python-side progress counts, never on a page-polling loop
+racing that thread (see `test_running_screen.py`'s module docstring).
+
+<a id="gui.test_live_statistic_toggle_screen.test_a_statistic_can_be_hidden_and_shown_during_a_live_run"></a>
+
+#### test\_a\_statistic\_can\_be\_hidden\_and\_shown\_during\_a\_live\_run
+
+```python
+def test_a_statistic_can_be_hidden_and_shown_during_a_live_run(
+        unreachable_convergence_run_settings: Path) -> None
+```
+
+Hide `D` mid-run: its curve goes, stays gone across ticks, and returns.
+
+<a id="gui.test_live_statistic_toggle_screen.test_statistics_rows_keep_their_cells_across_live_ticks"></a>
+
+#### test\_statistics\_rows\_keep\_their\_cells\_across\_live\_ticks
+
+```python
+def test_statistics_rows_keep_their_cells_across_live_ticks(
+        unreachable_convergence_run_settings: Path) -> None
+```
+
+A live tick updates a row's cells in place, never replaces them.
+
+A mouse click needs its press and release on the same element. Rebuilding
+the cells on every progress tick removes the element under the pointer
+between the two, and WebKit then delivers no click at all, which is how
+a fast run made the row toggle unusable while a synthetic `click()`
+(which this file's first test uses) still worked.
 
 <a id="gui.test_loci_grid_screen"></a>
 
