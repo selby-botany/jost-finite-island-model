@@ -83,6 +83,12 @@ let baseRunMessages = [];
 // its cap (it then stopped on no statistic).
 let completedConvergedOn = null;
 
+// The statistics the completed run's convergence rule watches (its
+// `convergence_statistic`), whether or not it stopped on them; `[]` when no
+// run is shown. These are the ones the statistics panel marks and the
+// messages explain first.
+let completedWatchedStatistics = [];
+
 // The deme pair the completed view's scatter shows (`[x, y]`, 1-based),
 // its final-generation statistics, and, once fetched, its per-frame
 // statistics for the scrubber (`null` until then; the default pair's
@@ -157,6 +163,168 @@ function pairStatisticsForFrame(frame, index, isFinal) {
 }
 
 /**
+ * The window a report's `window_statistics` entry covers, as words:
+ * "generations 8,424 to 21,910", or, for a report that does not record the
+ * ends, "the last 13,487 generations".
+ *
+ * @param {{window: number, window_start?: number, window_end?: number}} stats
+ * @returns {string}
+ */
+function windowWords(stats) {
+    if (Number.isFinite(stats.window_start) && Number.isFinite(stats.window_end)) {
+        return (
+            `generations ${stats.window_start.toLocaleString()} to ` +
+            `${stats.window_end.toLocaleString()}`
+        );
+    }
+    return `the last ${stats.window.toLocaleString()} generations`;
+}
+
+/**
+ * What the run says about one watched statistic, as one sentence: its
+ * average, how precisely that is known, and whether that meets the target
+ * that ends the run.
+ *
+ * @param {string} name
+ * @param {object} stats the statistic's `window_statistics` entry.
+ * @returns {string}
+ */
+function watchedStatisticSentence(name, stats) {
+    const decimals = estimateDecimals(stats.standard_error);
+    const target = stats.target_standard_error;
+    const targetText = Number.isFinite(target) ? target.toFixed(3) : "its target";
+    const verdict = stats.noise_adequate
+        ? `which meets the target of ${targetText} that ends the run`
+        : `which is above the target of ${targetText}, so its average is not ` +
+          "yet known to the requested precision";
+    return (
+        `${plainStatisticLabel(name)} is a statistic this run watches. Averaged ` +
+        `over ${windowWords(stats)} it is ${stats.mean.toFixed(decimals)}, with a ` +
+        `standard error of ${stats.standard_error.toFixed(decimals)}, ${verdict}.`
+    );
+}
+
+/**
+ * The explanation of one statistic in the collapsed group: what it is, its
+ * average when the run did not watch it, how much it varies, and how it
+ * compares with its prediction.
+ *
+ * @param {string} name
+ * @param {object} stats the statistic's `window_statistics` entry.
+ * @param {boolean} watched whether the run's convergence rule watches it.
+ * @param {object|null} comparisons `closedFormComparisons`'s result.
+ * @param {object|null} source `windowEstimate`'s source, for the prediction.
+ * @returns {string}
+ */
+function statisticDetailSentences(name, stats, watched, comparisons, source) {
+    const label = plainStatisticLabel(name);
+    const sentences = [];
+    const description = statisticDescription(name);
+    if (description) {
+        sentences.push(`${label} is ${description}.`);
+    }
+    if (!watched) {
+        const decimals = estimateDecimals(stats.standard_error);
+        const target = stats.target_standard_error;
+        const targetText = Number.isFinite(target) ? target.toFixed(3) : "the target";
+        const verdict = stats.noise_adequate
+            ? `its standard error is below the target of ${targetText}`
+            : `its standard error is above the target of ${targetText}, so treat ` +
+              "its average as approximate";
+        sentences.push(
+            `Averaged over ${windowWords(stats)} it is ` +
+                `${stats.mean.toFixed(decimals)}, with a standard error of ` +
+                `${stats.standard_error.toFixed(decimals)}. The run did not watch ` +
+                `it, and ${verdict}.`
+        );
+    }
+    if (Number.isFinite(stats.standard_deviation)) {
+        sentences.push(
+            "From one generation to the next it varies with a standard " +
+                `deviation of ${stats.standard_deviation.toFixed(2)}. A longer run ` +
+                "does not shrink this spread."
+        );
+    }
+    const prediction = predictionSentence(
+        name,
+        comparisons && comparisons[name],
+        windowEstimate(source, name)
+    );
+    if (prediction) {
+        sentences.push(prediction);
+    }
+    return sentences.join(" ");
+}
+
+/**
+ * The messages about a run's statistics, in full sentences.
+ *
+ * The statistics the run watches come first, each with its average, its
+ * standard error and the target, followed by one sentence on what a settled
+ * statistic still does. The rest (every shown statistic's meaning, its
+ * spread, and its prediction) is marked `detail` for the collapsed group.
+ *
+ * @param {object} windowStatistics the report's `window_statistics`.
+ * @param {string[]} watchedNames the statistics the convergence rule watches.
+ * @param {object|null} comparisons `closedFormComparisons`'s result.
+ * @param {object|null} source `windowEstimate`'s source (the run's history).
+ * @returns {Array<{severity: "info", text: string, detail?: boolean}>}
+ */
+function statisticMessagesFor(windowStatistics, watchedNames, comparisons, source) {
+    const shown = (name) =>
+        Boolean(windowStatistics[name]) && statisticSpec(name) !== null && isStatisticShown(name);
+    const watched = watchedNames.filter(shown);
+    const others = Object.keys(windowStatistics).filter(
+        (name) => shown(name) && !watched.includes(name)
+    );
+    const messages = watched.map((name) => ({
+        severity: "info",
+        text: watchedStatisticSentence(name, windowStatistics[name]),
+    }));
+    if (watched.length > 0) {
+        messages.push({
+            severity: "info",
+            text:
+                "A statistic that has settled still changes from one generation " +
+                "to the next. The shaded band on the graph shows that spread. " +
+                "The run judges how precisely each average is known, not how " +
+                "flat the line is.",
+        });
+    }
+    for (const name of [...watched, ...others]) {
+        const text = statisticDetailSentences(
+            name,
+            windowStatistics[name],
+            watched.includes(name),
+            comparisons,
+            source
+        );
+        if (text) {
+            messages.push({ severity: "info", text, detail: true });
+        }
+    }
+    return messages;
+}
+
+/**
+ * The completed run's messages about its statistics. Only a finished run
+ * has them; a run still going has no evidence window.
+ *
+ * @returns {Array<{severity: "info", text: string, detail?: boolean}>}
+ */
+function statisticMessages() {
+    if (window.fim.getRunViewState() !== "completed" || !completedWindowStatistics) {
+        return [];
+    }
+    return statisticMessagesFor(
+        completedWindowStatistics,
+        completedWatchedStatistics,
+        completedClosedFormComparisons,
+        completedEstimateSource
+    );
+}
+
+/**
  * A note when the shown run stopped on a statistic that is hidden: the
  * stop reason names a statistic nothing on screen shows otherwise.
  * Never forces it visible; that would defeat the choice.
@@ -213,7 +381,10 @@ function setBaseRunMessages(messages) {
  * page used to position independently (the G_ST caution note beside the
  * statistics table, chiefly) with the one list a botanist reads in one
  * place.
- * @param {Array<{severity: "info"|"warning"|"error", text: string}>} [extraMessages]
+ * A message with `detail: true` goes into the collapsed per-statistic group
+ * at the end of the list instead of its own line.
+ * @param {Array<{severity: "info"|"warning"|"error", text: string,
+ *     detail?: boolean}>} [extraMessages]
  */
 // One literal class string per severity -- not a template literal
 // (`` `run-message run-message-${severity}` ``) interpolating `severity`
@@ -227,17 +398,56 @@ const RUN_MESSAGE_CLASSES = {
 };
 
 function renderRunMessages(extraMessages = []) {
-    const messages = [...baseRunMessages, ...hiddenStopMessages(), ...extraMessages];
+    const messages = [
+        ...baseRunMessages,
+        ...hiddenStopMessages(),
+        ...statisticMessages(),
+        ...extraMessages,
+    ];
     runMessagesList.replaceChildren();
     runMessagesList.hidden = messages.length === 0;
-    for (const { severity, text } of messages) {
+    const details = [];
+    for (const message of messages) {
+        if (message.detail) {
+            details.push(message);
+            continue;
+        }
         const item = document.createElement("li");
-        item.className = RUN_MESSAGE_CLASSES[severity];
+        item.className = RUN_MESSAGE_CLASSES[message.severity];
         const dot = document.createElement("span");
         dot.className = "run-message-dot";
-        item.append(dot, text);
+        item.append(dot, message.text);
         runMessagesList.appendChild(item);
     }
+    if (details.length > 0) {
+        runMessagesList.appendChild(detailMessagesItem(details));
+    }
+}
+
+/**
+ * One collapsed list item holding the per-statistic explanations, so six
+ * statistics' worth of sentences do not push the results tables off the
+ * screen. The summary says how many there are.
+ *
+ * @param {Array<{severity: string, text: string}>} details
+ * @returns {HTMLLIElement}
+ */
+function detailMessagesItem(details) {
+    const item = document.createElement("li");
+    item.className = "run-message run-message-details";
+    const group = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = `Details for each statistic (${details.length})`;
+    const list = document.createElement("ul");
+    list.className = "run-message-detail-list";
+    for (const { text } of details) {
+        const entry = document.createElement("li");
+        entry.textContent = text;
+        list.appendChild(entry);
+    }
+    group.append(summary, list);
+    item.appendChild(group);
+    return item;
 }
 
 // See `wireCompletedScrubber`'s own comment: counts its own in-flight
@@ -662,36 +872,47 @@ function closedFormComparisons(generations, histories, closedForm, equilibrium =
 }
 
 /**
- * The running comparison of one statistic with its prediction, as a
- * tooltip clause: `ΔDₚ` (observed minus predicted) at the generation
- * shown, and the mean squared error of the trajectory so far, from the
- * first recorded generation up to that one.
+ * The comparison of one statistic's run average with its prediction, as
+ * sentences.
  *
- * @param {object} comparisons `closedFormComparisons`'s result.
+ * The prediction is averaged over the same generations as the run's own
+ * average (`closedFormComparisons`), so a closed-form trajectory that is
+ * still moving is compared like with like. The mean squared difference
+ * covers every recorded generation.
+ *
  * @param {string} name
- * @param {number|null} [index] index into the recorded generations; the
- *     last (the latest generation) when omitted or negative.
- * @returns {string} the clause, or `""` for a statistic with no prediction.
+ * @param {object|undefined} entry `closedFormComparisons`'s entry for it.
+ * @param {object|null} estimate `windowEstimate`'s result for it.
+ * @returns {string} `""` for a statistic with no prediction or no estimate.
  */
-function closedFormNote(comparisons, name, index = null) {
-    const entry = comparisons && comparisons[name];
-    if (!entry) {
+function predictionSentence(name, entry, estimate) {
+    if (!entry || !entry.predictedSums || estimate === null) {
         return "";
     }
-    const at = index === null || index < 0 ? entry.generations.length - 1 : index;
-    const difference = entry.observed[at] - entry.predicted[at];
-    if (!Number.isFinite(difference) || entry.counts[at] === 0) {
+    const last = entry.generations.length - 1;
+    if (entry.counts[last] === 0) {
         return "";
     }
-    const sign = difference < 0 ? "−" : "+";
-    const magnitude = Math.abs(difference).toPrecision(CLOSED_FORM_COMPARISON_DIGITS);
-    const mse = (entry.squares[at] / entry.counts[at]).toPrecision(
-        CLOSED_FORM_COMPARISON_DIGITS
-    );
+    const standardError = estimate.known ? estimate.standardError : NaN;
+    const decimals = estimateDecimals(standardError);
+    const predicted =
+        (entry.predictedSums.sum[estimate.end + 1] - entry.predictedSums.sum[estimate.start]) /
+        estimate.count;
+    const label = plainStatisticLabel(name);
+    let text =
+        `The prediction for ${label} (${entry.basis}), averaged over the same ` +
+        `generations, is ${predicted.toFixed(decimals)}.`;
+    if (standardError > 0) {
+        const difference = Math.abs(estimate.mean - predicted);
+        const distance = difference / standardError;
+        text +=
+            ` This run's average differs from it by ${difference.toFixed(decimals)}, ` +
+            `which is ${distance.toFixed(PREDICTION_DISTANCE_DECIMALS)} standard errors.`;
+    }
+    const mse = entry.squares[last] / entry.counts[last];
     return (
-        `Δ${plainStatisticLabel(name)}ₚ = ${sign}${magnitude}, MSE = ${mse} ` +
-        `(vs ${entry.basis}; MSE over ${entry.counts[at].toLocaleString()} ` +
-        `recorded generations to generation ${entry.generations[at].toLocaleString()})`
+        `${text} Over the whole run the mean squared difference from the ` +
+        `prediction is ${mse.toPrecision(CLOSED_FORM_COMPARISON_DIGITS)}.`
     );
 }
 
@@ -728,26 +949,6 @@ function completedAveraging() {
         burnIn: completedConvergenceBurnIn,
         anchors: completedEstimateSource ? completedEstimateSource.anchors : {},
     };
-}
-
-/**
- * The completed run's tooltip clauses for one statistic: its window
- * estimate, then its comparison with the prediction.
- *
- * @param {string} name
- * @param {number|null} [index] the shown generation's index; the final
- *     generation when omitted.
- * @returns {string[]}
- */
-function completedRowNotes(name, index = null) {
-    const estimate =
-        estimateNote(completedEstimateSource, name, index) ||
-        (index === null ? reportEstimateNote(name) : "");
-    return [
-        estimate,
-        sigmaNote(name),
-        closedFormNote(completedClosedFormComparisons, name, index),
-    ];
 }
 
 /**
@@ -1195,14 +1396,29 @@ function evidenceWindowAnchors(windowStatistics, recordedCount, convergenceWindo
  * @returns {number}
  */
 function estimateStart(generations, end, convergence, anchor) {
-    let first = anchor;
-    if (first === undefined && Number.isFinite(convergence.burnIn)) {
-        first = firstIndexAtOrAfter(generations, convergence.burnIn);
-    }
+    const first = evidenceFirst(generations, convergence, anchor);
     if (first !== undefined && end - first + 1 >= MINIMUM_WINDOW_ESTIMATE_POINTS) {
         return first;
     }
     return trailingWindowStart(generations, end, convergence.window);
+}
+
+/**
+ * The first index of the run's evidence window: a finished run's own grown
+ * window for the statistic (`evidenceWindowAnchors`), else the burn-in.
+ *
+ * @param {number[]} generations ascending.
+ * @param {{burnIn?: number|null}} convergence
+ * @param {number|undefined} anchor the statistic's grown window start.
+ * @returns {number|undefined} `undefined` when neither is known.
+ */
+function evidenceFirst(generations, convergence, anchor) {
+    if (anchor !== undefined) {
+        return anchor;
+    }
+    return Number.isFinite(convergence.burnIn)
+        ? firstIndexAtOrAfter(generations, convergence.burnIn)
+        : undefined;
 }
 
 /**
@@ -1267,10 +1483,7 @@ function windowEstimate(source, name, index = null) {
             !known ||
             !Number.isFinite(convergence.tolerance) ||
             estimate.standardError <= convergence.tolerance * NOISE_TOLERANCE_FRACTION,
-        evidence:
-            anchor !== undefined ||
-            (Number.isFinite(convergence.burnIn) &&
-                start === firstIndexAtOrAfter(generations, convergence.burnIn)),
+        evidence: start === evidenceFirst(generations, convergence, anchor),
     };
 }
 
@@ -1306,11 +1519,26 @@ function estimateCellText(source, name, index = null) {
  * @returns {string}
  */
 function formatEstimate(mean, standardError) {
-    const known = Number.isFinite(standardError) && standardError > 0;
-    const decimals = known && standardError < SMALL_STANDARD_ERROR ? 3 : 2;
-    return known
+    const decimals = estimateDecimals(standardError);
+    return Number.isFinite(standardError) && standardError > 0
         ? `${mean.toFixed(decimals)} ± ${standardError.toFixed(decimals)}`
         : mean.toFixed(decimals);
+}
+
+/**
+ * How many decimals a mean and its standard error are shown to: three
+ * when the standard error is under `SMALL_STANDARD_ERROR` so it does not
+ * round away, otherwise two.
+ *
+ * @param {number} standardError `NaN` or `undefined` when unknown.
+ * @returns {number}
+ */
+function estimateDecimals(standardError) {
+    return Number.isFinite(standardError) &&
+        standardError > 0 &&
+        standardError < SMALL_STANDARD_ERROR
+        ? 3
+        : 2;
 }
 
 /**
@@ -1333,109 +1561,6 @@ function completedEstimateCellText(name, index = null) {
         return undefined;
     }
     return formatEstimate(stats.mean, stats.standard_error);
-}
-
-/**
- * How well a statistic's mean is known at the shown generation, and how
- * far it lies from the prediction, as a tooltip clause.
- *
- * The mean covers the run's evidence window up to the shown generation
- * (`estimateStart`): at the last generation that is exactly the estimate
- * the monitor stopped on. Before the burn-in has passed it covers the
- * convergence window ending there. The prediction is averaged over the
- * same generations (`closedFormComparisons`), so a closed-form trajectory
- * that is still moving is compared like with like.
- *
- * @param {object|null} source as `windowEstimate`'s, with `comparisons`.
- * @param {string} name
- * @param {number|null} [index] the shown generation's index; the last
- *     when omitted or negative.
- * @returns {string} the clause, or `""` when there is too little to
- *     average or no convergence window to average over.
- */
-function estimateNote(source, name, index = null) {
-    const estimate = windowEstimate(source, name, index);
-    if (estimate === null) {
-        return "";
-    }
-    const { generations, comparisons } = source;
-    const { start, end, known, adequate } = estimate;
-    const decimals = WINDOW_STATISTIC_DECIMALS;
-    const span = generations[end] - generations[start] + 1;
-    const recorded =
-        estimate.count === span ? "" : `, ${estimate.count.toLocaleString()} recorded`;
-    const range =
-        `over generations ${generations[start].toLocaleString()}–` +
-        `${generations[end].toLocaleString()} ` +
-        `(${span.toLocaleString()} generations${recorded}`;
-    let note = known
-        ? `mean ${estimate.mean.toFixed(decimals)} ± ` +
-          `${estimate.standardError.toFixed(decimals)} ${range}; 1 SE` +
-          `${adequate ? "" : ", not yet noise-adequate"})`
-        : `mean ${estimate.mean.toFixed(decimals)} ${range}; ` +
-          "standard error known once the run has averaged)";
-    const entry = comparisons && comparisons[name];
-    if (entry && entry.predictedSums) {
-        const predicted =
-            (entry.predictedSums.sum[end + 1] - entry.predictedSums.sum[start]) /
-            estimate.count;
-        note += `; predicted ${predicted.toFixed(decimals)}`;
-        if (known && estimate.standardError > 0) {
-            const distance = (estimate.mean - predicted) / estimate.standardError;
-            const sign = distance < 0 ? "−" : "+";
-            note += `, ${sign}${Math.abs(distance).toFixed(PREDICTION_DISTANCE_DECIMALS)} SE`;
-        }
-    }
-    return note;
-}
-
-/**
- * The final report's own window estimate, as a tooltip clause, for a
- * reopened run that has no recorded history to compute one from.
- *
- * @param {string} name
- * @returns {string} the clause, or `""` when the report has none.
- */
-function reportEstimateNote(name) {
-    const stats = completedWindowStatistics && completedWindowStatistics[name];
-    if (!stats) {
-        return "";
-    }
-    const precision = stats.noise_adequate ? "" : ", not yet noise-adequate";
-    return (
-        `mean ${stats.mean.toFixed(WINDOW_STATISTIC_DECIMALS)} ± ` +
-        `${stats.standard_error.toFixed(WINDOW_STATISTIC_DECIMALS)} over the last ` +
-        `${stats.window.toLocaleString()} generations (1 SE${precision})`
-    );
-}
-
-/**
- * The spread of one statistic over the run's evidence window, as a tooltip
- * clause: how much it wanders from generation to generation at equilibrium,
- * which does not shrink with run length (design 6.8).
- *
- * @param {string} name
- * @returns {string} the clause, or `""` when the report has no window for it.
- */
-function sigmaNote(name) {
-    const stats = completedWindowStatistics && completedWindowStatistics[name];
-    if (!stats || !Number.isFinite(stats.standard_deviation)) {
-        return "";
-    }
-    return `σ ${stats.standard_deviation.toFixed(WINDOW_STATISTIC_DECIMALS)} per generation`;
-}
-
-/**
- * Join a row's tooltip clauses: the estimate, then the prediction
- * comparison, then the statistic's description. Empty clauses are left
- * out.
- *
- * @param {string[]} notes
- * @param {string} description
- * @returns {string}
- */
-function withNotes(notes, description) {
-    return [...notes, description].filter((part) => part).join(" — ");
 }
 
 /**
@@ -3545,7 +3670,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 buildPointMeter(
                     name,
                     completedFinalStatistics[name],
-                    withNotes(completedRowNotes(name), statisticDescription(name)),
+                    "",
                     completedEstimateCellText(name)
                 )
             );
@@ -3593,10 +3718,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 buildPointMeter(
                     name,
                     Number(value).toPrecision(REPORT_VALUE_SIGNIFICANT_DIGITS),
-                    withNotes(
-                        completedRowNotes(name, scrubIndex),
-                        statisticDescription(name)
-                    ),
+                    "",
                     completedEstimateCellText(name, scrubIndex)
                 )
             );
@@ -4132,6 +4254,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedFinalLiteratureVisuals = null;
         completedReportReason = null;
         completedConvergedOn = null;
+        completedWatchedStatistics = [];
         completedClosedFormComparisons = {};
         completedEstimateSource = null;
         completedConvergenceWindow = null;
@@ -4175,6 +4298,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         ]);
         completedReportReason = reason;
         completedConvergedOn = report.converged_on ?? null;
+        completedWatchedStatistics =
+            (payload.convergence && payload.convergence.statistics) || [];
         completedPair = [1, 2];
         completedFinalPairStatistics = payload.pairStatistics || null;
         completedPairFrameStatistics = null;
@@ -4225,7 +4350,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 buildPointMeter(
                     name,
                     value,
-                    withNotes(completedRowNotes(name), statisticDescription(name)),
+                    "",
                     completedEstimateCellText(name)
                 )
             );

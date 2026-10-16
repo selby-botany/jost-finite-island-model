@@ -4336,6 +4336,7 @@ def test_open_run_carries_the_convergence_window_and_tolerance(tmp_path: Path) -
         "window": result["generationCount"] - burn_in,
         "burnIn": burn_in,
         "tolerance": 0.02,
+        "statistics": ["D", "G_ST"],
     }
 
 

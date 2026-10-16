@@ -406,12 +406,10 @@ function wireLiveDemePairSelector(demeCount) {
  * shape) should leave whatever the table already shows alone rather
  * than throwing trying to read `undefined[name]`.
  *
- * A statistic with a prediction (the closed-form trajectory, else the
- * predicted equilibrium) also gets, first in its tooltip, observed minus
- * predicted at this tick's generation and the trajectory-so-far's mean
- * squared error (`closedFormComparisons`, `run-view-completed.js`),
- * after its mean over the convergence window ending at this tick and how
- * far that mean lies from the prediction (`estimateNote`).
+ * A statistic with a per-generation history shows its average over the
+ * run's evidence window once the burn-in has passed (`estimateCellText`);
+ * its tooltip gives that and the tick's own value. What the numbers mean is
+ * explained in the run messages once the run has finished.
  *
  * @param {Record<string, string> | undefined} statistics
  * @param {number} [generation] the tick's generation; the latest when omitted.
@@ -420,18 +418,11 @@ function renderLiveStatistics(statistics, generation) {
     if (!statistics) {
         return;
     }
-    const comparisons = closedFormComparisons(
-        liveTrajectoryGenerations,
-        liveTrajectoryHistories,
-        liveClosedForm,
-        liveEquilibriumReference
-    );
     const index =
         generation === undefined ? null : liveTrajectoryGenerations.indexOf(generation);
     const estimateSource = {
         generations: liveTrajectoryGenerations,
         histories: liveTrajectoryHistories,
-        comparisons,
         convergence: liveConvergence,
         anchors: {},
         sums: {},
@@ -443,13 +434,7 @@ function renderLiveStatistics(statistics, generation) {
             buildPointMeter(
                 name,
                 statistics[name],
-                withNotes(
-                    [
-                        estimateNote(estimateSource, name, index),
-                        closedFormNote(comparisons, name, index),
-                    ],
-                    statisticDescription(name)
-                ),
+                "",
                 estimateCellText(estimateSource, name, index)
             )
         );

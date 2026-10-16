@@ -17901,15 +17901,15 @@ option of the example is kept; only the locus count is raised to `LOCI`
 
 # gui.test\_closed\_form\_tooltip\_screen
 
-Headless functional tests for the prediction comparison in statistic tooltips.
+Headless functional tests for the prediction comparison in the run messages.
 
-A statistic with a prediction shows, first in its statistics-row tooltip,
-`ΔXₚ` (observed minus predicted at the displayed generation) and the
-running mean squared error of the trajectory so far. The prediction is
-the closed-form expected trajectory when the model has one (`D`, `G_ST`,
-`H_S`, `H_T`, `H_ST`), otherwise the predicted equilibrium (`D`, `G_ST`,
-`E_ST`): a run with stochastic migrants has no closed-form trajectory but
-is still compared.
+A statistic with a prediction gets a sentence in the run's messages that
+compares its average over the evidence window with the prediction averaged
+over the same generations, and gives the mean squared difference over the
+whole run. The prediction is the closed-form expected trajectory when the
+model has one (`D`, `G_ST`, `H_S`, `H_T`, `H_ST`), otherwise the predicted
+equilibrium (`D`, `G_ST`, `E_ST`): a run with stochastic migrants has no
+closed-form trajectory but is still compared.
 
 <a id="gui.test_closed_form_tooltip_screen.test_the_comparison_arithmetic_on_a_known_trajectory"></a>
 
@@ -17920,7 +17920,7 @@ def test_the_comparison_arithmetic_on_a_known_trajectory(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Hand-computed difference and MSE; a short history is left out.
+Hand-computed averages and squared difference; a short history is left out.
 
 <a id="gui.test_closed_form_tooltip_screen.test_a_completed_runs_predicted_rows_carry_the_comparison"></a>
 
@@ -17930,8 +17930,8 @@ Hand-computed difference and MSE; a short history is left out.
 @pytest.mark.parametrize(
     ("migrant_sampling", "basis"),
     [
-        ("continuous", "vs closed-form trajectory"),
-        ("stochastic", "vs predicted equilibrium"),
+        ("continuous", "(closed-form trajectory)"),
+        ("stochastic", "(predicted equilibrium "),
     ],
 )
 def test_a_completed_runs_predicted_rows_carry_the_comparison(
@@ -17939,7 +17939,7 @@ def test_a_completed_runs_predicted_rows_carry_the_comparison(
         migrant_sampling: str, basis: str) -> None
 ```
 
-After a real run, D's tooltip leads with ΔDₚ and the MSE; K_ST's has none.
+After a real run, D's messages compare it with its prediction; K_ST's do not.
 
 Stochastic migrants put the run outside the closed-form trajectory's
 model, so D is compared with its predicted equilibrium instead.
@@ -19708,7 +19708,7 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
 
 Every averaged number the panel shows equals the report's.
 
-For each watched statistic: the tooltip estimate, the last point of the
+For each watched statistic: the estimate, the last point of the
 trailing mean and of the cumulative mean, and where the cumulative mean
 starts, all against `report.json`.
 
@@ -25249,16 +25249,16 @@ def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None
 Between grid points it is linear interpolation; before the first and
 after the last it holds the end value.
 
-<a id="gui.test_running_screen.test_completed_row_tooltip_shows_the_trailing_window_mean"></a>
+<a id="gui.test_running_screen.test_completed_row_tooltip_gives_the_window_mean_and_the_last_value"></a>
 
-#### test\_completed\_row\_tooltip\_shows\_the\_trailing\_window\_mean
+#### test\_completed\_row\_tooltip\_gives\_the\_window\_mean\_and\_the\_last\_value
 
 ```python
-def test_completed_row_tooltip_shows_the_trailing_window_mean(
+def test_completed_row_tooltip_gives_the_window_mean_and_the_last_value(
         _isolate_gui_preferences: Path) -> None
 ```
 
-A statistic row's own hover title leads with its window mean and SE.
+A statistic row's own hover title gives its window mean, SE and last value.
 
 Needs an evidence window of at least `MINIMUM_WINDOW_VALUES` values --
 shorter than that, `report_for_state` has nothing to report
@@ -26992,13 +26992,13 @@ def test_the_cumulative_mean_its_start_and_the_window_marker(
 
 Averaging and legends agree with a controlled number formatter.
 
-<a id="gui.test_trailing_mean_screen.test_the_estimate_note_text"></a>
+<a id="gui.test_trailing_mean_screen.test_the_window_estimates"></a>
 
-#### test\_the\_estimate\_note\_text
+#### test\_the\_window\_estimates
 
 ```python
-def test_the_estimate_note_text(window: webview.Window,
-                                drive: Callable[..., Any]) -> None
+def test_the_window_estimates(window: webview.Window,
+                              drive: Callable[..., Any]) -> None
 ```
 
 Trailing, anchored, scrubbed, sparse and inadequate estimates read right.
@@ -27014,10 +27014,10 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path
 
 Pre-seed Settings for a fast run long enough to estimate a window mean.
 
-`fast_scalar_run_settings`' window of 4 is shorter than the eight
-points an estimate needs, so this one uses a window of 8, and a
-tolerance no run meets, so the run goes to its 40-generation cap: long
-enough past the one-window burn-in for a cumulative mean.
+The default burn-in (several relaxation times) is longer than a
+40-generation cap, so this one sets a burn-in of 8, and a tolerance no
+run meets, so the run goes to its cap: 32 generations of evidence
+window, more than the eight points an estimate needs.
 
 <a id="gui.test_trailing_mean_screen.test_a_completed_run_leads_with_its_estimate_and_offers_the_averages"></a>
 
@@ -27028,7 +27028,7 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
         estimable_run_settings: Path, window: webview.Window) -> None
 ```
 
-D's tooltip leads with its mean ± SE; each display redraws and persists.
+D's cell shows its mean ± SE; each display redraws and persists.
 
 <a id="gui.test_trailing_mean_screen.test_the_sigma_display_is_built_from_the_evidence_window"></a>
 
@@ -27039,7 +27039,7 @@ def test_the_sigma_display_is_built_from_the_evidence_window(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Band, tau_int and the sigma tooltip clause come from the report's window.
+Band and tau_int come from the report's evidence window.
 
 <a id="gui.test_trailing_mean_screen.test_the_band_width_selector_applies_and_is_remembered"></a>
 
@@ -27051,6 +27051,17 @@ def test_the_band_width_selector_applies_and_is_remembered(
 ```
 
 Choosing a width updates the page state and the saved layout.
+
+<a id="gui.test_trailing_mean_screen.test_the_statistic_messages_explain_each_statistic_in_sentences"></a>
+
+#### test\_the\_statistic\_messages\_explain\_each\_statistic\_in\_sentences
+
+```python
+def test_the_statistic_messages_explain_each_statistic_in_sentences(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Watched statistics lead; the others, spread and meaning follow as details.
 
 <a id="gui.test_trajectory_history"></a>
 

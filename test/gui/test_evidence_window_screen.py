@@ -84,7 +84,7 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
 ) -> None:
     """Every averaged number the panel shows equals the report's.
 
-    For each watched statistic: the tooltip estimate, the last point of the
+    For each watched statistic: the estimate, the last point of the
     trailing mean and of the cumulative mean, and where the cumulative mean
     starts, all against `report.json`.
     """
@@ -118,7 +118,7 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
             const cumulative = cumulativeMeanSeries(
                 histories[name], start, tauInt);
             result[name] = {{
-                note: estimateNote(source, name),
+                estimate: windowEstimate(source, name),
                 trailing: trailing.mean[trailing.mean.length - 1],
                 cumulative: cumulative.mean[cumulative.mean.length - 1],
                 cumulativeStart: start,
@@ -144,7 +144,13 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
             f"{expected['mean']:.{decimals}f} \u00b1 "
             f"{expected['standard_error']:.{decimals}f}"
         )
-        # Four decimals, as the tooltip shows them.
-        assert f"mean {expected['mean']:.4f}" in shown["note"]
-        assert f"± {expected['standard_error']:.4f}" in shown["note"]
-        assert f"{burn_in:,}\u2013{recorded - 1:,}" in shown["note"]
+        # The estimate behind it: the report's mean and standard error over
+        # the report's own window, an evidence window.
+        estimate = shown["estimate"]
+        assert estimate["evidence"] is True
+        assert estimate["mean"] == pytest.approx(expected["mean"], abs=1e-9)
+        assert estimate["standardError"] == pytest.approx(
+            expected["standard_error"], rel=1e-3
+        )
+        assert estimate["start"] == expected["window_start"]
+        assert estimate["end"] == expected["window_end"]

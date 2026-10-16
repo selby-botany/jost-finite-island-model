@@ -747,10 +747,10 @@ def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None:
         assert actual[name] == pytest.approx(list(expected), abs=1e-12)
 
 
-def test_completed_row_tooltip_shows_the_trailing_window_mean(
+def test_completed_row_tooltip_gives_the_window_mean_and_the_last_value(
     _isolate_gui_preferences: Path,
 ) -> None:
-    """A statistic row's own hover title leads with its window mean and SE.
+    """A statistic row's own hover title gives its window mean, SE and last value.
 
     Needs an evidence window of at least `MINIMUM_WINDOW_VALUES` values --
     shorter than that, `report_for_state` has nothing to report
@@ -795,9 +795,8 @@ def test_completed_row_tooltip_shows_the_trailing_window_mean(
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert settled is not None
-    assert " — mean " in settled
-    assert " over generations " in settled
-    assert "; 1 SE" in settled
+    assert settled.startswith("D = ")
+    assert "(mean \u00b1 1 standard error); last generation " in settled
 
 
 def test_trajectory_panel_updates_live_while_a_run_is_still_going(

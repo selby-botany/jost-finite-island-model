@@ -608,6 +608,22 @@ textarea::placeholder {
     color: var(--fim-muted);
 }
 
+.run-message-details {
+    display: block;
+}
+
+.run-message-details summary {
+    cursor: pointer;
+}
+
+.run-message-detail-list {
+    margin: 0.35rem 0 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
 .run-message-dot {
     flex: none;
     width: 0.55rem;

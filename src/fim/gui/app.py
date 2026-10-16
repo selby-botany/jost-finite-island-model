@@ -1061,11 +1061,12 @@ def _convergence_reference_payload(
             evidence window is not yet known.
 
     Returns:
-        `{"window", "burnIn", "tolerance"}`: `window` is the evidence
+        `{"window", "burnIn", "tolerance", "statistics"}`: `window` is the evidence
         window's length in generations when the run has finished and got
         past its burn-in, otherwise the span of the monitor's first check
         (what a live run averages over until its burn-in ends); `burnIn`
-        is where averaging begins; `tolerance` is the precision.
+        is where averaging begins; `tolerance` is the precision; `statistics`
+        lists the statistics the convergence rule watches.
     """
     # The span the monitor first judged: its first check,
     # `first_check_relaxation_times` of `tau` (at least the floor).
@@ -1080,10 +1081,12 @@ def _convergence_reference_payload(
     # A finished run past its burn-in has one real evidence window.
     if generation_count is not None and generation_count > params.convergence_burn_in:
         window = generation_count - params.convergence_burn_in
+    watched = params.convergence_statistic
     return {
         "window": window,
         "burnIn": params.convergence_burn_in,
         "tolerance": params.precision,
+        "statistics": [watched] if isinstance(watched, str) else list(watched),
     }
 
 

@@ -1,12 +1,12 @@
-"""Headless functional tests for the prediction comparison in statistic tooltips.
+"""Headless functional tests for the prediction comparison in the run messages.
 
-A statistic with a prediction shows, first in its statistics-row tooltip,
-`ΔXₚ` (observed minus predicted at the displayed generation) and the
-running mean squared error of the trajectory so far. The prediction is
-the closed-form expected trajectory when the model has one (`D`, `G_ST`,
-`H_S`, `H_T`, `H_ST`), otherwise the predicted equilibrium (`D`, `G_ST`,
-`E_ST`): a run with stochastic migrants has no closed-form trajectory but
-is still compared.
+A statistic with a prediction gets a sentence in the run's messages that
+compares its average over the evidence window with the prediction averaged
+over the same generations, and gives the mean squared difference over the
+whole run. The prediction is the closed-form expected trajectory when the
+model has one (`D`, `G_ST`, `H_S`, `H_T`, `H_ST`), otherwise the predicted
+equilibrium (`D`, `G_ST`, `E_ST`): a run with stochastic migrants has no
+closed-form trajectory but is still compared.
 """
 
 from __future__ import annotations
@@ -25,14 +25,13 @@ pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
-# The tooltip uses a true minus sign (U+2212), not a hyphen.
-_MINUS = "\u2212"
-
 # A sampled closed form (the unequal-sizes shape) on the same grid as the
-# history, so the expected values need no interpolation: differences 0,
-# -0.05, +0.05, -0.1. Running MSE: 0.00375 over all four, 0.001667 over
-# the first three. Against a predicted equilibrium of 0.25 instead:
-# differences -0.15, -0.05, +0.05, +0.15, MSE 0.0125.
+# history, so the expected values need no interpolation: the prediction
+# averages 0.275 over the four generations and the history 0.25, so the
+# averages differ by 0.025 (5.0 standard errors of 0.005). Squared
+# differences 0, 0.0025, 0.0025, 0.01 average 0.00375. Against a predicted
+# equilibrium of 0.25 instead: squared differences 0.0225, 0.0025, 0.0025,
+# 0.0225 average 0.0125, and the averages agree.
 _COMPARISON = """
 (() => {
     const generations = [0, 1, 2, 3];
@@ -48,15 +47,17 @@ _COMPARISON = """
     };
     const comparisons = closedFormComparisons(generations, histories, closedForm);
     const fallback = closedFormComparisons(generations, histories, null, {D: "0.25"});
+    const estimate = {
+        mean: 0.25, standardError: 0.005, known: true, start: 0, end: 3, count: 4,
+    };
     return {
         names: Object.keys(comparisons),
-        last: closedFormNote(comparisons, "D"),
-        second: closedFormNote(comparisons, "D", 2),
-        none: closedFormNote(comparisons, "K_ST"),
+        sentence: predictionSentence("D", comparisons.D, estimate),
+        none: predictionSentence("K_ST", comparisons.K_ST, estimate),
+        noEstimate: predictionSentence("D", comparisons.D, null),
         empty: Object.keys(closedFormComparisons(generations, histories, null)),
         fallbackNames: Object.keys(fallback),
-        fallback: closedFormNote(fallback, "D"),
-        placed: withNotes(["", closedFormNote(comparisons, "D")], "description"),
+        fallback: predictionSentence("D", fallback.D, estimate),
     };
 })()
 """
@@ -65,29 +66,33 @@ _COMPARISON = """
 def test_the_comparison_arithmetic_on_a_known_trajectory(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Hand-computed difference and MSE; a short history is left out."""
+    """Hand-computed averages and squared difference; a short history is left out."""
     settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_COMPARISON)
 
     assert settled["names"] == ["D"]
-    assert settled["last"] == (
-        f"ΔDₚ = {_MINUS}0.100, MSE = 0.00375 (vs closed-form trajectory; "
-        "MSE over 4 recorded generations to generation 3)"
+    assert settled["sentence"] == (
+        "The prediction for D (closed-form trajectory), averaged over the same "
+        "generations, is 0.275. This run's average differs from it by 0.025, "
+        "which is 5.0 standard errors. Over the whole run the mean squared "
+        "difference from the prediction is 0.00375."
     )
-    assert settled["second"].startswith("ΔDₚ = +0.0500, MSE = 0.00167 ")
-    assert "over 3 recorded generations to generation 2" in settled["second"]
     assert settled["none"] == ""
+    assert settled["noEstimate"] == ""
     assert settled["empty"] == []
     assert settled["fallbackNames"] == ["D"]
-    assert settled["fallback"].startswith("ΔDₚ = +0.150, MSE = 0.0125 ")
-    assert "vs predicted equilibrium 0.250" in settled["fallback"]
-    assert settled["placed"].endswith(" — description")
+    assert settled["fallback"] == (
+        "The prediction for D (predicted equilibrium 0.250), averaged over the "
+        "same generations, is 0.250. This run's average differs from it by "
+        "0.000, which is 0.0 standard errors. Over the whole run the mean "
+        "squared difference from the prediction is 0.0125."
+    )
 
 
 @pytest.mark.parametrize(
     ("migrant_sampling", "basis"),
     [
-        ("continuous", "vs closed-form trajectory"),
-        ("stochastic", "vs predicted equilibrium"),
+        ("continuous", "(closed-form trajectory)"),
+        ("stochastic", "(predicted equilibrium "),
     ],
 )
 def test_a_completed_runs_predicted_rows_carry_the_comparison(
@@ -96,7 +101,7 @@ def test_a_completed_runs_predicted_rows_carry_the_comparison(
     migrant_sampling: str,
     basis: str,
 ) -> None:
-    """After a real run, D's tooltip leads with ΔDₚ and the MSE; K_ST's has none.
+    """After a real run, D's messages compare it with its prediction; K_ST's do not.
 
     Stochastic migrants put the run outside the closed-form trajectory's
     model, so D is compared with its predicted equilibrium instead.
@@ -119,7 +124,8 @@ def test_a_completed_runs_predicted_rows_carry_the_comparison(
         "state: window.fim.getRunViewState(), "
         "pending: window.__fimScrubberPending, "
         "D: document.getElementById('stat-D').title, "
-        "K_ST: document.getElementById('stat-K_ST').title"
+        "messages: Array.from(document.querySelectorAll('#run-messages li'))"
+        ".map((item) => item.textContent).join(' ')"
         "})"
     )
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
@@ -145,9 +151,9 @@ def test_a_completed_runs_predicted_rows_carry_the_comparison(
     webview.start(_drive)
     settled = outcome.get(timeout=120)
 
-    assert " — ΔDₚ = " in settled["D"]
-    assert "MSE = " in settled["D"]
-    assert basis in settled["D"]
-    # The comparison comes right after the value, before the description.
-    assert settled["D"].index("ΔDₚ") < settled["D"].index("allelic differentiation")
-    assert "ₚ" not in settled["K_ST"]
+    assert "The prediction for D " in settled["messages"]
+    assert basis in settled["messages"]
+    assert "the mean squared difference from the prediction is " in settled["messages"]
+    assert "The prediction for K_ST" not in settled["messages"]
+    # The tooltip is the headline only; the comparison lives in the messages.
+    assert "prediction" not in settled["D"]
