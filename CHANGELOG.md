@@ -1068,6 +1068,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The statistics panel shows averages, and the explanations are messages.**
+  A statistic's cell now shows its mean and standard error over the run's
+  evidence window ("0.29 ± 0.06"), not the last generation's value, which is
+  one noisy draw; the tooltip gives the average and the last value, labeled.
+  What used to be crammed into the tooltip is now full sentences in the run
+  messages: each watched statistic's average and whether it meets the target,
+  one sentence on what a settled statistic still does, and a collapsed
+  "Details for each statistic" group (meaning, spread, comparison with the
+  prediction). The messages sit between the graphs and the results tables
+  instead of at the bottom of the page, and the statistics a run watches are
+  underlined in the table. A live statistic still inside its burn-in keeps its
+  last value, dimmed.
+- **`n_replicates` and `p_0` are named literally in the configuration
+  reference.** Their headings no longer use `<sub>` markup, so searching for
+  `n_replicates` finds its section, and a settings index near the top lists
+  every setting with a link. The anchors are now `#n_replicates` and `#p_0`.
+  The examples that pin `n_replicates: 1` say why, and the Wright-Takahata
+  example explains why a settled statistic's line still wanders.
+
 - **Replicate seeds come from `SeedSequence`.** Replicate `i` of a batch uses
   child `i` of `numpy.random.SeedSequence(seed)` (a 64-bit integer), not
   `seed + i`. Two batches with nearby seeds used to share replicates (`seed=100`'s
@@ -1557,6 +1576,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   when it is created.
 
 ### Fixed
+
+- **Statistics can be hidden and shown during a live run again.** Every
+  progress tick replaced the cells of every statistics row, removing the
+  element under a pointer between its press and its release, so the browser
+  dropped the click and the faster the run the more clicks were lost. Rows now
+  update their cells in place.
+- **The trajectory graph averages over the run's evidence window.** The
+  trailing mean used the span of the monitor's first check (3,370 generations
+  in the Wright-Takahata example) while the monitor had judged the whole
+  13,487-generation evidence window, so a converged statistic swung visibly
+  and nothing on screen reproduced the report. The trailing mean, the
+  cumulative mean and the statistics cells now end on the report's mean and
+  standard error.
+- **Axis labels no longer overlap.** "20000" was printed over "gen 21910".
+  Every graph's tick labels are now left off when they would touch another
+  label or a corner label, and runs of 100,000 generations or more label
+  whole thousands as "200k".
 
 - **A shutdown test no longer depends on the host's old test output.** The
   nested pytest run in `test_finished_worker_can_wait_for_a_peer_beyond_
