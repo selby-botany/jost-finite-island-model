@@ -622,7 +622,7 @@ def test_a_single_replicate_run_gets_a_per_generation_results_table(
     first = settled["firstRowCells"]
     assert first[0] == "0"
     assert settled["firstRowClass"] == "row-initial"
-    hit_cap = settled["outcome"].startswith("hit the cap")
+    hit_cap = settled["outcome"].lower().startswith("hit the cap")
     assert ("row-warning" in settled["lastRowClass"]) is hit_cap
 
 
@@ -688,6 +688,51 @@ def test_table_headers_toggle_and_highlight_their_statistic(
     assert settled["hidden"] == [True, True, True]
     assert settled["pressedAfter"] == "false"
     assert settled["restored"] is False
+
+
+def test_capped_run_warns_in_both_message_and_final_generation_row(
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A real capped run keeps its raw reason and never looks converged."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + """
+            window.fim.applyLoadedRunSettings({
+                runSettings: {n_replicates: "1", max_generations: "1"}
+            });
+            document.getElementById('run-button').click();
+            """
+        ),
+        read="""({
+            state: window.fim.getRunViewState(),
+            pending: window.__fimScrubberPending,
+            reason: completedReportReason,
+            message: document.querySelector('#run-messages .run-message')?.textContent,
+            warning: document.querySelector(
+                '#run-messages .run-message'
+            )?.classList.contains('run-message-warning'),
+            finalRow: document.querySelector(
+                '#run-results-table-body tr:last-child'
+            )?.className,
+            finalLabel: document.querySelector(
+                '#run-results-table-body tr:last-child [role=img]'
+            )?.getAttribute('aria-label'),
+        })""",
+        is_ready=lambda value: (
+            value is not None
+            and value["state"] == "completed"
+            and value["pending"] == 0
+            and value.get("finalRow") is not None
+        ),
+    )
+    assert settled["reason"] == "hit the cap"
+    assert settled["message"] == "Hit the cap: generation 1"
+    assert settled["warning"] is True
+    assert settled["finalRow"] == "row-warning"
+    assert settled["finalLabel"] == "Not converged (hit the cap)"
 
 
 def test_not_converged_row_gets_a_warning_background_and_a_text_mark(

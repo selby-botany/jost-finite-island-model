@@ -32,6 +32,7 @@ from typing import Any
 
 import pytest
 import webview
+import yaml
 from conftest import poll_or_fail
 
 from fim.gui import app as app_module
@@ -182,6 +183,204 @@ def _load_example(window: webview.Window, wait: Callable[..., Any]) -> None:
         "&& (window.__fimValidationPending || 0) === 0",
         "the example to load",
     )
+
+
+def _open_run_settings(window: webview.Window, wait: Callable[..., Any]) -> None:
+    """Open the per-run editor and wait until effective values are visible."""
+    window.evaluate_js(
+        "window.__fimSettingsLoaded = false;"
+        "document.getElementById('configure-run-settings-button').click();"
+    )
+    wait(
+        "window.__fimSettingsLoaded === true "
+        "&& document.getElementById('modal-settings').open",
+        "the per-run editor",
+    )
+
+
+def _apply_run_settings(window: webview.Window, wait: Callable[..., Any]) -> None:
+    """Apply the editor and wait for validation and rendering to finish."""
+    window.evaluate_js(
+        "window.__fimRunSettingsNoticeSettled = false;"
+        "document.getElementById('settings-save-button').click();"
+    )
+    wait(
+        "window.__fimRunSettingsNoticeSettled === true",
+        "the per-run edit to settle",
+    )
+
+
+def test_run_settings_can_be_edited_restored_and_replaced_with_defaults(
+    _isolate_gui_preferences: Path,
+    window: webview.Window,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edits reach Run, cancel is inert, and defaults and originals stay separate."""
+    _auto_200_settings(_isolate_gui_preferences)
+    captured: list[SimulationParams] = []
+
+    def capture(
+        self: Api, params: SimulationParams, *_args: Any, **_kwargs: Any
+    ) -> dict[str, Any]:
+        """Record the submitted configuration without starting a simulation."""
+        captured.append(params)
+        return {"ok": False, "message": _REFUSED}
+
+    monkeypatch.setattr(Api, "_start_scalar_run", capture)
+
+    def steps(wait: Callable[..., Any]) -> dict[str, Any]:
+        _load_example(window, wait)
+        _open_run_settings(window, wait)
+        assert window.evaluate_js(
+            "document.getElementById('settings-preferences-fields').hidden"
+        )
+        window.evaluate_js(
+            "document.getElementById('settings-precision').value = '0.1';"
+        )
+        _apply_run_settings(window, wait)
+        assert window.evaluate_js("collectFormValues().precision") == "0.1"
+        window.evaluate_js(
+            "window.fim.showScreen('screen-run');"
+            "document.getElementById('run-button').click();"
+        )
+        wait(
+            f"document.getElementById('run-banner').textContent.includes({_REFUSED!r})",
+            "the edited configuration to reach Run",
+        )
+        window.evaluate_js("window.fim.showConfigureScreen();")
+        _open_run_settings(window, wait)
+        window.evaluate_js(
+            "document.getElementById('settings-precision').value = '0.3';"
+            "document.getElementById('modal-settings').close();"
+        )
+        assert window.evaluate_js("collectFormValues().precision") == "0.1"
+        _open_run_settings(window, wait)
+        window.evaluate_js(
+            "document.getElementById('settings-restore-loaded').click();"
+        )
+        _apply_run_settings(window, wait)
+        restored = window.evaluate_js("collectFormValues()")
+        _open_run_settings(window, wait)
+        window.evaluate_js("document.getElementById('settings-use-defaults').click();")
+        wait("window.__fimSettingsLoaded === true", "saved Settings to fill the editor")
+        _apply_run_settings(window, wait)
+        defaults = window.evaluate_js("collectFormValues()")
+        # The original remains restorable after applying defaults.
+        _open_run_settings(window, wait)
+        window.evaluate_js(
+            "document.getElementById('settings-restore-loaded').click();"
+        )
+        _apply_run_settings(window, wait)
+        return {"restored": restored, "defaults": defaults}
+
+    result = _drive(window, steps)
+    (params,) = captured
+    assert params.precision == 0.1
+    assert params.n_replicates == 1
+    assert result["restored"]["engine_backend"] == "lineal"
+    assert result["restored"]["n_replicates"] == "1"
+    assert result["restored"]["precision"] != "0.1"
+    assert result["defaults"]["engine_backend"] == "auto"
+    assert result["defaults"]["n_replicates"] == "200"
+    assert "max_workers" not in result["defaults"]
+    settings = _settings_on_disk(_isolate_gui_preferences)
+    assert settings["n_replicates"] == "200"
+    assert settings["engine_backend"] == "auto"
+    assert settings["precision"] != "0.1"
+
+
+def test_edited_run_settings_are_saved_in_exported_yaml(
+    window: webview.Window, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The Save configuration action exports per-run edits, not saved defaults."""
+    saved_path = tmp_path / "edited-run.yaml"
+    monkeypatch.setattr(
+        window, "create_file_dialog", lambda *_args, **_kwargs: (str(saved_path),)
+    )
+
+    def steps(wait: Callable[..., Any]) -> None:
+        _load_example(window, wait)
+        _open_run_settings(window, wait)
+        window.evaluate_js(
+            "document.getElementById('settings-precision').value = '0.1';"
+        )
+        _apply_run_settings(window, wait)
+        window.evaluate_js(
+            "window.__fimEditedRunSaved = false;"
+            "window.fim.saveConfiguration().then(() => {"
+            "window.__fimEditedRunSaved = true; });"
+        )
+        wait("window.__fimEditedRunSaved === true", "the edited YAML to be saved")
+
+    _drive(window, steps)
+    saved = yaml.safe_load(saved_path.read_text(encoding="utf-8"))
+    assert saved["precision"] == 0.1
+    assert saved["n_replicates"] == 1
+
+
+def test_run_settings_editor_is_available_without_a_loaded_configuration(
+    window: webview.Window,
+) -> None:
+    """A fresh configuration can override defaults and rejects invalid edits."""
+
+    def steps(wait: Callable[..., Any]) -> None:
+        window.evaluate_js("window.fim.showConfigureScreen();")
+        _open_run_settings(window, wait)
+        assert window.evaluate_js(
+            "document.getElementById('settings-restore-loaded').disabled"
+        )
+        before = window.evaluate_js("collectFormValues()")
+        window.evaluate_js(
+            "document.getElementById('settings-n_replicates').value = '0';"
+        )
+        _apply_run_settings(window, wait)
+        assert window.evaluate_js("document.getElementById('modal-settings').open")
+        assert window.evaluate_js(
+            "document.getElementById('settings-banner').textContent"
+        )
+        assert window.evaluate_js("collectFormValues()") == before
+        window.evaluate_js(
+            "document.getElementById('settings-n_replicates').value = '1';"
+            "document.getElementById('settings-max_generations').value = '100';"
+        )
+        _apply_run_settings(window, wait)
+        assert not window.evaluate_js("document.getElementById('modal-settings').open")
+        assert window.evaluate_js("collectFormValues().n_replicates") == "1"
+
+    _drive(window, steps)
+
+
+def test_applying_defaults_reports_an_underivable_cap_without_changing_the_run(
+    _isolate_gui_preferences: Path, window: webview.Window
+) -> None:
+    """A zero-migration, zero-mutation model needs an explicit cap, not auto."""
+    _auto_200_settings(_isolate_gui_preferences)
+
+    def steps(wait: Callable[..., Any]) -> None:
+        _load_example(window, wait)
+        window.evaluate_js(
+            "document.getElementById('field-m_rate').value = '0';"
+            "document.getElementById('field-mu_value').value = '0';"
+        )
+        _open_run_settings(window, wait)
+        window.evaluate_js(
+            "document.getElementById('settings-max_generations').value = '1';"
+        )
+        _apply_run_settings(window, wait)
+        assert window.evaluate_js("collectFormValues().max_generations") == "1"
+        _open_run_settings(window, wait)
+        window.evaluate_js("document.getElementById('settings-use-defaults').click();")
+        wait("window.__fimSettingsLoaded === true", "the default settings snapshot")
+        _apply_run_settings(window, wait)
+        assert window.evaluate_js("document.getElementById('modal-settings').open")
+        message = window.evaluate_js(
+            "document.getElementById('settings-banner').textContent"
+        )
+        assert "cannot derive max_generations" in message
+        assert window.evaluate_js("collectFormValues().max_generations") == "1"
+        assert window.evaluate_js("collectFormValues().n_replicates") == "1"
+
+    _drive(window, steps)
 
 
 def test_loading_a_lineal_example_runs_it_without_changing_settings(

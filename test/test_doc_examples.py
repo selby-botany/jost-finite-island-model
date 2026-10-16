@@ -19,6 +19,7 @@ platform rounding in archived evidence-window and Shannon-entropy floats.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -127,6 +128,43 @@ def _output_files(directory: Path) -> list[str]:
 def _read_json(path: Path) -> Any:
     """Parse one JSON file."""
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_founder_sharing_example_has_dynamics_and_evidence_for_every_measure() -> None:
+    """The teaching example must not regress to a constant one-generation check."""
+    directory = (
+        EXAMPLES_DIRECTORY
+        / "literature-distance-statistics-from-an-explicit-founder-split"
+    )
+    manifest = _read_json(directory / "manifest.json")
+    report = _read_json(directory / "report.json")
+    params = manifest["parameters"]
+    watched = {"D", "G_ST", "A_CGD", "Delta", "MI"}
+    assert set(params["convergence_statistic"]) == watched
+    assert params["convergence_combinator"] == "all"
+    assert params["m"] > 0 and params["mu"] > 0
+    assert params["n_replicates"] == 1
+    assert all(len(deme[0]) > 1 for deme in params["p_0"])
+    assert report["converged"] is True
+    assert report["reason"] == "statistic converged"
+    assert set(report["converged_on"]) == watched
+    assert (
+        params["convergence_burn_in"] < report["generation"] < params["max_generations"]
+    )
+    for name in watched:
+        evidence = report["window_statistics"][name]
+        assert evidence["noise_adequate"]
+        assert evidence["effective_sample_size"] >= evidence["minimum_ess"]
+        assert evidence["standard_error"] <= evidence["target_standard_error"]
+    histories: list[dict[str, Any]] = []
+    for archive in sorted(directory.glob("convergence.jsonl.gz.part-*")):
+        with gzip.open(archive, "rt", encoding="utf-8") as stream:
+            histories.extend(json.loads(line) for line in stream)
+    assert histories[0]["generation"] == 0
+    assert histories[-1]["generation"] == report["generation"]
+    for name in watched:
+        assert len({entry[name] for entry in histories}) > 1, name
+    assert max(entry["A_CGD"] for entry in histories) > 1
 
 
 def test_dear_nolan_high_configuration_matches_its_derivation() -> None:

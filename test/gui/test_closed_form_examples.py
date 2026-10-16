@@ -50,8 +50,8 @@ EXPECTED: dict[str, str | None] = {
     # Unequal deme sizes and an explicit matrix: the full identity matrix.
     "unequal-island-sizes-with-a-migration-hub": SAMPLED,
     "stepping-stone-spatial-migration": SAMPLED,
-    # No migration and no mutation: nothing to relax toward.
-    "literature-distance-statistics-from-an-explicit-founder-split": NONE,
+    # Partially shared alleles, scalar migration and mutation.
+    "literature-distance-statistics-from-an-explicit-founder-split": ISLAND,
     # Equal sizes, scalar m: the two-variable form, from the run's own start.
     "equilibrium-split-founding": ISLAND,
     # migrant_sampling: stochastic

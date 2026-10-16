@@ -74,6 +74,8 @@ const settingsSaveButton = document.getElementById("settings-save-button");
 const settingsExpertFields = document.getElementById("settings-expert-fields");
 const settingsExpertResetAll = document.getElementById("settings-expert-reset-all");
 
+let editingRunSettings = false;
+
 // The Expert Settings, as listed by `Api.get_expert_settings_info`; filled
 // when the dialog opens. Each input's id is `settings-expert_<name>`.
 let expertSettingsInfo = [];
@@ -331,6 +333,60 @@ async function loadSettingsDialog() {
 }
 
 /**
+ * Scope the shared execution controls to defaults or the pending run.
+ * @param {boolean} forRun
+ */
+function setSettingsScope(forRun) {
+    editingRunSettings = forRun;
+    document.getElementById("settings-title").textContent =
+        forRun ? "Run settings for this configuration" : "Settings";
+    document.getElementById("settings-preferences-fields").hidden = forRun;
+    document.getElementById("settings-run-scope").hidden = !forRun;
+    document.getElementById("settings-run-actions").hidden = !forRun;
+    document.getElementById("settings-execution-legend").textContent =
+        forRun ? "Execution" : "Defaults for new configurations";
+    settingsMaxWorkersInput.closest(".field").hidden = forRun;
+    settingsSaveButton.textContent = forRun ? "Apply to this run" : "Save";
+    document.getElementById("settings-restore-loaded").disabled =
+        window.fim.originalRunSettings() === null;
+}
+
+/** Open the shared execution editor with this configuration's effective values. */
+window.fim.openRunSettings = async function openRunSettings() {
+    await loadSettingsDialog();
+    setSettingsScope(true);
+    applyDefaultRunSettingsValues({
+        ...collectDefaultRunSettingsValues(),
+        ...perRunSettingValues(),
+    });
+    window.fim.wireModal("modal-settings");
+    settingsDialog.showModal();
+};
+
+document.getElementById("configure-run-settings-button").addEventListener(
+    "click",
+    () => window.fim.openRunSettings()
+);
+
+document.getElementById("settings-use-defaults").addEventListener("click", async () => {
+    window.__fimSettingsLoaded = false;
+    try {
+        applyDefaultRunSettingsValues(await window.pywebview.api.get_default_run_settings());
+        showSettingsBanner("");
+    } finally {
+        window.__fimSettingsLoaded = true;
+    }
+});
+
+document.getElementById("settings-restore-loaded").addEventListener("click", () => {
+    applyDefaultRunSettingsValues({
+        ...collectDefaultRunSettingsValues(),
+        ...window.fim.originalRunSettings(),
+    });
+    showSettingsBanner("");
+});
+
+/**
  * Build the "Statistics shown" checklist from the catalog, grouped, with
  * each statistic's one-sentence description beneath its name.
  */
@@ -433,6 +489,7 @@ pairwiseMaxDemesInput.addEventListener("change", async () => {
  */
 window.fim.openStatisticsSettings = async function openStatisticsSettings() {
     await loadSettingsDialog();
+    setSettingsScope(false);
     window.fim.wireModal("modal-settings");
     settingsDialog.showModal();
     document.getElementById("settings-statistics").scrollIntoView({ block: "start" });
@@ -440,6 +497,7 @@ window.fim.openStatisticsSettings = async function openStatisticsSettings() {
 
 settingsButton.addEventListener("click", async () => {
     await loadSettingsDialog();
+    setSettingsScope(false);
     window.fim.wireModal("modal-settings");
     settingsDialog.showModal();
 });
@@ -513,16 +571,32 @@ defaultPloidySelect.addEventListener("change", async () => {
     }
 });
 
-// Collected together into one bridge call on Save, unlike startup
-// behavior/significant digits/appearance above and below (each a single
-// independent scalar, applied immediately on its own `change`) -- this
-// is ~11 fields, and a per-field round trip for each would be chatty
-// for no real benefit, since none of them takes effect until a *new*
-// configuration is started anyway (`index.html`'s own comment above
-// `#modal-settings` has the full account). Closes the dialog on success
-// -- a real, reported bug: Save used to leave it open, indistinguishable
-// from a save that silently failed.
+// These shared controls save either a validated per-run snapshot or
+// defaults, never both. Appearance and other immediate preferences are
+// hidden in the per-run editor.
 settingsSaveButton.addEventListener("click", async () => {
+    if (editingRunSettings) {
+        window.__fimRunSettingsNoticeSettled = false;
+        settingsSaveButton.disabled = true;
+        try {
+            const values = collectDefaultRunSettingsValues();
+            delete values.max_workers;
+            const result = await window.pywebview.api.validate_form({
+                ...collectFormValues(),
+                ...values,
+            });
+            if (!result.ok) {
+                showSettingsBanner(result.message);
+                return;
+            }
+            await window.fim.updateRunSettings(values);
+            settingsDialog.close();
+        } finally {
+            settingsSaveButton.disabled = false;
+            window.__fimRunSettingsNoticeSettled = true;
+        }
+        return;
+    }
     const result = await trackSettingsSave(
         window.pywebview.api.set_default_run_settings(collectDefaultRunSettingsValues())
     );

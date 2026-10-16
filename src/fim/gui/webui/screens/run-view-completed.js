@@ -4073,12 +4073,15 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         resultsOutcome.hidden = true;
         resultsOutcome.textContent = `${reason}: generation ${report.generation}`;
         setBaseRunMessages([
-            { severity: "info", text: resultsOutcome.textContent },
+            {
+                severity: report.converged ? "info" : "warning",
+                text: resultsOutcome.textContent,
+            },
             ...(payload.convergenceNote
                 ? [{ severity: "info", text: payload.convergenceNote }]
                 : []),
         ]);
-        completedReportReason = reason;
+        completedReportReason = report.reason;
         completedConvergedOn = report.converged_on ?? null;
         completedPair = [1, 2];
         completedFinalPairStatistics = payload.pairStatistics || null;
@@ -4246,4 +4249,3 @@ window.fim.returnToInitialState = function returnToInitialState() {
 resultsBackButton.addEventListener("click", () => {
     window.fim.returnToInitialState();
 });
-

@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Editable per-run execution settings.** Configure's Run settings editor
+  can override loaded examples, presets, YAML, and fresh configurations
+  without changing saved Settings. The shared controls can use a snapshot
+  of saved defaults or restore originally loaded values; invalid edits
+  leave the configuration unchanged.
+
 - **A Python guide.** [Using fim from Python](doc/python-api.md) walks a
   researcher through describing a run, reading its result, saving and
   reopening it, and pausing and resuming it, with code that a test runs as
@@ -1557,6 +1563,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   when it is created.
 
 ### Fixed
+
+- Replace the one-generation founder-split endpoint check with a dynamic
+  allele-sharing example that watches all five advertised measures.
+  Document the allelic-distance normalization and regenerate saved outputs.
+- Show capped scalar runs as warnings and retain their raw stop reason so
+  the final results row receives its intended warning marker.
 
 - **A shutdown test no longer depends on the host's old test output.** The
   nested pytest run in `test_finished_worker_can_wait_for_a_peer_beyond_

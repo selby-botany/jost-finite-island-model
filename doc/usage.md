@@ -327,48 +327,49 @@ distance classes.
 
 ### Literature distance statistics from an explicit founder split
 
-Three demes start fixed for three different alleles. This is a deliberately
-small, deterministic demonstration of the supplemental statistics added from
-the differentiation literature: Caballero-García-Dorado allelic distance
-A<sub>CGD</sub>, Gregorius δ, and Sherwin mutual information `MI`.
-track_expensive_statistics turns on their own per-generation tracking (D,
-G<sub>ST</sub>, H<sub>S</sub>, and H<sub>T</sub> are always tracked for free;
-this opts the remaining two — E<sub>ST</sub> and K<sub>ST</sub> — and the
-three literature statistics above into the same treatment), so a run that
-only converges on `D` still records all six for display — this example's
-own final-report values are identical either way, since a report always
-computes every statistic at the converged generation regardless of this
-setting; the flag only changes what is available generation by generation
-before that point. In the desktop app the key follows Settings' "Statistics
-shown" instead: show A<sub>CGD</sub>, δ<sub>G</sub> or I there (they start
-hidden, since computing them every generation makes runs take longer) to
-follow them on the trajectory.
+Three demes start with partially shared alleles at different frequencies.
+Migration shares alleles, mutation creates private alleles, and drift changes
+their abundance and survival. Compare Caballero-García-Dorado allelic distance
+A<sub>CGD</sub> (presence/absence), Gregorius δ (frequency distance), and
+Sherwin mutual information `MI` (information about population membership)
+with `D` and G<sub>ST</sub>. The split is imposed, not simulated from an
+ancestral population.
+
+All five measures are watched, so the stopping verdict applies to all of
+them. `track_expensive_statistics` also records the other supplemental
+measures. In the desktop app that flag follows Settings' **Statistics shown**;
+watched statistics are computed regardless. Show A<sub>CGD</sub>,
+δ<sub>G</sub>, and I there to see their trajectories.
 
 <!-- worked-example-config: examples/literature-distance-statistics-from-an-explicit-founder-split/config.yaml -->
 ```yaml
-name: Distance statistics from a founder split
+name: Allele sharing after a founder split
 description: >-
-  Three islands fixed for different alleles: a one-generation check of the
-  literature statistics.
+  Follow partially shared founder alleles as migration, mutation, and drift
+  reveal the differences between presence, frequency, and information measures.
 class: statistics-and-convergence
 _read_only: true  # marks the shipped copy read-only; delete it in your own copy
-N: 200
+N: 100
 ploidy: haploid
 d: 3
-m: 0.0
-mu: 0.0
+m: 0.02
+mu: 0.005
 seed: 20260914
 loci:
   - locus_id: 1
     length: 100
 p_0:
-  - - 0: 1.0
-  - - 1: 1.0
-  - - 2: 1.0
+  - - 0: 0.8
+      1: 0.2
+  - - 1: 0.8
+      2: 0.2
+  - - 0: 0.2
+      2: 0.8
 engine_backend: auto
-convergence_statistic: D
-precision: 0.000001
-max_generations: 1
+convergence_statistic: [D, G_ST, A_CGD, Delta, MI]
+convergence_combinator: all
+precision: 0.05
+max_generations: auto
 track_expensive_statistics: true
 n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
@@ -378,13 +379,18 @@ fim run literature-distance-statistics.yaml \
   --output results/literature-distance-statistics --quiet
 ```
 
-Converges at generation 1 with D = G<sub>ST</sub> = E<sub>ST</sub> =
-K<sub>ST</sub> = 1, A<sub>CGD</sub> = 1, Gregorius δ = 1, and
-`MI = log(3) ≈ 1.099`. The equal values are not a claim that these
-statistics are interchangeable; they are the easiest possible sanity check
-for a complete three-way split. Change one deme's `p_0` cell to
-`0:0.5,1:0.5` to see the distance-oriented statistics respond directly to
-shared alleles.
+The saved run converges at generation 10,499, with evidence-window means
+`D = 0.3568`, `Delta = 0.4528`, and `A_CGD = 3.7508`; these are not its
+final-generation values. It uses one replicate and took about 17 seconds
+on the development machine. Choose **Run settings...** on Configure to
+change the replicate count, cap, or precision for your run only.
+
+Unlike δ and `D`, `A_CGD` is not bounded by 1; `MI` uses natural-log units.
+The implementation averages allelic distance over distinct deme pairs,
+whereas Caballero and García-Dorado's all-pairs equation 6 includes
+self-pairs. See the [example's explanation and literature references](
+examples/literature-distance-statistics-from-an-explicit-founder-split/README.md)
+for the normalization and the different questions these measures answer.
 
 ### Equilibrium-split founding
 
@@ -1401,8 +1407,9 @@ FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 The run settings — execution engine, n<sub>replicates</sub>,
 max_generations, convergence burn-in, precision, confidence,
 JIT, the `auto` engine's two thresholds, and max concurrent replicates —
-live in Settings, not on the Configure form. A configuration you load can
-name its own values for them. Every way of loading one works the same:
+have defaults in Settings. **Run settings...** on Configure edits their
+effective values for the pending configuration only. A configuration you
+load can name its own values for them. Every way of loading one works the same:
 
 - **Examples…** → **Load into Configure**, and **Run it** on a saved example
 - File menu → **Load example…** (the presets picker), built-in or your own
@@ -1425,15 +1432,29 @@ the notice lists both settings.
 - **Make these my Settings** saves the loaded values as your Settings, so
   new configurations use them too. Max workers is not changed: it
   describes your computer, and no configuration names it.
+- **Edit this run...** opens the per-run editor with the effective values.
+  **Apply to this run** validates and applies the edits without changing
+  saved defaults. Closing without applying discards edits.
+- In the editor, **Use saved Settings** fills the controls from your saved
+  defaults; **Restore loaded settings** restores the originally loaded
+  values, even after edits. Neither action applies until you choose
+  **Apply to this run**.
 - **Dismiss** hides the notice. The run still uses the loaded values. A
   "run settings" item in the parameter strip at the top of the window
   stays while they differ; click it to see the notice again.
 
 If you change Settings after loading, the notice is updated to compare
 against your new Settings; the loaded configuration still keeps its own
-values. To return to your Settings for the run, choose File menu →
-**New configuration**, or load a configuration whose run settings match
-yours. Explore's **Run this for real** also starts from your Settings.
+values. To use your Settings for the run, choose **Run settings...** →
+**Use saved Settings** → **Apply to this run**. This copies a snapshot:
+later edits to saved Settings do not silently change it. The editor is
+available even when no values differ. File menu → **New configuration**
+and Explore's **Run this for real** start from your Settings.
+
+The editor validates settings against the current model. For example,
+`max_generations: auto` cannot be derived for a model with both migration
+and mutation zero: supply an explicit cap or change the model. The editor
+reports the error and keeps the pending configuration unchanged.
 
 When the app restores the last submitted configuration at launch, the run
 settings come from your Settings, not from that configuration.

@@ -1,25 +1,29 @@
-name: Distance statistics from a founder split
+name: Allele sharing after a founder split
 description: >-
-  Three islands fixed for different alleles: a one-generation check of the
-  literature statistics.
+  Follow partially shared founder alleles as migration, mutation, and drift
+  reveal the differences between presence, frequency, and information measures.
 class: statistics-and-convergence
 _read_only: true  # marks the shipped copy read-only; delete it in your own copy
-N: 200
+N: 100
 ploidy: haploid
 d: 3
-m: 0.0
-mu: 0.0
+m: 0.02
+mu: 0.005
 seed: 20260914
 loci:
   - locus_id: 1
     length: 100
 p_0:
-  - - 0: 1.0
-  - - 1: 1.0
-  - - 2: 1.0
+  - - 0: 0.8
+      1: 0.2
+  - - 1: 0.8
+      2: 0.2
+  - - 0: 0.2
+      2: 0.8
 engine_backend: auto
-convergence_statistic: D
-precision: 0.000001
-max_generations: 1
+convergence_statistic: [D, G_ST, A_CGD, Delta, MI]
+convergence_combinator: all
+precision: 0.05
+max_generations: auto
 track_expensive_statistics: true
 n_replicates: 1   # a single scalar run; the default (200) would batch

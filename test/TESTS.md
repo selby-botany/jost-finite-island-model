@@ -938,6 +938,17 @@ machine rather than the model (`VOLATILE_MANIFEST_KEYS`, and the
 artifact digests listed in `_comparable_manifest`), and tightly bounded
 platform rounding in archived evidence-window and Shannon-entropy floats.
 
+<a id="test.test_doc_examples.test_founder_sharing_example_has_dynamics_and_evidence_for_every_measure"></a>
+
+#### test\_founder\_sharing\_example\_has\_dynamics\_and\_evidence\_for\_every\_measure
+
+```python
+def test_founder_sharing_example_has_dynamics_and_evidence_for_every_measure(
+) -> None
+```
+
+The teaching example must not regress to a constant one-generation check.
+
 <a id="test.test_doc_examples.test_dear_nolan_high_configuration_matches_its_derivation"></a>
 
 #### test\_dear\_nolan\_high\_configuration\_matches\_its\_derivation
@@ -24278,6 +24289,18 @@ Clicking `D`'s header hides it everywhere (header, whole column,
 stats-panel row) with `aria-pressed` following; hovering highlights
 the header, the column and the stats-panel row; leaving clears it.
 
+<a id="gui.test_results_screen.test_capped_run_warns_in_both_message_and_final_generation_row"></a>
+
+#### test\_capped\_run\_warns\_in\_both\_message\_and\_final\_generation\_row
+
+```python
+def test_capped_run_warns_in_both_message_and_final_generation_row(
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
+```
+
+A real capped run keeps its raw reason and never looks converged.
+
 <a id="gui.test_results_screen.test_not_converged_row_gets_a_warning_background_and_a_text_mark"></a>
 
 #### test\_not\_converged\_row\_gets\_a\_warning\_background\_and\_a\_text\_mark
@@ -24830,6 +24853,52 @@ is.
 
 The example catalog is isolated from the shipped teaching examples, whose
 engine policy and replicate counts can change independently of this contract.
+
+<a id="gui.test_run_settings_notice_screen.test_run_settings_can_be_edited_restored_and_replaced_with_defaults"></a>
+
+#### test\_run\_settings\_can\_be\_edited\_restored\_and\_replaced\_with\_defaults
+
+```python
+def test_run_settings_can_be_edited_restored_and_replaced_with_defaults(
+        _isolate_gui_preferences: Path, window: webview.Window,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Edits reach Run, cancel is inert, and defaults and originals stay separate.
+
+<a id="gui.test_run_settings_notice_screen.test_edited_run_settings_are_saved_in_exported_yaml"></a>
+
+#### test\_edited\_run\_settings\_are\_saved\_in\_exported\_yaml
+
+```python
+def test_edited_run_settings_are_saved_in_exported_yaml(
+        window: webview.Window, monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path) -> None
+```
+
+The Save configuration action exports per-run edits, not saved defaults.
+
+<a id="gui.test_run_settings_notice_screen.test_run_settings_editor_is_available_without_a_loaded_configuration"></a>
+
+#### test\_run\_settings\_editor\_is\_available\_without\_a\_loaded\_configuration
+
+```python
+def test_run_settings_editor_is_available_without_a_loaded_configuration(
+        window: webview.Window) -> None
+```
+
+A fresh configuration can override defaults and rejects invalid edits.
+
+<a id="gui.test_run_settings_notice_screen.test_applying_defaults_reports_an_underivable_cap_without_changing_the_run"></a>
+
+#### test\_applying\_defaults\_reports\_an\_underivable\_cap\_without\_changing\_the\_run
+
+```python
+def test_applying_defaults_reports_an_underivable_cap_without_changing_the_run(
+        _isolate_gui_preferences: Path, window: webview.Window) -> None
+```
+
+A zero-migration, zero-mutation model needs an explicit cap, not auto.
 
 <a id="gui.test_run_settings_notice_screen.test_loading_a_lineal_example_runs_it_without_changing_settings"></a>
 
