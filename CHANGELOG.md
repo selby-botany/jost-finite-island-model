@@ -1586,6 +1586,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   data.** It controls number formatting and checks both grouped and
   ungrouped generation counts, preserving locale-aware application output
   while avoiding a Linux WebKit CI failure.
+- **A worker process that dies no longer ends a sweep.** One worker ended by
+  the system broke the whole pool; the next point then raised outside the
+  sweep's error handling, the sweep stopped, and in the app the page showed a
+  sweep that never finished with the busy guard stuck on. The pool is now
+  replaced, only the points in flight are reported as failed, and the app
+  shows any sweep error and frees the guard.
+- **A sweep tries a point again after a transient failure.** A point that
+  failed because a worker died or a file system call failed is tried once more
+  (`fim sweep run|resume --max-attempts N` sets the total; the app uses 2). A
+  failure the engine reports is not tried again. The failure record now keeps
+  the failure's class and the attempts made.
 - **Statistics can be hidden and shown during a live run again.** Every
   progress tick replaced the cells of every statistics row, removing the
   element under a pointer between its press and its release, so the browser

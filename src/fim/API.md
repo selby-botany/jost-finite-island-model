@@ -69,6 +69,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.config.defaults.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
   * [DEFAULT\_N\_REPLICATES](#fim.config.defaults.DEFAULT_N_REPLICATES)
   * [DEFAULT\_PRECISION](#fim.config.defaults.DEFAULT_PRECISION)
+  * [DEFAULT\_SWEEP\_MAX\_ATTEMPTS](#fim.config.defaults.DEFAULT_SWEEP_MAX_ATTEMPTS)
   * [DEFAULT\_PAIRWISE\_MAX\_DEMES](#fim.config.defaults.DEFAULT_PAIRWISE_MAX_DEMES)
 * [fim.config.display](#fim.config.display)
   * [GUI\_ANIMATION\_MAX\_FRAMES](#fim.config.display.GUI_ANIMATION_MAX_FRAMES)
@@ -1564,6 +1565,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [apply\_coordinates](#fim.sweep.apply_coordinates)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
+  * [FailureClass](#fim.sweep_run.FailureClass)
+  * [classify\_failure](#fim.sweep_run.classify_failure)
   * [PointFailure](#fim.sweep_run.PointFailure)
   * [PointPaused](#fim.sweep_run.PointPaused)
   * [SweepEvent](#fim.sweep_run.SweepEvent)
@@ -2791,6 +2794,18 @@ within-run tolerance and of the old replicate tolerance, which this
 setting merged. Paired with `DEFAULT_N_REPLICATES` above, it makes an
 unconfigured run compute a real confidence interval by default rather
 than a single, uncertainty-free-looking point estimate.
+
+Kind: policy; a regular setting.
+
+<a id="fim.config.defaults.DEFAULT_SWEEP_MAX_ATTEMPTS"></a>
+
+#### DEFAULT\_SWEEP\_MAX\_ATTEMPTS
+
+Times the command line and the app try a sweep point that failed for a
+transient reason (a worker process that died, a file system error) before
+recording the failure. A failure the engine itself reports is never retried:
+the same configuration would fail the same way. A killed worker is usually a
+one-off, so one retry recovers it without hiding a real fault.
 
 Kind: policy; a regular setting.
 
@@ -36626,6 +36641,34 @@ Run object's lifecycle state when it is `planned`, `running`, `paused`,
 `interrupted`, or `failed`; `stale` (only a run from another software
 version); `failed` (recorded before any Run object existed); or `waiting`.
 
+<a id="fim.sweep_run.FailureClass"></a>
+
+#### FailureClass
+
+Whether trying a failed point again can help: a `transient` failure (a
+worker process that died, a file system error) can pass; a `deterministic`
+one (the engine rejected the configuration) happens every time.
+
+<a id="fim.sweep_run.classify_failure"></a>
+
+#### classify\_failure
+
+```python
+def classify_failure(error: BaseException) -> FailureClass
+```
+
+Say whether a point that failed with `error` is worth trying again.
+
+**Arguments**:
+
+- `error` - What the point raised.
+
+
+**Returns**:
+
+  The class of the first row of the classification table that
+  `error` matches; `"deterministic"` if none does.
+
 <a id="fim.sweep_run.PointFailure"></a>
 
 ## PointFailure Objects
@@ -36636,6 +36679,13 @@ class PointFailure()
 ```
 
 Why one point produced no run.
+
+**Attributes**:
+
+- `reason` - What went wrong, in words for the person running the sweep.
+- `failure_class` - Whether trying the point again can help.
+- `attempts` - How many times the point was tried before this failure
+  was returned.
 
 <a id="fim.sweep_run.PointPaused"></a>
 
@@ -37113,6 +37163,7 @@ def run_sweep(study_id: str,
               software_version: str = __version__,
               points_at_once: int | None = None,
               max_workers: int | None = None,
+              max_attempts: int = 1,
               results: Path | None = None) -> SweepOutcome
 ```
 
@@ -37155,6 +37206,11 @@ falls back to the runner's `run_point`.
 - `points_at_once` - How many points to run at the same time, or `None`
   for automatic.
 - `max_workers` - Worker processes for each batch point, or `None`.
+- `max_attempts` - Times to try a point that fails for a transient reason
+  (`classify_failure`) before recording the failure. A
+  deterministic failure is never tried again. The attempts are
+  back to back, with no delay, so the result never depends on a
+  clock.
 - `results` - Optional results-directory override.
 
 
@@ -37165,8 +37221,9 @@ falls back to the runner's `run_point`.
 
 **Raises**:
 
-- `ValueError` - The Study is not a sweep, or the stored plan no longer
-  matches what this version of the program enumerates.
+- `ValueError` - `max_attempts` is below 1, the Study is not a sweep, or
+  the stored plan no longer matches what this version of the
+  program enumerates.
 - `ClosedGroupError` - The Study is closed; reopen it to continue.
 
 <a id="fim.sweep_run.failures_path"></a>

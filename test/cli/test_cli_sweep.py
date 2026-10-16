@@ -275,3 +275,38 @@ def test_rerun_is_offered_by_resume_only(
 
     assert raised.value.code == 2
     assert "--rerun" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [([], 2), (["--max-attempts", "5"], 5)],
+)
+def test_max_attempts_defaults_to_two_and_reaches_the_sweep(
+    tmp_path: Path,
+    sweep_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    flags: list[str],
+    expected: int,
+) -> None:
+    from fim import sweep_run  # noqa: PLC0415
+
+    seen: list[int] = []
+    real = sweep_run.run_sweep
+
+    def spy(*args: object, **kwargs: int) -> object:
+        seen.append(kwargs["max_attempts"])
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("fim.cli_sweep.run_sweep", spy)
+
+    assert _main(tmp_path, "sweep", "run", str(sweep_file), *flags) == 0
+    assert seen == [expected]
+
+
+def test_fewer_than_one_attempt_is_a_plain_error(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    status = _main(tmp_path, "sweep", "run", str(sweep_file), "--max-attempts", "0")
+
+    assert status == 2
+    assert "max_attempts" in capsys.readouterr().err

@@ -137,11 +137,50 @@ EventKind = Literal[
 ]
 
 
+FailureClass = Literal["transient", "deterministic"]
+"""Whether trying a failed point again can help: a `transient` failure (a
+worker process that died, a file system error) can pass; a `deterministic`
+one (the engine rejected the configuration) happens every time."""
+
+_FAILURE_CLASSES: Final[tuple[tuple[type[BaseException], FailureClass], ...]] = (
+    (BrokenProcessPool, "transient"),
+    (OSError, "transient"),
+    (Exception, "deterministic"),
+)
+"""How `classify_failure` sorts an exception: the first row it is an instance
+of decides, so a more specific type goes above a broader one."""
+
+
+def classify_failure(error: BaseException) -> FailureClass:
+    """Say whether a point that failed with `error` is worth trying again.
+
+    Args:
+        error: What the point raised.
+
+    Returns:
+        The class of the first row of the classification table that
+        `error` matches; `"deterministic"` if none does.
+    """
+    for kind, failure_class in _FAILURE_CLASSES:
+        if isinstance(error, kind):
+            return failure_class
+    return "deterministic"
+
+
 @dataclass(frozen=True, slots=True)
 class PointFailure:
-    """Why one point produced no run."""
+    """Why one point produced no run.
+
+    Attributes:
+        reason: What went wrong, in words for the person running the sweep.
+        failure_class: Whether trying the point again can help.
+        attempts: How many times the point was tried before this failure
+            was returned.
+    """
 
     reason: str
+    failure_class: FailureClass = "deterministic"
+    attempts: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,7 +341,7 @@ class LocalPointRunner:
         try:
             output_directory, reservation = _allocate_output_directory()
         except FileExistsError as error:
-            return PointFailure(str(error))
+            return PointFailure(str(error), classify_failure(error))
         try:
             return self._run(
                 params, output_directory, cancel_event, on_message, max_workers
@@ -431,7 +470,7 @@ def execute_point_object(
         )
     except _POINT_ERRORS as error:
         logger.warning("sweep point object %s failed: %s", object_id, error)
-        return PointFailure(str(error))
+        return PointFailure(str(error), classify_failure(error))
     state = finished.record.state
     if state is RunState.COMPLETED:
         return finished.directory
@@ -452,6 +491,16 @@ _POINT_ERRORS: Final = (
 )
 
 
+def _failure_kind(failure: PointFailure) -> str:
+    """Name a failure's kind in a worker's `(kind, value)` answer."""
+    return "transient" if failure.failure_class == "transient" else "failure"
+
+
+def _point_failure(kind: str, value: str) -> PointFailure:
+    """Rebuild a `PointFailure` from a worker's `(kind, value)` answer."""
+    return PointFailure(value, "transient" if kind == "transient" else "deterministic")
+
+
 def _run_object_in_process(
     object_id: str,
     results_directory: str,
@@ -469,7 +518,7 @@ def _run_object_in_process(
         object_id, cancel_event, None, pairwise_max_demes=pairwise_max_demes
     )
     if isinstance(result, PointFailure):
-        return "failure", result.reason
+        return _failure_kind(result), result.reason
     if isinstance(result, PointPaused):
         return "paused", result.state
     return "ok", str(result)
@@ -490,7 +539,7 @@ def _run_point_in_process(
     paths.set_results_directory_override(Path(results_directory))
     result = LocalPointRunner().run_point(params, cancel_event, None, max_workers)
     if isinstance(result, PointFailure):
-        return "failure", result.reason
+        return _failure_kind(result), result.reason
     return "ok", str(result)
 
 
@@ -599,14 +648,14 @@ class ProcessPointRunner:
             shared_cancel: The event the worker process watches.
 
         Returns:
-            The worker's `(kind, value)`, or `("failure", reason)` if the
+            The worker's `(kind, value)`, or `("transient", reason)` if the
             pool broke before or while the point ran.
         """
         try:
             future, executor = self._submit(function, *args)
         except (BrokenProcessPool, RuntimeError, OSError) as error:
             logger.warning("sweep worker pool refused a point: %s", error)
-            return "failure", f"the worker pool could not start the point: {error}"
+            return "transient", f"the worker pool could not start the point: {error}"
         while True:
             try:
                 return future.result(timeout=0.25)
@@ -615,7 +664,7 @@ class ProcessPointRunner:
                     shared_cancel.set()
             except BrokenProcessPool:
                 self._replace(executor)
-                return "failure", "a worker process ended unexpectedly"
+                return "transient", "a worker process ended unexpectedly"
             except Exception as error:
                 logger.warning("sweep worker raised: %s", error)
                 return "failure", str(error) or type(error).__name__
@@ -641,7 +690,7 @@ class ProcessPointRunner:
             cancel_event,
             shared_cancel,
         )
-        return Path(value) if kind == "ok" else PointFailure(value)
+        return Path(value) if kind == "ok" else _point_failure(kind, value)
 
     def run_object_point(
         self,
@@ -665,7 +714,9 @@ class ProcessPointRunner:
         )
         if kind == "ok":
             return Path(value)
-        return PointPaused(value) if kind == "paused" else PointFailure(value)
+        if kind == "paused":
+            return PointPaused(value)
+        return _point_failure(kind, value)
 
     def close(self) -> None:
         """Stop the worker processes and the shared-event server."""
@@ -992,6 +1043,8 @@ class _Context:
     # Points recomputed on purpose (`run_sweep(rerun=True)`): their existing
     # runs are not reused, only compared with the result.
     rerun_ids: frozenset[str] = frozenset()
+    # Times a point that failed for a transient reason is tried in all.
+    max_attempts: int = 1
 
     def emit(
         self, kind: EventKind, point: SweepPoint, detail: object = None, *, finish: bool
@@ -1017,6 +1070,7 @@ def run_sweep(
     software_version: str = __version__,
     points_at_once: int | None = None,
     max_workers: int | None = None,
+    max_attempts: int = 1,
     results: Path | None = None,
 ) -> SweepOutcome:
     """Run every point of a sweep Study that is not already present.
@@ -1057,16 +1111,23 @@ def run_sweep(
         points_at_once: How many points to run at the same time, or `None`
             for automatic.
         max_workers: Worker processes for each batch point, or `None`.
+        max_attempts: Times to try a point that fails for a transient reason
+            (`classify_failure`) before recording the failure. A
+            deterministic failure is never tried again. The attempts are
+            back to back, with no delay, so the result never depends on a
+            clock.
         results: Optional results-directory override.
 
     Returns:
         The tally.
 
     Raises:
-        ValueError: The Study is not a sweep, or the stored plan no longer
-            matches what this version of the program enumerates.
+        ValueError: `max_attempts` is below 1, the Study is not a sweep, or
+            the stored plan no longer matches what this version of the
+            program enumerates.
         ClosedGroupError: The Study is closed; reopen it to continue.
     """
+    _require_attempts(max_attempts)
     study = groups.get_study(study_id, results=results)
     groups.refuse_closed(study, "given more sweep runs")
     spec = sweep_spec_of(study)
@@ -1144,6 +1205,7 @@ def run_sweep(
             _completed_objects(software_version, results) if uses_objects else {}
         ),
         rerun_ids=rerun_ids,
+        max_attempts=max_attempts,
     )
     cancelled = False
 
@@ -1183,6 +1245,16 @@ def run_sweep(
         recomputed=tally["recomputed"],
         differing=tally["differs"],
     )
+
+
+def _require_attempts(max_attempts: int) -> None:
+    """Refuse a limit that would never try a point.
+
+    Raises:
+        ValueError: `max_attempts` is below 1.
+    """
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1")
 
 
 def failures_path(study_id: str, *, results: Path | None = None) -> Path:
@@ -1227,14 +1299,22 @@ def _read_status(study_id: str, results: Path | None) -> dict[str, Any]:
 def _record_failure(
     study_id: str,
     point: SweepPoint,
-    reason: str,
+    failure: PointFailure,
     results: Path | None,
 ) -> None:
-    """Persist one failed point so 'failed' survives a restart."""
+    """Persist one failed point so 'failed' survives a restart.
+
+    The record keeps the failure's class and the attempts made, added to
+    those of an earlier failure of the same point, so a point retried
+    across several resumes shows its total.
+    """
     failures = read_failures(study_id, results=results)
+    earlier = failures.get(point.run_id, {}).get("attempts", 0)
     failures[point.run_id] = {
         "index": point.index,
-        "reason": reason,
+        "reason": failure.reason,
+        "failure_class": failure.failure_class,
+        "attempts": (earlier if isinstance(earlier, int) else 0) + failure.attempts,
         "at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     _write_failures(study_id, failures, results)
@@ -1358,7 +1438,44 @@ def _point_object(context: _Context, point: SweepPoint) -> str:
 def _dispatch_point(
     context: _Context, point: SweepPoint, progress: Callable[[object], None]
 ) -> tuple[Path | PointFailure | PointPaused, str | None]:
-    """Run one point and return its outcome with its Run object ID, if any."""
+    """Run one point, trying again while it fails for a transient reason.
+
+    A failure the engine reports is returned at once: the same
+    configuration fails the same way. A transient one (a worker that died,
+    a file system error) is tried again up to `context.max_attempts` in
+    all, unless the sweep was cancelled. The attempts are back to back,
+    so the outcome never depends on a clock.
+
+    Returns:
+        The outcome and the point's Run object ID, if any. A failure
+        carries how many attempts it took.
+    """
+    attempts = 0
+    while True:
+        attempts += 1
+        outcome, object_id = _dispatch_once(context, point, progress)
+        if not isinstance(outcome, PointFailure):
+            return outcome, object_id
+        retry = (
+            outcome.failure_class == "transient"
+            and attempts < context.max_attempts
+            and not context.cancel_event.is_set()
+        )
+        if not retry:
+            return replace(outcome, attempts=attempts), object_id
+        logger.warning(
+            "sweep point %s failed (attempt %d of %d), trying again: %s",
+            point.run_id,
+            attempts,
+            context.max_attempts,
+            outcome.reason,
+        )
+
+
+def _dispatch_once(
+    context: _Context, point: SweepPoint, progress: Callable[[object], None]
+) -> tuple[Path | PointFailure | PointPaused, str | None]:
+    """Run one point once and return its outcome with its Run object ID."""
     params = SimulationParams.from_mapping(point.params)
     runner = context.runner
     if (
@@ -1369,7 +1486,7 @@ def _dispatch_point(
         try:
             object_id = _point_object(context, point)
         except (LifecycleError, OSError, ValueError) as error:
-            return PointFailure(str(error)), None
+            return PointFailure(str(error), classify_failure(error)), None
         return runner.run_object_point(object_id, context.cancel_event, progress), (
             object_id
         )
@@ -1415,7 +1532,7 @@ def _run_one_point(
             # A Run object records its own failure; only a failure before
             # one existed needs the sweep's own record.
             with context.lock:
-                _record_failure(context.study_id, point, result.reason, context.results)
+                _record_failure(context.study_id, point, result, context.results)
         context.emit("point_failed", point, result.reason, finish=True)
         return "failed"
     with context.lock:

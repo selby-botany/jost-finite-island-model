@@ -67,6 +67,7 @@ from fim import __dev_commit__ as fim_dev_commit
 from fim import __version__ as fim_version
 from fim import group_lifecycle, logging_setup, paths, update
 from fim.cli import load_config
+from fim.config.defaults import DEFAULT_SWEEP_MAX_ATTEMPTS
 from fim.config.expert import describe_expert_settings
 from fim.config.limits import MAXIMUM_RECURSION_DEMES
 from fim.convergence.defaults import (
@@ -5765,6 +5766,7 @@ class Api:
                     retry_failed=retry_failed,
                     points_at_once=points_at_once,
                     max_workers=max_workers,
+                    max_attempts=DEFAULT_SWEEP_MAX_ATTEMPTS,
                 )
             except Exception as error:
                 # A thread that dies silently leaves the page showing a sweep

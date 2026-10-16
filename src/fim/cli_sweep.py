@@ -21,6 +21,7 @@ from typing import Any
 
 import yaml
 
+from fim.config.defaults import DEFAULT_SWEEP_MAX_ATTEMPTS
 from fim.persistence import groups
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
@@ -92,7 +93,16 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
 
 
 def _add_concurrency_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add `--points-at-once`, `--workers` and `--sequential` to a subcommand."""
+    """Add the concurrency and retry flags to a subcommand."""
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=DEFAULT_SWEEP_MAX_ATTEMPTS,
+        metavar="N",
+        help="times to try a point that failed for a transient reason, such as "
+        f"a worker process that died (default: {DEFAULT_SWEEP_MAX_ATTEMPTS}); "
+        "a failure the engine reports is never tried again",
+    )
     parser.add_argument(
         "--points-at-once",
         default="auto",
@@ -237,6 +247,7 @@ def _execute(study_id: str, arguments: argparse.Namespace) -> int:
             rerun=getattr(arguments, "rerun", False),
             points_at_once=points_at_once,
             max_workers=max_workers,
+            max_attempts=arguments.max_attempts,
         )
     except KeyboardInterrupt:
         cancel_event.set()

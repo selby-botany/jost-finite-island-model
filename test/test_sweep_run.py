@@ -36,10 +36,12 @@ from fim.reproducibility import compare_runs
 from fim.sweep import SweepSpec, enumerate_points, expand_axis
 from fim.sweep_run import (
     Concurrency,
+    FailureClass,
     LocalPointRunner,
     PointFailure,
     ProcessPointRunner,
     SweepEvent,
+    classify_failure,
     create_sweep_study,
     failures_path,
     read_failures,
@@ -1112,7 +1114,7 @@ def test_a_worker_that_dies_mid_point_fails_it_and_later_points_use_a_new_pool()
     finally:
         runner.close()
 
-    assert first == PointFailure("a worker process ended unexpectedly")
+    assert first == PointFailure("a worker process ended unexpectedly", "transient")
     assert second == Path("/point")
     assert dying.shut_down
     assert (dying.submitted, fresh.submitted) == (1, 1)
@@ -1162,3 +1164,131 @@ def test_several_threads_seeing_one_dead_pool_replace_it_once() -> None:
     # every submit reached the dead pool or its single replacement: at most
     # one replacement was built, never one per thread
     assert len(created) == 2
+
+
+class _Flaky:
+    """A runner that fails its first `failures` calls, then runs for real."""
+
+    def __init__(
+        self,
+        failures: int,
+        failure_class: FailureClass,
+        cancel: threading.Event | None = None,
+    ) -> None:
+        self.failures = failures
+        self.failure_class: FailureClass = failure_class
+        self.cancel = cancel
+        self.local = LocalPointRunner()
+        self.calls = 0
+
+    def run_point(
+        self,
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None,
+        max_workers: int | None = None,
+    ) -> Path | PointFailure:
+        self.calls += 1
+        if self.calls <= self.failures:
+            if self.cancel is not None:
+                self.cancel.set()
+            return PointFailure("scripted failure", self.failure_class)
+        return self.local.run_point(params, cancel_event, on_message, max_workers)
+
+
+def test_a_transient_failure_is_tried_again_and_the_point_succeeds(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(1, "transient")
+
+    outcome, _ = _run(study_id, runner, max_attempts=2, points_at_once=1)
+
+    assert (outcome.done, outcome.failed) == (1, 0)
+    assert runner.calls == 2
+    assert read_failures(study_id) == {}
+
+
+def test_a_deterministic_failure_is_never_tried_again(results: Path) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(5, "deterministic")
+
+    outcome, _ = _run(study_id, runner, max_attempts=3, points_at_once=1)
+
+    assert (outcome.done, outcome.failed) == (0, 1)
+    assert runner.calls == 1
+    record = next(iter(read_failures(study_id).values()))
+    assert (record["failure_class"], record["attempts"]) == ("deterministic", 1)
+
+
+def test_attempts_stop_at_the_limit_and_the_record_keeps_the_count(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(5, "transient")
+
+    outcome, _ = _run(study_id, runner, max_attempts=3, points_at_once=1)
+
+    assert (outcome.done, outcome.failed) == (0, 1)
+    assert runner.calls == 3
+    record = next(iter(read_failures(study_id).values()))
+    assert (record["failure_class"], record["attempts"]) == ("transient", 3)
+
+
+def test_the_default_is_one_attempt(results: Path) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(1, "transient")
+
+    outcome, _ = _run(study_id, runner, points_at_once=1)
+
+    assert (outcome.done, outcome.failed) == (0, 1)
+    assert runner.calls == 1
+
+
+def test_attempts_add_up_across_resumes(results: Path) -> None:
+    study_id = _study(results, 2)
+    _run(study_id, _Flaky(9, "transient"), max_attempts=2, points_at_once=1)
+
+    _run(
+        study_id,
+        _Flaky(9, "transient"),
+        max_attempts=2,
+        retry_failed=True,
+        points_at_once=1,
+    )
+
+    record = next(iter(read_failures(study_id).values()))
+    assert record["attempts"] == 4
+
+
+def test_a_cancel_stops_the_retries(results: Path) -> None:
+    study_id = _study(results, 2)
+    cancel = threading.Event()
+    runner = _Flaky(5, "transient", cancel)
+
+    outcome, _ = _run(study_id, runner, cancel, max_attempts=4, points_at_once=1)
+
+    assert runner.calls == 1
+    assert outcome.cancelled
+
+
+def test_fewer_than_one_attempt_is_refused(results: Path) -> None:
+    study_id = _study(results, 2)
+
+    with pytest.raises(ValueError, match="max_attempts"):
+        _run(study_id, max_attempts=0)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (BrokenProcessPool("died"), "transient"),
+        (FileNotFoundError("gone"), "transient"),
+        (ValueError("bad configuration"), "deterministic"),
+        (ZeroDivisionError("division by zero"), "deterministic"),
+    ],
+)
+def test_failures_are_classified_by_exception_type(
+    error: BaseException, expected: str
+) -> None:
+    assert classify_failure(error) == expected

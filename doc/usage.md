@@ -1076,6 +1076,11 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   worker. In the app, the Sweep dialog's **Points at once** does the same, and
   the Settings value "max workers" applies. Results do not depend on the
   setting: each point is fixed by its own configuration and seed.
+- A point that fails for a transient reason, such as a worker process the
+  system ended, is tried again once; `--max-attempts N` sets how many tries in
+  all. A failure the engine reports is never tried again, because the same
+  configuration fails the same way. A pool of workers that breaks is replaced,
+  so the points after the failed one still run.
 - A point's run id is a hash of its configuration, so resuming, or running a
   second sweep that overlaps the first, reuses the runs that already exist
   instead of computing them again. Reuse requires identical configurations,
