@@ -78,6 +78,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_animation_screen`](#gui.test_animation_screen)
   - [`test_app`](#gui.test_app)
   - [`test_app_api`](#gui.test_app_api)
+  - [`test_axis_tick_layout_screen`](#gui.test_axis_tick_layout_screen)
   - [`test_batch_results_screen`](#gui.test_batch_results_screen)
   - [`test_batch_runner`](#gui.test_batch_runner)
   - [`test_batch_running`](#gui.test_batch_running)
@@ -16678,6 +16679,53 @@ def test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest(
 ```
 
 Configure's run name lands in the sidecar; a blank field keeps the old one.
+
+<a id="gui.test_axis_tick_layout_screen"></a>
+
+# gui.test\_axis\_tick\_layout\_screen
+
+Axis tick labels never print over one another or over a corner label.
+
+The trajectory graph draws exact corner labels ("gen 0", "gen N") and
+interior tick labels ("5000", "10000", ...). A run of 21,910 generations put
+"20000" on top of "gen 21910". `drawAxisTickMarks` now leaves off a label
+that would come within a few pixels of another, and the trajectory axis
+tells it where its corner labels are. These tests drive the real drawing
+function with a recording stand-in for the canvas context (text is 6 pixels
+per character), so the result is a pure function of the code.
+
+<a id="gui.test_axis_tick_layout_screen.test_axis_labels_never_overlap_at_any_run_length_or_width"></a>
+
+#### test\_axis\_labels\_never\_overlap\_at\_any\_run\_length\_or\_width
+
+```python
+def test_axis_labels_never_overlap_at_any_run_length_or_width(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+No two labels, and no label and corner, overlap, for any size.
+
+<a id="gui.test_axis_tick_layout_screen.test_the_reported_collision_leaves_off_20000_not_the_corner"></a>
+
+#### test\_the\_reported\_collision\_leaves\_off\_20000\_not\_the\_corner
+
+```python
+def test_the_reported_collision_leaves_off_20000_not_the_corner(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+21,910 generations in a 500-pixel plot: "20000" goes, "gen N" stays.
+
+<a id="gui.test_axis_tick_layout_screen.test_long_runs_label_whole_thousands_compactly"></a>
+
+#### test\_long\_runs\_label\_whole\_thousands\_compactly
+
+```python
+def test_long_runs_label_whole_thousands_compactly(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A two-million-generation axis reads "500k", not "500000".
 
 <a id="gui.test_batch_results_screen"></a>
 

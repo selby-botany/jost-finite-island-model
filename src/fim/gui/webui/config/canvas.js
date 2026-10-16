@@ -27,6 +27,11 @@ const TICK_LENGTH = 4;
 const TICK_LABEL_GAP_X = 1;
 const TICK_LABEL_GAP_Y = 2;
 
+// Least clear space, in pixels, between two axis labels (tick or corner)
+// along their axis; a tick label closer than this to another is left off
+// (`drawAxisTickMarks`).
+const TICK_LABEL_MIN_GAP = 6;
+
 // Stroke width of axis frames, tick marks and plain guide lines, and of
 // a data curve drawn over them.
 const AXIS_LINE_WIDTH = 1;

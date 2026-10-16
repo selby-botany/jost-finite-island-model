@@ -1758,6 +1758,24 @@ function drawTrajectoryAxisTicks(
         (value) =>
             Number.isInteger(value) && value > minGeneration && value < maxGeneration
     );
+    // The corner labels the caller drew, as pixel spans no tick label may
+    // touch: "gen 0" and "gen N" along x, the two end values along y.
+    context.save();
+    context.font = FONT_AXIS_SMALL;
+    const leftEnd = `gen ${minGeneration}`;
+    const rightEnd = `gen ${maxGeneration}`;
+    const leftPixel = xToPixel(minGeneration);
+    const rightPixel = xToPixel(maxGeneration);
+    const xAvoid = [
+        { start: leftPixel, end: leftPixel + context.measureText(leftEnd).width },
+        { start: rightPixel - context.measureText(rightEnd).width, end: rightPixel },
+    ];
+    context.restore();
+    const halfLabel = AXIS_TICK_FONT_SIZE / 2;
+    const yAvoid = [minValue, maxValue].map((value) => ({
+        start: yToPixel(value) - halfLabel,
+        end: yToPixel(value) + halfLabel,
+    }));
     drawAxisTickMarks(
         context,
         "y",
@@ -1766,7 +1784,8 @@ function drawTrajectoryAxisTicks(
         yToPixel,
         yTicks,
         AXIS_TICK_FONT_SIZE,
-        (v) => v.toFixed(TRAJECTORY_TICK_DECIMALS)
+        (v) => v.toFixed(TRAJECTORY_TICK_DECIMALS),
+        yAvoid
     );
     drawAxisTickMarks(
         context,
@@ -1776,8 +1795,25 @@ function drawTrajectoryAxisTicks(
         xToPixel,
         xTicks,
         AXIS_TICK_FONT_SIZE,
-        (v) => String(v)
+        (v) => formatGenerationTick(v, maxGeneration),
+        xAvoid
     );
+}
+
+/**
+ * A generation tick's label: whole thousands as "20k" once the run is long
+ * enough (100,000 generations or more) that the full number would crowd
+ * its neighbors, otherwise the plain number.
+ *
+ * @param {number} value
+ * @param {number} maxGeneration
+ * @returns {string}
+ */
+function formatGenerationTick(value, maxGeneration) {
+    if (maxGeneration >= COMPACT_GENERATION_TICK_FROM && value % 1000 === 0) {
+        return `${value / 1000}k`;
+    }
+    return String(value);
 }
 
 /**

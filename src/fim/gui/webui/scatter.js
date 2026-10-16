@@ -820,6 +820,11 @@ function niceAxisTicks(min, max, targetCount) {
  * exist, e.g. deme numbers beneath stacked bars). Caller sets the
  * stroke/fill colors beforehand; both are preserved.
  *
+ * Every mark is drawn, but a label is left off when it would come within
+ * `TICK_LABEL_MIN_GAP` pixels of another label already drawn on this axis
+ * or of a span in `avoid` (the caller's own corner labels), so a long axis
+ * or a narrow plot never prints one label over another.
+ *
  * @param {CanvasRenderingContext2D} context
  * @param {"x"|"y"} orientation
  * @param {number} axisX - The vertical axis's own x (for `"y"`), or
@@ -831,6 +836,8 @@ function niceAxisTicks(min, max, targetCount) {
  * @param {number[]} ticks
  * @param {number} fontSize
  * @param {((value: number) => string)|null} format
+ * @param {Array<{start: number, end: number}>} [avoid] - Pixel spans along
+ *     the axis (x for `"x"`, y for `"y"`) that no tick label may touch.
  */
 function drawAxisTickMarks(
     context,
@@ -840,11 +847,13 @@ function drawAxisTickMarks(
     toPixel,
     ticks,
     fontSize,
-    format
+    format,
+    avoid = []
 ) {
     context.save();
     context.lineWidth = AXIS_LINE_WIDTH;
     context.font = `${fontSize}px ${FONT_FAMILY_SYSTEM}`;
+    const taken = avoid.map((span) => ({ ...span }));
     for (const value of ticks) {
         const position = toPixel(value);
         context.beginPath();
@@ -856,16 +865,32 @@ function drawAxisTickMarks(
             context.lineTo(axisX, position);
         }
         context.stroke();
-        if (format) {
-            if (orientation === "x") {
-                context.textAlign = "center";
-                context.textBaseline = "top";
-                context.fillText(format(value), position, axisY + TICK_LENGTH + TICK_LABEL_GAP_X);
-            } else {
-                context.textAlign = "right";
-                context.textBaseline = "middle";
-                context.fillText(format(value), axisX - TICK_LENGTH - TICK_LABEL_GAP_Y, position);
-            }
+        if (!format) {
+            continue;
+        }
+        const text = format(value);
+        // The label's extent along the axis: its width for x, its height
+        // for y, centered on the mark either way.
+        const half =
+            orientation === "x" ? context.measureText(text).width / 2 : fontSize / 2;
+        const span = { start: position - half, end: position + half };
+        const clear = taken.every(
+            (other) =>
+                span.end + TICK_LABEL_MIN_GAP <= other.start ||
+                span.start >= other.end + TICK_LABEL_MIN_GAP
+        );
+        if (!clear) {
+            continue;
+        }
+        taken.push(span);
+        if (orientation === "x") {
+            context.textAlign = "center";
+            context.textBaseline = "top";
+            context.fillText(text, position, axisY + TICK_LENGTH + TICK_LABEL_GAP_X);
+        } else {
+            context.textAlign = "right";
+            context.textBaseline = "middle";
+            context.fillText(text, axisX - TICK_LENGTH - TICK_LABEL_GAP_Y, position);
         }
     }
     context.restore();

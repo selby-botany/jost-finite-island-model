@@ -222,6 +222,10 @@ const TRAJECTORY_X_LABEL_DROP = 4;
 const TRAJECTORY_TICK_TARGET = 6;
 const TRAJECTORY_TICK_DECIMALS = 1;
 
+// A run of at least this many generations labels whole-thousand ticks
+// compactly ("20k"); see `formatGenerationTick`.
+const COMPACT_GENERATION_TICK_FROM = 100000;
+
 // A statistic's curve: normal width; widths and opacities when another
 // statistic is highlighted (the highlighted one thickens, the rest fade).
 const TRAJECTORY_LINE_WIDTH = 0.75;
