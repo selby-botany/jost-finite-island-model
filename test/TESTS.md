@@ -11,6 +11,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`example_support`](#test.example_support)
   - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
   - [`test_ci_workflows`](#test.test_ci_workflows)
+  - [`test_configuration_doc_index`](#test.test_configuration_doc_index)
   - [`test_constants`](#test.test_constants)
   - [`test_convergence_docs`](#test.test_convergence_docs)
   - [`test_doc_examples`](#test.test_doc_examples)
@@ -826,6 +827,48 @@ def test_every_ubuntu_job_that_installs_the_project_installs_the_gtk_build_packa
 ```
 
 `pip install -e .[...]` on Ubuntu is preceded by the PyGObject build packages.
+
+<a id="test.test_configuration_doc_index"></a>
+
+# test.test\_configuration\_doc\_index
+
+The configuration reference names every setting where a search finds it.
+
+`doc/configuration.md` gives each setting a `###` heading, and a settings
+index near the top lists them all with links. A heading that hid a key
+behind markup (`n<sub>replicates</sub>`) could not be found by searching
+for `n_replicates`, so headings spell each key literally and the index must
+list every one.
+
+<a id="test.test_configuration_doc_index.test_every_setting_heading_is_in_the_index_with_its_anchor"></a>
+
+#### test\_every\_setting\_heading\_is\_in\_the\_index\_with\_its\_anchor
+
+```python
+def test_every_setting_heading_is_in_the_index_with_its_anchor() -> None
+```
+
+Each key in a heading has an index row linking to that heading.
+
+<a id="test.test_configuration_doc_index.test_setting_headings_spell_the_key_without_markup"></a>
+
+#### test\_setting\_headings\_spell\_the\_key\_without\_markup
+
+```python
+def test_setting_headings_spell_the_key_without_markup() -> None
+```
+
+No setting heading hides a key behind a subscript or other tag.
+
+<a id="test.test_configuration_doc_index.test_the_index_is_alphabetical"></a>
+
+#### test\_the\_index\_is\_alphabetical
+
+```python
+def test_the_index_is_alphabetical() -> None
+```
+
+The index reads in alphabetical order, ignoring case.
 
 <a id="test.test_constants"></a>
 

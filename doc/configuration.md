@@ -6,6 +6,7 @@ the [project overview](../README.md) for installation.
 
 ## Contents
 
+- [Settings index](#settings-index)
 - [Complete example](#complete-example)
 - [Required model keys](#required-model-keys)
 - [Loci](#loci)
@@ -17,6 +18,57 @@ the [project overview](../README.md) for installation.
 - [Run labels](#run-labels)
 - [Internal attributes](#internal-attributes)
 - [Validation summary](#validation-summary)
+
+## Settings index
+
+Every setting, in alphabetical order, with the section that describes it.
+
+| Setting | Section |
+|---|---|
+| [`_read_only`](#_read_only) | Internal attributes |
+| [`auto_vector_max_capacity`](#auto_vector_max_capacity) | Engine backend and JIT |
+| [`auto_vector_min_d`](#auto_vector_min_d) | Engine backend and JIT |
+| [`class`](#class) | Run labels |
+| [`confidence`](#confidence) | Analysis and execution |
+| [`convergence_burn_in`](#convergence_burn_in) | Convergence |
+| [`convergence_combinator`](#convergence_combinator) | Convergence |
+| [`convergence_estimate`](#convergence_estimate) | Convergence |
+| [`convergence_statistic`](#convergence_statistic) | Convergence |
+| [`d`](#d) | Required model keys |
+| [`deme_weighting`](#deme_weighting) | Analysis and execution |
+| [`description`](#description) | Run labels |
+| [`engine_backend`](#engine_backend) | Engine backend and JIT |
+| [`equilibrium_convergence_tolerance`](#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations) | Initial conditions |
+| [`equilibrium_convergence_window`](#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations) | Initial conditions |
+| [`equilibrium_max_generations`](#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations) | Initial conditions |
+| [`expert`](#expert) | Convergence |
+| [`initial_allele_count`](#initial_allele_count) | Initial conditions |
+| [`initial_concentration`](#initial_concentration) | Initial conditions |
+| [`jit`](#jit) | Engine backend and JIT |
+| [`loci`](#loci) | Loci |
+| [`locus_aggregation`](#locus_aggregation) | Analysis and execution |
+| [`m`](#m) | Required model keys |
+| [`max_concurrent_replicates`](#max_concurrent_replicates) | Engine backend and JIT |
+| [`max_generations`](#max_generations) | Convergence |
+| [`migrant_sampling`](#migrant_sampling) | Analysis and execution |
+| [`mu`](#mu) | Required model keys |
+| [`mutation_model`](#mutation_model) | Mutation model |
+| [`N`](#n) | Required model keys |
+| [`n_replicates`](#n_replicates) | Analysis and execution |
+| [`name`](#name) | Run labels |
+| [`p_0`](#p_0) | Initial conditions |
+| [`ploidy`](#ploidy) | Required model keys |
+| [`precision`](#precision) | Convergence |
+| [`precision_method`](#precision_method) | Analysis and execution |
+| [`replicate_averaging_window`](#replicate_averaging_window) | Analysis and execution |
+| [`replicate_minimum`](#replicate_minimum) | Analysis and execution |
+| [`seed`](#seed) | Required model keys |
+| [`statistic_precision`](#statistic_precision) | Convergence |
+| [`stop_batch_early`](#stop_batch_early) | Analysis and execution |
+| [`track_expensive_statistics`](#track_expensive_statistics) | Convergence |
+| [`trajectory_retention`](#trajectory_retention-trajectory_stride-trajectory_thinning_start) | Convergence |
+| [`trajectory_stride`](#trajectory_retention-trajectory_stride-trajectory_thinning_start) | Convergence |
+| [`trajectory_thinning_start`](#trajectory_retention-trajectory_stride-trajectory_thinning_start) | Convergence |
 
 ## Complete example
 
@@ -365,18 +417,18 @@ loci:
 ```
 
 finite_alleles interacts with `length`, initial_allele_count, and
-p<sub>0</sub>: every locus's starting allele IDs — the founding range
-0 .. initial_allele_count - 1, or an explicit p<sub>0</sub>'s specific IDs —
+p_0: every locus's starting allele IDs — the founding range
+0 .. initial_allele_count - 1, or an explicit p_0's specific IDs —
 must fit inside that locus's own 4<sup>length</sup> capacity, checked
 independently per locus. A locus this short with the library default
 initial_allele_count: 2 always fits (capacity is at least 4); it is
-easiest to violate by combining a short `length` with an explicit p<sub>0</sub>
+easiest to violate by combining a short `length` with an explicit p_0
 using IDs that were only ever meant for a longer locus.
 
 ## Initial conditions
 
 Generation 0 — whether drawn from initial_concentration or supplied
-explicitly via p<sub>0</sub> — is a continuous prior, not a state the run's `N`
+explicitly via p_0 — is a continuous prior, not a state the run's `N`
 gene copies could themselves produce; only generation 1 onward, once
 `drift` has resampled at `N` gene copies, lands on that discrete
 `1/N` lattice. See the [model contract](../README.md#model-contract)
@@ -397,14 +449,14 @@ Founding IDs are locus-relative `0` through initial_allele_count - 1.
 The random default draws each deme/locus frequency vector independently from a
 symmetric Dirichlet distribution. Smaller values are more uneven.
 
-### p<sub>0</sub>
+### p_0
 
 - **Type:** optional nested list: `d` demes, each containing one mapping per
   configured locus
 - **Default:** absent
 
 Allele keys are integer IDs and each mapping must sum to 1. When present,
-p<sub>0</sub> is used verbatim instead of a Dirichlet draw. Newly mutated allele IDs
+p_0 is used verbatim instead of a Dirichlet draw. Newly mutated allele IDs
 are allocated above both the reserved mutation range and the highest supplied
 ID, so they cannot collide with explicit labels.
 
@@ -482,7 +534,7 @@ first phase, separately from the main run's, and the manifest records how
 many there were (`equilibrium_generation_count`) and the diversity at the
 split (`equilibrium_final_heterozygosity`).
 
-Equilibrium-split cannot be combined with an explicit p<sub>0</sub> — a run cannot both
+Equilibrium-split cannot be combined with an explicit p_0 — a run cannot both
 fix its starting frequencies and derive them — and it uses its own random
 number stream, derived from `seed`, so the same `seed` always reproduces the
 same founding populations.
@@ -858,12 +910,12 @@ locus_lengths: [50, 500]
 locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
 ```
 
-### n<sub>replicates</sub>
+### n_replicates
 
 - **Type:** positive integer
 - **Default:** `200`
 
-n<sub>replicates</sub> runs that many independently seeded scalar runs — replicate
+n_replicates runs that many independently seeded scalar runs — replicate
 `i` uses child `i` of `numpy.random.SeedSequence(seed)` — through both the library API
 (`fim.engine.simulate_params`, returning one `RunResult` per replicate) and the CLI
 (`fim run`, writing one `replicate-NNN/` subdirectory per replicate; see
@@ -871,8 +923,8 @@ n<sub>replicates</sub> runs that many independently seeded scalar runs — repli
 target: stop_batch_early (below) is on by default, so an
 unconfigured run stops well short of `200` for most configurations,
 adaptively, once its own confidence interval is tight enough — set
-n<sub>replicates</sub>: `1` explicitly for a single, ordinary scalar run with no
-batching at all (stop_batch_early is a no-op at n<sub>replicates</sub> `1`
+n_replicates: `1` explicitly for a single, ordinary scalar run with no
+batching at all (stop_batch_early is a no-op at n_replicates `1`
 either way).
 
 ### stop_batch_early
@@ -880,14 +932,14 @@ either way).
 - **Type:** boolean
 - **Default:** `true`
 
-Early stopping for a replicate batch (n<sub>replicates</sub> greater than one):
+Early stopping for a replicate batch (n_replicates greater than one):
 once at least replicate_minimum replicates have run, stop as soon as
 every statistic named in convergence_statistic has an across-replicate
 Student's-t confidence interval (mean of each replicate's own window mean
 of that statistic, over the replicates so far) with a half-width at most
 precision — combined
 across several watched statistics by convergence_combinator, exactly like
-within-run convergence. n<sub>replicates</sub> is still the hard cap:
+within-run convergence. n_replicates is still the hard cap:
 reaching it without tightening ends the batch anyway, a valid,
 non-adaptively-stopped result. This is the mechanism that answers "how many
 replicate runs are needed for a confidence interval" without guessing a
@@ -905,7 +957,7 @@ result. Because of this rule, the same configuration and seed keep the
 same replicates and write the same `summary.json` under `lineal` and
 `generational`.
 
-`false` disables the adaptive stop entirely — n<sub>replicates</sub> then
+`false` disables the adaptive stop entirely — n_replicates then
 always runs in full.
 
 ```yaml
@@ -971,10 +1023,10 @@ replicate_averaging_window: 20000    # or: every replicate averages 20,000
 How a batch reaches its precision. `interval` adds replicates until the
 interval across them is plus or minus `precision` (with stop_batch_early on),
 each replicate averaging for a window matched to the batch. `planned_replicates`
-runs exactly n<sub>replicates</sub>, with no early stop, and sizes every
+runs exactly n_replicates, with no early stop, and sizes every
 replicate's window so that their interval is plus or minus `precision`: you
 choose the number of replicates, the engine chooses how long each one averages.
-It needs n<sub>replicates</sub> of at least 2.
+It needs n_replicates of at least 2.
 
 In the app, precision_method and replicate_averaging_window are Settings
 defaults (Settings, Convergence); a loaded configuration keeps its own.
@@ -992,9 +1044,9 @@ precision_method: planned_replicates   # 16 replicates, each long enough for +/-
 The fewest replicates before the batch may stop early — the
 replicate-layer analog of the within-run first check, guarding against a
 lucky-early-tight fluke from too small a sample. Only meaningful when
-stop_batch_early is on. A value larger than n<sub>replicates</sub> is
-silently capped at n<sub>replicates</sub> rather than rejected — setting
-n<sub>replicates</sub> to something small without separately thinking about
+stop_batch_early is on. A value larger than n_replicates is
+silently capped at n_replicates rather than rejected — setting
+n_replicates to something small without separately thinking about
 replicate_minimum is an ordinary, common thing to do, not a mistake
 worth an error for.
 
@@ -1065,7 +1117,7 @@ the run:
 - `lineal` (the default): the straightforward, reference
   implementation. Every replicate runs on its own, one after another
   (or in separate worker processes if you ask for that — see
-  [n<sub>replicates</sub>](#nreplicates) above).
+  [n_replicates](#n_replicates) above).
 - `generational`: the same computation, restructured to advance every
   replicate one generation at a time together, spread across threads
   instead of processes. Produces bit-for-bit identical results to
@@ -1384,13 +1436,13 @@ existed.
 | trajectory_stride less than 1 or not a whole number | rejected |
 | trajectory_thinning_start not a positive integer or `auto` | rejected |
 | precision_method not `interval` or `planned_replicates` | rejected |
-| precision_method `planned_replicates` with n<sub>replicates</sub> `1` | rejected |
+| precision_method `planned_replicates` with n_replicates `1` | rejected |
 | replicate_averaging_window not a positive integer or `auto` | rejected |
 | replicate_averaging_window set for a model with no burn-in | rejected |
 | replicate_minimum less than 2 | rejected |
 | convergence_burn_in not a positive integer or `auto` | rejected |
 | track_expensive_statistics not a boolean | rejected |
-| replicate_minimum greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
+| replicate_minimum greater than n_replicates | silently capped at n_replicates |
 | confidence not `0.90`, `0.95`, or `0.99` | rejected |
 | deme_weighting not `size` or `equal` | rejected |
 | locus_aggregation not `ratio_of_means` or `mean_of_ratios` | rejected |
@@ -1401,9 +1453,9 @@ existed.
 | jit: numba with engine_backend: lineal or generational-vector | rejected |
 | engine_backend: generational-vector with either mutation_model, scalar or matrix `m`, either migrant_sampling | accepted |
 | max_concurrent_replicates less than 1 | rejected |
-| max_concurrent_replicates greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
+| max_concurrent_replicates greater than n_replicates | silently capped at n_replicates |
 | one or two of the three equilibrium\_ keys given instead of all three | rejected |
-| any equilibrium\_ key given together with p<sub>0</sub> | rejected |
+| any equilibrium\_ key given together with p_0 | rejected |
 | equilibrium_convergence_window less than 2 | rejected |
 | equilibrium_convergence_tolerance zero, negative or non-finite | rejected |
 | equilibrium_max_generations less than 1 | rejected |

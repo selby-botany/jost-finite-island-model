@@ -4,6 +4,7 @@ out-of-range values are errors. See <a href="#" data-fim-help="usage" data-fim-a
 the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md">project overview</a> for installation.</p>
 <h2 id="contents">Contents</h2>
 <ul>
+<li><a href="#settings-index">Settings index</a></li>
 <li><a href="#complete-example">Complete example</a></li>
 <li><a href="#required-model-keys">Required model keys</a></li>
 <li><a href="#loci">Loci</a></li>
@@ -16,6 +17,194 @@ the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <li><a href="#internal-attributes">Internal attributes</a></li>
 <li><a href="#validation-summary">Validation summary</a></li>
 </ul>
+<h2 id="settings-index">Settings index</h2>
+<p>Every setting, in alphabetical order, with the section that describes it.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#_read_only"><code>_read_only</code></a></td>
+<td>Internal attributes</td>
+</tr>
+<tr>
+<td><a href="#auto_vector_max_capacity"><code>auto_vector_max_capacity</code></a></td>
+<td>Engine backend and JIT</td>
+</tr>
+<tr>
+<td><a href="#auto_vector_min_d"><code>auto_vector_min_d</code></a></td>
+<td>Engine backend and JIT</td>
+</tr>
+<tr>
+<td><a href="#class"><code>class</code></a></td>
+<td>Run labels</td>
+</tr>
+<tr>
+<td><a href="#confidence"><code>confidence</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#convergence_burn_in"><code>convergence_burn_in</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#convergence_combinator"><code>convergence_combinator</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#convergence_estimate"><code>convergence_estimate</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#convergence_statistic"><code>convergence_statistic</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#d"><code>d</code></a></td>
+<td>Required model keys</td>
+</tr>
+<tr>
+<td><a href="#deme_weighting"><code>deme_weighting</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#description"><code>description</code></a></td>
+<td>Run labels</td>
+</tr>
+<tr>
+<td><a href="#engine_backend"><code>engine_backend</code></a></td>
+<td>Engine backend and JIT</td>
+</tr>
+<tr>
+<td><a href="#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations"><code>equilibrium_convergence_tolerance</code></a></td>
+<td>Initial conditions</td>
+</tr>
+<tr>
+<td><a href="#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations"><code>equilibrium_convergence_window</code></a></td>
+<td>Initial conditions</td>
+</tr>
+<tr>
+<td><a href="#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations"><code>equilibrium_max_generations</code></a></td>
+<td>Initial conditions</td>
+</tr>
+<tr>
+<td><a href="#expert"><code>expert</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#initial_allele_count"><code>initial_allele_count</code></a></td>
+<td>Initial conditions</td>
+</tr>
+<tr>
+<td><a href="#initial_concentration"><code>initial_concentration</code></a></td>
+<td>Initial conditions</td>
+</tr>
+<tr>
+<td><a href="#jit"><code>jit</code></a></td>
+<td>Engine backend and JIT</td>
+</tr>
+<tr>
+<td><a href="#loci"><code>loci</code></a></td>
+<td>Loci</td>
+</tr>
+<tr>
+<td><a href="#locus_aggregation"><code>locus_aggregation</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#m"><code>m</code></a></td>
+<td>Required model keys</td>
+</tr>
+<tr>
+<td><a href="#max_concurrent_replicates"><code>max_concurrent_replicates</code></a></td>
+<td>Engine backend and JIT</td>
+</tr>
+<tr>
+<td><a href="#max_generations"><code>max_generations</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#migrant_sampling"><code>migrant_sampling</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#mu"><code>mu</code></a></td>
+<td>Required model keys</td>
+</tr>
+<tr>
+<td><a href="#mutation_model"><code>mutation_model</code></a></td>
+<td>Mutation model</td>
+</tr>
+<tr>
+<td><a href="#n"><code>N</code></a></td>
+<td>Required model keys</td>
+</tr>
+<tr>
+<td><a href="#n_replicates"><code>n_replicates</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#name"><code>name</code></a></td>
+<td>Run labels</td>
+</tr>
+<tr>
+<td><a href="#p_0"><code>p_0</code></a></td>
+<td>Initial conditions</td>
+</tr>
+<tr>
+<td><a href="#ploidy"><code>ploidy</code></a></td>
+<td>Required model keys</td>
+</tr>
+<tr>
+<td><a href="#precision"><code>precision</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#precision_method"><code>precision_method</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#replicate_averaging_window"><code>replicate_averaging_window</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#replicate_minimum"><code>replicate_minimum</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#seed"><code>seed</code></a></td>
+<td>Required model keys</td>
+</tr>
+<tr>
+<td><a href="#statistic_precision"><code>statistic_precision</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#stop_batch_early"><code>stop_batch_early</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
+<td><a href="#track_expensive_statistics"><code>track_expensive_statistics</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start"><code>trajectory_retention</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start"><code>trajectory_stride</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start"><code>trajectory_thinning_start</code></a></td>
+<td>Convergence</td>
+</tr>
+</tbody>
+</table>
 <h2 id="complete-example">Complete example</h2>
 <pre><code class="language-yaml">N: 225
 ploidy: diploid
@@ -313,16 +502,16 @@ loci:
     length: 1     # capacity 4 — recurrence becomes likely quickly
 </code></pre>
 <p>finite_alleles interacts with <code>length</code>, initial_allele_count, and
-p<sub>0</sub>: every locus's starting allele IDs — the founding range
-0 .. initial_allele_count - 1, or an explicit p<sub>0</sub>'s specific IDs —
+p_0: every locus's starting allele IDs — the founding range
+0 .. initial_allele_count - 1, or an explicit p_0's specific IDs —
 must fit inside that locus's own 4<sup>length</sup> capacity, checked
 independently per locus. A locus this short with the library default
 initial_allele_count: 2 always fits (capacity is at least 4); it is
-easiest to violate by combining a short <code>length</code> with an explicit p<sub>0</sub>
+easiest to violate by combining a short <code>length</code> with an explicit p_0
 using IDs that were only ever meant for a longer locus.</p>
 <h2 id="initial-conditions">Initial conditions</h2>
 <p>Generation 0 — whether drawn from initial_concentration or supplied
-explicitly via p<sub>0</sub> — is a continuous prior, not a state the run's <code>N</code>
+explicitly via p_0 — is a continuous prior, not a state the run's <code>N</code>
 gene copies could themselves produce; only generation 1 onward, once
 <code>drift</code> has resampled at <code>N</code> gene copies, lands on that discrete
 <code>1/N</code> lattice. See the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md#model-contract">model contract</a>
@@ -340,14 +529,14 @@ and <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 </ul>
 <p>The random default draws each deme/locus frequency vector independently from a
 symmetric Dirichlet distribution. Smaller values are more uneven.</p>
-<h3 id="p0">p<sub>0</sub></h3>
+<h3 id="p_0">p_0</h3>
 <ul>
 <li><strong>Type:</strong> optional nested list: <code>d</code> demes, each containing one mapping per
 configured locus</li>
 <li><strong>Default:</strong> absent</li>
 </ul>
 <p>Allele keys are integer IDs and each mapping must sum to 1. When present,
-p<sub>0</sub> is used verbatim instead of a Dirichlet draw. Newly mutated allele IDs
+p_0 is used verbatim instead of a Dirichlet draw. Newly mutated allele IDs
 are allocated above both the reserved mutation range and the highest supplied
 ID, so they cannot collide with explicit labels.</p>
 <pre><code class="language-yaml">p_0:
@@ -416,7 +605,7 @@ beside <code>trajectory.tlog</code>. Its generations are numbered from 0 within 
 first phase, separately from the main run's, and the manifest records how
 many there were (<code>equilibrium_generation_count</code>) and the diversity at the
 split (<code>equilibrium_final_heterozygosity</code>).</p>
-<p>Equilibrium-split cannot be combined with an explicit p<sub>0</sub> — a run cannot both
+<p>Equilibrium-split cannot be combined with an explicit p_0 — a run cannot both
 fix its starting frequencies and derive them — and it uses its own random
 number stream, derived from <code>seed</code>, so the same <code>seed</code> always reproduces the
 same founding populations.</p>
@@ -882,12 +1071,12 @@ watches a different estimator than the one its own final report shows.</p>
 locus_lengths: [50, 500]
 locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
 </code></pre>
-<h3 id="nreplicates">n<sub>replicates</sub></h3>
+<h3 id="n_replicates">n_replicates</h3>
 <ul>
 <li><strong>Type:</strong> positive integer</li>
 <li><strong>Default:</strong> <code>200</code></li>
 </ul>
-<p>n<sub>replicates</sub> runs that many independently seeded scalar runs — replicate
+<p>n_replicates runs that many independently seeded scalar runs — replicate
 <code>i</code> uses child <code>i</code> of <code>numpy.random.SeedSequence(seed)</code> — through both the library API
 (<code>fim.engine.simulate_params</code>, returning one <code>RunResult</code> per replicate) and the CLI
 (<code>fim run</code>, writing one <code>replicate-NNN/</code> subdirectory per replicate; see
@@ -895,22 +1084,22 @@ locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
 target: stop_batch_early (below) is on by default, so an
 unconfigured run stops well short of <code>200</code> for most configurations,
 adaptively, once its own confidence interval is tight enough — set
-n<sub>replicates</sub>: <code>1</code> explicitly for a single, ordinary scalar run with no
-batching at all (stop_batch_early is a no-op at n<sub>replicates</sub> <code>1</code>
+n_replicates: <code>1</code> explicitly for a single, ordinary scalar run with no
+batching at all (stop_batch_early is a no-op at n_replicates <code>1</code>
 either way).</p>
 <h3 id="stop_batch_early">stop_batch_early</h3>
 <ul>
 <li><strong>Type:</strong> boolean</li>
 <li><strong>Default:</strong> <code>true</code></li>
 </ul>
-<p>Early stopping for a replicate batch (n<sub>replicates</sub> greater than one):
+<p>Early stopping for a replicate batch (n_replicates greater than one):
 once at least replicate_minimum replicates have run, stop as soon as
 every statistic named in convergence_statistic has an across-replicate
 Student's-t confidence interval (mean of each replicate's own window mean
 of that statistic, over the replicates so far) with a half-width at most
 precision — combined
 across several watched statistics by convergence_combinator, exactly like
-within-run convergence. n<sub>replicates</sub> is still the hard cap:
+within-run convergence. n_replicates is still the hard cap:
 reaching it without tightening ends the batch anyway, a valid,
 non-adaptively-stopped result. This is the mechanism that answers &quot;how many
 replicate runs are needed for a confidence interval&quot; without guessing a
@@ -926,7 +1115,7 @@ statistics, so keeping whichever replicates finish first would bias the
 result. Because of this rule, the same configuration and seed keep the
 same replicates and write the same <code>summary.json</code> under <code>lineal</code> and
 <code>generational</code>.</p>
-<p><code>false</code> disables the adaptive stop entirely — n<sub>replicates</sub> then
+<p><code>false</code> disables the adaptive stop entirely — n_replicates then
 always runs in full.</p>
 <pre><code class="language-yaml">n_replicates: 200          # hard cap
 precision: 0.02            # stop once every watched statistic is this tight
@@ -981,10 +1170,10 @@ replicate_averaging_window: 20000    # or: every replicate averages 20,000
 <p>How a batch reaches its precision. <code>interval</code> adds replicates until the
 interval across them is plus or minus <code>precision</code> (with stop_batch_early on),
 each replicate averaging for a window matched to the batch. <code>planned_replicates</code>
-runs exactly n<sub>replicates</sub>, with no early stop, and sizes every
+runs exactly n_replicates, with no early stop, and sizes every
 replicate's window so that their interval is plus or minus <code>precision</code>: you
 choose the number of replicates, the engine chooses how long each one averages.
-It needs n<sub>replicates</sub> of at least 2.</p>
+It needs n_replicates of at least 2.</p>
 <p>In the app, precision_method and replicate_averaging_window are Settings
 defaults (Settings, Convergence); a loaded configuration keeps its own.</p>
 <pre><code class="language-yaml">n_replicates: 16
@@ -998,9 +1187,9 @@ precision_method: planned_replicates   # 16 replicates, each long enough for +/-
 <p>The fewest replicates before the batch may stop early — the
 replicate-layer analog of the within-run first check, guarding against a
 lucky-early-tight fluke from too small a sample. Only meaningful when
-stop_batch_early is on. A value larger than n<sub>replicates</sub> is
-silently capped at n<sub>replicates</sub> rather than rejected — setting
-n<sub>replicates</sub> to something small without separately thinking about
+stop_batch_early is on. A value larger than n_replicates is
+silently capped at n_replicates rather than rejected — setting
+n_replicates to something small without separately thinking about
 replicate_minimum is an ordinary, common thing to do, not a mistake
 worth an error for.</p>
 <h3 id="confidence">confidence</h3>
@@ -1064,7 +1253,7 @@ the run:</p>
 <li><code>lineal</code> (the default): the straightforward, reference
 implementation. Every replicate runs on its own, one after another
 (or in separate worker processes if you ask for that — see
-<a href="#nreplicates">n<sub>replicates</sub></a> above).</li>
+<a href="#n_replicates">n_replicates</a> above).</li>
 <li><code>generational</code>: the same computation, restructured to advance every
 replicate one generation at a time together, spread across threads
 instead of processes. Produces bit-for-bit identical results to
@@ -1450,7 +1639,7 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>precision_method <code>planned_replicates</code> with n<sub>replicates</sub> <code>1</code></td>
+<td>precision_method <code>planned_replicates</code> with n_replicates <code>1</code></td>
 <td>rejected</td>
 </tr>
 <tr>
@@ -1474,8 +1663,8 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>replicate_minimum greater than n<sub>replicates</sub></td>
-<td>silently capped at n<sub>replicates</sub></td>
+<td>replicate_minimum greater than n_replicates</td>
+<td>silently capped at n_replicates</td>
 </tr>
 <tr>
 <td>confidence not <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></td>
@@ -1518,15 +1707,15 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>max_concurrent_replicates greater than n<sub>replicates</sub></td>
-<td>silently capped at n<sub>replicates</sub></td>
+<td>max_concurrent_replicates greater than n_replicates</td>
+<td>silently capped at n_replicates</td>
 </tr>
 <tr>
 <td>one or two of the three equilibrium_ keys given instead of all three</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td>any equilibrium_ key given together with p<sub>0</sub></td>
+<td>any equilibrium_ key given together with p_0</td>
 <td>rejected</td>
 </tr>
 <tr>

@@ -156,7 +156,7 @@ initial condition, not an everyday parameter file.
 The near-equilibrium state is too long to type by hand: 100 patches, each
 with 63 allele frequencies. The script in this directory, `reproduce.py`,
 derives it and writes it into `config.yaml` as an explicit `p_0` table (see
-[p_0](../../configuration.md#p0) in the configuration reference). The
+[p_0](../../configuration.md#p_0) in the configuration reference). The
 derivation is the same code the validation test uses:
 
 ```python
