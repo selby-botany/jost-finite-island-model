@@ -310,3 +310,25 @@ def test_fewer_than_one_attempt_is_a_plain_error(
 
     assert status == 2
     assert "max_attempts" in capsys.readouterr().err
+
+
+def test_a_sweep_that_is_running_elsewhere_is_a_plain_error(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from fim.persistence.object_lock import exclusive_lock  # noqa: PLC0415
+    from fim.sweep_run import sweep_lock_path  # noqa: PLC0415
+
+    _main(tmp_path, "sweep", "run", str(sweep_file))
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    capsys.readouterr()
+
+    with exclusive_lock(
+        sweep_lock_path(study.study_id, results=tmp_path / "results"),
+        blocking=False,
+    ):
+        status = _main(tmp_path, "sweep", "resume", study.study_id)
+
+    assert status == 2
+    assert "another process is running" in capsys.readouterr().err

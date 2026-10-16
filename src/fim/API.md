@@ -1565,6 +1565,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [apply\_coordinates](#fim.sweep.apply_coordinates)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
+  * [SweepLockedError](#fim.sweep_run.SweepLockedError)
   * [FailureClass](#fim.sweep_run.FailureClass)
   * [classify\_failure](#fim.sweep_run.classify_failure)
   * [PointFailure](#fim.sweep_run.PointFailure)
@@ -1594,6 +1595,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [\_Context](#fim.sweep_run._Context)
     * [emit](#fim.sweep_run._Context.emit)
   * [run\_sweep](#fim.sweep_run.run_sweep)
+  * [sweep\_lock\_held](#fim.sweep_run.sweep_lock_held)
+  * [sweep\_lock\_path](#fim.sweep_run.sweep_lock_path)
   * [failures\_path](#fim.sweep_run.failures_path)
   * [read\_failures](#fim.sweep_run.read_failures)
   * [read\_point\_objects](#fim.sweep_run.read_point_objects)
@@ -36641,6 +36644,19 @@ Run object's lifecycle state when it is `planned`, `running`, `paused`,
 `interrupted`, or `failed`; `stale` (only a run from another software
 version); `failed` (recorded before any Run object existed); or `waiting`.
 
+<a id="fim.sweep_run.SweepLockedError"></a>
+
+## SweepLockedError Objects
+
+```python
+class SweepLockedError(StoreError, ValueError)
+```
+
+Another process is already running this sweep.
+
+A `ValueError` subclass so the command line and the app report it as
+a plain error, like any other reason a sweep cannot start.
+
 <a id="fim.sweep_run.FailureClass"></a>
 
 #### FailureClass
@@ -37225,6 +37241,44 @@ falls back to the runner's `run_point`.
   the stored plan no longer matches what this version of the
   program enumerates.
 - `ClosedGroupError` - The Study is closed; reopen it to continue.
+- `SweepLockedError` - Another process is running this sweep. A sweep
+  holds a lock on its Study for as long as it runs, released by
+  the operating system if the process dies, so two sweeps never
+  work on one Study at the same time.
+
+<a id="fim.sweep_run.sweep_lock_held"></a>
+
+#### sweep\_lock\_held
+
+```python
+def sweep_lock_held(study_id: str, *, results: Path | None = None) -> bool
+```
+
+Return whether a process is running the sweep `study_id` right now.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  True while any process, this one included, is inside `run_sweep` for
+  the Study.
+
+<a id="fim.sweep_run.sweep_lock_path"></a>
+
+#### sweep\_lock\_path
+
+```python
+def sweep_lock_path(study_id: str, *, results: Path | None = None) -> Path
+```
+
+Return the lock file a running sweep holds for its Study.
+
+Kept beside the failure file, so the Study index's `*.json` scan never
+sees it.
 
 <a id="fim.sweep_run.failures_path"></a>
 

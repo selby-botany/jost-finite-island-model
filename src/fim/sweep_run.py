@@ -47,11 +47,16 @@ import yaml
 
 from fim import __version__, paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.errors import StoreError
 from fim.execution import UnsupportedSessionError
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
-from fim.persistence.object_lock import is_lock_held
+from fim.persistence.object_lock import (
+    LockUnavailableError,
+    exclusive_lock,
+    is_lock_held,
+)
 from fim.persistence.run_lifecycle import (
     ACTIVE_STATES,
     LifecycleError,
@@ -135,6 +140,14 @@ EventKind = Literal[
     "sweep_done",
     "sweep_cancelled",
 ]
+
+
+class SweepLockedError(StoreError, ValueError):
+    """Another process is already running this sweep.
+
+    A `ValueError` subclass so the command line and the app report it as
+    a plain error, like any other reason a sweep cannot start.
+    """
 
 
 FailureClass = Literal["transient", "deterministic"]
@@ -1126,8 +1139,73 @@ def run_sweep(
             the stored plan no longer matches what this version of the
             program enumerates.
         ClosedGroupError: The Study is closed; reopen it to continue.
+        SweepLockedError: Another process is running this sweep. A sweep
+            holds a lock on its Study for as long as it runs, released by
+            the operating system if the process dies, so two sweeps never
+            work on one Study at the same time.
     """
     _require_attempts(max_attempts)
+    lock = sweep_lock_path(study_id, results=results)
+    try:
+        with exclusive_lock(lock, blocking=False):
+            return _run_sweep_locked(
+                study_id,
+                runner,
+                on_event,
+                cancel_event,
+                retry_failed=retry_failed,
+                rerun=rerun,
+                software_version=software_version,
+                points_at_once=points_at_once,
+                max_workers=max_workers,
+                max_attempts=max_attempts,
+                results=results,
+            )
+    except LockUnavailableError:
+        raise SweepLockedError(
+            f"another process is running sweep {study_id}; wait for it to "
+            "finish, or stop it, and try again"
+        ) from None
+
+
+def sweep_lock_held(study_id: str, *, results: Path | None = None) -> bool:
+    """Return whether a process is running the sweep `study_id` right now.
+
+    Args:
+        study_id: A sweep Study.
+        results: Optional results-directory override.
+
+    Returns:
+        True while any process, this one included, is inside `run_sweep` for
+        the Study.
+    """
+    return is_lock_held(sweep_lock_path(study_id, results=results))
+
+
+def sweep_lock_path(study_id: str, *, results: Path | None = None) -> Path:
+    """Return the lock file a running sweep holds for its Study.
+
+    Kept beside the failure file, so the Study index's `*.json` scan never
+    sees it.
+    """
+    return failures_path(study_id, results=results).with_suffix(".lock")
+
+
+def _run_sweep_locked(
+    study_id: str,
+    runner: PointRunner,
+    on_event: Callable[[SweepEvent], None],
+    cancel_event: threading.Event,
+    *,
+    retry_failed: bool = False,
+    rerun: bool = False,
+    software_version: str = __version__,
+    points_at_once: int | None = None,
+    max_workers: int | None = None,
+    max_attempts: int = 1,
+    results: Path | None = None,
+) -> SweepOutcome:
+    """Run the sweep; the caller holds the Study's sweep lock."""
     study = groups.get_study(study_id, results=results)
     groups.refuse_closed(study, "given more sweep runs")
     spec = sweep_spec_of(study)

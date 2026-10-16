@@ -1586,6 +1586,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   data.** It controls number formatting and checks both grouped and
   ungrouped generation counts, preserving locale-aware application output
   while avoiding a Linux WebKit CI failure.
+- **Two processes can no longer run one sweep at once.** A second
+  `fim sweep resume`, or the app, on a Study that another process is running
+  stopped nothing: both wrote the same failure file and raced to create the
+  same runs. A sweep now holds a lock on its Study, and a second start is
+  refused with a message that says so. The system frees the lock if the
+  process dies.
 - **A worker process that dies no longer ends a sweep.** One worker ended by
   the system broke the whole pool; the next point then raised outside the
   sweep's error handling, the sweep stopped, and in the app the page showed a

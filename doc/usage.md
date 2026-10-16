@@ -1081,6 +1081,11 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   all. A failure the engine reports is never tried again, because the same
   configuration fails the same way. A pool of workers that breaks is replaced,
   so the points after the failed one still run.
+- A sweep holds a lock on its Study while it runs. A second `fim sweep resume`
+  (or the app) on the same Study stops at once with a message that another
+  process is running it, instead of both writing the same files. The system
+  releases the lock if the process dies, so a crashed sweep never leaves its
+  Study locked.
 - A point's run id is a hash of its configuration, so resuming, or running a
   second sweep that overlaps the first, reuses the runs that already exist
   instead of computing them again. Reuse requires identical configurations,

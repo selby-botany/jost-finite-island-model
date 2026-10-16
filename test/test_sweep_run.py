@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+import sys
 import threading
 from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, Future
@@ -24,6 +26,7 @@ from fim import paths
 from fim.gui.sweep_bridge import status_payload
 from fim.model.params import SimulationParams
 from fim.persistence import groups
+from fim.persistence.object_lock import exclusive_lock
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_metadata import read_run_metadata, run_metadata_path
 from fim.persistence.run_objects import (
@@ -41,6 +44,7 @@ from fim.sweep_run import (
     PointFailure,
     ProcessPointRunner,
     SweepEvent,
+    SweepLockedError,
     classify_failure,
     create_sweep_study,
     failures_path,
@@ -49,6 +53,8 @@ from fim.sweep_run import (
     resolve_concurrency,
     run_sweep,
     stored_points,
+    sweep_lock_held,
+    sweep_lock_path,
     sweep_point_results,
     sweep_point_statuses,
 )
@@ -1292,3 +1298,101 @@ def test_failures_are_classified_by_exception_type(
     error: BaseException, expected: str
 ) -> None:
     assert classify_failure(error) == expected
+
+
+def test_a_second_sweep_on_a_study_that_is_running_is_refused(results: Path) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(0, "transient")
+
+    with (
+        exclusive_lock(sweep_lock_path(study_id), blocking=False),
+        pytest.raises(SweepLockedError, match="another process is running"),
+    ):
+        _run(study_id, runner)
+
+    assert runner.calls == 0
+    assert _manifest_count(results) == 0
+
+
+def test_the_lock_is_held_while_the_sweep_runs_and_free_after(results: Path) -> None:
+    study_id = _study(results, 2)
+    held_during: list[bool] = []
+    assert not sweep_lock_held(study_id)
+
+    run_sweep(
+        study_id,
+        LocalPointRunner(),
+        lambda _event: held_during.append(sweep_lock_held(study_id)),
+        threading.Event(),
+        points_at_once=1,
+    )
+
+    assert held_during
+    assert all(held_during)
+    assert not sweep_lock_held(study_id)
+
+
+class _Exploding:
+    """A runner that raises an exception no handler expects."""
+
+    def run_point(
+        self,
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None,
+        max_workers: int | None = None,
+    ) -> Path | PointFailure:
+        del params, cancel_event, on_message, max_workers
+        raise KeyError("not a failure the sweep knows")
+
+
+def test_the_lock_is_released_after_an_exception_and_after_a_cancel(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, 3)
+    with pytest.raises(KeyError):
+        _run(study_id, _Exploding(), points_at_once=1)
+    assert not sweep_lock_held(study_id)
+
+    cancel = threading.Event()
+    cancel.set()
+    outcome, _ = _run(study_id, cancel=cancel)
+    assert outcome.cancelled
+    assert not sweep_lock_held(study_id)
+
+    outcome, _ = _run(study_id, points_at_once=1)
+    assert outcome.done == 2
+
+
+def test_another_process_holding_the_lock_blocks_the_sweep_until_it_dies(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, 3)
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys, pathlib, time\n"
+            "from fim.persistence.object_lock import exclusive_lock\n"
+            "with exclusive_lock(pathlib.Path(sys.argv[1]), blocking=False):\n"
+            "    print('held', flush=True)\n"
+            "    time.sleep(3600)\n",
+            str(sweep_lock_path(study_id)),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "held"
+        assert sweep_lock_held(study_id)
+        with pytest.raises(SweepLockedError):
+            _run(study_id)
+    finally:
+        # SIGKILL: the operating system must free the lock with the process.
+        holder.kill()
+        holder.wait()
+
+    assert not sweep_lock_held(study_id)
+    outcome, _ = _run(study_id, points_at_once=1)
+    assert outcome.done == 2
