@@ -69,6 +69,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.config.defaults.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
   * [DEFAULT\_N\_REPLICATES](#fim.config.defaults.DEFAULT_N_REPLICATES)
   * [DEFAULT\_PRECISION](#fim.config.defaults.DEFAULT_PRECISION)
+  * [DEFAULT\_SWEEP\_MAX\_ATTEMPTS](#fim.config.defaults.DEFAULT_SWEEP_MAX_ATTEMPTS)
   * [DEFAULT\_PAIRWISE\_MAX\_DEMES](#fim.config.defaults.DEFAULT_PAIRWISE_MAX_DEMES)
 * [fim.config.display](#fim.config.display)
   * [GUI\_ANIMATION\_MAX\_FRAMES](#fim.config.display.GUI_ANIMATION_MAX_FRAMES)
@@ -84,6 +85,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [describe\_expert\_settings](#fim.config.expert.describe_expert_settings)
 * [fim.config.limits](#fim.config.limits)
   * [MAXIMUM\_RECURSION\_DEMES](#fim.config.limits.MAXIMUM_RECURSION_DEMES)
+  * [MINIMUM\_EQUILIBRIUM\_N](#fim.config.limits.MINIMUM_EQUILIBRIUM_N)
+  * [MINIMUM\_EQUILIBRIUM\_DEMES](#fim.config.limits.MINIMUM_EQUILIBRIUM_DEMES)
 * [fim.config.numerics](#fim.config.numerics)
   * [MAXIMUM\_LAG1\_CORRELATION](#fim.config.numerics.MAXIMUM_LAG1_CORRELATION)
   * [MINIMUM\_WINDOW\_VALUES](#fim.config.numerics.MINIMUM_WINDOW_VALUES)
@@ -488,6 +491,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_sweep\_status](#fim.gui.app.Api.get_sweep_status)
     * [get\_sweep\_results](#fim.gui.app.Api.get_sweep_results)
     * [get\_sweep\_theory](#fim.gui.app.Api.get_sweep_theory)
+    * [export\_sweep\_table](#fim.gui.app.Api.export_sweep_table)
     * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
     * [delete\_runs](#fim.gui.app.Api.delete_runs)
     * [delete\_selected](#fim.gui.app.Api.delete_selected)
@@ -1527,6 +1531,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pairwise\_matrices](#fim.statistics.pairwise.pairwise_matrices)
   * [pairwise\_nei\_identities](#fim.statistics.pairwise.pairwise_nei_identities)
   * [upper\_triangle](#fim.statistics.pairwise.upper_triangle)
+* [fim.statistics.theory](#fim.statistics.theory)
+  * [THEORY\_STATISTICS](#fim.statistics.theory.THEORY_STATISTICS)
+  * [equilibrium\_numeric\_predictions](#fim.statistics.theory.equilibrium_numeric_predictions)
+  * [theory\_for\_configuration](#fim.statistics.theory.theory_for_configuration)
+  * [theory\_at](#fim.statistics.theory.theory_at)
 * [fim.stored](#fim.stored)
   * [StoredReplicate](#fim.stored.StoredReplicate)
     * [trajectory\_path](#fim.stored.StoredReplicate.trajectory_path)
@@ -1564,6 +1573,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [apply\_coordinates](#fim.sweep.apply_coordinates)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
+  * [SweepLockedError](#fim.sweep_run.SweepLockedError)
+  * [FailureClass](#fim.sweep_run.FailureClass)
+  * [classify\_failure](#fim.sweep_run.classify_failure)
   * [PointFailure](#fim.sweep_run.PointFailure)
   * [PointPaused](#fim.sweep_run.PointPaused)
   * [SweepEvent](#fim.sweep_run.SweepEvent)
@@ -1591,12 +1603,47 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [\_Context](#fim.sweep_run._Context)
     * [emit](#fim.sweep_run._Context.emit)
   * [run\_sweep](#fim.sweep_run.run_sweep)
+  * [sweep\_lock\_held](#fim.sweep_run.sweep_lock_held)
+  * [sweep\_lock\_path](#fim.sweep_run.sweep_lock_path)
   * [failures\_path](#fim.sweep_run.failures_path)
   * [read\_failures](#fim.sweep_run.read_failures)
   * [read\_point\_objects](#fim.sweep_run.read_point_objects)
+  * [Replan](#fim.sweep_run.Replan)
+  * [replan\_sweep](#fim.sweep_run.replan_sweep)
   * [write\_reproducibility\_note](#fim.sweep_run.write_reproducibility_note)
-  * [PointResult](#fim.sweep_run.PointResult)
   * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
+  * [health\_cache\_path](#fim.sweep_run.health_cache_path)
+* [fim.sweep\_table](#fim.sweep_table)
+  * [HealthClass](#fim.sweep_table.HealthClass)
+  * [StatisticCell](#fim.sweep_table.StatisticCell)
+    * [from\_summary\_entry](#fim.sweep_table.StatisticCell.from_summary_entry)
+  * [HealthPolicy](#fim.sweep_table.HealthPolicy)
+  * [DEFAULT\_HEALTH\_POLICY](#fim.sweep_table.DEFAULT_HEALTH_POLICY)
+  * [PointHealth](#fim.sweep_table.PointHealth)
+    * [classify](#fim.sweep_table.PointHealth.classify)
+    * [describe](#fim.sweep_table.PointHealth.describe)
+    * [to\_dict](#fim.sweep_table.PointHealth.to_dict)
+  * [PointRow](#fim.sweep_table.PointRow)
+  * [HealthCache](#fim.sweep_table.HealthCache)
+    * [get](#fim.sweep_table.HealthCache.get)
+    * [put](#fim.sweep_table.HealthCache.put)
+    * [save](#fim.sweep_table.HealthCache.save)
+  * [read\_point\_health](#fim.sweep_table.read_point_health)
+  * [DEFAULT\_EXPORT\_STATISTICS](#fim.sweep_table.DEFAULT_EXPORT_STATISTICS)
+  * [ALL\_STATISTICS](#fim.sweep_table.ALL_STATISTICS)
+  * [COLUMN\_DESCRIPTIONS](#fim.sweep_table.COLUMN_DESCRIPTIONS)
+  * [AXIS\_DESCRIPTIONS](#fim.sweep_table.AXIS_DESCRIPTIONS)
+  * [TablePoint](#fim.sweep_table.TablePoint)
+  * [ResultTable](#fim.sweep_table.ResultTable)
+    * [read](#fim.sweep_table.ResultTable.read)
+    * [axis\_keys](#fim.sweep_table.ResultTable.axis_keys)
+    * [statistic\_names](#fim.sweep_table.ResultTable.statistic_names)
+    * [columns](#fim.sweep_table.ResultTable.columns)
+    * [long\_rows](#fim.sweep_table.ResultTable.long_rows)
+    * [wide\_rows](#fim.sweep_table.ResultTable.wide_rows)
+    * [to\_csv](#fim.sweep_table.ResultTable.to_csv)
+    * [to\_jsonl](#fim.sweep_table.ResultTable.to_jsonl)
+    * [metadata](#fim.sweep_table.ResultTable.metadata)
 * [fim.termination](#fim.termination)
   * [TERMINATED\_EXIT\_STATUS](#fim.termination.TERMINATED_EXIT_STATUS)
   * [sigterm\_raises\_exit](#fim.termination.sigterm_raises_exit)
@@ -2303,7 +2350,7 @@ def add_sweep_subcommands(
         subcommands: argparse._SubParsersAction[Any]) -> None
 ```
 
-Wire `fim sweep plan/run/resume/report` onto `subcommands`.
+Wire `fim sweep plan/run/resume/replan/export/report` onto `subcommands`.
 
 <a id="fim.cli_sweep.command_sweep"></a>
 
@@ -2794,6 +2841,18 @@ than a single, uncertainty-free-looking point estimate.
 
 Kind: policy; a regular setting.
 
+<a id="fim.config.defaults.DEFAULT_SWEEP_MAX_ATTEMPTS"></a>
+
+#### DEFAULT\_SWEEP\_MAX\_ATTEMPTS
+
+Times the command line and the app try a sweep point that failed for a
+transient reason (a worker process that died, a file system error) before
+recording the failure. A failure the engine itself reports is never retried:
+the same configuration would fail the same way. A killed worker is usually a
+one-off, so one retry recovers it without hiding a real fault.
+
+Kind: policy; a regular setting.
+
 <a id="fim.config.defaults.DEFAULT_PAIRWISE_MAX_DEMES"></a>
 
 #### DEFAULT\_PAIRWISE\_MAX\_DEMES
@@ -3049,6 +3108,22 @@ cost grows as `d⁶`, so larger explicit migration matrices must be given
 explicit convergence values.
 
 Kind: policy (run time).
+
+<a id="fim.config.limits.MINIMUM_EQUILIBRIUM_N"></a>
+
+#### MINIMUM\_EQUILIBRIUM\_N
+
+Smallest population size the closed-form equilibrium formulas accept.
+
+Kind: numerical guard.
+
+<a id="fim.config.limits.MINIMUM_EQUILIBRIUM_DEMES"></a>
+
+#### MINIMUM\_EQUILIBRIUM\_DEMES
+
+Smallest deme count the closed-form equilibrium formulas accept.
+
+Kind: numerical guard.
 
 <a id="fim.config.numerics"></a>
 
@@ -10980,7 +11055,7 @@ display range independent of the other three fields' current
 values, which are held fixed at whatever `get_equilibrium_
 predictions` was just called with.
 
-Every quantity `_equilibrium_numeric_predictions` knows about is
+Every quantity `equilibrium_numeric_predictions` knows about is
 evaluated at every swept point, not the `D`/`G_ST`/`E_ST` subset
 that shares a `[0, 1]` domain. No statistic is privileged: each
 one is a closed-form function of `(N, m, mu, d)`, so each one has
@@ -12617,7 +12692,7 @@ For the sweep results card's theory overlay and its theory and
 difference heat maps. Each entry of `coordinates` is a mapping of
 axis key to value; it is applied to the Study's stored base the
 way a sweep point is (`fim.sweep.apply_coordinates`), and the
-predictions are those of `_equilibrium_numeric_predictions`
+predictions are those of `equilibrium_numeric_predictions`
 (restricted to plain numbers). A point the closed form does not
 cover (a non-island topology, per-deme `N`) yields `None` for
 every statistic, never an error.
@@ -12627,6 +12702,39 @@ every statistic, never an error.
 - ``{"ok"` - True, "values": [{statistic: number | None}, ...]}`,
   one entry per requested coordinate, in order; or `{"ok":
   False, "message": ...}`.
+
+<a id="fim.gui.app.Api.export_sweep_table"></a>
+
+#### export\_sweep\_table
+
+```python
+@_log_bridge_call
+def export_sweep_table(study_id: str, options: dict[str,
+                                                    Any]) -> dict[str, Any]
+```
+
+Save a sweep's results as a tidy table, via a native Save dialog.
+
+Writes the CSV (or JSON Lines, for a `.jsonl` file name) and the
+`.meta.json` sidecar beside it (`fim.sweep_table.ResultTable`). The
+dialog asks before replacing a file, so an existing table is
+overwritten once the researcher has chosen it.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `options` - `{"statistics": [names] | "all", "withTheory": bool,
+- `"wide"` - bool, "includeUnfinished": bool}`; every key is
+  optional (the defaults are `D` and `G_ST`, no theory, the
+  long form, finished points only).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "path": ..., "sidecar": ...}` on success; `{"ok":
+  False, "message": ""}` if the dialog was cancelled; `{"ok":
+  False, "message": ...}` if the Study is not a sweep, has nothing
+  finished to write, or the write failed.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
@@ -32841,6 +32949,9 @@ It is organized into three modules by subject:
 - `fim.statistics.pairwise` — every deme pair's Nei identities at once,
   vectorized with numpy (the one module here that needs it), for
   capturing all-pairs matrices at large deme counts.
+- `fim.statistics.theory` — the closed-form equilibrium predictions of each
+  reported statistic, for a configuration or a sweep point, shared by the
+  Explore screen, the sweep results card and the sweep export.
 - `fim.statistics.interval` — confidence intervals for a sample mean
   (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
   independent replicates. See that module's own docstring for what a
@@ -36026,6 +36137,122 @@ diagonal.
   ``d * (d - 1) / 2`` values; a NaN entry (an undefined value) is
   ``None``, since strict JSON has no NaN.
 
+<a id="fim.statistics.theory"></a>
+
+# fim.statistics.theory
+
+Closed-form predictions for an island model at equilibrium.
+
+Every function takes plain numbers and returns plain numbers, like the rest
+of this package. The GUI's Explore screen and sweep results card, and the
+sweep export's theory columns, all read their predictions from here, so a
+quantity added once appears in all of them.
+
+<a id="fim.statistics.theory.THEORY_STATISTICS"></a>
+
+#### THEORY\_STATISTICS
+
+The predicted quantities that are also reported statistics of a run.
+
+<a id="fim.statistics.theory.equilibrium_numeric_predictions"></a>
+
+#### equilibrium\_numeric\_predictions
+
+```python
+def equilibrium_numeric_predictions(n: int, m: float, mu: float,
+                                    d: int) -> dict[str, float | bool | None]
+```
+
+Evaluate every Explore prediction at one `(N, m, mu, d)` point.
+
+The single source of truth for *which* analytical quantities Explore
+knows about. Every presentation reads from here: the GUI's
+`_equilibrium_prediction_payload` formats these for the table,
+`Api.get_equilibrium_sweep` collects one of these per swept point for
+the chart, and the sweep export reads them as its theory columns. None
+maintains its own second list of statistic names, so a quantity added
+here appears everywhere at once.
+
+Every one of these is a closed-form function of `(N, m, mu, d)`
+alone, so every one of them is defined along every one of the four
+sweep axes. Several do not depend on every parameter -- `D` has no
+`N` term at all (`equilibrium_d`'s own docstring: only the
+migration-to-mutation ratio sets where it settles), `H_S` depends on
+`N` and `mu` only, and the whole Whitlock identity-recovery family
+depends on `N` and `m` only. Swept against a parameter they do not
+contain, those produce a flat line. That flat line is the point, not
+a degenerate case to suppress: `D` level across two orders of
+magnitude of `N` while `G_ST` falls away beneath it is this
+project's central claim, drawn rather than asserted.
+
+**Arguments**:
+
+- `n` - Population size in gene copies per deme.
+- `m` - Symmetric migration rate.
+- `mu` - Infinite-alleles mutation rate.
+- `d` - Number of equal demes.
+
+
+**Returns**:
+
+  One entry per predicted quantity, as a plain number (or, for
+  `mutation_negligible_equilibrium`, a bool). `None` marks a
+  quantity this particular configuration leaves undefined -- every
+  mutation-dependent entry at `mu == 0`, for instance. Callers
+  plotting these must break the line at a `None` rather than
+  reading it as a zero.
+
+<a id="fim.statistics.theory.theory_for_configuration"></a>
+
+#### theory\_for\_configuration
+
+```python
+def theory_for_configuration(
+        configuration: Mapping[str, Any]) -> dict[str, float | None]
+```
+
+Return the closed-form prediction of each reported statistic.
+
+The formulas are functions of gene copies per deme, and a configuration's
+`N` counts individuals, so `N` is multiplied by the ploidy word the
+configuration must carry (`"haploid"` to `"tetraploid"`).
+
+**Arguments**:
+
+- `configuration` - A run configuration with at least `N`, `ploidy`, `m`,
+  `mu` and `d`, as a sweep point's mapping.
+
+
+**Returns**:
+
+  A value for each of `THEORY_STATISTICS`; all `None` where the closed
+  form does not cover the configuration (a missing or non-numeric
+  parameter, an unknown ploidy, or `N` or `d` below the smallest the
+  formulas accept).
+
+<a id="fim.statistics.theory.theory_at"></a>
+
+#### theory\_at
+
+```python
+def theory_at(base: Mapping[str, Any],
+              coordinates: Mapping[str, Any]) -> dict[str, float | None]
+```
+
+Return the predictions for a sweep's base configuration at coordinates.
+
+**Arguments**:
+
+- `base` - The sweep's base configuration.
+- `coordinates` - Axis key to value, applied to `base` the way a sweep
+  point is.
+
+
+**Returns**:
+
+  As `theory_for_configuration`; all `None` if the coordinates do not
+  apply to the base.
+
 <a id="fim.stored"></a>
 
 # fim.stored
@@ -36626,6 +36853,47 @@ Run object's lifecycle state when it is `planned`, `running`, `paused`,
 `interrupted`, or `failed`; `stale` (only a run from another software
 version); `failed` (recorded before any Run object existed); or `waiting`.
 
+<a id="fim.sweep_run.SweepLockedError"></a>
+
+## SweepLockedError Objects
+
+```python
+class SweepLockedError(StoreError, ValueError)
+```
+
+Another process is already running this sweep.
+
+A `ValueError` subclass so the command line and the app report it as
+a plain error, like any other reason a sweep cannot start.
+
+<a id="fim.sweep_run.FailureClass"></a>
+
+#### FailureClass
+
+Whether trying a failed point again can help: a `transient` failure (a
+worker process that died, a file system error) can pass; a `deterministic`
+one (the engine rejected the configuration) happens every time.
+
+<a id="fim.sweep_run.classify_failure"></a>
+
+#### classify\_failure
+
+```python
+def classify_failure(error: BaseException) -> FailureClass
+```
+
+Say whether a point that failed with `error` is worth trying again.
+
+**Arguments**:
+
+- `error` - What the point raised.
+
+
+**Returns**:
+
+  The class of the first row of the classification table that
+  `error` matches; `"deterministic"` if none does.
+
 <a id="fim.sweep_run.PointFailure"></a>
 
 ## PointFailure Objects
@@ -36636,6 +36904,13 @@ class PointFailure()
 ```
 
 Why one point produced no run.
+
+**Attributes**:
+
+- `reason` - What went wrong, in words for the person running the sweep.
+- `failure_class` - Whether trying the point again can help.
+- `attempts` - How many times the point was tried before this failure
+  was returned.
 
 <a id="fim.sweep_run.PointPaused"></a>
 
@@ -36855,8 +37130,10 @@ processes. A lineal batch already uses processes for its replicates and
 runs the same in either. Each worker process runs `LocalPointRunner` on
 one point at a time, so a lineal batch inside it starts its own workers.
 
-A cancel reaches the worker through a shared event, and a worker that
-dies is reported as a failed point, not a hung sweep.
+A cancel reaches the worker through a shared event. A worker that dies
+breaks the whole pool: every point in flight is reported as failed, and
+the pool is replaced so the points that follow still run, instead of
+the sweep ending on the first submit to a dead pool.
 
 **Arguments**:
 
@@ -36864,6 +37141,9 @@ dies is reported as a failed point, not a hung sweep.
 - `max_workers` - Default worker processes for a lineal batch point.
 - `pairwise_max_demes` - Largest deme count for which each point saves
   every deme pair's Nei identities (`pairwise.json`).
+- `executor_factory` - Builds the pool from a process count. The default
+  starts spawned worker processes; a test passes a fake that
+  breaks on demand.
 
 <a id="fim.sweep_run.ProcessPointRunner.run_point"></a>
 
@@ -37108,6 +37388,7 @@ def run_sweep(study_id: str,
               software_version: str = __version__,
               points_at_once: int | None = None,
               max_workers: int | None = None,
+              max_attempts: int = 1,
               results: Path | None = None) -> SweepOutcome
 ```
 
@@ -37150,6 +37431,11 @@ falls back to the runner's `run_point`.
 - `points_at_once` - How many points to run at the same time, or `None`
   for automatic.
 - `max_workers` - Worker processes for each batch point, or `None`.
+- `max_attempts` - Times to try a point that fails for a transient reason
+  (`classify_failure`) before recording the failure. A
+  deterministic failure is never tried again. The attempts are
+  back to back, with no delay, so the result never depends on a
+  clock.
 - `results` - Optional results-directory override.
 
 
@@ -37160,9 +37446,48 @@ falls back to the runner's `run_point`.
 
 **Raises**:
 
-- `ValueError` - The Study is not a sweep, or the stored plan no longer
-  matches what this version of the program enumerates.
+- `ValueError` - `max_attempts` is below 1, the Study is not a sweep, or
+  the stored plan no longer matches what this version of the
+  program enumerates.
 - `ClosedGroupError` - The Study is closed; reopen it to continue.
+- `SweepLockedError` - Another process is running this sweep. A sweep
+  holds a lock on its Study for as long as it runs, released by
+  the operating system if the process dies, so two sweeps never
+  work on one Study at the same time.
+
+<a id="fim.sweep_run.sweep_lock_held"></a>
+
+#### sweep\_lock\_held
+
+```python
+def sweep_lock_held(study_id: str, *, results: Path | None = None) -> bool
+```
+
+Return whether a process is running the sweep `study_id` right now.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  True while any process, this one included, is inside `run_sweep` for
+  the Study.
+
+<a id="fim.sweep_run.sweep_lock_path"></a>
+
+#### sweep\_lock\_path
+
+```python
+def sweep_lock_path(study_id: str, *, results: Path | None = None) -> Path
+```
+
+Return the lock file a running sweep holds for its Study.
+
+Kept beside the failure file, so the Study index's `*.json` scan never
+sees it.
 
 <a id="fim.sweep_run.failures_path"></a>
 
@@ -37201,6 +37526,73 @@ def read_point_objects(study_id: str,
 
 Return each point's linked Run object ID by point `run_id`.
 
+<a id="fim.sweep_run.Replan"></a>
+
+## Replan Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Replan()
+```
+
+What `replan_sweep` changed, or would change.
+
+**Attributes**:
+
+- `renamed` - `(old run id, new run id)` for each point whose coordinates
+  are unchanged but whose id differs.
+- `unchanged` - Points whose id already matches.
+- `added` - Run ids of points the stored plan did not have.
+- `removed` - Run ids of stored points that are no longer valid.
+- `orphaned_runs` - Runs still in the Study whose id matches no point of
+  the new plan. They stay attached as ordinary runs, and the
+  points they stood for run again.
+- `failures_moved` - Recorded failures carried over to a new id.
+- `unlinked_objects` - Run objects that were linked to a renamed point.
+  They are left as they are, but no longer continued by the sweep.
+- `written` - Whether the Study was changed (false for a dry run).
+
+<a id="fim.sweep_run.replan_sweep"></a>
+
+#### replan\_sweep
+
+```python
+def replan_sweep(study_id: str,
+                 *,
+                 dry_run: bool = False,
+                 results: Path | None = None) -> Replan
+```
+
+Re-identify a sweep Study's points under this version's run ids.
+
+A run id is a hash of the point's configuration, so a release that
+changes what the hash covers changes every id, and the stored plan then
+no longer matches (`run_sweep` refuses it). The plan is enumerated again
+from the stored specification and each new point is matched to its
+stored one by coordinates, never by id. The stored plan is rewritten, and
+the recorded failures follow their points. Runs already in the Study are
+never touched: one whose id no longer matches any point stays attached as
+an ordinary run, listed in the result, and its point runs again.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `dry_run` - Report what would change and write nothing.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  What changed, or would change.
+
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep, has no valid points, or has
+  points that coordinates cannot tell apart.
+- `ClosedGroupError` - The Study is closed.
+- `SweepLockedError` - A process is running the sweep.
+
 <a id="fim.sweep_run.write_reproducibility_note"></a>
 
 #### write\_reproducibility\_note
@@ -37215,28 +37607,6 @@ Record, beside a recomputed run, that it differs from an older version's.
 A sidecar file, deliberately outside the manifest's artifact digests, so
 the run's own record of itself is untouched.
 
-<a id="fim.sweep_run.PointResult"></a>
-
-## PointResult Objects
-
-```python
-@dataclass(frozen=True, slots=True)
-class PointResult()
-```
-
-One finished point's statistics, for the across-points views.
-
-**Attributes**:
-
-- `index` - The point's grid index.
-- `coordinates` - The varied values, by axis key.
-- `run_id` - The point's id.
-- `directory` - The point's run directory.
-- `n_replicates` - Replicates the run has (1 for a scalar run).
-- `statistics` - Each statistic as `{"mean": ..., "low": ..., "high": ...}`;
-  `low` and `high` are `None` for a single run, which has no
-  across-replicate interval.
-
 <a id="fim.sweep_run.sweep_point_results"></a>
 
 #### sweep\_point\_results
@@ -37244,16 +37614,505 @@ One finished point's statistics, for the across-points views.
 ```python
 def sweep_point_results(study: StudyManifest,
                         *,
-                        results: Path | None = None) -> list[PointResult]
+                        results: Path | None = None) -> list[PointRow]
 ```
 
 Read the final statistics of every finished point, in grid order.
 
 A batch point reads its `summary.json` (mean and confidence interval
-across replicates); a scalar point reads its `report.json`. A point
-whose files cannot be read is left out, like a missing run directory
-elsewhere in the Study code. Nothing is stored: the aggregate is
-computed each time from small JSON files.
+across replicates); a scalar point reads its `report.json`. Each row also
+carries how the point's replicates ended (`PointHealth`), derived from the
+run's manifests and cached beside the sweep's status file. A point whose
+files cannot be read is left out, like a missing run directory elsewhere
+in the Study code. The statistics are computed each time from small JSON
+files; only the health counts are cached, and deleting the cache loses
+nothing.
+
+<a id="fim.sweep_run.health_cache_path"></a>
+
+#### health\_cache\_path
+
+```python
+def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
+```
+
+Return the disposable cache of a sweep's point health counts.
+
+<a id="fim.sweep_table"></a>
+
+# fim.sweep\_table
+
+What a sweep's points produced: their statistics and how far to trust them.
+
+A `PointRow` is one point of a sweep Study read back from its run: the
+statistic of each kind with its interval (`StatisticCell`) and whether the
+point's replicates settled (`PointHealth`). Everything is derived from the
+small JSON files a run already wrote, so nothing here changes what a run
+stores, and runs that already exist (committed examples included) read the
+same way.
+
+A replicate that reaches the generation cap before its statistics settle
+still finishes, and its value may be biased. Health is how a long sweep says
+which points to trust; a point that is not healthy is flagged, never
+dropped (botanist question Q6).
+
+`ResultTable` is the whole sweep as data: one row per point and statistic
+(the tidy long form that R and Python group-by tools expect), or one row per
+point on request, written as CSV or JSON Lines with a sidecar file that says
+how to read it.
+
+<a id="fim.sweep_table.HealthClass"></a>
+
+#### HealthClass
+
+How far to trust a point: `healthy` (every replicate settled, within the
+requested precision), `degraded` (some capped or unsettled, or wider than the
+precision), or `unreliable` (every replicate hit the generation cap).
+
+<a id="fim.sweep_table.StatisticCell"></a>
+
+## StatisticCell Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class StatisticCell()
+```
+
+One statistic of one point, with its across-replicate interval.
+
+**Attributes**:
+
+- `mean` - The mean over replicates (the value itself for a single run).
+- `low` - Lower end of the confidence interval, or `None` for a single run.
+- `high` - Upper end, or `None` for a single run.
+- `half_width` - Half the interval's width, or `None`.
+- `sample_std` - Standard deviation across replicates, or `None`.
+- `sample_count` - Replicates that had a defined value.
+- `confidence` - The interval's confidence level, or `None`.
+
+<a id="fim.sweep_table.StatisticCell.from_summary_entry"></a>
+
+#### from\_summary\_entry
+
+```python
+@classmethod
+def from_summary_entry(cls, entry: Mapping[str, Any]) -> StatisticCell
+```
+
+Build a cell from one statistic's entry in a batch `summary.json`.
+
+<a id="fim.sweep_table.HealthPolicy"></a>
+
+## HealthPolicy Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class HealthPolicy()
+```
+
+The thresholds that turn replicate outcomes into a `HealthClass`.
+
+**Attributes**:
+
+- `precision_slack` - A watched statistic's achieved half width may be up
+  to this multiple of the run's `precision` before the point counts
+  as degraded.
+
+<a id="fim.sweep_table.DEFAULT_HEALTH_POLICY"></a>
+
+#### DEFAULT\_HEALTH\_POLICY
+
+The policy used unless a caller passes another.
+
+<a id="fim.sweep_table.PointHealth"></a>
+
+## PointHealth Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointHealth()
+```
+
+How a point's replicates ended.
+
+**Attributes**:
+
+- `replicates` - Replicates the point has.
+- `converged` - Replicates that settled (or averaged their whole window).
+- `hit_cap` - Replicates that stopped at the generation cap.
+- `other` - Replicates that ended some other way (cancelled, interrupted).
+- `achieved_half_width` - The interval half width of each watched
+  statistic, from `summary.json` (empty for a single run).
+- `precision` - The `precision` the run asked for, or `None` if unknown.
+
+<a id="fim.sweep_table.PointHealth.classify"></a>
+
+#### classify
+
+```python
+def classify(policy: HealthPolicy = DEFAULT_HEALTH_POLICY) -> HealthClass
+```
+
+Return how far to trust this point under `policy`.
+
+<a id="fim.sweep_table.PointHealth.describe"></a>
+
+#### describe
+
+```python
+def describe(policy: HealthPolicy = DEFAULT_HEALTH_POLICY) -> str
+```
+
+Say in words why a point is not healthy; empty for a healthy one.
+
+<a id="fim.sweep_table.PointHealth.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return the health as plain values, for JSON.
+
+<a id="fim.sweep_table.PointRow"></a>
+
+## PointRow Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointRow()
+```
+
+One point of a sweep, read back from its run.
+
+**Attributes**:
+
+- `index` - The point's grid index.
+- `coordinates` - The varied values, by axis key.
+- `run_id` - The point's id.
+- `state` - `done`, or `stale` for a run made by another software version.
+- `directory` - The point's run directory.
+- `n_replicates` - Replicates the run has (1 for a scalar run).
+- `seed` - The run's seed (a batch's base seed).
+- `software_version` - The version that made the run.
+- `engine_backend` - The backend that ran it, if recorded.
+- `started_at` - When it started (UTC text), if recorded.
+- `ended_at` - When it ended, if recorded.
+- `statistics` - Each statistic's cell.
+- `health` - How the replicates ended, or `None` if it cannot be read.
+- `parameters` - The run's resolved configuration.
+
+<a id="fim.sweep_table.HealthCache"></a>
+
+## HealthCache Objects
+
+```python
+class HealthCache()
+```
+
+Disposable cache of the replicate outcome counts of a sweep's points.
+
+Counting outcomes opens one small manifest per replicate, which adds up
+over hundreds of points. The counts are kept beside the sweep's status
+file, keyed by run id and the digest of the run's own manifest, so a
+changed run is read again. Deleting the file loses nothing.
+
+**Arguments**:
+
+- `path` - The cache file.
+
+<a id="fim.sweep_table.HealthCache.get"></a>
+
+#### get
+
+```python
+def get(run_id: str,
+        digest: str) -> tuple[int, int, int, tuple[str, ...]] | None
+```
+
+Return `(converged, hit_cap, other, watched)` if cached for `digest`.
+
+<a id="fim.sweep_table.HealthCache.put"></a>
+
+#### put
+
+```python
+def put(run_id: str, digest: str, counts: tuple[int, int, int],
+        watched: tuple[str, ...]) -> None
+```
+
+Remember a point's counts.
+
+<a id="fim.sweep_table.HealthCache.save"></a>
+
+#### save
+
+```python
+def save() -> None
+```
+
+Write the cache if it changed; a failure is logged, never raised.
+
+<a id="fim.sweep_table.read_point_health"></a>
+
+#### read\_point\_health
+
+```python
+def read_point_health(directory: Path,
+                      *,
+                      cache: HealthCache | None = None) -> PointHealth | None
+```
+
+Return how a finished point's replicates ended, or `None` if unreadable.
+
+The outcome counts come from each replicate's `manifest.json` (a scalar
+run's own manifest): a replicate `converged` if its monitor said so, and
+`hit_cap` if it stopped for the generation cap. The achieved half widths
+come from `summary.json`, for the statistics the monitor watched.
+
+**Arguments**:
+
+- `directory` - The point's run directory.
+- `cache` - Where to keep the outcome counts between reads.
+
+
+**Returns**:
+
+  The point's health, or `None` if its manifests cannot be read.
+
+<a id="fim.sweep_table.DEFAULT_EXPORT_STATISTICS"></a>
+
+#### DEFAULT\_EXPORT\_STATISTICS
+
+The statistics an export writes unless told otherwise (botanist question
+Q1: `D` and `G_ST` first, every statistic selectable).
+
+<a id="fim.sweep_table.ALL_STATISTICS"></a>
+
+#### ALL\_STATISTICS
+
+Pass as `statistics` to write every statistic a sweep has.
+
+<a id="fim.sweep_table.COLUMN_DESCRIPTIONS"></a>
+
+#### COLUMN\_DESCRIPTIONS
+
+What each exported column means, for the sidecar and for readers.
+
+<a id="fim.sweep_table.AXIS_DESCRIPTIONS"></a>
+
+#### AXIS\_DESCRIPTIONS
+
+What a swept configuration key means, for the sidecar's column dictionary.
+
+<a id="fim.sweep_table.TablePoint"></a>
+
+## TablePoint Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TablePoint()
+```
+
+One planned point of a sweep and, if it has finished, its row.
+
+**Attributes**:
+
+- `index` - The point's grid index.
+- `coordinates` - The varied values, by axis key.
+- `run_id` - The point's id.
+- `state` - The point's state (`done`, `stale`, `failed`, `waiting`, ...).
+- `row` - Its result, or `None` if the point has none.
+
+<a id="fim.sweep_table.ResultTable"></a>
+
+## ResultTable Objects
+
+```python
+class ResultTable()
+```
+
+An immutable view of a sweep's points, ready to write as data.
+
+**Arguments**:
+
+- `study_id` - The sweep Study's id.
+- `name` - The Study's name.
+- `spec` - The sweep specification.
+- `points` - Every planned point, in grid order.
+- `policy` - The thresholds that classify a point's health.
+
+<a id="fim.sweep_table.ResultTable.read"></a>
+
+#### read
+
+```python
+@classmethod
+def read(cls, study_id: str, *, results: Path | None = None) -> ResultTable
+```
+
+Read a sweep Study's points and results.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `results` - Optional results-directory override.
+
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep.
+
+<a id="fim.sweep_table.ResultTable.axis_keys"></a>
+
+#### axis\_keys
+
+```python
+@property
+def axis_keys() -> tuple[str, ...]
+```
+
+The swept keys, in axis order.
+
+<a id="fim.sweep_table.ResultTable.statistic_names"></a>
+
+#### statistic\_names
+
+```python
+def statistic_names() -> tuple[str, ...]
+```
+
+Return every statistic any finished point has, sorted.
+
+<a id="fim.sweep_table.ResultTable.columns"></a>
+
+#### columns
+
+```python
+def columns(*,
+            with_theory: bool = False,
+            statistics: Sequence[str] | None = None,
+            wide: bool = False) -> list[str]
+```
+
+Return the column names of the long (default) or wide table.
+
+<a id="fim.sweep_table.ResultTable.long_rows"></a>
+
+#### long\_rows
+
+```python
+def long_rows(statistics: Sequence[str] | str | None = None,
+              *,
+              with_theory: bool = False,
+              include_unfinished: bool = False) -> Iterator[dict[str, Cell]]
+```
+
+Yield one row per finished point and statistic.
+
+**Arguments**:
+
+- `statistics` - Statistic keys, `ALL_STATISTICS`, or `None` for the
+  defaults (`DEFAULT_EXPORT_STATISTICS`).
+- `with_theory` - Add `theory` and `residual` to each row.
+- `include_unfinished` - Also yield one row per point with no result,
+  its state filled and its statistic empty.
+
+
+**Raises**:
+
+- `ValueError` - A requested statistic is in no finished point.
+
+<a id="fim.sweep_table.ResultTable.wide_rows"></a>
+
+#### wide\_rows
+
+```python
+def wide_rows(statistics: Sequence[str] | str | None = None,
+              *,
+              with_theory: bool = False,
+              include_unfinished: bool = False) -> Iterator[dict[str, Cell]]
+```
+
+Yield one row per point, with a column group per statistic.
+
+<a id="fim.sweep_table.ResultTable.to_csv"></a>
+
+#### to\_csv
+
+```python
+def to_csv(
+    path: Path,
+    *,
+    statistics: Sequence[str] | str | None = None,
+    wide: bool = False,
+    with_theory: bool = False,
+    include_unfinished: bool = False,
+    overwrite: bool = False,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> Path
+```
+
+Write the table as CSV, and its sidecar beside it.
+
+**Returns**:
+
+  The sidecar's path.
+
+
+**Raises**:
+
+- `FileExistsError` - The table or its sidecar exists and `overwrite`
+  is false.
+- `ValueError` - A requested statistic is in no finished point.
+
+<a id="fim.sweep_table.ResultTable.to_jsonl"></a>
+
+#### to\_jsonl
+
+```python
+def to_jsonl(
+    path: Path,
+    *,
+    statistics: Sequence[str] | str | None = None,
+    with_theory: bool = False,
+    include_unfinished: bool = False,
+    overwrite: bool = False,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> Path
+```
+
+Write the long table as JSON Lines, and its sidecar beside it.
+
+**Returns**:
+
+  The sidecar's path.
+
+
+**Raises**:
+
+- `FileExistsError` - The table or its sidecar exists and `overwrite`
+  is false.
+- `ValueError` - A requested statistic is in no finished point.
+
+<a id="fim.sweep_table.ResultTable.metadata"></a>
+
+#### metadata
+
+```python
+def metadata(
+    *,
+    layout: str,
+    names: Sequence[str],
+    columns: Sequence[str],
+    with_theory: bool,
+    include_unfinished: bool,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> dict[str, object]
+```
+
+Return the sidecar content: how to read the table and where it came from.
 
 <a id="fim.termination"></a>
 

@@ -166,6 +166,13 @@ const HEATMAP_COLORBAR_TITLE_RISE = 2;
 const HEATMAP_MARKER_RADIUS = 2;
 const HEATMAP_MARKER_LINE_WIDTH = 0.75;
 
+// A flagged sweep point (one whose replicates did not all settle) is a ring
+// rather than a dot, crossed when none of them settled: ring radius, line
+// width, and how far the cross reaches from the centre.
+const HEATMAP_FLAG_RADIUS = 5;
+const HEATMAP_FLAG_LINE_WIDTH = 1.75;
+const HEATMAP_FLAG_CROSS_REACH = 3.5;
+
 // Outline of the selected cell, drawn inside the cell by this inset.
 const HEATMAP_SELECTED_LINE_WIDTH = 2;
 const HEATMAP_SELECTED_INSET = 1;
@@ -310,6 +317,18 @@ const SWEEP_Y_TITLE_INSET = 14;
 // A point's marker radius, and how close the pointer must be to pick it.
 const SWEEP_POINT_RADIUS = 2;
 const SWEEP_HIT_RADIUS_PX = 14;
+
+// A flagged point is drawn hollow (a ring), crossed when no replicate settled:
+// ring radius, line width, and how far the cross reaches from the centre.
+const SWEEP_FLAG_RADIUS = 5;
+const SWEEP_FLAG_LINE_WIDTH = 1.75;
+const SWEEP_FLAG_CROSS_REACH = 3.5;
+
+// The key to the markers, in the chart's top right corner: its distance from
+// the edge, the gap between lines, and between a marker and its words.
+const SWEEP_LEGEND_INSET = 10;
+const SWEEP_LEGEND_LINE_HEIGHT = 16;
+const SWEEP_LEGEND_TEXT_GAP = 10;
 
 /* ---- Explore surface and slices -------------------------------------- */
 

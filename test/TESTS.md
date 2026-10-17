@@ -11,6 +11,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`example_support`](#test.example_support)
   - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
   - [`test_ci_workflows`](#test.test_ci_workflows)
+  - [`test_configuration_doc_index`](#test.test_configuration_doc_index)
   - [`test_constants`](#test.test_constants)
   - [`test_convergence_docs`](#test.test_convergence_docs)
   - [`test_doc_examples`](#test.test_doc_examples)
@@ -39,6 +40,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_stored`](#test.test_stored)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
+  - [`test_sweep_table`](#test.test_sweep_table)
   - [`test_termination`](#test.test_termination)
   - [`test_update`](#test.test_update)
   - [`test_workspace`](#test.test_workspace)
@@ -136,6 +138,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_shutdown_signals`](#gui.test_shutdown_signals)
+  - [`test_statistics_cell_estimate_screen`](#gui.test_statistics_cell_estimate_screen)
   - [`test_statistics_shown_screen`](#gui.test_statistics_shown_screen)
   - [`test_store`](#gui.test_store)
   - [`test_sweep_api`](#gui.test_sweep_api)
@@ -143,6 +146,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sweep_screen`](#gui.test_sweep_screen)
   - [`test_trailing_mean_screen`](#gui.test_trailing_mean_screen)
   - [`test_trajectory_history`](#gui.test_trajectory_history)
+  - [`test_watched_statistics_screen`](#gui.test_watched_statistics_screen)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
   - [`test_welcome_screen`](#gui.test_welcome_screen)
 - [`test/model/`](#group-model)
@@ -200,6 +204,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_interval`](#statistics.test_interval)
   - [`test_pairwise`](#statistics.test_pairwise)
   - [`test_properties`](#statistics.test_properties)
+  - [`test_theory`](#statistics.test_theory)
 - [`test/validation/`](#group-validation)
   - [`test_api_docs`](#validation.test_api_docs)
   - [`test_benchmark_axes`](#validation.test_benchmark_axes)
@@ -212,6 +217,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_equilibrium`](#validation.test_equilibrium)
   - [`test_examples_auto_backend`](#validation.test_examples_auto_backend)
   - [`test_git_hooks`](#validation.test_git_hooks)
+  - [`test_help_html`](#validation.test_help_html)
   - [`test_identity_recursion_trajectory`](#validation.test_identity_recursion_trajectory)
   - [`test_install_sh`](#validation.test_install_sh)
   - [`test_mutation_textbook`](#validation.test_mutation_textbook)
@@ -824,6 +830,48 @@ def test_every_ubuntu_job_that_installs_the_project_installs_the_gtk_build_packa
 ```
 
 `pip install -e .[...]` on Ubuntu is preceded by the PyGObject build packages.
+
+<a id="test.test_configuration_doc_index"></a>
+
+# test.test\_configuration\_doc\_index
+
+The configuration reference names every setting where a search finds it.
+
+`doc/configuration.md` gives each setting a `###` heading, and a settings
+index near the top lists them all with links. A heading that hid a key
+behind markup (`n<sub>replicates</sub>`) could not be found by searching
+for `n_replicates`, so headings spell each key literally and the index must
+list every one.
+
+<a id="test.test_configuration_doc_index.test_every_setting_heading_is_in_the_index_with_its_anchor"></a>
+
+#### test\_every\_setting\_heading\_is\_in\_the\_index\_with\_its\_anchor
+
+```python
+def test_every_setting_heading_is_in_the_index_with_its_anchor() -> None
+```
+
+Each key in a heading has an index row linking to that heading.
+
+<a id="test.test_configuration_doc_index.test_setting_headings_spell_the_key_without_markup"></a>
+
+#### test\_setting\_headings\_spell\_the\_key\_without\_markup
+
+```python
+def test_setting_headings_spell_the_key_without_markup() -> None
+```
+
+No setting heading hides a key behind a subscript or other tag.
+
+<a id="test.test_configuration_doc_index.test_the_index_is_alphabetical"></a>
+
+#### test\_the\_index\_is\_alphabetical
+
+```python
+def test_the_index_is_alphabetical() -> None
+```
+
+The index reads in alphabetical order, ignoring case.
 
 <a id="test.test_constants"></a>
 
@@ -4537,6 +4585,39 @@ def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
 ```
 
 A read-only run is never superseded: both runs stay, the sweep succeeds.
+
+<a id="test.test_sweep_run.test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs"></a>
+
+#### test\_a\_sweep\_stored\_under\_old\_ids\_is\_repaired\_and\_then\_runs
+
+```python
+def test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs(
+        results: Path) -> None
+```
+
+The fixture is a Study whose stored plan and failure file use ids from
+before the identity change (2026-10-15), written directly.
+
+<a id="test.test_sweep_table"></a>
+
+# test.test\_sweep\_table
+
+Tests for `fim.sweep_table`: point cells, health, and the health cache.
+
+Health is derived from the manifests a run already wrote, so most tests build
+those few files by hand: no simulation runs, and the result depends only on
+the files.
+
+<a id="test.test_sweep_table.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Point the results directory at a temporary one for the test.
 
 <a id="test.test_termination"></a>
 
@@ -17911,15 +17992,15 @@ option of the example is kept; only the locus count is raised to `LOCI`
 
 # gui.test\_closed\_form\_tooltip\_screen
 
-Headless functional tests for the prediction comparison in statistic tooltips.
+Headless functional tests for the prediction comparison in the run messages.
 
-A statistic with a prediction shows, first in its statistics-row tooltip,
-`ΔXₚ` (observed minus predicted at the displayed generation) and the
-running mean squared error of the trajectory so far. The prediction is
-the closed-form expected trajectory when the model has one (`D`, `G_ST`,
-`H_S`, `H_T`, `H_ST`), otherwise the predicted equilibrium (`D`, `G_ST`,
-`E_ST`): a run with stochastic migrants has no closed-form trajectory but
-is still compared.
+A statistic with a prediction gets a sentence in the run's messages that
+compares its average over the evidence window with the prediction averaged
+over the same generations, and gives the mean squared difference over the
+whole run. The prediction is the closed-form expected trajectory when the
+model has one (`D`, `G_ST`, `H_S`, `H_T`, `H_ST`), otherwise the predicted
+equilibrium (`D`, `G_ST`, `E_ST`): a run with stochastic migrants has no
+closed-form trajectory but is still compared.
 
 <a id="gui.test_closed_form_tooltip_screen.test_the_comparison_arithmetic_on_a_known_trajectory"></a>
 
@@ -17930,7 +18011,7 @@ def test_the_comparison_arithmetic_on_a_known_trajectory(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Hand-computed difference and MSE; a short history is left out.
+Hand-computed averages and squared difference; a short history is left out.
 
 <a id="gui.test_closed_form_tooltip_screen.test_a_completed_runs_predicted_rows_carry_the_comparison"></a>
 
@@ -17940,8 +18021,8 @@ Hand-computed difference and MSE; a short history is left out.
 @pytest.mark.parametrize(
     ("migrant_sampling", "basis"),
     [
-        ("continuous", "vs closed-form trajectory"),
-        ("stochastic", "vs predicted equilibrium"),
+        ("continuous", "(closed-form trajectory)"),
+        ("stochastic", "(predicted equilibrium "),
     ],
 )
 def test_a_completed_runs_predicted_rows_carry_the_comparison(
@@ -17949,7 +18030,7 @@ def test_a_completed_runs_predicted_rows_carry_the_comparison(
         migrant_sampling: str, basis: str) -> None
 ```
 
-After a real run, D's tooltip leads with ΔDₚ and the MSE; K_ST's has none.
+After a real run, D's messages compare it with its prediction; K_ST's do not.
 
 Stochastic migrants put the run outside the closed-form trajectory's
 model, so D is compared with its predicted equilibrium instead.
@@ -19668,7 +19749,7 @@ The trajectory panel averages over the run's evidence window.
 The convergence monitor judges a run over its evidence window, from the
 burn-in to the last generation, and the report records the mean and the
 standard error it found there (`window_statistics`). The panel's trailing
-mean, cumulative mean and tooltip estimate must reproduce those numbers,
+mean, cumulative mean and cell estimate must reproduce those numbers,
 so a number on screen can always be traced to the report. These tests use
 the shipped Wright-Takahata example, whose saved history and report are
 fixed files, so they are pure functions of the commit.
@@ -19718,7 +19799,7 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
 
 Every averaged number the panel shows equals the report's.
 
-For each watched statistic: the tooltip estimate, the last point of the
+For each watched statistic: the estimate, the last point of the
 trailing mean and of the cumulative mean, and where the cumulative mean
 starts, all against `report.json`.
 
@@ -25317,16 +25398,16 @@ def test_page_interpolation_of_a_sampled_closed_form_matches_numpy() -> None
 Between grid points it is linear interpolation; before the first and
 after the last it holds the end value.
 
-<a id="gui.test_running_screen.test_completed_row_tooltip_shows_the_trailing_window_mean"></a>
+<a id="gui.test_running_screen.test_completed_row_tooltip_gives_the_window_mean_and_the_last_value"></a>
 
-#### test\_completed\_row\_tooltip\_shows\_the\_trailing\_window\_mean
+#### test\_completed\_row\_tooltip\_gives\_the\_window\_mean\_and\_the\_last\_value
 
 ```python
-def test_completed_row_tooltip_shows_the_trailing_window_mean(
+def test_completed_row_tooltip_gives_the_window_mean_and_the_last_value(
         _isolate_gui_preferences: Path) -> None
 ```
 
-A statistic row's own hover title leads with its window mean and SE.
+A statistic row's own hover title gives its window mean, SE and last value.
 
 Needs an evidence window of at least `MINIMUM_WINDOW_VALUES` values --
 shorter than that, `report_for_state` has nothing to report
@@ -26511,6 +26592,29 @@ child interpreter, not this test's own process, for the same reason
 here should risk a real termination signal reaching the process
 running this suite.
 
+<a id="gui.test_statistics_cell_estimate_screen"></a>
+
+# gui.test\_statistics\_cell\_estimate\_screen
+
+A finished run's statistics cells show the average, not the last value.
+
+The value in the last generation is one noisy draw (the Wright-Takahata
+example's `D` ends at 0.65 while its average over the evidence window is
+0.29). The statistics panel therefore shows each statistic's window mean and
+standard error, and keeps the last generation's value in the tooltip,
+labeled as such. A statistic without a per-generation history is unchanged.
+
+<a id="gui.test_statistics_cell_estimate_screen.test_a_completed_runs_cells_show_the_average_and_its_standard_error"></a>
+
+#### test\_a\_completed\_runs\_cells\_show\_the\_average\_and\_its\_standard\_error
+
+```python
+def test_a_completed_runs_cells_show_the_average_and_its_standard_error(
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
+```
+
+D's cell reads "mean ± SE" and its tooltip names the last value.
+
 <a id="gui.test_statistics_shown_screen"></a>
 
 # gui.test\_statistics\_shown\_screen
@@ -27037,13 +27141,13 @@ def test_the_cumulative_mean_its_start_and_the_window_marker(
 
 Averaging and legends agree with a controlled number formatter.
 
-<a id="gui.test_trailing_mean_screen.test_the_estimate_note_text"></a>
+<a id="gui.test_trailing_mean_screen.test_the_window_estimates"></a>
 
-#### test\_the\_estimate\_note\_text
+#### test\_the\_window\_estimates
 
 ```python
-def test_the_estimate_note_text(window: webview.Window,
-                                drive: Callable[..., Any]) -> None
+def test_the_window_estimates(window: webview.Window,
+                              drive: Callable[..., Any]) -> None
 ```
 
 Trailing, anchored, scrubbed, sparse and inadequate estimates read right.
@@ -27059,10 +27163,10 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path
 
 Pre-seed Settings for a fast run long enough to estimate a window mean.
 
-`fast_scalar_run_settings`' window of 4 is shorter than the eight
-points an estimate needs, so this one uses a window of 8, and a
-tolerance no run meets, so the run goes to its 40-generation cap: long
-enough past the one-window burn-in for a cumulative mean.
+The default burn-in (several relaxation times) is longer than a
+40-generation cap, so this one sets a burn-in of 8, and a tolerance no
+run meets, so the run goes to its cap: 32 generations of evidence
+window, more than the eight points an estimate needs.
 
 <a id="gui.test_trailing_mean_screen.test_a_completed_run_leads_with_its_estimate_and_offers_the_averages"></a>
 
@@ -27073,7 +27177,7 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
         estimable_run_settings: Path, window: webview.Window) -> None
 ```
 
-D's tooltip leads with its mean ± SE; each display redraws and persists.
+D's cell shows its mean ± SE; each display redraws and persists.
 
 <a id="gui.test_trailing_mean_screen.test_the_sigma_display_is_built_from_the_evidence_window"></a>
 
@@ -27084,7 +27188,7 @@ def test_the_sigma_display_is_built_from_the_evidence_window(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Band, tau_int and the sigma tooltip clause come from the report's window.
+Band and tau_int come from the report's evidence window.
 
 <a id="gui.test_trailing_mean_screen.test_the_band_width_selector_applies_and_is_remembered"></a>
 
@@ -27096,6 +27200,22 @@ def test_the_band_width_selector_applies_and_is_remembered(
 ```
 
 Choosing a width updates the page state and the saved layout.
+
+<a id="gui.test_trailing_mean_screen.test_the_statistic_messages_explain_each_statistic_in_sentences"></a>
+
+#### test\_the\_statistic\_messages\_explain\_each\_statistic\_in\_sentences
+
+```python
+@pytest.mark.parametrize(
+    ("formatted_start", "formatted_end"),
+    [("8,424", "21,910"), ("8424", "21910")],
+)
+def test_the_statistic_messages_explain_each_statistic_in_sentences(
+        window: webview.Window, drive: Callable[..., Any],
+        formatted_start: str, formatted_end: str) -> None
+```
+
+Watched statistics lead; the others, spread and meaning follow as details.
 
 <a id="gui.test_trajectory_history"></a>
 
@@ -27174,6 +27294,57 @@ A trajectory edited after the run completed fails the digest check.
 
 Identical failure mode to `reanalyze_trajectory`'s own equivalent
 test — the same `verify_trajectory_integrity` call underneath.
+
+<a id="gui.test_watched_statistics_screen"></a>
+
+# gui.test\_watched\_statistics\_screen
+
+The statistics table underlines the statistics the run watches.
+
+Bold, dimming and a color swatch already say whether a statistic is plotted.
+A fourth cue says which statistics the convergence rule watches: an
+underline on the row's name, with an explanation on the name cell for
+hover and for assistive technology. It shows during the run and after it,
+for every statistic in `convergence_statistic` (by default `D` and `G_ST`)
+and for no other.
+
+<a id="gui.test_watched_statistics_screen.test_the_watched_statistics_are_underlined_during_a_run"></a>
+
+#### test\_the\_watched\_statistics\_are\_underlined\_during\_a\_run
+
+```python
+def test_the_watched_statistics_are_underlined_during_a_run(
+        unreachable_convergence_run_settings: Path) -> None
+```
+
+A live run marks the statistics its convergence rule watches.
+
+<a id="gui.test_watched_statistics_screen.test_the_watched_statistics_are_underlined_after_a_run"></a>
+
+#### test\_the\_watched\_statistics\_are\_underlined\_after\_a\_run
+
+```python
+def test_the_watched_statistics_are_underlined_after_a_run(
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
+```
+
+A finished run keeps the marks.
+
+<a id="gui.test_watched_statistics_screen.test_a_batch_does_not_inherit_the_previous_runs_marks"></a>
+
+#### test\_a\_batch\_does\_not\_inherit\_the\_previous\_runs\_marks
+
+```python
+def test_a_batch_does_not_inherit_the_previous_runs_marks(
+        fast_batch_run_settings: Path) -> None
+```
+
+Reopening a batch clears the marks a scalar run left behind.
+
+The marks come from the run on screen, and a batch has no watched
+statistics (its stop is a confidence interval). The batch's completed
+payload is captured and shown again after the marks of a scalar run are
+put back, as opening a saved batch after a scalar run would do.
 
 <a id="gui.test_webui_global_scope"></a>
 
@@ -40906,6 +41077,16 @@ direction to higher gene flow (m). Tested as a pure property test across
 arbitrary population sizes, deme counts, and mutation rates against
 equilibrium_g_st.
 
+<a id="statistics.test_theory"></a>
+
+# statistics.test\_theory
+
+Tests for `fim.statistics.theory`, the closed-form predictions.
+
+The expected values come from the differentiation module's own formulas, so
+these tests pin the plumbing (which inputs reach which formula, and when a
+prediction is undefined), not the population genetics.
+
 
 
 <a id="group-validation"></a>
@@ -42318,6 +42499,58 @@ def test_installer_links_all_repository_hooks(tmp_path: Path) -> None
 ```
 
 The installer links each documented hook into a fixture repository.
+
+<a id="validation.test_help_html"></a>
+
+# validation.test\_help\_html
+
+Tests for heading anchors and freshness of generated in-app Help pages.
+
+<a id="validation.test_help_html.inject_header_ids"></a>
+
+#### inject\_header\_ids
+
+```python
+@pytest.fixture(scope="module")
+def inject_header_ids() -> Callable[[str], str]
+```
+
+Load the Help generator without running its command-line entry point.
+
+<a id="validation.test_help_html.test_help_heading_ids_preserve_rendered_text"></a>
+
+#### test\_help\_heading\_ids\_preserve\_rendered\_text
+
+```python
+@pytest.mark.parametrize(
+    ("heading", "anchor"),
+    [
+        ("`_read_only`", "_read_only"),
+        ("`trailing_`", "trailing_"),
+        ("`_both_`", "_both_"),
+        ("`convergence_statistic`", "convergence_statistic"),
+        ("_Notes_", "notes"),
+        ("**Bold** and `code`", "bold-and-code"),
+        ("A &amp; B", "a--b"),
+        ("A &lt; B", "a--b"),
+    ],
+)
+def test_help_heading_ids_preserve_rendered_text(inject_header_ids: Callable[
+    [str], str], heading: str, anchor: str) -> None
+```
+
+Rendered code is literal text, not a second pass of Markdown emphasis.
+
+<a id="validation.test_help_html.test_generated_help_is_current_and_local_links_resolve"></a>
+
+#### test\_generated\_help\_is\_current\_and\_local\_links\_resolve
+
+```python
+def test_generated_help_is_current_and_local_links_resolve(
+        tmp_path: Path) -> None
+```
+
+Committed Help matches the generator and every local jump has a target.
 
 <a id="validation.test_identity_recursion_trajectory"></a>
 

@@ -3,7 +3,7 @@
 The convergence monitor judges a run over its evidence window, from the
 burn-in to the last generation, and the report records the mean and the
 standard error it found there (`window_statistics`). The panel's trailing
-mean, cumulative mean and tooltip estimate must reproduce those numbers,
+mean, cumulative mean and cell estimate must reproduce those numbers,
 so a number on screen can always be traced to the report. These tests use
 the shipped Wright-Takahata example, whose saved history and report are
 fixed files, so they are pure functions of the commit.
@@ -84,7 +84,7 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
 ) -> None:
     """Every averaged number the panel shows equals the report's.
 
-    For each watched statistic: the tooltip estimate, the last point of the
+    For each watched statistic: the estimate, the last point of the
     trailing mean and of the cumulative mean, and where the cumulative mean
     starts, all against `report.json`.
     """
@@ -118,10 +118,11 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
             const cumulative = cumulativeMeanSeries(
                 histories[name], start, tauInt);
             result[name] = {{
-                note: estimateNote(source, name),
+                estimate: windowEstimate(source, name),
                 trailing: trailing.mean[trailing.mean.length - 1],
                 cumulative: cumulative.mean[cumulative.mean.length - 1],
                 cumulativeStart: start,
+                cell: estimateCellText(source, name),
             }};
         }}
         return result;
@@ -136,7 +137,20 @@ def test_the_panel_reproduces_the_reports_evidence_window_estimates(
         assert shown["cumulativeStart"] == burn_in
         assert shown["trailing"] == pytest.approx(expected["mean"], abs=1e-9)
         assert shown["cumulative"] == pytest.approx(expected["mean"], abs=1e-9)
-        # Four decimals, as the tooltip shows them.
-        assert f"mean {expected['mean']:.4f}" in shown["note"]
-        assert f"± {expected['standard_error']:.4f}" in shown["note"]
-        assert f"{burn_in:,}\u2013{recorded - 1:,}" in shown["note"]
+        # The statistics cell shows the same mean and standard error: three
+        # decimals under a standard error of 0.01, two otherwise.
+        decimals = 3 if expected["standard_error"] < 0.01 else 2
+        assert shown["cell"] == (
+            f"{expected['mean']:.{decimals}f} \u00b1 "
+            f"{expected['standard_error']:.{decimals}f}"
+        )
+        # The estimate behind it: the report's mean and standard error over
+        # the report's own window, an evidence window.
+        estimate = shown["estimate"]
+        assert estimate["evidence"] is True
+        assert estimate["mean"] == pytest.approx(expected["mean"], abs=1e-9)
+        assert estimate["standardError"] == pytest.approx(
+            expected["standard_error"], rel=1e-3
+        )
+        assert estimate["start"] == expected["window_start"]
+        assert estimate["end"] == expected["window_end"]

@@ -48,12 +48,6 @@ particular species.
 For unbounded watched statistics without a per-statistic override, the target
 is `0.05 * max(1, abs(mean))`; it is not a shared vertical scale.
 
-The example pins `n_replicates: 1` to keep a single trajectory easy to follow.
-On Configure, choose **Run settings...** to change this run's replicate
-count, generation cap, or precision without editing YAML or changing your
-saved Settings. **Use saved Settings** fills the editor from your defaults;
-**Restore loaded settings** brings back the example's original choices.
-
 ## Related literature
 
 - Caballero A, García-Dorado A (2013). Allelic diversity and its
@@ -78,6 +72,21 @@ this implementation's value by `(d - 1) / d` to obtain that convention.
 For three demes fixed for different alleles the two values are 1 and 2/3.
 That endpoint remains a useful formula check, but is no longer the runnable
 example: with no migration or mutation it has no population dynamics.
+
+## Why a single run
+
+This example sets `n_replicates: 1` to keep a single trajectory easy to
+follow, so the numbers quoted here, and the outputs saved with it, are those
+of one run. The engine's default is `n_replicates: 200`, an adaptively
+stopped batch that reports a confidence interval, and that is what a
+researcher would normally use. One run's final numbers are one noisy draw:
+for an estimate with an error bar, run a batch (see
+[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
+
+On Configure, choose **Run settings...** to change this run's replicate
+count, generation cap, or precision without editing YAML or changing your
+saved Settings. **Use saved Settings** fills the editor from your defaults;
+**Restore loaded settings** brings back the example's original choices.
 
 ## Run
 

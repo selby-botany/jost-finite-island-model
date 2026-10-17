@@ -218,6 +218,16 @@ than a single, uncertainty-free-looking point estimate.
 Kind: policy; a regular setting.
 """
 
+DEFAULT_SWEEP_MAX_ATTEMPTS: Final = 2
+"""Times the command line and the app try a sweep point that failed for a
+transient reason (a worker process that died, a file system error) before
+recording the failure. A failure the engine itself reports is never retried:
+the same configuration would fail the same way. A killed worker is usually a
+one-off, so one retry recovers it without hiding a real fault.
+
+Kind: policy; a regular setting.
+"""
+
 DEFAULT_PAIRWISE_MAX_DEMES: Final = 1024
 """Largest deme count whose full all-pairs matrices are saved by default.
 

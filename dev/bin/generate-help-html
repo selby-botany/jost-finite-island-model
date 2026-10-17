@@ -118,7 +118,10 @@ _ensure_project_interpreter()
 import markdown_it  # noqa: E402 -- must follow the interpreter bootstrap above
 
 sys.path.insert(0, str(ROOT / "dev" / "lib"))
-from docslug import anchor_for  # noqa: E402 -- must follow the sys.path insert above
+from docslug import (  # noqa: E402 -- must follow the sys.path insert above
+    HTML_TAG_PATTERN,
+    anchor_for_text,
+)
 
 DOC_DIR = ROOT / "doc"
 HELP_DIR = ROOT / "src" / "fim" / "gui" / "webui" / "help"
@@ -279,18 +282,17 @@ _HEADER_PATTERN = re.compile(r"<(h[1-6])>(.*?)</\1>", re.DOTALL)
 def inject_header_ids(rendered_html: str) -> str:
     """Add a GitHub-compatible `id` to every rendered heading.
 
-    `anchor_for` strips inline HTML tags before slugifying (its own
-    first step), so it reads straight through `render_math`'s own
-    injected `<var>`/`<code>` tags to the heading's real text -- the
-    identical anchor a raw-Markdown `### $N$` heading would get from
-    `check-doc-links` itself, with no separate math-aware slug logic
-    needed here.
+    Markdown has already been rendered, so its emphasis delimiters are
+    gone. Strip HTML tags and decode entities to recover the literal
+    heading text, then use the shared slug normalization without parsing
+    Markdown again: a code span's leading or trailing underscores are
+    literal characters, not emphasis.
     """
     seen: Counter[str] = Counter()
 
     def substitute(match: Match[str]) -> str:
         tag, inner = match.group(1), match.group(2)
-        base = anchor_for(inner)
+        base = anchor_for_text(html.unescape(HTML_TAG_PATTERN.sub("", inner)))
         duplicate = seen[base]
         seen[base] += 1
         anchor = base if duplicate == 0 else f"{base}-{duplicate}"

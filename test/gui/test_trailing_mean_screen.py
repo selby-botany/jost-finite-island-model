@@ -280,106 +280,122 @@ def test_the_cumulative_mean_its_start_and_the_window_marker(
 
 _VALUES = [0.12, 0.31, 0.22, 0.45, 0.28, 0.37, 0.19, 0.41, 0.33, 0.26, 0.39, 0.30]
 
-_NOTES = f"""
+_ESTIMATES = f"""
 (() => {{
     const values = {json.dumps(_VALUES)};
     const generations = values.map((_, index) => index);
-    const comparisons = closedFormComparisons(
-        generations, {{D: values}}, null, {{D: "0.25"}}
-    );
-    const source = (anchors, tolerance) => ({{
+    const source = (anchors, tolerance, burnIn) => ({{
         generations,
         histories: {{D: values}},
-        comparisons,
-        convergence: {{window: 8, tolerance}},
+        convergence: {{window: 8, tolerance, burnIn}},
         anchors,
         tauInt: {{D: {_TAU_INT}}},
         sums: {{}},
     }});
     const sparse = values.map((_, index) => 10 * index);
     return {{
-        trailing: estimateNote(source({{}}, 1.0), "D"),
-        anchored: estimateNote(source({{D: 2}}, 1.0), "D"),
-        scrubbed: estimateNote(source({{D: 2}}, 1.0), "D", 8),
-        tooShort: estimateNote(source({{}}, 1.0), "D", 5),
-        inadequate: estimateNote(source({{}}, 1e-6), "D"),
-        sparse: estimateNote({{
+        trailing: windowEstimate(source({{}}, 1.0), "D"),
+        anchored: windowEstimate(source({{D: 2}}, 1.0), "D"),
+        scrubbed: windowEstimate(source({{D: 2}}, 1.0), "D", 8),
+        burnedIn: windowEstimate(source({{}}, 1.0, 3), "D"),
+        tooShort: windowEstimate(source({{}}, 1.0), "D", 5),
+        inadequate: windowEstimate(source({{}}, 1e-6), "D"),
+        sparse: windowEstimate({{
             generations: sparse,
             histories: {{D: values}},
-            comparisons: {{}},
             convergence: {{window: 75, tolerance: 1.0}},
             anchors: {{}},
             tauInt: {{D: {_TAU_INT}}},
             sums: null,
         }}, "D"),
-        live: estimateNote({{
+        live: windowEstimate({{
             generations,
             histories: {{D: values}},
-            comparisons,
             convergence: {{window: 8, tolerance: 1.0}},
             anchors: {{}},
             sums: {{}},
         }}, "D"),
-        noWindow: estimateNote(source({{}}, 1.0), "K_ST"),
-        joined: withNotes(["first", "", "second"], "description"),
+        noWindow: windowEstimate(source({{}}, 1.0), "K_ST"),
+        cells: {{
+            anchored: estimateCellText(source({{D: 2}}, 1.0), "D"),
+            trailingOnly: estimateCellText(source({{}}, 1.0), "D") ?? null,
+            tooShort: estimateCellText(source({{D: 2}}, 1.0), "D", 5) ?? null,
+        }},
+        formatted: [
+            formatEstimate(0.2903, 0.058), formatEstimate(0.1931, 0.0066),
+            formatEstimate(0.5, NaN), formatEstimate(0.5, 0),
+        ],
     }};
 }})()
 """
 
 
-def _expected_note(start: int, end: int, *, predicted: float | None) -> str:
-    """The tooltip clause for `_VALUES[start..end]`, computed in Python."""
+def _check_estimate(
+    estimate: dict[str, Any], start: int, end: int, *, evidence: bool
+) -> None:
+    """Assert one `windowEstimate` result against `_VALUES[start..end]`."""
     stats = window_statistics(_VALUES[start : end + 1])
-    count = end - start + 1
-    note = (
-        f"mean {stats.mean:.4f} ± {stats.standard_error:.4f} over generations "
-        f"{start}{_EN_DASH}{end} ({count} generations; 1 SE)"
-    )
-    if predicted is not None:
-        distance = (stats.mean - predicted) / stats.standard_error
-        sign = _MINUS if distance < 0 else "+"
-        note += f"; predicted {predicted:.4f}, {sign}{abs(distance):.1f} SE"
-    return note
+    assert estimate["start"] == start
+    assert estimate["end"] == end
+    assert estimate["count"] == end - start + 1
+    assert estimate["mean"] == pytest.approx(stats.mean)
+    assert estimate["standardError"] == pytest.approx(stats.standard_error)
+    assert estimate["known"] is True
+    assert estimate["evidence"] is evidence
 
 
-def test_the_estimate_note_text(
+def test_the_window_estimates(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
     """Trailing, anchored, scrubbed, sparse and inadequate estimates read right."""
-    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_NOTES)
+    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_ESTIMATES)
 
-    assert settled["trailing"] == _expected_note(4, 11, predicted=0.25)
+    # No evidence window known: the trailing convergence window.
+    _check_estimate(settled["trailing"], 4, 11, evidence=False)
+    assert settled["trailing"]["adequate"] is True
     # Inside the grown evidence window: everything from its start.
-    assert settled["anchored"] == _expected_note(2, 11, predicted=0.25)
-    # Scrubbed back to where the evidence window is shorter than the
-    # convergence window: the ordinary trailing window again.
-    assert settled["scrubbed"] == _expected_note(1, 8, predicted=0.25)
-    assert settled["tooShort"] == ""
-    assert "(8 generations; 1 SE, not yet noise-adequate)" in settled["inadequate"]
+    _check_estimate(settled["anchored"], 2, 11, evidence=True)
+    # From the burn-in when there is no grown window.
+    _check_estimate(settled["burnedIn"], 3, 11, evidence=True)
+    # Scrubbed back to where the evidence window is shorter than eight
+    # points: the ordinary trailing window again, and not the evidence window.
+    _check_estimate(settled["scrubbed"], 1, 8, evidence=False)
+    assert settled["tooShort"] is None
+    assert settled["inadequate"]["adequate"] is False
     # Sparse live ticks: the window spans generations 40-110, eight ticks.
     sparse = window_statistics(_VALUES[4:])
-    assert settled["sparse"] == (
-        f"mean {sparse.mean:.4f} ± {sparse.standard_error:.4f} over generations "
-        f"40{_EN_DASH}110 (71 generations, 8 recorded; 1 SE)"
-    )
+    assert settled["sparse"]["start"] == 4
+    assert settled["sparse"]["count"] == 8
+    assert settled["sparse"]["mean"] == pytest.approx(sparse.mean)
+    assert settled["sparse"]["standardError"] == pytest.approx(sparse.standard_error)
     # A live run has no autocorrelation time yet: the mean, without an error bar.
-    stats = window_statistics(_VALUES[4:])
-    assert settled["live"] == (
-        f"mean {stats.mean:.4f} over generations 4{_EN_DASH}11 (8 generations; "
-        "standard error known once the run has averaged); predicted 0.2500"
+    live = settled["live"]
+    assert live["known"] is False
+    assert live["mean"] == pytest.approx(window_statistics(_VALUES[4:]).mean)
+    assert settled["noWindow"] is None
+    # The cell shows an evidence-window estimate only.
+    stats = window_statistics(_VALUES[2:])
+    assert settled["cells"]["anchored"] == (
+        f"{stats.mean:.2f} \u00b1 {stats.standard_error:.2f}"
     )
-    assert settled["noWindow"] == ""
-    assert settled["joined"] == "first — second — description"
+    assert settled["cells"]["trailingOnly"] is None
+    assert settled["cells"]["tooShort"] is None
+    assert settled["formatted"] == [
+        "0.29 \u00b1 0.06",
+        "0.193 \u00b1 0.007",
+        "0.50",
+        "0.50",
+    ]
 
 
 @pytest.fixture
 def estimable_run_settings(_isolate_gui_preferences: Path) -> Path:
     """Pre-seed Settings for a fast run long enough to estimate a window mean.
 
-    `fast_scalar_run_settings`' window of 4 is shorter than the eight
-    points an estimate needs, so this one uses a window of 8, and a
-    tolerance no run meets, so the run goes to its 40-generation cap: long
-    enough past the one-window burn-in for a cumulative mean.
+    The default burn-in (several relaxation times) is longer than a
+    40-generation cap, so this one sets a burn-in of 8, and a tolerance no
+    run meets, so the run goes to its cap: 32 generations of evidence
+    window, more than the eight points an estimate needs.
     """
     save_preferences(
         _isolate_gui_preferences,
@@ -389,6 +405,7 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path:
             default_run_settings={
                 "n_replicates": "1",
                 "max_generations": "40",
+                "convergence_burn_in": "8",
                 "precision": "1e-06",
             },
         ),
@@ -399,7 +416,7 @@ def estimable_run_settings(_isolate_gui_preferences: Path) -> Path:
 def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
     estimable_run_settings: Path, window: webview.Window
 ) -> None:
-    """D's tooltip leads with its mean ± SE; each display redraws and persists."""
+    """D's cell shows its mean ± SE; each display redraws and persists."""
     set_fields = (
         "function setField(name, value) {"
         "const field = document.getElementById(`field-${name}`);"
@@ -415,6 +432,9 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
         "state: window.fim.getRunViewState(), "
         "pending: window.__fimScrubberPending, "
         "D: document.getElementById('stat-D').title, "
+        "DCell: document.querySelector('#stat-D .stat-value')?.textContent, "
+        "messages: Array.from(document.querySelectorAll('#run-messages li'))"
+        ".map((item) => item.textContent), "
         "chooserHidden: document.getElementById("
         "'run-trajectory-display-control').hidden, "
         "legend: document.getElementById('run-trajectory-legend').textContent"
@@ -487,24 +507,28 @@ def test_a_completed_run_leads_with_its_estimate_and_offers_the_averages(
     trailing = settled["trailing_mean"]
     cumulative = settled["cumulative_mean"]
 
+    # The cell shows the average and its standard error; the tooltip is the
+    # headline only, and the explanation is in the run messages.
+    assert " \u00b1 " in before["DCell"]
     title = before["D"]
-    assert " — mean " in title
-    assert " over generations " in title
-    assert "; predicted " in title
-    # The estimate first, then the comparison, then the description.
-    assert (
-        title.index("mean ")
-        < title.index("ΔDₚ")
-        < title.index("allelic differentiation")
-    )
+    assert "mean \u00b1 1 standard error" in title
+    assert "last generation " in title
+    assert "allelic differentiation" not in title
+    messages = " ".join(before["messages"])
+    assert "D is a statistic this run watches" in messages
+    assert "Averaged over generations " in messages
+    assert "The prediction for D (closed-form trajectory)" in messages
+    assert "allelic differentiation" in messages
     assert before["chooserHidden"] is False
     assert "trailing mean" not in before["legend"]
-    assert "trailing mean ± 2 SE (last 50 generations)" in trailing["legend"]
+    # The trailing mean averages over the run's evidence window: the
+    # generations recorded after the burn-in of 8 (the cap is 40).
+    assert "trailing mean ± 2 SE (last 33 generations)" in trailing["legend"]
     assert "trailing window start" in trailing["legend"]
     assert trailing["saved"] == "trailing_mean"
-    # The run records where the monitor began averaging (its burn-in), so the
-    # legend says so instead of naming a generation of its own.
-    assert "cumulative mean ± 2 SE (from where averaging began)" in cumulative["legend"]
+    # Averaging begins at the burn-in for every statistic, so the legend names
+    # that generation.
+    assert "cumulative mean \u00b1 2 SE (from generation 8)" in cumulative["legend"]
     assert cumulative["saved"] == "cumulative_mean"
 
 
@@ -533,10 +557,6 @@ _EVIDENCE = """
         visible: Object.keys(visibleSigmaBand(two, {D: [1]}).band),
         allVisible: Object.keys(visibleSigmaBand(two, null).band),
         noneVisible: visibleSigmaBand(two, {X: [1]}),
-        sigmaNote: (() => {
-            completedWindowStatistics = stats;
-            return [sigmaNote("D"), sigmaNote("missing")];
-        })(),
     };
 })()
 """
@@ -545,7 +565,7 @@ _EVIDENCE = """
 def test_the_sigma_display_is_built_from_the_evidence_window(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Band, tau_int and the sigma tooltip clause come from the report's window."""
+    """Band and tau_int come from the report's evidence window."""
     settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_EVIDENCE)
 
     # tau_int is window / effective sample size, at least one; none without a window.
@@ -562,7 +582,6 @@ def test_the_sigma_display_is_built_from_the_evidence_window(
     assert settled["visible"] == ["D"]
     assert settled["allVisible"] == ["D", "G_ST"]
     assert settled["noneVisible"] is None
-    assert settled["sigmaNote"] == ["\u03c3 0.1000 per generation", ""]
 
 
 def test_the_band_width_selector_applies_and_is_remembered(
@@ -590,3 +609,94 @@ def test_the_band_width_selector_applies_and_is_remembered(
     )
 
     assert settled == {"width": 1, "select": "1", "saved": 1}
+
+
+_MESSAGES = """
+(() => {
+    const window_ = {window: 13487, window_start: 8424, window_end: 21910,
+                     target_standard_error: 0.0102};
+    const stats = {
+        D: {...window_, mean: 0.2903, standard_error: 0.058,
+            standard_deviation: 0.175, noise_adequate: false},
+        G_ST: {...window_, mean: 0.1931, standard_error: 0.0066,
+               standard_deviation: 0.0542, noise_adequate: true},
+        H_S: {...window_, mean: 0.48, standard_error: 0.058,
+              standard_deviation: 0.143, noise_adequate: false},
+    };
+    return {
+        watchedG: statisticMessagesFor(stats, ["G_ST"], null, null),
+        watchedBoth: statisticMessagesFor(stats, ["D", "G_ST"], null, null),
+        none: statisticMessagesFor(stats, [], null, null),
+        unknown: statisticMessagesFor({X: stats.D}, ["X"], null, null),
+    };
+})()
+"""
+
+
+@pytest.mark.parametrize(
+    ("formatted_start", "formatted_end"),
+    [("8,424", "21,910"), ("8424", "21910")],
+)
+def test_the_statistic_messages_explain_each_statistic_in_sentences(
+    window: webview.Window,
+    drive: Callable[..., Any],
+    formatted_start: str,
+    formatted_end: str,
+) -> None:
+    """Watched statistics lead; the others, spread and meaning follow as details."""
+    # Control locale-dependent grouping, as in the legend test above.
+    script = (
+        "(() => {"
+        "const original = Number.prototype.toLocaleString;"
+        "Number.prototype.toLocaleString = function () {"
+        f"const formatted = {{8424: {json.dumps(formatted_start)}, "
+        f"21910: {json.dumps(formatted_end)}}};"
+        "return formatted[Number(this)] ?? String(this);"
+        "};"
+        "try {"
+        f"return {_MESSAGES.strip().removesuffix(';')};"
+        "} finally { Number.prototype.toLocaleString = original; }"
+        "})()"
+    )
+    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=script)
+
+    watched = settled["watchedG"]
+    primary = [message for message in watched if not message.get("detail")]
+    details = [message["text"] for message in watched if message.get("detail")]
+    assert next(message["text"] for message in primary) == (
+        "G_ST is a statistic this run watches. Averaged over generations "
+        f"{formatted_start} to {formatted_end} it is 0.193, with a standard "
+        "error of 0.007, which meets the "
+        "target of 0.010 that ends the run."
+    )
+    assert primary[1]["text"].startswith(
+        "A statistic that has settled still changes from one generation"
+    )
+    assert "not how flat the line is." in primary[1]["text"]
+    assert len(primary) == 2
+    # A detail per statistic, the watched one first.
+    assert len(details) == 3
+    assert details[0] == (
+        "G_ST is nearness to fixation (Nei's G_ST), not a measure of "
+        "differentiation. From one generation to the next it varies with a "
+        "standard deviation of 0.05. A longer run does not shrink this spread."
+    )
+    assert details[1].startswith("D is allelic differentiation")
+    assert (
+        f"Averaged over generations {formatted_start} to {formatted_end} "
+        "it is 0.29, with a standard "
+        "error of 0.06. The run did not watch it, and its standard error is "
+        "above the target of 0.010, so treat its average as approximate."
+    ) in details[1]
+    assert "standard deviation of 0.17." in details[1]
+
+    # A watched statistic that misses its target says so.
+    both = [message["text"] for message in settled["watchedBoth"]]
+    assert (
+        "which is above the target of 0.010, so its average is not yet known "
+        "to the requested precision."
+    ) in both[0]
+    # Nothing watched: no leading sentences, only details.
+    assert all(message.get("detail") for message in settled["none"])
+    # A statistic the catalog does not know is left out.
+    assert settled["unknown"] == []

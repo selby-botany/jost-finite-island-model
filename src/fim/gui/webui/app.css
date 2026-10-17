@@ -608,6 +608,22 @@ textarea::placeholder {
     color: var(--fim-muted);
 }
 
+.run-message-details {
+    display: block;
+}
+
+.run-message-details summary {
+    cursor: pointer;
+}
+
+.run-message-detail-list {
+    margin: 0.35rem 0 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
 .run-message-dot {
     flex: none;
     width: 0.55rem;
@@ -1557,6 +1573,17 @@ fieldset.combinator-choice label {
 
 .stats-table tr.stat-plot-toggle-row.stat-plot-hidden {
     opacity: 0.55;
+}
+
+/* The statistics the run watches: underlined, a cue that does not depend on
+ * the bold, dimming or color the row already uses. */
+.stats-table tr.stat-watched .stat-name {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.stats-table tr.stat-burn-in .stat-value {
+    color: var(--fim-muted);
 }
 
 .stat-plot-toggle {

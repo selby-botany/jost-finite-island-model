@@ -35,7 +35,7 @@ import queue
 import shutil
 import threading
 from collections.abc import Callable, Mapping
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, replace
@@ -47,11 +47,16 @@ import yaml
 
 from fim import __version__, paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.errors import StoreError
 from fim.execution import UnsupportedSessionError
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
-from fim.persistence.object_lock import is_lock_held
+from fim.persistence.object_lock import (
+    LockUnavailableError,
+    exclusive_lock,
+    is_lock_held,
+)
 from fim.persistence.run_lifecycle import (
     ACTIVE_STATES,
     LifecycleError,
@@ -78,6 +83,12 @@ from fim.sweep import (
     enumerate_points,
     point_run_description,
     point_run_name,
+)
+from fim.sweep_table import (
+    HealthCache,
+    PointRow,
+    StatisticCell,
+    read_point_health,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,11 +148,58 @@ EventKind = Literal[
 ]
 
 
+class SweepLockedError(StoreError, ValueError):
+    """Another process is already running this sweep.
+
+    A `ValueError` subclass so the command line and the app report it as
+    a plain error, like any other reason a sweep cannot start.
+    """
+
+
+FailureClass = Literal["transient", "deterministic"]
+"""Whether trying a failed point again can help: a `transient` failure (a
+worker process that died, a file system error) can pass; a `deterministic`
+one (the engine rejected the configuration) happens every time."""
+
+_FAILURE_CLASSES: Final[tuple[tuple[type[BaseException], FailureClass], ...]] = (
+    (BrokenProcessPool, "transient"),
+    (OSError, "transient"),
+    (Exception, "deterministic"),
+)
+"""How `classify_failure` sorts an exception: the first row it is an instance
+of decides, so a more specific type goes above a broader one."""
+
+
+def classify_failure(error: BaseException) -> FailureClass:
+    """Say whether a point that failed with `error` is worth trying again.
+
+    Args:
+        error: What the point raised.
+
+    Returns:
+        The class of the first row of the classification table that
+        `error` matches; `"deterministic"` if none does.
+    """
+    for kind, failure_class in _FAILURE_CLASSES:
+        if isinstance(error, kind):
+            return failure_class
+    return "deterministic"
+
+
 @dataclass(frozen=True, slots=True)
 class PointFailure:
-    """Why one point produced no run."""
+    """Why one point produced no run.
+
+    Attributes:
+        reason: What went wrong, in words for the person running the sweep.
+        failure_class: Whether trying the point again can help.
+        attempts: How many times the point was tried before this failure
+            was returned.
+    """
 
     reason: str
+    failure_class: FailureClass = "deterministic"
+    attempts: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,7 +360,7 @@ class LocalPointRunner:
         try:
             output_directory, reservation = _allocate_output_directory()
         except FileExistsError as error:
-            return PointFailure(str(error))
+            return PointFailure(str(error), classify_failure(error))
         try:
             return self._run(
                 params, output_directory, cancel_event, on_message, max_workers
@@ -431,7 +489,7 @@ def execute_point_object(
         )
     except _POINT_ERRORS as error:
         logger.warning("sweep point object %s failed: %s", object_id, error)
-        return PointFailure(str(error))
+        return PointFailure(str(error), classify_failure(error))
     state = finished.record.state
     if state is RunState.COMPLETED:
         return finished.directory
@@ -452,6 +510,16 @@ _POINT_ERRORS: Final = (
 )
 
 
+def _failure_kind(failure: PointFailure) -> str:
+    """Name a failure's kind in a worker's `(kind, value)` answer."""
+    return "transient" if failure.failure_class == "transient" else "failure"
+
+
+def _point_failure(kind: str, value: str) -> PointFailure:
+    """Rebuild a `PointFailure` from a worker's `(kind, value)` answer."""
+    return PointFailure(value, "transient" if kind == "transient" else "deterministic")
+
+
 def _run_object_in_process(
     object_id: str,
     results_directory: str,
@@ -469,7 +537,7 @@ def _run_object_in_process(
         object_id, cancel_event, None, pairwise_max_demes=pairwise_max_demes
     )
     if isinstance(result, PointFailure):
-        return "failure", result.reason
+        return _failure_kind(result), result.reason
     if isinstance(result, PointPaused):
         return "paused", result.state
     return "ok", str(result)
@@ -490,7 +558,7 @@ def _run_point_in_process(
     paths.set_results_directory_override(Path(results_directory))
     result = LocalPointRunner().run_point(params, cancel_event, None, max_workers)
     if isinstance(result, PointFailure):
-        return "failure", result.reason
+        return _failure_kind(result), result.reason
     return "ok", str(result)
 
 
@@ -505,14 +573,19 @@ class ProcessPointRunner:
     runs the same in either. Each worker process runs `LocalPointRunner` on
     one point at a time, so a lineal batch inside it starts its own workers.
 
-    A cancel reaches the worker through a shared event, and a worker that
-    dies is reported as a failed point, not a hung sweep.
+    A cancel reaches the worker through a shared event. A worker that dies
+    breaks the whole pool: every point in flight is reported as failed, and
+    the pool is replaced so the points that follow still run, instead of
+    the sweep ending on the first submit to a dead pool.
 
     Args:
         processes: How many points can run at once.
         max_workers: Default worker processes for a lineal batch point.
         pairwise_max_demes: Largest deme count for which each point saves
             every deme pair's Nei identities (`pairwise.json`).
+        executor_factory: Builds the pool from a process count. The default
+            starts spawned worker processes; a test passes a fake that
+            breaks on demand.
     """
 
     def __init__(
@@ -521,12 +594,99 @@ class ProcessPointRunner:
         max_workers: int | None = None,
         *,
         pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        executor_factory: Callable[[int], Executor] | None = None,
     ) -> None:
         context = multiprocessing.get_context("spawn")
         self._manager = context.Manager()
-        self._executor = ProcessPoolExecutor(processes, mp_context=context)
+        self._processes = processes
+        self._factory: Callable[[int], Executor] = executor_factory or (
+            lambda count: ProcessPoolExecutor(count, mp_context=context)
+        )
+        self._lock = threading.Lock()
+        self._executor = self._factory(processes)
         self.max_workers = max_workers
         self.pairwise_max_demes = pairwise_max_demes
+
+    def _replace(self, broken: Executor) -> None:
+        """Swap in a fresh pool for `broken`, once however many threads ask.
+
+        Several point threads see the same dead pool at the same time; only
+        the first finds `broken` still current and replaces it.
+
+        Args:
+            broken: The pool that failed.
+        """
+        with self._lock:
+            if self._executor is not broken:
+                return
+            self._executor = self._factory(self._processes)
+        broken.shutdown(wait=False, cancel_futures=True)
+
+    def _submit(
+        self, function: Callable[..., tuple[str, str]], *args: object
+    ) -> tuple[Future[tuple[str, str]], Executor]:
+        """Submit `function`, replacing a pool that is already broken.
+
+        A pool whose worker died refuses every later submit. One replacement
+        is tried; a second refusal is raised to the caller.
+
+        Args:
+            function: The worker entry point.
+            *args: Its arguments.
+
+        Returns:
+            The future and the pool it was submitted to.
+
+        Raises:
+            BrokenProcessPool: A fresh pool refused the submit as well.
+            RuntimeError: The pool was shut down.
+        """
+        with self._lock:
+            executor = self._executor
+        try:
+            return executor.submit(function, *args), executor
+        except (BrokenProcessPool, RuntimeError):
+            self._replace(executor)
+        with self._lock:
+            executor = self._executor
+        return executor.submit(function, *args), executor
+
+    def _await(
+        self,
+        function: Callable[..., tuple[str, str]],
+        args: tuple[object, ...],
+        cancel_event: threading.Event,
+        shared_cancel: Any,
+    ) -> tuple[str, str]:
+        """Run `function` in the pool and wait, forwarding a cancel.
+
+        Args:
+            function: The worker entry point.
+            args: Its arguments.
+            cancel_event: The sweep's cancel event.
+            shared_cancel: The event the worker process watches.
+
+        Returns:
+            The worker's `(kind, value)`, or `("transient", reason)` if the
+            pool broke before or while the point ran.
+        """
+        try:
+            future, executor = self._submit(function, *args)
+        except (BrokenProcessPool, RuntimeError, OSError) as error:
+            logger.warning("sweep worker pool refused a point: %s", error)
+            return "transient", f"the worker pool could not start the point: {error}"
+        while True:
+            try:
+                return future.result(timeout=0.25)
+            except FutureTimeoutError:
+                if cancel_event.is_set():
+                    shared_cancel.set()
+            except BrokenProcessPool:
+                self._replace(executor)
+                return "transient", "a worker process ended unexpectedly"
+            except Exception as error:
+                logger.warning("sweep worker raised: %s", error)
+                return "failure", str(error) or type(error).__name__
 
     def run_point(
         self,
@@ -538,23 +698,18 @@ class ProcessPointRunner:
         """Run `params` in a worker process; see `PointRunner.run_point`."""
         del on_message  # progress inside a point does not cross processes
         shared_cancel = self._manager.Event()
-        future = self._executor.submit(
+        kind, value = self._await(
             _run_point_in_process,
-            params,
-            str(paths.results_directory()),
-            max_workers if max_workers is not None else self.max_workers,
+            (
+                params,
+                str(paths.results_directory()),
+                max_workers if max_workers is not None else self.max_workers,
+                shared_cancel,
+            ),
+            cancel_event,
             shared_cancel,
         )
-        while True:
-            try:
-                kind, value = future.result(timeout=0.25)
-            except FutureTimeoutError:
-                if cancel_event.is_set():
-                    shared_cancel.set()
-                continue
-            except BrokenProcessPool:
-                return PointFailure("a worker process ended unexpectedly")
-            return Path(value) if kind == "ok" else PointFailure(value)
+        return Path(value) if kind == "ok" else _point_failure(kind, value)
 
     def run_object_point(
         self,
@@ -565,29 +720,28 @@ class ProcessPointRunner:
         """Execute a point's Run object in a worker process."""
         del on_message  # progress inside a point does not cross processes
         shared_cancel = self._manager.Event()
-        future = self._executor.submit(
+        kind, value = self._await(
             _run_object_in_process,
-            object_id,
-            str(paths.results_directory()),
-            self.pairwise_max_demes,
+            (
+                object_id,
+                str(paths.results_directory()),
+                self.pairwise_max_demes,
+                shared_cancel,
+            ),
+            cancel_event,
             shared_cancel,
         )
-        while True:
-            try:
-                kind, value = future.result(timeout=0.25)
-            except FutureTimeoutError:
-                if cancel_event.is_set():
-                    shared_cancel.set()
-                continue
-            except BrokenProcessPool:
-                return PointFailure("a worker process ended unexpectedly")
-            if kind == "ok":
-                return Path(value)
-            return PointPaused(value) if kind == "paused" else PointFailure(value)
+        if kind == "ok":
+            return Path(value)
+        if kind == "paused":
+            return PointPaused(value)
+        return _point_failure(kind, value)
 
     def close(self) -> None:
         """Stop the worker processes and the shared-event server."""
-        self._executor.shutdown(wait=True, cancel_futures=True)
+        with self._lock:
+            executor = self._executor
+        executor.shutdown(wait=True, cancel_futures=True)
         self._manager.shutdown()
 
 
@@ -908,6 +1062,8 @@ class _Context:
     # Points recomputed on purpose (`run_sweep(rerun=True)`): their existing
     # runs are not reused, only compared with the result.
     rerun_ids: frozenset[str] = frozenset()
+    # Times a point that failed for a transient reason is tried in all.
+    max_attempts: int = 1
 
     def emit(
         self, kind: EventKind, point: SweepPoint, detail: object = None, *, finish: bool
@@ -933,6 +1089,7 @@ def run_sweep(
     software_version: str = __version__,
     points_at_once: int | None = None,
     max_workers: int | None = None,
+    max_attempts: int = 1,
     results: Path | None = None,
 ) -> SweepOutcome:
     """Run every point of a sweep Study that is not already present.
@@ -973,16 +1130,88 @@ def run_sweep(
         points_at_once: How many points to run at the same time, or `None`
             for automatic.
         max_workers: Worker processes for each batch point, or `None`.
+        max_attempts: Times to try a point that fails for a transient reason
+            (`classify_failure`) before recording the failure. A
+            deterministic failure is never tried again. The attempts are
+            back to back, with no delay, so the result never depends on a
+            clock.
         results: Optional results-directory override.
 
     Returns:
         The tally.
 
     Raises:
-        ValueError: The Study is not a sweep, or the stored plan no longer
-            matches what this version of the program enumerates.
+        ValueError: `max_attempts` is below 1, the Study is not a sweep, or
+            the stored plan no longer matches what this version of the
+            program enumerates.
         ClosedGroupError: The Study is closed; reopen it to continue.
+        SweepLockedError: Another process is running this sweep. A sweep
+            holds a lock on its Study for as long as it runs, released by
+            the operating system if the process dies, so two sweeps never
+            work on one Study at the same time.
     """
+    _require_attempts(max_attempts)
+    lock = sweep_lock_path(study_id, results=results)
+    try:
+        with exclusive_lock(lock, blocking=False):
+            return _run_sweep_locked(
+                study_id,
+                runner,
+                on_event,
+                cancel_event,
+                retry_failed=retry_failed,
+                rerun=rerun,
+                software_version=software_version,
+                points_at_once=points_at_once,
+                max_workers=max_workers,
+                max_attempts=max_attempts,
+                results=results,
+            )
+    except LockUnavailableError:
+        raise SweepLockedError(
+            f"another process is running sweep {study_id}; wait for it to "
+            "finish, or stop it, and try again"
+        ) from None
+
+
+def sweep_lock_held(study_id: str, *, results: Path | None = None) -> bool:
+    """Return whether a process is running the sweep `study_id` right now.
+
+    Args:
+        study_id: A sweep Study.
+        results: Optional results-directory override.
+
+    Returns:
+        True while any process, this one included, is inside `run_sweep` for
+        the Study.
+    """
+    return is_lock_held(sweep_lock_path(study_id, results=results))
+
+
+def sweep_lock_path(study_id: str, *, results: Path | None = None) -> Path:
+    """Return the lock file a running sweep holds for its Study.
+
+    Kept beside the failure file, so the Study index's `*.json` scan never
+    sees it.
+    """
+    return failures_path(study_id, results=results).with_suffix(".lock")
+
+
+def _run_sweep_locked(
+    study_id: str,
+    runner: PointRunner,
+    on_event: Callable[[SweepEvent], None],
+    cancel_event: threading.Event,
+    *,
+    retry_failed: bool = False,
+    rerun: bool = False,
+    software_version: str = __version__,
+    points_at_once: int | None = None,
+    max_workers: int | None = None,
+    max_attempts: int = 1,
+    results: Path | None = None,
+) -> SweepOutcome:
+    """Run the sweep; the caller holds the Study's sweep lock."""
     study = groups.get_study(study_id, results=results)
     groups.refuse_closed(study, "given more sweep runs")
     spec = sweep_spec_of(study)
@@ -1060,6 +1289,7 @@ def run_sweep(
             _completed_objects(software_version, results) if uses_objects else {}
         ),
         rerun_ids=rerun_ids,
+        max_attempts=max_attempts,
     )
     cancelled = False
 
@@ -1099,6 +1329,16 @@ def run_sweep(
         recomputed=tally["recomputed"],
         differing=tally["differs"],
     )
+
+
+def _require_attempts(max_attempts: int) -> None:
+    """Refuse a limit that would never try a point.
+
+    Raises:
+        ValueError: `max_attempts` is below 1.
+    """
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1")
 
 
 def failures_path(study_id: str, *, results: Path | None = None) -> Path:
@@ -1143,14 +1383,22 @@ def _read_status(study_id: str, results: Path | None) -> dict[str, Any]:
 def _record_failure(
     study_id: str,
     point: SweepPoint,
-    reason: str,
+    failure: PointFailure,
     results: Path | None,
 ) -> None:
-    """Persist one failed point so 'failed' survives a restart."""
+    """Persist one failed point so 'failed' survives a restart.
+
+    The record keeps the failure's class and the attempts made, added to
+    those of an earlier failure of the same point, so a point retried
+    across several resumes shows its total.
+    """
     failures = read_failures(study_id, results=results)
+    earlier = failures.get(point.run_id, {}).get("attempts", 0)
     failures[point.run_id] = {
         "index": point.index,
-        "reason": reason,
+        "reason": failure.reason,
+        "failure_class": failure.failure_class,
+        "attempts": (earlier if isinstance(earlier, int) else 0) + failure.attempts,
         "at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     _write_failures(study_id, failures, results)
@@ -1192,6 +1440,154 @@ def _write_status(
     paths.replace_with_retry(temporary, path)
 
 
+@dataclass(frozen=True, slots=True)
+class Replan:
+    """What `replan_sweep` changed, or would change.
+
+    Attributes:
+        renamed: `(old run id, new run id)` for each point whose coordinates
+            are unchanged but whose id differs.
+        unchanged: Points whose id already matches.
+        added: Run ids of points the stored plan did not have.
+        removed: Run ids of stored points that are no longer valid.
+        orphaned_runs: Runs still in the Study whose id matches no point of
+            the new plan. They stay attached as ordinary runs, and the
+            points they stood for run again.
+        failures_moved: Recorded failures carried over to a new id.
+        unlinked_objects: Run objects that were linked to a renamed point.
+            They are left as they are, but no longer continued by the sweep.
+        written: Whether the Study was changed (false for a dry run).
+    """
+
+    renamed: tuple[tuple[str, str], ...]
+    unchanged: int
+    added: tuple[str, ...]
+    removed: tuple[str, ...]
+    orphaned_runs: tuple[Path, ...]
+    failures_moved: int
+    unlinked_objects: tuple[str, ...]
+    written: bool
+
+
+def _coordinate_key(coordinates: Mapping[str, Any]) -> str:
+    """Return a text key for a point's coordinates, equal across a JSON round trip."""
+    return json.dumps(dict(coordinates), sort_keys=True, default=str)
+
+
+def replan_sweep(
+    study_id: str, *, dry_run: bool = False, results: Path | None = None
+) -> Replan:
+    """Re-identify a sweep Study's points under this version's run ids.
+
+    A run id is a hash of the point's configuration, so a release that
+    changes what the hash covers changes every id, and the stored plan then
+    no longer matches (`run_sweep` refuses it). The plan is enumerated again
+    from the stored specification and each new point is matched to its
+    stored one by coordinates, never by id. The stored plan is rewritten, and
+    the recorded failures follow their points. Runs already in the Study are
+    never touched: one whose id no longer matches any point stays attached as
+    an ordinary run, listed in the result, and its point runs again.
+
+    Args:
+        study_id: A sweep Study.
+        dry_run: Report what would change and write nothing.
+        results: Optional results-directory override.
+
+    Returns:
+        What changed, or would change.
+
+    Raises:
+        ValueError: The Study is not a sweep, has no valid points, or has
+            points that coordinates cannot tell apart.
+        ClosedGroupError: The Study is closed.
+        SweepLockedError: A process is running the sweep.
+    """
+    study = groups.get_study(study_id, results=results)
+    groups.refuse_closed(study, "re-planned")
+    plan = enumerate_points(sweep_spec_of(study))
+    if not plan.points:
+        raise ValueError("the sweep has no valid points to run")
+    old_entries = stored_points(study)
+    old_by_key = {
+        _coordinate_key(entry.get("coordinates", {})): entry for entry in old_entries
+    }
+    new_keys = [_coordinate_key(point.coordinates) for point in plan.points]
+    if len(old_by_key) != len(old_entries) or len(set(new_keys)) != len(new_keys):
+        raise ValueError("the sweep's points cannot be told apart by coordinates")
+
+    # Pair each new point with its stored one.
+    renamed: list[tuple[str, str]] = []
+    added: list[str] = []
+    unchanged = 0
+    for key, point in zip(new_keys, plan.points, strict=True):
+        entry = old_by_key.pop(key, None)
+        if entry is None:
+            added.append(point.run_id)
+        elif str(entry["run_id"]) == point.run_id:
+            unchanged += 1
+        else:
+            renamed.append((str(entry["run_id"]), point.run_id))
+    removed = tuple(str(entry["run_id"]) for entry in old_by_key.values())
+
+    # Runs that no longer stand for a point, and the status that follows ids.
+    new_ids = {point.run_id for point in plan.points}
+    orphaned = tuple(
+        directory
+        for directory in groups.study_run_directories(study, results=results)
+        if (identity := groups.run_identity_of(directory)) is not None
+        and identity[0] not in new_ids
+    )
+    failures = read_failures(study_id, results=results)
+    moved = {old: new for old, new in renamed if old in failures}
+    objects = read_point_objects(study_id, results=results)
+    unlinked = tuple(objects[old] for old, _new in renamed if old in objects)
+    outcome = Replan(
+        renamed=tuple(renamed),
+        unchanged=unchanged,
+        added=tuple(added),
+        removed=removed,
+        orphaned_runs=orphaned,
+        failures_moved=len(moved),
+        unlinked_objects=unlinked,
+        written=not dry_run,
+    )
+    if dry_run:
+        return outcome
+
+    # Write under the sweep lock, so no sweep reads a half-rewritten plan.
+    try:
+        with exclusive_lock(sweep_lock_path(study_id, results=results), blocking=False):
+            _write_replan(study, plan, renamed, results)
+    except LockUnavailableError:
+        raise SweepLockedError(
+            f"another process is running sweep {study_id}; stop it before re-planning"
+        ) from None
+    return outcome
+
+
+def _write_replan(
+    study: StudyManifest,
+    plan: SweepPlan,
+    renamed: list[tuple[str, str]],
+    results: Path | None,
+) -> None:
+    """Store the new plan and move the failure and object records with it."""
+    assert study.sweep_spec is not None  # checked by `stored_points`
+    points = [point.to_dict() for point in plan.points]
+    updated = replace(study, sweep_spec={**study.sweep_spec, "points": points})
+    groups.write_study_manifest(
+        groups.study_manifest_path(study.study_id, results=results), updated
+    )
+    failures = read_failures(study.study_id, results=results)
+    objects = read_point_objects(study.study_id, results=results)
+    for old, new in renamed:
+        if old in failures:
+            failures[new] = failures.pop(old)
+        objects.pop(old, None)
+    _write_status(study.study_id, results, "failures", failures)
+    _write_status(study.study_id, results, "objects", objects)
+
+
 def _matching_plan(study: StudyManifest, plan: SweepPlan) -> tuple[SweepPoint, ...]:
     """Return the enumerated points, after checking they match the stored plan."""
     stored = [str(entry["run_id"]) for entry in stored_points(study)]
@@ -1199,7 +1595,9 @@ def _matching_plan(study: StudyManifest, plan: SweepPlan) -> tuple[SweepPoint, .
     if stored != current:
         raise ValueError(
             "the stored sweep plan no longer matches this version of the "
-            "program (run ids differ); create the sweep again"
+            "program (run ids differ); re-identify its points with "
+            f"`fim sweep replan {study.study_id}` (add --dry-run to see "
+            "what would change first)"
         )
     return plan.points
 
@@ -1274,7 +1672,44 @@ def _point_object(context: _Context, point: SweepPoint) -> str:
 def _dispatch_point(
     context: _Context, point: SweepPoint, progress: Callable[[object], None]
 ) -> tuple[Path | PointFailure | PointPaused, str | None]:
-    """Run one point and return its outcome with its Run object ID, if any."""
+    """Run one point, trying again while it fails for a transient reason.
+
+    A failure the engine reports is returned at once: the same
+    configuration fails the same way. A transient one (a worker that died,
+    a file system error) is tried again up to `context.max_attempts` in
+    all, unless the sweep was cancelled. The attempts are back to back,
+    so the outcome never depends on a clock.
+
+    Returns:
+        The outcome and the point's Run object ID, if any. A failure
+        carries how many attempts it took.
+    """
+    attempts = 0
+    while True:
+        attempts += 1
+        outcome, object_id = _dispatch_once(context, point, progress)
+        if not isinstance(outcome, PointFailure):
+            return outcome, object_id
+        retry = (
+            outcome.failure_class == "transient"
+            and attempts < context.max_attempts
+            and not context.cancel_event.is_set()
+        )
+        if not retry:
+            return replace(outcome, attempts=attempts), object_id
+        logger.warning(
+            "sweep point %s failed (attempt %d of %d), trying again: %s",
+            point.run_id,
+            attempts,
+            context.max_attempts,
+            outcome.reason,
+        )
+
+
+def _dispatch_once(
+    context: _Context, point: SweepPoint, progress: Callable[[object], None]
+) -> tuple[Path | PointFailure | PointPaused, str | None]:
+    """Run one point once and return its outcome with its Run object ID."""
     params = SimulationParams.from_mapping(point.params)
     runner = context.runner
     if (
@@ -1285,7 +1720,7 @@ def _dispatch_point(
         try:
             object_id = _point_object(context, point)
         except (LifecycleError, OSError, ValueError) as error:
-            return PointFailure(str(error)), None
+            return PointFailure(str(error), classify_failure(error)), None
         return runner.run_object_point(object_id, context.cancel_event, progress), (
             object_id
         )
@@ -1331,7 +1766,7 @@ def _run_one_point(
             # A Run object records its own failure; only a failure before
             # one existed needs the sweep's own record.
             with context.lock:
-                _record_failure(context.study_id, point, result.reason, context.results)
+                _record_failure(context.study_id, point, result, context.results)
         context.emit("point_failed", point, result.reason, finish=True)
         return "failed"
     with context.lock:
@@ -1430,66 +1865,91 @@ def write_reproducibility_note(directory: Path, comparison: Mapping[str, Any]) -
     )
 
 
-@dataclass(frozen=True, slots=True)
-class PointResult:
-    """One finished point's statistics, for the across-points views.
-
-    Attributes:
-        index: The point's grid index.
-        coordinates: The varied values, by axis key.
-        run_id: The point's id.
-        directory: The point's run directory.
-        n_replicates: Replicates the run has (1 for a scalar run).
-        statistics: Each statistic as `{"mean": ..., "low": ..., "high": ...}`;
-            `low` and `high` are `None` for a single run, which has no
-            across-replicate interval.
-    """
-
-    index: int
-    coordinates: Mapping[str, Any]
-    run_id: str
-    directory: Path
-    n_replicates: int
-    statistics: Mapping[str, Mapping[str, float | None]]
-
-
 def sweep_point_results(
     study: StudyManifest, *, results: Path | None = None
-) -> list[PointResult]:
+) -> list[PointRow]:
     """Read the final statistics of every finished point, in grid order.
 
     A batch point reads its `summary.json` (mean and confidence interval
-    across replicates); a scalar point reads its `report.json`. A point
-    whose files cannot be read is left out, like a missing run directory
-    elsewhere in the Study code. Nothing is stored: the aggregate is
-    computed each time from small JSON files.
+    across replicates); a scalar point reads its `report.json`. Each row also
+    carries how the point's replicates ended (`PointHealth`), derived from the
+    run's manifests and cached beside the sweep's status file. A point whose
+    files cannot be read is left out, like a missing run directory elsewhere
+    in the Study code. The statistics are computed each time from small JSON
+    files; only the health counts are cached, and deleting the cache loses
+    nothing.
     """
     current, stale = _member_runs(study, __version__, results)
-    by_id = {**stale, **current}
-    found: list[PointResult] = []
+    cache = HealthCache(health_cache_path(study.study_id, results=results))
+    found: list[PointRow] = []
     for entry in stored_points(study):
-        directory = by_id.get(str(entry["run_id"]))
+        run_id = str(entry["run_id"])
+        directory = current.get(run_id) or stale.get(run_id)
         if directory is None:
             continue
-        statistics = _read_point_statistics(directory)
-        if statistics is None:
-            continue
-        found.append(
-            PointResult(
-                index=int(entry["index"]),
-                coordinates=dict(entry.get("coordinates", {})),
-                run_id=str(entry["run_id"]),
-                directory=directory,
-                n_replicates=statistics[0],
-                statistics=statistics[1],
-            )
+        row = _read_point_row(
+            entry, directory, "done" if run_id in current else "stale", cache
         )
+        if row is not None:
+            found.append(row)
+    cache.save()
     return found
+
+
+def health_cache_path(study_id: str, *, results: Path | None = None) -> Path:
+    """Return the disposable cache of a sweep's point health counts."""
+    return failures_path(study_id, results=results).with_name(f"{study_id}.health.json")
+
+
+def _read_point_row(
+    entry: Mapping[str, Any], directory: Path, state: PointState, cache: HealthCache
+) -> PointRow | None:
+    """Build a point's row from its run directory, or `None` if unreadable."""
+    statistics = _read_point_statistics(directory)
+    if statistics is None:
+        return None
+    manifest = _read_json_object(directory / "manifest.json")
+    parameters = manifest.get("parameters")
+    seed = parameters.get("seed") if isinstance(parameters, dict) else None
+    backend = manifest.get("engine_backend")
+    if backend is None:
+        replicate = _read_json_object(directory / "replicate-001" / "manifest.json")
+        backend = replicate.get("engine_backend")
+    return PointRow(
+        index=int(entry["index"]),
+        coordinates=dict(entry.get("coordinates", {})),
+        run_id=str(entry["run_id"]),
+        state=state,
+        directory=directory,
+        n_replicates=statistics[0],
+        seed=seed if isinstance(seed, int) else None,
+        software_version=_text_or_none(manifest.get("software_version")),
+        engine_backend=_text_or_none(backend),
+        started_at=_text_or_none(manifest.get("started_at")),
+        ended_at=_text_or_none(manifest.get("ended_at")),
+        statistics=statistics[1],
+        health=read_point_health(directory, cache=cache),
+        parameters=dict(parameters) if isinstance(parameters, dict) else {},
+    )
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    """Return the JSON object in `path`, or an empty one if it cannot be read."""
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _text_or_none(value: object) -> str | None:
+    """Return `value` if it is text, else `None`."""
+    return value if isinstance(value, str) else None
 
 
 def _read_point_statistics(
     directory: Path,
-) -> tuple[int, dict[str, dict[str, float | None]]] | None:
+) -> tuple[int, dict[str, StatisticCell]] | None:
     """Return `(replicates, statistics)` from a run directory, or `None`."""
     summary = directory / "summary.json"
     report = directory / "report.json"
@@ -1500,7 +1960,7 @@ def _read_point_statistics(
         if report.is_file():
             payload = json.loads(report.read_text(encoding="utf-8"))
             return 1, {
-                name: {"mean": float(value), "low": None, "high": None}
+                name: StatisticCell(mean=float(value))
                 for name, value in payload.items()
                 if isinstance(value, int | float)
                 and not isinstance(value, bool)
@@ -1513,18 +1973,15 @@ def _read_point_statistics(
 
 def _batch_statistics(
     payload: object,
-) -> tuple[int, dict[str, dict[str, float | None]]] | None:
-    """Reduce a batch `summary.json` to mean and interval per statistic."""
+) -> tuple[int, dict[str, StatisticCell]] | None:
+    """Reduce a batch `summary.json` to a cell per statistic, keeping every field."""
     if not isinstance(payload, dict):
         return None
-    statistics: dict[str, dict[str, float | None]] = {}
+    statistics: dict[str, StatisticCell] = {}
     replicates = 0
     for name, entry in payload.items():
         if isinstance(entry, dict) and "mean" in entry:
-            statistics[name] = {
-                "mean": float(entry["mean"]),
-                "low": float(entry["low"]) if "low" in entry else None,
-                "high": float(entry["high"]) if "high" in entry else None,
-            }
-            replicates = max(replicates, int(entry.get("sample_count", 0)))
+            cell = StatisticCell.from_summary_entry(entry)
+            statistics[name] = cell
+            replicates = max(replicates, cell.sample_count)
     return (replicates, statistics) if statistics else None

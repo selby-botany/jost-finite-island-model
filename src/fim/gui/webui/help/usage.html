@@ -67,14 +67,14 @@ generations. A run that finishes in a hundred generations is a warning sign,
 not good news. The derivation and its evidence are in
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence</a>; the settings are in
 <a href="#" data-fim-help="configuration" data-fim-anchor="convergence_burn_in">configuration.md</a>.</p>
-<h3 id="batches-nreplicates-greater-than-one">Batches (n<sub>replicates</sub> greater than one)</h3>
-<p>A config's n<sub>replicates</sub> (see <a href="#" data-fim-help="configuration" data-fim-anchor="nreplicates">configuration.md</a>)
+<h3 id="batches-n_replicates-greater-than-one">Batches (n_replicates greater than one)</h3>
+<p>A config's n_replicates (see <a href="#" data-fim-help="configuration" data-fim-anchor="n_replicates">configuration.md</a>)
 controls whether one run or a whole batch executes:</p>
 <ul>
-<li><strong>n<sub>replicates</sub>: 1</strong>: the four-file scalar-run contract below,
+<li><strong>n_replicates: 1</strong>: the four-file scalar-run contract below,
 directly in the output directory. Set this explicitly for a single,
 ordinary run with no batching at all.</li>
-<li><strong>n<sub>replicates</sub> greater than one (the default: <code>200</code>, with
+<li><strong>n_replicates greater than one (the default: <code>200</code>, with
 <a href="#" data-fim-help="configuration" data-fim-anchor="stop_batch_early">stop_batch_early</a> and a
 <a href="#" data-fim-help="configuration" data-fim-anchor="precision">precision</a> of <code>0.01</code> usually stopping well
 short of it)</strong>: each replicate gets its
@@ -110,11 +110,11 @@ for them to mean anything about; use
 <a href="#" data-fim-help="configuration" data-fim-anchor="max_concurrent_replicates">max_concurrent_replicates</a>
 instead (also settable for this run only via <code>--max-concurrent-replicates N</code>, without editing the config file), the <code>generational</code>/
 <code>generational-vector</code> path's own concurrency/memory-bounding control.</p>
-<p>With stop_batch_early off in the config, exactly n<sub>replicates</sub>
+<p>With stop_batch_early off in the config, exactly n_replicates
 replicates run. With it on (the default), the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see
 <a href="#" data-fim-help="configuration" data-fim-anchor="stop_batch_early">configuration.md</a>) — the number of
-<code>replicate-NNN/</code> subdirectories written can then be less than n<sub>replicates</sub>.</p>
+<code>replicate-NNN/</code> subdirectories written can then be less than n_replicates.</p>
 <h2 id="save-pause-and-resume-a-run">Save, pause, and resume a run</h2>
 <p><code>fim run</code> runs to the end in one go. For a run you may need to stop and
 continue later, save it as a Run object instead:</p>
@@ -718,7 +718,7 @@ in the two averaged displays; the Band control chooses ±1 or ±2. The numbers
 are in <code>report.json</code> under <code>window_statistics</code>.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
 <p>Rather than guessing how many replicate runs a confidence interval needs,
-set n<sub>replicates</sub> well above the plausible requirement and let
+set n_replicates well above the plausible requirement and let
 <a href="#" data-fim-help="configuration" data-fim-anchor="precision">precision</a> decide when
 enough have run:</p>
 <!-- worked-example-config: examples/an-adaptive-replicate-batch-with-a-confidence-interval/config.yaml -->
@@ -783,7 +783,7 @@ that one replicate. Under <code>engine_backend: auto</code> the replicates advan
 together in one process. To spread the same batch across worker processes
 instead, name <code>engine_backend: lineal</code> and add <code>--workers N</code> (or
 <code>--sequential</code> for one at a time) — the computed numbers are identical either
-way (see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only the
+way (see <a href="#batches-n_replicates-greater-than-one">Batches</a>); only the
 wall-clock time differs.</p>
 <h3 id="a-large-d-batch-under-generational-vector">A large-<code>d</code> batch under generational-vector</h3>
 <p>Every example above names <code>engine_backend: auto</code>, the recommended choice and
@@ -923,7 +923,9 @@ fim sweep run sweep.yaml             # create the study and run every point
 fim sweep resume STUDY_ID            # run only the points still missing
 fim sweep resume STUDY_ID --retry-failed
 fim sweep resume STUDY_ID --rerun   # also recompute the completed points
+fim sweep replan STUDY_ID [--dry-run]   # after an upgrade changed run ids
 fim sweep report STUDY_ID --statistic D --csv
+fim sweep export STUDY_ID results.csv [--statistic D --statistic G_ST] [--wide] [--with-theory]
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 </code></pre>
 <ul>
@@ -941,6 +943,49 @@ batch point uses, and <code>--sequential</code> runs one point at a time with on
 worker. In the app, the Sweep dialog's <strong>Points at once</strong> does the same, and
 the Settings value &quot;max workers&quot; applies. Results do not depend on the
 setting: each point is fixed by its own configuration and seed.</li>
+<li>A point that fails for a transient reason, such as a worker process the
+system ended, is tried again once; <code>--max-attempts N</code> sets how many tries in
+all. A failure the engine reports is never tried again, because the same
+configuration fails the same way. A pool of workers that breaks is replaced,
+so the points after the failed one still run.</li>
+<li><code>fim sweep export</code> writes the sweep's results as a table you can open in R,
+Python or a spreadsheet, with a <code>results.meta.json</code> file beside it that holds
+the sweep file's settings, the software version, and what every column means.
+The default is one row for each point and statistic (the &quot;tidy&quot; form that R
+and Python group-by tools expect) for <code>D</code> and <code>G_ST</code>; <code>--statistic NAME</code>
+(repeat it) or <code>--all-statistics</code> chooses others, and <code>--wide</code> writes one
+row per point instead. Each row gives the mean, its confidence interval, the
+spread across replicates, the seed and the software version. <code>--with-theory</code>
+adds the closed-form prediction and the difference from it (<code>D</code>, <code>G_ST</code>,
+<code>E_ST</code>, <code>H_S</code> and <code>H_T</code> have one). A <code>.jsonl</code> file name writes JSON Lines.
+Points with no result yet are left out unless you pass <code>--include-unfinished</code>.
+The command will not replace a file that exists unless you pass <code>--force</code>.
+In the app, the sweep results screen has the same two things as buttons:
+<strong>Save table…</strong> writes the table (and its <code>.meta.json</code> file) for every
+statistic you have chosen to show, with the closed-form columns, and <strong>Save
+chart…</strong> saves the chart as it is drawn as a PNG image.</li>
+<li>Each point has a health mark. A point is <code>unreliable</code> if every replicate
+stopped at the generation limit before its statistics settled, <code>degraded</code> if
+some did or if the interval is wider than the <code>precision</code> you asked for, and
+<code>healthy</code> otherwise. The mark is in the <code>health</code> column of the export and in
+<code>fim sweep report</code>. A point that is not healthy is flagged, never left out.
+In the app, the sweep results screen draws a <code>degraded</code> point as a hollow ring
+and an <code>unreliable</code> one as a ring with an X through it, on the chart and on
+the heat map, with a key on the chart. The table has a <strong>health</strong> column that
+says why, and pointing at a point or cell shows the same reason.</li>
+<li>A sweep holds a lock on its Study while it runs. A second <code>fim sweep resume</code>
+(or the app) on the same Study stops at once with a message that another
+process is running it, instead of both writing the same files. The system
+releases the lock if the process dies, so a crashed sweep never leaves its
+Study locked.</li>
+<li>A run id is a hash of the point's configuration, so a release that changes
+what the hash covers makes a stored sweep refuse to run (&quot;the stored sweep
+plan no longer matches&quot;). <code>fim sweep replan STUDY_ID</code> enumerates the points
+again from the stored specification, matches each to its old entry by its
+coordinates, and rewrites the plan; recorded failures follow their points.
+<code>--dry-run</code> shows what would change first. Runs already in the Study are not
+touched: one that no longer matches a point stays attached as an ordinary
+run, is listed, and its point runs again.</li>
 <li>A point's run id is a hash of its configuration, so resuming, or running a
 second sweep that overlaps the first, reuses the runs that already exist
 instead of computing them again. Reuse requires identical configurations,
@@ -1004,7 +1049,7 @@ above. Install it alongside <code>fim</code> (<code>python -m pip install .</cod
 provides both console scripts), or launch it from a packaged executable by
 opening it with no arguments — for example by double-clicking
 <code>fim-windows-x64.exe</code>/<code>fim.app</code>, or running <code>fim-gui</code>/<code>fim --graphical</code> from
-a Linux install. n<sub>replicates</sub> in the configuration is the only thing that
+a Linux install. n_replicates in the configuration is the only thing that
 decides whether a run goes through the scalar or the batch path — there is
 no separate &quot;batch mode&quot; toggle. Every screen calls the identical underlying
 function this guide already documents; nothing here is a second
@@ -1056,7 +1101,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Configure</td>
-<td>Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first and never guessed, starting on diploid unless Settings' default ploidy says otherwise (&quot;Ask me each time&quot; leaves it blank, and a blank ploidy blocks the run) — then N, the number of <em>individuals</em> per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are &quot;the finite island model&quot;; the app multiplies individuals by ploidy into the gene-copy <code>N</code> the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, whether to stop a batch early, and the replicate minimum) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, the Run card's graph columns and scatter-plot style, execution engine, n<sub>replicates</sub>, max_generations, convergence burn-in, precision and confidence, the expected-value form, the precision method and replicate averaging window, trajectory retention, the Expert settings, and the batch-execution tuning fields (JIT, the <code>auto</code> engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example uses its own values for that run only and leaves Settings unchanged, with a notice listing any differences and a &quot;Make these my Settings&quot; button (see <a href="#loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</a>). &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Examples…&quot; opens the Examples dialog (example classes on the left, the selected class's examples on the right with an excerpt of each one's explanation; &quot;Load into Configure&quot;, or Return, fills the form and the Run name and description boxes — see <a href="#worked-examples">Worked examples</a>), the File menu's &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
+<td>Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first and never guessed, starting on diploid unless Settings' default ploidy says otherwise (&quot;Ask me each time&quot; leaves it blank, and a blank ploidy blocks the run) — then N, the number of <em>individuals</em> per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are &quot;the finite island model&quot;; the app multiplies individuals by ploidy into the gene-copy <code>N</code> the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, whether to stop a batch early, and the replicate minimum) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, the Run card's graph columns and scatter-plot style, execution engine, n_replicates, max_generations, convergence burn-in, precision and confidence, the expected-value form, the precision method and replicate averaging window, trajectory retention, the Expert settings, and the batch-execution tuning fields (JIT, the <code>auto</code> engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example uses its own values for that run only and leaves Settings unchanged, with a notice listing any differences and a &quot;Make these my Settings&quot; button (see <a href="#loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</a>). &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Examples…&quot; opens the Examples dialog (example classes on the left, the selected class's examples on the right with an excerpt of each one's explanation; &quot;Load into Configure&quot;, or Return, fills the form and the Run name and description boxes — see <a href="#worked-examples">Worked examples</a>), the File menu's &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
 <td><a href="#create-a-configuration">Create a configuration</a></td>
 </tr>
 <tr>
@@ -1296,7 +1341,7 @@ the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 <pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 </code></pre>
 <h3 id="loading-a-configuration-does-not-change-your-settings">Loading a configuration does not change your Settings</h3>
-<p>The run settings — execution engine, n<sub>replicates</sub>,
+<p>The run settings — execution engine, n_replicates,
 max_generations, convergence burn-in, precision, confidence,
 JIT, the <code>auto</code> engine's two thresholds, and max concurrent replicates —
 have defaults in Settings. <strong>Run settings...</strong> on Configure edits their
@@ -1356,7 +1401,7 @@ see <a href="#" data-fim-help="configuration" data-fim-anchor="track_expensive_s
 largest deme count for which runs save every pair's statistics, the light/dark override (absent/<code>null</code> means &quot;follow the
 OS,&quot; the default), whether the first-launch welcome panel has already been
 dismissed, the startup behavior selected in Settings, the execution defaults
-(execution engine, n<sub>replicates</sub>, and the rest of Settings' own
+(execution engine, n_replicates, and the rest of Settings' own
 &quot;how the computation runs&quot; fields — see the Configure row above) every fresh
 configuration starts from, and the last configuration you successfully
 clicked &quot;Run simulation&quot; with. In Settings, &quot;Restore the last submitted
@@ -1728,7 +1773,7 @@ and the legend states the rule.</p>
 a maximum, and a maximum exists in every data set — including one where all
 the alleles are rare and nearly equal.</p>
 <h3 id="batch-summaryjson-and-manifestjson">Batch <code>summary.json</code> and <code>manifest.json</code></h3>
-<p>Written only for n<sub>replicates</sub> greater than one, alongside the
+<p>Written only for n_replicates greater than one, alongside the
 <code>replicate-NNN/</code> subdirectories, each of which holds the scalar-run files
 above.</p>
 <p><code>summary.json</code> maps each reported statistic name (every global statistic in

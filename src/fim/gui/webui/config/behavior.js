@@ -157,16 +157,17 @@ const OPEN_RUN_SUMMARY_COLUMN_INDEX = 4;
 const REPORT_VALUE_SIGNIFICANT_DIGITS = 6;
 
 // Significant digits of the closed-form comparison in a statistic's
-// tooltip (observed minus predicted, and the trajectory's mean squared
-// error from the closed form): a diagnostic, so three are enough.
+// message (the trajectory's mean squared error from the closed form): a
+// diagnostic, so three are enough.
 const CLOSED_FORM_COMPARISON_DIGITS = 3;
 
-// Decimal places of a window mean and its standard error in a statistic's
-// tooltip, and of a meter's value in the statistics table.
-const WINDOW_STATISTIC_DECIMALS = 4;
+// A standard error under this is shown, with its mean, to three decimals
+// instead of two so that it does not round away (`formatEstimate`).
+const SMALL_STANDARD_ERROR = 0.01;
 
 // Decimal places of how many standard errors a window mean lies from its
-// prediction ("+1.2 SE"): one is enough to read "inside or outside two".
+// prediction ("1.2 standard errors"): one is enough to read "inside or
+// outside two".
 const PREDICTION_DISTANCE_DECIMALS = 1;
 
 // Half-width of every band on the trajectory graph (the sigma band of the

@@ -33,6 +33,16 @@ in a finite population. *Genetics* 49:725–738.
 The finite-allele state space is related to this classical model; the
 example's specific parameters are chosen for a compact demonstration.
 
+## Why a single run
+
+This example sets `n_replicates: 1`. It was written when a run was always one
+run, and the numbers quoted here, and the outputs saved with it, are those of
+one run. The engine's default is `n_replicates: 200`, an adaptively stopped
+batch that reports a confidence interval, and that is what a researcher would
+normally use. One run's final numbers are one noisy draw: for an estimate with
+an error bar, run a batch (see
+[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
+
 ## Run
 
 ```console

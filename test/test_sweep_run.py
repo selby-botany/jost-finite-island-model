@@ -8,20 +8,25 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+import sys
 import threading
 from collections.abc import Callable, Iterator
+from concurrent.futures import Executor, Future
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
-from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message
+from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message, join_or_fail
 
 from fim import paths
 from fim.gui.sweep_bridge import status_payload
 from fim.model.params import SimulationParams
 from fim.persistence import groups
+from fim.persistence.object_lock import exclusive_lock
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_metadata import read_run_metadata, run_metadata_path
 from fim.persistence.run_objects import (
@@ -34,16 +39,23 @@ from fim.reproducibility import compare_runs
 from fim.sweep import SweepSpec, enumerate_points, expand_axis
 from fim.sweep_run import (
     Concurrency,
+    FailureClass,
     LocalPointRunner,
     PointFailure,
+    ProcessPointRunner,
     SweepEvent,
+    SweepLockedError,
+    classify_failure,
     create_sweep_study,
     failures_path,
     read_failures,
     read_point_objects,
+    replan_sweep,
     resolve_concurrency,
     run_sweep,
     stored_points,
+    sweep_lock_held,
+    sweep_lock_path,
     sweep_point_results,
     sweep_point_statuses,
 )
@@ -355,11 +367,11 @@ def test_point_results_read_a_batch_summary_and_a_scalar_report(results: Path) -
 
     assert batch_point.coordinates == {"d": 2}
     assert batch_point.n_replicates == 2
-    assert set(batch_point.statistics["D"]) == {"mean", "low", "high"}
-    assert batch_point.statistics["D"]["low"] is not None
+    assert batch_point.statistics["D"].low is not None
+    assert batch_point.statistics["D"].sample_count == 2
     assert scalar_point.n_replicates == 1
-    assert scalar_point.statistics["D"]["low"] is None
-    assert scalar_point.statistics["D"]["mean"] is not None
+    assert scalar_point.statistics["D"].low is None
+    assert scalar_point.statistics["D"].mean is not None
 
 
 def test_point_results_skip_points_that_have_not_run(results: Path) -> None:
@@ -1022,3 +1034,505 @@ def test_a_worker_reports_a_cancelled_point_object_as_paused(results: Path) -> N
         read_run_object(created.object_id, results=results).record.state
         is RunState.PAUSED
     )
+
+
+class _FakePool(Executor):
+    """A pool that answers each submit from a script, with no processes.
+
+    Args:
+        refuse: Raise `BrokenProcessPool` from `submit`, as a pool does once
+            a worker has died.
+        outcome: What the returned future holds: a `(kind, value)` result, or
+            an exception to raise from `result()`.
+    """
+
+    def __init__(
+        self,
+        *,
+        refuse: bool = False,
+        outcome: tuple[str, str] | BaseException = ("ok", "/point"),
+    ) -> None:
+        self.refuse = refuse
+        self.outcome = outcome
+        self.submitted = 0
+        self.shut_down = False
+
+    def submit(self, fn: Any, /, *args: Any, **kwargs: Any) -> Future[Any]:
+        del fn, args, kwargs  # the fake answers from its script
+        self.submitted += 1
+        if self.refuse:
+            raise BrokenProcessPool("a worker died")
+        future: Future[Any] = Future()
+        if isinstance(self.outcome, BaseException):
+            future.set_exception(self.outcome)
+        else:
+            future.set_result(self.outcome)
+        return future
+
+    def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+        del wait, cancel_futures
+        self.shut_down = True
+
+
+def _scripted_runner(*pools: _FakePool) -> ProcessPointRunner:
+    """A `ProcessPointRunner` that takes its pools, in order, from `pools`."""
+    supply = iter(pools)
+    return ProcessPointRunner(2, executor_factory=lambda _count: next(supply))
+
+
+def _run_fake_point(runner: ProcessPointRunner) -> Any:
+    """Run one point through `runner`; the fake pool never reads `params`."""
+    return runner.run_point(_params(), threading.Event())
+
+
+def test_a_pool_that_refuses_a_submit_is_replaced_and_the_point_still_runs() -> None:
+    dead, fresh = _FakePool(refuse=True), _FakePool()
+    runner = _scripted_runner(dead, fresh)
+    try:
+        outcome = _run_fake_point(runner)
+    finally:
+        runner.close()
+
+    assert outcome == Path("/point")
+    assert dead.shut_down
+    assert fresh.submitted == 1
+
+
+def test_a_pool_that_stays_broken_fails_the_point_instead_of_raising() -> None:
+    runner = _scripted_runner(_FakePool(refuse=True), _FakePool(refuse=True))
+    try:
+        outcome = _run_fake_point(runner)
+    finally:
+        runner.close()
+
+    assert isinstance(outcome, PointFailure)
+    assert "could not start the point" in outcome.reason
+
+
+def test_a_worker_that_dies_mid_point_fails_it_and_later_points_use_a_new_pool() -> (
+    None
+):
+    dying = _FakePool(outcome=BrokenProcessPool("terminated abruptly"))
+    fresh = _FakePool()
+    runner = _scripted_runner(dying, fresh)
+    try:
+        first = _run_fake_point(runner)
+        second = _run_fake_point(runner)
+    finally:
+        runner.close()
+
+    assert first == PointFailure("a worker process ended unexpectedly", "transient")
+    assert second == Path("/point")
+    assert dying.shut_down
+    assert (dying.submitted, fresh.submitted) == (1, 1)
+
+
+def test_an_exception_raised_by_a_worker_fails_that_point_only() -> None:
+    raising = _FakePool(outcome=TypeError("cannot pickle a lock"))
+    runner = _scripted_runner(raising)
+    try:
+        first = _run_fake_point(runner)
+        second = _run_fake_point(runner)
+    finally:
+        runner.close()
+
+    assert first == PointFailure("cannot pickle a lock")
+    assert isinstance(second, PointFailure)
+    assert raising.submitted == 2
+
+
+def test_several_threads_seeing_one_dead_pool_replace_it_once() -> None:
+    dead = _FakePool(outcome=BrokenProcessPool("terminated abruptly"))
+    created: list[_FakePool] = []
+
+    def factory(_count: int) -> _FakePool:
+        pool = dead if not created else _FakePool()
+        created.append(pool)
+        return pool
+
+    runner = ProcessPointRunner(4, executor_factory=factory)
+    outcomes: list[Any] = []
+    barrier = threading.Barrier(3)
+
+    def point() -> None:
+        barrier.wait()
+        outcomes.append(_run_fake_point(runner))
+
+    threads = [threading.Thread(target=point) for _ in range(3)]
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            join_or_fail(thread, "a point thread")
+    finally:
+        runner.close()
+
+    assert len(outcomes) == 3
+    # every submit reached the dead pool or its single replacement: at most
+    # one replacement was built, never one per thread
+    assert len(created) == 2
+
+
+class _Flaky:
+    """A runner that fails its first `failures` calls, then runs for real."""
+
+    def __init__(
+        self,
+        failures: int,
+        failure_class: FailureClass,
+        cancel: threading.Event | None = None,
+    ) -> None:
+        self.failures = failures
+        self.failure_class: FailureClass = failure_class
+        self.cancel = cancel
+        self.local = LocalPointRunner()
+        self.calls = 0
+
+    def run_point(
+        self,
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None,
+        max_workers: int | None = None,
+    ) -> Path | PointFailure:
+        self.calls += 1
+        if self.calls <= self.failures:
+            if self.cancel is not None:
+                self.cancel.set()
+            return PointFailure("scripted failure", self.failure_class)
+        return self.local.run_point(params, cancel_event, on_message, max_workers)
+
+
+def test_a_transient_failure_is_tried_again_and_the_point_succeeds(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(1, "transient")
+
+    outcome, _ = _run(study_id, runner, max_attempts=2, points_at_once=1)
+
+    assert (outcome.done, outcome.failed) == (1, 0)
+    assert runner.calls == 2
+    assert read_failures(study_id) == {}
+
+
+def test_a_deterministic_failure_is_never_tried_again(results: Path) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(5, "deterministic")
+
+    outcome, _ = _run(study_id, runner, max_attempts=3, points_at_once=1)
+
+    assert (outcome.done, outcome.failed) == (0, 1)
+    assert runner.calls == 1
+    record = next(iter(read_failures(study_id).values()))
+    assert (record["failure_class"], record["attempts"]) == ("deterministic", 1)
+
+
+def test_attempts_stop_at_the_limit_and_the_record_keeps_the_count(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(5, "transient")
+
+    outcome, _ = _run(study_id, runner, max_attempts=3, points_at_once=1)
+
+    assert (outcome.done, outcome.failed) == (0, 1)
+    assert runner.calls == 3
+    record = next(iter(read_failures(study_id).values()))
+    assert (record["failure_class"], record["attempts"]) == ("transient", 3)
+
+
+def test_the_default_is_one_attempt(results: Path) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(1, "transient")
+
+    outcome, _ = _run(study_id, runner, points_at_once=1)
+
+    assert (outcome.done, outcome.failed) == (0, 1)
+    assert runner.calls == 1
+
+
+def test_attempts_add_up_across_resumes(results: Path) -> None:
+    study_id = _study(results, 2)
+    _run(study_id, _Flaky(9, "transient"), max_attempts=2, points_at_once=1)
+
+    _run(
+        study_id,
+        _Flaky(9, "transient"),
+        max_attempts=2,
+        retry_failed=True,
+        points_at_once=1,
+    )
+
+    record = next(iter(read_failures(study_id).values()))
+    assert record["attempts"] == 4
+
+
+def test_a_cancel_stops_the_retries(results: Path) -> None:
+    study_id = _study(results, 2)
+    cancel = threading.Event()
+    runner = _Flaky(5, "transient", cancel)
+
+    outcome, _ = _run(study_id, runner, cancel, max_attempts=4, points_at_once=1)
+
+    assert runner.calls == 1
+    assert outcome.cancelled
+
+
+def test_fewer_than_one_attempt_is_refused(results: Path) -> None:
+    study_id = _study(results, 2)
+
+    with pytest.raises(ValueError, match="max_attempts"):
+        _run(study_id, max_attempts=0)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (BrokenProcessPool("died"), "transient"),
+        (FileNotFoundError("gone"), "transient"),
+        (ValueError("bad configuration"), "deterministic"),
+        (ZeroDivisionError("division by zero"), "deterministic"),
+    ],
+)
+def test_failures_are_classified_by_exception_type(
+    error: BaseException, expected: str
+) -> None:
+    assert classify_failure(error) == expected
+
+
+def test_a_second_sweep_on_a_study_that_is_running_is_refused(results: Path) -> None:
+    study_id = _study(results, 2)
+    runner = _Flaky(0, "transient")
+
+    with (
+        exclusive_lock(sweep_lock_path(study_id), blocking=False),
+        pytest.raises(SweepLockedError, match="another process is running"),
+    ):
+        _run(study_id, runner)
+
+    assert runner.calls == 0
+    assert _manifest_count(results) == 0
+
+
+def test_the_lock_is_held_while_the_sweep_runs_and_free_after(results: Path) -> None:
+    study_id = _study(results, 2)
+    held_during: list[bool] = []
+    assert not sweep_lock_held(study_id)
+
+    run_sweep(
+        study_id,
+        LocalPointRunner(),
+        lambda _event: held_during.append(sweep_lock_held(study_id)),
+        threading.Event(),
+        points_at_once=1,
+    )
+
+    assert held_during
+    assert all(held_during)
+    assert not sweep_lock_held(study_id)
+
+
+class _Exploding:
+    """A runner that raises an exception no handler expects."""
+
+    def run_point(
+        self,
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None,
+        max_workers: int | None = None,
+    ) -> Path | PointFailure:
+        del params, cancel_event, on_message, max_workers
+        raise KeyError("not a failure the sweep knows")
+
+
+def test_the_lock_is_released_after_an_exception_and_after_a_cancel(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, 3)
+    with pytest.raises(KeyError):
+        _run(study_id, _Exploding(), points_at_once=1)
+    assert not sweep_lock_held(study_id)
+
+    cancel = threading.Event()
+    cancel.set()
+    outcome, _ = _run(study_id, cancel=cancel)
+    assert outcome.cancelled
+    assert not sweep_lock_held(study_id)
+
+    outcome, _ = _run(study_id, points_at_once=1)
+    assert outcome.done == 2
+
+
+def test_another_process_holding_the_lock_blocks_the_sweep_until_it_dies(
+    results: Path,
+) -> None:
+    study_id = _study(results, 2, 3)
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys, pathlib, time\n"
+            "from fim.persistence.object_lock import exclusive_lock\n"
+            "with exclusive_lock(pathlib.Path(sys.argv[1]), blocking=False):\n"
+            "    print('held', flush=True)\n"
+            "    time.sleep(3600)\n",
+            str(sweep_lock_path(study_id)),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "held"
+        assert sweep_lock_held(study_id)
+        with pytest.raises(SweepLockedError):
+            _run(study_id)
+    finally:
+        # SIGKILL: the operating system must free the lock with the process.
+        holder.kill()
+        holder.wait()
+
+    assert not sweep_lock_held(study_id)
+    outcome, _ = _run(study_id, points_at_once=1)
+    assert outcome.done == 2
+
+
+def _identity_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make `enumerate_points` hash configurations differently, as a release
+    that changes what the run id covers would."""
+    from fim.engine import deterministic_run_id  # noqa: PLC0415
+
+    monkeypatch.setattr(
+        "fim.sweep.deterministic_run_id", lambda p: "v2-" + deterministic_run_id(p)
+    )
+
+
+def _stored_ids(study_id: str) -> list[str]:
+    """Return the run ids in a Study's stored plan, in grid order."""
+    return [str(e["run_id"]) for e in stored_points(groups.get_study(study_id))]
+
+
+def test_a_stale_plan_names_the_command_that_repairs_it(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    _identity_changes(monkeypatch)
+
+    with pytest.raises(ValueError, match=f"fim sweep replan {study_id}"):
+        _run(study_id)
+
+
+def test_replan_matches_points_by_coordinates_and_rewrites_the_plan(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    old_ids = _stored_ids(study_id)
+    _identity_changes(monkeypatch)
+
+    outcome = replan_sweep(study_id)
+
+    assert outcome.written
+    assert outcome.renamed == tuple((old, "v2-" + old) for old in old_ids)
+    assert (outcome.unchanged, outcome.added, outcome.removed) == (0, (), ())
+    assert _stored_ids(study_id) == ["v2-" + old for old in old_ids]
+    again = replan_sweep(study_id)
+    assert (again.renamed, again.unchanged) == ((), 2)
+
+
+def test_runs_whose_ids_no_longer_match_stay_attached_and_are_listed(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    _run(study_id, points_at_once=1)
+    members = sorted(groups.study_run_directories(groups.get_study(study_id)))
+    _identity_changes(monkeypatch)
+
+    outcome = replan_sweep(study_id)
+
+    assert sorted(outcome.orphaned_runs) == members
+    assert sorted(groups.study_run_directories(groups.get_study(study_id))) == members
+    assert [s.state for s in sweep_point_statuses(groups.get_study(study_id))] == [
+        "waiting",
+        "waiting",
+    ]
+
+
+def test_a_dry_run_reports_the_change_and_writes_nothing(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    before = _stored_ids(study_id)
+    _identity_changes(monkeypatch)
+
+    outcome = replan_sweep(study_id, dry_run=True)
+
+    assert not outcome.written
+    assert len(outcome.renamed) == 2
+    assert _stored_ids(study_id) == before
+    assert not sweep_lock_path(study_id).exists()
+
+
+def test_a_recorded_failure_follows_its_point_to_the_new_id(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    _run(study_id, _Failing(lambda params: params.d == 2), points_at_once=1)
+    (failed_id,) = read_failures(study_id)
+    _identity_changes(monkeypatch)
+
+    outcome = replan_sweep(study_id)
+
+    assert outcome.failures_moved == 1
+    assert list(read_failures(study_id)) == ["v2-" + failed_id]
+
+
+def test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs(
+    results: Path,
+) -> None:
+    """The fixture is a Study whose stored plan and failure file use ids from
+    before the identity change (2026-10-15), written directly."""
+    study_id = _study(results, 2, 3)
+    real = _stored_ids(study_id)
+    study = groups.get_study(study_id)
+    assert study.sweep_spec is not None
+    old = ["a0ld0000000" + str(i) for i in range(len(real))]
+    points = [
+        {**e, "run_id": o} for e, o in zip(stored_points(study), old, strict=True)
+    ]
+    groups.write_study_manifest(
+        groups.study_manifest_path(study_id),
+        replace(study, sweep_spec={**study.sweep_spec, "points": points}),
+    )
+    with pytest.raises(ValueError, match="replan"):
+        _run(study_id)
+
+    outcome = replan_sweep(study_id)
+
+    assert outcome.renamed == tuple(zip(old, real, strict=True))
+    assert _stored_ids(study_id) == real
+    run, _ = _run(study_id, points_at_once=1)
+    assert run.done == 2
+
+
+def test_replan_waits_for_no_one_and_refuses_while_a_sweep_runs(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _study(results, 2, 3)
+    _identity_changes(monkeypatch)
+
+    with exclusive_lock(sweep_lock_path(study_id), blocking=False):
+        preview = replan_sweep(study_id, dry_run=True)
+        with pytest.raises(SweepLockedError):
+            replan_sweep(study_id)
+
+    assert len(preview.renamed) == 2
+    assert all(not i.startswith("v2-") for i in _stored_ids(study_id))
+
+
+def test_replan_refuses_a_study_that_is_not_a_sweep(results: Path) -> None:
+    study = groups.create_study("Plain", None)
+
+    with pytest.raises(ValueError, match="not a sweep"):
+        replan_sweep(study.study_id)

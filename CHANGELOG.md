@@ -14,6 +14,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of saved defaults or restore originally loaded values; invalid edits
   leave the configuration unchanged.
 
+- **Sweep results show which points to trust.** On the sweep results screen, a
+  point whose replicates did not all settle before the generation limit is
+  drawn as a hollow ring (with an X through it when none settled) on the chart
+  and the heat map, listed with its reason in a new **health** column, and
+  named in the readout when you point at it. Flagged points stay on the screen
+  and in every export; none is dropped.
+
+- **Save a sweep's table and chart from the app.** The sweep results screen
+  has **Save table…** (the same tidy table as `fim sweep export`, with its
+  `.meta.json` file, for every statistic you have chosen to show) and **Save
+  chart…** (the chart as a PNG image), each through the system's Save dialog.
+
+- **`fim sweep export`: a sweep's results as data.** One command writes a
+  tidy CSV or JSON Lines table (one row per point and statistic, or one row per
+  point with `--wide`) with the mean, its confidence interval, the spread, the
+  replicate counts, the seed, the engine and the software version, plus a
+  `.meta.json` file that holds the sweep's settings and a dictionary of the
+  columns. `--with-theory` adds the closed-form prediction and the residual.
+  `fim sweep report` now shows each point's health too.
+- **Each sweep point has a health mark.** A point whose replicates all stopped
+  at the generation limit is `unreliable`, one where some did, or whose interval
+  is wider than the requested precision, is `degraded`, and the rest are
+  `healthy`. It is worked out from the files a run already wrote, so existing
+  runs have it too, and points that are not healthy are flagged, never dropped.
+
 - **A Python guide.** [Using fim from Python](doc/python-api.md) walks a
   researcher through describing a run, reading its result, saving and
   reopening it, and pausing and resuming it, with code that a test runs as
@@ -1074,6 +1099,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The statistics panel shows averages, and the explanations are messages.**
+  A statistic's cell now shows its mean and standard error over the run's
+  evidence window ("0.29 ± 0.06"), not the last generation's value, which is
+  one noisy draw; the tooltip gives the average and the last value, labeled.
+  What used to be crammed into the tooltip is now full sentences in the run
+  messages: each watched statistic's average and whether it meets the target,
+  one sentence on what a settled statistic still does, and a collapsed
+  "Details for each statistic" group (meaning, spread, comparison with the
+  prediction). The messages sit between the graphs and the results tables
+  instead of at the bottom of the page, and the statistics a run watches are
+  underlined in the table. A live statistic still inside its burn-in keeps its
+  last value, dimmed.
+- **`n_replicates` and `p_0` are named literally in the configuration
+  reference.** Their headings no longer use `<sub>` markup, so searching for
+  `n_replicates` finds its section, and a settings index near the top lists
+  every setting with a link. The anchors are now `#n_replicates` and `#p_0`.
+  The examples that pin `n_replicates: 1` say why, and the Wright-Takahata
+  example explains why a settled statistic's line still wanders.
+
 - **Replicate seeds come from `SeedSequence`.** Replicate `i` of a batch uses
   child `i` of `numpy.random.SeedSequence(seed)` (a 64-bit integer), not
   `seed + i`. Two batches with nearby seeds used to share replicates (`seed=100`'s
@@ -1564,11 +1608,66 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Replace the one-generation founder-split endpoint check with a dynamic
-  allele-sharing example that watches all five advertised measures.
-  Document the allelic-distance normalization and regenerate saved outputs.
-- Show capped scalar runs as warnings and retain their raw stop reason so
-  the final results row receives its intended warning marker.
+- **The founder-split example now demonstrates something.** The
+  one-generation endpoint check is replaced by a dynamic allele-sharing
+  example that watches all five advertised measures. The allelic-distance
+  normalization is documented and the saved outputs are regenerated.
+- **A capped run is shown as a warning.** The raw stop reason is retained
+  so the final results row receives its intended warning marker.
+- **A sweep's theory overlay now uses gene copies, not individuals.** The
+  closed-form predictions on the sweep results card were evaluated at `N`
+  individuals per deme, while Explore and a run's own overlay use `N` times
+  the ploidy gene copies, so for a diploid, triploid or tetraploid sweep the
+  theory curve, heat map and difference map were computed at too small a
+  population. `D` has no `N` term and was unaffected.
+- **The in-app Help index can jump to `_read_only`.** Heading generation
+  no longer parses rendered code as Markdown emphasis, which removed the
+  leading underscore and broke the index link. Generated Help pages now
+  have regression checks for literal identifiers, escaped text, duplicate
+  headings, freshness, and local links.
+- **The statistics-message GUI test no longer depends on browser locale
+  data.** It controls number formatting and checks both grouped and
+  ungrouped generation counts, preserving locale-aware application output
+  while avoiding a Linux WebKit CI failure.
+- **A sweep stored before a run-id change can be repaired.** When a release
+  changed what a run id covers, every stored sweep refused to run and the only
+  advice was to create it again. The error now names `fim sweep replan
+  STUDY_ID`, which re-identifies the points by their coordinates, moves the
+  recorded failures with them, and leaves the Study's runs alone;
+  `--dry-run` previews it.
+- **Two processes can no longer run one sweep at once.** A second
+  `fim sweep resume`, or the app, on a Study that another process is running
+  stopped nothing: both wrote the same failure file and raced to create the
+  same runs. A sweep now holds a lock on its Study, and a second start is
+  refused with a message that says so. The system frees the lock if the
+  process dies.
+- **A worker process that dies no longer ends a sweep.** One worker ended by
+  the system broke the whole pool; the next point then raised outside the
+  sweep's error handling, the sweep stopped, and in the app the page showed a
+  sweep that never finished with the busy guard stuck on. The pool is now
+  replaced, only the points in flight are reported as failed, and the app
+  shows any sweep error and frees the guard.
+- **A sweep tries a point again after a transient failure.** A point that
+  failed because a worker died or a file system call failed is tried once more
+  (`fim sweep run|resume --max-attempts N` sets the total; the app uses 2). A
+  failure the engine reports is not tried again. The failure record now keeps
+  the failure's class and the attempts made.
+- **Statistics can be hidden and shown during a live run again.** Every
+  progress tick replaced the cells of every statistics row, removing the
+  element under a pointer between its press and its release, so the browser
+  dropped the click and the faster the run the more clicks were lost. Rows now
+  update their cells in place.
+- **The trajectory graph averages over the run's evidence window.** The
+  trailing mean used the span of the monitor's first check (3,370 generations
+  in the Wright-Takahata example) while the monitor had judged the whole
+  13,487-generation evidence window, so a converged statistic swung visibly
+  and nothing on screen reproduced the report. The trailing mean, the
+  cumulative mean and the statistics cells now end on the report's mean and
+  standard error.
+- **Axis labels no longer overlap.** "20000" was printed over "gen 21910".
+  Every graph's tick labels are now left off when they would touch another
+  label or a corner label, and runs of 100,000 generations or more label
+  whole thousands as "200k".
 
 - **A shutdown test no longer depends on the host's old test output.** The
   nested pytest run in `test_finished_worker_can_wait_for_a_peer_beyond_

@@ -56,6 +56,8 @@ package and fails on one that is not on its short allow list.
 | `AVERAGING_MULTIPLE_MAXIMUM` | `convergence.py` | policy | Largest matched averaging window, in relaxation times. |
 | `FIRST_WAVE_AVERAGING_MULTIPLE` | `convergence.py` | policy | Averaging window, in relaxation times, of the first wave of replicates. |
 | `MAXIMUM_RECURSION_DEMES` | `limits.py` | policy (run time) | Largest `d` for which the `d² by d²` eigenvalue route is used. |
+| `MINIMUM_EQUILIBRIUM_DEMES` | `limits.py` | numerical guard | Smallest deme count the closed-form equilibrium formulas accept. |
+| `MINIMUM_EQUILIBRIUM_N` | `limits.py` | numerical guard | Smallest population size the closed-form equilibrium formulas accept. |
 | `MAXIMUM_LAG1_CORRELATION` | `numerics.py` | numerical guard | A lag-1 correlation this close to 1 makes `tau_int` (below) blow up numerically for a reason that is ... |
 | `MINIMUM_WINDOW_VALUES` | `numerics.py` | derivable | `window_statistics` needs at least this many values to define a lag-1 correlation at all (two ... |
 | `MINIMUM_CRITERION_WINDOW` | `numerics.py` | derivable | `MINIMUM_CRITERION_WINDOW`. |
@@ -77,6 +79,7 @@ package and fails on one that is not on its short allow list.
 | `DEFAULT_N_REPLICATES` | `defaults.py` | policy; a regular setting | How many independently seeded replicates a run tries by default. |
 | `DEFAULT_PRECISION` | `defaults.py` | policy; a regular setting | Default `precision`: plus or minus this much, in each statistic's units. |
 | `DEFAULT_PAIRWISE_MAX_DEMES` | `defaults.py` | policy; a regular setting | Largest deme count whose full all-pairs matrices are saved by default. |
+| `DEFAULT_SWEEP_MAX_ATTEMPTS` | `defaults.py` | policy; a regular setting | Times a sweep point that failed for a transient reason is tried before the failure is recorded. |
 | `GUI_ANIMATION_MAX_FRAMES` | `display.py` | policy (display) | `GUI_ANIMATION_MAX_FRAMES`. |
 | `ESTIMATE_AUTO_DENOMINATOR` | `statistics.py` | policy | Denominator below which a generation counts as degenerate for `auto`. |
 | `ESTIMATE_AUTO_FRACTION` | `statistics.py` | policy | Share of window generations that may be degenerate before `auto` switches. |

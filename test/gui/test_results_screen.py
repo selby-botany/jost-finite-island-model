@@ -122,6 +122,8 @@ def test_a_completed_run_renders_the_run_view(
             "const stat = document.getElementById('stat-G_ST');"
             "return stat ? stat.title : null;"
             "})(), "
+            "messagesText: Array.from(document.querySelectorAll("
+            "'#run-messages li')).map((item) => item.textContent).join(' '), "
             "supplementalHidden: "
             "document.getElementById('frequency-spectrum-card').hidden, "
             "statACgdTitle: (() => {"
@@ -208,9 +210,10 @@ def test_a_completed_run_renders_the_run_view(
     # `plainStatisticLabel` restores `_ST` rather than flattening the
     # name to a run-together "GST".
     assert settled["statGSTTrackTitle"].startswith("G_ST = ")
-    # Both screens' tooltips carry the statistic's own short gloss,
-    # which is why it no longer appears in the visible table.
-    assert "nearness to fixation" in settled["statGSTTrackTitle"]
+    # The tooltip is the headline only (a value, or an average and its last
+    # value); the statistic's own gloss is a sentence in the run messages.
+    assert "nearness to fixation" not in settled["statGSTTrackTitle"]
+    assert "nearness to fixation" in settled["messagesText"]
     # `A_CGD` -- one of the three expensive, opt-in "bonus" measurements
     # (`SimulationParams.track_expensive_statistics`) -- now renders as an
     # ordinary stats-table row exactly like every other statistic, no
@@ -329,8 +332,13 @@ def test_completed_run_consolidates_its_messages_into_one_area(
     assert settled["listHidden"] is False
     assert settled["listParentIsReasonParent"] is True
     assert settled["reasonText"] == ""
-    assert len(settled["items"]) == 3
-    info_one, info_two, warning = settled["items"]
+    # The outcome and the convergence note come first, then the run's
+    # statistic messages and the caution, and the collapsed per-statistic
+    # group is last.
+    assert len(settled["items"]) >= 5
+    info_one, info_two, *statistic_items, warning, details = settled["items"]
+    assert details["className"] == "run-message run-message-details"
+    assert "is a statistic this run watches" in statistic_items[0]["text"]
     assert info_one["className"] == "run-message run-message-info"
     assert info_one["hasDot"] is True
     assert info_one["text"] == settled["outcomeText"]

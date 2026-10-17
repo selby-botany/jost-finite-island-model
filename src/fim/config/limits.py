@@ -19,3 +19,15 @@ explicit convergence values.
 
 Kind: policy (run time).
 """
+
+MINIMUM_EQUILIBRIUM_N: Final = 1
+"""Smallest population size the closed-form equilibrium formulas accept.
+
+Kind: numerical guard.
+"""
+
+MINIMUM_EQUILIBRIUM_DEMES: Final = 2
+"""Smallest deme count the closed-form equilibrium formulas accept.
+
+Kind: numerical guard.
+"""

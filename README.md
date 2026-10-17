@@ -150,7 +150,7 @@ See [installation alternatives](install/README.md) and the
 ## Outputs
 
 Each scalar CLI run (`n_replicates: 1`; the library default is actually
-`200`, an adaptively-stopped batch — see [n_replicates](doc/configuration.md#nreplicates))
+`200`, an adaptively-stopped batch — see [n_replicates](doc/configuration.md#n_replicates))
 writes these artifacts:
 
 | File | Purpose |
