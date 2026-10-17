@@ -5628,6 +5628,33 @@ class Api:
             return {"ok": False, "message": str(error)}
 
     @_log_bridge_call
+    def get_sweep_series(
+        self,
+        study_id: str,
+        x: str,
+        statistic: str,
+        by: str | None,
+        held: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return a statistic as response curves across a sweep's axes.
+
+        Args:
+            study_id: A sweep Study.
+            x: The swept key along each curve.
+            statistic: A statistic's catalog key.
+            by: A second swept key giving one curve per value, or `None`.
+            held: A value for every axis that is neither `x` nor `by`.
+
+        Returns:
+            `{"ok": True, "series": [{"byValue", "points": [...]}, ...]}`,
+            or `{"ok": False, "message": ...}` for an unknown axis or a
+            missing held value. A point not yet finished is left out.
+        """
+        return sweep_bridge.series_payload(
+            study_id, x, statistic, by=by or None, held=held
+        )
+
+    @_log_bridge_call
     def get_sweep_theory(
         self, study_id: str, coordinates: list[dict[str, Any]]
     ) -> dict[str, Any]:

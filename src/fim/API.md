@@ -490,6 +490,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [cancel\_sweep](#fim.gui.app.Api.cancel_sweep)
     * [get\_sweep\_status](#fim.gui.app.Api.get_sweep_status)
     * [get\_sweep\_results](#fim.gui.app.Api.get_sweep_results)
+    * [get\_sweep\_series](#fim.gui.app.Api.get_sweep_series)
     * [get\_sweep\_theory](#fim.gui.app.Api.get_sweep_theory)
     * [export\_sweep\_table](#fim.gui.app.Api.export_sweep_table)
     * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
@@ -662,6 +663,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [spec\_from\_request](#fim.gui.sweep_bridge.spec_from_request)
   * [plan\_payload](#fim.gui.sweep_bridge.plan_payload)
   * [status\_payload](#fim.gui.sweep_bridge.status_payload)
+  * [series\_payload](#fim.gui.sweep_bridge.series_payload)
   * [results\_payload](#fim.gui.sweep_bridge.results_payload)
 * [fim.gui.trajectory\_history](#fim.gui.trajectory_history)
   * [TrajectoryHistory](#fim.gui.trajectory_history.TrajectoryHistory)
@@ -1634,6 +1636,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [COLUMN\_DESCRIPTIONS](#fim.sweep_table.COLUMN_DESCRIPTIONS)
   * [AXIS\_DESCRIPTIONS](#fim.sweep_table.AXIS_DESCRIPTIONS)
   * [TablePoint](#fim.sweep_table.TablePoint)
+  * [SeriesPoint](#fim.sweep_table.SeriesPoint)
+  * [Series](#fim.sweep_table.Series)
   * [ResultTable](#fim.sweep_table.ResultTable)
     * [read](#fim.sweep_table.ResultTable.read)
     * [axis\_keys](#fim.sweep_table.ResultTable.axis_keys)
@@ -1641,9 +1645,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [columns](#fim.sweep_table.ResultTable.columns)
     * [long\_rows](#fim.sweep_table.ResultTable.long_rows)
     * [wide\_rows](#fim.sweep_table.ResultTable.wide_rows)
+    * [series](#fim.sweep_table.ResultTable.series)
     * [to\_csv](#fim.sweep_table.ResultTable.to_csv)
     * [to\_jsonl](#fim.sweep_table.ResultTable.to_jsonl)
     * [metadata](#fim.sweep_table.ResultTable.metadata)
+  * [relative\_difference](#fim.sweep_table.relative_difference)
 * [fim.termination](#fim.termination)
   * [TERMINATED\_EXIT\_STATUS](#fim.termination.TERMINATED_EXIT_STATUS)
   * [sigterm\_raises\_exit](#fim.termination.sigterm_raises_exit)
@@ -12676,6 +12682,33 @@ def get_sweep_results(study_id: str) -> dict[str, Any]
 
 Return a sweep Study's finished points and their statistics.
 
+<a id="fim.gui.app.Api.get_sweep_series"></a>
+
+#### get\_sweep\_series
+
+```python
+@_log_bridge_call
+def get_sweep_series(study_id: str, x: str, statistic: str, by: str | None,
+                     held: dict[str, Any]) -> dict[str, Any]
+```
+
+Return a statistic as response curves across a sweep's axes.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `x` - The swept key along each curve.
+- `statistic` - A statistic's catalog key.
+- `by` - A second swept key giving one curve per value, or `None`.
+- `held` - A value for every axis that is neither `x` nor `by`.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "series": [{"byValue", "points": [...]}, ...]}`,
+  or `{"ok": False, "message": ...}` for an unknown axis or a
+  missing held value. A point not yet finished is left out.
+
 <a id="fim.gui.app.Api.get_sweep_theory"></a>
 
 #### get\_sweep\_theory
@@ -16999,6 +17032,25 @@ Describe a sweep Study and each planned point's derived state.
 
 `description`/`documentation` are the Study's own, for the sweep
 screen's name tooltip (`webui/screens/details.js`).
+
+<a id="fim.gui.sweep_bridge.series_payload"></a>
+
+#### series\_payload
+
+```python
+def series_payload(study_id: str,
+                   x: str,
+                   statistic: str,
+                   *,
+                   by: str | None,
+                   held: Mapping[str, Any],
+                   results: Path | None = None) -> dict[str, Any]
+```
+
+Group a sweep's results into response curves for the page.
+
+The grouping is `ResultTable.series`; this only renames fields to the
+page's own style. A request the table refuses comes back as a message.
 
 <a id="fim.gui.sweep_bridge.results_payload"></a>
 
@@ -37925,6 +37977,50 @@ One planned point of a sweep and, if it has finished, its row.
 - `state` - The point's state (`done`, `stale`, `failed`, `waiting`, ...).
 - `row` - Its result, or `None` if the point has none.
 
+<a id="fim.sweep_table.SeriesPoint"></a>
+
+## SeriesPoint Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SeriesPoint()
+```
+
+One finished point on a response curve.
+
+**Attributes**:
+
+- `x` - The point's value on the curve's x axis.
+- `point_index` - The point's grid index.
+- `run_id` - The point's id.
+- `directory` - The point's run directory.
+- `mean` - The statistic's mean over replicates.
+- `ci_low` - Lower end of the confidence interval of the mean, or `None`.
+- `ci_high` - Upper end of the confidence interval, or `None`.
+- `sd_low` - `mean` minus the standard deviation across replicates, or `None`.
+- `sd_high` - `mean` plus the standard deviation, or `None`.
+- `sample_count` - Replicates that had a defined value.
+- `replicates` - Replicates the point ran.
+- `health` - How far to trust the point, or `None` if unknown.
+- `health_reason` - Why the point is flagged; empty if it is not.
+
+<a id="fim.sweep_table.Series"></a>
+
+## Series Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Series()
+```
+
+One curve of a family: the points that share a value of the `by` axis.
+
+**Attributes**:
+
+- `by_value` - The `by` axis value this curve holds, or `None` for a
+  single curve.
+- `points` - The finished points, in the x axis's own order.
+
 <a id="fim.sweep_table.ResultTable"></a>
 
 ## ResultTable Objects
@@ -38015,7 +38111,7 @@ Yield one row per finished point and statistic.
 
 - `statistics` - Statistic keys, `ALL_STATISTICS`, or `None` for the
   defaults (`DEFAULT_EXPORT_STATISTICS`).
-- `with_theory` - Add `theory` and `residual` to each row.
+- `with_theory` - Add `theory`, `residual` and `residual_relative`.
 - `include_unfinished` - Also yield one row per point with no result,
   its state filled and its statistic empty.
 
@@ -38036,6 +38132,44 @@ def wide_rows(statistics: Sequence[str] | str | None = None,
 ```
 
 Yield one row per point, with a column group per statistic.
+
+<a id="fim.sweep_table.ResultTable.series"></a>
+
+#### series
+
+```python
+def series(x: str,
+           statistic: str,
+           *,
+           by: str | None = None,
+           held: Mapping[str, CoordinateValue] | None = None) -> list[Series]
+```
+
+Group one statistic into response curves.
+
+Each curve is the statistic across the `x` axis; with `by`, one curve
+for each value of that axis. Every other axis must be held at a value.
+A point that has not finished is left out of its curve; a curve with
+no finished point is still returned, so a legend can show it.
+
+**Arguments**:
+
+- `x` - The swept key along the curve.
+- `statistic` - A statistic's catalog key.
+- `by` - A second swept key, giving one curve per value, or `None`.
+- `held` - A value for each axis that is neither `x` nor `by`.
+
+
+**Returns**:
+
+  The curves, in the `by` axis's own order (one curve if `by` is
+  `None`); points within a curve follow the `x` axis's order.
+
+
+**Raises**:
+
+- `ValueError` - An axis is unknown or used twice, or an axis that is
+  neither `x` nor `by` has no held value.
 
 <a id="fim.sweep_table.ResultTable.to_csv"></a>
 
@@ -38113,6 +38247,31 @@ def metadata(
 ```
 
 Return the sidecar content: how to read the table and where it came from.
+
+<a id="fim.sweep_table.relative_difference"></a>
+
+#### relative\_difference
+
+```python
+def relative_difference(difference: float | None,
+                        reference: float | None) -> float | None
+```
+
+Return `difference / reference`, or `None` where it is not defined.
+
+Used for "simulation minus theory" as a fraction of the theory (botanist
+question Q8: the absolute difference is the default, the relative one is
+offered beside it, since some statistics span orders of magnitude).
+
+**Arguments**:
+
+- `difference` - The absolute difference, or `None`.
+- `reference` - What it is relative to (the theory), or `None`.
+
+
+**Returns**:
+
+  The ratio, or `None` if either is `None` or `reference` is 0.
 
 <a id="fim.termination"></a>
 

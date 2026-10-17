@@ -195,6 +195,13 @@ launch (not a terminal that hides a hang), check that:
    close**, and the program ends without a stuck process in the task manager.
 5. **Quit fim** in the menu behaves like the close button.
 6. After any of these, `logs/fim.log` has no `shutdown deadman fired` line.
+7. Open the results of a sweep with two or more axes, choose one axis for
+   **Across** and another for **Curves by**, and check that each curve has
+   its own color and marker shape, the error bars and caps line up with their
+   markers, the dashed theory curves follow their curves, a log axis shows
+   decade labels, and the arrow keys move a ring from point to point. The
+   chart is a canvas, and the three web engines (WebKit on macOS and Linux,
+   WebView2 on Windows) draw dashes and antialiasing a little differently.
 
 Record the platform, version, and result of each check with the release.
 

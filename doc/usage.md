@@ -1105,6 +1105,16 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   **Save table…** writes the table (and its `.meta.json` file) for every
   statistic you have chosen to show, with the closed-form columns, and **Save
   chart…** saves the chart as it is drawn as a PNG image.
+  In the app, the sweep results screen draws one curve for a sweep over one
+  axis. To compare values of a second axis, set **and** to "(none: a line)"
+  and choose **Curves by**: each value gets its own color and marker shape, with
+  its own error bars and, if you ask for it, its own theory curve. **Error
+  bars** show the 95% interval of the mean (the default), the spread across
+  replicates, or both. Axes are linear or log; "Automatic" uses a log axis for a
+  geometric series of values. With the chart selected, the arrow keys move from
+  point to point and Enter opens that point's run. The heat map's **Show** menu
+  also offers the difference from theory as a fraction of the theory, next to
+  the absolute difference; `fim sweep export --with-theory` writes both.
 - Each point has a health mark. A point is `unreliable` if every replicate
   stopped at the generation limit before its statistics settled, `degraded` if
   some did or if the interval is wider than the `precision` you asked for, and

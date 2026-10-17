@@ -468,6 +468,7 @@ COLUMN_DESCRIPTIONS: Final[Mapping[str, str]] = {
     "engine_backend": "The engine backend that ran the point.",
     "theory": "Closed-form prediction at equilibrium; empty where there is none.",
     "residual": "mean minus theory; empty where there is no prediction.",
+    "residual_relative": "residual divided by theory; empty if theory is 0 or absent.",
 }
 """What each exported column means, for the sidecar and for readers."""
 
@@ -520,6 +521,55 @@ class TablePoint:
     run_id: str
     state: str
     row: PointRow | None
+
+
+@dataclass(frozen=True, slots=True)
+class SeriesPoint:
+    """One finished point on a response curve.
+
+    Attributes:
+        x: The point's value on the curve's x axis.
+        point_index: The point's grid index.
+        run_id: The point's id.
+        directory: The point's run directory.
+        mean: The statistic's mean over replicates.
+        ci_low: Lower end of the confidence interval of the mean, or `None`.
+        ci_high: Upper end of the confidence interval, or `None`.
+        sd_low: `mean` minus the standard deviation across replicates, or `None`.
+        sd_high: `mean` plus the standard deviation, or `None`.
+        sample_count: Replicates that had a defined value.
+        replicates: Replicates the point ran.
+        health: How far to trust the point, or `None` if unknown.
+        health_reason: Why the point is flagged; empty if it is not.
+    """
+
+    x: CoordinateValue
+    point_index: int
+    run_id: str
+    directory: Path
+    mean: float
+    ci_low: float | None
+    ci_high: float | None
+    sd_low: float | None
+    sd_high: float | None
+    sample_count: int
+    replicates: int
+    health: HealthClass | None
+    health_reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class Series:
+    """One curve of a family: the points that share a value of the `by` axis.
+
+    Attributes:
+        by_value: The `by` axis value this curve holds, or `None` for a
+            single curve.
+        points: The finished points, in the x axis's own order.
+    """
+
+    by_value: CoordinateValue | None
+    points: tuple[SeriesPoint, ...]
 
 
 class ResultTable:
@@ -607,14 +657,18 @@ class ResultTable:
             axes.append("gene_copies_per_deme")
         if not wide:
             columns = [*_HEAD_COLUMNS, *axes, *_TAIL_COLUMNS]
-            return [*columns, "theory", "residual"] if with_theory else columns
+            if with_theory:
+                columns.extend(("theory", "residual", "residual_relative"))
+            return columns
         columns = [*_HEAD_COLUMNS, *axes, *_WIDE_POINT_COLUMNS]
         for name in self._selected(statistics):
             columns.extend(
                 f"{name}_{suffix}" for suffix, _field in _WIDE_STATISTIC_SUFFIXES
             )
             if with_theory and name in THEORY_STATISTICS:
-                columns.extend((f"{name}_theory", f"{name}_residual"))
+                columns.extend(
+                    (f"{name}_theory", f"{name}_residual", f"{name}_residual_relative")
+                )
         return columns
 
     def long_rows(
@@ -629,7 +683,7 @@ class ResultTable:
         Args:
             statistics: Statistic keys, `ALL_STATISTICS`, or `None` for the
                 defaults (`DEFAULT_EXPORT_STATISTICS`).
-            with_theory: Add `theory` and `residual` to each row.
+            with_theory: Add `theory`, `residual` and `residual_relative`.
             include_unfinished: Also yield one row per point with no result,
                 its state filled and its statistic empty.
 
@@ -677,12 +731,103 @@ class ResultTable:
                 if with_theory and name in THEORY_STATISTICS:
                     value = predicted.get(name)
                     row[f"{name}_theory"] = value
-                    row[f"{name}_residual"] = (
+                    difference = (
                         cell.mean - value
                         if cell is not None and value is not None
                         else None
                     )
+                    row[f"{name}_residual"] = difference
+                    row[f"{name}_residual_relative"] = relative_difference(
+                        difference, value
+                    )
             yield row
+
+    def series(
+        self,
+        x: str,
+        statistic: str,
+        *,
+        by: str | None = None,
+        held: Mapping[str, CoordinateValue] | None = None,
+    ) -> list[Series]:
+        """Group one statistic into response curves.
+
+        Each curve is the statistic across the `x` axis; with `by`, one curve
+        for each value of that axis. Every other axis must be held at a value.
+        A point that has not finished is left out of its curve; a curve with
+        no finished point is still returned, so a legend can show it.
+
+        Args:
+            x: The swept key along the curve.
+            statistic: A statistic's catalog key.
+            by: A second swept key, giving one curve per value, or `None`.
+            held: A value for each axis that is neither `x` nor `by`.
+
+        Returns:
+            The curves, in the `by` axis's own order (one curve if `by` is
+            `None`); points within a curve follow the `x` axis's order.
+
+        Raises:
+            ValueError: An axis is unknown or used twice, or an axis that is
+                neither `x` nor `by` has no held value.
+        """
+        values = {axis.key: axis.values for axis in self.spec.axes}
+        for key in (x, by):
+            if key is not None and key not in values:
+                raise ValueError(f"{key!r} is not an axis of this sweep")
+        if by == x:
+            raise ValueError("the curves cannot be split by the axis they run along")
+        fixed = dict(held or {})
+        others = [key for key in values if key not in (x, by)]
+        missing = [key for key in others if key not in fixed]
+        if missing:
+            raise ValueError(f"hold {missing[0]!r} at one of its values")
+        by_values: tuple[CoordinateValue | None, ...] = (
+            values[by] if by is not None else (None,)
+        )
+        x_order = {value: place for place, value in enumerate(values[x])}
+        curves: list[Series] = []
+        for by_value in by_values:
+            wanted = {key: fixed[key] for key in others}
+            if by is not None:
+                wanted[by] = by_value  # type: ignore[assignment]
+            points = [
+                self._series_point(point, x, statistic)
+                for point in self.points
+                if point.row is not None
+                and statistic in point.row.statistics
+                and all(point.coordinates.get(k) == v for k, v in wanted.items())
+            ]
+            curves.append(
+                Series(
+                    by_value,
+                    tuple(sorted(points, key=lambda found: x_order.get(found.x, 0))),
+                )
+            )
+        return curves
+
+    def _series_point(self, point: TablePoint, x: str, statistic: str) -> SeriesPoint:
+        """Build the curve point of a finished table point."""
+        row = point.row
+        assert row is not None  # the caller filtered on it
+        cell = row.statistics[statistic]
+        spread = cell.sample_std
+        health = row.health
+        return SeriesPoint(
+            x=point.coordinates[x],
+            point_index=point.index,
+            run_id=point.run_id,
+            directory=row.directory,
+            mean=cell.mean,
+            ci_low=cell.low,
+            ci_high=cell.high,
+            sd_low=None if spread is None else cell.mean - spread,
+            sd_high=None if spread is None else cell.mean + spread,
+            sample_count=cell.sample_count,
+            replicates=row.n_replicates,
+            health=health.classify(self.policy) if health is not None else None,
+            health_reason=health.describe(self.policy) if health is not None else "",
+        )
 
     def to_csv(
         self,
@@ -826,7 +971,7 @@ class ResultTable:
             if column.endswith(f"_{suffix}"):
                 statistic = column[: -len(suffix) - 1]
                 return f"{COLUMN_DESCRIPTIONS[suffix]} (statistic {statistic})"
-        for suffix in ("theory", "residual"):
+        for suffix in ("theory", "residual", "residual_relative"):
             if column.endswith(f"_{suffix}"):
                 statistic = column[: -len(suffix) - 1]
                 return f"{COLUMN_DESCRIPTIONS[suffix]} (statistic {statistic})"
@@ -945,8 +1090,31 @@ class ResultTable:
         if with_theory and name in THEORY_STATISTICS:
             value = theory_at(self.spec.base, point.coordinates).get(name)
             row["theory"] = value
-            row["residual"] = cell.mean - value if value is not None else None
+            difference = cell.mean - value if value is not None else None
+            row["residual"] = difference
+            row["residual_relative"] = relative_difference(difference, value)
         return row
+
+
+def relative_difference(
+    difference: float | None, reference: float | None
+) -> float | None:
+    """Return `difference / reference`, or `None` where it is not defined.
+
+    Used for "simulation minus theory" as a fraction of the theory (botanist
+    question Q8: the absolute difference is the default, the relative one is
+    offered beside it, since some statistics span orders of magnitude).
+
+    Args:
+        difference: The absolute difference, or `None`.
+        reference: What it is relative to (the theory), or `None`.
+
+    Returns:
+        The ratio, or `None` if either is `None` or `reference` is 0.
+    """
+    if difference is None or reference is None or reference == 0:
+        return None
+    return difference / reference
 
 
 def _statistic_info(name: str) -> dict[str, str]:

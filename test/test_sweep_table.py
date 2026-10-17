@@ -39,6 +39,7 @@ from fim.sweep_table import (
     StatisticCell,
     TablePoint,
     read_point_health,
+    relative_difference,
 )
 
 CAP = "hit the cap"
@@ -444,7 +445,12 @@ def test_the_long_header_is_fixed(tmp_path: Path) -> None:
 
     assert out.read_text(encoding="utf-8").splitlines()[0] == GOLDEN_LONG_HEADER
     with_theory = _table().columns(with_theory=True)
-    assert with_theory == [*GOLDEN_LONG_HEADER.split(","), "theory", "residual"]
+    assert with_theory == [
+        *GOLDEN_LONG_HEADER.split(","),
+        "theory",
+        "residual",
+        "residual_relative",
+    ]
 
 
 def test_the_default_statistics_are_d_and_g_st_for_finished_points(
@@ -567,8 +573,10 @@ def test_theory_and_residual_columns_follow_the_closed_form(tmp_path: Path) -> N
     first = next(r for r in rows if r["point_index"] == "0" and r["statistic"] == "D")
     assert float(first["theory"]) == expected["D"]
     assert float(first["residual"]) == 0.25 - expected["D"]
+    assert float(first["residual_relative"]) == (0.25 - expected["D"]) / expected["D"]
     no_formula = next(r for r in rows if r["statistic"] == "S_S")
     assert (no_formula["theory"], no_formula["residual"]) == ("", "")
+    assert no_formula["residual_relative"] == ""
 
 
 def test_the_wide_table_carries_theory_per_statistic(tmp_path: Path) -> None:
@@ -577,7 +585,7 @@ def test_the_wide_table_carries_theory_per_statistic(tmp_path: Path) -> None:
 
     columns = _read_csv(out)[0].keys()
 
-    assert {"D_theory", "D_residual"} <= set(columns)
+    assert {"D_theory", "D_residual", "D_residual_relative"} <= set(columns)
 
 
 def test_the_sidecar_reproduces_the_spec_and_names_the_columns(tmp_path: Path) -> None:
@@ -665,7 +673,7 @@ def test_every_wide_column_is_described_in_the_sidecar(tmp_path: Path) -> None:
     sidecar = _table().to_csv(out, statistics=["D"], wide=True, with_theory=True)
 
     columns = json.loads(sidecar.read_text(encoding="utf-8"))["columns"]
-    assert {"D_mean", "D_theory", "D_residual", "N", "m"} <= set(columns)
+    assert {"D_mean", "D_theory", "D_residual_relative", "N", "m"} <= set(columns)
     assert all(text and not text.startswith("Column ") for text in columns.values())
 
 
@@ -685,3 +693,98 @@ def test_the_reasons_for_a_flag_are_named() -> None:
         "1 ended another way; the interval is wider than the precision asked for"
     )
     assert PointHealth(3, 0, 3, 0).describe().startswith("3 of 3 replicates")
+
+
+@pytest.mark.parametrize(
+    ("difference", "reference", "expected"),
+    [
+        (0.1, 0.5, 0.2),
+        (-0.1, 0.5, -0.2),
+        (0.1, 0.0, None),
+        (None, 0.5, None),
+        (0.1, None, None),
+    ],
+)
+def test_the_relative_difference_is_a_fraction_of_the_reference(
+    difference: float | None, reference: float | None, expected: float | None
+) -> None:
+    assert relative_difference(difference, reference) == expected
+
+
+# --- response curves --------------------------------------------------------
+
+
+def test_one_curve_runs_along_the_x_axis_in_axis_order() -> None:
+    (curve,) = _table().series("m", "D", held={"N": 100})
+
+    assert curve.by_value is None
+    assert [point.x for point in curve.points] == [0.001, 0.01]
+    assert [point.point_index for point in curve.points] == [0, 1]
+
+
+def test_by_gives_one_curve_per_value_and_leaves_a_missing_point_out() -> None:
+    curves = _table().series("m", "D", by="N")
+
+    assert [curve.by_value for curve in curves] == [100, 225]
+    assert [len(curve.points) for curve in curves] == [2, 1]  # point 2 is waiting
+    assert curves[1].points[0].point_index == 3
+
+
+def test_a_curve_with_no_finished_point_is_still_returned() -> None:
+    curves = _table().series("m", "S_S", by="N")  # only point 0 has S_S
+
+    assert [len(curve.points) for curve in curves] == [1, 0]
+
+
+def test_a_curve_point_carries_both_intervals_and_the_health() -> None:
+    (curve,) = _table().series("m", "D", held={"N": 100})
+    first, single = curve.points
+
+    assert (first.ci_low, first.ci_high) == (0.2, 0.3)
+    assert first.sd_low == pytest.approx(0.25 - 0.04)
+    assert first.sd_high == pytest.approx(0.25 + 0.04)
+    assert (first.health, first.sample_count, first.replicates) == ("healthy", 3, 3)
+    assert first.health_reason == ""
+    assert (single.ci_low, single.sd_low, single.sd_high) == (None, None, None)
+    assert single.health == "degraded"
+    assert "stopped at the generation limit" in single.health_reason
+
+
+def test_a_third_axis_must_be_held_and_the_hold_selects_its_points() -> None:
+    spec = SweepSpec(
+        base={**_SPEC.base},
+        axes=(*_SPEC.axes, expand_axis("d", [10, 20])),
+    )
+    rows = [
+        TablePoint(
+            i,
+            {"N": 100, "m": 0.001, "d": d},
+            f"r{i}",
+            "done",
+            _row(
+                i, {"N": 100, "m": 0.001, "d": d}, {"D": StatisticCell(0.1 * (i + 1))}
+            ),
+        )
+        for i, d in enumerate([10, 20])
+    ]
+    table = ResultTable("s", "n", spec, rows)
+
+    with pytest.raises(ValueError, match="hold 'd'"):
+        table.series("m", "D", held={"N": 100})
+    (curve,) = table.series("m", "D", held={"N": 100, "d": 20})
+
+    assert [point.point_index for point in curve.points] == [1]
+
+
+@pytest.mark.parametrize(
+    ("x", "by", "message"),
+    [
+        ("nope", None, "'nope' is not an axis"),
+        ("m", "nope", "'nope' is not an axis"),
+        ("m", "m", "cannot be split by the axis"),
+        ("m", None, "hold 'N'"),
+    ],
+)
+def test_a_bad_curve_request_is_refused(x: str, by: str | None, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _table().series(x, "D", by=by)

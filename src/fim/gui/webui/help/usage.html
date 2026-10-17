@@ -963,7 +963,17 @@ The command will not replace a file that exists unless you pass <code>--force</c
 In the app, the sweep results screen has the same two things as buttons:
 <strong>Save table…</strong> writes the table (and its <code>.meta.json</code> file) for every
 statistic you have chosen to show, with the closed-form columns, and <strong>Save
-chart…</strong> saves the chart as it is drawn as a PNG image.</li>
+chart…</strong> saves the chart as it is drawn as a PNG image.
+In the app, the sweep results screen draws one curve for a sweep over one
+axis. To compare values of a second axis, set <strong>and</strong> to &quot;(none: a line)&quot;
+and choose <strong>Curves by</strong>: each value gets its own color and marker shape, with
+its own error bars and, if you ask for it, its own theory curve. <strong>Error
+bars</strong> show the 95% interval of the mean (the default), the spread across
+replicates, or both. Axes are linear or log; &quot;Automatic&quot; uses a log axis for a
+geometric series of values. With the chart selected, the arrow keys move from
+point to point and Enter opens that point's run. The heat map's <strong>Show</strong> menu
+also offers the difference from theory as a fraction of the theory, next to
+the absolute difference; <code>fim sweep export --with-theory</code> writes both.</li>
 <li>Each point has a health mark. A point is <code>unreliable</code> if every replicate
 stopped at the generation limit before its statistics settled, <code>degraded</code> if
 some did or if the interval is wider than the <code>precision</code> you asked for, and

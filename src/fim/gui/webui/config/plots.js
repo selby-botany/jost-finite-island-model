@@ -324,6 +324,43 @@ const SWEEP_FLAG_RADIUS = 5;
 const SWEEP_FLAG_LINE_WIDTH = 1.75;
 const SWEEP_FLAG_CROSS_REACH = 3.5;
 
+// Curves of a family: at most this many are drawn (more than that is
+// better read as a heat map or by holding an axis), each with its own marker
+// shape as well as its color, so the curves stay apart without color.
+const SWEEP_MAX_SERIES = 8;
+const SWEEP_SERIES_SHAPES = [
+    "circle",
+    "square",
+    "triangle",
+    "diamond",
+    "pentagon",
+    "hexagon",
+    "triangle-down",
+    "octagon",
+];
+const SWEEP_SERIES_MARKER_RADIUS = 3.5;
+// How wide the end caps of an error bar are, and how a spread (standard
+// deviation) bar differs from an interval bar when both are drawn.
+const SWEEP_ERROR_CAP_HALF_WIDTH = 3;
+const SWEEP_SD_LINE_WIDTH = 0.75;
+const SWEEP_SD_DASH = [3, 2];
+// The ring that marks the point the keyboard is on.
+const SWEEP_FOCUS_RADIUS = 9;
+const SWEEP_FOCUS_LINE_WIDTH = 2;
+// The smallest span, in decades, a log y axis is drawn over.
+const SWEEP_LOG_MIN_DECADES = 1;
+// The sides of the regular polygons that stand for the polygon shapes, and
+// the turn that points them up or down.
+const SWEEP_POLYGON_SIDES = {
+    square: 4,
+    triangle: 3,
+    "triangle-down": 3,
+    diamond: 4,
+    pentagon: 5,
+    hexagon: 6,
+    octagon: 8,
+};
+
 // The key to the markers, in the chart's top right corner: its distance from
 // the edge, the gap between lines, and between a marker and its words.
 const SWEEP_LEGEND_INSET = 10;

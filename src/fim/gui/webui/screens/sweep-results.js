@@ -8,6 +8,10 @@
  * - One axis: the statistic at each value, with its confidence interval
  *   across replicates, and (optionally) the closed-form theory drawn
  *   behind it.
+ * - A family of curves: "Curves by" splits the line into one curve per value
+ *   of a second axis, each with its own color and marker shape, error bars
+ *   (interval of the mean, spread, or both), and optional theory; the x and
+ *   y axes can be linear or log.
  * - Two axes: a heat map (`heatmap.js`) of the statistic's mean, or of the
  *   theory, or of simulation minus theory. A sweep with more axes holds
  *   the others at a chosen value; every axis is stored, any two are shown.
@@ -32,6 +36,14 @@ const sweepResultsReadout = document.getElementById("sweep-results-readout");
 const sweepResultsHead = document.getElementById("sweep-results-head");
 const sweepResultsBody = document.getElementById("sweep-results-body");
 const sweepResultsSetupButton = document.getElementById("sweep-results-setup-button");
+const sweepResultsBy = document.getElementById("sweep-results-by");
+const sweepResultsByField = document.getElementById("sweep-results-by-field");
+const sweepResultsInterval = document.getElementById("sweep-results-interval");
+const sweepResultsIntervalField = document.getElementById("sweep-results-interval-field");
+const sweepResultsXScale = document.getElementById("sweep-results-xscale");
+const sweepResultsXScaleField = document.getElementById("sweep-results-xscale-field");
+const sweepResultsYScale = document.getElementById("sweep-results-yscale");
+const sweepResultsYScaleField = document.getElementById("sweep-results-yscale-field");
 const sweepResultsSaveTable = document.getElementById("sweep-results-save-table");
 const sweepResultsSaveChart = document.getElementById("sweep-results-save-chart");
 const sweepResultsView = document.getElementById("sweep-results");
@@ -50,6 +62,10 @@ let sweepResultsRenderSequence = 0;
 // What the canvas currently shows, for hover and click: pixel points for a
 // line chart, or a heat-map layout with the run each cell holds.
 let sweepResultsHit = null;
+// The line chart's last spec (so the keyboard focus can redraw it without a
+// new request) and the point the keyboard is on: `{curve, position}`.
+let sweepResultsLastSpec = null;
+let sweepFocus = null;
 
 window.__fimSweepResultsReady = false;
 
@@ -240,14 +256,49 @@ function populateSweepResultsControls(data) {
     sweepResultsY.value = keys.length > 1 ? keys[1] : "";
     sweepResultsMode.value = "simulation";
     sweepResultsTheory.checked = false;
+    sweepResultsBy.value = "";
+    sweepResultsInterval.value = "ci";
+    sweepResultsXScale.value = "auto";
+    sweepResultsYScale.value = "auto";
     refreshSweepHeldControls();
+}
+
+/**
+ * Offer every axis but the ones already across and "and" as the "Curves by"
+ * axis, keeping the choice if it is still offered.
+ */
+function refreshSweepByControl() {
+    const previous = sweepResultsBy.value;
+    const taken = [sweepResultsX.value, sweepResultsY.value];
+    sweepResultsBy.replaceChildren();
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "(none: one curve)";
+    sweepResultsBy.appendChild(none);
+    for (const axis of sweepResultsData.axes) {
+        if (taken.includes(axis.key)) {
+            continue;
+        }
+        const option = document.createElement("option");
+        option.value = axis.key;
+        option.textContent = axis.key;
+        sweepResultsBy.appendChild(option);
+    }
+    sweepResultsBy.value = Array.from(sweepResultsBy.options).some(
+        (option) => option.value === previous
+    )
+        ? previous
+        : "";
 }
 
 /**
  * Rebuild the "held at" selects for the axes that are not displayed.
  */
 function refreshSweepHeldControls() {
-    const shown = [sweepResultsX.value, sweepResultsY.value].filter((key) => key !== "");
+    refreshSweepByControl();
+    const shown = [sweepResultsX.value, sweepResultsY.value, sweepResultsBy.value].filter(
+        (key) => key !== ""
+    );
     sweepResultsHeld.replaceChildren();
     for (const axis of sweepResultsData.axes) {
         if (shown.includes(axis.key)) {
@@ -281,9 +332,18 @@ async function renderSweepResults() {
     const statistic = sweepResultsStatistic.value;
     const xKey = sweepResultsX.value;
     const yKey = sweepResultsY.value === xKey ? "" : sweepResultsY.value;
+    const byKey = sweepResultsBy.value;
     const points = sweepFilteredPoints();
     const hasTheory = SWEEP_THEORY_STATISTICS.has(statistic);
-    sweepResultsTheoryField.hidden = yKey !== "";
+    for (const field of [
+        sweepResultsTheoryField,
+        sweepResultsByField,
+        sweepResultsIntervalField,
+        sweepResultsXScaleField,
+        sweepResultsYScaleField,
+    ]) {
+        field.hidden = yKey !== "";
+    }
     sweepResultsTheory.disabled = !hasTheory;
     sweepResultsModeField.hidden = yKey === "";
     for (const option of sweepResultsMode.options) {
@@ -302,7 +362,7 @@ async function renderSweepResults() {
         return;
     }
     if (yKey === "") {
-        await renderSweepLine(sequence, points, xKey, statistic);
+        await renderSweepLine(sequence, xKey, byKey, statistic);
     } else {
         await renderSweepHeatmap(sequence, points, xKey, yKey, statistic);
     }
@@ -369,52 +429,97 @@ function sweepTheorySamples(values, log) {
 }
 
 /**
- * Draw the one-axis chart: mean and interval per value, plus theory.
+ * Draw the one-axis chart: one curve, or a family of curves (one per value
+ * of the "Curves by" axis), each with its error bars, markers and theory.
  * @param {number} sequence
- * @param {object[]} points
  * @param {string} xKey
+ * @param {string} byKey The axis that splits the curves, or "".
  * @param {string} statistic
  */
-async function renderSweepLine(sequence, points, xKey, statistic) {
+async function renderSweepLine(sequence, xKey, byKey, statistic) {
     const values = sweepAxisValues(xKey);
     const numeric = values.every((value) => typeof value === "number");
-    const log = numeric && sweepAxisIsLog(values);
+    const xScale = sweepResultsXScale.value;
+    const log = numeric && (xScale === "log" || (xScale === "auto" && sweepAxisIsLog(values)));
     const held = sweepHeldValues();
-    const marks = points
-        .filter((point) => point.result && point.result.statistics[statistic])
-        .map((point) => ({
-            x: point.coordinates[xKey],
-            index: point.index,
-            directory: point.result.directory,
-            nReplicates: point.result.nReplicates,
-            coordinates: point.coordinates,
-            health: sweepHealthClass(point.result),
-            ...point.result.statistics[statistic],
-        }));
-    let theory = [];
+    const reply = await window.pywebview.api.get_sweep_series(
+        sweepResultsStudyId,
+        xKey,
+        statistic,
+        byKey || null,
+        held
+    );
+    if (sequence !== sweepResultsRenderSequence) {
+        return;
+    }
+    if (!reply.ok) {
+        sweepResultsHit = null;
+        sweepResultsLastSpec = null;
+        sweepFocus = null;
+        const context = sweepResultsCanvas.getContext("2d");
+        context.clearRect(0, 0, sweepResultsCanvas.width, sweepResultsCanvas.height);
+        sweepResultsReadout.textContent = reply.message;
+        return;
+    }
+    const single = STATISTIC_TRAJECTORY_COLORS[statistic] || SWEEP_FALLBACK_COLOR;
+    const curves = reply.series.slice(0, SWEEP_MAX_SERIES).map((curve, position) => ({
+        label: byKey ? `${byKey} = ${sweepFormatValue(curve.byValue)}` : null,
+        color: byKey ? SWEEP_SERIES_COLORS[position] : single,
+        shape: byKey ? SWEEP_SERIES_SHAPES[position] : "circle",
+        byValue: curve.byValue,
+        marks: curve.points,
+        theory: [],
+    }));
     if (sweepResultsTheory.checked && numeric) {
         const samples = sweepTheorySamples(values, log);
-        const predicted = await sweepTheoryAt(
-            samples.map((x) => ({ ...held, [xKey]: x }))
+        const coordinates = curves.flatMap((curve) =>
+            samples.map((x) => ({
+                ...held,
+                ...(byKey ? { [byKey]: curve.byValue } : {}),
+                [xKey]: x,
+            }))
         );
+        const predicted = await sweepTheoryAt(coordinates);
         if (sequence !== sweepResultsRenderSequence) {
             return;
         }
-        theory = samples.map((x, index) => ({ x, y: predicted[index][statistic] ?? null }));
+        curves.forEach((curve, index) => {
+            curve.theory = samples.map((x, step) => ({
+                x,
+                y: predicted[index * samples.length + step][statistic] ?? null,
+            }));
+        });
     }
-    sweepResultsHit = drawSweepLine(sweepResultsCanvas, {
+    sweepFocus = null;
+    redrawSweepLine({
         xKey,
         values,
         numeric,
         log,
-        marks,
-        theory,
+        curves,
         statistic,
+        interval: sweepResultsInterval.value,
+        yScale: sweepResultsYScale.value,
     });
+    const drawn = curves.reduce((count, curve) => count + curve.marks.length, 0);
+    const cut =
+        reply.series.length > SWEEP_MAX_SERIES
+            ? ` Showing the first ${SWEEP_MAX_SERIES} of ${reply.series.length} curves; hold an axis or use a heat map for the rest.`
+            : "";
     sweepResultsReadout.textContent =
-        marks.length === 0
+        (drawn === 0
             ? "No finished points at these settings."
-            : "Hover a point for its value; click it to open that run.";
+            : "Hover a point for its value; click it to open that run, or use the arrow keys and Enter.") +
+        cut;
+}
+
+/**
+ * Draw the line chart again from its last spec, with the keyboard focus.
+ * @param {object} spec
+ */
+function redrawSweepLine(spec) {
+    sweepResultsLastSpec = spec;
+    sweepResultsHit = drawSweepLine(sweepResultsCanvas, { ...spec, focus: sweepFocus });
 }
 
 /**
@@ -439,10 +544,42 @@ function sweepTicks(low, high) {
 }
 
 /**
+ * The values an error bar of this point reaches, for fitting the y axis.
+ * @param {object} mark
+ * @param {string} interval "ci", "sd" or "both".
+ * @returns {number[]}
+ */
+function sweepBarEnds(mark, interval) {
+    const ends = [mark.mean];
+    if (interval !== "sd") {
+        ends.push(mark.ciLow ?? mark.mean, mark.ciHigh ?? mark.mean);
+    }
+    if (interval !== "ci") {
+        ends.push(mark.sdLow ?? mark.mean, mark.sdHigh ?? mark.mean);
+    }
+    return ends;
+}
+
+/**
+ * Powers of ten between two powers of ten.
+ * @param {number} lowExponent
+ * @param {number} highExponent
+ * @returns {number[]}
+ */
+function sweepLogTicks(lowExponent, highExponent) {
+    const ticks = [];
+    for (let exponent = lowExponent; exponent <= highExponent; exponent += 1) {
+        ticks.push(10 ** exponent);
+    }
+    return ticks;
+}
+
+/**
  * Draw the one-axis chart and return its pixel points for hit testing.
  * @param {HTMLCanvasElement} canvas
  * @param {object} spec
- * @returns {{kind: "line", pixels: Array<{x: number, y: number, mark: object}>}}
+ * @returns {{kind: "line", pixels: Array<{x: number, y: number, mark: object,
+ *   curve: number, position: number}>}}
  */
 function drawSweepLine(canvas, spec) {
     const context = canvas.getContext("2d");
@@ -451,7 +588,6 @@ function drawSweepLine(canvas, spec) {
     const border = style.getPropertyValue("--fim-border").trim() || THEME_FALLBACK_BORDER;
     const foreground =
         style.getPropertyValue("--fim-foreground").trim() || THEME_FALLBACK_FOREGROUND;
-    const color = STATISTIC_TRAJECTORY_COLORS[spec.statistic] || SWEEP_FALLBACK_COLOR;
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.font = FONT_AXIS_LARGE;
     const left = SWEEP_LINE_MARGIN.left;
@@ -459,19 +595,49 @@ function drawSweepLine(canvas, spec) {
     const width = canvas.width - left - SWEEP_LINE_MARGIN.right;
     const height = canvas.height - top - SWEEP_LINE_MARGIN.bottom;
 
-    const lows = spec.marks.map((mark) => mark.low ?? mark.mean);
-    const highs = spec.marks.map((mark) => mark.high ?? mark.mean);
-    const theoryValues = spec.theory.map((entry) => entry.y).filter((y) => y !== null);
-    let yLow = Math.min(...lows, ...theoryValues, Infinity);
-    let yHigh = Math.max(...highs, ...theoryValues, -Infinity);
-    if (isProportionStatistic(spec.statistic)) {
+    const marks = spec.curves.flatMap((curve) => curve.marks);
+    const reached = marks.flatMap((mark) => sweepBarEnds(mark, spec.interval));
+    const theoryValues = spec.curves
+        .flatMap((curve) => curve.theory.map((entry) => entry.y))
+        .filter((y) => y !== null);
+    const everything = [...reached, ...theoryValues];
+    const positive = everything.filter((value) => value > 0);
+    const yLog = spec.yScale === "log" && positive.length > 0;
+    let yLow = Math.min(...everything, Infinity);
+    let yHigh = Math.max(...everything, -Infinity);
+    let lowExponent = 0;
+    let highExponent = 0;
+    if (yLog) {
+        lowExponent = Math.floor(Math.log10(Math.min(...positive)));
+        highExponent = Math.max(
+            Math.ceil(Math.log10(Math.max(...positive))),
+            lowExponent + SWEEP_LOG_MIN_DECADES
+        );
+        yLow = 10 ** lowExponent;
+        yHigh = 10 ** highExponent;
+    } else if (isProportionStatistic(spec.statistic)) {
         yLow = 0;
         yHigh = 1;
     } else if (!(yHigh > yLow)) {
         yLow = Number.isFinite(yLow) ? yLow - 1 : 0;
         yHigh = Number.isFinite(yHigh) ? yHigh + 1 : 1;
     }
-    const toY = (value) => top + height - ((value - yLow) / (yHigh - yLow)) * height;
+    // A value off a log axis (zero or negative) sits on the bottom edge.
+    const toY = yLog
+        ? (value) =>
+              value > 0
+                  ? top +
+                    height -
+                    Math.min(
+                        1,
+                        Math.max(
+                            0,
+                            (Math.log10(value) - lowExponent) / (highExponent - lowExponent)
+                        )
+                    ) *
+                        height
+                  : top + height
+        : (value) => top + height - ((value - yLow) / (yHigh - yLow)) * height;
 
     let toX;
     if (spec.numeric) {
@@ -491,7 +657,8 @@ function drawSweepLine(canvas, spec) {
     context.strokeStyle = border;
     context.fillStyle = muted;
     context.textAlign = "right";
-    for (const tick of sweepTicks(yLow, yHigh)) {
+    const yTicks = yLog ? sweepLogTicks(lowExponent, highExponent) : sweepTicks(yLow, yHigh);
+    for (const tick of yTicks) {
         const y = toY(tick);
         context.beginPath();
         context.moveTo(left, y);
@@ -516,64 +683,169 @@ function drawSweepLine(canvas, spec) {
         }
     });
     context.fillStyle = foreground;
-    context.fillText(spec.xKey, left + width / 2, canvas.height - SWEEP_X_TITLE_RISE);
+    const xTitle = `${spec.xKey}${spec.log ? " (log scale)" : ""}`;
+    context.fillText(xTitle, left + width / 2, canvas.height - SWEEP_X_TITLE_RISE);
     context.save();
     context.translate(SWEEP_Y_TITLE_INSET, top + height / 2);
     context.rotate(-QUARTER_TURN);
-    context.fillText(statisticDisplayName(spec.statistic), 0, 0);
+    context.fillText(
+        `${statisticDisplayName(spec.statistic)}${yLog ? " (log scale)" : ""}`,
+        0,
+        0
+    );
     context.restore();
 
-    drawSweepTheory(context, spec, toX, toY, muted);
-
-    const pixels = spec.marks.map((mark) => ({ x: toX(mark.x), y: toY(mark.mean), mark }));
-    context.strokeStyle = color;
-    context.fillStyle = color;
-    context.lineWidth = CURVE_LINE_WIDTH;
-    if (spec.numeric && pixels.length > 1) {
-        context.beginPath();
-        pixels.forEach((pixel, index) => {
-            if (index === 0) {
-                context.moveTo(pixel.x, pixel.y);
-            } else {
-                context.lineTo(pixel.x, pixel.y);
-            }
-        });
-        context.stroke();
+    for (const curve of spec.curves) {
+        drawSweepTheory(context, curve.theory, toX, toY, curve.color);
     }
-    context.lineWidth = AXIS_LINE_WIDTH;
-    for (const pixel of pixels) {
-        if (pixel.mark.low !== null && pixel.mark.high !== null) {
+
+    const pixels = [];
+    const single = spec.curves.length <= 1;
+    spec.curves.forEach((curve, curveIndex) => {
+        const own = curve.marks.map((mark, position) => ({
+            x: toX(mark.x),
+            y: toY(mark.mean),
+            mark,
+            curve: curveIndex,
+            position,
+        }));
+        context.strokeStyle = curve.color;
+        context.lineWidth = CURVE_LINE_WIDTH;
+        if (spec.numeric && own.length > 1) {
             context.beginPath();
-            context.moveTo(pixel.x, toY(pixel.mark.low));
-            context.lineTo(pixel.x, toY(pixel.mark.high));
+            own.forEach((pixel, index) => {
+                if (index === 0) {
+                    context.moveTo(pixel.x, pixel.y);
+                } else {
+                    context.lineTo(pixel.x, pixel.y);
+                }
+            });
             context.stroke();
         }
-        drawSweepMarker(context, pixel.x, pixel.y, sweepHealthMarker(pixel.mark.health), color);
+        context.lineWidth = AXIS_LINE_WIDTH;
+        for (const pixel of own) {
+            drawSweepErrorBars(context, pixel, toY, curve.color, spec.interval);
+            drawSweepMarker(
+                context,
+                pixel.x,
+                pixel.y,
+                sweepHealthMarker(pixel.mark.health),
+                curve.color,
+                curve.shape,
+                single ? SWEEP_POINT_RADIUS : SWEEP_SERIES_MARKER_RADIUS
+            );
+        }
+        pixels.push(...own);
+    });
+    drawSweepLegend(context, canvas, spec.curves, marks, foreground);
+    const focused = spec.focus
+        ? pixels.find(
+              (pixel) =>
+                  pixel.curve === spec.focus.curve && pixel.position === spec.focus.position
+          )
+        : null;
+    if (focused) {
+        context.strokeStyle = foreground;
+        context.lineWidth = SWEEP_FOCUS_LINE_WIDTH;
+        context.beginPath();
+        context.arc(focused.x, focused.y, SWEEP_FOCUS_RADIUS, 0, TAU);
+        context.stroke();
+        context.lineWidth = AXIS_LINE_WIDTH;
     }
-    drawSweepLegend(context, canvas, spec.marks, color, foreground);
     return { kind: "line", pixels, statistic: spec.statistic, xKey: spec.xKey };
 }
 
 /**
- * Draw one point's marker: a filled dot, a hollow ring when some replicates
- * did not settle, or a ring with an X through it when none did.
+ * Draw one point's error bars: the interval of the mean as a solid bar with
+ * caps, the spread across replicates as a thinner dashed one.
+ * @param {CanvasRenderingContext2D} context
+ * @param {{x: number, y: number, mark: object}} pixel
+ * @param {(value: number) => number} toY
+ * @param {string} color
+ * @param {string} interval "ci", "sd" or "both".
+ */
+function drawSweepErrorBars(context, pixel, toY, color, interval) {
+    const bars = [];
+    if (interval !== "sd" && pixel.mark.ciLow !== null && pixel.mark.ciHigh !== null) {
+        bars.push({ low: pixel.mark.ciLow, high: pixel.mark.ciHigh, solid: true });
+    }
+    if (interval !== "ci" && pixel.mark.sdLow !== null && pixel.mark.sdHigh !== null) {
+        bars.push({ low: pixel.mark.sdLow, high: pixel.mark.sdHigh, solid: false });
+    }
+    context.save();
+    context.strokeStyle = color;
+    for (const bar of bars) {
+        context.lineWidth = bar.solid ? AXIS_LINE_WIDTH : SWEEP_SD_LINE_WIDTH;
+        const cap = bar.solid ? SWEEP_ERROR_CAP_HALF_WIDTH : SWEEP_ERROR_CAP_HALF_WIDTH + 1;
+        context.setLineDash(bar.solid ? [] : SWEEP_SD_DASH);
+        context.beginPath();
+        context.moveTo(pixel.x, toY(bar.low));
+        context.lineTo(pixel.x, toY(bar.high));
+        context.stroke();
+        context.setLineDash([]);
+        context.beginPath();
+        for (const end of [bar.low, bar.high]) {
+            context.moveTo(pixel.x - cap, toY(end));
+            context.lineTo(pixel.x + cap, toY(end));
+        }
+        context.stroke();
+    }
+    context.restore();
+}
+
+/**
+ * Trace the outline of a marker shape around a point.
+ * @param {CanvasRenderingContext2D} context
+ * @param {string} shape A name from `SWEEP_SERIES_SHAPES`.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} radius
+ */
+function traceSweepShape(context, shape, x, y, radius) {
+    context.beginPath();
+    const sides = SWEEP_POLYGON_SIDES[shape];
+    if (sides === undefined) {
+        context.arc(x, y, radius, 0, TAU);
+        return;
+    }
+    // A square is a diamond turned an eighth of a turn; a downward triangle
+    // is an upward one turned half a turn.
+    const turn = shape === "square" ? Math.PI / 4 : shape === "triangle-down" ? Math.PI : 0;
+    for (let corner = 0; corner < sides; corner += 1) {
+        const angle = -Math.PI / 2 + turn + (corner * TAU) / sides;
+        const px = x + radius * Math.cos(angle);
+        const py = y + radius * Math.sin(angle);
+        if (corner === 0) {
+            context.moveTo(px, py);
+        } else {
+            context.lineTo(px, py);
+        }
+    }
+    context.closePath();
+}
+
+/**
+ * Draw one point's marker: filled when its replicates settled, a hollow
+ * outline when some did not, with an X through it when none did. The shape
+ * (circle, square, ...) tells curves apart without color.
  * @param {CanvasRenderingContext2D} context
  * @param {number} x
  * @param {number} y
  * @param {"dot"|"ring"|"crossed"} kind
  * @param {string} color
+ * @param {string} [shape] A name from `SWEEP_SERIES_SHAPES`.
+ * @param {number} [radius] The filled marker's radius.
  */
-function drawSweepMarker(context, x, y, kind, color) {
+function drawSweepMarker(context, x, y, kind, color, shape = "circle", radius = SWEEP_POINT_RADIUS) {
     context.strokeStyle = color;
     context.fillStyle = color;
-    context.beginPath();
     if (kind === "dot") {
-        context.arc(x, y, SWEEP_POINT_RADIUS, 0, TAU);
+        traceSweepShape(context, shape, x, y, radius);
         context.fill();
         return;
     }
     context.lineWidth = SWEEP_FLAG_LINE_WIDTH;
-    context.arc(x, y, SWEEP_FLAG_RADIUS, 0, TAU);
+    traceSweepShape(context, shape, x, y, Math.max(radius, SWEEP_FLAG_RADIUS));
     context.stroke();
     if (kind === "crossed") {
         const reach = SWEEP_FLAG_CROSS_REACH;
@@ -588,19 +860,35 @@ function drawSweepMarker(context, x, y, kind, color) {
 }
 
 /**
- * Key to the hollow markers, in the chart's top right, only for the kinds
- * the chart actually shows.
+ * The key to the chart, in its top right: one line per curve of a family,
+ * then one per kind of hollow marker the chart actually shows.
  * @param {CanvasRenderingContext2D} context
  * @param {HTMLCanvasElement} canvas
- * @param {object[]} marks
- * @param {string} color The statistic's line color.
+ * @param {object[]} curves
+ * @param {object[]} marks Every mark drawn.
  * @param {string} textColor
  */
-function drawSweepLegend(context, canvas, marks, color, textColor) {
-    const entries = [
+function drawSweepLegend(context, canvas, curves, marks, textColor) {
+    const entries = [];
+    if (curves.length > 1) {
+        for (const curve of curves) {
+            entries.push({ label: curve.label, kind: "dot", color: curve.color, shape: curve.shape });
+        }
+    }
+    const neutral = curves.length > 1 ? textColor : (curves[0] && curves[0].color) || textColor;
+    for (const entry of [
         { health: "degraded", label: "degraded: some replicates did not settle" },
         { health: "unreliable", label: "unreliable: none settled" },
-    ].filter((entry) => marks.some((mark) => mark.health === entry.health));
+    ]) {
+        if (marks.some((mark) => mark.health === entry.health)) {
+            entries.push({
+                label: entry.label,
+                kind: sweepHealthMarker(entry.health),
+                color: neutral,
+                shape: "circle",
+            });
+        }
+    }
     context.save();
     context.font = FONT_AXIS_LARGE;
     context.textAlign = "right";
@@ -614,23 +902,25 @@ function drawSweepLegend(context, canvas, marks, color, textColor) {
             context,
             textX - width - SWEEP_LEGEND_TEXT_GAP,
             y,
-            sweepHealthMarker(entry.health),
-            color
+            entry.kind,
+            entry.color,
+            entry.shape,
+            SWEEP_SERIES_MARKER_RADIUS
         );
     });
     context.restore();
 }
 
 /**
- * Draw the dashed theory curve, breaking it wherever it is undefined.
+ * Draw one curve's dashed theory line, breaking it wherever it is undefined.
  * @param {CanvasRenderingContext2D} context
- * @param {object} spec
+ * @param {Array<{x: number, y: number|null}>} theory
  * @param {(value: number) => number} toX
  * @param {(value: number) => number} toY
  * @param {string} color
  */
-function drawSweepTheory(context, spec, toX, toY, color) {
-    if (spec.theory.length === 0) {
+function drawSweepTheory(context, theory, toX, toY, color) {
+    if (theory.length === 0) {
         return;
     }
     context.save();
@@ -639,7 +929,7 @@ function drawSweepTheory(context, spec, toX, toY, color) {
     context.setLineDash(DASH_THEORY_CURVE);
     let drawing = false;
     context.beginPath();
-    for (const entry of spec.theory) {
+    for (const entry of theory) {
         if (entry.y === null) {
             drawing = false;
             continue;
@@ -703,11 +993,16 @@ async function renderSweepHeatmap(sequence, points, xKey, yKey, statistic) {
             if (mode === "difference") {
                 return value !== null && theory[r][c] !== null ? value - theory[r][c] : null;
             }
+            if (mode === "relative") {
+                return value !== null && theory[r][c] !== null && theory[r][c] !== 0
+                    ? (value - theory[r][c]) / theory[r][c]
+                    : null;
+            }
             return value;
         })
     );
     const flat = shownValues.flat().filter((value) => value !== null);
-    const diverging = mode === "difference";
+    const diverging = mode === "difference" || mode === "relative";
     let min = flat.length > 0 ? Math.min(...flat) : 0;
     let max = flat.length > 0 ? Math.max(...flat) : 1;
     if (diverging) {
@@ -727,7 +1022,10 @@ async function renderSweepHeatmap(sequence, points, xKey, yKey, statistic) {
         diverging,
         xTitle: xKey,
         yTitle: yKey,
-        valueTitle: `${diverging ? "Δ " : ""}${statisticDisplayName(statistic)}`,
+        valueTitle:
+            mode === "relative"
+                ? `Δ ${statisticDisplayName(statistic)} / theory`
+                : `${diverging ? "Δ " : ""}${statisticDisplayName(statistic)}`,
         selected: null,
         markers: sweepFlaggedMarkers(cells),
     });
@@ -861,6 +1159,58 @@ sweepResultsCanvas.addEventListener("mousemove", (event) => {
         sweepResultsReadout.textContent = `${sweepFormatValue(xValue)}, ${sweepFormatValue(yValue)}: not planned`;
     }
 });
+
+/**
+ * Move the keyboard focus around the line chart: left and right along a
+ * curve, up and down between curves; Enter opens the point's run.
+ * @param {KeyboardEvent} event
+ */
+function moveSweepFocus(event) {
+    if (sweepResultsHit === null || sweepResultsHit.kind !== "line") {
+        return;
+    }
+    const curves = sweepResultsLastSpec.curves;
+    const filled = curves.map((curve, index) => (curve.marks.length > 0 ? index : -1)).filter((i) => i >= 0);
+    if (filled.length === 0) {
+        return;
+    }
+    const step = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0] }[
+        event.key
+    ];
+    if (event.key === "Enter" && sweepFocus !== null) {
+        const mark = curves[sweepFocus.curve].marks[sweepFocus.position];
+        const result = sweepResultsByIndex().get(mark.index);
+        if (result) {
+            openSweepPoint(result);
+        }
+        event.preventDefault();
+        return;
+    }
+    if (step === undefined) {
+        return;
+    }
+    event.preventDefault();
+    if (sweepFocus === null) {
+        sweepFocus = { curve: filled[0], position: 0 };
+    } else {
+        const place = filled.indexOf(sweepFocus.curve);
+        const curve = filled[Math.min(filled.length - 1, Math.max(0, place + step[0]))];
+        const length = curves[curve].marks.length;
+        sweepFocus = {
+            curve,
+            position: Math.min(length - 1, Math.max(0, sweepFocus.position + step[1])),
+        };
+    }
+    const mark = curves[sweepFocus.curve].marks[sweepFocus.position];
+    const point = sweepResultsData.points.find((entry) => entry.index === mark.index);
+    sweepResultsReadout.textContent = sweepPointReadout(
+        { ...point, result: sweepResultsByIndex().get(point.index) },
+        sweepResultsStatistic.value
+    );
+    redrawSweepLine(sweepResultsLastSpec);
+}
+
+sweepResultsCanvas.addEventListener("keydown", moveSweepFocus);
 
 sweepResultsCanvas.addEventListener("click", async (event) => {
     const target = sweepResultsTarget(event);
@@ -999,7 +1349,15 @@ window.fim.saveSweepChart = async function saveSweepChart() {
 sweepResultsSaveTable.addEventListener("click", () => window.fim.saveSweepTable());
 sweepResultsSaveChart.addEventListener("click", () => window.fim.saveSweepChart());
 
-for (const control of [sweepResultsStatistic, sweepResultsMode, sweepResultsTheory]) {
+for (const control of [
+    sweepResultsStatistic,
+    sweepResultsMode,
+    sweepResultsTheory,
+    sweepResultsBy,
+    sweepResultsInterval,
+    sweepResultsXScale,
+    sweepResultsYScale,
+]) {
     control.addEventListener("change", renderSweepResults);
 }
 for (const control of [sweepResultsX, sweepResultsY]) {

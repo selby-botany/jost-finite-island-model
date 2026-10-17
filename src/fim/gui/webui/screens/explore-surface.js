@@ -209,18 +209,31 @@ function drawExploreSlices(statistic) {
                 x,
                 index,
                 mean: series[index],
-                low: null,
-                high: null,
+                ciLow: null,
+                ciHigh: null,
+                sdLow: null,
+                sdHigh: null,
+                health: "healthy",
             }))
             .filter((mark) => mark.mean !== null);
+        // One curve with no error bars: the closed form is exact.
         drawSweepLine(canvas, {
             xKey: exploreAxisLabel(axisKey),
             values: axisValues,
             numeric: true,
             log: sweepAxisIsLog(axisValues),
-            marks,
-            theory: [],
+            curves: [
+                {
+                    label: null,
+                    color: STATISTIC_TRAJECTORY_COLORS[statistic] || SWEEP_FALLBACK_COLOR,
+                    shape: "circle",
+                    marks,
+                    theory: [],
+                },
+            ],
             statistic,
+            interval: "ci",
+            yScale: "auto",
         });
     };
     draw(

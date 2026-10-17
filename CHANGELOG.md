@@ -13,6 +13,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   without changing saved Settings. The shared controls can use a snapshot
   of saved defaults or restore originally loaded values; invalid edits
   leave the configuration unchanged.
+- **Families of curves on the sweep results screen.** **Curves by** draws one
+  curve for each value of a second axis, each with its own color and marker
+  shape, error bars (the interval of the mean, the spread across replicates,
+  or both), optional theory, and a key. The x and y axes can be linear or log,
+  and the arrow keys walk the points. The difference from theory can also be
+  shown as a fraction of the theory, and `fim sweep export --with-theory`
+  adds a `residual_relative` column beside `residual`.
 
 - **Sweep results show which points to trust.** On the sweep results screen, a
   point whose replicates did not all settle before the generation limit is

@@ -603,7 +603,7 @@ def test_export_sweep_table_writes_the_table_and_its_sidecar(
         "sidecar": str(tmp_path / "saved.meta.json"),
     }
     lines = target.read_text(encoding="utf-8").splitlines()
-    assert lines[0].endswith(",theory,residual")
+    assert lines[0].endswith(",theory,residual,residual_relative")
     assert len(lines) == 1 + 2 * 2  # two points, two statistics
     assert saving.asked[0]["save_filename"].endswith(".csv")
     meta = json.loads((tmp_path / "saved.meta.json").read_text(encoding="utf-8"))
@@ -679,3 +679,38 @@ def test_export_sweep_table_with_nothing_finished_says_so(
 
     assert reply == {"ok": False, "message": "no finished points to save yet"}
     assert saving.asked == []
+
+
+def test_get_sweep_series_returns_the_curve_with_both_intervals_and_health(
+    api: Api, window: _FakeWindow
+) -> None:
+    study_id = _finished_sweep(api, window)
+
+    reply = api.get_sweep_series(study_id, "d", "D", "", {})
+
+    assert reply["ok"] is True
+    assert (reply["x"], reply["by"], reply["statistic"]) == ("d", None, "D")
+    (curve,) = reply["series"]
+    assert curve["byValue"] is None
+    assert [point["x"] for point in curve["points"]] == [2, 3]
+    first = curve["points"][0]
+    assert {"mean", "ciLow", "ciHigh", "sdLow", "sdHigh", "health"} <= set(first)
+    assert first["health"] == "unreliable"  # the tiny runs stop at the cap
+    assert first["healthReason"].startswith("1 of 1 replicates")
+    assert first["directory"]
+
+
+def test_get_sweep_series_refuses_what_the_table_refuses(
+    api: Api, window: _FakeWindow
+) -> None:
+    study_id = _finished_sweep(api, window)
+
+    unknown = api.get_sweep_series(study_id, "nope", "D", None, {})
+    same = api.get_sweep_series(study_id, "d", "D", "d", {})
+    plain = api.get_sweep_series(
+        groups.create_study("Plain").study_id, "d", "D", None, {}
+    )
+
+    assert unknown["ok"] is False and "'nope' is not an axis" in unknown["message"]
+    assert same["ok"] is False and "cannot be split" in same["message"]
+    assert plain["ok"] is False and "not a sweep" in plain["message"]

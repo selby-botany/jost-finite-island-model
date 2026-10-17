@@ -123,6 +123,19 @@ const EXPLORE_FALLBACK_SERIES_COLOR = "#666666";
 // A sweep line for a statistic with no assigned color.
 const SWEEP_FALLBACK_COLOR = OKABE_ITO_BLUE;
 
+// One color per curve of a family (a sweep's "Curves by" axis). Yellow is
+// left out: it does not show on a light background.
+const SWEEP_SERIES_COLORS = [
+    OKABE_ITO_BLUE,
+    OKABE_ITO_VERMILLION,
+    OKABE_ITO_BLUISH_GREEN,
+    OKABE_ITO_REDDISH_PURPLE,
+    OKABE_ITO_ORANGE,
+    OKABE_ITO_SKY_BLUE,
+    OKABE_ITO_BLACK,
+    DARK2_PURPLE,
+];
+
 /* ---- Theme fallbacks ------------------------------------------------ */
 
 /* Used only when a `--fim-*` custom property reads back empty (a canvas

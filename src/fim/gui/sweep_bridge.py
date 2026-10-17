@@ -27,7 +27,7 @@ from fim.sweep_run import (
     sweep_point_statuses,
     sweep_spec_of,
 )
-from fim.sweep_table import PointHealth
+from fim.sweep_table import PointHealth, ResultTable
 
 
 def sweepable_keys_payload() -> list[dict[str, Any]]:
@@ -162,6 +162,57 @@ def _health_payload(health: PointHealth | None) -> dict[str, Any] | None:
         "converged": health.converged,
         "hitCap": health.hit_cap,
         "other": health.other,
+    }
+
+
+def series_payload(
+    study_id: str,
+    x: str,
+    statistic: str,
+    *,
+    by: str | None,
+    held: Mapping[str, Any],
+    results: Path | None = None,
+) -> dict[str, Any]:
+    """Group a sweep's results into response curves for the page.
+
+    The grouping is `ResultTable.series`; this only renames fields to the
+    page's own style. A request the table refuses comes back as a message.
+    """
+    try:
+        table = ResultTable.read(study_id, results=results)
+        curves = table.series(x, statistic, by=by, held=held)
+    except ValueError as error:
+        return {"ok": False, "message": str(error)}
+    return {
+        "ok": True,
+        "x": x,
+        "by": by,
+        "statistic": statistic,
+        "series": [
+            {
+                "byValue": curve.by_value,
+                "points": [
+                    {
+                        "x": point.x,
+                        "index": point.point_index,
+                        "runId": point.run_id,
+                        "directory": str(point.directory),
+                        "mean": point.mean,
+                        "ciLow": point.ci_low,
+                        "ciHigh": point.ci_high,
+                        "sdLow": point.sd_low,
+                        "sdHigh": point.sd_high,
+                        "sampleCount": point.sample_count,
+                        "nReplicates": point.replicates,
+                        "health": point.health or "healthy",
+                        "healthReason": point.health_reason,
+                    }
+                    for point in curve.points
+                ],
+            }
+            for curve in curves
+        ],
     }
 
 
