@@ -52,7 +52,7 @@ import webbrowser
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
-from math import exp, isfinite
+from math import isfinite
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from types import FrameType
@@ -69,7 +69,11 @@ from fim import group_lifecycle, logging_setup, paths, update
 from fim.cli import load_config
 from fim.config.defaults import DEFAULT_SWEEP_MAX_ATTEMPTS
 from fim.config.expert import describe_expert_settings
-from fim.config.limits import MAXIMUM_RECURSION_DEMES
+from fim.config.limits import (
+    MAXIMUM_RECURSION_DEMES,
+    MINIMUM_EQUILIBRIUM_DEMES,
+    MINIMUM_EQUILIBRIUM_N,
+)
 from fim.convergence.defaults import (
     describe_derived_convergence,
     island_migration_matrix,
@@ -163,18 +167,12 @@ from fim.statistics import (
     effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
-    equilibrium_heterozygosity_isolated,
-    equilibrium_heterozygosity_total,
     equilibrium_shannon_differentiation,
-    equilibrium_shannon_entropy_subpopulation,
-    equilibrium_shannon_entropy_total,
     identity_matrix_from_frequencies,
     identity_recovery_equilibrium,
-    identity_recovery_half_life,
     identity_recovery_rate,
     identity_recursion,
     matrix_identity_trajectory,
-    mutation_negligible_equilibrium,
 )
 from fim.statistics.catalog import (
     CATALOG,
@@ -189,7 +187,8 @@ from fim.statistics.catalog import (
 )
 from fim.statistics.genetic_distance import nei_distance_from_identity
 from fim.statistics.interval import confidence_interval
-from fim.sweep import SweepSpec, apply_coordinates, enumerate_points
+from fim.statistics.theory import equilibrium_numeric_predictions, theory_at
+from fim.sweep import SweepSpec, enumerate_points
 from fim.sweep_run import (
     LocalPointRunner,
     SweepEvent,
@@ -880,73 +879,6 @@ def _equilibrium_reference(
     }
 
 
-def _equilibrium_numeric_predictions(
-    n: int, m: float, mu: float, d: int
-) -> dict[str, float | bool | None]:
-    """Evaluate every Explore prediction at one `(N, m, mu, d)` point.
-
-    The single source of truth for *which* analytical quantities Explore
-    knows about. Both presentations read from here: `_equilibrium_
-    prediction_payload` formats these for the table, and `Api.get_
-    equilibrium_sweep` collects one of these per swept point for the
-    chart. Neither maintains its own second list of statistic names, so
-    a quantity added here appears in both places at once.
-
-    Every one of these is a closed-form function of `(N, m, mu, d)`
-    alone, so every one of them is defined along every one of the four
-    sweep axes. Several do not depend on every parameter -- `D` has no
-    `N` term at all (`equilibrium_d`'s own docstring: only the
-    migration-to-mutation ratio sets where it settles), `H_S` depends on
-    `N` and `mu` only, and the whole Whitlock identity-recovery family
-    depends on `N` and `m` only. Swept against a parameter they do not
-    contain, those produce a flat line. That flat line is the point, not
-    a degenerate case to suppress: `D` level across two orders of
-    magnitude of `N` while `G_ST` falls away beneath it is this
-    project's central claim, drawn rather than asserted.
-
-    Args:
-        n: Population size in gene copies per deme.
-        m: Symmetric migration rate.
-        mu: Infinite-alleles mutation rate.
-        d: Number of equal demes.
-
-    Returns:
-        One entry per predicted quantity, as a plain number (or, for
-        `mutation_negligible_equilibrium`, a bool). `None` marks a
-        quantity this particular configuration leaves undefined -- every
-        mutation-dependent entry at `mu == 0`, for instance. Callers
-        plotting these must break the line at a `None` rather than
-        reading it as a zero.
-    """
-
-    def value_of(function: Callable[..., float], *args: float | int) -> float | None:
-        try:
-            return function(*args)
-        except ValueError:
-            return None
-
-    s_s_value = value_of(equilibrium_shannon_entropy_subpopulation, n, m, mu, d)
-    s_t_value = value_of(equilibrium_shannon_entropy_total, n, m, mu, d)
-    return {
-        "D": value_of(equilibrium_d, m, mu, d),
-        "G_ST": value_of(equilibrium_g_st, n, m, mu, d),
-        "E_ST": value_of(equilibrium_shannon_differentiation, n, m, mu, d),
-        "H_S": value_of(equilibrium_heterozygosity_isolated, n, mu),
-        "H_T": value_of(equilibrium_heterozygosity_total, n, m, mu, d),
-        "S_S": s_s_value,
-        "S_T": s_t_value,
-        # `exp` of the full-precision entropy, never of an already
-        # display-rounded one -- `format_statistic` is applied to this
-        # result, not to its input.
-        "A_S": exp(s_s_value) if s_s_value is not None else None,
-        "A_T": exp(s_t_value) if s_t_value is not None else None,
-        "identity_recovery_rate": value_of(identity_recovery_rate, n, m),
-        "identity_recovery_equilibrium": value_of(identity_recovery_equilibrium, n, m),
-        "identity_recovery_half_life": value_of(identity_recovery_half_life, n, m),
-        "mutation_negligible_equilibrium": mutation_negligible_equilibrium(m, mu, n),
-    }
-
-
 def _equilibrium_prediction_payload(
     n: int, m: float, mu: float, d: int, digits: int
 ) -> tuple[dict[str, str | bool], dict[str, str]]:
@@ -963,7 +895,7 @@ def _equilibrium_prediction_payload(
         Formatted predictions and qualification messages. Formula-specific
         ``ValueError`` results become the existing ``"undefined"`` value.
     """
-    values = _equilibrium_numeric_predictions(n, m, mu, d)
+    values = equilibrium_numeric_predictions(n, m, mu, d)
     predictions: dict[str, str | bool] = {
         name: value if isinstance(value, bool) else format_statistic(value, digits)
         for name, value in values.items()
@@ -971,7 +903,7 @@ def _equilibrium_prediction_payload(
     qualifications = {
         "S_S": (
             "Approximate; less reliable when d = 2"
-            if d == _MINIMUM_EQUILIBRIUM_DEMES
+            if d == MINIMUM_EQUILIBRIUM_DEMES
             else "Approximate equilibrium subpopulation entropy"
         )
     }
@@ -1846,10 +1778,6 @@ def _nearest_index(values: Sequence[float | int], target: float | int) -> int:
     return min(range(len(values)), key=lambda index: abs(values[index] - target))
 
 
-_MINIMUM_EQUILIBRIUM_N: Final = 1
-_MINIMUM_EQUILIBRIUM_DEMES: Final = 2
-
-
 def _parse_equilibrium_inputs(
     n: str, m: str, mu: str, d: str
 ) -> tuple[int, float, float, int]:
@@ -1889,9 +1817,9 @@ def _parse_equilibrium_inputs(
         n_value, m_value, mu_value, d_value = (int(n), float(m), float(mu), int(d))
     except (TypeError, ValueError) as error:
         raise ValueError("N, d, m, and mu must all be numbers") from error
-    if n_value < _MINIMUM_EQUILIBRIUM_N:
+    if n_value < MINIMUM_EQUILIBRIUM_N:
         raise ValueError("N must be a positive number of individuals")
-    if d_value < _MINIMUM_EQUILIBRIUM_DEMES:
+    if d_value < MINIMUM_EQUILIBRIUM_DEMES:
         raise ValueError("d must be at least 2")
     for name, value in (("m", m_value), ("mu", mu_value)):
         if not isfinite(value) or not 0.0 <= value <= 1.0:
@@ -3587,7 +3515,7 @@ class Api:
             for x_value in x_values:
                 point = {**held, x_axis: x_value, y_axis: y_value}
                 row.append(
-                    _equilibrium_numeric_predictions(
+                    equilibrium_numeric_predictions(
                         int(point["N"]) * ploidy_value,
                         float(point["m"]),
                         float(point["mu"]),
@@ -3649,7 +3577,7 @@ class Api:
         points = []
         for value in values:
             point = {**held, axis: round(value) if axis in ("N", "d") else value}
-            predictions = _equilibrium_numeric_predictions(
+            predictions = equilibrium_numeric_predictions(
                 int(point["N"]) * ploidy_value,
                 float(point["m"]),
                 float(point["mu"]),
@@ -3671,7 +3599,7 @@ class Api:
         values, which are held fixed at whatever `get_equilibrium_
         predictions` was just called with.
 
-        Every quantity `_equilibrium_numeric_predictions` knows about is
+        Every quantity `equilibrium_numeric_predictions` knows about is
         evaluated at every swept point, not the `D`/`G_ST`/`E_ST` subset
         that shares a `[0, 1]` domain. No statistic is privileged: each
         one is a closed-form function of `(N, m, mu, d)`, so each one has
@@ -3742,7 +3670,7 @@ class Api:
             points.append(
                 {
                     "x": value,
-                    **_equilibrium_numeric_predictions(
+                    **equilibrium_numeric_predictions(
                         sweep_n, sweep_m, sweep_mu, sweep_d
                     ),
                 }
@@ -5707,7 +5635,7 @@ class Api:
         difference heat maps. Each entry of `coordinates` is a mapping of
         axis key to value; it is applied to the Study's stored base the
         way a sweep point is (`fim.sweep.apply_coordinates`), and the
-        predictions are those of `_equilibrium_numeric_predictions`
+        predictions are those of `equilibrium_numeric_predictions`
         (restricted to plain numbers). A point the closed form does not
         cover (a non-island topology, per-deme `N`) yields `None` for
         every statistic, never an error.
@@ -5721,7 +5649,7 @@ class Api:
             spec = sweep_spec_of(groups.get_study(study_id))
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        return {"ok": True, "values": [_theory_at(spec.base, e) for e in coordinates]}
+        return {"ok": True, "values": [theory_at(spec.base, e) for e in coordinates]}
 
     def _busy_message(self) -> str | None:
         """Return why a sweep cannot start now, or `None` if it can."""
@@ -7032,38 +6960,6 @@ def _sweep_point_count(study: groups.StudyManifest) -> int | None:
         return None
     points = study.sweep_spec.get("points")
     return len(points) if isinstance(points, list) else None
-
-
-_THEORY_STATISTICS: Final = ("D", "G_ST", "E_ST", "H_S", "H_T")
-"""The predicted quantities that are also reported statistics of a run."""
-
-
-def _theory_at(
-    base: Mapping[str, Any], coordinates: Mapping[str, Any]
-) -> dict[str, float | None]:
-    """Closed-form predictions for one sweep coordinate, `None` where undefined."""
-    undefined: dict[str, float | None] = dict.fromkeys(_THEORY_STATISTICS)
-    try:
-        mapping = apply_coordinates(base, coordinates)
-        n, m, mu, d = mapping["N"], mapping["m"], mapping["mu"], mapping["d"]
-    except (ValueError, KeyError):
-        return undefined
-    scalars = all(
-        isinstance(value, int | float) and not isinstance(value, bool)
-        for value in (n, m, mu, d)
-    )
-    if not scalars or n < _MINIMUM_EQUILIBRIUM_N or d < _MINIMUM_EQUILIBRIUM_DEMES:
-        return undefined
-    predictions = _equilibrium_numeric_predictions(int(n), float(m), float(mu), int(d))
-    result: dict[str, float | None] = {}
-    for name in _THEORY_STATISTICS:
-        value = predictions.get(name)
-        result[name] = (
-            float(value)
-            if isinstance(value, float | int) and not isinstance(value, bool)
-            else None
-        )
-    return result
 
 
 def _push_sweep_event(window: _EvaluatesJs, event: SweepEvent) -> None:

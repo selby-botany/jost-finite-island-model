@@ -24,6 +24,9 @@ It is organized into three modules by subject:
 - `fim.statistics.pairwise` — every deme pair's Nei identities at once,
   vectorized with numpy (the one module here that needs it), for
   capturing all-pairs matrices at large deme counts.
+- `fim.statistics.theory` — the closed-form equilibrium predictions of each
+  reported statistic, for a configuration or a sweep point, shared by the
+  Explore screen, the sweep results card and the sweep export.
 - `fim.statistics.interval` — confidence intervals for a sample mean
   (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
   independent replicates. See that module's own docstring for what a

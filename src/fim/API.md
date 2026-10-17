@@ -85,6 +85,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [describe\_expert\_settings](#fim.config.expert.describe_expert_settings)
 * [fim.config.limits](#fim.config.limits)
   * [MAXIMUM\_RECURSION\_DEMES](#fim.config.limits.MAXIMUM_RECURSION_DEMES)
+  * [MINIMUM\_EQUILIBRIUM\_N](#fim.config.limits.MINIMUM_EQUILIBRIUM_N)
+  * [MINIMUM\_EQUILIBRIUM\_DEMES](#fim.config.limits.MINIMUM_EQUILIBRIUM_DEMES)
 * [fim.config.numerics](#fim.config.numerics)
   * [MAXIMUM\_LAG1\_CORRELATION](#fim.config.numerics.MAXIMUM_LAG1_CORRELATION)
   * [MINIMUM\_WINDOW\_VALUES](#fim.config.numerics.MINIMUM_WINDOW_VALUES)
@@ -1528,6 +1530,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pairwise\_matrices](#fim.statistics.pairwise.pairwise_matrices)
   * [pairwise\_nei\_identities](#fim.statistics.pairwise.pairwise_nei_identities)
   * [upper\_triangle](#fim.statistics.pairwise.upper_triangle)
+* [fim.statistics.theory](#fim.statistics.theory)
+  * [THEORY\_STATISTICS](#fim.statistics.theory.THEORY_STATISTICS)
+  * [equilibrium\_numeric\_predictions](#fim.statistics.theory.equilibrium_numeric_predictions)
+  * [theory\_for\_configuration](#fim.statistics.theory.theory_for_configuration)
+  * [theory\_at](#fim.statistics.theory.theory_at)
 * [fim.stored](#fim.stored)
   * [StoredReplicate](#fim.stored.StoredReplicate)
     * [trajectory\_path](#fim.stored.StoredReplicate.trajectory_path)
@@ -3069,6 +3076,22 @@ cost grows as `d⁶`, so larger explicit migration matrices must be given
 explicit convergence values.
 
 Kind: policy (run time).
+
+<a id="fim.config.limits.MINIMUM_EQUILIBRIUM_N"></a>
+
+#### MINIMUM\_EQUILIBRIUM\_N
+
+Smallest population size the closed-form equilibrium formulas accept.
+
+Kind: numerical guard.
+
+<a id="fim.config.limits.MINIMUM_EQUILIBRIUM_DEMES"></a>
+
+#### MINIMUM\_EQUILIBRIUM\_DEMES
+
+Smallest deme count the closed-form equilibrium formulas accept.
+
+Kind: numerical guard.
 
 <a id="fim.config.numerics"></a>
 
@@ -11000,7 +11023,7 @@ display range independent of the other three fields' current
 values, which are held fixed at whatever `get_equilibrium_
 predictions` was just called with.
 
-Every quantity `_equilibrium_numeric_predictions` knows about is
+Every quantity `equilibrium_numeric_predictions` knows about is
 evaluated at every swept point, not the `D`/`G_ST`/`E_ST` subset
 that shares a `[0, 1]` domain. No statistic is privileged: each
 one is a closed-form function of `(N, m, mu, d)`, so each one has
@@ -12637,7 +12660,7 @@ For the sweep results card's theory overlay and its theory and
 difference heat maps. Each entry of `coordinates` is a mapping of
 axis key to value; it is applied to the Study's stored base the
 way a sweep point is (`fim.sweep.apply_coordinates`), and the
-predictions are those of `_equilibrium_numeric_predictions`
+predictions are those of `equilibrium_numeric_predictions`
 (restricted to plain numbers). A point the closed form does not
 cover (a non-island topology, per-deme `N`) yields `None` for
 every statistic, never an error.
@@ -32861,6 +32884,9 @@ It is organized into three modules by subject:
 - `fim.statistics.pairwise` — every deme pair's Nei identities at once,
   vectorized with numpy (the one module here that needs it), for
   capturing all-pairs matrices at large deme counts.
+- `fim.statistics.theory` — the closed-form equilibrium predictions of each
+  reported statistic, for a configuration or a sweep point, shared by the
+  Explore screen, the sweep results card and the sweep export.
 - `fim.statistics.interval` — confidence intervals for a sample mean
   (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
   independent replicates. See that module's own docstring for what a
@@ -36045,6 +36071,117 @@ diagonal.
 
   ``d * (d - 1) / 2`` values; a NaN entry (an undefined value) is
   ``None``, since strict JSON has no NaN.
+
+<a id="fim.statistics.theory"></a>
+
+# fim.statistics.theory
+
+Closed-form predictions for an island model at equilibrium.
+
+Every function takes plain numbers and returns plain numbers, like the rest
+of this package. The GUI's Explore screen and sweep results card, and the
+sweep export's theory columns, all read their predictions from here, so a
+quantity added once appears in all of them.
+
+<a id="fim.statistics.theory.THEORY_STATISTICS"></a>
+
+#### THEORY\_STATISTICS
+
+The predicted quantities that are also reported statistics of a run.
+
+<a id="fim.statistics.theory.equilibrium_numeric_predictions"></a>
+
+#### equilibrium\_numeric\_predictions
+
+```python
+def equilibrium_numeric_predictions(n: int, m: float, mu: float,
+                                    d: int) -> dict[str, float | bool | None]
+```
+
+Evaluate every Explore prediction at one `(N, m, mu, d)` point.
+
+The single source of truth for *which* analytical quantities Explore
+knows about. Every presentation reads from here: the GUI's
+`_equilibrium_prediction_payload` formats these for the table,
+`Api.get_equilibrium_sweep` collects one of these per swept point for
+the chart, and the sweep export reads them as its theory columns. None
+maintains its own second list of statistic names, so a quantity added
+here appears everywhere at once.
+
+Every one of these is a closed-form function of `(N, m, mu, d)`
+alone, so every one of them is defined along every one of the four
+sweep axes. Several do not depend on every parameter -- `D` has no
+`N` term at all (`equilibrium_d`'s own docstring: only the
+migration-to-mutation ratio sets where it settles), `H_S` depends on
+`N` and `mu` only, and the whole Whitlock identity-recovery family
+depends on `N` and `m` only. Swept against a parameter they do not
+contain, those produce a flat line. That flat line is the point, not
+a degenerate case to suppress: `D` level across two orders of
+magnitude of `N` while `G_ST` falls away beneath it is this
+project's central claim, drawn rather than asserted.
+
+**Arguments**:
+
+- `n` - Population size in gene copies per deme.
+- `m` - Symmetric migration rate.
+- `mu` - Infinite-alleles mutation rate.
+- `d` - Number of equal demes.
+
+
+**Returns**:
+
+  One entry per predicted quantity, as a plain number (or, for
+  `mutation_negligible_equilibrium`, a bool). `None` marks a
+  quantity this particular configuration leaves undefined -- every
+  mutation-dependent entry at `mu == 0`, for instance. Callers
+  plotting these must break the line at a `None` rather than
+  reading it as a zero.
+
+<a id="fim.statistics.theory.theory_for_configuration"></a>
+
+#### theory\_for\_configuration
+
+```python
+def theory_for_configuration(
+        configuration: Mapping[str, Any]) -> dict[str, float | None]
+```
+
+Return the closed-form prediction of each reported statistic.
+
+**Arguments**:
+
+- `configuration` - A run configuration with at least `N`, `m`, `mu`
+  and `d`, as a sweep point's mapping.
+
+
+**Returns**:
+
+  A value for each of `THEORY_STATISTICS`; all `None` where the closed
+  form does not cover the configuration (a missing or non-numeric
+  parameter, or `N` or `d` below the smallest the formulas accept).
+
+<a id="fim.statistics.theory.theory_at"></a>
+
+#### theory\_at
+
+```python
+def theory_at(base: Mapping[str, Any],
+              coordinates: Mapping[str, Any]) -> dict[str, float | None]
+```
+
+Return the predictions for a sweep's base configuration at coordinates.
+
+**Arguments**:
+
+- `base` - The sweep's base configuration.
+- `coordinates` - Axis key to value, applied to `base` the way a sweep
+  point is.
+
+
+**Returns**:
+
+  As `theory_for_configuration`; all `None` if the coordinates do not
+  apply to the base.
 
 <a id="fim.stored"></a>
 

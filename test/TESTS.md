@@ -203,6 +203,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_interval`](#statistics.test_interval)
   - [`test_pairwise`](#statistics.test_pairwise)
   - [`test_properties`](#statistics.test_properties)
+  - [`test_theory`](#statistics.test_theory)
 - [`test/validation/`](#group-validation)
   - [`test_api_docs`](#validation.test_api_docs)
   - [`test_benchmark_axes`](#validation.test_benchmark_axes)
@@ -40984,6 +40985,16 @@ Aoki et al. (2023) §5.3 Claim 4: G_ST responds in a strictly downward
 direction to higher gene flow (m). Tested as a pure property test across
 arbitrary population sizes, deme counts, and mutation rates against
 equilibrium_g_st.
+
+<a id="statistics.test_theory"></a>
+
+# statistics.test\_theory
+
+Tests for `fim.statistics.theory`, the closed-form predictions.
+
+The expected values come from the differentiation module's own formulas, so
+these tests pin the plumbing (which inputs reach which formula, and when a
+prediction is undefined), not the population genetics.
 
 
 

@@ -56,6 +56,8 @@ package and fails on one that is not on its short allow list.
 | `AVERAGING_MULTIPLE_MAXIMUM` | `convergence.py` | policy | Largest matched averaging window, in relaxation times. |
 | `FIRST_WAVE_AVERAGING_MULTIPLE` | `convergence.py` | policy | Averaging window, in relaxation times, of the first wave of replicates. |
 | `MAXIMUM_RECURSION_DEMES` | `limits.py` | policy (run time) | Largest `d` for which the `d² by d²` eigenvalue route is used. |
+| `MINIMUM_EQUILIBRIUM_DEMES` | `limits.py` | numerical guard | Smallest deme count the closed-form equilibrium formulas accept. |
+| `MINIMUM_EQUILIBRIUM_N` | `limits.py` | numerical guard | Smallest population size the closed-form equilibrium formulas accept. |
 | `MAXIMUM_LAG1_CORRELATION` | `numerics.py` | numerical guard | A lag-1 correlation this close to 1 makes `tau_int` (below) blow up numerically for a reason that is ... |
 | `MINIMUM_WINDOW_VALUES` | `numerics.py` | derivable | `window_statistics` needs at least this many values to define a lag-1 correlation at all (two ... |
 | `MINIMUM_CRITERION_WINDOW` | `numerics.py` | derivable | `MINIMUM_CRITERION_WINDOW`. |

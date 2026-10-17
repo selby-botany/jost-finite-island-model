@@ -94,6 +94,7 @@ from fim.statistics.catalog import (
     pair_keys,
     report_keys,
 )
+from fim.statistics.theory import equilibrium_numeric_predictions
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
 
@@ -1998,7 +1999,7 @@ def test_get_equilibrium_sweep_carries_every_statistic_on_every_axis(
     axes. The chart's unit-family grouping is a presentation concern; the
     bridge withholds nothing.
     """
-    expected = set(app_module._equilibrium_numeric_predictions(450, 0.001, 3e-05, 20))
+    expected = set(equilibrium_numeric_predictions(450, 0.001, 3e-05, 20))
 
     result = Api().get_equilibrium_sweep(
         axis=axis, n="450", m="0.001", mu="0.00003", d="20"
