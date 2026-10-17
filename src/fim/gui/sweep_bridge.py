@@ -159,7 +159,8 @@ def results_payload(
             "directory": str(result.directory),
             "nReplicates": result.n_replicates,
             "statistics": {
-                name: dict(stat) for name, stat in result.statistics.items()
+                name: {"mean": cell.mean, "low": cell.low, "high": cell.high}
+                for name, cell in result.statistics.items()
             },
         }
         for result in sweep_point_results(study, results=results)

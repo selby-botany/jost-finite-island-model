@@ -40,6 +40,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_stored`](#test.test_stored)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_run`](#test.test_sweep_run)
+  - [`test_sweep_table`](#test.test_sweep_table)
   - [`test_termination`](#test.test_termination)
   - [`test_update`](#test.test_update)
   - [`test_workspace`](#test.test_workspace)
@@ -4585,6 +4586,27 @@ def test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs(
 
 The fixture is a Study whose stored plan and failure file use ids from
 before the identity change (2026-10-15), written directly.
+
+<a id="test.test_sweep_table"></a>
+
+# test.test\_sweep\_table
+
+Tests for `fim.sweep_table`: point cells, health, and the health cache.
+
+Health is derived from the manifests a run already wrote, so most tests build
+those few files by hand: no simulation runs, and the result depends only on
+the files.
+
+<a id="test.test_sweep_table.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Point the results directory at a temporary one for the test.
 
 <a id="test.test_termination"></a>
 

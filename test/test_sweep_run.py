@@ -367,11 +367,11 @@ def test_point_results_read_a_batch_summary_and_a_scalar_report(results: Path) -
 
     assert batch_point.coordinates == {"d": 2}
     assert batch_point.n_replicates == 2
-    assert set(batch_point.statistics["D"]) == {"mean", "low", "high"}
-    assert batch_point.statistics["D"]["low"] is not None
+    assert batch_point.statistics["D"].low is not None
+    assert batch_point.statistics["D"].sample_count == 2
     assert scalar_point.n_replicates == 1
-    assert scalar_point.statistics["D"]["low"] is None
-    assert scalar_point.statistics["D"]["mean"] is not None
+    assert scalar_point.statistics["D"].low is None
+    assert scalar_point.statistics["D"].mean is not None
 
 
 def test_point_results_skip_points_that_have_not_run(results: Path) -> None:

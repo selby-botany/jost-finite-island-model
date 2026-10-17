@@ -372,9 +372,9 @@ def _report(study_id: str, statistic: str, *, as_csv: bool) -> int:
                 *(_format(status.coordinates.get(key, "")) for key in keys),
                 status.state,
                 str(result.n_replicates) if result is not None else "",
-                _format(stat["mean"]) if stat else "",
-                _format(stat["low"]) if stat and stat["low"] is not None else "",
-                _format(stat["high"]) if stat and stat["high"] is not None else "",
+                _format(stat.mean) if stat else "",
+                _format(stat.low) if stat and stat.low is not None else "",
+                _format(stat.high) if stat and stat.high is not None else "",
             ]
         )
     if as_csv:

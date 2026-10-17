@@ -84,6 +84,12 @@ from fim.sweep import (
     point_run_description,
     point_run_name,
 )
+from fim.sweep_table import (
+    HealthCache,
+    PointRow,
+    StatisticCell,
+    read_point_health,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1859,66 +1865,91 @@ def write_reproducibility_note(directory: Path, comparison: Mapping[str, Any]) -
     )
 
 
-@dataclass(frozen=True, slots=True)
-class PointResult:
-    """One finished point's statistics, for the across-points views.
-
-    Attributes:
-        index: The point's grid index.
-        coordinates: The varied values, by axis key.
-        run_id: The point's id.
-        directory: The point's run directory.
-        n_replicates: Replicates the run has (1 for a scalar run).
-        statistics: Each statistic as `{"mean": ..., "low": ..., "high": ...}`;
-            `low` and `high` are `None` for a single run, which has no
-            across-replicate interval.
-    """
-
-    index: int
-    coordinates: Mapping[str, Any]
-    run_id: str
-    directory: Path
-    n_replicates: int
-    statistics: Mapping[str, Mapping[str, float | None]]
-
-
 def sweep_point_results(
     study: StudyManifest, *, results: Path | None = None
-) -> list[PointResult]:
+) -> list[PointRow]:
     """Read the final statistics of every finished point, in grid order.
 
     A batch point reads its `summary.json` (mean and confidence interval
-    across replicates); a scalar point reads its `report.json`. A point
-    whose files cannot be read is left out, like a missing run directory
-    elsewhere in the Study code. Nothing is stored: the aggregate is
-    computed each time from small JSON files.
+    across replicates); a scalar point reads its `report.json`. Each row also
+    carries how the point's replicates ended (`PointHealth`), derived from the
+    run's manifests and cached beside the sweep's status file. A point whose
+    files cannot be read is left out, like a missing run directory elsewhere
+    in the Study code. The statistics are computed each time from small JSON
+    files; only the health counts are cached, and deleting the cache loses
+    nothing.
     """
     current, stale = _member_runs(study, __version__, results)
-    by_id = {**stale, **current}
-    found: list[PointResult] = []
+    cache = HealthCache(health_cache_path(study.study_id, results=results))
+    found: list[PointRow] = []
     for entry in stored_points(study):
-        directory = by_id.get(str(entry["run_id"]))
+        run_id = str(entry["run_id"])
+        directory = current.get(run_id) or stale.get(run_id)
         if directory is None:
             continue
-        statistics = _read_point_statistics(directory)
-        if statistics is None:
-            continue
-        found.append(
-            PointResult(
-                index=int(entry["index"]),
-                coordinates=dict(entry.get("coordinates", {})),
-                run_id=str(entry["run_id"]),
-                directory=directory,
-                n_replicates=statistics[0],
-                statistics=statistics[1],
-            )
+        row = _read_point_row(
+            entry, directory, "done" if run_id in current else "stale", cache
         )
+        if row is not None:
+            found.append(row)
+    cache.save()
     return found
+
+
+def health_cache_path(study_id: str, *, results: Path | None = None) -> Path:
+    """Return the disposable cache of a sweep's point health counts."""
+    return failures_path(study_id, results=results).with_name(f"{study_id}.health.json")
+
+
+def _read_point_row(
+    entry: Mapping[str, Any], directory: Path, state: PointState, cache: HealthCache
+) -> PointRow | None:
+    """Build a point's row from its run directory, or `None` if unreadable."""
+    statistics = _read_point_statistics(directory)
+    if statistics is None:
+        return None
+    manifest = _read_json_object(directory / "manifest.json")
+    parameters = manifest.get("parameters")
+    seed = parameters.get("seed") if isinstance(parameters, dict) else None
+    backend = manifest.get("engine_backend")
+    if backend is None:
+        replicate = _read_json_object(directory / "replicate-001" / "manifest.json")
+        backend = replicate.get("engine_backend")
+    return PointRow(
+        index=int(entry["index"]),
+        coordinates=dict(entry.get("coordinates", {})),
+        run_id=str(entry["run_id"]),
+        state=state,
+        directory=directory,
+        n_replicates=statistics[0],
+        seed=seed if isinstance(seed, int) else None,
+        software_version=_text_or_none(manifest.get("software_version")),
+        engine_backend=_text_or_none(backend),
+        started_at=_text_or_none(manifest.get("started_at")),
+        ended_at=_text_or_none(manifest.get("ended_at")),
+        statistics=statistics[1],
+        health=read_point_health(directory, cache=cache),
+        parameters=dict(parameters) if isinstance(parameters, dict) else {},
+    )
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    """Return the JSON object in `path`, or an empty one if it cannot be read."""
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _text_or_none(value: object) -> str | None:
+    """Return `value` if it is text, else `None`."""
+    return value if isinstance(value, str) else None
 
 
 def _read_point_statistics(
     directory: Path,
-) -> tuple[int, dict[str, dict[str, float | None]]] | None:
+) -> tuple[int, dict[str, StatisticCell]] | None:
     """Return `(replicates, statistics)` from a run directory, or `None`."""
     summary = directory / "summary.json"
     report = directory / "report.json"
@@ -1929,7 +1960,7 @@ def _read_point_statistics(
         if report.is_file():
             payload = json.loads(report.read_text(encoding="utf-8"))
             return 1, {
-                name: {"mean": float(value), "low": None, "high": None}
+                name: StatisticCell(mean=float(value))
                 for name, value in payload.items()
                 if isinstance(value, int | float)
                 and not isinstance(value, bool)
@@ -1942,18 +1973,15 @@ def _read_point_statistics(
 
 def _batch_statistics(
     payload: object,
-) -> tuple[int, dict[str, dict[str, float | None]]] | None:
-    """Reduce a batch `summary.json` to mean and interval per statistic."""
+) -> tuple[int, dict[str, StatisticCell]] | None:
+    """Reduce a batch `summary.json` to a cell per statistic, keeping every field."""
     if not isinstance(payload, dict):
         return None
-    statistics: dict[str, dict[str, float | None]] = {}
+    statistics: dict[str, StatisticCell] = {}
     replicates = 0
     for name, entry in payload.items():
         if isinstance(entry, dict) and "mean" in entry:
-            statistics[name] = {
-                "mean": float(entry["mean"]),
-                "low": float(entry["low"]) if "low" in entry else None,
-                "high": float(entry["high"]) if "high" in entry else None,
-            }
-            replicates = max(replicates, int(entry.get("sample_count", 0)))
+            cell = StatisticCell.from_summary_entry(entry)
+            statistics[name] = cell
+            replicates = max(replicates, cell.sample_count)
     return (replicates, statistics) if statistics else None

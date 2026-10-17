@@ -1610,8 +1610,23 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [Replan](#fim.sweep_run.Replan)
   * [replan\_sweep](#fim.sweep_run.replan_sweep)
   * [write\_reproducibility\_note](#fim.sweep_run.write_reproducibility_note)
-  * [PointResult](#fim.sweep_run.PointResult)
   * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
+  * [health\_cache\_path](#fim.sweep_run.health_cache_path)
+* [fim.sweep\_table](#fim.sweep_table)
+  * [HealthClass](#fim.sweep_table.HealthClass)
+  * [StatisticCell](#fim.sweep_table.StatisticCell)
+    * [from\_summary\_entry](#fim.sweep_table.StatisticCell.from_summary_entry)
+  * [HealthPolicy](#fim.sweep_table.HealthPolicy)
+  * [DEFAULT\_HEALTH\_POLICY](#fim.sweep_table.DEFAULT_HEALTH_POLICY)
+  * [PointHealth](#fim.sweep_table.PointHealth)
+    * [classify](#fim.sweep_table.PointHealth.classify)
+    * [to\_dict](#fim.sweep_table.PointHealth.to_dict)
+  * [PointRow](#fim.sweep_table.PointRow)
+  * [HealthCache](#fim.sweep_table.HealthCache)
+    * [get](#fim.sweep_table.HealthCache.get)
+    * [put](#fim.sweep_table.HealthCache.put)
+    * [save](#fim.sweep_table.HealthCache.save)
+  * [read\_point\_health](#fim.sweep_table.read_point_health)
 * [fim.termination](#fim.termination)
   * [TERMINATED\_EXIT\_STATUS](#fim.termination.TERMINATED_EXIT_STATUS)
   * [sigterm\_raises\_exit](#fim.termination.sigterm_raises_exit)
@@ -37537,28 +37552,6 @@ Record, beside a recomputed run, that it differs from an older version's.
 A sidecar file, deliberately outside the manifest's artifact digests, so
 the run's own record of itself is untouched.
 
-<a id="fim.sweep_run.PointResult"></a>
-
-## PointResult Objects
-
-```python
-@dataclass(frozen=True, slots=True)
-class PointResult()
-```
-
-One finished point's statistics, for the across-points views.
-
-**Attributes**:
-
-- `index` - The point's grid index.
-- `coordinates` - The varied values, by axis key.
-- `run_id` - The point's id.
-- `directory` - The point's run directory.
-- `n_replicates` - Replicates the run has (1 for a scalar run).
-- `statistics` - Each statistic as `{"mean": ..., "low": ..., "high": ...}`;
-  `low` and `high` are `None` for a single run, which has no
-  across-replicate interval.
-
 <a id="fim.sweep_run.sweep_point_results"></a>
 
 #### sweep\_point\_results
@@ -37566,16 +37559,257 @@ One finished point's statistics, for the across-points views.
 ```python
 def sweep_point_results(study: StudyManifest,
                         *,
-                        results: Path | None = None) -> list[PointResult]
+                        results: Path | None = None) -> list[PointRow]
 ```
 
 Read the final statistics of every finished point, in grid order.
 
 A batch point reads its `summary.json` (mean and confidence interval
-across replicates); a scalar point reads its `report.json`. A point
-whose files cannot be read is left out, like a missing run directory
-elsewhere in the Study code. Nothing is stored: the aggregate is
-computed each time from small JSON files.
+across replicates); a scalar point reads its `report.json`. Each row also
+carries how the point's replicates ended (`PointHealth`), derived from the
+run's manifests and cached beside the sweep's status file. A point whose
+files cannot be read is left out, like a missing run directory elsewhere
+in the Study code. The statistics are computed each time from small JSON
+files; only the health counts are cached, and deleting the cache loses
+nothing.
+
+<a id="fim.sweep_run.health_cache_path"></a>
+
+#### health\_cache\_path
+
+```python
+def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
+```
+
+Return the disposable cache of a sweep's point health counts.
+
+<a id="fim.sweep_table"></a>
+
+# fim.sweep\_table
+
+What a sweep's points produced: their statistics and how far to trust them.
+
+A `PointRow` is one point of a sweep Study read back from its run: the
+statistic of each kind with its interval (`StatisticCell`) and whether the
+point's replicates settled (`PointHealth`). Everything is derived from the
+small JSON files a run already wrote, so nothing here changes what a run
+stores, and runs that already exist (committed examples included) read the
+same way.
+
+A replicate that reaches the generation cap before its statistics settle
+still finishes, and its value may be biased. Health is how a long sweep says
+which points to trust; a point that is not healthy is flagged, never
+dropped (botanist question Q6).
+
+<a id="fim.sweep_table.HealthClass"></a>
+
+#### HealthClass
+
+How far to trust a point: `healthy` (every replicate settled, within the
+requested precision), `degraded` (some capped or unsettled, or wider than the
+precision), or `unreliable` (every replicate hit the generation cap).
+
+<a id="fim.sweep_table.StatisticCell"></a>
+
+## StatisticCell Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class StatisticCell()
+```
+
+One statistic of one point, with its across-replicate interval.
+
+**Attributes**:
+
+- `mean` - The mean over replicates (the value itself for a single run).
+- `low` - Lower end of the confidence interval, or `None` for a single run.
+- `high` - Upper end, or `None` for a single run.
+- `half_width` - Half the interval's width, or `None`.
+- `sample_std` - Standard deviation across replicates, or `None`.
+- `sample_count` - Replicates that had a defined value.
+- `confidence` - The interval's confidence level, or `None`.
+
+<a id="fim.sweep_table.StatisticCell.from_summary_entry"></a>
+
+#### from\_summary\_entry
+
+```python
+@classmethod
+def from_summary_entry(cls, entry: Mapping[str, Any]) -> StatisticCell
+```
+
+Build a cell from one statistic's entry in a batch `summary.json`.
+
+<a id="fim.sweep_table.HealthPolicy"></a>
+
+## HealthPolicy Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class HealthPolicy()
+```
+
+The thresholds that turn replicate outcomes into a `HealthClass`.
+
+**Attributes**:
+
+- `precision_slack` - A watched statistic's achieved half width may be up
+  to this multiple of the run's `precision` before the point counts
+  as degraded.
+
+<a id="fim.sweep_table.DEFAULT_HEALTH_POLICY"></a>
+
+#### DEFAULT\_HEALTH\_POLICY
+
+The policy used unless a caller passes another.
+
+<a id="fim.sweep_table.PointHealth"></a>
+
+## PointHealth Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointHealth()
+```
+
+How a point's replicates ended.
+
+**Attributes**:
+
+- `replicates` - Replicates the point has.
+- `converged` - Replicates that settled (or averaged their whole window).
+- `hit_cap` - Replicates that stopped at the generation cap.
+- `other` - Replicates that ended some other way (cancelled, interrupted).
+- `achieved_half_width` - The interval half width of each watched
+  statistic, from `summary.json` (empty for a single run).
+- `precision` - The `precision` the run asked for, or `None` if unknown.
+
+<a id="fim.sweep_table.PointHealth.classify"></a>
+
+#### classify
+
+```python
+def classify(policy: HealthPolicy = DEFAULT_HEALTH_POLICY) -> HealthClass
+```
+
+Return how far to trust this point under `policy`.
+
+<a id="fim.sweep_table.PointHealth.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return the health as plain values, for JSON.
+
+<a id="fim.sweep_table.PointRow"></a>
+
+## PointRow Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointRow()
+```
+
+One point of a sweep, read back from its run.
+
+**Attributes**:
+
+- `index` - The point's grid index.
+- `coordinates` - The varied values, by axis key.
+- `run_id` - The point's id.
+- `state` - `done`, or `stale` for a run made by another software version.
+- `directory` - The point's run directory.
+- `n_replicates` - Replicates the run has (1 for a scalar run).
+- `seed` - The run's seed (a batch's base seed).
+- `software_version` - The version that made the run.
+- `engine_backend` - The backend that ran it, if recorded.
+- `started_at` - When it started (UTC text), if recorded.
+- `ended_at` - When it ended, if recorded.
+- `statistics` - Each statistic's cell.
+- `health` - How the replicates ended, or `None` if it cannot be read.
+- `parameters` - The run's resolved configuration.
+
+<a id="fim.sweep_table.HealthCache"></a>
+
+## HealthCache Objects
+
+```python
+class HealthCache()
+```
+
+Disposable cache of the replicate outcome counts of a sweep's points.
+
+Counting outcomes opens one small manifest per replicate, which adds up
+over hundreds of points. The counts are kept beside the sweep's status
+file, keyed by run id and the digest of the run's own manifest, so a
+changed run is read again. Deleting the file loses nothing.
+
+**Arguments**:
+
+- `path` - The cache file.
+
+<a id="fim.sweep_table.HealthCache.get"></a>
+
+#### get
+
+```python
+def get(run_id: str,
+        digest: str) -> tuple[int, int, int, tuple[str, ...]] | None
+```
+
+Return `(converged, hit_cap, other, watched)` if cached for `digest`.
+
+<a id="fim.sweep_table.HealthCache.put"></a>
+
+#### put
+
+```python
+def put(run_id: str, digest: str, counts: tuple[int, int, int],
+        watched: tuple[str, ...]) -> None
+```
+
+Remember a point's counts.
+
+<a id="fim.sweep_table.HealthCache.save"></a>
+
+#### save
+
+```python
+def save() -> None
+```
+
+Write the cache if it changed; a failure is logged, never raised.
+
+<a id="fim.sweep_table.read_point_health"></a>
+
+#### read\_point\_health
+
+```python
+def read_point_health(directory: Path,
+                      *,
+                      cache: HealthCache | None = None) -> PointHealth | None
+```
+
+Return how a finished point's replicates ended, or `None` if unreadable.
+
+The outcome counts come from each replicate's `manifest.json` (a scalar
+run's own manifest): a replicate `converged` if its monitor said so, and
+`hit_cap` if it stopped for the generation cap. The achieved half widths
+come from `summary.json`, for the statistics the monitor watched.
+
+**Arguments**:
+
+- `directory` - The point's run directory.
+- `cache` - Where to keep the outcome counts between reads.
+
+
+**Returns**:
+
+  The point's health, or `None` if its manifests cannot be read.
 
 <a id="fim.termination"></a>
 
