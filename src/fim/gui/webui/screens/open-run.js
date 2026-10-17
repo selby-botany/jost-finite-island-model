@@ -40,6 +40,7 @@ const deleteSelectedButton = document.getElementById(
     "open-run-delete-selected-button"
 );
 const selectionCountLabel = document.getElementById("open-run-selection-count");
+const compareSelectedButton = document.getElementById("open-run-compare-selected-button");
 
 let selectedTrajectoryPath = null;
 // A batch row's own counterpart to `selectedTrajectoryPath` -- a batch
@@ -1116,6 +1117,12 @@ function buildGroupActionControls(group) {
     const container = document.createElement("span");
     container.className = "open-run-group-actions";
 
+    if (group.kind === "experiment") {
+        const compare = buildCompareSweepsButton(group);
+        if (compare !== null) {
+            container.appendChild(compare);
+        }
+    }
     if (group.kind === "study" && group.sweepPointCount !== null) {
         container.appendChild(buildSweepResultsButton(group));
         if (group.runCount < group.sweepPointCount && !group.closed) {
@@ -1671,6 +1678,10 @@ function totalSelectedCount() {
  * toggle, so it never drifts from the actual selection.
  */
 function updateSelectionToolbar() {
+    const sweeps = selectedSweepStudyIds();
+    compareSelectedButton.disabled = sweeps.length < 2;
+    compareSelectedButton.textContent =
+        sweeps.length < 2 ? "Compare selected sweeps…" : `Compare selected sweeps (${sweeps.length})…`;
     // Skip touching the button while its own inline confirmation is
     // showing (`confirmThenRun`) -- an unrelated re-render (a filter
     // keystroke) must not silently re-enable it or overwrite its label
@@ -1684,6 +1695,20 @@ function updateSelectionToolbar() {
         count === 0 ? "Delete selected" : `Delete selected (${count})`;
     selectionCountLabel.textContent = count === 0 ? "" : `${count} selected`;
 }
+
+/**
+ * The selected Studies that hold a sweep, in the order Home lists them.
+ * @returns {string[]}
+ */
+function selectedSweepStudyIds() {
+    return allStudies
+        .filter((study) => study.sweepPointCount != null && selectedStudyIds.has(study.studyId))
+        .map((study) => study.studyId);
+}
+
+compareSelectedButton.addEventListener("click", async () => {
+    await compareSweepStudies(selectedSweepStudyIds());
+});
 
 /**
  * Spell out exactly what "Delete selected" is about to remove -- never
@@ -1924,6 +1949,49 @@ function buildSweepResultsButton(group) {
     button.addEventListener("click", async (event) => {
         event.stopPropagation();
         await window.fim.showSweepResults(group.studyId);
+    });
+    return button;
+}
+
+/**
+ * Open the compare screen for sweep Studies, or say why it cannot open.
+ * @param {string[]} studyIds
+ */
+async function compareSweepStudies(studyIds) {
+    if (studyIds.length < 2) {
+        showOpenRunBanner("Comparing needs at least two sweep studies.");
+        return;
+    }
+    const result = await window.fim.showSweepCompare(studyIds);
+    if (!result.ok) {
+        showOpenRunBanner(result.message);
+        return;
+    }
+    showOpenRunBanner("");
+}
+
+/**
+ * "Compare sweeps…" on an Experiment's row: its sweep Studies side by side
+ * (`screens/sweep-compare.js`). Studies of other Experiments can be added
+ * by selecting them and using "Compare selected sweeps…" on the toolbar.
+ * An Experiment with fewer than two sweeps has nothing to compare and gets
+ * no button.
+ * @param {{subgroups: Array<{studyId: string, sweepPointCount: number|null}>}} group
+ * @returns {HTMLButtonElement|null}
+ */
+function buildCompareSweepsButton(group) {
+    const sweeps = group.subgroups.filter((study) => study.sweepPointCount !== null);
+    if (sweeps.length < 2) {
+        return null;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = "Compare sweeps…";
+    button.title = `Compare the ${sweeps.length} sweeps in this experiment`;
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await compareSweepStudies(sweeps.map((study) => study.studyId));
     });
     return button;
 }

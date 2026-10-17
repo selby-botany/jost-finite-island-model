@@ -48,7 +48,7 @@ from typing import Any, Literal
 
 from fim.statistics.interval import student_t_critical_value
 from fim.sweep import CoordinateValue
-from fim.sweep_table import ResultTable, StatisticCell, TablePoint
+from fim.sweep_table import HealthClass, ResultTable, StatisticCell, TablePoint
 
 Pairing = Literal["independent", "shared-seeds", "partly-shared-seeds", "unknown"]
 """Whether the compared runs used the same seeds: none shared, all shared at
@@ -106,6 +106,9 @@ class ComparedPoint:
             finished point.
         seeds: Each sweep's seed at the coordinate by label; `None` where it
             has none.
+        health: How far to trust each sweep's point by label (`None` where it
+            has none or its health is unknown); a flagged point stays flagged
+            in a comparison.
         difference: First minus second, for exactly two sweeps whose cells
             are both present; otherwise `None`.
     """
@@ -113,6 +116,7 @@ class ComparedPoint:
     coordinates: Mapping[str, CoordinateValue]
     cells: Mapping[str, StatisticCell | None]
     seeds: Mapping[str, int | None]
+    health: Mapping[str, HealthClass | None]
     difference: DifferenceCell | None
 
 
@@ -332,17 +336,21 @@ def _compared_point(
     key = tuple(coordinates.values())
     cells: dict[str, StatisticCell | None] = {}
     seeds: dict[str, int | None] = {}
+    health: dict[str, HealthClass | None] = {}
     for label, lookup in zip(labels, index, strict=True):
         point = lookup.get(key)
         row = point.row if point is not None else None
         cells[label] = row.statistics.get(statistic) if row is not None else None
         seeds[label] = row.seed if row is not None else None
+        health[label] = (
+            row.health.classify() if row is not None and row.health else None
+        )
     difference = None
     if len(labels) == _TWO:
         first, second = (cells[label] for label in labels)
         if first is not None and second is not None:
             difference = welch_difference(first, second)
-    return ComparedPoint(coordinates, cells, seeds, difference)
+    return ComparedPoint(coordinates, cells, seeds, health, difference)
 
 
 def _pairing(points: Sequence[ComparedPoint]) -> Pairing:

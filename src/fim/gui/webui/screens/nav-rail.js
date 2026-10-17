@@ -77,6 +77,10 @@ function resolveDestination(screenId) {
         // A sweep is set up from Configure and is a kind of run.
         return "configure";
     }
+    if (screenId === "screen-sweep-compare") {
+        // Comparing sweeps starts from the studies on Home.
+        return "home";
+    }
     for (const [destination, mappedScreenId] of Object.entries(
         STATIC_DESTINATION_TO_SCREEN
     )) {

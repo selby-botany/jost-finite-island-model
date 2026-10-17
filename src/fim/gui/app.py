@@ -5655,6 +5655,35 @@ class Api:
         )
 
     @_log_bridge_call
+    def compare_sweeps(
+        self,
+        study_ids: list[str],
+        statistic: str,
+        on: list[str] | None,
+        labels: list[str] | None,
+    ) -> dict[str, Any]:
+        """Compare one statistic across two or more sweeps (`fim.sweep_compare`).
+
+        Nothing is stored; the comparison is worked out on each call.
+
+        Args:
+            study_ids: Two or more sweep Studies.
+            statistic: A statistic's catalog key, or an empty string for a
+                default (`D`, else `G_ST`, else the first they have).
+            on: The axes to join on, or `None` for every shared axis.
+            labels: A label for each Study, or `None` for the Study names.
+
+        Returns:
+            `{"ok": True, "statistic", "available", "on", "labels", "axes",
+            "pairing", "seedPolicies", "baseDifferences", "points"}`, or
+            `{"ok": False, "message": ...}` with the reason a comparison
+            cannot be made.
+        """
+        return sweep_bridge.comparison_payload(
+            study_ids, statistic, on=on or None, labels=labels or None
+        )
+
+    @_log_bridge_call
     def get_sweep_theory(
         self, study_id: str, coordinates: list[dict[str, Any]]
     ) -> dict[str, Any]:

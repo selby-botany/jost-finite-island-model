@@ -491,6 +491,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_sweep\_status](#fim.gui.app.Api.get_sweep_status)
     * [get\_sweep\_results](#fim.gui.app.Api.get_sweep_results)
     * [get\_sweep\_series](#fim.gui.app.Api.get_sweep_series)
+    * [compare\_sweeps](#fim.gui.app.Api.compare_sweeps)
     * [get\_sweep\_theory](#fim.gui.app.Api.get_sweep_theory)
     * [export\_sweep\_table](#fim.gui.app.Api.export_sweep_table)
     * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
@@ -664,6 +665,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [plan\_payload](#fim.gui.sweep_bridge.plan_payload)
   * [status\_payload](#fim.gui.sweep_bridge.status_payload)
   * [series\_payload](#fim.gui.sweep_bridge.series_payload)
+  * [comparison\_payload](#fim.gui.sweep_bridge.comparison_payload)
   * [results\_payload](#fim.gui.sweep_bridge.results_payload)
 * [fim.gui.trajectory\_history](#fim.gui.trajectory_history)
   * [TrajectoryHistory](#fim.gui.trajectory_history.TrajectoryHistory)
@@ -12717,6 +12719,36 @@ Return a statistic as response curves across a sweep's axes.
   or `{"ok": False, "message": ...}` for an unknown axis or a
   missing held value. A point not yet finished is left out.
 
+<a id="fim.gui.app.Api.compare_sweeps"></a>
+
+#### compare\_sweeps
+
+```python
+@_log_bridge_call
+def compare_sweeps(study_ids: list[str], statistic: str, on: list[str] | None,
+                   labels: list[str] | None) -> dict[str, Any]
+```
+
+Compare one statistic across two or more sweeps (`fim.sweep_compare`).
+
+Nothing is stored; the comparison is worked out on each call.
+
+**Arguments**:
+
+- `study_ids` - Two or more sweep Studies.
+- `statistic` - A statistic's catalog key, or an empty string for a
+  default (`D`, else `G_ST`, else the first they have).
+- `on` - The axes to join on, or `None` for every shared axis.
+- `labels` - A label for each Study, or `None` for the Study names.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "statistic", "available", "on", "labels", "axes",
+  "pairing", "seedPolicies", "baseDifferences", "points"}`, or
+- ``{"ok"` - False, "message": ...}` with the reason a comparison
+  cannot be made.
+
 <a id="fim.gui.app.Api.get_sweep_theory"></a>
 
 #### get\_sweep\_theory
@@ -17059,6 +17091,37 @@ Group a sweep's results into response curves for the page.
 
 The grouping is `ResultTable.series`; this only renames fields to the
 page's own style. A request the table refuses comes back as a message.
+
+<a id="fim.gui.sweep_bridge.comparison_payload"></a>
+
+#### comparison\_payload
+
+```python
+def comparison_payload(study_ids: Sequence[str],
+                       statistic: str,
+                       *,
+                       on: Sequence[str] | None,
+                       labels: Sequence[str] | None,
+                       results: Path | None = None) -> dict[str, Any]
+```
+
+Compare sweeps for the page: the join, each sweep's cells, the difference.
+
+**Arguments**:
+
+- `study_ids` - Two or more sweep Studies.
+- `statistic` - A statistic's catalog key, or empty for the first of
+  `D`, `G_ST` that the sweeps have (else the first they have).
+- `on` - The axes to join on, or `None` for every shared axis.
+- `labels` - A label for each Study, or `None` for the Study names (with
+  the Study id added where two names are alike).
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+- ``{"ok"` - True, ...}` with the comparison, or `{"ok": False, "message"}`
+  for a comparison that cannot be made.
 
 <a id="fim.gui.sweep_bridge.results_payload"></a>
 
@@ -36976,6 +37039,9 @@ One shared coordinate and what each sweep has there.
   finished point.
 - `seeds` - Each sweep's seed at the coordinate by label; `None` where it
   has none.
+- `health` - How far to trust each sweep's point by label (`None` where it
+  has none or its health is unknown); a flagged point stays flagged
+  in a comparison.
 - `difference` - First minus second, for exactly two sweeps whose cells
   are both present; otherwise `None`.
 

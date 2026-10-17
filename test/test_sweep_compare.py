@@ -23,6 +23,7 @@ from fim.sweep_compare import (
 )
 from fim.sweep_run import LocalPointRunner, create_sweep_study, run_sweep
 from fim.sweep_table import (
+    PointHealth,
     PointRow,
     ResultTable,
     StatisticCell,
@@ -56,6 +57,7 @@ def _table(
     base: dict[str, Any] | None = None,
     seeds: dict[tuple[Any, ...], int] | None = None,
     seed_policy: str = "spaced",
+    health: dict[tuple[Any, ...], PointHealth] | None = None,
 ) -> ResultTable:
     """A table with one point per coordinate tuple; `None` means unfinished."""
     spec = SweepSpec(
@@ -82,7 +84,7 @@ def _table(
                 started_at=None,
                 ended_at=None,
                 statistics={"D": cell},
-                health=None,
+                health=(health or {}).get(coordinate),
                 parameters={},
             )
         points.append(
@@ -207,6 +209,24 @@ def test_a_value_only_one_sweep_has_is_left_out_of_the_join(serve: Any) -> None:
     result = compare_sweeps([SweepRef("a"), SweepRef("b")], statistic="D")
 
     assert [p.coordinates["m"] for p in result.points] == [0.01, 0.1]
+
+
+def test_a_flagged_point_stays_flagged_in_a_comparison(serve: Any) -> None:
+    serve(
+        _table(
+            "a",
+            "A",
+            (_M,),
+            {(0.01,): _cell(0.3), (0.1,): _cell(0.4)},
+            health={(0.01,): PointHealth(5, 3, 2, 0, {}, 0.01)},
+        ),
+        _table("b", "B", (_M,), {(0.01,): _cell(0.2), (0.1,): None}),
+    )
+
+    result = compare_sweeps([SweepRef("a"), SweepRef("b")], statistic="D")
+
+    assert result.points[0].health == {"A": "degraded", "B": None}
+    assert result.points[1].health == {"A": None, "B": None}
 
 
 def test_a_deleted_or_unfinished_point_leaves_a_none_cell_and_no_difference(

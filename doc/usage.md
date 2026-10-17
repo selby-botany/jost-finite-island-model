@@ -1131,6 +1131,17 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   seed and grid use the same seeds, point for point), or partly shared. It
   never changes the method on its own. Nothing is stored; the comparison is
   worked out each time.
+  In the app, comparing starts on Home: an experiment row has **Compare
+  sweeps…** for the sweep studies inside it, and **Select** lets you tick any
+  sweep studies, from any experiment, and choose **Compare selected sweeps…**.
+  The comparison screen draws one curve per sweep, each in its own color and
+  marker shape, over the axis you pick (the other shared axes are held at a
+  value), with the error-bar, scale and theory controls of the results screen.
+  With exactly two sweeps a second panel shows their difference with its
+  interval and a zero line. Each sweep's theory curve uses that sweep's own
+  settings. A point flagged as degraded or unreliable stays flagged. Nothing is
+  saved: closing the screen forgets the comparison, and opening it again works
+  it out afresh.
 - Each point has a health mark. A point is `unreliable` if every replicate
   stopped at the generation limit before its statistics settled, `degraded` if
   some did or if the interval is wider than the `precision` you asked for, and

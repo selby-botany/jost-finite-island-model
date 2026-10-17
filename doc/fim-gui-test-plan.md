@@ -202,6 +202,10 @@ launch (not a terminal that hides a hang), check that:
    decade labels, and the arrow keys move a ring from point to point. The
    chart is a canvas, and the three web engines (WebKit on macOS and Linux,
    WebView2 on Windows) draw dashes and antialiasing a little differently.
+8. Select two sweep studies on Home, choose **Compare selected sweeps…**, and
+   check that the two curves differ in color and marker shape, the difference
+   panel shows a dashed zero line with its intervals, and **Back** returns to
+   Home with the selection intact.
 
 Record the platform, version, and result of each check with the release.
 

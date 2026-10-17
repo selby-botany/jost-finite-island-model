@@ -714,3 +714,94 @@ def test_get_sweep_series_refuses_what_the_table_refuses(
     assert unknown["ok"] is False and "'nope' is not an axis" in unknown["message"]
     assert same["ok"] is False and "cannot be split" in same["message"]
     assert plain["ok"] is False and "not a sweep" in plain["message"]
+
+
+def _compared_study(name: str, population: int) -> str:
+    """Create and run a tiny two-point sweep over `m`; return its Study id."""
+    from fim.sweep import SweepSpec, enumerate_points, expand_axis  # noqa: PLC0415
+    from fim.sweep_run import (  # noqa: PLC0415
+        LocalPointRunner,
+        create_sweep_study,
+        run_sweep,
+    )
+
+    spec = SweepSpec(
+        base={
+            "N": population,
+            "ploidy": "haploid",
+            "d": 2,
+            "m": 0.1,
+            "mu": 0.01,
+            "seed": 7,
+            "n_replicates": 3,
+            "max_generations": 10,
+        },
+        axes=(expand_axis("m", [0.05, 0.1]),),
+    )
+    study = create_sweep_study(spec, enumerate_points(spec), name)
+    run_sweep(
+        study.study_id,
+        LocalPointRunner(),
+        lambda _event: None,
+        threading.Event(),
+        points_at_once=1,
+    )
+    return study.study_id
+
+
+def test_compare_sweeps_returns_the_join_cells_and_difference(api: Api) -> None:
+    small, large = _compared_study("Small", 16), _compared_study("Large", 32)
+
+    reply = api.compare_sweeps([small, large], "", None, None)
+
+    assert reply["ok"] is True
+    assert (reply["statistic"], reply["on"], reply["labels"]) == (
+        "D",
+        ["m"],
+        ["Small", "Large"],
+    )
+    assert reply["axes"] == {"m": [0.05, 0.1]}
+    assert "D" in reply["available"] and "G_ST" in reply["available"]
+    assert reply["baseDifferences"] == {"N": {"Small": 16, "Large": 32}}
+    assert reply["pairing"] == "shared-seeds"
+    first = reply["points"][0]
+    assert first["coordinates"] == {"m": 0.05}
+    assert set(first["cells"]["Small"]) >= {"mean", "low", "high", "sdLow", "health"}
+    assert first["difference"]["difference"] == pytest.approx(
+        first["cells"]["Small"]["mean"] - first["cells"]["Large"]["mean"]
+    )
+    assert first["difference"]["degreesOfFreedom"] is not None
+
+
+def test_compare_sweeps_uses_a_chosen_statistic(api: Api) -> None:
+    small, large = _compared_study("Small", 16), _compared_study("Large", 32)
+
+    reply = api.compare_sweeps([small, large], "G_ST", None, None)
+
+    assert reply["ok"] is True
+    assert reply["statistic"] == "G_ST"
+    assert reply["labels"] == ["Small", "Large"]
+
+
+def test_two_studies_with_the_same_name_are_told_apart_by_id(api: Api) -> None:
+    first, second = _compared_study("Same", 16), _compared_study("Same", 32)
+
+    reply = api.compare_sweeps([first, second], "D", None, None)
+
+    assert reply["labels"] == [f"Same ({first})", f"Same ({second})"]
+
+
+def test_compare_sweeps_says_why_it_cannot(api: Api) -> None:
+    small = _compared_study("Small", 16)
+
+    one = api.compare_sweeps([small], "D", None, None)
+    plain = api.compare_sweeps(
+        [small, groups.create_study("Plain").study_id], "D", None, None
+    )
+    unknown = api.compare_sweeps(
+        [small, _compared_study("Other", 32)], "D", ["nope"], None
+    )
+
+    assert one["ok"] is False and "at least two sweeps" in one["message"]
+    assert plain["ok"] is False and "not a sweep" in plain["message"]
+    assert unknown["ok"] is False and "cannot join on 'nope'" in unknown["message"]

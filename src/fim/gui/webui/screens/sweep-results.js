@@ -600,7 +600,8 @@ function drawSweepLine(canvas, spec) {
     const theoryValues = spec.curves
         .flatMap((curve) => curve.theory.map((entry) => entry.y))
         .filter((y) => y !== null);
-    const everything = [...reached, ...theoryValues];
+    // A difference chart always shows zero, the line that means "no difference".
+    const everything = [...reached, ...theoryValues, ...(spec.zeroLine ? [0] : [])];
     const positive = everything.filter((value) => value > 0);
     const yLog = spec.yScale === "log" && positive.length > 0;
     let yLow = Math.min(...everything, Infinity);
@@ -615,7 +616,7 @@ function drawSweepLine(canvas, spec) {
         );
         yLow = 10 ** lowExponent;
         yHigh = 10 ** highExponent;
-    } else if (isProportionStatistic(spec.statistic)) {
+    } else if (spec.statistic !== "" && isProportionStatistic(spec.statistic)) {
         yLow = 0;
         yHigh = 1;
     } else if (!(yHigh > yLow)) {
@@ -689,11 +690,22 @@ function drawSweepLine(canvas, spec) {
     context.translate(SWEEP_Y_TITLE_INSET, top + height / 2);
     context.rotate(-QUARTER_TURN);
     context.fillText(
-        `${statisticDisplayName(spec.statistic)}${yLog ? " (log scale)" : ""}`,
+        `${spec.yLabel ?? statisticDisplayName(spec.statistic)}${yLog ? " (log scale)" : ""}`,
         0,
         0
     );
     context.restore();
+    if (spec.zeroLine && !yLog) {
+        context.save();
+        context.strokeStyle = foreground;
+        context.lineWidth = AXIS_LINE_WIDTH;
+        context.setLineDash(DASH_THEORY_CURVE);
+        context.beginPath();
+        context.moveTo(left, toY(0));
+        context.lineTo(left + width, toY(0));
+        context.stroke();
+        context.restore();
+    }
 
     for (const curve of spec.curves) {
         drawSweepTheory(context, curve.theory, toX, toY, curve.color);

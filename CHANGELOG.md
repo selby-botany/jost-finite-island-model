@@ -13,6 +13,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   without changing saved Settings. The shared controls can use a snapshot
   of saved defaults or restore originally loaded values; invalid edits
   leave the configuration unchanged.
+- **Compare sweeps in the app.** On Home, an experiment's **Compare sweeps…**
+  button, or **Select** and **Compare selected sweeps…** across experiments,
+  opens a screen with one curve per sweep on the axes they share, error bars,
+  optional theory, a note of what differs between the sweeps and whether their
+  seeds were shared, and, for two sweeps, a panel with their difference and its
+  interval. Nothing is saved.
 - **`fim sweep compare`: sweeps side by side.** Lines up two or more sweeps on
   the axes they share and prints a statistic from each at every shared value,
   the base settings that differ between them, and, for two sweeps, the

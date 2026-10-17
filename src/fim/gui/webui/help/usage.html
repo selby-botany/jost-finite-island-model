@@ -989,7 +989,18 @@ independent, so the command looks at the seeds the runs actually used and
 says whether they were different, shared (two sweeps built from the same
 seed and grid use the same seeds, point for point), or partly shared. It
 never changes the method on its own. Nothing is stored; the comparison is
-worked out each time.</li>
+worked out each time.
+In the app, comparing starts on Home: an experiment row has <strong>Compare
+sweeps…</strong> for the sweep studies inside it, and <strong>Select</strong> lets you tick any
+sweep studies, from any experiment, and choose <strong>Compare selected sweeps…</strong>.
+The comparison screen draws one curve per sweep, each in its own color and
+marker shape, over the axis you pick (the other shared axes are held at a
+value), with the error-bar, scale and theory controls of the results screen.
+With exactly two sweeps a second panel shows their difference with its
+interval and a zero line. Each sweep's theory curve uses that sweep's own
+settings. A point flagged as degraded or unreliable stays flagged. Nothing is
+saved: closing the screen forgets the comparison, and opening it again works
+it out afresh.</li>
 <li>Each point has a health mark. A point is <code>unreliable</code> if every replicate
 stopped at the generation limit before its statistics settled, <code>degraded</code> if
 some did or if the interval is wider than the <code>precision</code> you asked for, and

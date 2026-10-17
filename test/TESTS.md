@@ -143,6 +143,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_statistics_shown_screen`](#gui.test_statistics_shown_screen)
   - [`test_store`](#gui.test_store)
   - [`test_sweep_api`](#gui.test_sweep_api)
+  - [`test_sweep_compare_screen`](#gui.test_sweep_compare_screen)
   - [`test_sweep_results_screen`](#gui.test_sweep_results_screen)
   - [`test_sweep_screen`](#gui.test_sweep_screen)
   - [`test_trailing_mean_screen`](#gui.test_trailing_mean_screen)
@@ -27092,6 +27093,12 @@ def api(tmp_path: Path, results: Path) -> Api
 ```
 
 An `Api` whose defaults make every point a tiny single run.
+
+<a id="gui.test_sweep_compare_screen"></a>
+
+# gui.test\_sweep\_compare\_screen
+
+Headless functional tests for comparing sweeps (`sweep-compare.js`).
 
 <a id="gui.test_sweep_results_screen"></a>
 

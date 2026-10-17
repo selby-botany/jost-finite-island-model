@@ -841,6 +841,14 @@
         <button type="button" id="open-run-clear-selection-button">
           Clear selection
         </button>
+        <button
+          type="button"
+          id="open-run-compare-selected-button"
+          disabled
+          title="Select two or more sweep studies to compare them"
+        >
+          Compare selected sweeps…
+        </button>
         <button type="button" id="open-run-delete-selected-button" disabled>
           Delete selected
         </button>
@@ -1024,6 +1032,71 @@
         <button type="button" id="sweep-results-save-chart" title="Save the chart as a PNG image">Save chart…</button>
         <button type="button" id="sweep-results-setup-button">Back to Configure</button>
       </div>
+    </div>
+  </section>
+
+  <!-- Compare sweeps (`doc/20261014-claude-sonnet-5-5-sweep-features-design.md`,
+       `selby/restricted`, section 8): one statistic from two or more sweeps
+       on the axes they share, with the difference for exactly two. Reached
+       from Home (an Experiment row, or the selected sweep Studies). Nothing
+       is stored; `screens/sweep-compare.js` asks `Api.compare_sweeps` each
+       time. -->
+  <section id="screen-sweep-compare" class="screen" hidden>
+    <div id="sweep-compare-banner" class="banner" hidden></div>
+    <h2 id="sweep-compare-title">Compare sweeps</h2>
+    <p id="sweep-compare-summary"></p>
+    <ul id="sweep-compare-notes" class="hint"></ul>
+    <div class="sweep-results-controls">
+      <div class="field">
+        <label for="sweep-compare-statistic">Statistic</label>
+        <select id="sweep-compare-statistic"></select>
+      </div>
+      <div class="field">
+        <label for="sweep-compare-x">Across</label>
+        <select id="sweep-compare-x"></select>
+      </div>
+      <div class="field">
+        <label for="sweep-compare-interval">Error bars</label>
+        <select id="sweep-compare-interval">
+          <option value="ci">Interval of the mean</option>
+          <option value="sd">Spread (standard deviation)</option>
+          <option value="both">Both</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sweep-compare-xscale">x scale</label>
+        <select id="sweep-compare-xscale">
+          <option value="auto">Automatic</option>
+          <option value="linear">Linear</option>
+          <option value="log">Log</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sweep-compare-yscale">y scale</label>
+        <select id="sweep-compare-yscale">
+          <option value="auto">Automatic</option>
+          <option value="linear">Linear</option>
+          <option value="log">Log</option>
+        </select>
+      </div>
+      <label class="sweep-results-theory-field">
+        <input type="checkbox" id="sweep-compare-theory">
+        Show theory
+      </label>
+    </div>
+    <div id="sweep-compare-held" class="sweep-results-controls"></div>
+    <canvas id="sweep-compare-canvas" role="img" aria-label="Sweeps compared"></canvas>
+    <p id="sweep-compare-readout" class="hint" aria-live="polite"></p>
+    <div id="sweep-compare-difference-panel" hidden>
+      <h3 id="sweep-compare-difference-title"></h3>
+      <canvas id="sweep-compare-difference-canvas" role="img" aria-label="Difference between the two sweeps"></canvas>
+    </div>
+    <table id="sweep-compare-table" class="results-table">
+      <thead id="sweep-compare-head"></thead>
+      <tbody id="sweep-compare-body"></tbody>
+    </table>
+    <div class="actions">
+      <button type="button" id="sweep-compare-back-button" data-history-back>Back</button>
     </div>
   </section>
 
@@ -2648,6 +2721,7 @@
 <script src="screens/sweep.js"></script>
 <script src="heatmap.js"></script>
 <script src="screens/sweep-results.js"></script>
+<script src="screens/sweep-compare.js"></script>
 <script src="screens/explore-surface.js"></script>
 <script src="axis-range.js"></script>
 <script src="screens/explore-sweep.js"></script>

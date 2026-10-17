@@ -7,7 +7,7 @@ draw. Nothing here touches a window or starts a run; `Api` owns that.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ from fim.sweep import (
     expand_axis,
     work_estimate,
 )
+from fim.sweep_compare import ComparedPoint, SweepRef, compare_sweeps
 from fim.sweep_run import (
     sweep_point_results,
     sweep_point_statuses,
@@ -213,6 +214,123 @@ def series_payload(
             }
             for curve in curves
         ],
+    }
+
+
+def comparison_payload(
+    study_ids: Sequence[str],
+    statistic: str,
+    *,
+    on: Sequence[str] | None,
+    labels: Sequence[str] | None,
+    results: Path | None = None,
+) -> dict[str, Any]:
+    """Compare sweeps for the page: the join, each sweep's cells, the difference.
+
+    Args:
+        study_ids: Two or more sweep Studies.
+        statistic: A statistic's catalog key, or empty for the first of
+            `D`, `G_ST` that the sweeps have (else the first they have).
+        on: The axes to join on, or `None` for every shared axis.
+        labels: A label for each Study, or `None` for the Study names (with
+            the Study id added where two names are alike).
+        results: Optional results-directory override.
+
+    Returns:
+        `{"ok": True, ...}` with the comparison, or `{"ok": False, "message"}`
+        for a comparison that cannot be made.
+    """
+    try:
+        tables = [ResultTable.read(i, results=results) for i in study_ids]
+        available = sorted({n for table in tables for n in table.statistic_names()})
+        chosen = statistic or next(
+            (name for name in ("D", "G_ST") if name in available),
+            available[0] if available else "",
+        )
+        names = list(labels) if labels else _distinct_labels(tables)
+        comparison = compare_sweeps(
+            [SweepRef(i, label) for i, label in zip(study_ids, names, strict=True)],
+            statistic=chosen,
+            on=on,
+            results=results,
+        )
+    except ValueError as error:
+        return {"ok": False, "message": str(error)}
+    return {
+        "ok": True,
+        "statistic": comparison.statistic,
+        "available": available,
+        "on": list(comparison.on),
+        "labels": list(comparison.labels),
+        "studyIds": list(study_ids),
+        "pairing": comparison.pairing,
+        "seedPolicies": dict(comparison.seed_policies),
+        "baseDifferences": {
+            key: dict(values) for key, values in comparison.base_differences.items()
+        },
+        "axes": {key: _common(tables, key) for key in comparison.on},
+        "points": [_compared_point_payload(point) for point in comparison.points],
+    }
+
+
+def _distinct_labels(tables: Sequence[ResultTable]) -> list[str]:
+    """Name each sweep by its Study's name, adding the id where names repeat."""
+    names = [table.name for table in tables]
+    return [
+        f"{table.name} ({table.study_id})"
+        if names.count(table.name) > 1
+        else table.name
+        for table in tables
+    ]
+
+
+def _common(tables: Sequence[ResultTable], key: str) -> list[Any]:
+    """Return an axis's values that every sweep has, in the first sweep's order."""
+    per_sweep = [
+        next(axis.values for axis in table.spec.axes if axis.key == key)
+        for table in tables
+    ]
+    return [v for v in per_sweep[0] if all(v in other for other in per_sweep[1:])]
+
+
+def _offset(mean: float, spread: float | None, sign: int) -> float | None:
+    """Return `mean` plus or minus `spread`, or `None` without a spread."""
+    return None if spread is None else mean + sign * spread
+
+
+def _compared_point_payload(point: ComparedPoint) -> dict[str, Any]:
+    """Describe one shared coordinate for the page."""
+    difference = point.difference
+    return {
+        "coordinates": dict(point.coordinates),
+        "seeds": dict(point.seeds),
+        "cells": {
+            label: None
+            if cell is None
+            else {
+                "mean": cell.mean,
+                "low": cell.low,
+                "high": cell.high,
+                "sdLow": None
+                if cell.sample_std is None
+                else cell.mean - cell.sample_std,
+                "sdHigh": None
+                if cell.sample_std is None
+                else cell.mean + cell.sample_std,
+                "sampleCount": cell.sample_count,
+                "health": point.health.get(label) or "healthy",
+            }
+            for label, cell in point.cells.items()
+        },
+        "difference": None
+        if difference is None
+        else {
+            "difference": difference.difference,
+            "low": difference.low,
+            "high": difference.high,
+            "confidence": difference.confidence,
+            "degreesOfFreedom": difference.degrees_of_freedom,
+        },
     }
 
 
