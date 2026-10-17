@@ -335,3 +335,154 @@ def test_the_results_card_saves_its_table_and_its_chart(
     assert (tmp_path / "sweep.meta.json").is_file()
     assert chart.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     assert cancelled == {"ok": False, "message": ""}
+
+
+_MARKER_PIXELS = """(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 40; canvas.height = 40;
+    const context = canvas.getContext('2d');
+    const alpha = (x, y) => context.getImageData(x, y, 1, 1).data[3];
+    const result = {};
+    for (const kind of ['dot', 'ring', 'crossed']) {
+        context.clearRect(0, 0, 40, 40);
+        drawSweepMarker(context, 20, 20, kind, '#ff0000');
+        result[kind] = {
+            centre: alpha(20, 20),
+            edge: alpha(20 + SWEEP_FLAG_RADIUS, 20),
+            between: alpha(22, 20),
+            diagonal: alpha(22, 22),
+        };
+    }
+    return result;
+})()"""
+
+
+def test_a_flagged_point_is_drawn_hollow_and_a_failed_one_crossed(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        poll_until("document.readyState", lambda state: state == "complete")
+        return window.evaluate_js(_MARKER_PIXELS)
+
+    pixels = _drive(window, steps)
+
+    # A healthy point is a filled dot; a degraded one a ring, empty inside;
+    # an unreliable one a ring with an X through it.
+    assert pixels["dot"]["centre"] > 0
+    assert pixels["ring"]["centre"] == 0
+    assert pixels["ring"]["edge"] > 0
+    assert pixels["crossed"]["edge"] > 0
+    assert pixels["crossed"]["diagonal"] > 0
+    assert pixels["crossed"]["between"] == 0
+
+
+_FLAG_THE_POINTS = """(() => {
+    const unreliable = {
+        class: 'unreliable', replicates: 1, converged: 0, hitCap: 1, other: 0,
+        reason: '1 of 1 replicates stopped at the generation limit before settling',
+    };
+    const degraded = {
+        class: 'degraded', replicates: 3, converged: 2, hitCap: 1, other: 0,
+        reason: '1 of 3 replicates stopped at the generation limit before settling',
+    };
+    sweepResultsData.results[0].health = unreliable;
+    sweepResultsData.results[1].health = degraded;
+    sweepResultsSummary.textContent = sweepResultsSummaryText(sweepResultsData);
+    renderSweepResults();
+})();"""
+_FLAGGED_STATE = """({
+    summary: document.getElementById('sweep-results-summary').textContent,
+    marks: sweepResultsHit.pixels.map((pixel) => pixel.mark.health),
+    healthCells: Array.from(document.querySelectorAll('#sweep-results-body tr'))
+        .map((row) => row.children[row.children.length - 3].textContent),
+    warningRows: document.querySelectorAll('#sweep-results-body tr.row-warning').length,
+    header: Array.from(document.querySelectorAll('#sweep-results-head th'))
+        .map((cell) => cell.textContent),
+    readout: sweepPointReadout(
+        {...sweepResultsData.points[0], result: sweepResultsByIndex().get(0)}, 'D'),
+    markers: sweepFlaggedMarkers(
+        [[{result: sweepResultsData.results[0]},
+          {result: sweepResultsData.results[1]}]]),
+    ready: window.__fimSweepResultsReady,
+})"""
+
+
+def test_flagged_points_are_marked_and_explained_on_the_card(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        _run_and_view_results(window, poll_until, _ONE_AXIS)
+        window.evaluate_js(_FLAG_THE_POINTS)
+        return poll_until(_FLAGGED_STATE, lambda state: state["ready"] is True)
+
+    card = _drive(window, steps)
+
+    assert "2 flagged (drawn hollow)" in card["summary"]
+    assert card["marks"] == ["unreliable", "degraded"]
+    assert "health" in card["header"]
+    assert card["healthCells"] == [
+        "unreliable: 1 of 1 replicates stopped at the generation limit before settling",
+        "degraded: 1 of 3 replicates stopped at the generation limit before settling",
+    ]
+    assert card["warningRows"] == 1  # only the unreliable point's row
+    assert "unreliable: 1 of 1 replicates stopped" in card["readout"]
+    assert card["markers"] == [
+        {"row": 0.5, "column": 0.5, "kind": "crossed"},
+        {"row": 0.5, "column": 1.5, "kind": "ring"},
+    ]
+
+
+def test_healthy_points_show_no_flag(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        _run_and_view_results(window, poll_until, _ONE_AXIS)
+        window.evaluate_js(
+            "for (const result of sweepResultsData.results) {"
+            " result.health = {class: 'healthy', reason: '', replicates: 3,"
+            " converged: 3, hitCap: 0, other: 0}; }"
+            "sweepResultsSummary.textContent ="
+            " sweepResultsSummaryText(sweepResultsData);"
+            "renderSweepResults();"
+        )
+        return poll_until(_FLAGGED_STATE, lambda state: state["ready"] is True)
+
+    card = _drive(window, steps)
+
+    assert "flagged" not in card["summary"]
+    assert card["marks"] == ["healthy", "healthy"]
+    assert card["healthCells"] == ["", ""]
+    assert card["warningRows"] == 0
+    assert "healthy" not in card["readout"]
+
+
+def test_a_flagged_heat_map_cell_gets_a_ring_that_leaves_the_color_showing(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        poll_until("document.readyState", lambda state: state == "complete")
+        return window.evaluate_js(
+            """(() => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 320; canvas.height = 320;
+                const pixel = (x, y) =>
+                    Array.from(canvas.getContext('2d').getImageData(x, y, 1, 1).data);
+                const draw = (kind) => {
+                    const layout = window.fim.heatmap.draw(canvas, {
+                        columns: ['a', 'b'], rows: ['c', 'd'],
+                        values: [[0.5, 0.5], [0.5, 0.5]], min: 0, max: 1,
+                        markers: [{row: 0.5, column: 0.5, kind}],
+                    });
+                    return pixel(
+                        Math.floor(layout.left + 0.5 * layout.cellWidth),
+                        Math.floor(layout.top + 0.5 * layout.cellHeight));
+                };
+                return {dot: draw('dot'), ring: draw('ring'), crossed: draw('crossed')};
+            })()"""
+        )
+
+    centre = _drive(window, steps)
+
+    assert centre["dot"][:3] == [255, 255, 255]  # a dot is filled white
+    assert centre["ring"][:3] != [255, 255, 255]  # a ring leaves the cell's color
+    assert centre["ring"][3] == 255

@@ -965,7 +965,11 @@ chart…</strong> saves the chart as it is drawn as a PNG image.</li>
 stopped at the generation limit before its statistics settled, <code>degraded</code> if
 some did or if the interval is wider than the <code>precision</code> you asked for, and
 <code>healthy</code> otherwise. The mark is in the <code>health</code> column of the export and in
-<code>fim sweep report</code>. A point that is not healthy is flagged, never left out.</li>
+<code>fim sweep report</code>. A point that is not healthy is flagged, never left out.
+In the app, the sweep results screen draws a <code>degraded</code> point as a hollow ring
+and an <code>unreliable</code> one as a ring with an X through it, on the chart and on
+the heat map, with a key on the chart. The table has a <strong>health</strong> column that
+says why, and pointing at a point or cell shows the same reason.</li>
 <li>A sweep holds a lock on its Study while it runs. A second <code>fim sweep resume</code>
 (or the app) on the same Study stops at once with a message that another
 process is running it, instead of both writing the same files. The system

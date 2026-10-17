@@ -667,3 +667,21 @@ def test_every_wide_column_is_described_in_the_sidecar(tmp_path: Path) -> None:
     columns = json.loads(sidecar.read_text(encoding="utf-8"))["columns"]
     assert {"D_mean", "D_theory", "D_residual", "N", "m"} <= set(columns)
     assert all(text and not text.startswith("Column ") for text in columns.values())
+
+
+def test_a_healthy_point_has_nothing_to_explain() -> None:
+    assert PointHealth(3, 3, 0, 0, {"D": 0.005}, 0.01).describe() == ""
+
+
+def test_the_reasons_for_a_flag_are_named() -> None:
+    capped = PointHealth(3, 2, 1, 0, {"D": 0.005}, 0.01)
+    mixed = PointHealth(4, 1, 2, 1, {"D": 0.5}, 0.01)
+
+    assert capped.describe() == (
+        "1 of 3 replicates stopped at the generation limit before settling"
+    )
+    assert mixed.describe() == (
+        "2 of 4 replicates stopped at the generation limit before settling; "
+        "1 ended another way; the interval is wider than the precision asked for"
+    )
+    assert PointHealth(3, 0, 3, 0).describe().startswith("3 of 3 replicates")

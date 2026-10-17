@@ -8,6 +8,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sweep results show which points to trust.** On the sweep results screen, a
+  point whose replicates did not all settle before the generation limit is
+  drawn as a hollow ring (with an X through it when none settled) on the chart
+  and the heat map, listed with its reason in a new **health** column, and
+  named in the readout when you point at it. Flagged points stay on the screen
+  and in every export; none is dropped.
+
 - **Save a sweep's table and chart from the app.** The sweep results screen
   has **Save table…** (the same tidy table as `fim sweep export`, with its
   `.meta.json` file, for every statistic you have chosen to show) and **Save

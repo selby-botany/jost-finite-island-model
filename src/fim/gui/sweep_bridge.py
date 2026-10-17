@@ -27,6 +27,7 @@ from fim.sweep_run import (
     sweep_point_statuses,
     sweep_spec_of,
 )
+from fim.sweep_table import PointHealth
 
 
 def sweepable_keys_payload() -> list[dict[str, Any]]:
@@ -146,6 +147,24 @@ def status_payload(
     }
 
 
+def _health_payload(health: PointHealth | None) -> dict[str, Any] | None:
+    """Describe a point's health for the page, or `None` if it is not known.
+
+    The class and the reason are worked out here, in one place, so the
+    chart, the table and the tooltips all say the same thing.
+    """
+    if health is None:
+        return None
+    return {
+        "class": health.classify(),
+        "reason": health.describe(),
+        "replicates": health.replicates,
+        "converged": health.converged,
+        "hitCap": health.hit_cap,
+        "other": health.other,
+    }
+
+
 def results_payload(
     study: StudyManifest, *, results: Path | None = None
 ) -> dict[str, Any]:
@@ -162,6 +181,7 @@ def results_payload(
                 name: {"mean": cell.mean, "low": cell.low, "high": cell.high}
                 for name, cell in result.statistics.items()
             },
+            "health": _health_payload(result.health),
         }
         for result in sweep_point_results(study, results=results)
     ]

@@ -1621,6 +1621,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [DEFAULT\_HEALTH\_POLICY](#fim.sweep_table.DEFAULT_HEALTH_POLICY)
   * [PointHealth](#fim.sweep_table.PointHealth)
     * [classify](#fim.sweep_table.PointHealth.classify)
+    * [describe](#fim.sweep_table.PointHealth.describe)
     * [to\_dict](#fim.sweep_table.PointHealth.to_dict)
   * [PointRow](#fim.sweep_table.PointRow)
   * [HealthCache](#fim.sweep_table.HealthCache)
@@ -37753,6 +37754,16 @@ def classify(policy: HealthPolicy = DEFAULT_HEALTH_POLICY) -> HealthClass
 ```
 
 Return how far to trust this point under `policy`.
+
+<a id="fim.sweep_table.PointHealth.describe"></a>
+
+#### describe
+
+```python
+def describe(policy: HealthPolicy = DEFAULT_HEALTH_POLICY) -> str
+```
+
+Say in words why a point is not healthy; empty for a healthy one.
 
 <a id="fim.sweep_table.PointHealth.to_dict"></a>
 

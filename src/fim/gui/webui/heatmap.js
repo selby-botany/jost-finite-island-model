@@ -78,11 +78,13 @@ function heatmapFormat(value) {
  *   min: number, max: number, diverging?: boolean,
  *   xTitle?: string, yTitle?: string, valueTitle?: string,
  *   selected?: {row: number, column: number}|null,
- *   markers?: Array<{row: number, column: number}>
+ *   markers?: Array<{row: number, column: number, kind?: "dot"|"ring"|"crossed"}>
  * }} spec `values[row][column]`; `null` is a cell with no value.
- * `markers` are drawn as dots at fractional cell positions (a whole
- * number is a cell's left/top edge; add 0.5 for its centre), for example
- * the points a sweep would run.
+ * `markers` are drawn at fractional cell positions (a whole number is a
+ * cell's left/top edge; add 0.5 for its centre), for example the points a
+ * sweep would run. A marker is a dot unless its `kind` says otherwise: a
+ * `ring` is hollow, a `crossed` ring has an X through it, so a cell can be
+ * flagged without hiding the color under it.
  * @returns {{left: number, top: number, cellWidth: number, cellHeight: number,
  *   rows: number, columns: number}}
  */
@@ -175,19 +177,12 @@ function drawHeatmap(canvas, spec) {
     drawHeatmapColorBar(context, canvas, spec, ramp, { top, plotHeight, muted, border });
 
     for (const marker of spec.markers || []) {
-        context.beginPath();
-        context.arc(
+        drawHeatmapMarker(
+            context,
             left + marker.column * cellWidth,
             top + marker.row * cellHeight,
-            HEATMAP_MARKER_RADIUS,
-            0,
-            TAU
+            marker.kind || "dot"
         );
-        context.fillStyle = HEATMAP_MARKER_FILL;
-        context.fill();
-        context.strokeStyle = HEATMAP_MARKER_STROKE;
-        context.lineWidth = HEATMAP_MARKER_LINE_WIDTH;
-        context.stroke();
     }
 
     if (spec.selected) {
@@ -201,6 +196,44 @@ function drawHeatmap(canvas, spec) {
         );
     }
     return { left, top, cellWidth, cellHeight, rows, columns };
+}
+
+/**
+ * Draw one marker: a dot, a hollow ring, or a ring with an X through it.
+ * @param {CanvasRenderingContext2D} context
+ * @param {number} x
+ * @param {number} y
+ * @param {"dot"|"ring"|"crossed"} kind
+ */
+function drawHeatmapMarker(context, x, y, kind) {
+    context.beginPath();
+    if (kind === "dot") {
+        context.arc(x, y, HEATMAP_MARKER_RADIUS, 0, TAU);
+        context.fillStyle = HEATMAP_MARKER_FILL;
+        context.fill();
+        context.strokeStyle = HEATMAP_MARKER_STROKE;
+        context.lineWidth = HEATMAP_MARKER_LINE_WIDTH;
+        context.stroke();
+        return;
+    }
+    // The ring is stroked twice, a wide halo under a narrower line, so it
+    // reads on any color of the ramp.
+    context.arc(x, y, HEATMAP_FLAG_RADIUS, 0, TAU);
+    context.strokeStyle = HEATMAP_MARKER_FILL;
+    context.lineWidth = HEATMAP_FLAG_LINE_WIDTH + 2 * HEATMAP_MARKER_LINE_WIDTH;
+    context.stroke();
+    context.strokeStyle = HEATMAP_MARKER_STROKE;
+    context.lineWidth = HEATMAP_FLAG_LINE_WIDTH;
+    context.stroke();
+    if (kind === "crossed") {
+        const reach = HEATMAP_FLAG_CROSS_REACH;
+        context.beginPath();
+        context.moveTo(x - reach, y - reach);
+        context.lineTo(x + reach, y + reach);
+        context.moveTo(x - reach, y + reach);
+        context.lineTo(x + reach, y - reach);
+        context.stroke();
+    }
 }
 
 /**

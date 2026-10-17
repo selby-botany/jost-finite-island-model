@@ -138,6 +138,22 @@ class PointHealth:
             return "degraded"
         return "healthy"
 
+    def describe(self, policy: HealthPolicy = DEFAULT_HEALTH_POLICY) -> str:
+        """Say in words why a point is not healthy; empty for a healthy one."""
+        if self.classify(policy) == "healthy":
+            return ""
+        reasons: list[str] = []
+        if self.hit_cap:
+            reasons.append(
+                f"{self.hit_cap} of {self.replicates} replicates stopped at the "
+                "generation limit before settling"
+            )
+        if self.other:
+            reasons.append(f"{self.other} ended another way")
+        if self._wider_than_precision(policy):
+            reasons.append("the interval is wider than the precision asked for")
+        return "; ".join(reasons) or "no replicates"
+
     def to_dict(self) -> dict[str, object]:
         """Return the health as plain values, for JSON."""
         return {

@@ -190,6 +190,13 @@ def test_a_finished_sweep_reports_its_results(api: Api, window: _FakeWindow) -> 
     ]
     assert "D" in payload["results"][0]["statistics"]
     assert payload["axes"] == [{"key": "d", "values": [2, 3]}]
+    # The tiny runs stop at the generation cap, so each point is flagged and
+    # says why; a flagged point is reported, never dropped.
+    health = payload["results"][0]["health"]
+    assert health["class"] == "unreliable"
+    assert health["reason"].startswith("1 of 1 replicates stopped")
+    assert (health["replicates"], health["hitCap"], health["converged"]) == (1, 1, 0)
+    assert len(payload["results"]) == 2
 
 
 def test_a_large_sweep_needs_confirmation_before_anything_is_created(

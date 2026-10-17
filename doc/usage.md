@@ -1104,6 +1104,10 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   some did or if the interval is wider than the `precision` you asked for, and
   `healthy` otherwise. The mark is in the `health` column of the export and in
   `fim sweep report`. A point that is not healthy is flagged, never left out.
+  In the app, the sweep results screen draws a `degraded` point as a hollow ring
+  and an `unreliable` one as a ring with an X through it, on the chart and on
+  the heat map, with a key on the chart. The table has a **health** column that
+  says why, and pointing at a point or cell shows the same reason.
 - A sweep holds a lock on its Study while it runs. A second `fim sweep resume`
   (or the app) on the same Study stops at once with a message that another
   process is running it, instead of both writing the same files. The system

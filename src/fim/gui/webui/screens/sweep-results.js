@@ -13,6 +13,9 @@
  *   the others at a chosen value; every axis is stored, any two are shown.
  * - Always a table of every planned point beside the chart, and a click on
  *   a point or a cell opens that run's own Results card.
+ * - A point whose replicates did not all settle before the generation limit
+ *   is flagged, never removed: a hollow ring on the chart or heat map (an X
+ *   through it when none settled), its reason in the table and the readout.
  */
 
 const sweepResultsSummary = document.getElementById("sweep-results-summary");
@@ -99,6 +102,33 @@ function sweepResultsByIndex() {
 }
 
 /**
+ * How far to trust one point's result.
+ * @param {object|null} result A results entry.
+ * @returns {"healthy"|"degraded"|"unreliable"}
+ */
+function sweepHealthClass(result) {
+    return result && result.health ? result.health.class : "healthy";
+}
+
+/**
+ * Why a point is flagged, in words; empty when it is healthy.
+ * @param {object|null} result A results entry.
+ * @returns {string}
+ */
+function sweepHealthReason(result) {
+    return result && result.health ? result.health.reason : "";
+}
+
+/**
+ * The marker a heat map or chart gives a point of this health.
+ * @param {"healthy"|"degraded"|"unreliable"} health
+ * @returns {"dot"|"ring"|"crossed"}
+ */
+function sweepHealthMarker(health) {
+    return { healthy: "dot", degraded: "ring", unreliable: "crossed" }[health];
+}
+
+/**
  * The points that agree with every held axis value.
  * @returns {object[]} Planned points with their `result` (or `null`).
  */
@@ -160,7 +190,12 @@ function sweepResultsSummaryText(data) {
     const pending = total - done;
     const remaining =
         pending > 0 ? ` ${pending} not run yet; resume the study to finish them.` : "";
-    return `${done} of ${total} points finished, varying ${axes}.${remaining}`;
+    const flagged = data.results.filter((result) => sweepHealthClass(result) !== "healthy");
+    const warning =
+        flagged.length > 0
+            ? ` ${flagged.length} flagged (drawn hollow): not every replicate settled.`
+            : "";
+    return `${done} of ${total} points finished, varying ${axes}.${remaining}${warning}`;
 }
 
 /**
@@ -353,6 +388,7 @@ async function renderSweepLine(sequence, points, xKey, statistic) {
             directory: point.result.directory,
             nReplicates: point.result.nReplicates,
             coordinates: point.coordinates,
+            health: sweepHealthClass(point.result),
             ...point.result.statistics[statistic],
         }));
     let theory = [];
@@ -512,11 +548,77 @@ function drawSweepLine(canvas, spec) {
             context.lineTo(pixel.x, toY(pixel.mark.high));
             context.stroke();
         }
-        context.beginPath();
-        context.arc(pixel.x, pixel.y, SWEEP_POINT_RADIUS, 0, TAU);
-        context.fill();
+        drawSweepMarker(context, pixel.x, pixel.y, sweepHealthMarker(pixel.mark.health), color);
     }
+    drawSweepLegend(context, canvas, spec.marks, color, foreground);
     return { kind: "line", pixels, statistic: spec.statistic, xKey: spec.xKey };
+}
+
+/**
+ * Draw one point's marker: a filled dot, a hollow ring when some replicates
+ * did not settle, or a ring with an X through it when none did.
+ * @param {CanvasRenderingContext2D} context
+ * @param {number} x
+ * @param {number} y
+ * @param {"dot"|"ring"|"crossed"} kind
+ * @param {string} color
+ */
+function drawSweepMarker(context, x, y, kind, color) {
+    context.strokeStyle = color;
+    context.fillStyle = color;
+    context.beginPath();
+    if (kind === "dot") {
+        context.arc(x, y, SWEEP_POINT_RADIUS, 0, TAU);
+        context.fill();
+        return;
+    }
+    context.lineWidth = SWEEP_FLAG_LINE_WIDTH;
+    context.arc(x, y, SWEEP_FLAG_RADIUS, 0, TAU);
+    context.stroke();
+    if (kind === "crossed") {
+        const reach = SWEEP_FLAG_CROSS_REACH;
+        context.beginPath();
+        context.moveTo(x - reach, y - reach);
+        context.lineTo(x + reach, y + reach);
+        context.moveTo(x - reach, y + reach);
+        context.lineTo(x + reach, y - reach);
+        context.stroke();
+    }
+    context.lineWidth = AXIS_LINE_WIDTH;
+}
+
+/**
+ * Key to the hollow markers, in the chart's top right, only for the kinds
+ * the chart actually shows.
+ * @param {CanvasRenderingContext2D} context
+ * @param {HTMLCanvasElement} canvas
+ * @param {object[]} marks
+ * @param {string} color The statistic's line color.
+ * @param {string} textColor
+ */
+function drawSweepLegend(context, canvas, marks, color, textColor) {
+    const entries = [
+        { health: "degraded", label: "degraded: some replicates did not settle" },
+        { health: "unreliable", label: "unreliable: none settled" },
+    ].filter((entry) => marks.some((mark) => mark.health === entry.health));
+    context.save();
+    context.font = FONT_AXIS_LARGE;
+    context.textAlign = "right";
+    entries.forEach((entry, line) => {
+        const y = SWEEP_LEGEND_INSET + line * SWEEP_LEGEND_LINE_HEIGHT;
+        const textX = canvas.width - SWEEP_LEGEND_INSET;
+        context.fillStyle = textColor;
+        context.fillText(entry.label, textX, y + SWEEP_Y_LABEL_BASELINE);
+        const width = context.measureText(entry.label).width;
+        drawSweepMarker(
+            context,
+            textX - width - SWEEP_LEGEND_TEXT_GAP,
+            y,
+            sweepHealthMarker(entry.health),
+            color
+        );
+    });
+    context.restore();
 }
 
 /**
@@ -627,12 +729,35 @@ async function renderSweepHeatmap(sequence, points, xKey, yKey, statistic) {
         yTitle: yKey,
         valueTitle: `${diverging ? "Δ " : ""}${statisticDisplayName(statistic)}`,
         selected: null,
+        markers: sweepFlaggedMarkers(cells),
     });
     sweepResultsHit = { kind: "heatmap", layout, cells, shownValues, xValues, yValues, mode };
     sweepResultsReadout.textContent =
         flat.length === 0
             ? "No finished points at these settings."
             : "Hover a cell for its value; click it to open that run.";
+}
+
+/**
+ * Heat map markers for the cells whose point is flagged, at cell centres.
+ * @param {Array<Array<object|null>>} cells Rows of planned points with results.
+ * @returns {Array<{row: number, column: number, kind: string}>}
+ */
+function sweepFlaggedMarkers(cells) {
+    const markers = [];
+    cells.forEach((row, rowIndex) =>
+        row.forEach((cell, columnIndex) => {
+            const health = sweepHealthClass(cell && cell.result);
+            if (health !== "healthy") {
+                markers.push({
+                    row: rowIndex + 0.5,
+                    column: columnIndex + 0.5,
+                    kind: sweepHealthMarker(health),
+                });
+            }
+        })
+    );
+    return markers;
 }
 
 /**
@@ -653,9 +778,11 @@ function sweepPointReadout(point, statistic) {
         stat.low !== null && stat.high !== null
             ? ` [${sweepFormatValue(stat.low)}, ${sweepFormatValue(stat.high)}]`
             : "";
+    const reason = sweepHealthReason(point.result);
     return (
         `${where}: ${statisticDisplayName(statistic)} ${sweepFormatValue(stat.mean)}${interval}` +
-        ` (${point.result.nReplicates} replicate${point.result.nReplicates === 1 ? "" : "s"})`
+        ` (${point.result.nReplicates} replicate${point.result.nReplicates === 1 ? "" : "s"})` +
+        (reason ? `; ${sweepHealthClass(point.result)}: ${reason}` : "")
     );
 }
 
@@ -764,6 +891,7 @@ function drawSweepResultsTable(statistic) {
             "low",
             "high",
             "replicates",
+            "health",
             "state",
             "",
         ])
@@ -774,7 +902,8 @@ function drawSweepResultsTable(statistic) {
         const result = results.get(point.index);
         const stat = result && statistic ? result.statistics[statistic] : null;
         const row = document.createElement("tr");
-        if (point.state === "failed") {
+        const health = sweepHealthClass(result);
+        if (point.state === "failed" || health === "unreliable") {
             row.classList.add("row-warning");
         }
         const cells = [
@@ -783,6 +912,7 @@ function drawSweepResultsTable(statistic) {
             stat && stat.low !== null ? sweepFormatValue(stat.low) : "",
             stat && stat.high !== null ? sweepFormatValue(stat.high) : "",
             result ? String(result.nReplicates) : "",
+            health === "healthy" ? "" : `${health}: ${sweepHealthReason(result)}`,
             point.state === "failed"
                 ? `failed (${point.reason})`
                 : SWEEP_STATE_LABELS[states.get(point.index).state] ??
