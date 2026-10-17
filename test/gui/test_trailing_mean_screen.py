@@ -633,18 +633,40 @@ _MESSAGES = """
 """
 
 
+@pytest.mark.parametrize(
+    ("formatted_start", "formatted_end"),
+    [("8,424", "21,910"), ("8424", "21910")],
+)
 def test_the_statistic_messages_explain_each_statistic_in_sentences(
-    window: webview.Window, drive: Callable[..., Any]
+    window: webview.Window,
+    drive: Callable[..., Any],
+    formatted_start: str,
+    formatted_end: str,
 ) -> None:
     """Watched statistics lead; the others, spread and meaning follow as details."""
-    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_MESSAGES)
+    # Control locale-dependent grouping, as in the legend test above.
+    script = (
+        "(() => {"
+        "const original = Number.prototype.toLocaleString;"
+        "Number.prototype.toLocaleString = function () {"
+        f"const formatted = {{8424: {json.dumps(formatted_start)}, "
+        f"21910: {json.dumps(formatted_end)}}};"
+        "return formatted[Number(this)] ?? String(this);"
+        "};"
+        "try {"
+        f"return {_MESSAGES.strip().removesuffix(';')};"
+        "} finally { Number.prototype.toLocaleString = original; }"
+        "})()"
+    )
+    settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=script)
 
     watched = settled["watchedG"]
     primary = [message for message in watched if not message.get("detail")]
     details = [message["text"] for message in watched if message.get("detail")]
     assert next(message["text"] for message in primary) == (
-        "G_ST is a statistic this run watches. Averaged over generations 8,424 "
-        "to 21,910 it is 0.193, with a standard error of 0.007, which meets the "
+        "G_ST is a statistic this run watches. Averaged over generations "
+        f"{formatted_start} to {formatted_end} it is 0.193, with a standard "
+        "error of 0.007, which meets the "
         "target of 0.010 that ends the run."
     )
     assert primary[1]["text"].startswith(
@@ -661,7 +683,8 @@ def test_the_statistic_messages_explain_each_statistic_in_sentences(
     )
     assert details[1].startswith("D is allelic differentiation")
     assert (
-        "Averaged over generations 8,424 to 21,910 it is 0.29, with a standard "
+        f"Averaged over generations {formatted_start} to {formatted_end} "
+        "it is 0.29, with a standard "
         "error of 0.06. The run did not watch it, and its standard error is "
         "above the target of 0.010, so treat its average as approximate."
     ) in details[1]

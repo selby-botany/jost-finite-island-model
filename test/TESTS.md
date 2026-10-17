@@ -27101,8 +27101,13 @@ Choosing a width updates the page state and the saved layout.
 #### test\_the\_statistic\_messages\_explain\_each\_statistic\_in\_sentences
 
 ```python
+@pytest.mark.parametrize(
+    ("formatted_start", "formatted_end"),
+    [("8,424", "21,910"), ("8424", "21910")],
+)
 def test_the_statistic_messages_explain_each_statistic_in_sentences(
-        window: webview.Window, drive: Callable[..., Any]) -> None
+        window: webview.Window, drive: Callable[..., Any],
+        formatted_start: str, formatted_end: str) -> None
 ```
 
 Watched statistics lead; the others, spread and meaning follow as details.

@@ -1577,6 +1577,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The statistics-message GUI test no longer depends on browser locale
+  data.** It controls number formatting and checks both grouped and
+  ungrouped generation counts, preserving locale-aware application output
+  while avoiding a Linux WebKit CI failure.
 - **Statistics can be hidden and shown during a live run again.** Every
   progress tick replaced the cells of every statistics row, removing the
   element under a pointer between its press and its release, so the browser
