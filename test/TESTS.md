@@ -215,6 +215,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_equilibrium`](#validation.test_equilibrium)
   - [`test_examples_auto_backend`](#validation.test_examples_auto_backend)
   - [`test_git_hooks`](#validation.test_git_hooks)
+  - [`test_help_html`](#validation.test_help_html)
   - [`test_identity_recursion_trajectory`](#validation.test_identity_recursion_trajectory)
   - [`test_install_sh`](#validation.test_install_sh)
   - [`test_mutation_textbook`](#validation.test_mutation_textbook)
@@ -42384,6 +42385,58 @@ def test_installer_links_all_repository_hooks(tmp_path: Path) -> None
 ```
 
 The installer links each documented hook into a fixture repository.
+
+<a id="validation.test_help_html"></a>
+
+# validation.test\_help\_html
+
+Tests for heading anchors and freshness of generated in-app Help pages.
+
+<a id="validation.test_help_html.inject_header_ids"></a>
+
+#### inject\_header\_ids
+
+```python
+@pytest.fixture(scope="module")
+def inject_header_ids() -> Callable[[str], str]
+```
+
+Load the Help generator without running its command-line entry point.
+
+<a id="validation.test_help_html.test_help_heading_ids_preserve_rendered_text"></a>
+
+#### test\_help\_heading\_ids\_preserve\_rendered\_text
+
+```python
+@pytest.mark.parametrize(
+    ("heading", "anchor"),
+    [
+        ("`_read_only`", "_read_only"),
+        ("`trailing_`", "trailing_"),
+        ("`_both_`", "_both_"),
+        ("`convergence_statistic`", "convergence_statistic"),
+        ("_Notes_", "notes"),
+        ("**Bold** and `code`", "bold-and-code"),
+        ("A &amp; B", "a--b"),
+        ("A &lt; B", "a--b"),
+    ],
+)
+def test_help_heading_ids_preserve_rendered_text(inject_header_ids: Callable[
+    [str], str], heading: str, anchor: str) -> None
+```
+
+Rendered code is literal text, not a second pass of Markdown emphasis.
+
+<a id="validation.test_help_html.test_generated_help_is_current_and_local_links_resolve"></a>
+
+#### test\_generated\_help\_is\_current\_and\_local\_links\_resolve
+
+```python
+def test_generated_help_is_current_and_local_links_resolve(
+        tmp_path: Path) -> None
+```
+
+Committed Help matches the generator and every local jump has a target.
 
 <a id="validation.test_identity_recursion_trajectory"></a>
 

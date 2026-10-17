@@ -1577,6 +1577,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The in-app Help index can jump to `_read_only`.** Heading generation
+  no longer parses rendered code as Markdown emphasis, which removed the
+  leading underscore and broke the index link. Generated Help pages now
+  have regression checks for literal identifiers, escaped text, duplicate
+  headings, freshness, and local links.
 - **The statistics-message GUI test no longer depends on browser locale
   data.** It controls number formatting and checks both grouped and
   ungrouped generation counts, preserving locale-aware application output

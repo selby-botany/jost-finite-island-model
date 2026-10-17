@@ -46,6 +46,11 @@ def anchor_for(heading: str) -> str:
         segments.append(span.group(1))
         cursor = span.end()
     segments.append(INLINE_MARKUP_PATTERN.sub("", plain[cursor:]))
-    plain = "".join(segments).strip().lower()
+    return anchor_for_text("".join(segments))
+
+
+def anchor_for_text(text: str) -> str:
+    """Return a GitHub-style anchor for literal text, with no markup parsing."""
+    plain = text.strip().lower()
     plain = NON_SLUG_PATTERN.sub("", plain)
     return re.sub(r"\s+", lambda match: "-" * len(match.group(0)), plain)
