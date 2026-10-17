@@ -779,11 +779,11 @@ function sweepPointReadout(point, statistic) {
             ? ` [${sweepFormatValue(stat.low)}, ${sweepFormatValue(stat.high)}]`
             : "";
     const reason = sweepHealthReason(point.result);
-    return (
-        `${where}: ${statisticDisplayName(statistic)} ${sweepFormatValue(stat.mean)}${interval}` +
-        ` (${point.result.nReplicates} replicate${point.result.nReplicates === 1 ? "" : "s"})` +
-        (reason ? `; ${sweepHealthClass(point.result)}: ${reason}` : "")
-    );
+    const count = point.result.nReplicates;
+    const replicates = `${count} replicate${count === 1 ? "" : "s"}`;
+    const health = reason ? `; ${sweepHealthClass(point.result)}: ${reason}` : "";
+    const value = `${statisticDisplayName(statistic)} ${sweepFormatValue(stat.mean)}`;
+    return `${where}: ${value}${interval} (${replicates})${health}`;
 }
 
 /**
