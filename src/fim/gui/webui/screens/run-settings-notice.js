@@ -19,16 +19,20 @@
  * - `clearLoadedRunSettings` drops them when the form starts fresh (New
  *   configuration, Explore's handoff), so Settings apply again.
  * - The notice (one copy on Configure, one on the Run card) lists each
- *   field that differs, with "Make these my Settings" and "Dismiss". A
+ *   field that differs, with "Edit this run", "Make these my Settings"
+ *   and "Dismiss". Configure also offers the editor when no values differ. A
  *   "Run settings" item in the parameter strip stays while they differ,
  *   and brings a dismissed notice back.
  *
- * `window.__fimRunSettingsNoticeSettled` is false while "Make these my
- * Settings" is saving and comparing, so a test can wait for its result.
+ * `window.__fimRunSettingsNoticeSettled` is false while an edit is applying
+ * or "Make these my Settings" is saving, so a test can wait for its result.
  */
 
 /** The loaded configuration's run settings, or `null` to use Settings. */
 let loadedRunSettings = null;
+
+/** Original loaded values, kept independently of edits to the pending run. */
+let originalLoadedRunSettings = null;
 
 /** How `loadedRunSettings` differs from Settings (`Api` entries). */
 let runSettingDifferenceRows = [];
@@ -129,6 +133,7 @@ window.fim.renderRunSettingsNotice = renderRunSettingsNotice;
  */
 function applyLoadedRunSettings(result) {
     loadedRunSettings = result.runSettings ? { ...result.runSettings } : null;
+    originalLoadedRunSettings = loadedRunSettings === null ? null : { ...loadedRunSettings };
     runSettingDifferenceRows = result.runSettingDifferences || [];
     runSettingsNoticeDismissed = false;
     runSettingsAdopted = false;
@@ -140,6 +145,7 @@ window.fim.applyLoadedRunSettings = applyLoadedRunSettings;
 /** Go back to Settings for the run settings (a fresh configuration). */
 function clearLoadedRunSettings() {
     loadedRunSettings = null;
+    originalLoadedRunSettings = null;
     runSettingDifferenceRows = [];
     runSettingsNoticeDismissed = false;
     runSettingsAdopted = false;
@@ -163,6 +169,25 @@ async function refreshRunSettingDifferences() {
 }
 
 window.fim.refreshRunSettingDifferences = refreshRunSettingDifferences;
+
+/**
+ * Apply validated editor values to the pending configuration, not Settings.
+ * @param {Record<string, string>} values
+ */
+async function updateRunSettings(values) {
+    loadedRunSettings = { ...values };
+    runSettingsNoticeDismissed = false;
+    runSettingsAdopted = false;
+    await refreshRunSettingDifferences();
+    await revalidate();
+    if (window.fim.getRunViewState() === "initial") {
+        await window.fim.renderInitialPreview();
+    }
+}
+
+window.fim.updateRunSettings = updateRunSettings;
+window.fim.originalRunSettings = () =>
+    originalLoadedRunSettings === null ? null : { ...originalLoadedRunSettings };
 
 /**
  * "Make these my Settings": save the run's own run settings as Settings,
@@ -198,6 +223,9 @@ async function adoptLoadedRunSettings(notice) {
 }
 
 for (const notice of runSettingsNotices) {
+    notice
+        .querySelector("[data-run-settings-edit]")
+        .addEventListener("click", () => window.fim.openRunSettings());
     notice
         .querySelector("[data-run-settings-adopt]")
         .addEventListener("click", () => adoptLoadedRunSettings(notice));

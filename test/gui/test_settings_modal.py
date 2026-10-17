@@ -624,7 +624,7 @@ def test_every_settings_section_separates_its_hint_from_its_first_field(
     titles = {section["title"] for section in settled["sections"]}
     assert {
         "Statistics shown",
-        "Execution defaults",
+        "Defaults for new configurations",
         "Convergence",
         "Expert: engine tuning",
     } <= titles

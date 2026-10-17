@@ -50,8 +50,8 @@ EXPECTED: dict[str, str | None] = {
     # Unequal deme sizes and an explicit matrix: the full identity matrix.
     "unequal-island-sizes-with-a-migration-hub": SAMPLED,
     "stepping-stone-spatial-migration": SAMPLED,
-    # No migration and no mutation: nothing to relax toward.
-    "literature-distance-statistics-from-an-explicit-founder-split": NONE,
+    # Partially shared alleles, scalar migration and mutation.
+    "literature-distance-statistics-from-an-explicit-founder-split": ISLAND,
     # Equal sizes, scalar m: the two-variable form, from the run's own start.
     "equilibrium-split-founding": ISLAND,
     # migrant_sampling: stochastic
@@ -226,10 +226,9 @@ STANDARD_ERRORS = 5.0
 MINIMUM_HORIZON = 60
 
 # Examples the engine comparison below cannot run the way it runs the others.
-# `dear-nolan-high`'s explicit `p_0` holds one locus, so raising the locus
-# count to `LOCI` would make it invalid, and its 100 demes of 2,000 gene
-# copies would make eight 1,500-generation runs take hours. Its curve is
-# still checked for shape and range above.
+# `dear-nolan-high`'s 100 demes of 2,000 gene copies would make eight
+# 1,500-generation runs take hours. Its curve is still checked for shape
+# and range above.
 ENGINE_CHECK_EXCLUDED = frozenset({"dear-nolan-high"})
 
 
@@ -274,6 +273,10 @@ def test_engine_agrees_with_the_payload_for_every_example(
                 for index in range(1, LOCI + 1)
             ],
         }
+        # An explicit single-locus `p_0` must grow with the locus count; each
+        # added locus starts from the example's own initial distribution.
+        if "p_0" in base:
+            config["p_0"] = [[deme[0]] * LOCI for deme in base["p_0"]]
         path = tmp_path / f"{name.replace('/', '-')}-{offset}.yaml"
         path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
         output = tmp_path / f"out-{name.replace('/', '-')}-{offset}"

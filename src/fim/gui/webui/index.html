@@ -221,6 +221,7 @@
       </table>
       <div class="actions">
         <button type="button" class="primary-action" data-run-settings-adopt>Make these my Settings</button>
+        <button type="button" data-run-settings-edit>Edit this run…</button>
         <button type="button" data-run-settings-dismiss>Dismiss</button>
       </div>
     </div>
@@ -1328,6 +1329,7 @@
       </table>
       <div class="actions">
         <button type="button" class="primary-action" data-run-settings-adopt>Make these my Settings</button>
+        <button type="button" data-run-settings-edit>Edit this run…</button>
         <button type="button" data-run-settings-dismiss>Dismiss</button>
       </div>
     </div>
@@ -1338,6 +1340,7 @@
          "Back to Home" would be wrong every time it was opened from
          somewhere else. -->
     <div class="actions">
+      <button type="button" id="configure-run-settings-button">Run settings…</button>
       <button type="button" id="configure-back-button" data-history-back disabled>
         <svg class="button-icon" aria-hidden="true">
           <use href="icons/fim-icons.svg#icon-back"></use>
@@ -2131,8 +2134,17 @@
        modal a user may dismiss quickly did not seem like enough on its
        own. -->
   <dialog class="config-modal" id="modal-settings">
-    <h2>Settings</h2>
+    <h2 id="settings-title">Settings</h2>
     <div id="settings-banner" class="banner" hidden></div>
+    <p class="hint" id="settings-run-scope" hidden>
+      Changes apply to this configuration only. Saved Settings and existing
+      results are not changed.
+    </p>
+    <div class="actions" id="settings-run-actions" hidden>
+      <button type="button" id="settings-use-defaults">Use saved Settings</button>
+      <button type="button" id="settings-restore-loaded">Restore loaded settings</button>
+    </div>
+    <div id="settings-preferences-fields">
     <div class="field">
       <label for="settings-startup-behavior">At startup</label>
       <select id="settings-startup-behavior">
@@ -2302,11 +2314,12 @@
       </select>
     </div>
 
+    </div>
     <fieldset class="composite">
-      <legend>Execution defaults</legend>
+      <legend id="settings-execution-legend">Defaults for new configurations</legend>
       <p class="hint">
-        Seeds every new configuration -- how the computation runs, not
-        what experiment it asks (Configure's own per-run scope).
+        Controls how the computation runs. Configure's Run settings editor
+        can override these defaults without changing them.
       </p>
       <div class="field">
         <label for="settings-engine_backend" data-field-help="engine_backend">execution engine</label>

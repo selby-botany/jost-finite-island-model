@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Editable per-run execution settings.** Configure's Run settings editor
+  can override loaded examples, presets, YAML, and fresh configurations
+  without changing saved Settings. The shared controls can use a snapshot
+  of saved defaults or restore originally loaded values; invalid edits
+  leave the configuration unchanged.
+
 - **Sweep results show which points to trust.** On the sweep results screen, a
   point whose replicates did not all settle before the generation limit is
   drawn as a hollow ring (with an X through it when none settled) on the chart
@@ -1602,6 +1608,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The founder-split example now demonstrates something.** The
+  one-generation endpoint check is replaced by a dynamic allele-sharing
+  example that watches all five advertised measures. The allelic-distance
+  normalization is documented and the saved outputs are regenerated.
+- **A capped run is shown as a warning.** The raw stop reason is retained
+  so the final results row receives its intended warning marker.
 - **A sweep's theory overlay now uses gene copies, not individuals.** The
   closed-form predictions on the sweep results card were evaluated at `N`
   individuals per deme, while Explore and a run's own overlay use `N` times
