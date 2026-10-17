@@ -337,6 +337,11 @@ def test_the_results_card_saves_its_table_and_its_chart(
     assert cancelled == {"ok": False, "message": ""}
 
 
+# The marker is centred on pixel (20, 20)'s centre, so each probe pixel's
+# distance from the strokes is exact. `between`, pixel (23, 20), spans 2.5 to
+# 3.5 px right of the centre: at least 1.41 px from either arm of the X and
+# 0.59 px inside the ring, both clear of the 0.875 px half-width of the
+# stroke, so it is empty whatever the renderer's antialiasing.
 _MARKER_PIXELS = """(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 40; canvas.height = 40;
@@ -345,11 +350,11 @@ _MARKER_PIXELS = """(() => {
     const result = {};
     for (const kind of ['dot', 'ring', 'crossed']) {
         context.clearRect(0, 0, 40, 40);
-        drawSweepMarker(context, 20, 20, kind, '#ff0000');
+        drawSweepMarker(context, 20.5, 20.5, kind, '#ff0000');
         result[kind] = {
             centre: alpha(20, 20),
             edge: alpha(20 + SWEEP_FLAG_RADIUS, 20),
-            between: alpha(22, 20),
+            between: alpha(23, 20),
             diagonal: alpha(22, 22),
         };
     }
