@@ -8,6 +8,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Save a sweep's table and chart from the app.** The sweep results screen
+  has **Save table…** (the same tidy table as `fim sweep export`, with its
+  `.meta.json` file, for every statistic you have chosen to show) and **Save
+  chart…** (the chart as a PNG image), each through the system's Save dialog.
+
 - **`fim sweep export`: a sweep's results as data.** One command writes a
   tidy CSV or JSON Lines table (one row per point and statistic, or one row per
   point with `--wide`) with the mean, its confidence interval, the spread, the

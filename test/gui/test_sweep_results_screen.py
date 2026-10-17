@@ -283,3 +283,55 @@ def test_home_shows_only_studies_that_exist_without_removed_actions(
         "Delete runs…",
         "Copy",
     }.intersection(seen["buttons"])
+
+
+_SAVE_TABLE = (
+    "window.__saveResult = null;"
+    "(async () => { window.__saveResult = await window.fim.saveSweepTable(); })();"
+)
+_SAVE_CHART = (
+    "window.__saveResult = null;"
+    "(async () => { window.__saveResult = await window.fim.saveSweepChart(); })();"
+)
+
+
+def test_the_results_card_saves_its_table_and_its_chart(
+    fast_scalar_run_settings: Path,
+    window: webview.Window,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = tmp_path / "sweep.csv"
+    chart = tmp_path / "sweep.png"
+    answers = iter([str(table), str(chart), None])
+    monkeypatch.setattr(
+        window, "create_file_dialog", lambda *_args, **_kwargs: next(answers)
+    )
+
+    def steps(poll_until: Poll) -> Any:
+        _run_and_view_results(window, poll_until, _ONE_AXIS)
+        buttons = window.evaluate_js(
+            "[document.getElementById('sweep-results-save-table').textContent,"
+            " document.getElementById('sweep-results-save-chart').textContent]"
+        )
+        saved = {}
+        for name, script in (("table", _SAVE_TABLE), ("chart", _SAVE_CHART)):
+            window.evaluate_js(script)
+            saved[name] = poll_until(
+                "window.__saveResult", lambda result: result is not None
+            )
+        window.evaluate_js(_SAVE_TABLE)
+        cancelled = poll_until("window.__saveResult", lambda result: result is not None)
+        return buttons, saved, cancelled
+
+    buttons, saved, cancelled = _drive(window, steps)
+
+    assert buttons == ["Save table…", "Save chart…"]
+    assert saved["table"]["ok"] is True
+    assert saved["chart"]["ok"] is True
+    header = table.read_text(encoding="utf-8").splitlines()[0]
+    assert header.startswith("sweep_id,point_index,state,d,")
+    assert header.endswith(",theory,residual")
+    assert (tmp_path / "sweep.meta.json").is_file()
+    assert chart.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert cancelled == {"ok": False, "message": ""}

@@ -29,6 +29,8 @@ const sweepResultsReadout = document.getElementById("sweep-results-readout");
 const sweepResultsHead = document.getElementById("sweep-results-head");
 const sweepResultsBody = document.getElementById("sweep-results-body");
 const sweepResultsSetupButton = document.getElementById("sweep-results-setup-button");
+const sweepResultsSaveTable = document.getElementById("sweep-results-save-table");
+const sweepResultsSaveChart = document.getElementById("sweep-results-save-chart");
 const sweepResultsView = document.getElementById("sweep-results");
 
 // Whether a statistic is on a fixed 0-to-1 scale comes from the catalog
@@ -803,6 +805,69 @@ function drawSweepResultsTable(statistic) {
         sweepResultsBody.appendChild(row);
     }
 }
+
+/**
+ * A file-name-safe version of a title: lowercase, other characters as hyphens.
+ * @param {string} text
+ * @returns {string}
+ */
+function sweepSlug(text) {
+    return text
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Say what a save did in the readout: where it went, why it failed, or
+ * nothing for a cancelled dialog (the researcher's own choice).
+ * @param {{ok: boolean, path?: string, message?: string}} reply
+ */
+function reportSweepSave(reply) {
+    if (reply.ok) {
+        sweepResultsReadout.textContent = `Saved ${reply.path}`;
+    } else if (reply.message) {
+        sweepResultsReadout.textContent = `Could not save: ${reply.message}`;
+    }
+}
+
+/**
+ * Save the results table (CSV and its .meta.json) through a native Save
+ * dialog. It writes every statistic the researcher has chosen to show, with
+ * the closed-form columns for those that have one, so the file does not
+ * depend on which statistic the chart is showing.
+ * @returns {Promise<{ok: boolean, path?: string, message?: string}>}
+ */
+window.fim.saveSweepTable = async function saveSweepTable() {
+    const statistics = Array.from(sweepResultsStatistic.options).map(
+        (option) => option.value
+    );
+    const reply = await window.pywebview.api.export_sweep_table(sweepResultsStudyId, {
+        statistics,
+        withTheory: true,
+    });
+    reportSweepSave(reply);
+    return reply;
+};
+
+/**
+ * Save the chart as it is drawn now, as a PNG, through the same bridge call
+ * every other graph uses (`Api.export_graph_image`).
+ * @returns {Promise<{ok: boolean, path?: string, message?: string}>}
+ */
+window.fim.saveSweepChart = async function saveSweepChart() {
+    const name = sweepSlug(sweepResultsData.name) || "sweep";
+    const statistic = sweepSlug(sweepResultsStatistic.value);
+    const reply = await window.pywebview.api.export_graph_image({
+        dataUrl: sweepResultsCanvas.toDataURL("image/png"),
+        suggestedFilename: `${name}${statistic ? `-${statistic}` : ""}.png`,
+    });
+    reportSweepSave(reply);
+    return reply;
+};
+
+sweepResultsSaveTable.addEventListener("click", () => window.fim.saveSweepTable());
+sweepResultsSaveChart.addEventListener("click", () => window.fim.saveSweepChart());
 
 for (const control of [sweepResultsStatistic, sweepResultsMode, sweepResultsTheory]) {
     control.addEventListener("change", renderSweepResults);

@@ -43,6 +43,7 @@ import math
 import multiprocessing
 import os
 import queue
+import re
 import signal
 import subprocess
 import sys
@@ -199,6 +200,7 @@ from fim.sweep_run import (
     sweep_spec_of,
     write_reproducibility_note,
 )
+from fim.sweep_table import ALL_STATISTICS, ResultTable
 from fim.viz.scatter import (
     deme_pair_panel,
     frequency_points,
@@ -5650,6 +5652,80 @@ class Api:
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "values": [theory_at(spec.base, e) for e in coordinates]}
+
+    @_log_bridge_call
+    def export_sweep_table(
+        self, study_id: str, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Save a sweep's results as a tidy table, via a native Save dialog.
+
+        Writes the CSV (or JSON Lines, for a `.jsonl` file name) and the
+        `.meta.json` sidecar beside it (`fim.sweep_table.ResultTable`). The
+        dialog asks before replacing a file, so an existing table is
+        overwritten once the researcher has chosen it.
+
+        Args:
+            study_id: A sweep Study.
+            options: `{"statistics": [names] | "all", "withTheory": bool,
+                "wide": bool, "includeUnfinished": bool}`; every key is
+                optional (the defaults are `D` and `G_ST`, no theory, the
+                long form, finished points only).
+
+        Returns:
+            `{"ok": True, "path": ..., "sidecar": ...}` on success; `{"ok":
+            False, "message": ""}` if the dialog was cancelled; `{"ok":
+            False, "message": ...}` if the Study is not a sweep, has nothing
+            finished to write, or the write failed.
+        """
+        try:
+            table = ResultTable.read(study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        if not table.statistic_names():
+            return {"ok": False, "message": "no finished points to save yet"}
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
+        slug = re.sub(r"[^A-Za-z0-9._-]+", "-", table.name).strip("-") or "sweep"
+        selection = window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            directory=str(Path.home()),
+            save_filename=f"{slug}.csv",
+        )
+        target = _save_dialog_path(selection)
+        if target is None:
+            return {"ok": False, "message": ""}
+        statistics = options.get("statistics")
+        chosen: list[str] | str | None = (
+            statistics
+            if statistics == ALL_STATISTICS
+            else [str(name) for name in statistics]
+            if isinstance(statistics, list)
+            else None
+        )
+        with_theory = bool(options.get("withTheory"))
+        include_unfinished = bool(options.get("includeUnfinished"))
+        try:
+            if target.suffix == ".jsonl":
+                sidecar = table.to_jsonl(
+                    target,
+                    statistics=chosen,
+                    with_theory=with_theory,
+                    include_unfinished=include_unfinished,
+                    overwrite=True,
+                )
+            else:
+                sidecar = table.to_csv(
+                    target,
+                    statistics=chosen,
+                    wide=bool(options.get("wide")),
+                    with_theory=with_theory,
+                    include_unfinished=include_unfinished,
+                    overwrite=True,
+                )
+        except (ValueError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "path": str(target), "sidecar": str(sidecar)}
 
     def _busy_message(self) -> str | None:
         """Return why a sweep cannot start now, or `None` if it can."""

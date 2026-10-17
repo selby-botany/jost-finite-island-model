@@ -491,6 +491,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_sweep\_status](#fim.gui.app.Api.get_sweep_status)
     * [get\_sweep\_results](#fim.gui.app.Api.get_sweep_results)
     * [get\_sweep\_theory](#fim.gui.app.Api.get_sweep_theory)
+    * [export\_sweep\_table](#fim.gui.app.Api.export_sweep_table)
     * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
     * [delete\_runs](#fim.gui.app.Api.delete_runs)
     * [delete\_selected](#fim.gui.app.Api.delete_selected)
@@ -12700,6 +12701,39 @@ every statistic, never an error.
 - ``{"ok"` - True, "values": [{statistic: number | None}, ...]}`,
   one entry per requested coordinate, in order; or `{"ok":
   False, "message": ...}`.
+
+<a id="fim.gui.app.Api.export_sweep_table"></a>
+
+#### export\_sweep\_table
+
+```python
+@_log_bridge_call
+def export_sweep_table(study_id: str, options: dict[str,
+                                                    Any]) -> dict[str, Any]
+```
+
+Save a sweep's results as a tidy table, via a native Save dialog.
+
+Writes the CSV (or JSON Lines, for a `.jsonl` file name) and the
+`.meta.json` sidecar beside it (`fim.sweep_table.ResultTable`). The
+dialog asks before replacing a file, so an existing table is
+overwritten once the researcher has chosen it.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `options` - `{"statistics": [names] | "all", "withTheory": bool,
+- `"wide"` - bool, "includeUnfinished": bool}`; every key is
+  optional (the defaults are `D` and `G_ST`, no theory, the
+  long form, finished points only).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "path": ..., "sidecar": ...}` on success; `{"ok":
+  False, "message": ""}` if the dialog was cancelled; `{"ok":
+  False, "message": ...}` if the Study is not a sweep, has nothing
+  finished to write, or the write failed.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 

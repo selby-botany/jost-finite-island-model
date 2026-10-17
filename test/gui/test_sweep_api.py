@@ -554,3 +554,121 @@ def test_sweep_theory_for_a_diploid_sweep_uses_gene_copies(api: Api) -> None:
 
     # 225 diploid individuals per deme are 450 gene copies.
     assert values[0]["G_ST"] == equilibrium_g_st(450, 0.001, 3e-05, 20)
+
+
+class _SavingWindow(_FakeWindow):
+    """A fake window whose Save dialog answers with a chosen path."""
+
+    def __init__(self, answer: Path | None) -> None:
+        super().__init__()
+        self.answer = answer
+        self.asked: list[dict[str, Any]] = []
+
+    def create_file_dialog(self, *args: Any, **kwargs: Any) -> Any:
+        del args
+        self.asked.append(kwargs)
+        return None if self.answer is None else str(self.answer)
+
+
+def _finished_sweep(api: Api, window: _FakeWindow) -> str:
+    """Run the two-point sweep to its end and return its Study id."""
+    started = api.start_sweep(_form(), _request(_D_AXIS))
+    _wait_until_idle(api)
+    assert window.finished.is_set()
+    return str(started["studyId"])
+
+
+def test_export_sweep_table_writes_the_table_and_its_sidecar(
+    api: Api, window: _FakeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _finished_sweep(api, window)
+    target = tmp_path / "saved.csv"
+    saving = _SavingWindow(target)
+    monkeypatch.setattr(app_module, "_active_window", lambda: saving)
+
+    reply = api.export_sweep_table(
+        study_id, {"statistics": ["D", "H_S"], "withTheory": True}
+    )
+
+    assert reply == {
+        "ok": True,
+        "path": str(target),
+        "sidecar": str(tmp_path / "saved.meta.json"),
+    }
+    lines = target.read_text(encoding="utf-8").splitlines()
+    assert lines[0].endswith(",theory,residual")
+    assert len(lines) == 1 + 2 * 2  # two points, two statistics
+    assert saving.asked[0]["save_filename"].endswith(".csv")
+    meta = json.loads((tmp_path / "saved.meta.json").read_text(encoding="utf-8"))
+    assert meta["sweep"]["study_id"] == study_id
+
+
+def test_export_sweep_table_by_jsonl_name_and_over_an_existing_file(
+    api: Api, window: _FakeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _finished_sweep(api, window)
+    target = tmp_path / "saved.jsonl"
+    target.write_text("old", encoding="utf-8")
+    monkeypatch.setattr(app_module, "_active_window", lambda: _SavingWindow(target))
+
+    reply = api.export_sweep_table(study_id, {"statistics": "all"})
+
+    assert reply["ok"] is True
+    rows = [json.loads(line) for line in target.read_text("utf-8").splitlines()]
+    assert {row["statistic"] for row in rows} > {"D", "G_ST"}
+
+
+def test_a_cancelled_save_dialog_is_not_an_error(
+    api: Api, window: _FakeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _finished_sweep(api, window)
+    monkeypatch.setattr(app_module, "_active_window", lambda: _SavingWindow(None))
+
+    assert api.export_sweep_table(study_id, {}) == {"ok": False, "message": ""}
+    assert not list(tmp_path.glob("*.csv"))
+
+
+def test_export_sweep_table_refuses_what_it_cannot_write(
+    api: Api, window: _FakeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_id = _finished_sweep(api, window)
+    plain = groups.create_study("By hand")
+    monkeypatch.setattr(
+        app_module, "_active_window", lambda: _SavingWindow(tmp_path / "t.csv")
+    )
+
+    not_a_sweep = api.export_sweep_table(plain.study_id, {})
+    unknown = api.export_sweep_table(study_id, {"statistics": ["nope"]})
+
+    assert not_a_sweep["ok"] is False and "not a sweep" in not_a_sweep["message"]
+    assert unknown["ok"] is False and "no statistic 'nope'" in unknown["message"]
+
+
+def test_export_sweep_table_with_nothing_finished_says_so(
+    api: Api, window: _FakeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fim.sweep import SweepSpec, enumerate_points, expand_axis  # noqa: PLC0415
+    from fim.sweep_run import create_sweep_study  # noqa: PLC0415
+
+    del window
+    spec = SweepSpec(
+        base={
+            "N": 16,
+            "ploidy": "haploid",
+            "d": 2,
+            "m": 0.1,
+            "mu": 0.01,
+            "seed": 1,
+            "n_replicates": 1,
+            "max_generations": 10,
+        },
+        axes=(expand_axis("d", [2, 3]),),
+    )
+    study = create_sweep_study(spec, enumerate_points(spec), "Not run")
+    saving = _SavingWindow(tmp_path / "t.csv")
+    monkeypatch.setattr(app_module, "_active_window", lambda: saving)
+
+    reply = api.export_sweep_table(study.study_id, {})
+
+    assert reply == {"ok": False, "message": "no finished points to save yet"}
+    assert saving.asked == []

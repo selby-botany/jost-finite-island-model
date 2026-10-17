@@ -1095,6 +1095,10 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   `E_ST`, `H_S` and `H_T` have one). A `.jsonl` file name writes JSON Lines.
   Points with no result yet are left out unless you pass `--include-unfinished`.
   The command will not replace a file that exists unless you pass `--force`.
+  In the app, the sweep results screen has the same two things as buttons:
+  **Save table…** writes the table (and its `.meta.json` file) for every
+  statistic you have chosen to show, with the closed-form columns, and **Save
+  chart…** saves the chart as it is drawn as a PNG image.
 - Each point has a health mark. A point is `unreliable` if every replicate
   stopped at the generation limit before its statistics settled, `degraded` if
   some did or if the interval is wider than the `precision` you asked for, and

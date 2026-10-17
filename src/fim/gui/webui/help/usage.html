@@ -956,7 +956,11 @@ spread across replicates, the seed and the software version. <code>--with-theory
 adds the closed-form prediction and the difference from it (<code>D</code>, <code>G_ST</code>,
 <code>E_ST</code>, <code>H_S</code> and <code>H_T</code> have one). A <code>.jsonl</code> file name writes JSON Lines.
 Points with no result yet are left out unless you pass <code>--include-unfinished</code>.
-The command will not replace a file that exists unless you pass <code>--force</code>.</li>
+The command will not replace a file that exists unless you pass <code>--force</code>.
+In the app, the sweep results screen has the same two things as buttons:
+<strong>Save table…</strong> writes the table (and its <code>.meta.json</code> file) for every
+statistic you have chosen to show, with the closed-form columns, and <strong>Save
+chart…</strong> saves the chart as it is drawn as a PNG image.</li>
 <li>Each point has a health mark. A point is <code>unreliable</code> if every replicate
 stopped at the generation limit before its statistics settled, <code>degraded</code> if
 some did or if the interval is wider than the <code>precision</code> you asked for, and
