@@ -1060,6 +1060,7 @@ fim sweep resume STUDY_ID --retry-failed
 fim sweep resume STUDY_ID --rerun   # also recompute the completed points
 fim sweep replan STUDY_ID [--dry-run]   # after an upgrade changed run ids
 fim sweep report STUDY_ID --statistic D --csv
+fim sweep export STUDY_ID results.csv [--statistic D --statistic G_ST] [--wide] [--with-theory]
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 ```
 
@@ -1082,6 +1083,23 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   all. A failure the engine reports is never tried again, because the same
   configuration fails the same way. A pool of workers that breaks is replaced,
   so the points after the failed one still run.
+- `fim sweep export` writes the sweep's results as a table you can open in R,
+  Python or a spreadsheet, with a `results.meta.json` file beside it that holds
+  the sweep file's settings, the software version, and what every column means.
+  The default is one row for each point and statistic (the "tidy" form that R
+  and Python group-by tools expect) for `D` and `G_ST`; `--statistic NAME`
+  (repeat it) or `--all-statistics` chooses others, and `--wide` writes one
+  row per point instead. Each row gives the mean, its confidence interval, the
+  spread across replicates, the seed and the software version. `--with-theory`
+  adds the closed-form prediction and the difference from it (`D`, `G_ST`,
+  `E_ST`, `H_S` and `H_T` have one). A `.jsonl` file name writes JSON Lines.
+  Points with no result yet are left out unless you pass `--include-unfinished`.
+  The command will not replace a file that exists unless you pass `--force`.
+- Each point has a health mark. A point is `unreliable` if every replicate
+  stopped at the generation limit before its statistics settled, `degraded` if
+  some did or if the interval is wider than the `precision` you asked for, and
+  `healthy` otherwise. The mark is in the `health` column of the export and in
+  `fim sweep report`. A point that is not healthy is flagged, never left out.
 - A sweep holds a lock on its Study while it runs. A second `fim sweep resume`
   (or the app) on the same Study stops at once with a message that another
   process is running it, instead of both writing the same files. The system

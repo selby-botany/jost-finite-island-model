@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -86,7 +87,7 @@ def test_run_creates_a_study_runs_every_point_and_report_reads_them(
 
     lines = capsys.readouterr().out.splitlines()
     assert status == 0
-    assert lines[0] == "d,state,replicates,D,low,high"
+    assert lines[0] == "d,state,replicates,D,low,high,health"
     assert [line.split(",")[0:3] for line in lines[1:]] == [
         ["2", "done", "1"],
         ["3", "done", "1"],
@@ -359,3 +360,109 @@ def test_replan_reports_a_dry_run_then_repairs_a_stale_plan(
     changed = capsys.readouterr().out
     assert "Changed: 2 point(s) got a new run id" in changed
     assert f"Continue with: fim sweep resume {study.study_id}" in changed
+
+
+def _run_sweep_file(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> str:
+    """Run the two-point sweep and return its study id."""
+    assert _main(tmp_path, "sweep", "run", str(sweep_file)) == 0
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    capsys.readouterr()
+    return study.study_id
+
+
+def test_export_writes_the_table_and_its_sidecar(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    out = tmp_path / "table.csv"
+
+    status = _main(tmp_path, "sweep", "export", study_id, str(out))
+
+    assert status == 0
+    assert "table.meta.json" in capsys.readouterr().out
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert lines[0].startswith("sweep_id,point_index,state,d,run_id,seed,statistic")
+    assert len(lines) == 1 + 2 * 2  # two points, D and G_ST
+    meta = json.loads((tmp_path / "table.meta.json").read_text(encoding="utf-8"))
+    assert meta["sweep"]["study_id"] == study_id
+    assert meta["spec"]["axes"]
+
+
+def test_export_refuses_to_overwrite_unless_forced(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    out = tmp_path / "table.csv"
+    assert _main(tmp_path, "sweep", "export", study_id, str(out)) == 0
+    capsys.readouterr()
+
+    assert _main(tmp_path, "sweep", "export", study_id, str(out)) == 2
+    assert "already exists" in capsys.readouterr().err
+    assert _main(tmp_path, "sweep", "export", study_id, str(out), "--force") == 0
+
+
+def test_export_options_choose_statistics_layout_and_theory(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    out = tmp_path / "wide.csv"
+
+    status = _main(
+        tmp_path,
+        "sweep",
+        "export",
+        study_id,
+        str(out),
+        "--wide",
+        "--statistic",
+        "D",
+        "--statistic",
+        "H_S",
+        "--with-theory",
+    )
+
+    assert status == 0
+    header = out.read_text(encoding="utf-8").splitlines()[0].split(",")
+    assert {"D_mean", "H_S_mean", "H_S_theory", "H_S_residual"} <= set(header)
+    assert "G_ST_mean" not in header
+
+
+def test_export_all_statistics_and_jsonl_by_file_name(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    out = tmp_path / "table.jsonl"
+
+    assert (
+        _main(tmp_path, "sweep", "export", study_id, str(out), "--all-statistics") == 0
+    )
+
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert {row["statistic"] for row in rows} > {"D", "G_ST", "H_S", "H_T"}
+    assert all(row["state"] == "done" for row in rows)
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [
+        (["--statistic", "not_a_statistic"], "no statistic 'not_a_statistic'"),
+        (["--format", "jsonl", "--wide"], "CSV only"),
+    ],
+)
+def test_bad_export_requests_are_plain_errors(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    flags: list[str],
+    message: str,
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    out = tmp_path / "table.csv"
+
+    status = _main(tmp_path, "sweep", "export", study_id, str(out), *flags)
+
+    assert status == 2
+    assert message in capsys.readouterr().err
+    assert not out.exists()

@@ -11,24 +11,36 @@ A replicate that reaches the generation cap before its statistics settle
 still finishes, and its value may be biased. Health is how a long sweep says
 which points to trust; a point that is not healthy is flagged, never
 dropped (botanist question Q6).
+
+`ResultTable` is the whole sweep as data: one row per point and statistic
+(the tidy long form that R and Python group-by tools expect), or one row per
+point on request, written as CSV or JSON Lines with a sidecar file that says
+how to read it.
 """
 
 from __future__ import annotations
 
 import contextlib
+import csv
 import hashlib
 import json
 import logging
 import os
-from collections.abc import Mapping
+import platform
+import sys
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal
 
+from fim import __version__
 from fim.convergence.monitor import StopReason
+from fim.statistics.catalog import spec as statistic_spec
+from fim.statistics.theory import THEORY_STATISTICS, theory_at
 
 if TYPE_CHECKING:
-    from fim.sweep import CoordinateValue
+    from fim.sweep import CoordinateValue, SweepSpec
     from fim.sweep_run import PointState
 
 logger = logging.getLogger(__name__)
@@ -369,3 +381,575 @@ def _replicate_outcomes(
         counts[kind] += 1
         watched.update(dict.fromkeys(names))
     return counts["converged"], counts["hit_cap"], counts["other"], tuple(watched)
+
+
+DEFAULT_EXPORT_STATISTICS: Final = ("D", "G_ST")
+"""The statistics an export writes unless told otherwise (botanist question
+Q1: `D` and `G_ST` first, every statistic selectable)."""
+
+ALL_STATISTICS: Final = "all"
+"""Pass as `statistics` to write every statistic a sweep has."""
+
+_HEAD_COLUMNS: Final = ("sweep_id", "point_index", "state")
+_TAIL_COLUMNS: Final = (
+    "run_id",
+    "seed",
+    "statistic",
+    "mean",
+    "ci_low",
+    "ci_high",
+    "ci_half_width",
+    "ci_level",
+    "sample_std",
+    "sample_count",
+    "replicates",
+    "replicates_converged",
+    "replicates_hit_cap",
+    "health",
+    "achieved_half_width",
+    "software_version",
+    "engine_backend",
+)
+_WIDE_POINT_COLUMNS: Final = (
+    "run_id",
+    "seed",
+    "replicates",
+    "replicates_converged",
+    "replicates_hit_cap",
+    "health",
+    "software_version",
+    "engine_backend",
+)
+_WIDE_STATISTIC_SUFFIXES: Final = (
+    ("mean", "mean"),
+    ("ci_low", "low"),
+    ("ci_high", "high"),
+    ("ci_half_width", "half_width"),
+    ("sample_std", "sample_std"),
+)
+
+COLUMN_DESCRIPTIONS: Final[Mapping[str, str]] = {
+    "sweep_id": "The sweep's Study id.",
+    "point_index": "The point's position in the full grid, first axis slowest.",
+    "state": "done, or the point's state if it has no result (waiting, failed, ...).",
+    "gene_copies_per_deme": "N times the ploidy; the closed forms use gene copies.",
+    "run_id": "The point's run id, a hash of its whole configuration.",
+    "seed": "The run's seed (a batch's base seed).",
+    "statistic": "The statistic's catalog key.",
+    "mean": "Mean over replicates (the value itself for a single run).",
+    "ci_low": "Lower end of the confidence interval of the mean; empty for one run.",
+    "ci_high": "Upper end of the confidence interval of the mean; empty for one run.",
+    "ci_half_width": "Half the interval's width; empty for one run.",
+    "ci_level": "The interval's confidence level, a fraction.",
+    "sample_std": "Standard deviation across replicates; empty for one run.",
+    "sample_count": "Replicates that had a defined value of the statistic.",
+    "replicates": "Replicates the point ran.",
+    "replicates_converged": "Replicates whose watched statistics settled.",
+    "replicates_hit_cap": "Replicates that stopped at the generation cap.",
+    "health": "healthy, degraded or unreliable; a flagged point is never dropped.",
+    "achieved_half_width": "Interval half width of a watched statistic; empty if not.",
+    "software_version": "The fim version that made the run.",
+    "engine_backend": "The engine backend that ran the point.",
+    "theory": "Closed-form prediction at equilibrium; empty where there is none.",
+    "residual": "mean minus theory; empty where there is no prediction.",
+}
+"""What each exported column means, for the sidecar and for readers."""
+
+AXIS_DESCRIPTIONS: Final[Mapping[str, str]] = {
+    "N": "Individuals per deme (the swept value of N).",
+    "d": "Number of demes.",
+    "m": "Migration rate per generation.",
+    "mu": "Mutation rate per generation.",
+    "topology": "Migration topology (island, ring, torus, ...).",
+}
+"""What a swept configuration key means, for the sidecar's column dictionary."""
+
+Cell = float | int | str | None
+
+
+def _text(value: object) -> str:
+    """Format one value for CSV: shortest round-trip floats, empty for `None`."""
+    if value is None:
+        return ""
+    return repr(value) if isinstance(value, float) else str(value)
+
+
+def _gene_copies(spec: SweepSpec, coordinates: Mapping[str, Any]) -> int | None:
+    """Return `N` gene copies per deme at a point, or `None` if it cannot be told."""
+    from fim.model.params import PLOIDY_WORDS  # noqa: PLC0415
+
+    ploidy = next(
+        (n for n, word in PLOIDY_WORDS.items() if word == spec.base.get("ploidy")), None
+    )
+    size = coordinates.get("N", spec.base.get("N"))
+    if ploidy is None or isinstance(size, bool) or not isinstance(size, int | float):
+        return None
+    return int(size) * ploidy
+
+
+@dataclass(frozen=True, slots=True)
+class TablePoint:
+    """One planned point of a sweep and, if it has finished, its row.
+
+    Attributes:
+        index: The point's grid index.
+        coordinates: The varied values, by axis key.
+        run_id: The point's id.
+        state: The point's state (`done`, `stale`, `failed`, `waiting`, ...).
+        row: Its result, or `None` if the point has none.
+    """
+
+    index: int
+    coordinates: Mapping[str, CoordinateValue]
+    run_id: str
+    state: str
+    row: PointRow | None
+
+
+class ResultTable:
+    """An immutable view of a sweep's points, ready to write as data.
+
+    Args:
+        study_id: The sweep Study's id.
+        name: The Study's name.
+        spec: The sweep specification.
+        points: Every planned point, in grid order.
+        policy: The thresholds that classify a point's health.
+    """
+
+    def __init__(
+        self,
+        study_id: str,
+        name: str,
+        spec: SweepSpec,
+        points: Sequence[TablePoint],
+        policy: HealthPolicy = DEFAULT_HEALTH_POLICY,
+    ) -> None:
+        self.study_id = study_id
+        self.name = name
+        self.spec = spec
+        self.points: tuple[TablePoint, ...] = tuple(points)
+        self.policy = policy
+
+    @classmethod
+    def read(cls, study_id: str, *, results: Path | None = None) -> ResultTable:
+        """Read a sweep Study's points and results.
+
+        Args:
+            study_id: A sweep Study.
+            results: Optional results-directory override.
+
+        Raises:
+            ValueError: The Study is not a sweep.
+        """
+        from fim import sweep_run  # noqa: PLC0415 - sweep_run imports this module
+        from fim.persistence import groups  # noqa: PLC0415
+
+        study = groups.get_study(study_id, results=results)
+        spec = sweep_run.sweep_spec_of(study)
+        rows = {
+            row.index: row
+            for row in sweep_run.sweep_point_results(study, results=results)
+        }
+        points = [
+            TablePoint(
+                status.index,
+                status.coordinates,
+                status.run_id,
+                status.state,
+                rows.get(status.index) if status.state == "done" else None,
+            )
+            for status in sweep_run.sweep_point_statuses(study, results=results)
+        ]
+        return cls(study.study_id, study.name, spec, points)
+
+    @property
+    def axis_keys(self) -> tuple[str, ...]:
+        """The swept keys, in axis order."""
+        return tuple(axis.key for axis in self.spec.axes)
+
+    def statistic_names(self) -> tuple[str, ...]:
+        """Return every statistic any finished point has, sorted."""
+        names = {
+            name
+            for point in self.points
+            if point.row is not None
+            for name in point.row.statistics
+        }
+        return tuple(sorted(names))
+
+    def columns(
+        self,
+        *,
+        with_theory: bool = False,
+        statistics: Sequence[str] | None = None,
+        wide: bool = False,
+    ) -> list[str]:
+        """Return the column names of the long (default) or wide table."""
+        axes = list(self.axis_keys)
+        if "N" in axes:
+            axes.append("gene_copies_per_deme")
+        if not wide:
+            columns = [*_HEAD_COLUMNS, *axes, *_TAIL_COLUMNS]
+            return [*columns, "theory", "residual"] if with_theory else columns
+        columns = [*_HEAD_COLUMNS, *axes, *_WIDE_POINT_COLUMNS]
+        for name in self._selected(statistics):
+            columns.extend(
+                f"{name}_{suffix}" for suffix, _field in _WIDE_STATISTIC_SUFFIXES
+            )
+            if with_theory and name in THEORY_STATISTICS:
+                columns.extend((f"{name}_theory", f"{name}_residual"))
+        return columns
+
+    def long_rows(
+        self,
+        statistics: Sequence[str] | str | None = None,
+        *,
+        with_theory: bool = False,
+        include_unfinished: bool = False,
+    ) -> Iterator[dict[str, Cell]]:
+        """Yield one row per finished point and statistic.
+
+        Args:
+            statistics: Statistic keys, `ALL_STATISTICS`, or `None` for the
+                defaults (`DEFAULT_EXPORT_STATISTICS`).
+            with_theory: Add `theory` and `residual` to each row.
+            include_unfinished: Also yield one row per point with no result,
+                its state filled and its statistic empty.
+
+        Raises:
+            ValueError: A requested statistic is in no finished point.
+        """
+        names = self._selected(statistics)
+        for point in self.points:
+            if point.row is None:
+                if include_unfinished:
+                    yield self._row(point, None, with_theory)
+                continue
+            for name in names:
+                if name in point.row.statistics:
+                    yield self._row(point, name, with_theory)
+
+    def wide_rows(
+        self,
+        statistics: Sequence[str] | str | None = None,
+        *,
+        with_theory: bool = False,
+        include_unfinished: bool = False,
+    ) -> Iterator[dict[str, Cell]]:
+        """Yield one row per point, with a column group per statistic."""
+        names = self._selected(statistics)
+        for point in self.points:
+            if point.row is None and not include_unfinished:
+                continue
+            row = self._point_cells(point)
+            row.update(
+                {
+                    f"{n}_{suffix}": None
+                    for n in names
+                    for suffix, _f in _WIDE_STATISTIC_SUFFIXES
+                }
+            )
+            predicted = (
+                theory_at(self.spec.base, point.coordinates) if with_theory else {}
+            )
+            for name in names:
+                cell = point.row.statistics.get(name) if point.row else None
+                if cell is not None:
+                    for suffix, attribute in _WIDE_STATISTIC_SUFFIXES:
+                        row[f"{name}_{suffix}"] = getattr(cell, attribute)
+                if with_theory and name in THEORY_STATISTICS:
+                    value = predicted.get(name)
+                    row[f"{name}_theory"] = value
+                    row[f"{name}_residual"] = (
+                        cell.mean - value
+                        if cell is not None and value is not None
+                        else None
+                    )
+            yield row
+
+    def to_csv(
+        self,
+        path: Path,
+        *,
+        statistics: Sequence[str] | str | None = None,
+        wide: bool = False,
+        with_theory: bool = False,
+        include_unfinished: bool = False,
+        overwrite: bool = False,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> Path:
+        """Write the table as CSV, and its sidecar beside it.
+
+        Returns:
+            The sidecar's path.
+
+        Raises:
+            FileExistsError: The table or its sidecar exists and `overwrite`
+                is false.
+            ValueError: A requested statistic is in no finished point.
+        """
+        names = self._selected(statistics)
+        columns = self.columns(with_theory=with_theory, statistics=names, wide=wide)
+        make = self.wide_rows if wide else self.long_rows
+        rows = make(
+            names, with_theory=with_theory, include_unfinished=include_unfinished
+        )
+        sidecar = self._guard(path, overwrite)
+
+        def write(handle: Any) -> None:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerow(columns)
+            writer.writerows(
+                [_text(row.get(column)) for column in columns] for row in rows
+            )
+
+        _write_atomically(path, write)
+        self._write_sidecar(
+            sidecar,
+            layout="wide" if wide else "long",
+            names=names,
+            columns=columns,
+            with_theory=with_theory,
+            include_unfinished=include_unfinished,
+            clock=clock,
+        )
+        return sidecar
+
+    def to_jsonl(
+        self,
+        path: Path,
+        *,
+        statistics: Sequence[str] | str | None = None,
+        with_theory: bool = False,
+        include_unfinished: bool = False,
+        overwrite: bool = False,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> Path:
+        """Write the long table as JSON Lines, and its sidecar beside it.
+
+        Returns:
+            The sidecar's path.
+
+        Raises:
+            FileExistsError: The table or its sidecar exists and `overwrite`
+                is false.
+            ValueError: A requested statistic is in no finished point.
+        """
+        names = self._selected(statistics)
+        columns = self.columns(with_theory=with_theory, statistics=names)
+        rows = self.long_rows(
+            names, with_theory=with_theory, include_unfinished=include_unfinished
+        )
+        sidecar = self._guard(path, overwrite)
+
+        def write(handle: Any) -> None:
+            for row in rows:
+                handle.write(json.dumps({c: row.get(c) for c in columns}) + "\n")
+
+        _write_atomically(path, write)
+        self._write_sidecar(
+            sidecar,
+            layout="jsonl",
+            names=names,
+            columns=columns,
+            with_theory=with_theory,
+            include_unfinished=include_unfinished,
+            clock=clock,
+        )
+        return sidecar
+
+    def metadata(
+        self,
+        *,
+        layout: str,
+        names: Sequence[str],
+        columns: Sequence[str],
+        with_theory: bool,
+        include_unfinished: bool,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> dict[str, object]:
+        """Return the sidecar content: how to read the table and where it came from."""
+        return {
+            "format_version": 1,
+            "sweep": {"study_id": self.study_id, "name": self.name},
+            "spec": self.spec.to_dict(),
+            "points": [
+                {
+                    "index": p.index,
+                    "coordinates": dict(p.coordinates),
+                    "run_id": p.run_id,
+                    "state": p.state,
+                }
+                for p in self.points
+            ],
+            "table": {
+                "layout": layout,
+                "statistics": list(names),
+                "with_theory": with_theory,
+                "include_unfinished": include_unfinished,
+                "health_policy": {"precision_slack": self.policy.precision_slack},
+            },
+            "software_version": __version__,
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+            "created": clock().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "statistics": {name: _statistic_info(name) for name in names},
+            "columns": {c: self._describe(c) for c in columns},
+        }
+
+    def _describe(self, column: str) -> str:
+        """Say what one column holds, for the sidecar."""
+        if column in COLUMN_DESCRIPTIONS:
+            return COLUMN_DESCRIPTIONS[column]
+        if column in self.axis_keys:
+            return AXIS_DESCRIPTIONS.get(
+                column, f"The swept configuration key {column}."
+            )
+        for suffix in ("mean", "ci_low", "ci_high", "ci_half_width", "sample_std"):
+            if column.endswith(f"_{suffix}"):
+                statistic = column[: -len(suffix) - 1]
+                return f"{COLUMN_DESCRIPTIONS[suffix]} (statistic {statistic})"
+        for suffix in ("theory", "residual"):
+            if column.endswith(f"_{suffix}"):
+                statistic = column[: -len(suffix) - 1]
+                return f"{COLUMN_DESCRIPTIONS[suffix]} (statistic {statistic})"
+        return f"Column {column}."
+
+    def _guard(self, path: Path, overwrite: bool) -> Path:
+        """Return the sidecar path, refusing to overwrite unless allowed."""
+        sidecar = path.with_suffix(".meta.json")
+        if not overwrite:
+            for target in (path, sidecar):
+                if target.exists():
+                    raise FileExistsError(
+                        f"{target} already exists; choose another name or overwrite it"
+                    )
+        return sidecar
+
+    def _write_sidecar(
+        self,
+        sidecar: Path,
+        *,
+        layout: str,
+        names: Sequence[str],
+        columns: Sequence[str],
+        with_theory: bool,
+        include_unfinished: bool,
+        clock: Callable[[], datetime],
+    ) -> None:
+        """Write the sidecar JSON."""
+        document = self.metadata(
+            layout=layout,
+            names=names,
+            columns=columns,
+            with_theory=with_theory,
+            include_unfinished=include_unfinished,
+            clock=clock,
+        )
+        _write_atomically(
+            sidecar, lambda handle: handle.write(json.dumps(document, indent=2) + "\n")
+        )
+
+    def _selected(self, statistics: Sequence[str] | str | None) -> tuple[str, ...]:
+        """Resolve the statistics to write and check each exists.
+
+        Raises:
+            ValueError: A requested statistic is in no finished point.
+        """
+        available = self.statistic_names()
+        if statistics == ALL_STATISTICS:
+            return available
+        if isinstance(statistics, str):
+            statistics = (statistics,)
+        if statistics is None:
+            return tuple(n for n in DEFAULT_EXPORT_STATISTICS if n in available)
+        if available:
+            unknown = [name for name in statistics if name not in available]
+            if unknown:
+                raise ValueError(
+                    f"no statistic {unknown[0]!r} in this sweep's results; "
+                    f"available: {', '.join(available)}"
+                )
+        return tuple(statistics)
+
+    def _point_cells(self, point: TablePoint) -> dict[str, Cell]:
+        """Return the columns every row of a point shares."""
+        row: dict[str, Cell] = {
+            "sweep_id": self.study_id,
+            "point_index": point.index,
+            "state": point.state,
+            "run_id": point.run_id,
+        }
+        for key in self.axis_keys:
+            value = point.coordinates.get(key)
+            row[key] = value if isinstance(value, float | int | str) else None
+        if "N" in self.axis_keys:
+            row["gene_copies_per_deme"] = _gene_copies(self.spec, point.coordinates)
+        found = point.row
+        if found is not None:
+            health = found.health
+            row.update(
+                {
+                    "seed": found.seed,
+                    "replicates": found.n_replicates,
+                    "replicates_converged": health.converged if health else None,
+                    "replicates_hit_cap": health.hit_cap if health else None,
+                    "health": health.classify(self.policy) if health else None,
+                    "software_version": found.software_version,
+                    "engine_backend": found.engine_backend,
+                }
+            )
+        return row
+
+    def _row(
+        self, point: TablePoint, name: str | None, with_theory: bool
+    ) -> dict[str, Cell]:
+        """Build one long row; `name` is `None` for a point with no result."""
+        row = self._point_cells(point)
+        row["statistic"] = name
+        found = point.row
+        if name is None or found is None:
+            return row
+        cell = found.statistics[name]
+        row.update(
+            {
+                "mean": cell.mean,
+                "ci_low": cell.low,
+                "ci_high": cell.high,
+                "ci_half_width": cell.half_width,
+                "ci_level": cell.confidence,
+                "sample_std": cell.sample_std,
+                "sample_count": cell.sample_count,
+                "achieved_half_width": (
+                    found.health.achieved_half_width.get(name) if found.health else None
+                ),
+            }
+        )
+        if with_theory and name in THEORY_STATISTICS:
+            value = theory_at(self.spec.base, point.coordinates).get(name)
+            row["theory"] = value
+            row["residual"] = cell.mean - value if value is not None else None
+        return row
+
+
+def _statistic_info(name: str) -> dict[str, str]:
+    """Describe a statistic from the catalog, for the sidecar."""
+    try:
+        entry = statistic_spec(name)
+    except KeyError:
+        return {"label": name, "description": ""}
+    return {"label": entry.label_text, "description": entry.description}
+
+
+def _write_atomically(path: Path, write: Callable[[Any], object]) -> None:
+    """Write a text file by writing a temporary one and renaming it."""
+    temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="") as handle:
+            write(handle)
+        temporary.replace(path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            temporary.unlink(missing_ok=True)
+        raise

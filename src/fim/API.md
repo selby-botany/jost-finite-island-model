@@ -1627,6 +1627,21 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [put](#fim.sweep_table.HealthCache.put)
     * [save](#fim.sweep_table.HealthCache.save)
   * [read\_point\_health](#fim.sweep_table.read_point_health)
+  * [DEFAULT\_EXPORT\_STATISTICS](#fim.sweep_table.DEFAULT_EXPORT_STATISTICS)
+  * [ALL\_STATISTICS](#fim.sweep_table.ALL_STATISTICS)
+  * [COLUMN\_DESCRIPTIONS](#fim.sweep_table.COLUMN_DESCRIPTIONS)
+  * [AXIS\_DESCRIPTIONS](#fim.sweep_table.AXIS_DESCRIPTIONS)
+  * [TablePoint](#fim.sweep_table.TablePoint)
+  * [ResultTable](#fim.sweep_table.ResultTable)
+    * [read](#fim.sweep_table.ResultTable.read)
+    * [axis\_keys](#fim.sweep_table.ResultTable.axis_keys)
+    * [statistic\_names](#fim.sweep_table.ResultTable.statistic_names)
+    * [columns](#fim.sweep_table.ResultTable.columns)
+    * [long\_rows](#fim.sweep_table.ResultTable.long_rows)
+    * [wide\_rows](#fim.sweep_table.ResultTable.wide_rows)
+    * [to\_csv](#fim.sweep_table.ResultTable.to_csv)
+    * [to\_jsonl](#fim.sweep_table.ResultTable.to_jsonl)
+    * [metadata](#fim.sweep_table.ResultTable.metadata)
 * [fim.termination](#fim.termination)
   * [TERMINATED\_EXIT\_STATUS](#fim.termination.TERMINATED_EXIT_STATUS)
   * [sigterm\_raises\_exit](#fim.termination.sigterm_raises_exit)
@@ -2333,7 +2348,7 @@ def add_sweep_subcommands(
         subcommands: argparse._SubParsersAction[Any]) -> None
 ```
 
-Wire `fim sweep plan/run/resume/replan/report` onto `subcommands`.
+Wire `fim sweep plan/run/resume/replan/export/report` onto `subcommands`.
 
 <a id="fim.cli_sweep.command_sweep"></a>
 
@@ -37606,6 +37621,11 @@ still finishes, and its value may be biased. Health is how a long sweep says
 which points to trust; a point that is not healthy is flagged, never
 dropped (botanist question Q6).
 
+`ResultTable` is the whole sweep as data: one row per point and statistic
+(the tidy long form that R and Python group-by tools expect), or one row per
+point on request, written as CSV or JSON Lines with a sidecar file that says
+how to read it.
+
 <a id="fim.sweep_table.HealthClass"></a>
 
 #### HealthClass
@@ -37815,6 +37835,239 @@ come from `summary.json`, for the statistics the monitor watched.
 **Returns**:
 
   The point's health, or `None` if its manifests cannot be read.
+
+<a id="fim.sweep_table.DEFAULT_EXPORT_STATISTICS"></a>
+
+#### DEFAULT\_EXPORT\_STATISTICS
+
+The statistics an export writes unless told otherwise (botanist question
+Q1: `D` and `G_ST` first, every statistic selectable).
+
+<a id="fim.sweep_table.ALL_STATISTICS"></a>
+
+#### ALL\_STATISTICS
+
+Pass as `statistics` to write every statistic a sweep has.
+
+<a id="fim.sweep_table.COLUMN_DESCRIPTIONS"></a>
+
+#### COLUMN\_DESCRIPTIONS
+
+What each exported column means, for the sidecar and for readers.
+
+<a id="fim.sweep_table.AXIS_DESCRIPTIONS"></a>
+
+#### AXIS\_DESCRIPTIONS
+
+What a swept configuration key means, for the sidecar's column dictionary.
+
+<a id="fim.sweep_table.TablePoint"></a>
+
+## TablePoint Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TablePoint()
+```
+
+One planned point of a sweep and, if it has finished, its row.
+
+**Attributes**:
+
+- `index` - The point's grid index.
+- `coordinates` - The varied values, by axis key.
+- `run_id` - The point's id.
+- `state` - The point's state (`done`, `stale`, `failed`, `waiting`, ...).
+- `row` - Its result, or `None` if the point has none.
+
+<a id="fim.sweep_table.ResultTable"></a>
+
+## ResultTable Objects
+
+```python
+class ResultTable()
+```
+
+An immutable view of a sweep's points, ready to write as data.
+
+**Arguments**:
+
+- `study_id` - The sweep Study's id.
+- `name` - The Study's name.
+- `spec` - The sweep specification.
+- `points` - Every planned point, in grid order.
+- `policy` - The thresholds that classify a point's health.
+
+<a id="fim.sweep_table.ResultTable.read"></a>
+
+#### read
+
+```python
+@classmethod
+def read(cls, study_id: str, *, results: Path | None = None) -> ResultTable
+```
+
+Read a sweep Study's points and results.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `results` - Optional results-directory override.
+
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep.
+
+<a id="fim.sweep_table.ResultTable.axis_keys"></a>
+
+#### axis\_keys
+
+```python
+@property
+def axis_keys() -> tuple[str, ...]
+```
+
+The swept keys, in axis order.
+
+<a id="fim.sweep_table.ResultTable.statistic_names"></a>
+
+#### statistic\_names
+
+```python
+def statistic_names() -> tuple[str, ...]
+```
+
+Return every statistic any finished point has, sorted.
+
+<a id="fim.sweep_table.ResultTable.columns"></a>
+
+#### columns
+
+```python
+def columns(*,
+            with_theory: bool = False,
+            statistics: Sequence[str] | None = None,
+            wide: bool = False) -> list[str]
+```
+
+Return the column names of the long (default) or wide table.
+
+<a id="fim.sweep_table.ResultTable.long_rows"></a>
+
+#### long\_rows
+
+```python
+def long_rows(statistics: Sequence[str] | str | None = None,
+              *,
+              with_theory: bool = False,
+              include_unfinished: bool = False) -> Iterator[dict[str, Cell]]
+```
+
+Yield one row per finished point and statistic.
+
+**Arguments**:
+
+- `statistics` - Statistic keys, `ALL_STATISTICS`, or `None` for the
+  defaults (`DEFAULT_EXPORT_STATISTICS`).
+- `with_theory` - Add `theory` and `residual` to each row.
+- `include_unfinished` - Also yield one row per point with no result,
+  its state filled and its statistic empty.
+
+
+**Raises**:
+
+- `ValueError` - A requested statistic is in no finished point.
+
+<a id="fim.sweep_table.ResultTable.wide_rows"></a>
+
+#### wide\_rows
+
+```python
+def wide_rows(statistics: Sequence[str] | str | None = None,
+              *,
+              with_theory: bool = False,
+              include_unfinished: bool = False) -> Iterator[dict[str, Cell]]
+```
+
+Yield one row per point, with a column group per statistic.
+
+<a id="fim.sweep_table.ResultTable.to_csv"></a>
+
+#### to\_csv
+
+```python
+def to_csv(
+    path: Path,
+    *,
+    statistics: Sequence[str] | str | None = None,
+    wide: bool = False,
+    with_theory: bool = False,
+    include_unfinished: bool = False,
+    overwrite: bool = False,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> Path
+```
+
+Write the table as CSV, and its sidecar beside it.
+
+**Returns**:
+
+  The sidecar's path.
+
+
+**Raises**:
+
+- `FileExistsError` - The table or its sidecar exists and `overwrite`
+  is false.
+- `ValueError` - A requested statistic is in no finished point.
+
+<a id="fim.sweep_table.ResultTable.to_jsonl"></a>
+
+#### to\_jsonl
+
+```python
+def to_jsonl(
+    path: Path,
+    *,
+    statistics: Sequence[str] | str | None = None,
+    with_theory: bool = False,
+    include_unfinished: bool = False,
+    overwrite: bool = False,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> Path
+```
+
+Write the long table as JSON Lines, and its sidecar beside it.
+
+**Returns**:
+
+  The sidecar's path.
+
+
+**Raises**:
+
+- `FileExistsError` - The table or its sidecar exists and `overwrite`
+  is false.
+- `ValueError` - A requested statistic is in no finished point.
+
+<a id="fim.sweep_table.ResultTable.metadata"></a>
+
+#### metadata
+
+```python
+def metadata(
+    *,
+    layout: str,
+    names: Sequence[str],
+    columns: Sequence[str],
+    with_theory: bool,
+    include_unfinished: bool,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> dict[str, object]
+```
+
+Return the sidecar content: how to read the table and where it came from.
 
 <a id="fim.termination"></a>
 

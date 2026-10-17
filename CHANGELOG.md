@@ -8,6 +8,19 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`fim sweep export`: a sweep's results as data.** One command writes a
+  tidy CSV or JSON Lines table (one row per point and statistic, or one row per
+  point with `--wide`) with the mean, its confidence interval, the spread, the
+  replicate counts, the seed, the engine and the software version, plus a
+  `.meta.json` file that holds the sweep's settings and a dictionary of the
+  columns. `--with-theory` adds the closed-form prediction and the residual.
+  `fim sweep report` now shows each point's health too.
+- **Each sweep point has a health mark.** A point whose replicates all stopped
+  at the generation limit is `unreliable`, one where some did, or whose interval
+  is wider than the requested precision, is `degraded`, and the rest are
+  `healthy`. It is worked out from the files a run already wrote, so existing
+  runs have it too, and points that are not healthy are flagged, never dropped.
+
 - **A Python guide.** [Using fim from Python](doc/python-api.md) walks a
   researcher through describing a run, reading its result, saving and
   reopening it, and pausing and resuming it, with code that a test runs as

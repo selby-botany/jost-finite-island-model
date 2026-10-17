@@ -37,13 +37,12 @@ from fim.sweep_run import (
     create_sweep_study,
     replan_sweep,
     run_sweep,
-    sweep_point_results,
-    sweep_point_statuses,
 )
+from fim.sweep_table import ALL_STATISTICS, ResultTable
 
 
 def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
-    """Wire `fim sweep plan/run/resume/replan/report` onto `subcommands`."""
+    """Wire `fim sweep plan/run/resume/replan/export/report` onto `subcommands`."""
     sweep_parser = subcommands.add_parser(
         "sweep", help="run a configuration over a parameter space as one study"
     )
@@ -81,6 +80,44 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         "match replaces it, a difference keeps both and is reported",
     )
     _add_concurrency_arguments(resume_parser)
+    export_parser = sweep_subcommands.add_parser(
+        "export",
+        help="write a sweep's results as a tidy CSV or JSON Lines table",
+    )
+    export_parser.add_argument("study_id", metavar="STUDY_ID")
+    export_parser.add_argument("out", metavar="OUT", help="file to write")
+    export_parser.add_argument(
+        "--format",
+        choices=("csv", "jsonl"),
+        help="table format (default: jsonl for a .jsonl file name, else csv)",
+    )
+    export_parser.add_argument(
+        "--statistic",
+        action="append",
+        metavar="NAME",
+        help="statistic to write; repeat for several (default: D and G_ST)",
+    )
+    export_parser.add_argument(
+        "--all-statistics", action="store_true", help="write every statistic"
+    )
+    export_parser.add_argument(
+        "--wide",
+        action="store_true",
+        help="one row per point with a column group per statistic (CSV only)",
+    )
+    export_parser.add_argument(
+        "--with-theory",
+        action="store_true",
+        help="add the closed-form prediction and the residual (mean minus theory)",
+    )
+    export_parser.add_argument(
+        "--include-unfinished",
+        action="store_true",
+        help="also write a row for each point with no result, its state filled",
+    )
+    export_parser.add_argument(
+        "--force", action="store_true", help="overwrite an existing table"
+    )
     replan_parser = sweep_subcommands.add_parser(
         "replan",
         help="re-identify a sweep study's points after an upgrade changed run ids",
@@ -175,6 +212,8 @@ def command_sweep(
         return _resume(arguments)
     if command == "replan":
         return _replan(arguments)
+    if command == "export":
+        return _export(arguments)
     if command == "report":
         return _report(arguments.study_id, arguments.statistic, as_csv=arguments.csv)
     parser.error("a sweep subcommand is required")
@@ -238,6 +277,28 @@ def _run(arguments: argparse.Namespace) -> int:
     study = create_sweep_study(spec, plan, name, experiment_id=arguments.experiment)
     print(f"Created sweep study {study.study_id}: {study.name}")
     return _execute(study.study_id, arguments)
+
+
+def _export(arguments: argparse.Namespace) -> int:
+    """Write a sweep's results as a tidy table and say where it went."""
+    out = Path(arguments.out)
+    fmt = arguments.format or ("jsonl" if out.suffix == ".jsonl" else "csv")
+    if arguments.wide and fmt != "csv":
+        raise ValueError("--wide is available for CSV only")
+    statistics = ALL_STATISTICS if arguments.all_statistics else arguments.statistic
+    table = ResultTable.read(arguments.study_id)
+    options = {
+        "statistics": statistics,
+        "with_theory": arguments.with_theory,
+        "include_unfinished": arguments.include_unfinished,
+        "overwrite": arguments.force,
+    }
+    if fmt == "jsonl":
+        sidecar = table.to_jsonl(out, **options)
+    else:
+        sidecar = table.to_csv(out, wide=arguments.wide, **options)
+    print(f"Wrote {out} and {sidecar}")
+    return 0
 
 
 def _replan(arguments: argparse.Namespace) -> int:
@@ -355,26 +416,26 @@ def _print_event(event: SweepEvent) -> None:
 
 
 def _report(study_id: str, statistic: str, *, as_csv: bool) -> int:
-    """Print each point's statistic with its interval, as text or CSV."""
-    study = groups.get_study(study_id)
-    statuses = {status.index: status for status in sweep_point_statuses(study)}
-    results = {result.index: result for result in sweep_point_results(study)}
-    keys = _axis_keys(study)
-    header = [*keys, "state", "replicates", statistic, "low", "high"]
+    """Print each point's statistic with its interval and health, as text or CSV."""
+    table = ResultTable.read(study_id)
+    keys = list(table.axis_keys)
+    header = [*keys, "state", "replicates", statistic, "low", "high", "health"]
     rows: list[list[str]] = []
-    for index, status in sorted(statuses.items()):
-        result = results.get(index)
-        stat = result.statistics.get(statistic) if result is not None else None
-        if result is not None and stat is None:
+    for point in table.points:
+        result = point.row
+        cell = result.statistics.get(statistic) if result is not None else None
+        if result is not None and cell is None:
             raise ValueError(f"no statistic {statistic!r} in this sweep's results")
+        health = result.health if result is not None else None
         rows.append(
             [
-                *(_format(status.coordinates.get(key, "")) for key in keys),
-                status.state,
+                *(_format(point.coordinates.get(key, "")) for key in keys),
+                point.state,
                 str(result.n_replicates) if result is not None else "",
-                _format(stat.mean) if stat else "",
-                _format(stat.low) if stat and stat.low is not None else "",
-                _format(stat.high) if stat and stat.high is not None else "",
+                _format(cell.mean) if cell else "",
+                _format(cell.low) if cell and cell.low is not None else "",
+                _format(cell.high) if cell and cell.high is not None else "",
+                health.classify(table.policy) if health is not None else "",
             ]
         )
     if as_csv:
@@ -386,16 +447,6 @@ def _report(study_id: str, statistic: str, *, as_csv: bool) -> int:
         for row in rows:
             print("  ".join(row))
     return 0
-
-
-def _axis_keys(study: groups.StudyManifest) -> list[str]:
-    """Return the swept keys of a sweep study, in axis order."""
-    if study.sweep_spec is None:
-        raise ValueError(f"study {study.study_id} is not a sweep")
-    axes = study.sweep_spec.get("axes")
-    if not isinstance(axes, list):
-        raise ValueError("the sweep study's stored axes are malformed")
-    return [str(axis["key"]) for axis in axes]
 
 
 def _format(value: object) -> str:
