@@ -104,15 +104,23 @@ def theory_for_configuration(
 ) -> dict[str, float | None]:
     """Return the closed-form prediction of each reported statistic.
 
+    The formulas are functions of gene copies per deme, and a configuration's
+    `N` counts individuals, so `N` is multiplied by the ploidy word the
+    configuration must carry (`"haploid"` to `"tetraploid"`).
+
     Args:
-        configuration: A run configuration with at least `N`, `m`, `mu`
-            and `d`, as a sweep point's mapping.
+        configuration: A run configuration with at least `N`, `ploidy`, `m`,
+            `mu` and `d`, as a sweep point's mapping.
 
     Returns:
         A value for each of `THEORY_STATISTICS`; all `None` where the closed
         form does not cover the configuration (a missing or non-numeric
-        parameter, or `N` or `d` below the smallest the formulas accept).
+        parameter, an unknown ploidy, or `N` or `d` below the smallest the
+        formulas accept).
     """
+    # Imported here because the model package imports this one.
+    from fim.model.params import PLOIDY_WORDS  # noqa: PLC0415
+
     undefined: dict[str, float | None] = dict.fromkeys(THEORY_STATISTICS)
     try:
         n, m, mu, d = (
@@ -121,6 +129,7 @@ def theory_for_configuration(
             configuration["mu"],
             configuration["d"],
         )
+        ploidy_word = configuration["ploidy"]
     except KeyError:
         return undefined
     scalars = all(
@@ -129,7 +138,14 @@ def theory_for_configuration(
     )
     if not scalars or n < MINIMUM_EQUILIBRIUM_N or d < MINIMUM_EQUILIBRIUM_DEMES:
         return undefined
-    predictions = equilibrium_numeric_predictions(int(n), float(m), float(mu), int(d))
+    ploidy = next(
+        (number for number, word in PLOIDY_WORDS.items() if word == ploidy_word), None
+    )
+    if ploidy is None:
+        return undefined
+    predictions = equilibrium_numeric_predictions(
+        int(n) * ploidy, float(m), float(mu), int(d)
+    )
     result: dict[str, float | None] = {}
     for name in THEORY_STATISTICS:
         value = predictions.get(name)

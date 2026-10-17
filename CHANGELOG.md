@@ -1577,6 +1577,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A sweep's theory overlay now uses gene copies, not individuals.** The
+  closed-form predictions on the sweep results card were evaluated at `N`
+  individuals per deme, while Explore and a run's own overlay use `N` times
+  the ploidy gene copies, so for a diploid, triploid or tetraploid sweep the
+  theory curve, heat map and difference map were computed at too small a
+  population. `D` has no `N` term and was unaffected.
 - **The in-app Help index can jump to `_read_only`.** Heading generation
   no longer parses rendered code as Markdown emphasis, which removed the
   leading underscore and broke the index link. Generated Help pages now

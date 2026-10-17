@@ -528,3 +528,29 @@ def test_a_sweep_thread_that_dies_tells_the_page_and_frees_the_guard(
     errors = [s for s in window.pushed if s.startswith("fim.onSweepError(")]
     assert len(errors) == 1
     assert "terminated abruptly" in errors[0]
+
+
+def test_sweep_theory_for_a_diploid_sweep_uses_gene_copies(api: Api) -> None:
+    from fim.statistics.differentiation import equilibrium_g_st  # noqa: PLC0415
+    from fim.sweep import SweepSpec, enumerate_points, expand_axis  # noqa: PLC0415
+    from fim.sweep_run import create_sweep_study  # noqa: PLC0415
+
+    spec = SweepSpec(
+        base={
+            "N": 225,
+            "ploidy": "diploid",
+            "d": 20,
+            "m": 0.001,
+            "mu": 3e-05,
+            "seed": 1,
+            "n_replicates": 1,
+            "max_generations": 10,
+        },
+        axes=(expand_axis("m", [0.001, 0.01]),),
+    )
+    study = create_sweep_study(spec, enumerate_points(spec), "Diploid theory")
+
+    values = api.get_sweep_theory(study.study_id, [{"m": 0.001}])["values"]
+
+    # 225 diploid individuals per deme are 450 gene copies.
+    assert values[0]["G_ST"] == equilibrium_g_st(450, 0.001, 3e-05, 20)

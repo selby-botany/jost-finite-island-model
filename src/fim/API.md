@@ -36163,17 +36163,22 @@ def theory_for_configuration(
 
 Return the closed-form prediction of each reported statistic.
 
+The formulas are functions of gene copies per deme, and a configuration's
+`N` counts individuals, so `N` is multiplied by the ploidy word the
+configuration must carry (`"haploid"` to `"tetraploid"`).
+
 **Arguments**:
 
-- `configuration` - A run configuration with at least `N`, `m`, `mu`
-  and `d`, as a sweep point's mapping.
+- `configuration` - A run configuration with at least `N`, `ploidy`, `m`,
+  `mu` and `d`, as a sweep point's mapping.
 
 
 **Returns**:
 
   A value for each of `THEORY_STATISTICS`; all `None` where the closed
   form does not cover the configuration (a missing or non-numeric
-  parameter, or `N` or `d` below the smallest the formulas accept).
+  parameter, an unknown ploidy, or `N` or `d` below the smallest the
+  formulas accept).
 
 <a id="fim.statistics.theory.theory_at"></a>
 
