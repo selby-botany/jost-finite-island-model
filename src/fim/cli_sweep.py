@@ -15,7 +15,7 @@ import argparse
 import csv
 import sys
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +31,7 @@ from fim.sweep import (
     spec_from_config,
     work_estimate,
 )
+from fim.sweep_compare import Comparison, SweepRef, compare_sweeps
 from fim.sweep_run import (
     LocalPointRunner,
     SweepEvent,
@@ -42,7 +43,7 @@ from fim.sweep_table import ALL_STATISTICS, ResultTable
 
 
 def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
-    """Wire `fim sweep plan/run/resume/replan/export/report` onto `subcommands`."""
+    """Wire `fim sweep plan/run/resume/replan/export/compare/report`."""
     sweep_parser = subcommands.add_parser(
         "sweep", help="run a configuration over a parameter space as one study"
     )
@@ -117,6 +118,31 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     )
     export_parser.add_argument(
         "--force", action="store_true", help="overwrite an existing table"
+    )
+    compare_parser = sweep_subcommands.add_parser(
+        "compare",
+        help="compare one statistic across two or more sweeps on their shared axes",
+    )
+    compare_parser.add_argument(
+        "studies",
+        nargs="+",
+        metavar="STUDY[=LABEL]",
+        help="two or more sweep studies; a label after = names one in the output",
+    )
+    compare_parser.add_argument(
+        "--statistic", default="D", help="statistic to compare (default: D)"
+    )
+    compare_parser.add_argument(
+        "--on",
+        action="append",
+        metavar="KEY",
+        help="axis to join on, repeated for several (default: every shared axis)",
+    )
+    compare_parser.add_argument(
+        "--csv", metavar="OUT", help="also write the comparison to a CSV file"
+    )
+    compare_parser.add_argument(
+        "--force", action="store_true", help="overwrite an existing --csv file"
     )
     replan_parser = sweep_subcommands.add_parser(
         "replan",
@@ -203,20 +229,19 @@ def command_sweep(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser
 ) -> int:
     """Dispatch one `fim sweep` subcommand and return its exit status."""
-    command = arguments.sweep_command
-    if command == "plan":
-        return _plan(Path(arguments.file))
-    if command == "run":
-        return _run(arguments)
-    if command == "resume":
-        return _resume(arguments)
-    if command == "replan":
-        return _replan(arguments)
-    if command == "export":
-        return _export(arguments)
-    if command == "report":
-        return _report(arguments.study_id, arguments.statistic, as_csv=arguments.csv)
-    parser.error("a sweep subcommand is required")
+    handlers: dict[str, Callable[[argparse.Namespace], int]] = {
+        "plan": lambda args: _plan(Path(args.file)),
+        "run": _run,
+        "resume": _resume,
+        "replan": _replan,
+        "export": _export,
+        "compare": _compare,
+        "report": lambda args: _report(args.study_id, args.statistic, as_csv=args.csv),
+    }
+    handler = handlers.get(arguments.sweep_command)
+    if handler is None:
+        parser.error("a sweep subcommand is required")
+    return handler(arguments)
 
 
 def _load(path: Path) -> tuple[SweepSpec, str | None]:
@@ -277,6 +302,99 @@ def _run(arguments: argparse.Namespace) -> int:
     study = create_sweep_study(spec, plan, name, experiment_id=arguments.experiment)
     print(f"Created sweep study {study.study_id}: {study.name}")
     return _execute(study.study_id, arguments)
+
+
+def _compare(arguments: argparse.Namespace) -> int:
+    """Compare a statistic across sweeps and print where they line up."""
+    refs = []
+    for item in arguments.studies:
+        study_id, _, label = item.partition("=")
+        refs.append(SweepRef(study_id, label))
+    comparison = compare_sweeps(refs, statistic=arguments.statistic, on=arguments.on)
+    rows = _comparison_rows(comparison)
+    _print_comparison(comparison, rows)
+    if arguments.csv:
+        target = Path(arguments.csv)
+        if target.exists() and not arguments.force:
+            raise FileExistsError(
+                f"{target} already exists; choose another name or pass --force"
+            )
+        with target.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerows(rows)
+        print(f"Wrote {target}")
+    return 0
+
+
+def _comparison_rows(comparison: Comparison) -> list[list[str]]:
+    """Lay a comparison out as a header and one row per shared coordinate."""
+    two = len(comparison.labels) == 2  # noqa: PLR2004
+    header = [*comparison.on]
+    for label in comparison.labels:
+        header += [
+            f"{label}: mean",
+            f"{label}: low",
+            f"{label}: high",
+            f"{label}: seed",
+        ]
+    if two:
+        header += ["difference", "diff low", "diff high"]
+    rows = [header]
+    for point in comparison.points:
+        row = [_format(point.coordinates[key]) for key in comparison.on]
+        for label in comparison.labels:
+            cell = point.cells[label]
+            seed = point.seeds[label]
+            row += [
+                _format(cell.mean) if cell else "",
+                _format(cell.low) if cell and cell.low is not None else "",
+                _format(cell.high) if cell and cell.high is not None else "",
+                "" if seed is None else str(seed),
+            ]
+        if two:
+            diff = point.difference
+            row += [
+                _format(diff.difference) if diff else "",
+                _format(diff.low) if diff and diff.low is not None else "",
+                _format(diff.high) if diff and diff.high is not None else "",
+            ]
+        rows.append(row)
+    return rows
+
+
+def _print_comparison(comparison: Comparison, rows: list[list[str]]) -> None:
+    """Print what was compared, how the seeds relate, and the table."""
+    print(
+        f"Comparing {comparison.statistic} across "
+        f"{', '.join(comparison.labels)}, joined on {', '.join(comparison.on)}"
+    )
+    for key, values in comparison.base_differences.items():
+        shown = "; ".join(f"{label}: {value}" for label, value in values.items())
+        print(f"  base differs in {key}: {shown}")
+    policies = ", ".join(f"{k}: {v}" for k, v in comparison.seed_policies.items())
+    print(f"  seed policy: {policies}")
+    note = {
+        "independent": "the runs used different seeds",
+        "shared-seeds": (
+            "the runs used the same seeds, so they are paired, and the interval "
+            "of a difference (which assumes independence) is only approximate"
+        ),
+        "partly-shared-seeds": "some compared runs used the same seeds",
+        "unknown": "no coordinate has a finished point in two sweeps",
+    }[comparison.pairing]
+    print(f"  seeds: {note}")
+    if len(comparison.labels) == 2:  # noqa: PLR2004
+        print(
+            f"  difference is {comparison.labels[0]} minus {comparison.labels[1]}, "
+            "with a Welch interval"
+        )
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+    for row in rows:
+        print(
+            "  ".join(
+                text.ljust(width) for text, width in zip(row, widths, strict=True)
+            )
+        )
 
 
 def _export(arguments: argparse.Namespace) -> int:

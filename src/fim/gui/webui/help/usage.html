@@ -926,6 +926,7 @@ fim sweep resume STUDY_ID --rerun   # also recompute the completed points
 fim sweep replan STUDY_ID [--dry-run]   # after an upgrade changed run ids
 fim sweep report STUDY_ID --statistic D --csv
 fim sweep export STUDY_ID results.csv [--statistic D --statistic G_ST] [--wide] [--with-theory]
+fim sweep compare STUDY_A STUDY_B [--statistic D] [--on m] [--csv out.csv]
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 </code></pre>
 <ul>
@@ -974,6 +975,21 @@ geometric series of values. With the chart selected, the arrow keys move from
 point to point and Enter opens that point's run. The heat map's <strong>Show</strong> menu
 also offers the difference from theory as a fraction of the theory, next to
 the absolute difference; <code>fim sweep export --with-theory</code> writes both.</li>
+<li><code>fim sweep compare</code> lines up two or more sweeps on the axes they all vary and
+prints one statistic from each at every value they share, so you can ask
+whether a ring behaves like an island or whether 100 individuals per deme
+differ from 1,000. Name a sweep in the output with <code>STUDY=label</code>. It refuses,
+and says why, when the sweeps share no axis, share no value of an axis, have
+different ploidy, or one varies an axis the others do not. It lists the base
+settings that differ between the sweeps, which is the difference you are
+investigating. For exactly two sweeps it adds their difference (first minus
+second) with a 95% interval from Welch's method, which allows each sweep a
+different spread. That interval assumes the two sweeps' replicates are
+independent, so the command looks at the seeds the runs actually used and
+says whether they were different, shared (two sweeps built from the same
+seed and grid use the same seeds, point for point), or partly shared. It
+never changes the method on its own. Nothing is stored; the comparison is
+worked out each time.</li>
 <li>Each point has a health mark. A point is <code>unreliable</code> if every replicate
 stopped at the generation limit before its statistics settled, <code>degraded</code> if
 some did or if the interval is wider than the <code>precision</code> you asked for, and

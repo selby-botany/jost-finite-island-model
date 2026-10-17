@@ -13,6 +13,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   without changing saved Settings. The shared controls can use a snapshot
   of saved defaults or restore originally loaded values; invalid edits
   leave the configuration unchanged.
+- **`fim sweep compare`: sweeps side by side.** Lines up two or more sweeps on
+  the axes they share and prints a statistic from each at every shared value,
+  the base settings that differ between them, and, for two sweeps, the
+  difference with a Welch interval. It reports whether the compared runs used
+  the same seeds (the interval assumes they did not) and refuses a comparison
+  that cannot be made, with the reason. `--csv` writes the table.
 - **Families of curves on the sweep results screen.** **Curves by** draws one
   curve for each value of a second axis, each with its own color and marker
   shape, error bars (the interval of the mean, the spread across replicates,

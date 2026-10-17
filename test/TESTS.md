@@ -39,6 +39,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_simulate`](#test.test_simulate)
   - [`test_stored`](#test.test_stored)
   - [`test_sweep`](#test.test_sweep)
+  - [`test_sweep_compare`](#test.test_sweep_compare)
   - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_sweep_table`](#test.test_sweep_table)
   - [`test_termination`](#test.test_termination)
@@ -4511,6 +4512,38 @@ def test_a_point_run_description_places_it_in_its_sweep() -> None
 ```
 
 A long axis is summarized as a range; a short one is listed.
+
+<a id="test.test_sweep_compare"></a>
+
+# test.test\_sweep\_compare
+
+Tests for `fim.sweep_compare`: joining sweeps and the Welch difference.
+
+Most tests build the sweeps' tables by hand and serve them in place of
+`ResultTable.read`, so no simulation runs and every number is checkable on
+paper; a last test compares two real, tiny sweeps end to end.
+
+<a id="test.test_sweep_compare.serve"></a>
+
+#### serve
+
+```python
+@pytest.fixture
+def serve(monkeypatch: pytest.MonkeyPatch) -> Any
+```
+
+Serve prebuilt tables in place of reading Studies.
+
+<a id="test.test_sweep_compare.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Point the results directory at a temporary one for the test.
 
 <a id="test.test_sweep_run"></a>
 

@@ -1573,6 +1573,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [expand\_axis](#fim.sweep.expand_axis)
   * [spec\_from\_config](#fim.sweep.spec_from_config)
   * [apply\_coordinates](#fim.sweep.apply_coordinates)
+* [fim.sweep\_compare](#fim.sweep_compare)
+  * [Pairing](#fim.sweep_compare.Pairing)
+  * [SweepRef](#fim.sweep_compare.SweepRef)
+  * [DifferenceCell](#fim.sweep_compare.DifferenceCell)
+  * [ComparedPoint](#fim.sweep_compare.ComparedPoint)
+  * [Comparison](#fim.sweep_compare.Comparison)
+  * [welch\_difference](#fim.sweep_compare.welch_difference)
+  * [compare\_sweeps](#fim.sweep_compare.compare_sweeps)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
   * [SweepLockedError](#fim.sweep_run.SweepLockedError)
@@ -2356,7 +2364,7 @@ def add_sweep_subcommands(
         subcommands: argparse._SubParsersAction[Any]) -> None
 ```
 
-Wire `fim sweep plan/run/resume/replan/export/report` onto `subcommands`.
+Wire `fim sweep plan/run/resume/replan/export/compare/report`.
 
 <a id="fim.cli_sweep.command_sweep"></a>
 
@@ -36863,6 +36871,198 @@ coordinates, such as the closed-form theory along an axis.
 
 - `ValueError` - `base` cannot take one of the axes (for example an `m`
   axis with no `m` in the base).
+
+<a id="fim.sweep_compare"></a>
+
+# fim.sweep\_compare
+
+Compare sweeps: the same statistic across sweeps, joined by coordinates.
+
+The botanist's questions are comparative: ring against island topology,
+`N` = 100 against `N` = 1,000, a sweep against its recomputed twin. A
+comparison lines up two or more sweeps on the axis values they share, reports
+the statistic of each at every shared coordinate, and, for exactly two
+sweeps, the difference with an interval.
+
+One definition of "comparable" serves the command line, the app and the
+export: two sweeps compare on the axis keys both vary, at the values both
+have. Nothing is stored; a comparison is computed when it is asked for.
+
+**The interval of a difference.** For two sweeps with replicate means `m1`
+and `m2`, standard deviations `s1` and `s2`, and `n1` and `n2` replicates,
+
+    difference = m1 - m2
+    standard error = sqrt(s1^2 / n1 + s2^2 / n2)
+    degrees of freedom = standard error^4 /
+        ((s1^2 / n1)^2 / (n1 - 1) + (s2^2 / n2)^2 / (n2 - 1))
+
+(Welch's unequal-variance method with the Welch-Satterthwaite degrees of
+freedom, rounded down to a whole number so the interval errs wide). The
+interval is `difference` plus or minus the Student's-t critical value for
+those degrees of freedom times the standard error. It needs at least two
+replicates on each side; with fewer, the difference is reported without an
+interval.
+
+**Seeds (botanist question Q7).** Welch's method assumes the two sweeps'
+replicates are independent. They are when no replicate seed is shared, which
+is the default: a sweep gives point `i` the seed `base seed + i *
+n_replicates`, so two sweeps with different base seeds share none. Two
+sweeps built from the same base seed and the same grid *do* share seeds
+point for point (common random numbers), as do sweeps built with
+`seed_policy: same`. The comparison does not switch method silently: it
+looks at the seeds the compared runs actually used and reports
+`pairing` as `independent`, `shared-seeds` or `partly-shared-seeds`, along
+with each sweep's seed policy, so a reader can judge the interval.
+
+<a id="fim.sweep_compare.Pairing"></a>
+
+#### Pairing
+
+Whether the compared runs used the same seeds: none shared, all shared at
+every shared coordinate, some shared, or too few shared coordinates to say.
+
+<a id="fim.sweep_compare.SweepRef"></a>
+
+## SweepRef Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepRef()
+```
+
+A sweep to compare.
+
+**Attributes**:
+
+- `study_id` - The sweep Study's id.
+- `label` - What to call it in the comparison; defaults to the Study's name.
+
+<a id="fim.sweep_compare.DifferenceCell"></a>
+
+## DifferenceCell Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class DifferenceCell()
+```
+
+The difference of two sweeps' means at one coordinate.
+
+**Attributes**:
+
+- `difference` - First sweep's mean minus the second's.
+- `low` - Lower end of the interval, or `None` without one.
+- `high` - Upper end of the interval, or `None` without one.
+- `half_width` - Half the interval's width, or `None`.
+- `confidence` - The interval's confidence level, or `None`.
+- `degrees_of_freedom` - Welch-Satterthwaite degrees of freedom (rounded
+  down) behind the interval, or `None`.
+
+<a id="fim.sweep_compare.ComparedPoint"></a>
+
+## ComparedPoint Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ComparedPoint()
+```
+
+One shared coordinate and what each sweep has there.
+
+**Attributes**:
+
+- `coordinates` - The compared axis values (shared keys only).
+- `cells` - Each sweep's statistic by label; `None` where that sweep has no
+  finished point.
+- `seeds` - Each sweep's seed at the coordinate by label; `None` where it
+  has none.
+- `difference` - First minus second, for exactly two sweeps whose cells
+  are both present; otherwise `None`.
+
+<a id="fim.sweep_compare.Comparison"></a>
+
+## Comparison Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Comparison()
+```
+
+Sweeps lined up on their shared coordinates.
+
+**Attributes**:
+
+- `statistic` - The statistic compared.
+- `on` - The axis keys the sweeps were joined on.
+- `labels` - The sweeps' labels, in the order given.
+- `points` - Every shared coordinate, in the first sweep's grid order.
+- `base_differences` - Each base configuration key that differs between
+  the sweeps (and is not one of their axes), with each sweep's
+  value by label: the difference being investigated.
+- `pairing` - Whether the compared runs shared seeds (see the module
+  docstring).
+- `seed_policies` - Each sweep's seed policy by label.
+
+<a id="fim.sweep_compare.welch_difference"></a>
+
+#### welch\_difference
+
+```python
+def welch_difference(first: StatisticCell,
+                     second: StatisticCell) -> DifferenceCell
+```
+
+Return the difference of two cells' means with a Welch interval.
+
+**Arguments**:
+
+- `first` - The first sweep's cell.
+- `second` - The second sweep's cell.
+
+
+**Returns**:
+
+  `first.mean - second.mean`; with the interval of the module
+  docstring when both cells have at least two replicates and a spread,
+  and without one otherwise.
+
+<a id="fim.sweep_compare.compare_sweeps"></a>
+
+#### compare\_sweeps
+
+```python
+def compare_sweeps(refs: Sequence[SweepRef],
+                   *,
+                   statistic: str,
+                   on: Sequence[str] | None = None,
+                   results: Path | None = None) -> Comparison
+```
+
+Line up sweeps on their shared axes and compare one statistic.
+
+**Arguments**:
+
+- `refs` - Two or more sweeps. A ref with no label is called by its
+  Study's name.
+- `statistic` - A statistic's catalog key.
+- `on` - The axis keys to join on, all of which every sweep must vary;
+  by default every axis they all share.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  The comparison. For exactly two sweeps each shared coordinate with a
+  finished point on both sides has a `difference`.
+
+
+**Raises**:
+
+- `ValueError` - Fewer than two sweeps, repeated labels, no shared axis
+  key (or `on` names one that is not shared), a shared axis with no
+  common value, a sweep that also varies an axis outside `on`
+  (its points could not be told apart), sweeps of different
+  ploidy, or a statistic none of the sweeps has.
 
 <a id="fim.sweep_run"></a>
 

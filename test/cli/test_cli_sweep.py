@@ -466,3 +466,108 @@ def test_bad_export_requests_are_plain_errors(
     assert status == 2
     assert message in capsys.readouterr().err
     assert not out.exists()
+
+
+_COMPARE_FILE = """\
+N: {n}
+ploidy: diploid
+d: 2
+m: 0.1
+mu: 0.01
+seed: 7
+n_replicates: 3
+max_generations: 10
+sweep:
+  name: {name}
+  axes:
+    m: [0.05, 0.1]
+"""
+
+
+def _two_sweeps(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> tuple[str, str]:
+    """Run two small sweeps that differ only in N; return their study ids."""
+    for n, name in ((16, "Small"), (32, "Large")):
+        path = tmp_path / f"{name}.yaml"
+        path.write_text(_COMPARE_FILE.format(n=n, name=name), encoding="utf-8")
+        assert _main(tmp_path, "sweep", "run", str(path)) == 0
+    by_name = {
+        study.name: study.study_id
+        for study in groups.list_studies(results=tmp_path / "results")
+    }
+    capsys.readouterr()
+    return by_name["Small"], by_name["Large"]
+
+
+def test_compare_prints_the_join_the_difference_and_the_seed_note(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    small, large = _two_sweeps(tmp_path, capsys)
+
+    status = _main(tmp_path, "sweep", "compare", small, large, "--statistic", "D")
+
+    output = capsys.readouterr().out
+    assert status == 0
+    assert "Comparing D across Small, Large, joined on m" in output
+    assert "base differs in N: Small: 16; Large: 32" in output
+    assert "the runs used the same seeds, so they are paired" in output
+    assert "difference is Small minus Large, with a Welch interval" in output
+    assert "Small: mean" in output and "diff low" in output
+
+
+def test_compare_labels_writes_a_csv_and_will_not_overwrite_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    small, large = _two_sweeps(tmp_path, capsys)
+    out = tmp_path / "compare.csv"
+
+    status = _main(
+        tmp_path,
+        "sweep",
+        "compare",
+        f"{small}=this year",
+        f"{large}=last year",
+        "--csv",
+        str(out),
+    )
+
+    assert status == 0
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert lines[0].startswith("m,this year: mean,this year: low")
+    assert "last year: seed" in lines[0] and lines[0].endswith("diff high")
+    assert len(lines) == 1 + 2  # one row per shared m value
+    capsys.readouterr()
+
+    args = ("sweep", "compare", small, large, "--csv", str(out))
+    assert _main(tmp_path, *args) == 2
+    assert "already exists" in capsys.readouterr().err
+    assert _main(tmp_path, *args, "--force") == 0
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        (["--statistic", "not_a_statistic"], "has statistic 'not_a_statistic'"),
+        (["--on", "nope"], "cannot join on 'nope'"),
+    ],
+)
+def test_a_comparison_that_cannot_be_made_is_a_plain_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    extra: list[str],
+    message: str,
+) -> None:
+    small, large = _two_sweeps(tmp_path, capsys)
+
+    status = _main(tmp_path, "sweep", "compare", small, large, *extra)
+
+    assert status == 2
+    assert message in capsys.readouterr().err
+
+
+def test_comparing_one_sweep_is_a_plain_error(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+
+    assert _main(tmp_path, "sweep", "compare", study_id) == 2
+    assert "at least two sweeps" in capsys.readouterr().err
