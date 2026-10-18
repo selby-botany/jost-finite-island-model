@@ -333,32 +333,6 @@ def enumerate_points(spec: SweepSpec) -> SweepPlan:
     return SweepPlan(tuple(points), tuple(invalid), collapsed, spec.grid_size)
 
 
-def work_estimate(spec: SweepSpec, plan: SweepPlan) -> dict[str, int]:
-    """Return an upper bound on the work a plan represents.
-
-    The cost of a point is not known until a pilot runs, so this is the sum
-    over points of replicates times that point's generation cap: a ceiling
-    that convergence usually undercuts. Each point resolves its own cap,
-    since an unset `max_generations` is derived from that point's own
-    migration, mutation and sizes.
-
-    Returns:
-        `points`, `replicates` per point, `max_generations` (the largest cap
-        of any point), and `replicate_generations` (the sum described above).
-    """
-    replicates = _integer_setting(spec.base, "n_replicates")
-    caps = [
-        SimulationParams.from_mapping(point.params).max_generations
-        for point in plan.points
-    ]
-    return {
-        "points": len(plan.points),
-        "replicates": replicates,
-        "max_generations": max(caps, default=0),
-        "replicate_generations": replicates * sum(caps),
-    }
-
-
 def point_run_name(study_name: str, point: SweepPoint) -> str:
     """Return the name a sweep point's run is given: Study name plus its values.
 

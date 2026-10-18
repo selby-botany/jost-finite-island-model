@@ -571,3 +571,16 @@ def test_comparing_one_sweep_is_a_plain_error(
 
     assert _main(tmp_path, "sweep", "compare", study_id) == 2
     assert "at least two sweeps" in capsys.readouterr().err
+
+
+def test_plan_states_the_work_as_a_range(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _main(tmp_path, "sweep", "plan", str(sweep_file)) == 0
+
+    output = capsys.readouterr().out
+    assert "2 valid point(s), 0 invalid" in output
+    work = next(line for line in output.splitlines() if line.startswith("work"))
+    assert "1 replicate(s) each" in work  # a single run: nothing to range over
+    assert "generations each" in work and "replicate-generations in all" in work
+    assert "nobody knows in advance how soon a run settles" in work

@@ -41,6 +41,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_stored`](#test.test_stored)
   - [`test_sweep`](#test.test_sweep)
   - [`test_sweep_compare`](#test.test_sweep_compare)
+  - [`test_sweep_cost`](#test.test_sweep_cost)
   - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_sweep_table`](#test.test_sweep_table)
   - [`test_termination`](#test.test_termination)
@@ -4584,16 +4585,6 @@ The `lineal` process pool gives the numbers and files of a serial run.
 
 Tests for `fim.sweep`: axes, enumeration, validation and seed policy.
 
-<a id="test.test_sweep.test_an_unset_cap_is_derived_per_point_in_the_work_estimate"></a>
-
-#### test\_an\_unset\_cap\_is\_derived\_per\_point\_in\_the\_work\_estimate
-
-```python
-def test_an_unset_cap_is_derived_per_point_in_the_work_estimate() -> None
-```
-
-Points with different migration get different derived caps.
-
 <a id="test.test_sweep.test_a_point_with_no_relaxation_time_is_invalid_not_fatal"></a>
 
 #### test\_a\_point\_with\_no\_relaxation\_time\_is\_invalid\_not\_fatal
@@ -4655,6 +4646,16 @@ def results(tmp_path: Path) -> Iterator[Path]
 ```
 
 Point the results directory at a temporary one for the test.
+
+<a id="test.test_sweep_cost"></a>
+
+# test.test\_sweep\_cost
+
+Tests for `fim.sweep_cost`: the static cost bands of a sweep.
+
+Every expected number is derived here from the resolved configuration of the
+point itself (its burn-in, cap, and replicate settings), so the tests check
+the plumbing and the arithmetic, never an engine's speed.
 
 <a id="test.test_sweep_run"></a>
 

@@ -410,6 +410,17 @@ function drawSweepPlanProblem(message) {
 }
 
 /**
+ * A band as "a to b", or just "a" when its ends are equal.
+ * @param {{low: number, high: number}} band
+ * @returns {string}
+ */
+function sweepBandText(band) {
+    const low = Math.round(band.low).toLocaleString();
+    const high = Math.round(band.high).toLocaleString();
+    return low === high ? low : `${low} to ${high}`;
+}
+
+/**
  * Draw a valid plan: the values each axis produced, the counts, and a
  * table of the points.
  * @param {object} plan `Api.plan_sweep`'s payload.
@@ -433,11 +444,12 @@ function drawSweepPlan(plan) {
     if (plan.collapsed > 0) {
         pieces.push(`${plan.collapsed} duplicate`);
     }
-    const estimate = plan.estimate;
+    const replicates = sweepBandText(plan.cost.replicates);
+    const generations = sweepBandText(plan.cost.generations);
+    const plural = plan.cost.replicates.high === 1 ? "" : "s";
     sweepPlanSummary.textContent =
-        `${pieces.join(", ")}. ${estimate.replicates} replicate` +
-        `${estimate.replicates === 1 ? "" : "s"} each, up to ` +
-        `${estimate.max_generations} generations.`;
+        `${pieces.join(", ")}. ${replicates} replicate${plural} each, ` +
+        `${generations} generations each.`;
 
     const keys = plan.axes.map((axis) => axis.key);
     sweepPlanHead.replaceChildren(sweepHeaderRow(["#", ...keys, "Result"]));

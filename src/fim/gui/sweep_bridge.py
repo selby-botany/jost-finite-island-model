@@ -20,9 +20,9 @@ from fim.sweep import (
     SweepPlan,
     SweepSpec,
     expand_axis,
-    work_estimate,
 )
 from fim.sweep_compare import ComparedPoint, SweepRef, compare_sweeps
+from fim.sweep_cost import static_cost
 from fim.sweep_run import (
     sweep_point_results,
     sweep_point_statuses,
@@ -112,7 +112,7 @@ def plan_payload(
         "collapsed": plan.collapsed,
         "newCount": len(points) - reused,
         "reusedCount": reused,
-        "estimate": work_estimate(spec, plan),
+        "cost": static_cost(spec, plan).to_dict(),
         "needsConfirmation": plan.needs_confirmation,
         "confirmationThreshold": SIZE_CONFIRMATION_THRESHOLD,
     }

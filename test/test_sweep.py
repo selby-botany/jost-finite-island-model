@@ -16,7 +16,6 @@ from fim.sweep import (
     point_run_description,
     point_run_name,
     spec_from_config,
-    work_estimate,
 )
 
 _BASE: dict[str, Any] = {
@@ -298,19 +297,6 @@ def test_a_malformed_sweep_block_is_named(block: Any, message: str) -> None:
         spec_from_config(config)
 
 
-def test_the_work_estimate_is_points_times_replicates_times_generations() -> None:
-    spec = _spec(expand_axis("d", [4, 6]))
-
-    estimate = work_estimate(spec, enumerate_points(spec))
-
-    assert estimate == {
-        "points": 2,
-        "replicates": 3,
-        "max_generations": 50,
-        "replicate_generations": 300,
-    }
-
-
 def test_a_large_plan_asks_for_confirmation() -> None:
     small = enumerate_points(_spec(expand_axis("d", [4, 6])))
     large = enumerate_points(
@@ -323,24 +309,6 @@ def test_a_large_plan_asks_for_confirmation() -> None:
 
     assert small.needs_confirmation is False
     assert large.needs_confirmation is True
-
-
-def test_an_unset_cap_is_derived_per_point_in_the_work_estimate() -> None:
-    """Points with different migration get different derived caps."""
-    base = {key: value for key, value in _BASE.items() if key != "max_generations"}
-    base["mu"] = 1e-6
-    spec = SweepSpec(base=base, axes=(expand_axis("m", [0.01, 0.00001]),))
-
-    estimate = work_estimate(spec, enumerate_points(spec))
-
-    plan = enumerate_points(spec)
-    caps = [
-        SimulationParams.from_mapping(point.params).max_generations
-        for point in plan.points
-    ]
-    assert caps[0] < caps[1]
-    assert estimate["max_generations"] == max(caps)
-    assert estimate["replicate_generations"] == 3 * sum(caps)
 
 
 def test_a_point_with_no_relaxation_time_is_invalid_not_fatal() -> None:

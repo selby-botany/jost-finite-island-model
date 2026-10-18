@@ -1569,7 +1569,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SweepPlan](#fim.sweep.SweepPlan)
     * [needs\_confirmation](#fim.sweep.SweepPlan.needs_confirmation)
   * [enumerate\_points](#fim.sweep.enumerate_points)
-  * [work\_estimate](#fim.sweep.work_estimate)
   * [point\_run\_name](#fim.sweep.point_run_name)
   * [point\_run\_description](#fim.sweep.point_run_description)
   * [expand\_axis](#fim.sweep.expand_axis)
@@ -1583,6 +1582,20 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [Comparison](#fim.sweep_compare.Comparison)
   * [welch\_difference](#fim.sweep_compare.welch_difference)
   * [compare\_sweeps](#fim.sweep_compare.compare_sweeps)
+* [fim.sweep\_cost](#fim.sweep_cost)
+  * [Band](#fim.sweep_cost.Band)
+    * [\_\_post\_init\_\_](#fim.sweep_cost.Band.__post_init__)
+    * [\_\_add\_\_](#fim.sweep_cost.Band.__add__)
+    * [\_\_mul\_\_](#fim.sweep_cost.Band.__mul__)
+    * [scaled](#fim.sweep_cost.Band.scaled)
+    * [to\_dict](#fim.sweep_cost.Band.to_dict)
+  * [PointCost](#fim.sweep_cost.PointCost)
+  * [SweepCost](#fim.sweep_cost.SweepCost)
+    * [to\_dict](#fim.sweep_cost.SweepCost.to_dict)
+    * [generation\_band](#fim.sweep_cost.SweepCost.generation_band)
+    * [replicate\_band](#fim.sweep_cost.SweepCost.replicate_band)
+  * [point\_cost](#fim.sweep_cost.point_cost)
+  * [static\_cost](#fim.sweep_cost.static_cost)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
   * [SweepLockedError](#fim.sweep_run.SweepLockedError)
@@ -36798,27 +36811,6 @@ Enumerate and validate every point of `spec`, without running any.
   invalid ones with their reasons, and the count collapsed because
   two points resolved to the same configuration.
 
-<a id="fim.sweep.work_estimate"></a>
-
-#### work\_estimate
-
-```python
-def work_estimate(spec: SweepSpec, plan: SweepPlan) -> dict[str, int]
-```
-
-Return an upper bound on the work a plan represents.
-
-The cost of a point is not known until a pilot runs, so this is the sum
-over points of replicates times that point's generation cap: a ceiling
-that convergence usually undercuts. Each point resolves its own cap,
-since an unset `max_generations` is derived from that point's own
-migration, mutation and sizes.
-
-**Returns**:
-
-  `points`, `replicates` per point, `max_generations` (the largest cap
-  of any point), and `replicate_generations` (the sum described above).
-
 <a id="fim.sweep.point_run_name"></a>
 
 #### point\_run\_name
@@ -37129,6 +37121,212 @@ Line up sweeps on their shared axes and compare one statistic.
   common value, a sweep that also varies an axis outside `on`
   (its points could not be told apart), sweeps of different
   ploidy, or a statistic none of the sweeps has.
+
+<a id="fim.sweep_cost"></a>
+
+# fim.sweep\_cost
+
+What a sweep is expected to cost, before it runs.
+
+A point's cost is not known until it runs, because nobody knows in advance
+how soon the convergence monitor will settle. What is known is a band: a
+replicate runs for at least its burn-in and at most its generation cap, and a
+batch runs at least its minimum replicate count and at most `n_replicates`.
+`PointCost` and `SweepCost` carry those bands, honestly wide, in the unit the
+engine actually spends: replicate-generations. Seconds and bytes come from
+measuring the engine (a later layer builds them on these types), and a sweep
+that has started refines the band from the points that have finished.
+
+Nothing here runs a simulation or touches disk.
+
+<a id="fim.sweep_cost.Band"></a>
+
+## Band Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Band()
+```
+
+A range a quantity is expected to fall in.
+
+**Attributes**:
+
+- `low` - The least it can be.
+- `high` - The most it can be.
+- `calibrated` - A better single estimate, once points have finished and
+  their actual figures are known; `None` before that.
+
+<a id="fim.sweep_cost.Band.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Refuse a band whose ends are the wrong way round.
+
+<a id="fim.sweep_cost.Band.__add__"></a>
+
+#### \_\_add\_\_
+
+```python
+def __add__(other: Band) -> Band
+```
+
+Add two bands end to end (the calibrated estimate is dropped).
+
+<a id="fim.sweep_cost.Band.__mul__"></a>
+
+#### \_\_mul\_\_
+
+```python
+def __mul__(other: Band) -> Band
+```
+
+Multiply two bands of non-negative quantities end to end.
+
+<a id="fim.sweep_cost.Band.scaled"></a>
+
+#### scaled
+
+```python
+def scaled(factor: float) -> Band
+```
+
+Return the band with both ends multiplied by `factor >= 0`.
+
+<a id="fim.sweep_cost.Band.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, float | None]
+```
+
+Return the band as plain values, for JSON.
+
+<a id="fim.sweep_cost.PointCost"></a>
+
+## PointCost Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointCost()
+```
+
+What one point is expected to cost.
+
+**Attributes**:
+
+- `run_id` - The point's id.
+- `generations` - Generations per replicate: its burn-in up to its cap.
+- `replicates` - Replicates the point runs: the batch minimum up to
+  `n_replicates` (a single run is exactly one).
+- `work` - Replicate-generations for the whole point, the product of the
+  two bands above.
+
+<a id="fim.sweep_cost.SweepCost"></a>
+
+## SweepCost Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepCost()
+```
+
+What a sweep is expected to cost.
+
+**Attributes**:
+
+- `points` - Each point's cost, in grid order.
+- `work` - Replicate-generations for the whole sweep.
+- `points_at_once` - How many points run at the same time, or `None` if
+  it is not yet known.
+
+<a id="fim.sweep_cost.SweepCost.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return the cost as plain values, for the page and for JSON.
+
+<a id="fim.sweep_cost.SweepCost.generation_band"></a>
+
+#### generation\_band
+
+```python
+def generation_band() -> Band
+```
+
+Return the narrowest band holding every point's generations.
+
+<a id="fim.sweep_cost.SweepCost.replicate_band"></a>
+
+#### replicate\_band
+
+```python
+def replicate_band() -> Band
+```
+
+Return the narrowest band holding every point's replicates.
+
+<a id="fim.sweep_cost.point_cost"></a>
+
+#### point\_cost
+
+```python
+def point_cost(run_id: str, params: SimulationParams) -> PointCost
+```
+
+Return the static cost band of one resolved point.
+
+**Arguments**:
+
+- `run_id` - The point's id.
+- `params` - The point's resolved configuration, whose automatic burn-in
+  and generation cap are already derived from its own migration,
+  mutation and sizes.
+
+
+**Returns**:
+
+  A replicate lasts at least `convergence_burn_in` (or the cap, if the
+  cap is smaller) and at most `max_generations` generations. A batch
+  that may stop early runs at least `replicate_minimum` replicates
+  (never more than `n_replicates`); otherwise, and for a single run, it
+  runs
+  `n_replicates` in full.
+
+<a id="fim.sweep_cost.static_cost"></a>
+
+#### static\_cost
+
+```python
+def static_cost(spec: SweepSpec,
+                plan: SweepPlan,
+                *,
+                points_at_once: int | None = None) -> SweepCost
+```
+
+Return the static cost bands of a plan's points.
+
+**Arguments**:
+
+- `spec` - The sweep specification (kept for the layers that add seconds
+  and bytes, which depend on its base configuration).
+- `plan` - The enumerated plan; only its valid points cost anything.
+- `points_at_once` - How many points will run at the same time (see
+  `fim.sweep_run.resolve_concurrency`), if known.
+
+
+**Returns**:
+
+  Each point's cost and the sweep's total work.
 
 <a id="fim.sweep_run"></a>
 

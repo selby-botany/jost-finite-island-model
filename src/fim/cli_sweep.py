@@ -29,9 +29,9 @@ from fim.sweep import (
     SweepSpec,
     enumerate_points,
     spec_from_config,
-    work_estimate,
 )
 from fim.sweep_compare import Comparison, SweepRef, compare_sweeps
+from fim.sweep_cost import Band, static_cost
 from fim.sweep_run import (
     LocalPointRunner,
     SweepEvent,
@@ -261,6 +261,12 @@ def _plan(path: Path) -> int:
     return 0 if plan.points else 2
 
 
+def _band_text(band: Band) -> str:
+    """Write a band as "a to b", or just "a" when its ends are equal."""
+    low, high = f"{band.low:,.0f}", f"{band.high:,.0f}"
+    return low if low == high else f"{low} to {high}"
+
+
 def _print_plan(spec: SweepSpec, plan: SweepPlan) -> None:
     """Print the points, the invalid ones with reasons, and the size."""
     keys = [axis.key for axis in spec.axes]
@@ -271,13 +277,16 @@ def _print_plan(spec: SweepSpec, plan: SweepPlan) -> None:
     for invalid in plan.invalid:
         values = [_format(invalid.coordinates[key]) for key in keys]
         print("  ".join([f"{invalid.index:>5}", *values, f"INVALID: {invalid.reason}"]))
-    estimate = work_estimate(spec, plan)
+    cost = static_cost(spec, plan)
     print(
         f"{len(plan.points)} valid point(s), {len(plan.invalid)} invalid, "
-        f"{plan.collapsed} duplicate(s) of {plan.grid_size} grid position(s); "
-        f"{estimate['replicates']} replicate(s) each, up to "
-        f"{estimate['max_generations']} generations "
-        f"(at most {estimate['replicate_generations']} replicate-generations)"
+        f"{plan.collapsed} duplicate(s) of {plan.grid_size} grid position(s)"
+    )
+    print(
+        f"work   {_band_text(cost.replicate_band())} replicate(s) each, "
+        f"{_band_text(cost.generation_band())} generations each: "
+        f"{_band_text(cost.work)} replicate-generations in all "
+        "(a range, because nobody knows in advance how soon a run settles)"
     )
     if plan.needs_confirmation:
         print(

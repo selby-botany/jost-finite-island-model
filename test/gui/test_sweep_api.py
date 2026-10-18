@@ -132,7 +132,7 @@ def test_plan_sweep_counts_points_and_reports_invalid_ones(api: Api) -> None:
     assert plan["newCount"] == 2
     assert plan["reusedCount"] == 0
     assert plan["needsConfirmation"] is False
-    assert plan["estimate"]["points"] == 2
+    assert plan["cost"]["points"] == 2
 
 
 def test_plan_sweep_reads_a_range_definition(api: Api) -> None:
@@ -805,3 +805,18 @@ def test_compare_sweeps_says_why_it_cannot(api: Api) -> None:
     assert one["ok"] is False and "at least two sweeps" in one["message"]
     assert plain["ok"] is False and "not a sweep" in plain["message"]
     assert unknown["ok"] is False and "cannot join on 'nope'" in unknown["message"]
+
+
+def test_plan_sweep_reports_the_cost_bands_and_the_points_at_once(api: Api) -> None:
+    plan = api.plan_sweep(_form(), _request(_D_AXIS))
+
+    cost = plan["cost"]
+    assert "estimate" not in plan
+    assert cost["points"] == 2
+    assert cost["pointsAtOnce"] == plan["concurrency"]["pointsAtOnce"]
+    for name in ("replicates", "generations", "work"):
+        assert cost[name]["low"] <= cost[name]["high"]
+    assert cost["replicates"] == {"low": 1.0, "high": 1.0, "calibrated": None}
+    assert cost["work"]["high"] == pytest.approx(
+        cost["replicates"]["high"] * 2 * cost["generations"]["high"]
+    )

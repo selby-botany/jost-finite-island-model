@@ -5478,6 +5478,7 @@ class Api:
             payload["concurrency"] = self._concurrency_payload(
                 values, request, plan.points[0].params, int(payload["newCount"])
             )
+            payload["cost"]["pointsAtOnce"] = payload["concurrency"]["pointsAtOnce"]
         return payload
 
     def _sweep_run_options(

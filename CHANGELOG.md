@@ -1146,6 +1146,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   explicit `n_replicates: 1` case. The configuration reference's complete
   example and the usage guide's paragraph on an unconfigured run describe the
   default.
+- **A sweep's plan states its work as a range.** `fim sweep plan` and the
+  Sweep dialog used to give only an upper bound ("up to N generations").
+  They now give the replicates and the generations each point may take, from
+  the fewest (the burn-in, the batch minimum) to the most (the cap, every
+  replicate), and the total in replicate-generations. A cap set below the
+  burn-in counts as the whole range. The groundwork for estimated time and
+  disk, which need the engine measured.
 - **The statistics panel shows averages, and the explanations are messages.**
   A statistic's cell now shows its mean and standard error over the run's
   evidence window ("0.29 ± 0.06"), not the last generation's value, which is

@@ -1068,6 +1068,12 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 - `plan` checks every point first. A combination that cannot run (a torus
   whose `rows * columns` differs from `d`) is listed with its reason.
 - A sweep of 100 points or more asks for `--yes`.
+- `plan` states the work as a range, in replicate-generations (one replicate
+  stepped one generation): at least the burn-in for the fewest replicates a
+  point may stop at, at most the generation cap for every replicate. It is a
+  range because nobody knows in advance how soon a run settles; a run that
+  settles early sits near the low end. The same range appears in the app's
+  Sweep dialog.
 - **Points run at the same time, by default as many as fill the machine, each
   in its own process.** A single run, or a batch on any engine but `lineal`
   (including `auto`), uses about one core; a `lineal` batch of `r` replicates
