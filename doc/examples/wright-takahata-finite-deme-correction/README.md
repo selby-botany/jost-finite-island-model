@@ -32,7 +32,8 @@ line flatter, only the average better known.
 
 `D` is a nonlinear function of the heterozygosities, so averaging its values
 and computing it from the averaged heterozygosities give different numbers:
-here 0.343 and 0.311 (see [Which average?](../../convergence.md#which-average-two-forms-for-d-and-g_st)).
+here 0.343 and 0.311 (see the section "Which average?" in
+[Convergence](../../convergence.md)).
 The statistics panel underlines the statistics a batch watches, and the run
 messages explain the others.
 
