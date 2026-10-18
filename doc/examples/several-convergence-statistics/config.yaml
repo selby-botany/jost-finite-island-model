@@ -15,4 +15,4 @@ loci:
 engine_backend: auto
 convergence_statistic: [D, G_ST]
 convergence_combinator: any
-n_replicates: 1   # a single scalar run; the default (200) would batch
+n_replicates: 1   # single run: this example is about one run's own stopping rule (`convergence_combinator: any`)

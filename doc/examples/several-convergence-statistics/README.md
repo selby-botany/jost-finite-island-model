@@ -20,13 +20,7 @@ are equivalent.
 
 ## Why a single run
 
-This example sets `n_replicates: 1`. It was written when a run was always one
-run, and the numbers quoted here, and the outputs saved with it, are those of
-one run. The engine's default is `n_replicates: 200`, an adaptively stopped
-batch that reports a confidence interval, and that is what a researcher would
-normally use. One run's final numbers are one noisy draw: for an estimate with
-an error bar, run a batch (see
-[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
+This example is a single run because its subject is one run's own stopping rule: with `convergence_combinator: any` a run stops when either watched statistic settles. A replicate in a batch has no stopping rule of its own (it burns in, averages for a matched window and stops), so the lesson cannot be taught on a batch. The engine's default is `n_replicates: 200`, an adaptively stopped batch that reports a confidence interval, and that is what most examples use; see [an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md).
 
 ## Run
 

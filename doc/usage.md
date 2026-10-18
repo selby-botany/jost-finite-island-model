@@ -371,7 +371,7 @@ convergence_combinator: all
 precision: 0.05
 max_generations: auto
 track_expensive_statistics: true
-n_replicates: 1   # a single scalar run; the default (200) would batch
+n_replicates: 1   # single run: a one-generation computation from an explicit founder state, so there is nothing to average over replicates
 ```
 
 ```console
@@ -743,7 +743,7 @@ loci:
 engine_backend: auto
 convergence_statistic: [D, G_ST]
 convergence_combinator: any
-n_replicates: 1   # a single scalar run; the default (200) would batch
+n_replicates: 1   # single run: this example is about one run's own stopping rule (`convergence_combinator: any`)
 ```
 
 ```console
@@ -808,7 +808,7 @@ convergence_statistic: D
 trajectory_retention: thinned
 trajectory_stride: 10
 trajectory_thinning_start: 5000
-n_replicates: 1   # a single scalar run; the default (200) would batch
+n_replicates: 1   # single run: this example is about one run's own sigma band over its evidence window
 ```
 
 ```console
