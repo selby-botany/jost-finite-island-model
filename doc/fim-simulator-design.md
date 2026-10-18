@@ -99,7 +99,9 @@ or a collaborator working in that tradition — uses to generate
 known-ground-truth allele-frequency trajectories, then compute and inspect
 population-differentiation statistics against that known history. The
 motivating gap, per the companion introduction (§4 of that document): the
-existing tools in this space (quantiNemo 2, `hierfstat`) are built to
+existing tools in this space
+[`quantiNemo 2`](https://www2.unil.ch/popgen/softwares/quantinemo/),
+[`hierfstat`](https://github.com/jgx65/hierfstat)) are built to
 answer "what is the equilibrium statistic?", not "show me every
 generation's allele frequencies" — and per-generation history is exactly
 what this project exists to keep.
@@ -184,6 +186,21 @@ p_{k,t,l}:\text{Allele}\to[0,1] \tag{3.2}
 \sum_a p_{k,t,l}(a)=1 \tag{3.3}
 ```
 
+Read these three equations as a hierarchy of containers. Equation (3.1)
+says that a deme's state contains one frequency distribution for each
+locus. Equation (3.2) says that looking up an allele in one such
+distribution returns a number between zero and one. Equation (3.3)
+says that accounting for all alleles accounts for the entire locus:
+their shares add to 100%. The sum runs over allele identities, not
+over demes or generations.
+
+For example, if deme 2 at generation 7 has locus 1 frequencies
+$p_{2,7,1}(a)=0.6$ and $p_{2,7,1}(b)=0.4$, that locus's distribution
+is the mapping $\{a\mapsto0.6,b\mapsto0.4\}$; an absent allele $c$
+has frequency zero. A second locus contributes a separate mapping
+to $\psi_{2,7}$. Its frequencies also sum to one on their own:
+frequencies are not shared out between loci.
+
 $p_{k,t,l}$ is a probability vector over whatever alleles are actually
 present at locus $l$ in deme $k$ at generation $t$ — not over the whole
 infinite allele universe. This is the load-bearing representational choice
@@ -210,6 +227,13 @@ $N=2000$ already equal the corresponding gene-copy counts.
 The abstract signature (2.1) retains the historical symbol $N$;
 subsequent sampling equations use $n_k$ to avoid that ambiguity.
 See [the configuration reference](configuration.md) for accepted ploidies.
+
+Equation (3.4) counts copies **at one locus**, not all DNA copies
+across all tracked loci. A diploid deme of 225 individuals has 450
+copies at locus 1 and another 450 at locus 2. Adding a second locus
+does not double the population size supplied to either drift draw.
+When deme sizes differ, perform the same conversion separately for
+each $N_k$.
 
 ### 3.2 Alleles, loci, and identity
 
@@ -241,6 +265,15 @@ states, with no notion of one being "closer" to another — so it stays
 inside the same distance-free identity model as the paragraph above, only
 with a ceiling.
 
+The power $4^{L_l}$ counts possible DNA strings, not the number of
+alleles that must be present. For a two-base locus there are four
+choices for the first base and four for the second, giving
+$4\cdot4=16$ possible states. A deme may contain only two of them.
+The finite-alleles model treats those states as 16 labels: a mutation
+chooses one of the 15 alternatives uniformly, even if one candidate
+sequence would differ at more bases than another. Thus this is not
+a model of successive single-base edits.
+
 A locus is a separate concept from an allele: it names *where* to look,
 carrying its own identity $l\in\mathbb Z_{>0}$ and length $L_l\in\mathbb Z_{>0}$.
 Length matters through the mutation rate ($\mu_l\approx\mu_b L_l$, per the differentiation-measures
@@ -264,6 +297,15 @@ model. An explicit, user-supplied $p_{0}$ is also accepted as an alternative
 initial-condition source, for reproducing a specific published scenario or
 a real allele-frequency survey as a starting point.
 
+Here "i.i.d." means independent draws from the same distribution:
+one deme's starting frequencies do not determine another's, but
+every draw uses the same configured concentration. "Symmetric" means
+that the starting alleles are treated alike, not that their realized
+frequencies must be equal. With three starting alleles, rows such as
+$(0.7,0.2,0.1)$ and $(0.2,0.3,0.5)$ can both come from that same
+rule. Appendix D.5 shows how positive random weights are normalized
+into these rows.
+
 **Generation 0 is a continuous prior, not a state on the model's own
 $1/n_k$ lattice.** Every generation from 1 onward is produced by `drift`
 (§3.4), a multinomial resample at exactly $n_k$ gene copies, so every
@@ -280,6 +322,14 @@ actual $n_k$-gene-copy realization. A statistic computed at generation 0
 (`fim stats --generation 0`) describes this continuous prior, not a
 population; treat it accordingly rather than assuming it is comparable,
 lattice-for-lattice, to every later generation.
+
+For a ten-copy deme, the realizable frequency values are
+$0,0.1,0.2,\ldots,1$. An initial frequency of $0.23$ is a valid
+parental probability but would correspond to 2.3 observed copies,
+which is impossible. The first drift draw might instead produce two
+copies, or three, or another count; it does not round $0.23$ to the
+nearest tenth. This is why keeping the distinction between an input
+distribution and a sampled population matters.
 
 Analytic convergence claims require assumptions about connectivity,
 mutation, and the state being tracked; mutation alone does not prove
@@ -314,10 +364,20 @@ Wright-Fisher model.
 p_{t+1}=\operatorname{Mutate}_\mu(\operatorname{Drift}_{\boldsymbol n}(\operatorname{Migrate}_m(p_t))) \tag{3.5}
 ```
 
+Nested function notation is read from the inside out. Begin with
+$p_t$, the collection of all current frequency rows. Apply migration
+to obtain parental probabilities; apply drift to draw whole-copy
+counts; then apply mutation to change labels on those copies.
+$\boldsymbol n=(n_1,\ldots,n_d)^{\mathsf T}$ supplies the copy count
+for each deme, rather than one count shared by all demes.
+The output $p_{t+1}$ becomes the next generation's input.
+Changing the order would change which objects are sampled and would
+therefore define a different stochastic model.
+
 ```mermaid
 flowchart LR
     A["ψ_k,t\n(current state)"] --> B["Migrate(m)\nweighted blend with\nmigrant pool"]
-    B --> C["Drift(N)\nmultinomial resample,\nN gene copies per deme"]
+    B --> C["Drift(n_k)\nmultinomial resample,\nn_k gene copies in deme k"]
     C --> D["Mutate(μ)\neach new copy mutates\nindependently"]
     D --> E["ψ_k,t+1\n(next state)"]
 ```
@@ -325,8 +385,14 @@ flowchart LR
 Mutation acts on the sampled copies, not on the frequencies before
 sampling. The following derivation makes that distinction concrete.
 Fix one locus and generation; suppress $t$ and $l$ temporarily. Write
-$n_k$ for deme $k$'s **gene-copy** count (the engine's `gene_copies`,
-not the configuration's individual count `N`).
+$n_k$ for the number of **gene copies at that locus in deme $k$**.
+As in (3.4), $n_k=cN_k$, where $N_k$ is the number of individuals
+in deme $k$ and $c$ is the number of copies per individual specified
+by `ploidy` (1 for haploid, 2 for diploid).
+This is the engine's `gene_copies` count, not the configuration's
+individual count `N`. The index is a placeholder: $n_j$ in (3.6)
+denotes the same count for deme $j$. Thus $S$ is the total number
+of gene copies at this locus across all $d$ demes.
 
 #### Migration: form the parental pool
 
@@ -343,9 +409,38 @@ S=\sum_{j=1}^{d}n_j \tag{3.6}
 s_a=\sum_{j=1}^{d}n_jp_j(a) \tag{3.7}
 ```
 
+Here $S$ counts **all gene copies at this locus, across all demes**,
+regardless of which allele they carry. The smaller total $s_a$ counts
+only the copies carrying **allele $a$**. To obtain that second total,
+multiply each deme's copy count $n_j$ by its frequency $p_j(a)$,
+then add those contributions. For example, a deme with 20 copies and
+an allele frequency of $0.3$ contributes $20\cdot0.3=6$ copies of
+allele $a$. For generation 0's continuous frequencies, these products
+are copy-equivalent amounts rather than necessarily whole-copy counts.
+
+The migrant pool for deme $k$ must exclude deme $k$ itself: a copy
+already in the destination is not an incoming migrant. Equation (3.8)
+therefore removes that deme from **both** totals before calculating
+the external allele frequency:
+
 ```math
 r_k(a)=\frac{s_a-n_kp_k(a)}{S-n_k}\quad(d>1) \tag{3.8}
 ```
+
+Read the numerator as "copies of allele $a$ everywhere, minus copies
+of allele $a$ in deme $k$." Read the denominator as "all copies
+everywhere, minus all copies in deme $k$." Dividing gives $r_k(a)$:
+the fraction of copies **outside deme $k$** that carry allele $a$.
+Larger source demes contribute more copies automatically; this is
+not an unweighted average of their frequencies.
+
+For example, suppose $S=40$, $s_a=17$, and deme $k$ contains
+$n_k=10$ copies with $p_k(a)=0.8$. That deme accounts for
+$10\cdot0.8=8$ copies of allele $a$. Removing it leaves
+$17-8=9$ copies of allele $a$ among $40-10=30$ external copies,
+so $r_k(a)=9/30=0.3$. This is the source-pool frequency, not yet
+the destination's new frequency. Equation (3.9) blends that pool
+with the destination's retained local copies:
 
 ```math
 q_k(a)=(1-m)p_k(a)+m r_k(a) \tag{3.9}
@@ -357,29 +452,132 @@ Summing over alleles gives $(1-m)\cdot1+m\cdot1=1$.
 For equal sizes, (3.8) is simply the average of the other $d-1$ rows.
 For one deme there is no external pool: migration leaves its row unchanged.
 
-For a full migration matrix, entry $M_{kj}$ is the fraction of
-destination $k$'s pool supplied by source $j$, including self-retention:
+The next equation defines **the same quantity** $q_k(a)$ — allele
+$a$'s frequency in deme $k$'s parental pool after migration — but
+allows a more general rule for where the incoming copies come from.
+Equation (3.9) groups sources into two parts: the destination's own
+copies, with weight $1-m$, and all other demes combined, with weight
+$m$. The combined pool $r_k(a)$ already contains the relative
+contributions of those other demes.
+
+A full migration matrix makes those source contributions explicit,
+one deme at a time. Entry $M_{kj}$ is the fraction of destination
+$k$'s pool supplied by source $j$. The diagonal entry $M_{kk}$
+is self-retention; the entries with $j\ne k$ describe incoming
+contributions:
 
 ```math
 q_k(a)=\sum_{j=1}^{d}M_{kj}p_j(a)\quad\left(M_{kj}\geq0,\ \sum_jM_{kj}=1\right) \tag{3.10}
 ```
 
-Matrix rows already specify the weights; no further size weighting is
-applied. Under `migrant_sampling: stochastic`, the scalar case replaces
-$m$ in (3.9) by the realized migrant fraction:
+To recover (3.9) from (3.10), choose $M_{kk}=1-m$ for the local
+contribution and $M_{kj}=m n_j/(S-n_k)$ for each external source
+$j\ne k$, as also recorded in (4.14). The external weights add to
+$m$, because the external deme sizes add to $S-n_k$. Substituting
+these weights into (3.10) gives the local term $(1-m)p_k(a)$ plus
+an external sum. Factor $m/(S-n_k)$ out of that sum; what remains
+is the external allele count $s_a-n_kp_k(a)$. The whole external
+term is therefore $m r_k(a)$ by (3.8), reproducing (3.9).
+
+For a numerical check, take three demes with gene-copy counts
+$(10,20,10)$, allele-$a$ frequencies $(0.8,0.2,0.5)$, and
+$m=0.2$. For destination 1, the other demes supply
+$20\cdot0.2+10\cdot0.5=9$ allele-$a$ copies among 30 copies,
+so $r_1(a)=0.3$. Equation (3.9) gives
+$q_1(a)=0.8\cdot0.8+0.2\cdot0.3=0.70$.
+The equivalent matrix row is $(0.8,2/15,1/15)$:
+the larger external deme contributes twice the weight of the smaller.
+Equation (3.10) then gives
+$q_1(a)=0.8\cdot0.8+(2/15)\cdot0.2+(1/15)\cdot0.5=0.70$.
+The two forms differ only in whether the external contributions are
+grouped into one pool or written separately.
+
+An arbitrary matrix need not use those size-based weights. It can,
+for example, give a neighboring deme more influence than a distant
+one or let migration differ by direction. Thus (3.10) is the general
+weighted-sum rule, and (3.9) is its scalar-migration special case.
+Matrix rows already specify the complete source weights; multiplying
+them by deme sizes again would change the intended migration model.
+
+So far, the migration fraction $m$ has been applied exactly every
+generation. For example, $m=0.2$ means that the parental pool is
+always 20% external and 80% local. The corresponding amount
+$n_km$ need not be a whole number: with $n_k=12$, it is 2.4
+copy-equivalents. That is valid for a continuous mixture of
+frequencies, but it is not a count of individual migrant copies.
+
+The option `migrant_sampling: stochastic` instead makes the
+**number of incoming copies** random and whole-valued. Let $B_k$
+be that count for destination deme $k$ in the current generation.
+Imagine $n_k$ independent yes-or-no trials, one for each copy's
+source: "external" has probability $m$, and "local" has probability
+$1-m$. Count the external choices:
 
 ```math
 B_k\sim\operatorname{Binomial}(n_k,m) \tag{3.11}
 ```
 
+The symbol $\sim$ means "is drawn from the distribution"; it does
+not mean that $B_k$ equals $n_km$. A binomial distribution assigns
+probabilities to the possible counts $0,1,\ldots,n_k$.
+Its expected count is $n_km$, but any particular draw must be a
+whole number. Appendix D explains how these probabilities are
+calculated and how a draw is made.
+
+Equation (3.12) converts the drawn **count** back into a **fraction**
+so it can be used in the same weighted-blend formula as before:
+
 ```math
 \widehat m_k=\frac{B_k}{n_k} \tag{3.12}
 ```
 
-The same realized fraction is used for all loci of that destination.
-For stochastic matrix migration the rate is $1-M_{kk}$ and the
-conditional source pool has weights $M_{kj}/(1-M_{kk})$ for $j\ne k$;
-a zero rate leaves the row unchanged.
+The hat distinguishes the realized fraction $\widehat m_k$ from
+the configured probability $m$. Its possible values are
+$0,1/n_k,2/n_k,\ldots,1$. Substitute $\widehat m_k$ for $m$ in
+(3.9): retain a fraction $1-\widehat m_k$ of the local composition
+and mix in a fraction $\widehat m_k$ of the external pool.
+No other part of that blend changes.
+
+For example, take $n_k=10$, $m=0.2$, $p_k(a)=0.8$, and
+$r_k(a)=0.3$. The expected migrant count is $10\cdot0.2=2$.
+Suppose this generation's draw gives $B_k=3$ instead.
+Then $\widehat m_k=3/10=0.3$: 30% of the parental pool is external,
+and 70% is local. The resulting allele frequency is
+$q_k(a)=0.7\cdot0.8+0.3\cdot0.3=0.65$.
+The continuous blend gave $0.70$ for these same input frequencies;
+this realization is lower because more copies came from the
+external pool, where allele $a$ is less common.
+
+Across repeated migration draws with the input frequencies held
+fixed, the expected fraction is still $m$, since
+$\mathbb E[\widehat m_k]=\mathbb E[B_k]/n_k=n_km/n_k=m$.
+Because the blend is linear in that fraction, its expected
+$q_k(a)$ equals the continuous result. This is agreement for the
+**one-step migration expectation**, not a promise of identical
+trajectories or identical long-run statistics under both settings.
+The stochastic option adds variation around the continuous blend.
+
+Only the **amount** of migration is sampled here. The external
+allele composition $r_k$ remains the weighted average calculated
+in (3.8); the migration step does not separately draw which alleles
+the $B_k$ incoming copies carry. Thus its output can still contain
+fractional copy-equivalents. The following drift step samples the
+complete parental pool to produce an actual whole-copy population.
+The same realized fraction $\widehat m_k$ is used for all loci of
+destination $k$ in that generation, rather than drawing a separate
+migrant count for each locus.
+
+For stochastic matrix migration, the same reasoning starts from
+the destination's total external weight $1-M_{kk}$ instead of a
+shared scalar $m$. Draw $B_k$ with that probability, divide by
+$n_k$, and use the result as the external fraction. To determine
+the external composition, divide each off-diagonal weight $M_{kj}$
+by $1-M_{kk}$: these conditional source weights sum to one among
+the external demes. This separates "how much comes from outside?"
+from "given that it comes from outside, which source contributes
+what share?" If $1-M_{kk}=0$, no external copies are possible:
+$B_k=0$, the row stays unchanged, and no division by the zero
+external weight is needed.
 
 #### Drift: draw whole gene copies
 
@@ -390,9 +588,30 @@ Draw $n_k$ times with replacement, using $q_k$ as the probabilities:
 (C_{k1},\ldots,C_{kA})\sim\operatorname{Multinomial}(n_k;q_k(a_1),\ldots,q_k(a_A)) \tag{3.13}
 ```
 
+Here $A$ is the number of allele categories in this pool, not a
+population size. $C_{ki}$ counts how many of the $n_k$ offspring
+copies receive allele $a_i$. A multinomial draw fills the whole
+count row together: every copy receives exactly one label, so the
+entries cannot vary independently. If one category receives more
+copies, fewer remain for the others.
+
+For ten copies and probabilities $(0.7,0.2,0.1)$, a possible result
+is $(6,3,1)$; another is $(8,2,0)$. Both sum to ten. The zero in
+the latter result means the third allele was lost from this deme
+in that draw, even though its parental probability was positive.
+"With replacement" means that choosing one parent does not remove
+it from the pool: several offspring can choose the same parent.
+
+The next equation converts each count back to a frequency. The
+tilde marks the intermediate state **after drift but before mutation**:
+
 ```math
 \widetilde p_k(a_i)=\frac{C_{ki}}{n_k} \tag{3.14}
 ```
+
+Thus $(6,3,1)$ becomes $(0.6,0.3,0.1)$ by dividing every entry by ten.
+Because the counts sum to $n_k$, their divided values sum to one
+without a biological correction or the addition of missing copies.
 
 The counts sum to $n_k$ exactly. Their mean reproduces the parental
 pool, but a particular realization need not:
@@ -401,9 +620,27 @@ pool, but a particular realization need not:
 \mathbb E[\widetilde p_k(a_i)\mid q_k]=q_k(a_i) \tag{3.15}
 ```
 
+The symbol $\mathbb E$ means an average over possible draws, and
+the vertical bar means "with the parental distribution $q_k$ held
+fixed." Repeat this same one-step experiment many times, without
+feeding one result into the next: the average frequency approaches
+$q_k(a_i)$. For an allele with probability $0.7$ in a ten-copy
+deme, the expected count is seven and the expected frequency is
+$0.7$. Neither statement requires each draw to contain seven copies.
+
 ```math
 \operatorname{Var}[\widetilde p_k(a_i)\mid q_k]=\frac{q_k(a_i)(1-q_k(a_i))}{n_k} \tag{3.16}
 ```
+
+Variance is the average **squared** departure from that expected
+frequency. For $q_k(a_i)=0.7$ and $n_k=10$, it is
+$0.7\cdot0.3/10=0.021$. Its square root, approximately $0.145$,
+is the standard deviation in frequency units. Raising the copy
+count to 100 reduces the variance to $0.0021$ and the standard
+deviation to approximately $0.0458$. Ten times as many copies
+therefore reduce typical deviations by $\sqrt{10}$, not ten.
+At probability zero or one the variance is zero: absent alleles
+cannot be sampled, and a sole available allele receives every copy.
 
 This is drift: the mean stays put while finite sampling produces
 movement around it. Appendix D derives the sampling probabilities.
@@ -417,12 +654,36 @@ a binomial number of copies to mutation:
 U_{ki}\mid C_{ki}\sim\operatorname{Binomial}(C_{ki},\mu_l) \tag{3.17}
 ```
 
+$U_{ki}$ is the number of copies **leaving their old allele label**,
+not the count of copies entering a particular new label.
+The conditioning bar says that the drift result $C_{ki}$ has
+already been drawn and is now held fixed. The mutation probability
+$\mu_l$ is per copy at locus $l$; the trial count is $C_{ki}$,
+not the deme-wide count $n_k$ for every allele.
+Using $n_k$ separately for every category would count the same
+population repeatedly.
+
+For a post-drift count of six and $\mu_l=0.1$, the expected number
+leaving that label is $6\cdot0.1=0.6$. A realized count might be
+zero, one, or another integer up to six. The fraction $0.6$ is
+an expectation, not a fractional mutation event. A category with
+zero copies contributes no mutations.
+
 Under infinite alleles, the old allele retains $C_{ki}-U_{ki}$ copies,
 and each of the $U_{ki}$ mutated copies gets its own new label and
 frequency $1/n_k$. Under finite alleles, each mutated copy instead
 chooses uniformly among the $K_l-1$ labels other than its parent.
 Incoming mutations can therefore increase an existing allele's count.
 In either case mutation changes labels, not the total number of copies.
+
+The two models differ in how those outgoing copies are assigned.
+Under infinite alleles, two mutated copies always receive different
+new labels, even when they had the same parent allele. Under finite
+alleles, both can choose the same target, and another old label can
+receive incoming copies while losing some of its own. Consequently
+"subtract outgoing mutations" completes the old-label calculation
+only in the infinite-alleles case; finite alleles also require adding
+incoming mutations, as in Appendix E.3.
 
 For example, take $n_k=10$, parental probabilities $(0.7,0.2,0.1)$,
 and a possible drift result $(6,3,1)$. If mutation counts are $(1,0,1)$,
@@ -442,19 +703,36 @@ gives:
 F_{t+1}=(1-\mu)^2\left[\frac1n+\left(1-\frac1n\right)F_t\right] \tag{3.18}
 ```
 
+Read the bracket as two mutually exclusive ways to obtain identical
+parental labels. First choose one parent; the second offspring
+chooses that exact copy with probability $1/n$, and those labels
+necessarily match. Otherwise, with probability $1-1/n$, the two
+parents are distinct; their labels match with probability $F_t$.
+Add those two cases. Finally, each offspring independently avoids
+mutation with probability $1-\mu$, so multiply the bracket by
+$(1-\mu)(1-\mu)$.
+
+For example, let $n=10$, $F_t=0.5$, and $\mu=0.1$. Before mutation
+the matching probability is $0.1+0.9\cdot0.5=0.55$.
+Both offspring avoid mutation with probability $0.9^2=0.81$,
+giving $F_{t+1}=0.81\cdot0.55=0.4455$.
+This describes an expected matching probability across populations,
+not an instruction to overwrite any allele frequency with $0.4455$.
+
 This isolated-deme recursion is not a complete multi-deme recursion:
 with migration, parent choices can come from different demes and
 between-deme identities must also be tracked. Nor does it apply
 unchanged to finite alleles, where independent mutations can match.
-Appendix F solves (3.17) and distinguishes it from observed identity.
+Appendix F solves (3.18) and distinguishes it from observed identity.
 
 (Releases before this order was adopted ran Migrate → Mutate →
 Drift with a mutation step that scaled every allele's frequency down in
 proportion to a deme-wide event count; that is not the textbook model
 and left an $O(\mu/n)$ excess identity each generation.)
 
-Each stage is implemented as a pure function of state to state — no
-stage reads or mutates global state, and each is independently
+Each stage has explicit state and parameter inputs; random stages
+also receive random streams and consume draws from them. No
+stage reads or mutates global simulation state, and each is independently
 unit-testable against the closed-form expectations in the companion
 documents (§10). Keeping the generative model and the statistic
 computation as two separate concerns, and keeping each stage of the
@@ -474,6 +752,15 @@ handles independent replicates (§5). A flat-looking short interval
 does not establish equilibrium. Appendix F explains the distinction,
 and [the convergence reference](convergence.md) specifies the stopping
 policy.
+
+A run can therefore be making useful progress even when its latest
+$D$ value continues to rise and fall. The estimate of interest is
+the average after burn-in, together with the uncertainty in that
+average. A precision request of $0.01$ does not ask successive
+generations to differ by less than $0.01$; it asks for an error-bar
+half-width of at most $0.01$ around the reported equilibrium estimate.
+The effective sample size accounts for the fact that nearby
+generations contain overlapping information.
 
 If $\mu=0$, loss of alleles can instead produce absorbing states.
 Global fixation requires migration that actually connects the demes;
@@ -525,6 +812,16 @@ small class it calls, none of them aware of the loop that drives them.
 a previously persisted run — re-computing a new statistic against an old
 trajectory should never require re-running the simulation.
 
+For example, the migration operator receives frequencies and produces
+new frequencies; it need not know whether they will be plotted or
+saved. The statistics module receives a frequency table and calculates
+$D$; it need not know whether that table came from this simulator or
+a survey. Keeping these boundaries explicit makes two independent
+checks possible: test that the simulated population follows the model,
+and separately test that the statistics correctly describe a supplied
+population. Agreement between two components that share the same
+mistake would not be an independent check.
+
 ### 4.2 Data flow
 
 1. `SimulationParams` (validated) plus a seed produce an initial $\psi_0$ via
@@ -539,6 +836,16 @@ trajectory should never require re-running the simulation.
    $\psi_T$.
 5. The visualization module reads from the `TrajectoryStore` (for the
    canonical scatter and any diagnostic plots) and from the final report.
+
+One pass through this loop advances biological time by one generation,
+not by one operator. The intermediate parental pool and post-drift
+counts explain how the next state is produced; they are not three
+additional generations. The state at generation $T$ answers "what
+population was present when execution stopped?" The post-burn-in
+average answers the different question "what statistic characterized
+the sampled equilibrium history?" A final scatter and an equilibrium
+average can therefore describe the same run without describing the
+same mathematical object.
 
 ### 4.3 The parameter bag (P)
 
@@ -572,6 +879,15 @@ array/matrix (per-deme size, full or sparse migration matrix) — see §9.
 Passing a richer value for either is a config change, not a new code path
 threaded through the operators.
 
+For example, an individual-count list `[100, 200, 100]` with
+`ploidy: diploid` becomes gene-copy counts $(200,400,200)$.
+Every drift draw uses its own destination's count. A scalar
+migration rate still applies the same incoming fraction to each
+destination, but its external source frequencies use those copy
+counts as weights. A full migration matrix is different: its rows
+already specify the complete source shares, so the size list does
+not reweight them.
+
 **Deme weighting defaults to `"size"`, not `"equal"`.** Size weighting
 asks about a randomly selected gene copy; equal weighting asks about
 a randomly selected deme. Both are defined for unequal sizes, but
@@ -582,6 +898,12 @@ The `deme_weighting` key governs $E_{ST}$ alone
 (`fim.statistics.differentiation.statistics_report`), so setting
 `convergence_statistic` to anything other
 than $E_{ST}$ makes this key a no-op for that run.
+
+Here "no-op" refers to the stopping decision when no watched
+statistic uses the weighting setting. The full report's $E_{ST}$
+can still change with that setting. A parameter can therefore
+leave the simulated trajectory unchanged while changing a summary
+calculated from that trajectory.
 
 **Default values.** `precision` has no botanically-derived default: `0.01`
 is a generic plus-or-minus, not a claim about what a real study needs; a
@@ -630,7 +952,8 @@ from fixation-neutrality ($G_{ST}$ near zero) — which is exactly the point
 the letter itself is making ($Nm$ alone does not control allelic
 differentiation; the ratio $m/[\mu(d-1)]$ matters), rendered as a
 parameter sweep rather than a static table. The default end-to-end
-scenario uses approximately $N=450$, $d=20$, $m=0.001$, and
+scenario uses $n=450$ gene copies per deme (225 diploid individuals),
+approximately $d=20$, $m=0.001$, and
 $\mu=3\times10^{-7}$. These are scenario choices, not the geometric
 midpoints of all four columns.
 
@@ -643,6 +966,17 @@ $L$ as this document's `LocusSpec.length` (§3.2) despite the shared
 letter; a coincidence of the letter's own notation (which also writes the
 mutation rate as `u`, not $\mu$), not a hint about locus-length defaults.
 
+The column $Nm$ gives the expected migrant count per deme per
+generation in these haploid examples: $100\cdot0.0001=0.01$
+versus $2000\cdot0.01=20$. An expectation below one is not a
+fractional observed migrant. Under stochastic migrant sampling,
+most draws can be zero and occasional draws positive. The
+ratio $m/[\mu(d-1)]$ compares migration and mutation on another
+scale; it is $25$ in the first row and approximately $0.101$
+in the second. Reading both quantities makes the contrast clearer:
+more migrants in absolute count do not by themselves imply a
+smaller value of every differentiation statistic.
+
 ### 4.4 Language and library choice
 
 **Python 3, with NumPy as the array backend.** NumPy's `Generator` gives
@@ -652,6 +986,15 @@ are chosen to be equally easy to load from R, because the project exists
 to give a researcher per-generation frequencies loadable into their own
 analysis tooling. §4.5 below records the packaging
 consequence of this choice.
+
+NumPy arrays organize many frequencies or counts into contiguous
+tables; its random generator supplies explicitly seeded draws.
+These solve different problems: storing values in an array does
+not make them random, and drawing random values does not require
+discarding the seed or the intermediate states.
+The optional compiled kernels accelerate the same operations.
+They are implementation choices beneath the biological model,
+not alternative definitions of migration, drift, or mutation.
 
 ### 4.5 Packaging and distribution
 
@@ -872,6 +1215,13 @@ column 2 cannot mean allele $a_2$ in one row and $a_7$ in another.
 This alignment, not any numerical property of the labels, enables
 table arithmetic.
 
+The two indices in $P_{ki}$ have different jobs. Moving down column
+$i$ asks how the **same allele** is distributed among demes.
+Moving across row $k$ asks which **different alleles** make up one
+deme. The locus and generation have not disappeared biologically;
+they are fixed while this one table is being transformed.
+Repeat the construction for each locus and each generation.
+
 #### A complete three-deme example
 
 Take three equal demes with ten gene copies each, alleles $a,b,c$,
@@ -888,6 +1238,13 @@ pool and receives $0.1$ from each other deme, giving:
 M=\begin{pmatrix}0.8&0.1&0.1\\0.1&0.8&0.1\\0.1&0.1&0.8\end{pmatrix} \tag{4.3}
 ```
 
+The diagonal $0.8$ is $1-m$. The remaining weight $m=0.2$
+is split equally between two external demes, so each gets $0.1$.
+This equal split follows from equal source sizes; it would not
+generally hold for unequal sizes. $M$ describes source shares,
+whereas $P$ describes allele shares. A row of $M$ sums to one
+over **sources**; a row of $P$ sums to one over **alleles**.
+
 Multiplication on the **left** mixes deme rows while keeping allele
 columns separate. The dimensions match:
 
@@ -895,15 +1252,28 @@ columns separate. The dimensions match:
 Q=MP\quad[(3\times3)(3\times3)\longrightarrow(3\times3)] \tag{4.4}
 ```
 
+The inner dimensions both count source demes. Multiplication pairs
+the weight of source $j$ with that source's frequency of the
+selected allele, then sums over $j$. The remaining dimensions
+identify a destination and an allele. This example happens to have
+three of each, but a table with five allele columns would instead
+give a $(3\times3)(3\times5)$ product of shape $3\times5$.
+
 For example, row 1 of the result is a weighted sum of complete rows:
 
 ```math
 Q_{1,:}=0.8(0.8,0.2,0)+0.1(0.2,0.5,0.3)+0.1(0.5,0,0.5) \tag{4.5}
 ```
 
+The colon in $Q_{1,:}$ means "all allele columns in row 1."
+Multiply each source row entry by its source weight before adding:
+
 ```math
 Q_{1,:}=(0.64,0.16,0)+(0.02,0.05,0.03)+(0.05,0,0.05) \tag{4.6}
 ```
+
+Now add the first entries together, then the second entries, then
+the third. No term moves from one allele column to another:
 
 ```math
 Q_{1,:}=(0.71,0.21,0.08) \tag{4.7}
@@ -914,6 +1284,14 @@ Perform the same operation for the other two rows:
 ```math
 Q=\begin{pmatrix}0.71&0.21&0.08\\0.29&0.42&0.29\\0.50&0.07&0.43\end{pmatrix} \tag{4.8}
 ```
+
+For row 2 the weights are $(0.1,0.8,0.1)$ rather than row 1's
+$(0.8,0.1,0.1)$. Its allele-$a$ entry is therefore
+$0.1\cdot0.8+0.8\cdot0.2+0.1\cdot0.5=0.29$.
+Row 3 similarly gives
+$0.1\cdot0.8+0.1\cdot0.2+0.8\cdot0.5=0.50$.
+Checking a column this way verifies that the source weights follow
+the destination row, not the allele.
 
 The column for $a$, for example, changes from $(0.8,0.2,0.5)$ to
 $(0.71,0.29,0.5)$: extreme demes move toward their neighbors.
@@ -933,6 +1311,11 @@ its own multinomial distribution, is:
 C=\begin{pmatrix}7&2&1\\3&4&3\\5&1&4\end{pmatrix} \tag{4.9}
 ```
 
+The entry 7 means seven copies of allele $a$ in deme 1, not a
+probability of seven. Its parental expectation was
+$10\cdot0.71=7.1$ copies. A whole-copy realization can differ
+from that expectation; each count row must nevertheless sum to ten.
+
 This is **not** rounding $10Q$. Rounding always gives the same answer;
 sampling has many possible answers. The mean count table is $10Q$,
 but (4.9) is one possible outcome. For this example, suppose mutation
@@ -942,11 +1325,20 @@ then selects these numbers of copies from the old allele columns:
 U=\begin{pmatrix}1&0&1\\0&0&0\\0&1&0\end{pmatrix} \tag{4.10}
 ```
 
+$U$ has the same old-label columns as $C$. Its first row says one
+$a$ copy and one $c$ copy mutate in deme 1; its third row says one
+$b$ copy mutates in deme 3. Every entry lies between zero and the
+corresponding entry in $C$, because only existing copies can mutate.
+
 The old labels retain the following copies:
 
 ```math
 C-U=\begin{pmatrix}6&2&0\\3&4&3\\5&0&4\end{pmatrix} \tag{4.11}
 ```
+
+The first row now totals eight and the third totals nine. These
+temporary deficits are exactly the copies awaiting new labels,
+not deaths or a change in deme size. The middle row is unchanged.
 
 Under infinite alleles, the three mutated copies get different new
 labels $x,y,z$, allocated in deme order. Append their count columns
@@ -956,6 +1348,13 @@ to the surviving old columns:
 C_{\mathrm{next}}=
 \left(\begin{array}{ccc|ccc}6&2&0&1&1&0\\3&4&3&0&0&0\\5&0&4&0&0&1\end{array}\right) \tag{4.12}
 ```
+
+To the left of the divider the column labels remain $(a,b,c)$;
+to its right they are $(x,y,z)$. Label $x$ replaces the mutating
+$a$ copy in deme 1, $y$ replaces that deme's mutating $c$ copy,
+and $z$ replaces the mutating $b$ copy in deme 3. Zeros in all
+other rows mean that those new labels are initially private.
+The row totals have returned to ten.
 
 Divide row $k$ by $n_k$ to return from counts to frequencies:
 
@@ -979,12 +1378,27 @@ the execution. For scalar migration the entries of $M$ would be:
 M_{kj}=\begin{cases}1-m,&j=k,\\m\,n_j/(S-n_k),&j\ne k.\end{cases} \tag{4.14}
 ```
 
+The two cases separate the destination's own contribution from
+incoming contributions. For an external source, $n_j/(S-n_k)$
+is that source's share of all external copies; multiplying by $m$
+makes it that source's share of the **complete** parental pool.
+These are the same weights derived after (3.10), now written as
+one matrix definition. Building all $d^2$ entries would store a
+large number of weights determined by the same short size vector.
+
 Instead, form the size vector $\boldsymbol n$ and one weighted total
-row, whose $i$th entry is the total mass of allele $a_i$:
+row, whose $i$<sup>th</sup> entry is the total mass of allele $a_i$:
 
 ```math
 \boldsymbol s=\boldsymbol n^{\mathsf T}P \tag{4.15}
 ```
+
+$\boldsymbol n$ is a column of $d$ deme sizes; the transpose
+$\boldsymbol n^{\mathsf T}$ turns it into a row. Multiplying that
+$1\times d$ row by the $d\times A$ table produces a $1\times A$
+row. Entry $i$ is $s_{a_i}$ from (3.7). Thus $\boldsymbol s$
+is not a new biological quantity: it collects all the scalar
+allele totals into one reusable object.
 
 Subtract each destination's own contribution from this row and divide
 by the number of copies outside that destination:
@@ -993,9 +1407,20 @@ by the number of copies outside that destination:
 R_{k,:}=\frac{\boldsymbol s-n_kP_{k,:}}{S-n_k} \tag{4.16}
 ```
 
+Subtracting $n_kP_{k,:}$ removes the destination's contribution
+from **each allele total at once**. Division by the one denominator
+$S-n_k$ converts each remaining total into an external frequency.
+The result is the row version of (3.8).
+
 ```math
 Q_{k,:}=(1-m)P_{k,:}+mR_{k,:} \tag{4.17}
 ```
+
+This last step blends two entire probability rows using the same
+weights for every column. It is (3.9) applied to all alleles, not
+a second migration event after (4.16). The first calculation finds
+the source composition; the second determines how much of it enters
+the destination's parental distribution.
 
 For (4.2), $\boldsymbol n=(10,10,10)^{\mathsf T}$ and
 $\boldsymbol s=(15,7,8)$. The first external pool is
@@ -1008,6 +1433,14 @@ per locus, versus order $d^2A$ for a general dense matrix product.
 The original "linear in demes" description holds with allele count
 fixed; an increasing number of live alleles also increases the work.
 A genuinely arbitrary migration matrix does not have this shortcut.
+
+For a rough operation-count comparison, take 100 demes and 20 allele
+columns. A general product forms 2,000 output cells, each combining
+100 sources: about 200,000 weighted contributions. The scalar path
+forms 20 shared totals from 100 sources, then updates 2,000 cells.
+This comparison counts the main arithmetic work, not actual machine
+instructions or a guaranteed wall-clock speedup. The benefit comes
+from recognizing repeated structure before compiling the loops.
 
 #### What vectorization does, and does not, mean
 
@@ -1046,6 +1479,16 @@ The cross-machine limitation in §4.6 still applies.
 ## 5. Module layout
 
 *Implementer detail — optional for the botanist.*
+
+Read the module boundaries as a worked dependency chain.
+To advance a deme, the engine needs a state, model parameters,
+and explicit random streams. It delegates the biological update
+to operators, passes the resulting table to statistics, and
+hands the state and summaries to persistence. A user-interface
+request starts this chain but does not itself implement its
+equations. This separation lets a developer change a storage
+format without redefining drift, or add a statistic without
+changing how gene copies are drawn.
 
 Package layout:
 
@@ -1135,8 +1578,9 @@ explicit-$p_{0}$ override path. Structured as a small strategy interface
 (e.g., from a real allele-frequency survey) is a second implementation of
 the same interface, not a special case wired into the engine.
 
-**`model/operators.py`.** Three pure functions, each `ModelState ->
-ModelState`, matching §3.4 exactly:
+**`model/operators.py`.** Three state-transforming functions, each
+`ModelState -> ModelState`, with explicit random-stream inputs
+where draws are needed, matching §3.4:
 
 - `migrate(state, m) -> ModelState` — per-deme weighted blend with the
   migrant pool. A scalar $m$ is the introduction's "island model proper"
@@ -1207,7 +1651,7 @@ run should say so plainly rather than raise).
 entirely independent of the simulator — the generative model and the
 statistic computation are kept as two separate concerns. Implements
 exactly the
-formula sheet in the differentiation-measures guide's Appendix A: `H`,
+formula sheet in the differentiation-measures guide's Appendix A: $H$,
 $H_{S}$, $H_{T}$, $J$, Hill numbers ${}^qD$, $G_{ST}$, $D$ (Jost's), $E_{ST}$,
 $K_{ST}$, plus the general Differentiation_q family formula so a botanist
 can sweep `q` directly rather than being limited to the three named
@@ -1330,17 +1774,27 @@ alleles):
 
 | Column | Type | Meaning |
 |---|---|---|
-| run_id | string | groups rows from one replicate's run |
-| `generation` | int | `t` |
-| `deme` | int | `k`, `[1..d]` |
-| locus_id | int | `l` |
-| allele_id | int | opaque allele label |
+| `run_id` | string | groups rows from one replicate's run |
+| `generation` | int | $t$ |
+| `deme` | int | $k$, $[1..d]$ |
+| `locus_id` | int | $l$ |
+| `allele_id` | int | opaque allele label |
 | `frequency` | float | $p_{k,t,l}(a)$ for the allele named by `allele_id` |
 
 Long-format, tidy, one value per row — directly loadable into R or Python
 without a custom parser, matching this project's purpose:
 giving a researcher per-generation frequencies loadable into their own
 analysis, not a black box.
+
+For a ten-copy deme with alleles $a$ and $b$ at frequencies
+$(0.7,0.3)$, the logical table contains two rows with the same
+run, generation, deme, and locus identifiers. Their allele IDs
+differ, and their `frequency` entries are $0.7$ and $0.3$.
+There is no row for an absent allele $c$; within a complete
+recorded state, absence means frequency zero. It must not be
+confused with an unrecorded generation under optional thinning.
+To reconstruct a frequency vector, group rows by the first
+four identifiers and use `allele_id` to align its entries.
 
 **Backend is swappable behind a `TrajectoryStore` protocol** (`persistence/
 store.py`); the row schema above is the store's public contract, not any
@@ -1370,6 +1824,15 @@ Key properties of the binary trajectory log:
   tail reads (`live_block_seconds`), allowing the GUI and monitoring CLI
   to stream live curve points while the simulation engine appends to the file.
 
+The logical row contract and the physical binary representation
+answer different questions. The contract specifies what a
+recorded value means. The binary format specifies how to store,
+check, and retrieve those values efficiently. A checksum can
+detect damaged bytes; it cannot establish that the biological
+equation used to produce intact bytes was correct. Conversely,
+a correct simulation still needs integrity checks to distinguish
+valid output from a partially written last block.
+
 ### Atomic run checkpointing
 
 Long simulations or exploratory runs require resuming after interruptions,
@@ -1395,6 +1858,21 @@ pauses, or machine reboots. The checkpoint subsystem
   Cadence is derived from `params.expert` via `cadence_for_params(params)`
   and can be overridden via CLI flags (`--checkpoint-generations`,
   `--checkpoint-seconds`) or API arguments.
+
+A trajectory records the population's history; a checkpoint
+records what execution needs to continue from one point in it.
+Frequencies alone are insufficient for exact continuation.
+Two runs can reach the same frequency table while having different
+next random numbers available. Restoring the random-stream states
+preserves the next draws, and restoring the monitor preserves the
+evidence already accumulated toward stopping. These are why a
+checkpoint contains more than a saved population.
+
+Recovery starts from the latest **committed** checkpoint, not
+from an arbitrary half-written intermediate state. Computation
+after that checkpoint may need to be repeated. Repetition from
+the same state and random streams reconstructs the same continuation;
+it does not treat incomplete output as a new observation.
 
 ### Saved run objects and lifecycle state machine
 
@@ -1499,6 +1977,15 @@ produced the run (`engine_backend`/`jit` — the *resolved* backend when
 itself). The manifest is what lets someone hand a run_id to a
 collaborator and have them reproduce the identical trajectory.
 
+Distinguish three provenance questions: the configuration says
+what model was requested; the manifest says what actually ran;
+the trajectory says what populations were produced.
+For example, `engine_backend: auto` records a selection request.
+Recording only that word would omit the implementation chosen
+on a particular machine. Recording the resolved backend makes
+the execution auditable, while the science settings remain the
+definition of the experiment.
+
 ## 7. Statistics module
 
 *Implementer detail — optional for the botanist; the numbers it produces
@@ -1525,6 +2012,14 @@ J(p)=\sum_i p_i^2 \tag{7.1}
 H(p)=1-J(p) \tag{7.2}
 ```
 
+For $p=(0.6,0.4)$, the two matching cases have probabilities
+$0.6\cdot0.6=0.36$ and $0.4\cdot0.4=0.16$. Adding gives
+$J=0.52$; taking the complement gives $H=0.48$.
+The nonmatching ordered pairs are $(a,b)$ and $(b,a)$, each with
+probability $0.24$, which independently checks that same $H$.
+"Heterozygosity" here describes a pair-drawing probability even for
+haploid markers; it does not require a diploid organism.
+
 $J$ is identity; $H$ is expected heterozygosity, the probability of
 different alleles. These frequency-based draws are with replacement;
 they are not the distinct-copy identity $F$ in (3.18).
@@ -1536,19 +2031,49 @@ first to obtain the pooled distribution:
 \bar p_i=\frac1d\sum_{k=1}^{d}p_k(a_i) \tag{7.3}
 ```
 
+The bar means an average, and $i$ still denotes one particular
+allele. Keep its column fixed, add its frequency across demes,
+and divide by $d$. This pooling rule gives every deme the same
+influence, even if their copy counts differ. It is equivalent
+to choosing a deme uniformly first, then drawing a copy there;
+it is not necessarily equivalent to sampling a copy uniformly
+from all individuals combined.
+
 ```math
 H_S=\frac1d\sum_{k=1}^{d}\left[1-\sum_i p_k(a_i)^2\right] \tag{7.4}
 ```
 
+In (7.4), calculate a complete heterozygosity inside each deme
+**before** averaging over demes. The inner sum runs over alleles;
+the outer sum runs over demes. The subscript $S$ means the
+within-subpopulation quantity, not the global copy count $S$ in
+(3.6). Its operational question is: "How often do two draws differ
+when both are made within the same randomly chosen deme?"
+
 ```math
 H_T=1-\sum_i\bar p_i^2 \tag{7.5}
 ```
+
+For $H_T$, reverse the order: average the frequency rows first
+using (7.3), then compute one heterozygosity from that pooled row.
+Each of the two draws now chooses its deme independently, so they
+can come from different demes. Squaring is nonlinear; computing
+heterozygosity after pooling need not give the same answer as
+averaging heterozygosities computed before pooling.
 
 Subtract (7.4) from (7.5). The constant ones cancel:
 
 ```math
 H_T-H_S=\sum_i\left[\frac1d\sum_kp_k(a_i)^2-\bar p_i^2\right] \tag{7.6}
 ```
+
+To check the subtraction explicitly, write
+$H_S=1-d^{-1}\sum_k\sum_i p_k(a_i)^2$.
+Subtracting this from $1-\sum_i\bar p_i^2$ cancels the two ones
+and turns the negative within-deme sum positive.
+Interchange the order of the finite sums so each allele's
+contribution can be examined separately. The result is (7.6):
+mean square frequency minus squared mean frequency for each allele.
 
 To recognize this expression, expand
 $(p_k(a_i)-\bar p_i)^2=p_k(a_i)^2-2p_k(a_i)\bar p_i+\bar p_i^2$,
@@ -1558,12 +2083,26 @@ then average over $k$ and use (7.3):
 \frac1d\sum_k(p_k(a_i)-\bar p_i)^2=\frac1d\sum_kp_k(a_i)^2-\bar p_i^2 \tag{7.7}
 ```
 
+In that expansion the averaged cross-term is
+$-2\bar p_i(d^{-1}\sum_kp_k(a_i))=-2\bar p_i^2$.
+The final term $\bar p_i^2$ is the same for all $d$ demes, so
+its average remains $\bar p_i^2$. Combining them leaves
+$-2\bar p_i^2+\bar p_i^2=-\bar p_i^2$, the right-hand
+side of (7.7). No approximation or sampling assumption is involved.
+
 Therefore the difference in heterozygosities is a sum of variances
 across demes:
 
 ```math
 H_T-H_S=\sum_i\frac1d\sum_k(p_k(a_i)-\bar p_i)^2\geq0 \tag{7.8}
 ```
+
+Every squared difference is nonnegative. The sum is zero exactly
+when every allele has the same frequency in every deme.
+Thus this numerator measures differences in **composition**, not
+the absolute diversity already shared by all demes. Two demes
+can each contain many alleles and still have numerator zero if
+their rows are identical.
 
 This is a useful correctness check: equal-weight pooling cannot
 decrease heterozygosity. The two familiar statistics normalize that
@@ -1573,9 +2112,29 @@ same nonnegative difference differently:
 G_{ST}=\frac{H_T-H_S}{H_T}=1-\frac{H_S}{H_T}\quad(H_T>0) \tag{7.9}
 ```
 
+Read $G_{ST}$ as the part of total heterozygosity not accounted
+for by average within-deme heterozygosity, expressed as a fraction
+of the total. The second form follows by dividing both numerator
+terms by $H_T$: $H_T/H_T-H_S/H_T=1-H_S/H_T$.
+If pooling adds no heterozygosity, this fraction is zero.
+When $H_T$ itself is zero there is no nonzero total to divide by;
+that is a genuine undefined ratio, not evidence of maximal differentiation.
+
 ```math
 D=\frac{H_T-H_S}{1-H_S}\,\frac{d}{d-1}\quad(d>1) \tag{7.10}
 ```
+
+In $D$, $1-H_S$ is average within-deme **identity**, the complement
+of heterozygosity. First divide the between-deme increase by that
+identity. Then multiply by $d/(d-1)$, a factor depending only on
+the number of demes.
+Why this factor? If no allele is shared between any two demes,
+each pooled frequency is its source frequency divided by $d$.
+Squaring and summing then gives pooled identity
+$1-H_T=(1-H_S)/d$.
+Consequently $H_T-H_S=(1-H_S)(d-1)/d$.
+The first ratio in (7.10) is $(d-1)/d$ in this fully private
+case, and the final factor rescales it to exactly one.
 
 $G_{ST}$ divides by total heterozygosity. $D$ divides by within-deme
 identity and applies the finite-deme factor. Changing the denominator
@@ -1606,13 +2165,29 @@ Thus $H_S=3/8$. Pooling the rows gives $(1/2,1/2)$:
 H_T=1-\left[(1/2)^2+(1/2)^2\right]=1/2 \tag{7.13}
 ```
 
+The pooled frequency of the first allele is
+$((3/4)+(1/4))/2=1/2$; the second is the same.
+Within each deme, two matching draws are relatively likely because
+one allele dominates. Pooling makes the two alleles equally common,
+so matching becomes less likely and heterozygosity increases.
+The next line measures the size of that increase:
+
 ```math
 H_T-H_S=1/2-3/8=1/8 \tag{7.14}
 ```
 
+Expressing $1/2$ as $4/8$ gives $4/8-3/8=1/8$.
+Use that same numerator in both statistics, changing only the
+normalization:
+
 ```math
 G_{ST}=\frac{1/8}{1/2}=\frac14 \tag{7.15}
 ```
+
+Dividing by a fraction means multiplying by its reciprocal:
+$(1/8)/(1/2)=(1/8)\cdot2=1/4$.
+For $D$, the denominator is instead $1-3/8=5/8$,
+and two demes give the extra factor $2/(2-1)=2$:
 
 ```math
 D=\frac{1/8}{1-3/8}\,\frac2{2-1}=\frac{1/8}{5/8}\cdot2=\frac25 \tag{7.16}
@@ -1633,6 +2208,15 @@ its chance of observation:
 E(p)=-\sum_{i:p_i>0}p_i\ln p_i \tag{7.17}
 ```
 
+$E$ denotes Shannon entropy, not the expectation operator
+$\mathbb E$. For probabilities below one, $\ln p_i$ is negative;
+the leading minus sign makes each entropy contribution nonnegative.
+For a frequency-$1/4$ allele, the contribution is
+$-(1/4)\ln(1/4)\approx0.346574$.
+It is the average information contributed by that allele, not
+its raw information $-\ln(1/4)\approx1.386294$ on an occasion
+when it is observed. Sum these weighted contributions over alleles.
+
 For entropy differentiation only, let $w_k$ be the chosen deme
 weights, nonnegative and summing to one. Size weighting gives
 $w_k=n_k/\sum_jn_j$; equal weighting gives $w_k=1/d$:
@@ -1641,24 +2225,61 @@ $w_k=n_k/\sum_jn_j$; equal weighting gives $w_k=1/d$:
 \bar p_i^{(w)}=\sum_kw_kp_k(a_i) \tag{7.18}
 ```
 
+The superscript $(w)$ is a reminder of the pooling weights, not
+an exponent. For two demes with weights $(1/4,3/4)$ and first-allele
+frequencies $(3/4,1/4)$, that allele's pooled frequency is
+$(1/4)(3/4)+(3/4)(1/4)=3/8$.
+Equal weights would have given $1/2$ instead.
+
 ```math
 E_S=\sum_kw_kE(p_k) \tag{7.19}
 ```
+
+As with $H_S$, compute diversity inside each deme first, then
+average it with the chosen weights. $E(p_k)$ is one scalar
+calculated from the complete row for deme $k$, not one value
+per allele to be averaged directly over demes.
 
 ```math
 E_T=E(\bar p^{(w)}) \tag{7.20}
 ```
 
+As with $H_T$, pooled entropy instead uses the pooled row from
+(7.18). The difference $E_T-E_S$ is the information about allele
+identity gained by distinguishing demes rather than treating their
+copies as one mixture.
+
 ```math
 E_w=-\sum_{k:w_k>0}w_k\ln w_k \tag{7.21}
 ```
+
+Now apply the same entropy formula to the **deme-selection
+probabilities**, not the allele frequencies. $E_w$ measures how
+uncertain the source deme was before observing any allele.
+With $d$ equal weights, every term is $-(1/d)\ln(1/d)$;
+adding $d$ such terms gives $E_w=\ln d$.
+If only one deme has positive weight, its identity is already known,
+$E_w=0$, and this normalization is undefined.
 
 ```math
 E_{ST}=\frac{E_T-E_S}{E_w}\quad(E_w>0) \tag{7.22}
 ```
 
+The ratio asks what fraction of the available information about
+source deme is carried by allele identity. Identical compositions
+provide none, giving zero. Completely disjoint allele sets identify
+the source deme unambiguously, giving one. This describes a
+statistical association, not a causal claim that the allele determines
+where a copy lives.
+
 For (7.11) with equal weights, $E_S\approx0.562335$ and
 $E_T=E_w=\ln2\approx0.693147$, giving $E_{ST}\approx0.188722$.
+For one row, compute
+$-(3/4)\ln(3/4)\approx0.215762$ and
+$-(1/4)\ln(1/4)\approx0.346574$; their sum is approximately
+$0.562335$. The other row merely swaps the terms, so their
+average is unchanged. The entropy difference is about $0.130812$;
+dividing by $0.693147$ gives the stated result.
 Appendix C explains logs and why zero-frequency terms are omitted.
 `deme_weighting` controls this report's $E_{ST}$, not the equal-weight
 $H_S$, $H_T$, $G_{ST}$, $D$, or $K_{ST}$.
@@ -1670,9 +2291,26 @@ arithmetic mean, and let $K_T$ count the union of represented alleles:
 K_S=\frac1d\sum_kK_k \tag{7.23}
 ```
 
+The union count $K_T$ counts a label once even if it appears in
+several demes. For allele sets $\{a,b\}$ and $\{b,c\}$, each deme
+has two alleles, so $K_S=2$, while the union $\{a,b,c\}$ gives
+$K_T=3$. The ratio $K_T/K_S=1.5$ says that the combined set
+is one and a half times the mean within-deme count.
+
 ```math
 K_{ST}=1-\frac{K_T/K_S-d}{1-d}=\frac{K_T/K_S-1}{d-1} \tag{7.24}
 ```
+
+To see the simpler right-hand form, multiply the numerator and
+denominator of the inner fraction by $-1$, then subtract:
+$1-(d-K_T/K_S)/(d-1)=(K_T/K_S-1)/(d-1)$.
+The diversity ratio starts at 1 when every deme has the same
+allele set and reaches $d$ when their sets are disjoint.
+Subtracting 1 moves the first endpoint to zero; dividing by $d-1$
+moves the second to one. For $\{a,b\}$ and $\{b,c\}$ with $d=2$,
+the result is $(1.5-1)/(2-1)=0.5$.
+Frequencies do not enter this calculation: a single surviving copy
+keeps a label in its deme's set.
 
 In (7.11), $K_S=K_T=2$, so $K_{ST}=0$: both alleles occur in both
 demes even though their frequencies differ. In contrast, if each of
@@ -1690,17 +2328,41 @@ sharing its letter:
 {}^qD(p)=\left(\sum_{i:p_i>0}p_i^q\right)^{1/(1-q)}\quad(q\geq0,\ q\ne1) \tag{7.25}
 ```
 
+Here $q$ is a **diversity order**, not the parental frequency $q_k$
+from §3.4. It controls how strongly common alleles dominate the
+diversity calculation. Compute one power $p_i^q$ per positive
+frequency, add the powers, and then apply the outer exponent.
+That outer exponent converts the sum into an effective allele
+count, calibrated to return $K$ for $K$ equally frequent alleles.
+Increasing the order reduces sensitivity to very rare alleles.
+
 ```math
 {}^0D(p)=K(p) \tag{7.26}
 ```
+
+For $q=0$, every positive frequency contributes $p_i^0=1$;
+the sum counts present labels. The outer exponent is then one.
+Zeros are omitted, so no ambiguous $0^0$ term is needed.
 
 ```math
 {}^1D(p)=\exp(E(p)) \tag{7.27}
 ```
 
+At $q=1$, direct substitution into (7.25) would divide by zero.
+Its continuous limit is the exponential of Shannon entropy.
+For two equally frequent alleles, entropy is $\ln2$ and
+$\exp(\ln2)=2$, so the units are again effective alleles.
+
 ```math
 {}^2D(p)=\frac1{J(p)}=\frac1{1-H(p)} \tag{7.28}
 ```
+
+For $q=2$, the outer exponent in (7.25) is $1/(1-2)=-1$:
+take the reciprocal of the squared-frequency sum $J$.
+Because $H=1-J$, the second expression follows immediately.
+An effective count such as $1.6$ need not be an integer:
+it expresses diversity on a scale of equally common alleles,
+not the literal number of labels in the row.
 
 For a row of (7.11), order-two diversity is $1/(5/8)=1.6$ effective
 alleles, versus $2$ in the pooled distribution. Appendix C checks
@@ -1720,6 +2382,24 @@ $d$-dimensional space"):** one point per `(locus, allele)`, with coordinates:
 ```math
 \boldsymbol x_{a,l}=(p_{1,T,l}(a),p_{2,T,l}(a),\ldots,p_{d,T,l}(a)) \tag{8.1}
 ```
+
+$T$ selects the displayed generation; $l$ fixes one locus;
+$a$ fixes one allele identity. Each coordinate then reads
+that **same allele's** frequency from a different deme row.
+For two demes containing $(a,b,c)$ at frequencies
+$(0.6,0.4,0)$ and $(0.2,0.4,0.4)$, the three plotted
+points are $a:(0.6,0.2)$, $b:(0.4,0.4)$, and $c:(0,0.4)$.
+Allele $b$ lies on the equality diagonal because its two
+frequencies agree; $c$ lies on the second-deme axis because
+it is absent from the first deme.
+
+Each point has an allele label, whereas each **axis** has a
+deme label. The points are not populations. Coordinates of
+one point need not sum to one: $(0.4,0.4)$ sums to $0.8$
+without violating any probability rule. Instead, summing the
+first coordinate across **all alleles at that locus** gives
+one; the same holds separately for every other coordinate.
+This is the plotted version of the unit row sums in $P$.
 
 The axes are the $d$ demes, and a point's position shows how that allele's
 frequency is distributed across them. An allele private to one deme sits
@@ -1820,6 +2500,15 @@ each is a configuration change, and
 and default. The second table is the answer for changes that are not
 built (§11): each names the one place the change lands.
 
+To read the tables, separate a richer **input** from a new
+**biological operation**. Changing a scalar $m$ to a matrix
+changes which sources enter the same weighted sum. Adding
+selection changes how gene copies are favored and therefore
+requires a new biological rule. In either case, identify the
+equation that changes first; then identify the module that
+owns it. "Small landing spot" describes an architectural
+boundary, not permission to omit mathematical validation.
+
 ### 9.1 Variations reachable from configuration
 
 | "What if…" | Where it lives | Why it stayed small |
@@ -1827,7 +2516,7 @@ built (§11): each names the one place the change lands.
 | …island sizes differed ($N_i$)? | `N` accepts a length-$d$ array of individual counts | The configuration converts each entry to $n_i$ gene copies; `drift()` receives these through `population_size` |
 | …migration were asymmetric, or a full matrix? | `m` accepts a $d\times d$ matrix; its rows are the authoritative weights and are never rescaled by `N` ([`doc/configuration.md`](configuration.md#m)) | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
 | …migration were spatial (stepping-stone)? | `m` accepts a sparse, neighbor-restricted map, or `{topology, rate}` sugar for a 1D ring or bounded chain (`fim.model.topology`) | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
-| …migration counted gene copies rather than blending an idealized continuous fraction? | `migrant_sampling` = "stochastic" draws each deme's migrant count from Binomial($N_{i}$, rate); migrant composition stays the deterministic pool average, so `drift()` remains the only operator that resamples every gene copy | `migrate()`'s rate/pool split already separates "how much moves" from "what it is made of"; only the first half becomes random |
+| …migration counted gene copies rather than blending an idealized continuous fraction? | `migrant_sampling: stochastic` draws each deme's migrant count from $\operatorname{Binomial}(n_i,\text{rate})$; migrant composition stays the deterministic pool average, so `drift()` remains the only operator that resamples every gene copy | `migrate()` separates "how much moves" from "what it is made of"; only the first part becomes random (§3.4) |
 | …locus length varied? | `LocusSpec.length` per locus, driving finite-alleles capacity and the rate derived from $\mu_b$ | a first-class field of the locus (§3.2) |
 | …mutation rate were per base rather than per locus? | `mu` accepts a per-locus tuple; mutually exclusive `mu_b` derives it using (C.13) | `mutate()` reads each locus's rate; `SimulationParams.from_mapping` performs the conversion once |
 | …the mutation model weren't infinite-alleles? | `mutation_model: finite_alleles` bounds locus $l$ to $4^{L_l}$ states (`finite_allele_capacity`) and permits recurrent mutation without ordering alleles | `FiniteAlleleSpace` and `FiniteAlleleRegistry` replace the registry behind the same `mutate()` call |
@@ -1864,6 +2553,18 @@ the $D$-vs-$K_{ST}$ disagreement case. `statistics/differentiation.py`'s
 test suite asserts against these exact values directly, not just against
 internal consistency — they were independently recomputed from first
 principles in that document, not copied from the paper.
+
+The worked calculations here provide a similar ladder of checks.
+First supply exact input rows such as (7.11) and verify the
+statistics without running a simulation. Next test migration
+with (4.2)–(4.8), where weighted sums are deterministic.
+Then test the random samplers across fixed, preselected seeds
+against analytically determined probabilities or moments.
+Finally compare complete seeded histories between engines.
+Each rung catches a different class of error: a correct mean
+does not establish an identical random trajectory, and
+identical trajectories do not establish that a shared formula
+is biologically correct.
 
 **Invariant tests**, checked as properties over randomly generated
 frequency tables rather than single fixed inputs:
@@ -1922,10 +2623,19 @@ The simulator does not model selection. Its mutation models are
 distance-free by design (§3.2), so a stepwise model for microsatellites —
 where how *far* one allele is from another carries meaning — is outside
 it; the finite-alleles model is a bounded label space, not a metric one.
-Migration is any topology expressible as a fixed $d\times d$ matrix, which
-excludes a 2D lattice constructor and any neighbor-selection logic that
-changes over a run. A single graphical front end is likewise out of scope
-(§4.5); the command line is the only one.
+Migration accepts a topology expressible as a fixed $d\times d$ matrix.
+A 2D lattice can be represented by such a matrix, but a dedicated
+constructor for it remains outside the built-in conveniences, as does
+neighbor-selection logic that changes over a run. The desktop
+front end described in §4.5 and Appendix A is already implemented.
+
+For example, assigning larger source weights to particular alleles
+because they reproduce more successfully would introduce selection.
+Choosing mutation targets by how many bases differ would introduce
+a sequence-distance model. Neither is merely a different numeric
+setting for the distance-free, neutral model described here.
+The distinction keeps a future extension from silently changing
+the meaning of an existing run configuration.
 
 Each of these has a named landing spot in §9.2. They are deferred, not
 precluded, and none of them requires revisiting a decision made above.
@@ -1980,7 +2690,25 @@ max_generations: 10000
 n_replicates: 1            # explicit: the library default is 200, batched
 ```
 
-Running it — a real, reproducible transcript, not a sketch:
+Read the inputs in their mathematical units. The 225 diploid
+individuals give 450 gene copies **per deme at the locus**.
+The 20 demes therefore contain $20\cdot450=9000$ copies there.
+Migration $m=0.001$ gives an expected incoming amount of
+$450\cdot0.001=0.45$ copies per destination per generation.
+The mutation probability is explicitly supplied as `mu`, so
+the length of 200 does not multiply that probability again.
+The starting allele count of two says how many founding
+labels to use, not that later mutation can never create a third.
+
+**Historical transcript.** The following recorded output predates
+the current burn-in-and-average stopping policy. It illustrates
+the output files and the distinction between statistics, but
+its generation-49 convergence message is not evidence of
+equilibrium under the current policy. No new run was performed
+to regenerate these historical numbers for this explanation.
+Use [the usage guide](usage.md) and
+[the convergence reference](convergence.md) for current execution
+and stopping behavior.
 
 ```console
 $ fim run myrun.yaml -o results/example
@@ -1992,7 +2720,8 @@ Report     -> results/example/report.json
 Scatter    -> results/example/scatter.png
 ```
 
-`report.json`, in full — this is requirement 6a, the final scalar report:
+The historical `report.json` below illustrates requirement 6a,
+the final scalar report; it is not a complete current report schema:
 
 ```json
 {
@@ -2011,6 +2740,17 @@ Scatter    -> results/example/scatter.png
 }
 ```
 
+Read the frequency-based entries as relationships rather than
+independent facts. Here $H_S\approx0.28218$ is average
+within-deme heterozygosity, and $H_T\approx0.44473$ is pooled
+heterozygosity. Their difference is approximately $0.16255$.
+Dividing by $H_T$ gives $G_{ST}\approx0.36551$;
+dividing by $1-H_S$ gives $H_{ST}\approx0.22645$.
+Multiplying the latter by $20/19$ gives $D\approx0.23837$.
+Thus the reported numbers can be checked against one another
+without reproducing the random history. This arithmetic check
+does not validate the historical stopping decision.
+
 `trajectory.jsonl` — produced by `fim export` from the run's binary
 `trajectory.tlog` (`doc/trajectory-log.md`): one line per `(generation, deme,
 locus, allele)` row, exactly §6's schema, openable in a text editor, Excel, R,
@@ -2022,13 +2762,33 @@ or pandas without any custom parser:
 {"allele_id":0,"deme":2,"frequency":0.9042452958446685,"generation":0,"locus_id":1,"run_id":"run-cee6b47ea87691ee"}
 ```
 
-Given the same version, parameters, and seed, this transcript reproduces
-byte for byte — see [doc/usage.md](usage.md#reproduce-a-run).
+The first two rows belong to the same deme, generation, and
+locus. Their frequencies sum to one, accounting for both
+starting alleles there. The third row begins deme 2's
+distribution; it is not an additional allele in deme 1.
+Generation 0's long decimal frequencies are permitted by
+the continuous starting distribution (§3.3). They need not
+be multiples of $1/450$, unlike frequencies after the first
+whole-copy draw.
+
+Exact reproduction requires the software version, parameters,
+seed, and compatible numerical platform that produced the
+data, not just copying these historical output lines.
+See [the reproduction guide](usage.md#reproduce-a-run).
 
 ## Appendix A. Graphical front-end sketches
 
 The original sketches below illustrated what a graphical front end could
 look like, drawn from a small illustrative simulation.
+
+Read a sketch as an explanation of a screen's purpose, not
+as a second source of equilibrium evidence. The input screen
+specifies the experiment; the results screen describes one
+recorded population; the live curves show how summaries change
+with generation. A visible curve becoming nearly horizontal
+does not replace the burn-in and uncertainty checks.
+The implemented-screen list below records the realized application,
+whereas the small numeric examples remain illustrative.
 
 **Screen 1 — model input.** The four named arguments and the $\mathsf P$-bag
 entries from §4.3, as a form instead of a YAML file: labeled fields for
@@ -2093,11 +2853,36 @@ through B.6 tables; [§4.6](#46-choosing-an-engine-backend) and
 [§9.1](#91-variations-reachable-from-configuration) above still carry the
 present-tense summary of what the evidence shows.
 
+When reading a benchmark, hold the scientific workload fixed:
+the same deme counts, loci, mutation model, generations, and
+seed. Compare elapsed times only after the required output
+agreement has been checked. A tenfold speedup means a
+10-second workload becomes approximately one second under
+the measured conditions; it does not imply every workload
+or machine gains that factor. In particular, table width
+and how many alleles are alive affect array memory and work,
+so deme count alone does not describe every performance boundary.
+
 ## Appendix C. Mathematical notation and algebra refresher
 
 This appendix assumes remembered arithmetic, not recent coursework.
 Read a symbol's definition before trying to remember what it "usually"
 means: population genetics uses $N$ and $D$ in several different ways.
+
+The following map collects recurring quantities. It supplements
+their local definitions rather than replacing them.
+
+| Symbol | Meaning and units | Do not confuse with |
+|---|---|---|
+| $N_k$, $n_k$ | Individuals and gene copies, respectively, in deme $k$ | The number of tracked loci |
+| $p_k(a)$, $q_k(a)$ | Frequencies before and after migration, with generation and locus fixed | Whole-copy counts |
+| $S$, $s_a$ | Total copies and copies of allele $a$ across demes | The subscript $S$ in within-deme statistics |
+| $r_k(a)$ | Allele frequency in destination $k$'s external pool | Remaining count $r_i$ in conditional sampling |
+| $P$, $M$, $Q$ | Frequency, migration-weight, and post-migration tables | The further-parameter bag $\mathsf P$ |
+| $J$, $H$ | Identity and heterozygosity probabilities | Distinct-copy identity $F$ |
+| $D$, ${}^qD$ | Jost's differentiation and Hill diversity | The parental frequency $q_k$ or deme count $d$ |
+| $\mathbb E[X]$, $E(p)$ | Expectation of a random quantity and Shannon entropy | One another: they are different operations |
+| $\sigma$, $\operatorname{SE}(\bar Y)$ | Spread of individual observations and uncertainty of their mean | A requested precision or an actual error |
 
 ### C.1 Indices, sums, and functions
 
@@ -2140,6 +2925,13 @@ mean. Multiplying a whole row by a scalar means multiplying *every*
 entry; adding rows means adding corresponding entries.
 These are the only rules needed to check (4.5)–(4.7).
 
+The weights in (C.4) are $0.25$ and $0.75$, not the values
+$0.2$ and $0.8$ being averaged. The answer $0.65$ lies between
+the two values and closer to the more heavily weighted one.
+For comparison, the ordinary mean is $(0.2+0.8)/2=0.5$.
+This distinction is exactly what source-size weighting changes
+in a migrant pool.
+
 ### C.2 Powers, logarithms, and effective numbers
 
 An exponent counts repeated multiplication when it is a positive
@@ -2151,9 +2943,21 @@ of the exponential function $\exp x=e^x$:
 \ln(\exp x)=x \tag{C.5}
 ```
 
+The number $e\approx2.71828$ is the base of natural exponentials.
+To interpret $\ln8$, ask: "To what power must $e$ be raised to
+obtain 8?" The answer is approximately $2.07944$.
+Equation (C.5) first raises $e$ to the power $x$, then asks what
+that power was. The two operations undo one another.
+
 ```math
 \exp(\ln x)=x\quad(x>0) \tag{C.6}
 ```
+
+Equation (C.6) undoes them in the opposite order. For example,
+$\ln1=0$, $\exp0=1$, and $\exp(\ln8)=8$.
+The positivity restriction matters: a real natural logarithm
+requires a positive argument. Probabilities of zero are handled
+by limits, not by pretending that $\ln0$ is a finite number.
 
 Products become sums under a logarithm, and powers become multipliers:
 
@@ -2161,9 +2965,20 @@ Products become sums under a logarithm, and powers become multipliers:
 \ln(xy)=\ln x+\ln y\quad(x,y>0) \tag{C.7}
 ```
 
+If $x=e^u$ and $y=e^v$, their product is $e^{u+v}$.
+Taking its logarithm returns $u+v$, which is $\ln x+\ln y$.
+For probabilities, this turns the multiplication rule for
+independent events into an addition rule for information.
+
 ```math
 \ln(x^r)=r\ln x\quad(x>0) \tag{C.8}
 ```
+
+Similarly, $(e^u)^r=e^{ru}$, whose logarithm is $ru$.
+Thus $\ln((1-\mu_b)^L)=L\ln(1-\mu_b)$.
+This identity is useful both for explaining repeated probabilities
+and for computing them without multiplying a very long list of
+small factors directly.
 
 Entropy uses these identities to turn the information in independent
 events into additive quantities. At $p=0$ the logarithm itself is not
@@ -2172,6 +2987,14 @@ defined, but the limiting product is:
 ```math
 \lim_{p\downarrow0}p\ln p=0 \tag{C.9}
 ```
+
+The notation $p\downarrow0$ means approach zero through positive
+values. Although $\ln p$ becomes increasingly negative, the
+multiplier $p$ decreases fast enough for their product to approach
+zero. For example, $-p\ln p$ is approximately $0.04605$ at
+$p=0.01$ and $0.0009210$ at $p=0.0001$.
+An event that essentially never occurs makes an essentially zero
+contribution to **average** information.
 
 Thus a zero-frequency allele contributes zero entropy, not an error
 and not infinite entropy.
@@ -2183,11 +3006,23 @@ alleles each have frequency $1/K$, its inner sum becomes:
 \sum_{i=1}^{K}(1/K)^q=K(1/K)^q=K^{1-q} \tag{C.10}
 ```
 
+There are $K$ identical terms, so replace their sum by $K$ times
+one term. Next write $(1/K)^q=K^{-q}$ and combine powers of the
+same base: $K^1K^{-q}=K^{1-q}$.
+This explains each step rather than treating the exponent as
+an unexplained adjustment.
+
 Raising this result to the stated power undoes the exponent:
 
 ```math
 \left(K^{1-q}\right)^{1/(1-q)}=K\quad(q\ne1) \tag{C.11}
 ```
+
+The rule $(x^u)^v=x^{uv}$ multiplies the two exponents.
+Here their product is $(1-q)/(1-q)=1$.
+For four equally frequent alleles at order two, the inner sum
+is $4(1/4)^2=1/4$ and the outer power is $-1$;
+its reciprocal is four, as required.
 
 At $q=1$ the expression is a limit rather than a direct substitution;
 the result is $\exp(E(p))$. For a uniform vector $E(p)=\ln K$,
@@ -2204,17 +3039,38 @@ Independence lets the probabilities multiply:
 \Pr(\text{no base mutates})=(1-\mu_b)^L \tag{C.12}
 ```
 
+Here $\Pr$ means probability, $L$ is the number of bases being
+examined, and "no base mutates" means that all $L$ independent
+trials avoid mutation. For two bases this is
+$(1-\mu_b)(1-\mu_b)$; for three, multiply by one more
+$1-\mu_b$. The exponent is shorthand for that repeated product.
+
 The complementary event is at least one mutation:
 
 ```math
 \mu_l=1-(1-\mu_b)^{L_l} \tag{C.13}
 ```
 
+The subscript $l$ selects a particular locus and its length $L_l$.
+Subtracting the probability of **none** from one includes every
+case with one or more mutated bases. Simply adding $L_l$ copies
+of $\mu_b$ would count overlapping events more than once:
+a trial where two bases mutate would appear in two single-base
+contributions.
+
 For a two-base locus, expand the square to see the approximation:
 
 ```math
 1-(1-\mu_b)^2=1-(1-2\mu_b+\mu_b^2)=2\mu_b-\mu_b^2 \tag{C.14}
 ```
+
+The subtraction of $\mu_b^2$ removes that double counting for
+two bases. To expand the square by hand, multiply
+$(1-\mu_b)(1-\mu_b)$: the terms are
+$1$, $-\mu_b$, $-\mu_b$, and $+\mu_b^2$.
+The outer subtraction from one changes their signs and cancels
+the constant. This is the reason the linear approximation is
+slightly larger than the exact probability.
 
 When the total mutation probability is small, terms containing
 $\mu_b^2$ and higher powers are negligible, giving $\mu_l\approx L_l\mu_b$.
@@ -2240,11 +3096,25 @@ with allele probability $p$:
 \mathbb E[X]=1\cdot p+0\cdot(1-p)=p \tag{D.1}
 ```
 
+$X$ is an **indicator**: a numerical way to record yes or no.
+The expectation formula multiplies each possible numerical outcome
+by its probability and adds the results. No outcome equals
+$p$ unless $p$ is zero or one, but the average can still be $p$.
+For $p=0.3$, each recorded value is 0 or 1, while the expected
+value is $0.3$.
+
 Because $X^2=X$, its variance is:
 
 ```math
 \operatorname{Var}(X)=\mathbb E[X^2]-\mathbb E[X]^2=p-p^2=p(1-p) \tag{D.2}
 ```
+
+The two squared expressions are different. $\mathbb E[X^2]$
+squares the observations **before** averaging, whereas
+$\mathbb E[X]^2$ squares their average. Since $0^2=0$ and
+$1^2=1$, the first is $p$ and the second is $p^2$.
+At $p=0.3$, the variance is $0.3-0.09=0.21$.
+At zero or one there is no uncertainty and the variance vanishes.
 
 For $n$ independent copies, $C=X_1+\cdots+X_n$. Expectations add;
 independence makes the variances add:
@@ -2253,13 +3123,31 @@ independence makes the variances add:
 \mathbb E[C]=np \tag{D.3}
 ```
 
+$C$ counts successes over $n$ trials, so adding the expected
+contribution $p$ from each trial gives $p+\cdots+p=np$.
+Linearity of expectation alone gives this result; independence
+is needed for the simple variance sum that follows.
+
 ```math
 \operatorname{Var}(C)=np(1-p) \tag{D.4}
 ```
 
+In general a sum's variance also includes covariances, which
+measure whether its terms tend to rise together. Independent
+trials have zero covariance, leaving $n$ copies of (D.2).
+This independence is between trials for one allele. It does not
+make different allele counts in a fixed-total multinomial row
+independent of one another.
+
 Dividing a count by $n$ divides its variance by $n^2$, producing
 (3.15)–(3.16). Sampling with replacement means each copy is drawn
 from the same parental distribution, without removing the parent.
+
+To see the division explicitly, the centered frequency is
+$C/n-p=(C-np)/n$. Squaring it divides the squared count
+deviation by $n^2$; averaging then gives
+$np(1-p)/n^2=p(1-p)/n$. Dividing a standard deviation
+instead uses $n$, because it is the square root of variance.
 
 ### D.2 From binomial to multinomial
 
@@ -2270,6 +3158,14 @@ There are $\binom nc$ possible choices of which $c$ draws were successes:
 \Pr(C=c)=\binom nc p^c(1-p)^{n-c}\quad(c=0,\ldots,n) \tag{D.5}
 ```
 
+The lowercase $c$ is a proposed count; uppercase $C$ is the
+random count before observation. For one specified ordering of
+$c$ successes and $n-c$ failures, independence gives the product
+$p^c(1-p)^{n-c}$. Many different orderings give the same total
+count. The coefficient $\binom nc$, read "n choose c," counts
+those orderings; multiplying by it adds their probabilities.
+This $c$ is not the ploidy symbol from §3.1.
+
 The exclamation mark in a factorial means multiplication down to one,
 with $0!=1$:
 
@@ -2277,12 +3173,28 @@ with $0!=1$:
 \binom nc=\frac{n!}{c!(n-c)!} \tag{D.6}
 ```
 
+For three trials and one success, $\binom31=3!/(1!2!)=3$:
+the success can occupy the first, second, or third position.
+With $p=1/4$, each ordering has probability
+$(1/4)(3/4)^2=9/64$, so the count-one probability is
+$3(9/64)=27/64$. The coefficient counts arrangements;
+it does not change the probability of a success in any one trial.
+
 For several alleles the multinomial counts *all* categories together:
 
 ```math
 \Pr(C_1=c_1,\ldots,C_A=c_A)=\frac{n!}{\prod_i c_i!}\prod_i p_i^{c_i}
 \quad\left(\sum_ic_i=n\right) \tag{D.7}
 ```
+
+Here the proposed outcomes are all the counts
+$(c_1,\ldots,c_A)$ together. The factor $\prod_i p_i^{c_i}$
+is the probability of one specified ordering of those labels.
+The factorial ratio counts how many orderings yield the same
+row. If the proposed counts do not sum to $n$, they do not
+describe a possible outcome of this experiment.
+As usual, a zero count contributes a factor of one, including
+the boundary case of a zero-probability category.
 
 The product symbol $\prod$ means multiply the terms, just as $\sum$
 means add them. For three copies with probabilities $(1/2,1/3,1/6)$,
@@ -2292,6 +3204,12 @@ the probability of one copy of each is:
 \Pr(C=(1,1,1))=\frac{3!}{1!1!1!}\left(\frac12\right)\left(\frac13\right)\left(\frac16\right)
 =\frac16 \tag{D.8}
 ```
+
+There are $3!=6$ orders for three different labels. Each has
+probability $(1/2)(1/3)(1/6)=1/36$; adding six equal
+probabilities gives $6/36=1/6$. This calculation concerns
+the whole count pattern, not the probability of drawing
+any particular label first.
 
 Counts in a row are not independent: if one rises, fewer copies
 remain for the others. Drawing an independent binomial with $n$
@@ -2307,13 +3225,34 @@ and the remaining probability mass shrink. At category $i$:
 r_i=n-\sum_{j<i}C_j \tag{D.9}
 ```
 
+The condition $j<i$ means categories already processed. $r_i$
+is the number of copies **still unassigned**, including the
+copies that may be assigned to category $i$. For the first
+category the sum has no terms and is zero, so $r_1=n$.
+This $r_i$ is a remaining count, not the migration-pool frequency
+$r_k(a)$ in §3.4.
+
 ```math
 s_i=1-\sum_{j<i}p_j \tag{D.10}
 ```
 
+$s_i$ is the remaining **probability mass** after excluding those
+same processed categories. It starts at one. The two remaining
+quantities have different units: $r_i$ is a copy count; $s_i$
+is a probability. Neither is the global allele total $s_a$.
+The conditional probability for the next category is its original
+share $p_i$ divided by the total remaining share $s_i$.
+
 ```math
 C_i\mid C_1,\ldots,C_{i-1}\sim\operatorname{Binomial}(r_i,p_i/s_i)\quad(s_i>0) \tag{D.11}
 ```
+
+The vertical bar means that the earlier counts have already
+been observed. Among the remaining copies, the earlier categories
+are no longer candidates; probabilities must be renormalized over
+the ones still available. This conditional distribution is why
+the construction works, rather than drawing every category
+independently from its original probability.
 
 Assign the final category all remaining copies. Zero-probability
 categories get zero without a draw. For ten copies with probabilities
@@ -2330,9 +3269,23 @@ The joint probability verifies the construction:
 =0.070875 \tag{D.12}
 ```
 
+The first part is the probability of six first-allele copies
+among ten. Conditional on that result, the second part is the
+probability of three second-allele copies among the four left.
+The last copy must then belong to the third category; it
+requires no additional draw. Multiply these sequential,
+conditional probabilities to obtain the joint probability.
+
 ```math
 \Pr(C=(6,3,1))=\frac{10!}{6!3!1!}0.5^6 0.3^3 0.2=0.070875 \tag{D.13}
 ```
+
+For a direct algebra check, the coefficients combine as
+$\binom{10}{6}\binom43=10!/(6!3!1!)$.
+The remaining probability factors combine as
+$0.5^4(0.3/0.5)^3(0.2/0.5)=0.3^3\cdot0.2$:
+the four denominator factors of $0.5$ cancel its fourth power.
+What remains is exactly the multinomial expression in (D.13).
 
 The leftover probability factors cancel, leaving the multinomial
 formula. This is equality of distributions. Reproducing an individual
@@ -2349,6 +3302,14 @@ probability reaches the draw:
 ```math
 C=\min\left\{c:\sum_{j=0}^{c}\Pr(C=j)\geq u\right\} \tag{D.14}
 ```
+
+The symbol $\min$ means take the **first** count satisfying the
+condition. Starting with count zero, add probability bins until
+their cumulative total reaches $u$. A bin twice as wide captures
+twice as many uniform draws, giving its count twice the chance
+of being selected. This is inverse cumulative-distribution
+sampling: a uniform position is converted into an outcome with
+the desired nonuniform probabilities.
 
 For $n=2$ and $p=1/4$, the probabilities for counts 0, 1, 2 are
 $9/16$, $6/16$, $1/16$. A draw $u=0.8$ falls in the count-1 bin:
@@ -2383,9 +3344,23 @@ with common shape $\alpha$ and scale 1, then normalize:
 G_i\sim\operatorname{Gamma}(\alpha,1)\quad(i=1,\ldots,A) \tag{D.15}
 ```
 
+$G_i$ is a temporary positive weight for starting allele $i$,
+and $A$ is the number of starting alleles. The Gamma distribution
+is a family of distributions on positive numbers; its shape
+parameter $\alpha$ controls how concentrated or uneven those
+weights tend to be. These weights do not yet sum to one,
+so they are not themselves frequencies.
+
 ```math
 p_i=\frac{G_i}{\sum_jG_j} \tag{D.16}
 ```
+
+The denominator is shared by every allele in this one row.
+For $(2,1,1)$ it is four; division gives
+$(2/4,1/4,1/4)$. Summing the normalized entries gives
+$(\sum_iG_i)/(\sum_jG_j)=1$. The $G_i$ draws are independent,
+but the resulting $p_i$ values are not: once one receives
+more of the unit total, less remains for the others.
 
 For example, positive draws $(2,1,1)$ normalize to $(0.5,0.25,0.25)$.
 Actual Gamma draws are continuous; this example illustrates the
@@ -2396,9 +3371,23 @@ Symmetry gives the same expected frequency to every allele:
 \mathbb E[p_i]=\frac1A \tag{D.17}
 ```
 
+Symmetry makes all expected frequencies equal, and their sum
+must be one. The only possible common expected value is
+therefore $1/A$. This reasoning does not require taking a ratio
+of expectations, an operation that is generally invalid.
+
 ```math
 \operatorname{Var}(p_i)=\frac{A-1}{A^2(A\alpha+1)} \tag{D.18}
 ```
+
+For scale, take $A=2$. With $\alpha=1$, the variance is
+$1/[4(2+1)]=1/12$, the variance of a uniform probability on
+$[0,1]$. With $\alpha=10$, it is $1/[4(20+1)]=1/84$.
+The mean remains $1/2$ in both cases; the second draw is
+more tightly concentrated around that mean.
+This closed-form Dirichlet variance summarizes the distribution;
+unlike the normalization proof above, deriving it requires
+integrating the distribution's density.
 
 Large $\alpha$ concentrates rows near equal frequencies; small
 $\alpha$ favors rows with a few dominant alleles. For two alleles
@@ -2429,8 +3418,18 @@ the left matrix and a column from the right:
 (MP)_{ki}=\sum_{j=1}^{d}M_{kj}P_{ji} \tag{E.2}
 ```
 
+Fix an output address $(k,i)$ before starting the sum.
+Walk along row $k$ of $M$ and down column $i$ of $P$,
+multiply the first pair, then the second pair, and add.
+For (E.1), the three contributions are $0.64$, $0.02$,
+and $0.05$, totaling $0.71$. Changing $i$ selects a different
+allele column; changing $k$ selects a different destination's
+source weights.
+
 The repeated index $j$ is summed out; destination $k$ and allele $i$
-remain. This is precisely the scalar migration formula (3.10).
+remain. This is precisely the per-destination matrix-weighted
+migration formula (3.10); choosing the weights derived after
+that equation recovers scalar migration (3.9).
 It is not element-by-element multiplication.
 With $P$ of shape $d\times A$, $MP$ mixes demes. A product $PT$
 with an $A\times A$ matrix instead mixes allele columns.
@@ -2455,11 +3454,26 @@ every frequency row sums to one becomes:
 P\boldsymbol1_A=\boldsymbol1_d \tag{E.3}
 ```
 
+Multiplying by a column of ones adds a matrix's row entries:
+every entry is multiplied by one before summation. The result
+has $d$ entries, one for each deme. Saying it equals
+$\boldsymbol1_d$ is a compact way to say **every** row sum
+is one, rather than merely saying that the grand total is $d$.
+
 If $M$ also has unit row sums, multiplication preserves this invariant:
 
 ```math
 (MP)\boldsymbol1_A=M(P\boldsymbol1_A)=M\boldsymbol1_d=\boldsymbol1_d \tag{E.4}
 ```
+
+Read the equality chain in order. First, associativity of exact
+matrix multiplication lets the parentheses move without changing
+the mathematical result. Next substitute (E.3), replacing
+$P\boldsymbol1_A$ by $\boldsymbol1_d$. Finally use the unit
+row sums of $M$, which say $M\boldsymbol1_d=\boldsymbol1_d$.
+The result proves that the new table $MP$ has normalized rows.
+It does not claim that differently parenthesized floating-point
+calculations will always have identical final bits.
 
 This is an algebraic proof of normalization, not just a check on one
 example. Nonnegative entries in both factors also give nonnegative
@@ -2480,6 +3494,13 @@ The weighted total for the two alleles is:
 =10(0.8,0.2)+20(0.2,0.8)+10(0.5,0.5)=(17,23) \tag{E.6}
 ```
 
+The three source contributions are $(8,2)$, $(4,16)$,
+and $(5,5)$ copy counts. Add their first entries to get 17
+copies of the first allele and their second entries to get 23
+of the second. These totals sum to 40, the complete number
+of copies across demes. The total row is in **copies**, not
+frequencies; it should not sum to one.
+
 For destination 1, remove its own $(8,2)$ copies, leaving thirty
 external copies:
 
@@ -2487,11 +3508,24 @@ external copies:
 R_{1,:}=\frac{(17,23)-(8,2)}{40-10}=(0.3,0.7) \tag{E.7}
 ```
 
+The numerator is $(9,21)$: remove only deme 1's contribution.
+The denominator is 30: remove its ten copies from the total.
+Divide both entries by 30 to obtain $(9/30,21/30)$.
+This row now sums to one and describes the allele composition
+of the external source pool.
+
 With $m=0.2$, blend this pool into the local row:
 
 ```math
 Q_{1,:}=0.8(0.8,0.2)+0.2(0.3,0.7)=(0.70,0.30) \tag{E.8}
 ```
+
+Multiply before adding:
+the retained local part is $(0.64,0.16)$ and the incoming
+part is $(0.06,0.14)$. Their element-by-element sum gives
+$(0.70,0.30)$. These are expected sampling probabilities;
+the first allele's frequency fell because its external pool
+frequency was lower than its local one.
 
 An equal-weight average of the other rows would be $(0.35,0.65)$,
 which is wrong for this size-weighted scalar model. The equivalent
@@ -2509,6 +3543,15 @@ the additional condition is:
 \boldsymbol n^{\mathsf T}M=\boldsymbol n^{\mathsf T} \tag{E.9}
 ```
 
+To see why this is the relevant condition, the weighted allele
+totals before migration are $\boldsymbol n^{\mathsf T}P$.
+After migration they are $\boldsymbol n^{\mathsf T}MP$.
+If (E.9) holds, replace the first two factors of the latter
+by $\boldsymbol n^{\mathsf T}$ and recover the former.
+Without it, each destination still has a valid unit-sum row,
+but the population-wide number of copies assigned each label
+can change through replacement.
+
 Row sums alone do not imply (E.9). This simulator describes
 replacement from parental pools, not literal copy-conserving transport
 of a fixed set of individuals between islands.
@@ -2521,6 +3564,15 @@ a particular label can be written as a row-stochastic transition matrix:
 ```math
 T_{ij}=\begin{cases}1-\mu,&j=i,\\\mu/(K-1),&j\ne i.\end{cases} \tag{E.10}
 ```
+
+Rows now index the **parent allele** $i$, and columns index
+the **resulting allele** $j$, rather than source and destination
+demes. A copy retains its label with probability $1-\mu$.
+If it mutates, the probability $\mu$ is divided equally among
+$K-1$ alternatives. Summing one row gives
+$(1-\mu)+(K-1)\mu/(K-1)=1$ for $K>1$.
+This is a probability transition table for one copy, not the
+realized count table for a population.
 
 For a three-state teaching example, $K=3$ and $\mu=0.1$
 (the configured DNA model instead has $K_l=4^{L_l}$):
@@ -2536,6 +3588,16 @@ mutation:
 (7,2,1)T=(6.45,2.20,1.35) \tag{E.12}
 ```
 
+The first target receives, on average,
+$7\cdot0.9+2\cdot0.05+1\cdot0.05=6.45$ copies:
+retained copies from its own label plus mutations from the other
+two labels. The second receives
+$7\cdot0.05+2\cdot0.9+1\cdot0.05=2.20$.
+The third receives
+$7\cdot0.05+2\cdot0.05+1\cdot0.9=1.35$.
+Their sum is ten, checking that expected mutation also preserves
+the population size.
+
 Fractional expected counts are valid averages, but not a realized
 ten-copy population. If one $a$ copy mutates to $c$ and one $c$ copy
 mutates to $b$, the actual count calculation is:
@@ -2543,6 +3605,14 @@ mutates to $b$, the actual count calculation is:
 ```math
 (7,2,1)-(1,0,1)+(0,1,1)=(6,3,1) \tag{E.13}
 ```
+
+The subtracted row names **departures** from $(a,b,c)$; the
+added row names **arrivals** at those same labels.
+First $(7,2,1)-(1,0,1)=(6,2,0)$.
+Then add the incoming $b$ and $c$ copies to obtain $(6,3,1)$.
+The third label loses its old copy and gains a different copy,
+so its unchanged final count does not mean that no event
+involved it.
 
 Targets are chosen from the original copies undergoing mutation;
 an incoming copy does not mutate again in the same step.
@@ -2564,6 +3634,13 @@ labels $(b,c)$ preserves every frequency:
 ```math
 P_{\mathrm{compact}}=\begin{pmatrix}0.6&0.4\\0.2&0.8\end{pmatrix} \tag{E.15}
 ```
+
+This transformation changes column addresses, not biological
+identities. Before compaction, label $b$ occupied column 2;
+afterward it occupies column 1. Looking up $b$ must still
+return $(0.6,0.2)$ across demes. The accompanying ID map is
+therefore part of the representation, not optional metadata.
+Removing a zero column leaves all row sums and statistics unchanged.
 
 A zero in just one row is insufficient: the allele may migrate back
 from another row. Under infinite alleles a globally extinct identity
@@ -2602,6 +3679,14 @@ is $d\bar{\boldsymbol p}-P_{k,:}$. Substitution into (3.9) gives:
 Q_{k,:}=(1-m)P_{k,:}+\frac{m}{d-1}\left(d\bar{\boldsymbol p}-P_{k,:}\right) \tag{E.16}
 ```
 
+The term $d\bar{\boldsymbol p}$ is the sum of **all** deme
+rows, because the mean was formed by dividing that sum by $d$.
+Subtract one destination row and $d-1$ rows remain.
+Divide by $d-1$ to average those external rows, then multiply
+by the incoming fraction $m$. The first term retains the local
+fraction $1-m$. These steps restate the scalar pool construction,
+using equal sizes to remove the size weights.
+
 Collect the two terms containing $P_{k,:}$:
 
 ```math
@@ -2609,12 +3694,29 @@ Q_{k,:}=\left(1-\frac{md}{d-1}\right)P_{k,:}
 +\frac{md}{d-1}\bar{\boldsymbol p} \tag{E.17}
 ```
 
+Distribute $m/(d-1)$ across the bracket in (E.16).
+The local-row coefficient becomes
+$(1-m)-m/(d-1)=1-md/(d-1)$.
+The pooled-row coefficient becomes $md/(d-1)$.
+Their sum is one. This regrouping is an algebraic identity,
+not a new instruction to draw migrants from the global pool.
+For large $m$ the regrouped local coefficient can be negative,
+even though the original source weights in (E.16) remain nonnegative.
+
 Subtract the pooled row, which this symmetric migration preserves:
 
 ```math
 Q_{k,:}-\bar{\boldsymbol p}=
 \left(1-\frac{md}{d-1}\right)(P_{k,:}-\bar{\boldsymbol p}) \tag{E.18}
 ```
+
+Write $b=md/(d-1)$ temporarily. Subtracting the pooled row
+from (E.17) gives
+$(1-b)P_{k,:}+b\bar{\boldsymbol p}-\bar{\boldsymbol p}$.
+The last two terms combine to $-(1-b)\bar{\boldsymbol p}$.
+Factor out the shared $1-b$ to obtain the right-hand side
+of (E.18). This is why every deme contrast gets one common
+multiplier rather than needing its own separate calculation.
 
 Thus migration scales every deme's deviation from the pooled
 composition by the same factor $\lambda=1-md/(d-1)$.
@@ -2637,6 +3739,15 @@ differentiation numerator shrinks by the square of this factor:
 (H_T-H_S)_{\mathrm{after\ migration}}=
 \lambda^2(H_T-H_S)_{\mathrm{before\ migration}} \tag{E.19}
 ```
+
+Equation (7.8) adds squared distances from the pooled row.
+Replacing each deviation $x$ by $\lambda x$ replaces its
+square by $(\lambda x)^2=\lambda^2x^2$.
+The same factor can then be taken outside both sums.
+The pooled composition, and hence $H_T$, stays fixed during
+this particular symmetric, equal-size migration step.
+The reduction in $H_T-H_S$ therefore reflects an increase
+in within-deme heterozygosity $H_S$ as the rows mix.
 
 For the example, the factor is $0.49$. Drift then adds random
 dispersion; mutation can introduce new private columns. Migration
@@ -2663,6 +3774,13 @@ the probability that neither descendant mutates:
 \alpha=(1-\mu)^2 \tag{F.1}
 ```
 
+Here $\mu$ is the per-copy mutation probability for the one
+locus under discussion. The square arises because **both**
+copies must avoid mutation. The abbreviation $\alpha$ keeps
+that repeated survival factor from obscuring the algebra;
+it is not the Dirichlet concentration parameter in Appendix D.5.
+With $\mu=0.1$, it equals $0.9^2=0.81$.
+
 At equilibrium, expected distinct-copy identity stops changing, so
 substitute $F_{t+1}=F_t=F_*$. This is constancy of an expectation,
 not constancy of every population state:
@@ -2671,17 +3789,39 @@ not constancy of every population state:
 F_*=\frac{\alpha}{n}+\alpha\left(1-\frac1n\right)F_* \tag{F.2}
 ```
 
+The asterisk labels the equilibrium value; it does not mean
+multiplication. Distributing $\alpha$ across the bracket in
+(3.18) gives the two terms shown here. The first is a
+constant contribution from shared parent copies; the second
+retains a fraction of the existing distinct-copy identity.
+At equilibrium the output of this calculation equals its input.
+
 Move the term containing $F_*$ to the left and factor:
 
 ```math
 F_*\left[1-\alpha\left(1-\frac1n\right)\right]=\frac{\alpha}{n} \tag{F.3}
 ```
 
+Subtract $\alpha(1-1/n)F_*$ from both sides of (F.2).
+The left becomes $F_*-\alpha(1-1/n)F_*$.
+Both terms contain $F_*$, so factor it out, just as
+$x-bx=(1-b)x$. This leaves one unknown multiplied by
+one known coefficient.
+
 Divide and multiply numerator and denominator by $n$:
 
 ```math
 F_*=\frac{\alpha}{n(1-\alpha)+\alpha} \tag{F.4}
 ```
+
+Before simplification the ratio is
+$(\alpha/n)/[1-\alpha+\alpha/n]$.
+Multiplying numerator and denominator by $n$ cancels both
+small fractions, leaving $\alpha/[n-n\alpha+\alpha]$.
+Collect the first two denominator terms as $n(1-\alpha)$
+to obtain (F.4). For $n=10$ and $\alpha=0.81$,
+the denominator is $10(0.19)+0.81=2.71$ and
+$F_*=0.81/2.71\approx0.298893$.
 
 The frequency identity $J=\sum_i p_i^2$ includes the possibility of
 drawing the same observed copy twice. Distinguish it from $F$:
@@ -2690,11 +3830,32 @@ drawing the same observed copy twice. Distinguish it from $F$:
 \mathbb E[J]=\frac1n+\left(1-\frac1n\right)F \tag{F.5}
 ```
 
+The observed identity $J$ is calculated by sampling **with**
+replacement from one population's frequencies. The second draw
+selects the very same physical copy as the first with probability
+$1/n$; such a pair matches automatically. Otherwise the two
+selected copies are distinct and match with probability $F$
+across the modeled populations. Add the two disjoint cases.
+This reasoning does not add another mutation factor: both draws
+inspect the population that already exists.
+
 Substituting (F.4) gives the equilibrium frequency heterozygosity:
 
 ```math
 \mathbb E[H]_*=\frac{(n-1)(1-\alpha)}{n(1-\alpha)+\alpha} \tag{F.6}
 ```
+
+Since $H=1-J$, subtract (F.5) from one and factor:
+$\mathbb E[H]=(1-1/n)(1-F)$.
+Substituting (F.4) makes the last factor
+$1-\alpha/[n(1-\alpha)+\alpha]$.
+Write one over the same denominator; subtracting $\alpha$
+from its numerator leaves $n(1-\alpha)$.
+Multiplication by $(n-1)/n$ cancels that $n$, giving (F.6).
+In the numerical example,
+$\mathbb E[H]_*=9(0.19)/2.71\approx0.630996$.
+The corresponding expected $J$ is approximately $0.369004$,
+which exceeds distinct-copy $F_*$ because self-pairs always match.
 
 For $\mu=0$, this is zero. The heterozygosity expression also extends
 to $n=1$, giving zero even with mutation, because a single-copy deme
@@ -2710,12 +3871,28 @@ time-dependent version:
 F_{t+1}-F_*=\alpha\left(1-\frac1n\right)(F_t-F_*) \tag{F.7}
 ```
 
+Write the recurrence once with $F_t$ and once with $F_*$,
+then subtract the second equation from the first.
+Their constant terms $\alpha/n$ cancel.
+The remaining terms share $\alpha(1-1/n)$, giving the
+factorized difference above. Following the **error from
+equilibrium** is simpler than repeatedly solving for the full
+identity value.
+
 Each step multiplies the remaining discrepancy by the same factor.
 Writing $\beta=\alpha(1-1/n)$ and repeating gives:
 
 ```math
 F_t-F_*=\beta^t(F_0-F_*) \tag{F.8}
 ```
+
+After one generation the initial error is multiplied by $\beta$;
+after two it is multiplied by $\beta^2$; repeating $t$ times
+gives $\beta^t$. In the example $\beta=0.81\cdot0.9=0.729$.
+After ten generations only $0.729^{10}\approx0.0424$,
+about 4.24%, of the initial error remains. This statement
+concerns the expectation recursion, not the noise in an
+individual simulated trajectory.
 
 When $0<\beta<1$, the discrepancy shrinks geometrically. The
 relaxation time is the number of generations for a factor $e^{-1}$
@@ -2724,6 +3901,16 @@ of the initial discrepancy to remain:
 ```math
 \tau=-\frac1{\ln\beta} \tag{F.9}
 ```
+
+Set the remaining fraction in (F.8) equal to $e^{-1}$:
+$\beta^\tau=e^{-1}$. Taking natural logs gives
+$\tau\ln\beta=-1$ by (C.8).
+Divide by $\ln\beta$ to obtain (F.9). This logarithm is
+negative when $0<\beta<1$, so $\tau$ is positive.
+After about $5\tau$, the initial discrepancy has been
+multiplied by $e^{-5}\approx0.00674$. A relaxation time
+is therefore a decay scale, not a sharp instant when the
+process becomes exactly stationary.
 
 The multi-deme model needs coupled within- and between-deme
 identities rather than this one-dimensional recurrence.
@@ -2741,6 +3928,14 @@ watched statistic, such as $D$. Its time average is:
 \bar Y=\frac1T\sum_{t=1}^{T}Y_t \tag{F.10}
 ```
 
+$T$ here counts recorded observations **after burn-in**; it
+need not be the final generation number used elsewhere.
+The index $t$ is local to this averaging window.
+For observations $(0.2,0.4,0.6)$, the mean is
+$(0.2+0.4+0.6)/3=0.4$. The equilibrium mean being
+estimated is a property of the model; $\bar Y$ is the
+estimate from this finite collection of observations.
+
 Adjacent generations resemble each other, so $T$ generations do
 not generally provide $T$ independent observations. In a stationary
 series with variance $\sigma^2$ and lag-$h$ correlation $\rho_h$,
@@ -2751,6 +3946,26 @@ expanding the variance of this sum gives:
 \left[1+2\sum_{h=1}^{T-1}\left(1-\frac hT\right)\rho_h\right] \tag{F.11}
 ```
 
+$\sigma^2$ is the variance of an individual stationary
+observation, not the variance of its average. A lag $h$
+is a separation of $h$ observations: lag 1 compares neighbors,
+and lag 2 compares observations two steps apart.
+$\rho_h$ is their correlation, a dimensionless measure
+of how similarly they vary. Independence would make all
+these off-diagonal correlations zero, reducing (F.11)
+to the familiar $\sigma^2/T$.
+
+To show where the correction comes from, expand the variance
+of $Y_1+\cdots+Y_T$. There are $T$ individual variance
+terms, contributing $T\sigma^2$. Each distinct pair adds
+twice its covariance, because both orders occur when
+the square of the sum is expanded. At lag $h$ there
+are $T-h$ pairs, each with covariance $\sigma^2\rho_h$.
+The variance of the sum is therefore
+$T\sigma^2+2\sigma^2\sum_{h=1}^{T-1}(T-h)\rho_h$.
+Divide by $T^2$ for the average and factor out
+$\sigma^2/T$ to obtain (F.11).
+
 There are $T-h$ pairs at separation $h$, which explains the
 factor $1-h/T$. Positive correlations increase the uncertainty.
 One can express that loss of information as an effective sample size:
@@ -2760,9 +3975,26 @@ T_{\mathrm{eff}}=
 \frac{T}{1+2\sum_{h=1}^{T-1}(1-h/T)\rho_h} \tag{F.12}
 ```
 
+This definition replaces the independence formula's sample
+count by an equivalent-information count. It asks how many
+independent observations would give the same mean variance.
+If the bracketed correlation correction is 5, then 1,000
+correlated observations carry the mean-estimation information
+of about 200 independent ones. This is not a claim that
+only 200 generations happened, or a recommendation to delete
+the other 800 observations.
+
 ```math
 \operatorname{SE}(\bar Y)=\frac{\sigma}{\sqrt{T_{\mathrm{eff}}}} \tag{F.13}
 ```
+
+The standard error is the square root of the variance of
+the **estimated mean**. It differs from the standard deviation
+$\sigma$, which describes the spread of individual values.
+For $\sigma=0.1$ and $T_{\mathrm{eff}}=100$, the standard
+error is $0.1/10=0.01$. The individual generations still
+vary on the scale $0.1$; averaging has reduced the uncertainty
+about their mean, not their biological variation.
 
 The correlations and variance are unknown and must be estimated.
 The monitor uses Geyer's autocorrelation estimate and an
@@ -2781,11 +4013,39 @@ instead uses a Student's-$t$ interval. Define their sample variance:
 s_Z^2=\frac1{R-1}\sum_{r=1}^{R}(Z_r-\bar Z)^2\quad(R>1) \tag{F.14}
 ```
 
+Here $R$ is the number of independent runs and $Z_r$ is
+one scalar summary from run $r$, using the same summary
+rule in each run. $\bar Z$ is their arithmetic mean.
+Subtract that mean from each summary, square the departures,
+and add. The divisor is $R-1$ rather than $R$ because
+estimating the mean from these data consumes one independent
+constraint: the departures must sum to zero.
+The square root $s_Z$ estimates the spread of replicate
+summaries, not yet the uncertainty of their mean.
+
 At confidence $1-\gamma$, the interval is:
 
 ```math
 \bar Z\ \mathbin{\pm}\ t_{1-\gamma/2,R-1}\frac{s_Z}{\sqrt R} \tag{F.15}
 ```
+
+$\gamma$ is the total probability assigned to the two tails
+of the reference distribution, so 95% confidence uses
+$\gamma=0.05$ and quantile $1-\gamma/2=0.975$.
+The symbol $t_{1-\gamma/2,R-1}$ denotes a Student's-$t$
+critical value, not a generation index.
+First divide the estimated spread $s_Z$ by $\sqrt R$
+to obtain the standard error of the replicate mean.
+Multiply by that critical value to obtain a half-width,
+then subtract and add it to $\bar Z$ for the interval endpoints.
+
+For example, if 25 independent replicate summaries have
+mean $0.4$ and sample standard deviation $0.1$, their
+standard error is $0.1/5=0.02$. At 95% confidence the
+24-degree-of-freedom critical value is approximately $2.064$,
+giving a half-width of about $0.0413$ and an interval
+from approximately $0.3587$ to $0.4413$.
+A requested half-width of $0.01$ has not yet been reached.
 
 The critical value has $R-1$ degrees of freedom; for small batches
 it is larger than the corresponding normal critical value. Independence
@@ -2803,11 +4063,25 @@ $(1/2,3/4)$. Their $G_{ST}$ values are $1$ and $1/3$:
 \overline{G_{ST}}=\frac12\left(1+\frac13\right)=\frac23 \tag{F.16}
 ```
 
+For the first observation, $1-H_S/H_T=1-0/(1/2)=1$.
+For the second it is $1-(1/2)/(3/4)=1-2/3=1/3$.
+Equation (F.16) computes the statistic for each observation
+first and then averages the two results.
+
 But calculating the statistic from the averaged heterozygosities gives:
 
 ```math
 G_{ST}(\overline{H_S},\overline{H_T})=1-\frac{1/4}{5/8}=\frac35 \tag{F.17}
 ```
+
+For this calculation, average the inputs first:
+$\overline{H_S}=(0+1/2)/2=1/4$ and
+$\overline{H_T}=(1/2+3/4)/2=5/8$.
+Their ratio is $(1/4)/(5/8)=(1/4)(8/5)=2/5$,
+so the statistic is $1-2/5=3/5$, not $2/3$.
+The operations differ because the denominator varies;
+there is no algebraic rule allowing an average to pass
+through division unchanged.
 
 Both are meaningful summaries; they estimate different quantities.
 The same issue applies to $D$. This is why `convergence_estimate`
@@ -3022,5 +4296,24 @@ generator-version: unavailable
 generator-model-token: unavailable
 generator-provider: OpenAI
 generation-date: 2026-10-15
+generator-responsibility: revision
+```
+
+Expanded the equation-by-equation explanations throughout the model,
+statistics, and mathematical appendices. Added intermediate arithmetic,
+symbol definitions, and worked interpretations of V-engine arrays,
+sampling, mutation, equilibrium, and uncertainty. Extended the same
+explanatory approach to configuration, module boundaries, persistence,
+visualization, validation, and the walkthrough. Identified historical
+walkthrough output separately from the current stopping policy.
+
+The model identifier remains unavailable in this session.
+
+```text
+generator-name: Copilot SDK in VS Code
+generator-version: unavailable
+generator-model-token: unavailable
+generator-provider: OpenAI
+generation-date: 2026-10-17
 generator-responsibility: revision
 ```
