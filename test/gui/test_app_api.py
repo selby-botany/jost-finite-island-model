@@ -2861,6 +2861,13 @@ def test_open_batch_matches_a_live_batchs_own_done_payload(
     assert isinstance(summary, dict)
     assert "D" in summary
     assert summary["D"]["sampleCount"] == 3
+    # How the batch was set to stop, for the results messages: the replicates
+    # published, the configured cap, and the statistics the rule watches.
+    batch = result["batch"]
+    assert batch["replicates"] == 3
+    assert batch["cap"] == 3
+    assert batch["method"] == "interval"
+    assert batch["statistics"] == ["D", "G_ST"]
     p0 = result["p0Statistics"]
     assert isinstance(p0, dict)
     assert set(p0) == set(app_module._RESULT_STATISTIC_NAMES)

@@ -353,13 +353,166 @@ function statisticMessagesFor(windowStatistics, watchedNames, comparisons, sourc
 }
 
 /**
+ * The width of an interval's plus-or-minus, from its formatted ends.
+ *
+ * @param {{low: string, high: string}} interval a batch summary entry.
+ * @returns {number} `NaN` when an end is not a number.
+ */
+function intervalHalfWidth(interval) {
+    const low = Number(interval.low);
+    const high = Number(interval.high);
+    return Number.isFinite(low) && Number.isFinite(high) ? (high - low) / 2 : NaN;
+}
+
+/**
+ * Join statistic names for a sentence: "D", "D and G_ST", "D, G_ST and H_S".
+ *
+ * @param {string[]} names
+ * @returns {string}
+ */
+function listNames(names) {
+    const labels = names.map((name) => plainStatisticLabel(name));
+    if (labels.length <= 1) {
+        return labels.join("");
+    }
+    return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+/**
+ * Why a batch stopped, as one sentence: how many replicates ran and what
+ * ended the batch.
+ *
+ * @param {object} batch `completedBatch`'s shape.
+ * @param {object} summary the batch's per-statistic intervals.
+ * @returns {string}
+ */
+function batchStopSentence(batch, summary) {
+    const count = batch.replicates;
+    const noun = count === 1 ? "replicate" : "replicates";
+    const percent = Math.round(batch.confidence * 100);
+    const precision = `±${batch.precision}`;
+    if (batch.method === "planned_replicates") {
+        return (
+            `The batch ran the ${count} ${noun} you planned. Each ran long enough ` +
+            `for the interval across them to reach ${precision}.`
+        );
+    }
+    if (!batch.stopEarly) {
+        return `The batch ran exactly ${count} ${noun}, because stop_batch_early is off.`;
+    }
+    const watched = batch.statistics.filter((name) => summary[name]);
+    const met =
+        watched.length > 0 &&
+        watched.every((name) => intervalHalfWidth(summary[name]) <= batch.precision);
+    const names = listNames(watched);
+    if (met) {
+        const prefix =
+            count >= batch.cap
+                ? `The batch ran all ${count} ${noun} it allows, and`
+                : `The batch ran ${count} ${noun} and stopped because`;
+        return (
+            `${prefix} the ${percent}% confidence interval for ${names} is ` +
+            `within ${precision}.`
+        );
+    }
+    return (
+        `The batch ran all ${count} ${noun} it allows and stopped at that limit: ` +
+        `the ${percent}% confidence interval for ${names} is still wider than ` +
+        `${precision}.`
+    );
+}
+
+/**
+ * One statistic's batch result as a sentence: its mean over the replicates
+ * and the interval around it.
+ *
+ * @param {string} name
+ * @param {object} interval the statistic's batch summary entry.
+ * @param {object} batch `completedBatch`'s shape.
+ * @returns {string} `""` when the interval has no numbers.
+ */
+function batchIntervalSentence(name, interval, batch) {
+    const mean = Number(interval.mean);
+    const halfWidth = intervalHalfWidth(interval);
+    if (!Number.isFinite(mean) || !Number.isFinite(halfWidth)) {
+        return "";
+    }
+    const decimals = estimateDecimals(halfWidth);
+    const percent = Math.round(batch.confidence * 100);
+    return (
+        `The batch mean of ${plainStatisticLabel(name)} is ${mean.toFixed(decimals)}, ` +
+        `with a ${percent}% confidence interval from ` +
+        `${Number(interval.low).toFixed(decimals)} to ` +
+        `${Number(interval.high).toFixed(decimals)} (plus or minus ` +
+        `${halfWidth.toFixed(decimals)}).`
+    );
+}
+
+/**
+ * The messages about a finished batch, in full sentences: how it stopped,
+ * each watched statistic's interval and whether it meets the target, one
+ * sentence on what an interval across replicates means, and, collapsed,
+ * every other shown statistic's meaning and interval.
+ *
+ * @param {object} batch `completedBatch`'s shape.
+ * @param {object} summary the batch's per-statistic intervals.
+ * @returns {Array<{severity: "info", text: string, detail?: boolean}>}
+ */
+function batchMessagesFor(batch, summary) {
+    const shown = (name) =>
+        Boolean(summary[name]) && statisticSpec(name) !== null && isStatisticShown(name);
+    const watched = batch.statistics.filter(shown);
+    const others = Object.keys(summary).filter(
+        (name) => shown(name) && !watched.includes(name)
+    );
+    const messages = [{ severity: "info", text: batchStopSentence(batch, summary) }];
+    for (const name of watched) {
+        const text = batchIntervalSentence(name, summary[name], batch);
+        if (text) {
+            const met = intervalHalfWidth(summary[name]) <= batch.precision;
+            messages.push({
+                severity: "info",
+                text:
+                    `${text} ${plainStatisticLabel(name)} is a statistic the batch ` +
+                    `watches; that is ${met ? "within" : "wider than"} the ` +
+                    `target of ±${batch.precision}.`,
+            });
+        }
+    }
+    messages.push({
+        severity: "info",
+        text:
+            "The interval is across replicates: it says how well the average is " +
+            "known. It does not say how much one run's line varies from one " +
+            "generation to the next; open a replicate to see that.",
+    });
+    for (const name of [...watched, ...others]) {
+        const description = statisticDescription(name);
+        const interval = batchIntervalSentence(name, summary[name], batch);
+        const text = [description ? `${plainStatisticLabel(name)} is ${description}.` : "", interval]
+            .filter(Boolean)
+            .join(" ");
+        if (text) {
+            messages.push({ severity: "info", text, detail: true });
+        }
+    }
+    return messages;
+}
+
+/**
  * The completed run's messages about its statistics. Only a finished run
  * has them; a run still going has no evidence window.
  *
  * @returns {Array<{severity: "info", text: string, detail?: boolean}>}
  */
 function statisticMessages() {
-    if (window.fim.getRunViewState() !== "completed" || !completedWindowStatistics) {
+    if (window.fim.getRunViewState() !== "completed") {
+        return [];
+    }
+    if (completedBatch && completedBatchSummary) {
+        return batchMessagesFor(completedBatch, completedBatchSummary);
+    }
+    if (!completedWindowStatistics) {
         return [];
     }
     return statisticMessagesFor(
@@ -713,6 +866,11 @@ let completedFinalLiteratureVisuals = null;
 // above already observes.
 let completedBatchSummary = null;
 let completedBatchEffectiveAlleles = null;
+
+// How the completed batch was configured to stop (`Api` payload `batch`:
+// replicates run, cap, minimum, precision, confidence, method, watched
+// statistics), which the run messages explain; `null` for a single run.
+let completedBatch = null;
 // The scalar entry's own final `effectiveAlleles` payload, retained for
 // the same reason and on the same lifetime: a scrub tick back at the
 // final frame restores the two derived rows (`renderEffectiveAlleles`)
@@ -4268,6 +4426,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 ? [{ severity: "info", text: payload.convergenceNote }]
                 : []
         );
+        // Set before the summary renders: it renders the run messages, which
+        // explain this batch's stop and intervals.
+        completedBatch = payload.batch || null;
+        completedBatchSummary = payload.summary || null;
         renderBatchSummary(payload.summary, payload.effectiveAlleles);
         renderBatchTable(payload.replicates, payload.p0Statistics);
         // A batch's own completed scrubber replays the pooled scatter
@@ -4328,6 +4490,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedEffectiveAlleles = null;
         completedBatchSummary = payload.summary || null;
         completedBatchEffectiveAlleles = payload.effectiveAlleles || null;
+        completedBatch = payload.batch || null;
         renderBatchTrajectory(payload.pooledConvergenceHistories);
     } else {
         const report = payload.report;
@@ -4436,6 +4599,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedFinalLiteratureVisuals = payload.literatureVisuals || null;
         completedBatchSummary = null;
         completedBatchEffectiveAlleles = null;
+        completedBatch = null;
         completedEffectiveAlleles = payload.effectiveAlleles || null;
         renderTrajectory(
             payload.convergenceGenerations,

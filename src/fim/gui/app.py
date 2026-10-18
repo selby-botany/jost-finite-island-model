@@ -8099,6 +8099,41 @@ def _pooled_batch_payload(
         "p0Statistics": p0_statistics,
         "pooledConvergenceHistories": pooled_convergence_histories_payload,
         "literatureVisuals": literature_visuals,
+        "batch": _batch_description_payload(params, len(replicate_ids)),
+    }
+
+
+def _batch_description_payload(
+    params: SimulationParams, replicate_count: int
+) -> dict[str, Any]:
+    """Describe how a batch was configured to stop, for the results messages.
+
+    The results card says in sentences how many replicates ran and why the
+    batch stopped; the page decides that from these facts and the
+    summary's intervals, so one source of truth (the configuration) serves
+    both a live batch and a reopened one.
+
+    Args:
+        params: The batch's configuration (for a pooled Study, one member's).
+        replicate_count: How many replicates were published.
+
+    Returns:
+        `{"replicates", "cap", "minimum", "precision", "confidence",
+        "method", "stopEarly", "statistics"}`: the replicates that ran, the
+        configured cap and minimum, the plus-or-minus `precision` and the
+        `confidence` level of the interval, the `precision_method`, whether
+        `stop_batch_early` is on, and the statistics the rule watches.
+    """
+    watched = params.convergence_statistic
+    return {
+        "replicates": replicate_count,
+        "cap": params.n_replicates,
+        "minimum": params.replicate_minimum,
+        "precision": params.precision,
+        "confidence": params.confidence,
+        "method": params.precision_method,
+        "stopEarly": params.stop_batch_early,
+        "statistics": [watched] if isinstance(watched, str) else list(watched),
     }
 
 

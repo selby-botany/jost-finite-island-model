@@ -82,6 +82,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_app`](#gui.test_app)
   - [`test_app_api`](#gui.test_app_api)
   - [`test_axis_tick_layout_screen`](#gui.test_axis_tick_layout_screen)
+  - [`test_batch_messages_screen`](#gui.test_batch_messages_screen)
   - [`test_batch_results_screen`](#gui.test_batch_results_screen)
   - [`test_batch_runner`](#gui.test_batch_runner)
   - [`test_batch_running`](#gui.test_batch_running)
@@ -16853,6 +16854,51 @@ def test_long_runs_label_whole_thousands_compactly(
 ```
 
 A two-million-generation axis reads "500k", not "500000".
+
+<a id="gui.test_batch_messages_screen"></a>
+
+# gui.test\_batch\_messages\_screen
+
+A finished batch says how it stopped and what its intervals mean.
+
+The scalar results card explains its watched statistics in sentences. A
+batch card used to show intervals in tooltips and nothing in prose, so
+nothing said how many replicates ran or why the batch stopped. These tests
+check the sentences as a pure function of a hand-built summary, then on a
+real two-replicate batch.
+
+<a id="gui.test_batch_messages_screen.test_the_batch_sentences_say_how_the_batch_stopped"></a>
+
+#### test\_the\_batch\_sentences\_say\_how\_the\_batch\_stopped
+
+```python
+def test_the_batch_sentences_say_how_the_batch_stopped(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Each way a batch can end has its own sentence.
+
+<a id="gui.test_batch_messages_screen.test_the_batch_sentences_give_each_watched_interval"></a>
+
+#### test\_the\_batch\_sentences\_give\_each\_watched\_interval
+
+```python
+def test_the_batch_sentences_give_each_watched_interval(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Watched statistics first, then the meaning of an interval, then details.
+
+<a id="gui.test_batch_messages_screen.test_a_real_batch_explains_how_it_stopped"></a>
+
+#### test\_a\_real\_batch\_explains\_how\_it\_stopped
+
+```python
+def test_a_real_batch_explains_how_it_stopped(
+        fast_batch_run_settings: Path) -> None
+```
+
+A two-replicate batch's card carries the stop sentence and a details group.
 
 <a id="gui.test_batch_results_screen"></a>
 
