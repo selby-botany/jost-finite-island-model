@@ -444,16 +444,15 @@ precision: 0.03
 trajectory_retention: thinned
 trajectory_stride: 10
 trajectory_thinning_start: 5000
-n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
 ```console
 fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
 ```
 
-The ancestral phase runs 1,256 generations; the main run then converges at
-generation 41,089, after about two minutes, with an average D of
-0.302 ± 0.009 (the model's expectation is 0.287) — real differentiation that grew from the
+The ancestral phase runs 1,256 generations in each replicate; the batch of 10
+replicates takes about fifteen minutes and gives an average D of
+0.285 ± 0.012 across replicates (the model's expectation is 0.287) — real differentiation that grew from the
 ancestral-population founder effect, with no explicit `p_0` anywhere in the
 file. The example pools
 eight loci and sets `precision: 0.03`, because one locus here

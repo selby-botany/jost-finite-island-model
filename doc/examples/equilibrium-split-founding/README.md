@@ -15,17 +15,19 @@ need 1,256 generations. The configuration allows at most 2,000
 (`equilibrium_max_generations`); a burn-in longer than that cap is an
 error, reported before anything is simulated. The ancestral phase is
 saved, every generation of it, in `equilibrium_trajectory.tlog` beside
-the main run's `trajectory.tlog`; this is the only example that writes
-that file (see [`equilibrium_trajectory.tlog`](../../usage.md#equilibrium_trajectorytlog)).
-The main run then converges at generation 41,089, after about two minutes on
-a development machine. It burns in for 1,539 generations (5 relaxation times of
-308) and then averages over a 39,551-generation window, so the average starts
-well after the founding split, once the demes have stopped differentiating:
-`D` = 0.302 ± 0.009 (one standard error), within two standard errors of the
-0.287 that the island model's identity recursion predicts for these
-parameters, and `G_ST` = 0.166 ± 0.002. The saved main trajectory is thinned
-(every generation to 5,000, then one in ten) to keep the example small; the
-ancestral phase is saved in full.
+the main run's `trajectory.tlog`, in every replicate; this is the only example
+that writes that file (see [`equilibrium_trajectory.tlog`](../../usage.md#equilibrium_trajectorytlog)).
+The main run of each replicate then burns in for 1,539 generations (5
+relaxation times of 308) and averages over a 6,154-generation window, so the
+average starts well after the founding split, once the demes have stopped
+differentiating. The batch ran 10 replicates in about fifteen minutes on a
+development machine (each replicate runs its own ancestral phase) and stopped
+at the minimum of 10 because the 95% confidence interval for `D` was already
+within ±0.03. Across the replicates `D` = 0.285 ± 0.012 (95% confidence
+half-width), which contains the 0.287 that the island model's identity
+recursion predicts for these parameters, and `G_ST` = 0.1635 ± 0.0033. The saved
+main trajectories are thinned (every generation to 5,000, then one in ten) to
+keep the example small; each replicate's ancestral phase is saved in full.
 
 ## Why eight loci and a precision of 0.03
 
@@ -34,8 +36,8 @@ run. With one locus, the main run's `D` swings slowly between the three demes,
 and a run stops only once the average is known to plus or minus the precision
 at 95% confidence: at the default 0.01 it reached the 200,000-generation cap
 without getting there, and even at 0.05 it needed about 30,000 generations and
-two minutes. Eight pooled loci average those swings, and 0.03 keeps the run to
-a couple of minutes. The founder effect this example shows is unchanged: it
+two minutes. Eight pooled loci average those swings, and 0.03 keeps each replicate's
+window short enough for the batch to finish in about fifteen minutes. The founder effect this example shows is unchanged: it
 comes from the split, not from the number of loci.
 
 ## Related literature
@@ -47,16 +49,6 @@ flow and genetic drift. *PLOS ONE* 9(12):e115203.
 This paper studies genetic consequences of population founding; the
 configuration demonstrates `fim`'s shared-ancestor split and is not a
 reproduction of the paper's model.
-
-## Why a single run
-
-This example sets `n_replicates: 1`. It was written when a run was always one
-run, and the numbers quoted here, and the outputs saved with it, are those of
-one run. The engine's default is `n_replicates: 200`, an adaptively stopped
-batch that reports a confidence interval, and that is what a researcher would
-normally use. One run's final numbers are one noisy draw: for an estimate with
-an error bar, run a batch (see
-[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 
 ## Run
 
