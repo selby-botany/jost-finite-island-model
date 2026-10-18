@@ -36,9 +36,10 @@ run. With one locus, the main run's `D` swings slowly between the three demes,
 and a run stops only once the average is known to plus or minus the precision
 at 95% confidence: at the default 0.01 it reached the 200,000-generation cap
 without getting there, and even at 0.05 it needed about 30,000 generations and
-two minutes. Eight pooled loci average those swings, and 0.03 keeps each replicate's
-window short enough for the batch to finish in about fifteen minutes. The founder effect this example shows is unchanged: it
-comes from the split, not from the number of loci.
+two minutes. Eight pooled loci average those swings, and 0.03 keeps each
+replicate's window short enough for the batch to finish in about fifteen
+minutes. The founder effect this example shows is unchanged: it comes from the
+split, not from the number of loci.
 
 ## Related literature
 
