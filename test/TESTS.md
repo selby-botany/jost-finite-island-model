@@ -27416,21 +27416,22 @@ def test_the_watched_statistics_are_underlined_after_a_run(
 
 A finished run keeps the marks.
 
-<a id="gui.test_watched_statistics_screen.test_a_batch_does_not_inherit_the_previous_runs_marks"></a>
+<a id="gui.test_watched_statistics_screen.test_a_batch_marks_its_own_watched_statistics_not_the_previous_runs"></a>
 
-#### test\_a\_batch\_does\_not\_inherit\_the\_previous\_runs\_marks
+#### test\_a\_batch\_marks\_its\_own\_watched\_statistics\_not\_the\_previous\_runs
 
 ```python
-def test_a_batch_does_not_inherit_the_previous_runs_marks(
+def test_a_batch_marks_its_own_watched_statistics_not_the_previous_runs(
         fast_batch_run_settings: Path) -> None
 ```
 
-Reopening a batch clears the marks a scalar run left behind.
+A batch underlines the statistics its stop rule watches, only those.
 
-The marks come from the run on screen, and a batch has no watched
-statistics (its stop is a confidence interval). The batch's completed
-payload is captured and shown again after the marks of a scalar run are
-put back, as opening a saved batch after a scalar run would do.
+The marks come from the run on screen. The batch's completed payload is
+captured and shown again after the marks of an earlier run (here `H_S` and
+`K_ST`, which this batch does not watch) are put back, as opening a saved
+batch after another run would do. The default batch watches `D` and
+`G_ST`.
 
 <a id="gui.test_webui_global_scope"></a>
 

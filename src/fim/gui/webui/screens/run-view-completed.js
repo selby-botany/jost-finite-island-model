@@ -4430,6 +4430,9 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         // explain this batch's stop and intervals.
         completedBatch = payload.batch || null;
         completedBatchSummary = payload.summary || null;
+        // The statistics whose intervals decide the batch's stop are marked
+        // like a single run's watched statistics.
+        window.fim.setWatchedStatistics(completedBatch ? completedBatch.statistics : []);
         renderBatchSummary(payload.summary, payload.effectiveAlleles);
         renderBatchTable(payload.replicates, payload.p0Statistics);
         // A batch's own completed scrubber replays the pooled scatter
@@ -4464,9 +4467,6 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedReportReason = null;
         completedConvergedOn = null;
         completedWatchedStatistics = [];
-        // A batch's convergence rule is its confidence interval, not a
-        // watched statistic: clear the marks the previous run left.
-        window.fim.setWatchedStatistics([]);
         completedClosedFormComparisons = {};
         completedEstimateSource = null;
         completedConvergenceWindow = null;

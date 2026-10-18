@@ -121,15 +121,16 @@ def test_the_watched_statistics_are_underlined_after_a_run(
     _assert_default_watch(outcome.get(timeout=120))
 
 
-def test_a_batch_does_not_inherit_the_previous_runs_marks(
+def test_a_batch_marks_its_own_watched_statistics_not_the_previous_runs(
     fast_batch_run_settings: Path,
 ) -> None:
-    """Reopening a batch clears the marks a scalar run left behind.
+    """A batch underlines the statistics its stop rule watches, only those.
 
-    The marks come from the run on screen, and a batch has no watched
-    statistics (its stop is a confidence interval). The batch's completed
-    payload is captured and shown again after the marks of a scalar run are
-    put back, as opening a saved batch after a scalar run would do.
+    The marks come from the run on screen. The batch's completed payload is
+    captured and shown again after the marks of an earlier run (here `H_S` and
+    `K_ST`, which this batch does not watch) are put back, as opening a saved
+    batch after another run would do. The default batch watches `D` and
+    `G_ST`.
     """
     done_event = threading.Event()
 
@@ -138,7 +139,7 @@ def test_a_batch_does_not_inherit_the_previous_runs_marks(
             done_event.set()
 
     window = create_window(api=Api(on_message=on_message), hidden=True)
-    outcome: queue.Queue[list[str]] = queue.Queue(maxsize=1)
+    outcome: queue.Queue[dict[str, list[str]]] = queue.Queue(maxsize=1)
     capture = (
         "window.__original = window.fim.enterCompletedState;"
         "window.fim.enterCompletedState = function (payload, isBatch) {"
@@ -146,13 +147,14 @@ def test_a_batch_does_not_inherit_the_previous_runs_marks(
         "};"
     )
     reopen = (
-        "window.fim.setWatchedStatistics(['D', 'G_ST']);"
+        "window.fim.setWatchedStatistics(['H_S', 'K_ST']);"
         "window.__original(window.__payload, true);"
     )
-    marked = (
-        "Array.from(document.querySelectorAll("
+    read = (
+        "({marked: Array.from(document.querySelectorAll("
         "'#batch-results-summary-body tr.stat-watched'))"
-        ".map((row) => row.dataset.trajectoryStatistic)"
+        ".map((row) => row.dataset.trajectoryStatistic), "
+        "watched: window.__payload.batch.statistics})"
     )
 
     def _drive() -> None:
@@ -165,10 +167,12 @@ def test_a_batch_does_not_inherit_the_previous_runs_marks(
             )
             wait_or_fail(done_event, "batch (done, cancelled or error message)")
             window.evaluate_js(reopen)
-            outcome.put(window.evaluate_js(marked))
+            outcome.put(window.evaluate_js(read))
         finally:
             window.destroy()
 
     webview.start(_drive)
+    settled = outcome.get(timeout=120)
 
-    assert outcome.get(timeout=120) == []
+    assert settled["watched"] == ["D", "G_ST"]
+    assert sorted(settled["marked"]) == ["D", "G_ST"]
