@@ -256,17 +256,15 @@ convergence_statistic: D
 trajectory_retention: thinned
 trajectory_stride: 10
 trajectory_thinning_start: 5000
-n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
 ```console
 fim run hub-island.yaml --output results/hub-island --quiet
 ```
 
-Converges at generation 44,847, after about seven minutes, with D = 0.0602 and
-an average over its 43,071-generation evidence window of 0.0626 ± 0.0022. The
-example pools eight loci: one locus alone swings too widely for its D to settle
-honestly (see the
+The batch of 10 replicates takes about five minutes and gives an average D of
+0.0652 ± 0.0028 across replicates. The example pools eight loci: one locus
+alone swings too widely for its D to settle honestly (see the
 [example's README](examples/unequal-island-sizes-with-a-migration-hub/README.md)).
 `manifest.json`'s `parameters.N`
 and `parameters.m` record the exact per-deme sizes and matrix rows used —
@@ -275,9 +273,8 @@ unequal size and asymmetric connectivity on differentiation.
 
 deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme `N` above,
-the default `equal` weighting gives E<sub>ST</sub> = 0.0815; adding
-`deme_weighting: size` to the same configuration gives E<sub>ST</sub> = 0.0764
-instead — deme 4's own 800-gene-copy weight pulls the size-weighted value
+the default `equal` weighting and `deme_weighting: size` give different
+E<sub>ST</sub> — deme 4's own 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.
 
 ### Stepping-stone (spatial) migration
