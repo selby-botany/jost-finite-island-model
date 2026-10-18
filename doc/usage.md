@@ -101,10 +101,11 @@ controls whether one run or a whole batch executes:
 An unconfigured run — no `n_replicates` key at all — is therefore a batch,
 not a single scalar run: this is a deliberate default (an unattended run
 reports a real confidence interval instead of a single, uncertainty-free
-point estimate) but it means every config below that wants the plain
-scalar behavior this guide describes states `n_replicates: 1` explicitly,
-the same way [`fim init`](#create-a-configuration)'s own starter
-configuration does.
+point estimate), and a config that wants one run says so with
+`n_replicates: 1`. [`fim init`](#create-a-configuration)'s starter
+configuration states the default (`n_replicates: 200`) explicitly. Most of
+the worked examples below run as the default batch; the few that are about
+one run's own behavior set `n_replicates: 1` and give the reason.
 
 A batch runs under any [engine_backend](configuration.md#engine_backend),
 not only `lineal`; every backend writes the same `replicate-NNN/` +

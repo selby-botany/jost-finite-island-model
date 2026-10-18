@@ -89,7 +89,7 @@ convergence_statistic: D
 convergence_combinator: all
 precision: 0.01
 max_generations: auto      # derived from the model; see below
-n_replicates: 1   # opt-in single scalar run; the library default is 200
+n_replicates: 200   # the default: an adaptively stopped batch; 1 asks for a single run
 engine_backend: auto   # recommended choice; the library default is lineal
 ```
 

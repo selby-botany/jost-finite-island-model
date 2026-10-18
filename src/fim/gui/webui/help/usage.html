@@ -85,10 +85,11 @@ plus a batch-level <code>manifest.json</code> and <code>summary.json</code> — 
 <p>An unconfigured run — no <code>n_replicates</code> key at all — is therefore a batch,
 not a single scalar run: this is a deliberate default (an unattended run
 reports a real confidence interval instead of a single, uncertainty-free
-point estimate) but it means every config below that wants the plain
-scalar behavior this guide describes states <code>n_replicates: 1</code> explicitly,
-the same way <a href="#create-a-configuration"><code>fim init</code></a>'s own starter
-configuration does.</p>
+point estimate), and a config that wants one run says so with
+<code>n_replicates: 1</code>. <a href="#create-a-configuration"><code>fim init</code></a>'s starter
+configuration states the default (<code>n_replicates: 200</code>) explicitly. Most of
+the worked examples below run as the default batch; the few that are about
+one run's own behavior set <code>n_replicates: 1</code> and give the reason.</p>
 <p>A batch runs under any <a href="#" data-fim-help="configuration" data-fim-anchor="engine_backend">engine_backend</a>,
 not only <code>lineal</code>; every backend writes the same <code>replicate-NNN/</code> +
 <code>manifest.json</code> + <code>summary.json</code> layout. Whether a replicate's own
