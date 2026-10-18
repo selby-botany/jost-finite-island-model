@@ -19940,8 +19940,10 @@ burn-in to the last generation, and the report records the mean and the
 standard error it found there (`window_statistics`). The panel's trailing
 mean, cumulative mean and cell estimate must reproduce those numbers,
 so a number on screen can always be traced to the report. These tests use
-the shipped Wright-Takahata example, whose saved history and report are
-fixed files, so they are pure functions of the commit.
+the saved history and report of the Wright-Takahata example's single run
+(`test/data/wright-takahata-single-run`, a copy of what the example committed
+while it was a single run), which are fixed files, so the tests are pure
+functions of the commit.
 
 <a id="gui.test_evidence_window_screen.test_a_live_run_averages_over_the_first_check_until_it_ends"></a>
 

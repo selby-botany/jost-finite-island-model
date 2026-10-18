@@ -5,8 +5,10 @@ burn-in to the last generation, and the report records the mean and the
 standard error it found there (`window_statistics`). The panel's trailing
 mean, cumulative mean and cell estimate must reproduce those numbers,
 so a number on screen can always be traced to the report. These tests use
-the shipped Wright-Takahata example, whose saved history and report are
-fixed files, so they are pure functions of the commit.
+the saved history and report of the Wright-Takahata example's single run
+(`test/data/wright-takahata-single-run`, a copy of what the example committed
+while it was a single run), which are fixed files, so the tests are pure
+functions of the commit.
 """
 
 from __future__ import annotations
@@ -24,9 +26,7 @@ import webview
 from fim.gui.app import _convergence_reference_payload
 from fim.model import SimulationParams
 
-_EXAMPLE = (
-    Path(__file__).parents[2] / "doc/examples/wright-takahata-finite-deme-correction"
-)
+_EXAMPLE = Path(__file__).parents[2] / "test/data/wright-takahata-single-run"
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 _WATCHED = ("G_ST", "D")
 
