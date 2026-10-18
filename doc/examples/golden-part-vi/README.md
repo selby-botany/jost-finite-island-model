@@ -18,7 +18,7 @@ observation motivating D as a replacement statistic.
 Published equilibrium values (100-replicate ensemble, multi-locus engineered
 start): **G<sub>ST</sub> ≈ 0.176, D ≈ 0.604**.
 
-## One locus, one run: the average earns its error bar
+## One locus per replicate: the batch earns its error bar
 
 A single locus, watched by a single replicate, is exactly the case that
 once exposed a real defect in `fim`'s own convergence rule: a short
@@ -29,21 +29,26 @@ of this example fell into that trap: it reported "converged" at generation 400
 with D = 0.611, a number that looked like a clean match to the published
 ensemble mean (0.604) but was one lucky window among many unlucky ones nearby.
 
-`fim` now avoids it by construction. A run burns in (here 449 generations,
-about 5.3 relaxation times of 85), then averages, and stops only when the
-average of each watched statistic is known to the requested
-[precision](../../configuration.md#precision), correcting for how correlated
-consecutive generations
-([Convergence](../../convergence.md)). This example watches **D**
-(`convergence_statistic: D`), so the run has to settle D. At generation 176,575
-the averages over the 176,127-generation window are **D = 0.6080 ± 0.0043**
-and **G<sub>ST</sub> = 0.1731 ± 0.0009** (one standard error; every recorded
-statistic gets its average and error bar over the same window): both very close
-to the published 0.604 and 0.176, with error bars that say how much to trust
-them. The run takes longer than the old rule's 400 generations, and that is the
-point: `D` swings widely here (a standard deviation of 0.16 from one
-generation to the next), so averaging it to ±0.009 (the 95% interval the
-precision of 0.01 asks for) takes a long window.
+`fim` now avoids it by construction. Each replicate burns in (here 449
+generations, about 5.3 relaxation times of 85), averages over a
+1,693-generation window, and stops. The batch then adds replicates until the
+95% confidence interval across them is within the requested
+[precision](../../configuration.md#precision), here ±0.01
+([Convergence](../../convergence.md)). This example watches **D**, so the batch
+has to settle D: it needed 32 replicates, where the minimum is 10, and took
+under three minutes on a development machine. Across the replicates
+**D = 0.6247 ± 0.0098** and **G<sub>ST</sub> = 0.1742 ± 0.0023** (95%
+confidence half-widths). The interval for G<sub>ST</sub>, 0.172 to 0.177,
+contains the published 0.176. The interval for D, 0.615 to 0.635, lies a little
+above the published 0.604; computing D from the averaged heterozygosities
+H<sub>S</sub> and H<sub>T</sub> instead gives 0.614, because D is a nonlinear
+function of them and the average of its values differs from its value at the
+averages (see the section "Which average?" in
+[Convergence](../../convergence.md)). `D` swings widely here (a standard
+deviation of 0.16 from one generation to the next in a single run), which is
+why 32 replicates were needed. The earlier single-run version of this example
+averaged one long window (176,127 generations) and reported D = 0.608 ± 0.004
+(one standard error).
 
 ## The real calibration: many seeds, many loci
 
@@ -68,16 +73,6 @@ stand in for that calibration.
 | &mu; | 0.005 | Per-locus mutation rate |
 | locus length | 200 | Allele-space size (infinite-alleles model) |
 | seed | 20260825 | Exact RNG seed |
-
-## Why a single run
-
-This example sets `n_replicates: 1`. It was written when a run was always one
-run, and the numbers quoted here, and the outputs saved with it, are those of
-one run. The engine's default is `n_replicates: 200`, an adaptively stopped
-batch that reports a confidence interval, and that is what a researcher would
-normally use. One run's final numbers are one noisy draw: for an estimate with
-an error bar, run a batch (see
-[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 
 ## Running the example
 

@@ -24,4 +24,3 @@ precision: 0.01
 trajectory_retention: thinned
 trajectory_stride: 10
 trajectory_thinning_start: 5000
-n_replicates: 1
