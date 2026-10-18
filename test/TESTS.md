@@ -834,6 +834,66 @@ def test_every_ubuntu_job_that_installs_the_project_installs_the_gtk_build_packa
 
 `pip install -e .[...]` on Ubuntu is preceded by the PyGObject build packages.
 
+<a id="test.test_ci_workflows.test_there_are_packaging_smoke_jobs_to_check"></a>
+
+#### test\_there\_are\_packaging\_smoke\_jobs\_to\_check
+
+```python
+def test_there_are_packaging_smoke_jobs_to_check() -> None
+```
+
+The checks below must not pass by finding no jobs.
+
+<a id="test.test_ci_workflows.test_every_smoke_edit_matches_a_line_of_the_starter_config"></a>
+
+#### test\_every\_smoke\_edit\_matches\_a\_line\_of\_the\_starter\_config
+
+```python
+@pytest.mark.parametrize(("workflow", "job"), _SMOKE_JOBS)
+def test_every_smoke_edit_matches_a_line_of_the_starter_config(
+        workflow: str, job: str) -> None
+```
+
+Each edit of the starter configuration finds something to edit.
+
+The packaging smoke tests shrink the `fim init` configuration with `sed`
+(macOS, Linux) or `-replace` (Windows). An edit whose pattern no longer
+matches changes nothing and fails silently (`N: 450` outlived the
+starter's `N: 225` that way), so every pattern must be a line of
+`fim.cli.STARTER_CONFIG`.
+
+<a id="test.test_ci_workflows.test_every_unix_smoke_job_also_runs_the_default_batch"></a>
+
+#### test\_every\_unix\_smoke\_job\_also\_runs\_the\_default\_batch
+
+```python
+@pytest.mark.parametrize(("workflow", "job"), _UNIX_SMOKE_JOBS)
+def test_every_unix_smoke_job_also_runs_the_default_batch(
+        workflow: str, job: str) -> None
+```
+
+A packaged macOS or Linux build is run on the default as well: a batch.
+
+The single-run smoke test pins one run to check the flat layout. The
+default must be exercised too: the same shrunken configuration with
+`n_replicates` left alone, checked for a summary and at least the
+10-replicate minimum.
+
+<a id="test.test_ci_workflows.test_every_windows_smoke_job_runs_the_default_batch"></a>
+
+#### test\_every\_windows\_smoke\_job\_runs\_the\_default\_batch
+
+```python
+@pytest.mark.parametrize(
+    ("workflow", "job"),
+    [entry for entry in _SMOKE_JOBS if entry not in _UNIX_SMOKE_JOBS],
+)
+def test_every_windows_smoke_job_runs_the_default_batch(
+        workflow: str, job: str) -> None
+```
+
+The Windows smoke run leaves `n_replicates` alone and expects batch files.
+
 <a id="test.test_configuration_doc_index"></a>
 
 # test.test\_configuration\_doc\_index

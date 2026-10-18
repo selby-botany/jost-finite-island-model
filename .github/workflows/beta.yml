@@ -140,7 +140,7 @@ jobs:
           .\dist\fim.exe --help
           .\dist\fim.exe init --output tiny.yaml
           (Get-Content tiny.yaml) `
-            -replace 'N: 450', 'N: 20' `
+            -replace 'N: 225', 'N: 20' `
             -replace 'd: 20', 'd: 2' `
             -replace 'precision: 0.01', 'precision: 1.0' `
             -replace 'max_generations: auto', 'max_generations: 10' `
@@ -231,7 +231,7 @@ jobs:
           .\dist\fim.exe --help
           .\dist\fim.exe init --output tiny.yaml
           (Get-Content tiny.yaml) `
-            -replace 'N: 450', 'N: 20' `
+            -replace 'N: 225', 'N: 20' `
             -replace 'd: 20', 'd: 2' `
             -replace 'precision: 0.01', 'precision: 1.0' `
             -replace 'max_generations: auto', 'max_generations: 10' `
@@ -302,7 +302,7 @@ jobs:
           dist/fim.app/Contents/MacOS/fim --help >/dev/null
           dist/fim.app/Contents/MacOS/fim init --output tiny.yaml
           sed -i '' \
-            -e 's/N: 450/N: 20/' \
+            -e 's/N: 225/N: 20/' \
             -e 's/d: 20/d: 2/' \
             -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
@@ -315,6 +315,30 @@ jobs:
               exit 1
             fi
           done
+          # The default is a batch. Run it from the same shrunken
+          # configuration, with `n_replicates` left at its default, and check
+          # what a batch writes: a summary and at least `replicate_minimum`
+          # (10) replicate directories.
+          dist/fim.app/Contents/MacOS/fim init --output tiny-batch.yaml
+          sed -i '' \
+            -e 's/N: 225/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/precision: 0.01/precision: 1.0/' \
+            -e 's/max_generations: auto/max_generations: 10/' \
+            -e 's/convergence_burn_in: auto/convergence_burn_in: 1/' \
+            tiny-batch.yaml
+          dist/fim.app/Contents/MacOS/fim run tiny-batch.yaml --output smoke-batch --quiet
+          for artifact in manifest.json summary.json; do
+            if [[ ! -s "smoke-batch/${artifact}" ]]; then
+              echo "::error::Executable batch smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          replicates="$(find smoke-batch -maxdepth 1 -type d -name 'replicate-*' | wc -l | tr -d ' ')"
+          if [[ "${replicates}" -lt 10 ]]; then
+            echo "::error::The default batch wrote ${replicates} replicates, not at least 10"
+            exit 1
+          fi
           open dist/fim.app
           sleep 5
           gui_pid="$(pgrep -f 'dist/fim.app/Contents/MacOS/fim' | head -1)"
@@ -379,7 +403,7 @@ jobs:
           dist/fim.app/Contents/MacOS/fim --help >/dev/null
           dist/fim.app/Contents/MacOS/fim init --output tiny.yaml
           sed -i '' \
-            -e 's/N: 450/N: 20/' \
+            -e 's/N: 225/N: 20/' \
             -e 's/d: 20/d: 2/' \
             -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
@@ -392,6 +416,30 @@ jobs:
               exit 1
             fi
           done
+          # The default is a batch. Run it from the same shrunken
+          # configuration, with `n_replicates` left at its default, and check
+          # what a batch writes: a summary and at least `replicate_minimum`
+          # (10) replicate directories.
+          dist/fim.app/Contents/MacOS/fim init --output tiny-batch.yaml
+          sed -i '' \
+            -e 's/N: 225/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/precision: 0.01/precision: 1.0/' \
+            -e 's/max_generations: auto/max_generations: 10/' \
+            -e 's/convergence_burn_in: auto/convergence_burn_in: 1/' \
+            tiny-batch.yaml
+          dist/fim.app/Contents/MacOS/fim run tiny-batch.yaml --output smoke-batch --quiet
+          for artifact in manifest.json summary.json; do
+            if [[ ! -s "smoke-batch/${artifact}" ]]; then
+              echo "::error::Executable batch smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          replicates="$(find smoke-batch -maxdepth 1 -type d -name 'replicate-*' | wc -l | tr -d ' ')"
+          if [[ "${replicates}" -lt 10 ]]; then
+            echo "::error::The default batch wrote ${replicates} replicates, not at least 10"
+            exit 1
+          fi
           open dist/fim.app
           sleep 5
           gui_pid="$(pgrep -f 'dist/fim.app/Contents/MacOS/fim' | head -1)"
@@ -492,7 +540,7 @@ jobs:
           dist/fim --help >/dev/null
           dist/fim init --output tiny.yaml
           sed -i \
-            -e 's/N: 450/N: 20/' \
+            -e 's/N: 225/N: 20/' \
             -e 's/d: 20/d: 2/' \
             -e 's/precision: 0.01/precision: 1.0/' \
             -e 's/max_generations: auto/max_generations: 10/' \
@@ -505,6 +553,30 @@ jobs:
               exit 1
             fi
           done
+          # The default is a batch. Run it from the same shrunken
+          # configuration, with `n_replicates` left at its default, and check
+          # what a batch writes: a summary and at least `replicate_minimum`
+          # (10) replicate directories.
+          dist/fim init --output tiny-batch.yaml
+          sed -i \
+            -e 's/N: 225/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/precision: 0.01/precision: 1.0/' \
+            -e 's/max_generations: auto/max_generations: 10/' \
+            -e 's/convergence_burn_in: auto/convergence_burn_in: 1/' \
+            tiny-batch.yaml
+          dist/fim run tiny-batch.yaml --output smoke-batch --quiet
+          for artifact in manifest.json summary.json; do
+            if [[ ! -s "smoke-batch/${artifact}" ]]; then
+              echo "::error::Executable batch smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          replicates="$(find smoke-batch -maxdepth 1 -type d -name 'replicate-*' | wc -l | tr -d ' ')"
+          if [[ "${replicates}" -lt 10 ]]; then
+            echo "::error::The default batch wrote ${replicates} replicates, not at least 10"
+            exit 1
+          fi
           # Matches ci.yml's own linux-x64 job: a startup smoke check
           # under a virtual display, then confirm a missing WebKitGTK
           # fails loudly rather than hanging or silently degrading.
