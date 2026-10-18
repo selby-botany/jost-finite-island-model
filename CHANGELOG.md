@@ -1118,6 +1118,34 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The worked examples run as the default batch.** Ten examples that pinned
+  `n_replicates: 1` (a leftover from when the default changed from 1 to 200)
+  now run as `fim run` does by default, an adaptively stopped batch: the
+  K-allele, per-base mutation, stochastic migrant counts, stepping-stone,
+  Kimura-Weiss, unequal-islands, equilibrium-split, Wright-Takahata, Jost
+  Part VI and Dear-Nolan low examples. Their READMEs and the usage guide quote
+  the batch mean and its confidence interval, the replicates that ran and the
+  measured running time (20 seconds to about 55 minutes on a loaded 10-core
+  machine). Three examples stay single runs because their subject is one run
+  (the stopping combinator, the σ band, and a one-generation computation); each
+  states why on its `n_replicates` line and in a "Why a single run" section,
+  and a test enforces that. A few findings changed: the Jost Part VI batch
+  gives D = 0.625 ± 0.010, a little above the published 0.604, and the
+  stochastic-migrant batch (D = 0.082 ± 0.010) is indistinguishable from the
+  continuous-migration batch (0.077 ± 0.010). The Dear-Nolan low single run's
+  report is kept as test data for the convergence rule.
+- **A batch's results say how it stopped, in sentences.** The results card
+  states how many replicates ran and why the batch stopped (interval met, cap
+  reached, planned replicates, or early stop off), each watched statistic's
+  mean and confidence interval against its target, what an interval across
+  replicates does and does not say, and, collapsed, every other statistic's
+  meaning and interval. The statistics a batch watches are underlined, as in a
+  single run.
+- **The README leads with what the default writes.** The "Outputs" section
+  describes the default batch's files first and the single-run files as the
+  explicit `n_replicates: 1` case. The configuration reference's complete
+  example and the usage guide's paragraph on an unconfigured run describe the
+  default.
 - **The statistics panel shows averages, and the explanations are messages.**
   A statistic's cell now shows its mean and standard error over the run's
   evidence window ("0.29 ± 0.06"), not the last generation's value, which is
@@ -1134,8 +1162,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reference.** Their headings no longer use `<sub>` markup, so searching for
   `n_replicates` finds its section, and a settings index near the top lists
   every setting with a link. The anchors are now `#n_replicates` and `#p_0`.
-  The examples that pin `n_replicates: 1` say why, and the Wright-Takahata
-  example explains why a settled statistic's line still wanders.
+  The Wright-Takahata example explains why a settled statistic's line still
+  wanders.
 
 - **Replicate seeds come from `SeedSequence`.** Replicate `i` of a batch uses
   child `i` of `numpy.random.SeedSequence(seed)` (a 64-bit integer), not
@@ -1627,6 +1655,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The packaged macOS and Linux builds are smoke-tested on the default.** Their
+  smoke steps pinned one run and never ran the default batch (the Windows steps
+  already did); they now also run a shrunken default batch and expect
+  `summary.json` and at least 10 replicates. The steps' size edit had matched
+  `N: 450`, which the starter configuration (`N: 225`) stopped matching, so it
+  changed nothing; it now matches, and a test checks every smoke edit against
+  the starter.
 - **The founder-split example now demonstrates something.** The
   one-generation endpoint check is replaced by a dynamic allele-sharing
   example that watches all five advertised measures. The allelic-distance
