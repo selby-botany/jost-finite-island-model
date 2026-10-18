@@ -1,43 +1,51 @@
 {
   "artifacts": {
-    "convergence": {
-      "bytes": 2961737,
-      "sha256": "d2dd78f86a6dd0e3013e37389b5e6123be21a9910012df114340df2400e23af8"
+    "replicate-001": {
+      "bytes": 2293,
+      "sha256": "2f228d4e07966d50ecf1c9746332b76d98e3215554fe5bd20d5cb7e0db8f9ea7"
     },
-    "pairwise": {
-      "bytes": 2965,
-      "sha256": "bb37ed1e2dcaa4e6ddae93718b118811036d5b2bf478f05b86fa4360db1ea33a"
+    "replicate-002": {
+      "bytes": 2292,
+      "sha256": "c7f1e014ec3db348c614be5eb839f792b1854389f03bc09f5165da8f6ee57841"
     },
-    "report": {
-      "bytes": 4618,
-      "sha256": "ca62328a6f4807d115d4e46334a7d1a26bfa1e283957ae30c6e45c6aa6c29cab"
+    "replicate-003": {
+      "bytes": 2293,
+      "sha256": "9905f9dbdd2552b4bf05fffc5b1d239913968610a838483a55bf690887f04501"
     },
-    "scatter": {
-      "bytes": 50419,
-      "sha256": "c7616ec64adcd86d566948c1927ed49af6c256680fa3d11bc4ea537c36a145f4"
+    "replicate-004": {
+      "bytes": 2293,
+      "sha256": "c8a73472318e1d0b60b08466ef0c229f0dd23ca335a48db0a32ecfac04df80a0"
     },
-    "trajectory": {
-      "bytes": 6016049,
-      "sha256": "8085aed6cc09d2d2822994f065fc3d206b4714b6f6eab4ba81cf0d34d8f5c46e"
+    "replicate-005": {
+      "bytes": 2294,
+      "sha256": "1ed181173af536c21b36f4447f8e17dd3e1892e36adcc76a3a6ba5a3571b7272"
+    },
+    "replicate-006": {
+      "bytes": 2293,
+      "sha256": "369e47f8bf78eaaa81e05c8c1b4902223308e8b17f9e982e4e64798b0898fc13"
+    },
+    "replicate-007": {
+      "bytes": 2294,
+      "sha256": "6f7ec4d4a958f181d942119197202cd355903e9a459e15638458422a81c6956f"
+    },
+    "replicate-008": {
+      "bytes": 2294,
+      "sha256": "59fb1a526384cbc4e4f3e78d819f43921768204bb42cee9eb04111cca64c709d"
+    },
+    "replicate-009": {
+      "bytes": 2291,
+      "sha256": "aba103498983b4a2602a497a37b606e76068ec86a47480c4129dcdbf45241aa1"
+    },
+    "replicate-010": {
+      "bytes": 2291,
+      "sha256": "f9c03b46b5a523da6f1808597bd408630ce75fa7ccad1abe6f17a716fb5787dd"
+    },
+    "summary": {
+      "bytes": 6074,
+      "sha256": "6dda7c15af6ff209e680f9c9c762f21de9e25249cef426444ee572826421c686"
     }
   },
-  "auto_derived": [
-    "convergence_burn_in",
-    "max_generations"
-  ],
-  "convergence": {
-    "converged": true,
-    "generation": 21910,
-    "generation_count": 21911,
-    "reason": "statistic converged",
-    "statistic": "G_ST"
-  },
-  "ended_at": "2026-10-15T20:34:54.611776Z",
-  "engine_backend": "generational-vector",
-  "equilibrium_final_heterozygosity": null,
-  "equilibrium_generation_count": null,
-  "initial_condition_mode": "dirichlet",
-  "jit": "off",
+  "ended_at": "2026-10-18T19:35:44.413529Z",
   "parameters": {
     "N": 500,
     "_read_only": true,
@@ -66,7 +74,7 @@
     "migrant_sampling": "continuous",
     "mu": 0.0002,
     "mutation_model": "infinite_alleles",
-    "n_replicates": 1,
+    "n_replicates": 200,
     "ploidy": "haploid",
     "precision": 0.02,
     "precision_method": "interval",
@@ -76,9 +84,21 @@
     "stop_batch_early": true,
     "track_expensive_statistics": false
   },
-  "relaxation_time": 1684.7826086956522,
-  "run_id": "run-f96b2ebff7f7bf37",
-  "schema_version": 3,
+  "replicate_count": 10,
+  "replicate_run_ids": [
+    "run-086c93f3d0ba2db6-r001",
+    "run-086c93f3d0ba2db6-r002",
+    "run-086c93f3d0ba2db6-r003",
+    "run-086c93f3d0ba2db6-r004",
+    "run-086c93f3d0ba2db6-r005",
+    "run-086c93f3d0ba2db6-r006",
+    "run-086c93f3d0ba2db6-r007",
+    "run-086c93f3d0ba2db6-r008",
+    "run-086c93f3d0ba2db6-r009",
+    "run-086c93f3d0ba2db6-r010"
+  ],
+  "run_id": "run-086c93f3d0ba2db6",
+  "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-15T20:34:51.382647Z"
+  "started_at": "2026-10-18T19:27:20.172496Z"
 }

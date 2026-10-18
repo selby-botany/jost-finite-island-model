@@ -512,20 +512,20 @@ loci:
 engine_backend: auto
 convergence_statistic: G_ST
 precision: 0.02   # looser than the 0.01 default: under a minute
-n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-deme-correction.yaml \
   --output results/finite-deme-correction --quiet
 </code></pre>
-<p>Converges (on G<sub>ST</sub>) at generation 21,910, after about a minute, with
-an average G<sub>ST</sub> of 0.193 ± 0.007
-(<code>precision: 0.02</code> keeps the run short; see the
+<p>The batch of 10 replicates takes about nine minutes and gives an average
+G<sub>ST</sub> of 0.193 ± 0.003 across replicates
+(<code>precision: 0.02</code> keeps the batch short; see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/wright-takahata-finite-deme-correction/README.md">example's README</a>).
 The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
 about 0.238 because the <code>d / (d - 1)</code> correction is retained. A single locus
 scatters widely around that expectation (the exact expectation for this
-model is G<sub>ST</sub> 0.195 and D 0.319); a batch averages it out.</p>
+model is G<sub>ST</sub> 0.195 and D 0.319); the batch averages it out, and its
+interval for G<sub>ST</sub> contains 0.195.</p>
 <h3 id="kimura-weiss-isolation-by-distance">Kimura-Weiss isolation by distance</h3>
 <p>A 20-deme ring gives enough graph-distance classes for the GUI's
 isolation-by-distance panel to show the short-distance decay pattern from

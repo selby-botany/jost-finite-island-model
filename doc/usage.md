@@ -590,7 +590,6 @@ loci:
 engine_backend: auto
 convergence_statistic: G_ST
 precision: 0.02   # looser than the 0.01 default: under a minute
-n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
 ```console
@@ -598,15 +597,16 @@ fim run finite-deme-correction.yaml \
   --output results/finite-deme-correction --quiet
 ```
 
-Converges (on G<sub>ST</sub>) at generation 21,910, after about a minute, with
-an average G<sub>ST</sub> of 0.193 ± 0.007
-(`precision: 0.02` keeps the run short; see the
+The batch of 10 replicates takes about nine minutes and gives an average
+G<sub>ST</sub> of 0.193 ± 0.003 across replicates
+(`precision: 0.02` keeps the batch short; see the
 [example's README](examples/wright-takahata-finite-deme-correction/README.md)).
 The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
 about 0.238 because the `d / (d - 1)` correction is retained. A single locus
 scatters widely around that expectation (the exact expectation for this
-model is G<sub>ST</sub> 0.195 and D 0.319); a batch averages it out.
+model is G<sub>ST</sub> 0.195 and D 0.319); the batch averages it out, and its
+interval for G<sub>ST</sub> contains 0.195.
 
 ### Kimura-Weiss isolation by distance
 
