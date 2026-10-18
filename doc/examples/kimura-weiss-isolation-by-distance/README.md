@@ -7,26 +7,26 @@ Migration is restricted to neighboring demes, and the completed-run GUI
 can group deme-pair genetic correlations by distance to show spatial
 decay.
 
-The run converges at generation 31,250, after about five minutes on a
-development machine. It burns in for 2,260 generations (5 relaxation times of
-452), then averages over a 28,991-generation window: `D` = 0.565 ± 0.011 and
-`G_ST` = 0.119 ± 0.002 (one standard error). The final generation's own `D`
-and `G_ST`, 0.538 and 0.136, are single draws. These are values from one locus
-and one seeded run, not ensemble estimates. The saved trajectory is thinned
-(every generation to 5,000, then one in ten) to keep the example small.
+The batch ran 10 replicates in about six minutes on a development machine
+and stopped at the minimum of 10 because the 95% confidence interval for `D`
+was already within ±0.05. Each replicate burned in for 2,260 generations (5
+relaxation times of 452) and then averaged over a 9,039-generation window.
+Across the replicates, `D` = 0.563 ± 0.026 and `G_ST` = 0.1215 ± 0.0024 (95%
+confidence half-widths), from one locus per replicate. The saved trajectories
+are thinned (every generation to 5,000, then one in ten) to keep the example
+small.
 
 ## Why the precision is 0.05
 
-The configuration sets `precision: 0.05`, five times the
-default. Twenty demes on a ring mix slowly, so a single locus's `D`
-wanders for a long time, and the window needed grows as one over the square of
-the precision: at the default 0.01 the run would need about 25 times as long
-(hours, with a trajectory file of several gigabytes). The point of this example
-is the isolation-by-distance pattern, which appears at any of these
-precisions, so it trades precision in `D` (known to about ±0.02 rather than
-±0.004) for a run that finishes in minutes. Lower the precision in your own
-copy when you need the more precise value, and consider `trajectory_retention:
-thinned` to keep the file small.
+The configuration sets `precision: 0.05`, five times the default. Twenty demes
+on a ring mix slowly, so a single locus's `D` wanders for a long time, and the
+window each replicate averages over grows as one over the square of the
+precision: at the default 0.01 the batch would need about 25 times as much
+simulation (hours). The point of this example is the isolation-by-distance
+pattern, which appears at any of these precisions, so it trades precision in
+`D` (known to about ±0.03 rather than ±0.01) for a batch that finishes in
+minutes. Lower the precision in your own copy when you need a more precise
+value.
 
 ## Related literature
 
@@ -36,16 +36,6 @@ structure and the decrease of genetic correlation with distance.
 [doi:10.1093/genetics/49.4.561](https://doi.org/10.1093/genetics/49.4.561).
 The example illustrates the spatial structure behind the model; it is
 not a numerical reproduction of the paper's results.
-
-## Why a single run
-
-This example sets `n_replicates: 1`. It was written when a run was always one
-run, and the numbers quoted here, and the outputs saved with it, are those of
-one run. The engine's default is `n_replicates: 200`, an adaptively stopped
-batch that reports a confidence interval, and that is what a researcher would
-normally use. One run's final numbers are one noisy draw: for an estimate with
-an error bar, run a batch (see
-[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 
 ## Run
 

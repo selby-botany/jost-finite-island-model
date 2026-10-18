@@ -646,7 +646,6 @@ precision: 0.05   # looser than the 0.01 default: seconds, not hours
 trajectory_retention: thinned
 trajectory_stride: 10
 trajectory_thinning_start: 5000
-n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
 ```console
@@ -654,10 +653,10 @@ fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 ```
 
-Converges at generation 31,250, after about five minutes, with averages D =
-0.565 and G<sub>ST</sub> = 0.119. `precision: 0.05` is deliberately loose:
-the default 0.01 would need many times as long, hours (see the
-[example's README](examples/kimura-weiss-isolation-by-distance/README.md)).
+The batch of 10 replicates takes about six minutes and gives averages D =
+0.563 and G<sub>ST</sub> = 0.122 across replicates. `precision: 0.05` is
+deliberately loose: the default 0.01 would need many times as long, hours (see
+the [example's README](examples/kimura-weiss-isolation-by-distance/README.md)).
 Open the result in `fim-gui` and inspect the Literature visualizations panel:
 the identity-decay plot groups deme pairs by shortest-path distance over the
 non-zero migration edges and overlays a log-linear fit.
