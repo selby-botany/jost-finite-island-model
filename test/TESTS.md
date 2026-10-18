@@ -17,6 +17,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_doc_examples`](#test.test_doc_examples)
   - [`test_doc_snippets`](#test.test_doc_snippets)
   - [`test_example_artifacts`](#test.test_example_artifacts)
+  - [`test_example_single_run_pins`](#test.test_example_single_run_pins)
   - [`test_example_support`](#test.test_example_support)
   - [`test_examples_catalog`](#test.test_examples_catalog)
   - [`test_examples_seed`](#test.test_examples_seed)
@@ -1275,6 +1276,54 @@ def test_opening_a_study_restores_its_archived_members(tmp_path: Path) -> None
 ```
 
 Opening a Study directly must not require opening its example runs first.
+
+<a id="test.test_example_single_run_pins"></a>
+
+# test.test\_example\_single\_run\_pins
+
+A worked example runs as the default batch, or says why it is one run.
+
+The engine's default is `n_replicates: 200`, an adaptively stopped batch with a
+confidence interval, and a single run happens only when asked for. A shipped
+example that sets `n_replicates: 1` is therefore the exception and has to say
+why, in a form a reader and this test can find: the pin line carries a comment
+starting `single run:`, and the README has a "Why a single run" section.
+
+<a id="test.test_example_single_run_pins.test_the_single_run_examples_are_the_ones_whose_subject_is_one_run"></a>
+
+#### test\_the\_single\_run\_examples\_are\_the\_ones\_whose\_subject\_is\_one\_run
+
+```python
+def test_the_single_run_examples_are_the_ones_whose_subject_is_one_run(
+) -> None
+```
+
+Exactly three examples are single runs, each about a within-run idea.
+
+<a id="test.test_example_single_run_pins.test_a_single_run_pin_states_its_reason_in_the_config_and_the_readme"></a>
+
+#### test\_a\_single\_run\_pin\_states\_its\_reason\_in\_the\_config\_and\_the\_readme
+
+```python
+@pytest.mark.parametrize("example", _pinned())
+def test_a_single_run_pin_states_its_reason_in_the_config_and_the_readme(
+        example: str) -> None
+```
+
+The pin line says `single run: <reason>` and the README has the section.
+
+<a id="test.test_example_single_run_pins.test_a_batch_example_does_not_carry_a_stale_single_run_explanation"></a>
+
+#### test\_a\_batch\_example\_does\_not\_carry\_a\_stale\_single\_run\_explanation
+
+```python
+@pytest.mark.parametrize(
+    "example", sorted(p.parent.name for p in EXAMPLES.glob("*/config.yaml")))
+def test_a_batch_example_does_not_carry_a_stale_single_run_explanation(
+        example: str) -> None
+```
+
+An example that is not pinned to one run has no "Why a single run" section.
 
 <a id="test.test_example_support"></a>
 
