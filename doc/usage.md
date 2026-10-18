@@ -308,16 +308,15 @@ loci:
 engine_backend: auto
 convergence_statistic: D
 precision: 0.02   # looser than the 0.01 default: about a minute
-n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
 ```console
 fim run stepping-stone.yaml --output results/stepping-stone --quiet
 ```
 
-Converges at generation 22,761, after about half a minute, with an average D
-of 0.156 ± 0.009. `precision: 0.02` keeps the run to half a
-minute; the default 0.01 would take about four times as long (see
+The batch of 16 replicates takes under two minutes and gives an average D of
+0.146 ± 0.019 across replicates. `precision: 0.02` keeps the batch short; the
+default 0.01 would take about four times as long (see
 the [example's README](examples/stepping-stone-spatial-migration/README.md)).
 Swap `topology: ring` for
 `linear` to remove the wrap-around edge between deme 1 and deme 6. In

@@ -7,22 +7,23 @@ neighbors. The `topology: ring` shorthand builds this sparse migration
 graph without writing all 36 matrix entries. Replacing `ring` with
 `linear` removes the wrap-around connection.
 
-The run converges at generation 22,761, after about half a minute on a
-development machine. It burns in for 1,643 generations, then averages over a
-21,119-generation window: `D` = 0.156 ± 0.009 (one standard error) and `G_ST`
-= 0.060 ± 0.001; the final generation's own `D`, 0.069, is one noisy draw. In
-the GUI, the resulting graph has distance classes for the isolation-by-distance
+The batch ran 16 replicates in under two minutes on a development machine
+and stopped because the 95% confidence interval for `D` was within ±0.02. Each
+replicate burned in for 1,643 generations (5 relaxation times of 329) and then
+averaged over a 6,572-generation window. Across the replicates, `D` = 0.146 ±
+0.019 and `G_ST` = 0.0589 ± 0.0014 (95% confidence half-widths). In the GUI,
+the resulting graph has distance classes for the isolation-by-distance
 visualization.
 
 ## Why the precision is 0.02
 
-The configuration sets `precision: 0.02`, twice the default.
-A run stops once the average of each watched statistic is known to plus or
-minus the precision at 95% confidence, and a single locus is noisy, so the
-default 0.01 would take about four times as long. At 0.02 `D` is known to about
-±0.02 instead of ±0.01, which is enough to show the ring's effect. A looser
-precision still, such as 0.05, finishes in seconds but averages over a short
-window whose mean is visibly less reliable.
+The configuration sets `precision: 0.02`, twice the default. A batch stops
+once the 95% confidence interval across replicates is within ±0.02 for each
+watched statistic, and a single locus is noisy, so the default 0.01 would need
+windows about four times as long. At 0.02 `D` is known to about ±0.02 instead
+of ±0.01, which is enough to show the ring's effect. A looser precision still,
+such as 0.05, finishes sooner but averages over shorter windows and gives a
+visibly wider interval.
 
 ## Related literature
 
@@ -33,16 +34,6 @@ structure and the decrease of genetic correlation with distance.
 Their spatial migration model motivates the ring topology; this small
 configuration is a demonstration, not a fitted reproduction of their
 analysis.
-
-## Why a single run
-
-This example sets `n_replicates: 1`. It was written when a run was always one
-run, and the numbers quoted here, and the outputs saved with it, are those of
-one run. The engine's default is `n_replicates: 200`, an adaptively stopped
-batch that reports a confidence interval, and that is what a researcher would
-normally use. One run's final numbers are one noisy draw: for an estimate with
-an error bar, run a batch (see
-[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
 
 ## Run
 

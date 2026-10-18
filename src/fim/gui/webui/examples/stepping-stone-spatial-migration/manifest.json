@@ -1,43 +1,75 @@
 {
   "artifacts": {
-    "convergence": {
-      "bytes": 3365160,
-      "sha256": "617efe090fd483485d712134aa2b433fa19a508fa90c4d83bd150fc010a68874"
+    "replicate-001": {
+      "bytes": 2878,
+      "sha256": "d98ba76f25271c702049bc1070421d23cc9bbd7735b8fe21e7c9bf3a715b0227"
     },
-    "pairwise": {
-      "bytes": 1679,
-      "sha256": "d472238d1fe56ce1b3ef391b0c06c8e8a7f8ddb862898855f8fd1785046f70e2"
+    "replicate-002": {
+      "bytes": 2878,
+      "sha256": "5220b9fdcb5a1983baffa2fe2edc357290f3140cc1cf46d6b30c9490b161261e"
     },
-    "report": {
-      "bytes": 4655,
-      "sha256": "117b4313c5226e53934aaa5b279c0dfb6394110a9b30ee66feb58dda33277161"
+    "replicate-003": {
+      "bytes": 2878,
+      "sha256": "a97d7c2b0667565eccbd39140d8b64f958ca0f5469d3ddaf9bd715aa33d6404d"
     },
-    "scatter": {
-      "bytes": 314439,
-      "sha256": "28a9c3e193e0ffbe4d8ffcc67700cccc6a958ef62793919c5ace154881bf3875"
+    "replicate-004": {
+      "bytes": 2878,
+      "sha256": "4f5d182f77189d3b88a1ed918638bae288a50fbf6f8ec72847377846e21adb37"
     },
-    "trajectory": {
-      "bytes": 5883111,
-      "sha256": "096339990b7d57b38a87245cba7bf9c5b2711bb1d23cf04e91e46b7baa956c6e"
+    "replicate-005": {
+      "bytes": 2878,
+      "sha256": "17f06860fcc0ab3b4d107ea86f229fe0c4e14a6cdb101485b41c1edfa65ad061"
+    },
+    "replicate-006": {
+      "bytes": 2877,
+      "sha256": "dd8fd757d607b421def85a737503fa30ed0505bfcbdca373a7e260b7ad9d01e2"
+    },
+    "replicate-007": {
+      "bytes": 2877,
+      "sha256": "0388d725043f9a0da4608ec74f2eefa0e0e6cb4d0b0f75be622bc488a360bcde"
+    },
+    "replicate-008": {
+      "bytes": 2878,
+      "sha256": "b163f7a9d60f6850d67c2a5e75448238255571332cae07d0bc25fe8444d63723"
+    },
+    "replicate-009": {
+      "bytes": 2876,
+      "sha256": "aa04087475c06279efc22c2c4c5dc3ce79ad62c92ad3f7555541fbb112fcc63f"
+    },
+    "replicate-010": {
+      "bytes": 2876,
+      "sha256": "7e89ba1ab2497d41e68c52048dd46d61683e4f72b38b70a7953fec734ce8eb9e"
+    },
+    "replicate-011": {
+      "bytes": 2875,
+      "sha256": "daa5857c72d4f236aeba620c7e3780ca6b44f176949099a28e22dbceddb8ded6"
+    },
+    "replicate-012": {
+      "bytes": 2874,
+      "sha256": "b1d899fbbbf8a5dcf4c0be10e9db1f116b1581dc60b127ee34a77f1e53b8caf9"
+    },
+    "replicate-013": {
+      "bytes": 2875,
+      "sha256": "22e0a8281f8c1dfe3cd96e6533b4cab77ed7c147e56de00247a74624b900644a"
+    },
+    "replicate-014": {
+      "bytes": 2876,
+      "sha256": "d9799109d18c6381ebe2671269cfe33a1000fa00301eb101e9ebbbde7b298a3a"
+    },
+    "replicate-015": {
+      "bytes": 2875,
+      "sha256": "d483cf03d69e189ec7a071342882a5b39dcb2ad1370fb05c0af159b7da89970a"
+    },
+    "replicate-016": {
+      "bytes": 2876,
+      "sha256": "2f5948821b1ed9dc29654be1b82704dbf21608dff1e05ff0e62ec1b7ee491a6c"
+    },
+    "summary": {
+      "bytes": 6116,
+      "sha256": "2e52c418c14ff9a9b968e3f4bc0b28e5ca1ba0129009056957710319f29f44c8"
     }
   },
-  "auto_derived": [
-    "convergence_burn_in",
-    "max_generations"
-  ],
-  "convergence": {
-    "converged": true,
-    "generation": 22761,
-    "generation_count": 22762,
-    "reason": "statistic converged",
-    "statistic": "D"
-  },
-  "ended_at": "2026-10-15T20:34:32.495456Z",
-  "engine_backend": "generational-vector",
-  "equilibrium_final_heterozygosity": null,
-  "equilibrium_generation_count": null,
-  "initial_condition_mode": "dirichlet",
-  "jit": "off",
+  "ended_at": "2026-10-18T19:25:52.488154Z",
   "parameters": {
     "N": 150,
     "_read_only": true,
@@ -115,7 +147,7 @@
     "migrant_sampling": "continuous",
     "mu": 0.001,
     "mutation_model": "infinite_alleles",
-    "n_replicates": 1,
+    "n_replicates": 200,
     "ploidy": "haploid",
     "precision": 0.02,
     "precision_method": "interval",
@@ -125,9 +157,27 @@
     "stop_batch_early": true,
     "track_expensive_statistics": false
   },
-  "relaxation_time": 328.5790199974907,
-  "run_id": "run-2d3888c651070ed9",
-  "schema_version": 3,
+  "replicate_count": 16,
+  "replicate_run_ids": [
+    "run-069e38c0d0448b32-r001",
+    "run-069e38c0d0448b32-r002",
+    "run-069e38c0d0448b32-r003",
+    "run-069e38c0d0448b32-r004",
+    "run-069e38c0d0448b32-r005",
+    "run-069e38c0d0448b32-r006",
+    "run-069e38c0d0448b32-r007",
+    "run-069e38c0d0448b32-r008",
+    "run-069e38c0d0448b32-r009",
+    "run-069e38c0d0448b32-r010",
+    "run-069e38c0d0448b32-r011",
+    "run-069e38c0d0448b32-r012",
+    "run-069e38c0d0448b32-r013",
+    "run-069e38c0d0448b32-r014",
+    "run-069e38c0d0448b32-r015",
+    "run-069e38c0d0448b32-r016"
+  ],
+  "run_id": "run-069e38c0d0448b32",
+  "schema_version": 1,
   "software_version": "1.2.0",
-  "started_at": "2026-10-15T20:34:29.372264Z"
+  "started_at": "2026-10-18T19:24:43.181310Z"
 }
