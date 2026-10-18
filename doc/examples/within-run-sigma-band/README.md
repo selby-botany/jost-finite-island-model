@@ -37,7 +37,13 @@ than one locus needs.
 
 ## Why a single run
 
-This example is a single run because its subject is the σ band over one run's own evidence window. A batch has no single evidence window: each replicate averages over a window matched to the whole batch, and the batch reports an interval across replicates instead. The engine's default is `n_replicates: 200`, an adaptively stopped batch that reports a confidence interval, and that is what most examples use; see [an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md).
+This example is a single run because its subject is the σ band over one run's
+own evidence window. A batch has no single evidence window: each replicate
+averages over a window matched to the whole batch, and the batch reports an
+interval across replicates instead. The engine's default is `n_replicates:
+200`, an adaptively stopped batch that reports a confidence interval, and that
+is what most examples use; see [an adaptive replicate batch with a confidence
+interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md).
 
 ## Run
 

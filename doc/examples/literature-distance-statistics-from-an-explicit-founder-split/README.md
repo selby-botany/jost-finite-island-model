@@ -75,7 +75,13 @@ example: with no migration or mutation it has no population dynamics.
 
 ## Why a single run
 
-This example is a single run because it is a one-generation computation: the demes start from an explicit founder state (`max_generations: 1`, with no migration or mutation), so the statistics follow from that state and there is nothing for replicates to average. The engine's default is `n_replicates: 200`, an adaptively stopped batch that reports a confidence interval, and that is what most examples use; see [an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md).
+This example is a single run because it is a one-generation computation: the
+demes start from an explicit founder state (`max_generations: 1`, with no
+migration or mutation), so the statistics follow from that state and there is
+nothing for replicates to average. The engine's default is `n_replicates:
+200`, an adaptively stopped batch that reports a confidence interval, and that
+is what most examples use; see [an adaptive replicate batch with a confidence
+interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md).
 
 On Configure, choose **Run settings...** to change this run's replicate
 count, generation cap, or precision without editing YAML or changing your
