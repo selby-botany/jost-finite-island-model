@@ -600,14 +600,13 @@ loci:
 engine_backend: auto
 convergence_statistic: D
 precision: 0.03   # looser than the 0.01 default: under a minute
-n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
 </code></pre>
-<p>Converges at generation 17,345, after about twenty seconds, with an average
-D of 0.209 ± 0.013 (the window is sized from the slowest locus, the
-50-base one, so it is long enough to leave the approach from the starting
-state; <code>precision: 0.03</code> keeps the run short; see the
+<p>The batch of 10 replicates takes about a minute and gives an average D of
+0.199 ± 0.014 across replicates (the window is sized from the slowest locus,
+the 50-base one, so it is long enough to leave the approach from the starting
+state; <code>precision: 0.03</code> keeps the batch short; see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md">example's README</a>).
 <code>results/mu-b/manifest.json</code>'s
 <code>parameters.mu</code> records the two derived rates — <code>0.0009995</code> for the

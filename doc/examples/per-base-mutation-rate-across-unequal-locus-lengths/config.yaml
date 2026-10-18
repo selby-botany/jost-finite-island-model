@@ -18,4 +18,3 @@ loci:
 engine_backend: auto
 convergence_statistic: D
 precision: 0.03   # looser than the 0.01 default: under a minute
-n_replicates: 1   # a single scalar run; the default (200) would batch

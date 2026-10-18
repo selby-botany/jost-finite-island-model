@@ -1,0 +1,88 @@
+{
+  "artifacts": {
+    "convergence": {
+      "bytes": 917159,
+      "sha256": "b44bc435ffc74949d0261cd89409a5fed655b91148359b5ca8d99356611c64b2"
+    },
+    "pairwise": {
+      "bytes": 522,
+      "sha256": "4d7dec5f83ad9d3512e30df751ba1bd5cc3d4e19561b6b75be02529d7e23b9db"
+    },
+    "report": {
+      "bytes": 4630,
+      "sha256": "c6bc9eebf93fa53fec50acf52a32fbdf4c6f3465556293a3df4fcfafbbe3ce85"
+    },
+    "scatter": {
+      "bytes": 129448,
+      "sha256": "34752bbce63107a9440a4fac0ccd58714989f773dee6b966d1b49bf11be4a95e"
+    },
+    "trajectory": {
+      "bytes": 2821931,
+      "sha256": "7d064e6b79d6a7273ea30065a87d557e900dda77998c2f96a6fabfc8a86da66f"
+    }
+  },
+  "auto_derived": [],
+  "convergence": {
+    "converged": true,
+    "generation": 6253,
+    "generation_count": 6254,
+    "reason": "averaging window complete",
+    "statistic": "D"
+  },
+  "ended_at": "2026-10-18T19:25:14.930867Z",
+  "engine_backend": "generational-vector",
+  "equilibrium_final_heterozygosity": null,
+  "equilibrium_generation_count": null,
+  "initial_condition_mode": "dirichlet",
+  "jit": "off",
+  "parameters": {
+    "N": 150,
+    "_read_only": true,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "confidence": 0.95,
+    "convergence_burn_in": 1251,
+    "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
+    "convergence_statistic": "D",
+    "d": 3,
+    "deme_weighting": "equal",
+    "engine_backend": "auto",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 50,
+        "locus_id": 1
+      },
+      {
+        "length": 500,
+        "locus_id": 2
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.02,
+    "max_generations": 200000,
+    "migrant_sampling": "continuous",
+    "mu": [
+      0.0009995101567641385,
+      0.009950265257140378
+    ],
+    "mutation_model": "infinite_alleles",
+    "n_replicates": 1,
+    "ploidy": "haploid",
+    "precision": 0.03,
+    "precision_method": "interval",
+    "replicate_averaging_window": 5002,
+    "replicate_minimum": 10,
+    "seed": 1271090953952351175,
+    "stop_batch_early": true,
+    "track_expensive_statistics": false
+  },
+  "relaxation_time": 250.06124540480633,
+  "run_id": "run-d82e34fbc271debf-r007",
+  "schema_version": 3,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-18T19:24:23.577052Z"
+}

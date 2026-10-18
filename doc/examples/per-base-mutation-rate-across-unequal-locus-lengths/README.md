@@ -11,36 +11,28 @@ The manifest records the expanded per-locus rates, 0.0009995 for the
 50-base locus and 0.0099503 for the 500-base one. This demonstrates
 configuration behavior rather than a particular literature result.
 
-The run converges at generation 17,345, after about twenty seconds on a
-development machine. It burns in for 1,251 generations, then averages over a
-16,095-generation window: `D` = 0.209 ± 0.013 (one standard error) and `G_ST`
-= 0.059 ± 0.001, pooled over both loci. The burn-in is sized from the slowest
-locus: the 50-base locus mutates ten times less than the 500-base one, so it
-takes about ten times longer to forget its starting state (a relaxation time
-of 250 generations), and the derived burn-in and cap follow it. An earlier
-version averaged the two rates, derived too short a burn-in, and stopped at
-generation 231 with `D` still on its approach from the starting state.
+The batch ran 10 replicates in about a minute on a development machine and
+stopped at the minimum of 10 because the 95% confidence interval for `D` was
+already within ±0.03. Each replicate burned in for 1,251 generations, then
+averaged over a 5,002-generation window; across the replicates `D` = 0.199 ±
+0.014 and `G_ST` = 0.0590 ± 0.0012 (95% confidence half-widths), pooled over
+both loci. The burn-in is sized from the slowest locus: the 50-base locus
+mutates ten times less than the 500-base one, so it takes about ten times
+longer to forget its starting state (a relaxation time of 250 generations),
+and the derived burn-in and window follow it. An earlier version averaged the
+two rates, derived too short a burn-in, and stopped at generation 231 with `D`
+still on its approach from the starting state.
 
 ## Why the precision is 0.03
 
-The configuration sets `precision: 0.03`, three times the
-default. A run stops once the average of each watched statistic is known to
-plus or minus the precision at 95% confidence (a standard error of at most
-0.03 / 1.96 ≈ 0.015). The 500-base locus mutates fast enough to hold many
-alleles, which makes each generation slow to simulate, and the window needed
-grows as one over the square of the precision, so the default 0.01 would take
-about nine times as long. This example is about the derived rates in the
-manifest, not about a precise `D`, so it accepts a mean known to about ±0.03.
-
-## Why a single run
-
-This example sets `n_replicates: 1`. It was written when a run was always one
-run, and the numbers quoted here, and the outputs saved with it, are those of
-one run. The engine's default is `n_replicates: 200`, an adaptively stopped
-batch that reports a confidence interval, and that is what a researcher would
-normally use. One run's final numbers are one noisy draw: for an estimate with
-an error bar, run a batch (see
-[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
+The configuration sets `precision: 0.03`, three times the default. A batch
+stops once the 95% confidence interval across replicates is within ±0.03 for
+each watched statistic. The 500-base locus mutates fast enough to hold many
+alleles, which makes each generation slow to simulate, and the window each
+replicate averages over grows as one over the square of the precision, so the
+default 0.01 would take about nine times as long. This example is about the
+derived rates in the manifest, not about a precise `D`, so it accepts a mean
+known to about ±0.03.
 
 ## Run
 

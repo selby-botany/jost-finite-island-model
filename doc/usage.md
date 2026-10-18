@@ -692,17 +692,16 @@ loci:
 engine_backend: auto
 convergence_statistic: D
 precision: 0.03   # looser than the 0.01 default: under a minute
-n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
 ```console
 fim run mu-b.yaml --output results/mu-b --quiet
 ```
 
-Converges at generation 17,345, after about twenty seconds, with an average
-D of 0.209 ± 0.013 (the window is sized from the slowest locus, the
-50-base one, so it is long enough to leave the approach from the starting
-state; `precision: 0.03` keeps the run short; see the
+The batch of 10 replicates takes about a minute and gives an average D of
+0.199 ± 0.014 across replicates (the window is sized from the slowest locus,
+the 50-base one, so it is long enough to leave the approach from the starting
+state; `precision: 0.03` keeps the batch short; see the
 [example's README](examples/per-base-mutation-rate-across-unequal-locus-lengths/README.md)).
 `results/mu-b/manifest.json`'s
 `parameters.mu` records the two derived rates — `0.0009995` for the
