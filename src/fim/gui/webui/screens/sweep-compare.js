@@ -148,12 +148,10 @@ function writeSweepCompareNotes(data) {
         const parts = Object.entries(values).map(([label, value]) => `${label}: ${value}`);
         lines.push(`Differs in ${key}: ${parts.join("; ")}`);
     }
-    lines.push(
-        "Seed policy: " +
-            Object.entries(data.seedPolicies)
-                .map(([label, policy]) => `${label}: ${policy}`)
-                .join("; ")
-    );
+    const policies = Object.entries(data.seedPolicies)
+        .map(([label, policy]) => `${label}: ${policy}`)
+        .join("; ");
+    lines.push(`Seed policy: ${policies}`);
     lines.push(SWEEP_COMPARE_PAIRING_NOTES[data.pairing]);
     sweepCompareNotes.replaceChildren(
         ...lines.map((line) => {
