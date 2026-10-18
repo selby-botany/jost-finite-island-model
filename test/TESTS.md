@@ -12831,6 +12831,20 @@ def drive() -> Callable[..., Any]
 
 Bind `drive_and_read` as a fixture, for tests that prefer the fixture style.
 
+<a id="gui.conftest.FastEngineProbe"></a>
+
+## FastEngineProbe Objects
+
+```python
+class FastEngineProbe()
+```
+
+Stands in for `EngineProbe` in the app: fixed figures, nothing timed.
+
+The Sweep dialog asks for a cost estimate after every plan. A real
+measurement takes seconds and depends on the machine, so no GUI test
+makes one; a test of the estimate itself reads `asked`.
+
 <a id="gui.conftest.examples_seeding"></a>
 
 #### examples\_seeding
@@ -27280,6 +27294,17 @@ def api(tmp_path: Path, results: Path) -> Api
 ```
 
 An `Api` whose defaults make every point a tiny single run.
+
+<a id="gui.test_sweep_api.test_a_plan_marks_the_points_a_finished_sweep_already_computed"></a>
+
+#### test\_a\_plan\_marks\_the\_points\_a\_finished\_sweep\_already\_computed
+
+```python
+def test_a_plan_marks_the_points_a_finished_sweep_already_computed(
+        api: Api, window: _FakeWindow) -> None
+```
+
+The runs a sweep makes are Run objects; a plan must count them.
 
 <a id="gui.test_sweep_compare_screen"></a>
 

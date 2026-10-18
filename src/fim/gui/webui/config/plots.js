@@ -376,3 +376,11 @@ const EXPLORE_SURFACE_CANVAS_HEIGHT = 360;
 // The two slice charts beside it are smaller.
 const EXPLORE_SLICE_CANVAS_MIN_WIDTH = 240;
 const EXPLORE_SLICE_CANVAS_HEIGHT = 200;
+
+
+/* ---- Time units ------------------------------------------------------ */
+
+// For writing a duration as "3 h 10 min" (the sweep time-left line).
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;

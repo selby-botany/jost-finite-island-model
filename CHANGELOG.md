@@ -8,6 +8,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Time and disk in the Sweep dialog, time left in the progress view.** The
+  dialog shows the same time, disk and measured lines as `fim sweep plan` for
+  the points that have not run yet; a running sweep shows the time left,
+  worked out from the points that have finished, and how long each point took.
+
 - **`fim sweep status`, `--pilot`, and costliest-first order.** `fim sweep
   status STUDY_ID` shows a sweep's points by state, whether a process is
   running it, its failures, and the time left, calibrated from the points that
@@ -1686,6 +1691,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `N: 450`, which the starter configuration (`N: 225`) stopped matching, so it
   changed nothing; it now matches, and a test checks every smoke edit against
   the starter.
+- **The Sweep dialog now counts runs a sweep already made.** "Already
+  computed" ignored runs stored as Run objects (which is what a sweep makes),
+  and did not check the software version, so after a finished sweep the
+  dialog still called every point new while the sweep itself would reuse
+  them. It now applies the rule the sweep applies.
 - **The founder-split example now demonstrates something.** The
   one-generation endpoint check is replaced by a dynamic allele-sharing
   example that watches all five advertised measures. The allelic-distance

@@ -1085,6 +1085,11 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   of a similar size share one measurement, and the results are remembered
   beside your preferences file (`sweep-throughput.json`), so planning again is
   instant. `--no-probe` skips the measurement and prints the work range only.
+  The app's Sweep dialog shows the same three lines (time, disk, and what was
+  measured) under the plan, for the points that still have to run; it says
+  "Measuring the engine…" for the first few seconds of a new size, and a
+  running sweep's progress view shows the time left and how long each point
+  took.
 - A sweep starts the points that may take longest first, so the last point to
   finish is not one that could have started at the beginning. This changes no
   result; each point is stored by its configuration. Each finished point's line

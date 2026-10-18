@@ -889,3 +889,56 @@ def remaining_cost(cost: SweepCost, finished: Mapping[str, Actual]) -> Remaining
         if planned and len(planned) == len(left)
         else None,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class CostLines:
+    """The sentences that state a probed cost, for the command line and the app.
+
+    Attributes:
+        time: How long the sweep may take, and how many points run at once.
+        disk: How much disk it may use, with and without the trajectory log.
+        probe: What was measured, and on which machine.
+    """
+
+    time: str
+    disk: str
+    probe: str
+
+
+def describe_cost(
+    cost: SweepCost, *, cores: int | None = None, machine: str | None = None
+) -> CostLines | None:
+    """Write a probed cost as three sentences.
+
+    Args:
+        cost: A cost from `probed_cost`.
+        cores: The machine's core count, to say how the points share it.
+        machine: The machine's name; this computer's when `None`.
+
+    Returns:
+        The three sentences, or `None` for a cost with no time or disk.
+    """
+    if cost.wall_seconds is None or cost.disk_bytes is None:
+        return None
+    where = ""
+    if cost.points_at_once is not None:
+        where = f" ({cost.points_at_once} point(s) at once"
+        where += f" on {cores} core(s))" if cores is not None else ")"
+    statistics = (
+        f"; {band_text(cost.statistics_bytes, format_bytes)} statistics only"
+        if cost.statistics_bytes is not None
+        else ""
+    )
+    nearest = sum(p.probe == "nearest" for p in cost.points)
+    return CostLines(
+        time=f"about {band_text(cost.wall_seconds, format_duration)}{where}",
+        disk=(
+            f"about {band_text(cost.disk_bytes, format_bytes)} with the full "
+            f"trajectory log{statistics}"
+        ),
+        probe=(
+            f"{cost.classes_measured} shape class(es) measured, {nearest} point(s) "
+            f"matched to the nearest; machine: {machine or platform.node()}"
+        ),
+    )

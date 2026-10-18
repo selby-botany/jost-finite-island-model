@@ -490,6 +490,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [cancel\_sweep](#fim.gui.app.Api.cancel_sweep)
     * [get\_sweep\_status](#fim.gui.app.Api.get_sweep_status)
     * [get\_sweep\_results](#fim.gui.app.Api.get_sweep_results)
+    * [estimate\_sweep\_cost](#fim.gui.app.Api.estimate_sweep_cost)
+    * [get\_sweep\_eta](#fim.gui.app.Api.get_sweep_eta)
     * [get\_sweep\_series](#fim.gui.app.Api.get_sweep_series)
     * [compare\_sweeps](#fim.gui.app.Api.compare_sweeps)
     * [get\_sweep\_theory](#fim.gui.app.Api.get_sweep_theory)
@@ -662,6 +664,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.sweep\_bridge](#fim.gui.sweep_bridge)
   * [sweepable\_keys\_payload](#fim.gui.sweep_bridge.sweepable_keys_payload)
   * [spec\_from\_request](#fim.gui.sweep_bridge.spec_from_request)
+  * [existing\_run\_ids](#fim.gui.sweep_bridge.existing_run_ids)
   * [plan\_payload](#fim.gui.sweep_bridge.plan_payload)
   * [status\_payload](#fim.gui.sweep_bridge.status_payload)
   * [series\_payload](#fim.gui.sweep_bridge.series_payload)
@@ -1623,6 +1626,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [read\_actual](#fim.sweep_cost.read_actual)
   * [Remaining](#fim.sweep_cost.Remaining)
   * [remaining\_cost](#fim.sweep_cost.remaining_cost)
+  * [CostLines](#fim.sweep_cost.CostLines)
+  * [describe\_cost](#fim.sweep_cost.describe_cost)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
   * [SweepLockedError](#fim.sweep_run.SweepLockedError)
@@ -1652,6 +1657,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [sweep\_spec\_of](#fim.sweep_run.sweep_spec_of)
   * [stored\_points](#fim.sweep_run.stored_points)
   * [sweep\_point\_statuses](#fim.sweep_run.sweep_point_statuses)
+  * [completed\_run\_ids](#fim.sweep_run.completed_run_ids)
   * [\_Context](#fim.sweep_run._Context)
     * [emit](#fim.sweep_run._Context.emit)
   * [run\_sweep](#fim.sweep_run.run_sweep)
@@ -1670,6 +1676,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SweepStatus](#fim.sweep_status.SweepStatus)
     * [finished](#fim.sweep_status.SweepStatus.finished)
   * [read\_sweep\_status](#fim.sweep_status.read_sweep_status)
+  * [describe\_remaining](#fim.sweep_status.describe_remaining)
 * [fim.sweep\_table](#fim.sweep_table)
   * [HealthClass](#fim.sweep_table.HealthClass)
   * [StatisticCell](#fim.sweep_table.StatisticCell)
@@ -12737,6 +12744,56 @@ def get_sweep_results(study_id: str) -> dict[str, Any]
 
 Return a sweep Study's finished points and their statistics.
 
+<a id="fim.gui.app.Api.estimate_sweep_cost"></a>
+
+#### estimate\_sweep\_cost
+
+```python
+@_log_bridge_call
+def estimate_sweep_cost(values: dict[str, str],
+                        request: dict[str, Any]) -> dict[str, Any]
+```
+
+Estimate the time and disk of the sweep's new points by measuring the engine.
+
+Separate from `plan_sweep` because the first measurement of a size
+class takes a few seconds (the result is remembered beside the
+preferences file), and a plan is redrawn on every edit. Points whose
+run already exists cost nothing and are left out.
+
+**Arguments**:
+
+- `values` - The Configure form's values, the base configuration.
+- `request` - As for `plan_sweep`.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "time", "disk", "probe", "cost"}`, the three
+  sentences of `fim.sweep_cost.describe_cost` and the cost as
+  numbers; `{"ok": True, "none": True, "time": ...}` when every
+  point is already computed; or `{"ok": False, "message": ...}`.
+
+<a id="fim.gui.app.Api.get_sweep_eta"></a>
+
+#### get\_sweep\_eta
+
+```python
+@_log_bridge_call
+def get_sweep_eta(study_id: str) -> dict[str, Any]
+```
+
+Say how much of a sweep is left and how long it may take.
+
+Worked out from the points that have finished
+(`fim.sweep_status.read_sweep_status`), so it sharpens as the sweep
+goes, and read from files, so it works while the sweep runs.
+
+**Returns**:
+
+- ``{"ok"` - True, "text": ..., "done", "total", "remainingPoints"}`
+  or `{"ok": False, "message": ...}`.
+
 <a id="fim.gui.app.Api.get_sweep_series"></a>
 
 #### get\_sweep\_series
@@ -17089,6 +17146,19 @@ Build a `SweepSpec` from the page's request and a validated base mapping.
 **Raises**:
 
 - `ValueError` - An axis is malformed, or the spec is not valid.
+
+<a id="fim.gui.sweep_bridge.existing_run_ids"></a>
+
+#### existing\_run\_ids
+
+```python
+def existing_run_ids(results: Path | None = None) -> set[str]
+```
+
+Return the id of every run a sweep would reuse, so a plan can mark them.
+
+Counts finished run directories and completed Run objects made by this
+software version, as `run_sweep` does.
 
 <a id="fim.gui.sweep_bridge.plan_payload"></a>
 
@@ -37832,6 +37902,47 @@ over the points run at once. It sharpens as more points finish.
 
   The points and work left, and the calibrated and planned time.
 
+<a id="fim.sweep_cost.CostLines"></a>
+
+## CostLines Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class CostLines()
+```
+
+The sentences that state a probed cost, for the command line and the app.
+
+**Attributes**:
+
+- `time` - How long the sweep may take, and how many points run at once.
+- `disk` - How much disk it may use, with and without the trajectory log.
+- `probe` - What was measured, and on which machine.
+
+<a id="fim.sweep_cost.describe_cost"></a>
+
+#### describe\_cost
+
+```python
+def describe_cost(cost: SweepCost,
+                  *,
+                  cores: int | None = None,
+                  machine: str | None = None) -> CostLines | None
+```
+
+Write a probed cost as three sentences.
+
+**Arguments**:
+
+- `cost` - A cost from `probed_cost`.
+- `cores` - The machine's core count, to say how the points share it.
+- `machine` - The machine's name; this computer's when `None`.
+
+
+**Returns**:
+
+  The three sentences, or `None` for a cost with no time or disk.
+
 <a id="fim.sweep_run"></a>
 
 # fim.sweep\_run
@@ -38368,6 +38479,27 @@ a failure was recorded before any object existed; otherwise `waiting`.
 A completed or cancelled object that is not a member yet is never
 reported as done.
 
+<a id="fim.sweep_run.completed_run_ids"></a>
+
+#### completed\_run\_ids
+
+```python
+def completed_run_ids(*,
+                      software_version: str = __version__,
+                      results: Path | None = None) -> set[str]
+```
+
+Return the id of every run a sweep would reuse instead of computing.
+
+A run counts if it is a finished run directory, or a completed Run
+object, made by `software_version`: the same rule `run_sweep` applies,
+so a plan can say beforehand which points are already computed.
+
+**Arguments**:
+
+- `software_version` - The version whose runs count as done.
+- `results` - Optional results-directory override.
+
 <a id="fim.sweep_run._Context"></a>
 
 ## \_Context Objects
@@ -38760,6 +38892,27 @@ Read a sweep Study's status.
 **Raises**:
 
 - `ValueError` - The Study does not exist or is not a sweep.
+
+<a id="fim.sweep_status.describe_remaining"></a>
+
+#### describe\_remaining
+
+```python
+def describe_remaining(status: SweepStatus) -> str
+```
+
+Say in a sentence how much of the sweep is left and how long it may take.
+
+**Arguments**:
+
+- `status` - A snapshot from `read_sweep_status`.
+
+
+**Returns**:
+
+  For example `"about 2 h 10 min for 14 point(s), from the speed of the
+  6 finished point(s) (an upper figure: ...)"`, or why there is no
+  estimate yet.
 
 <a id="fim.sweep_table"></a>
 

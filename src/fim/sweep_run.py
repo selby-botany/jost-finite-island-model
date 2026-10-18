@@ -1018,6 +1018,29 @@ def _completed_objects(software_version: str, results: Path | None) -> dict[str,
     return found
 
 
+def completed_run_ids(
+    *, software_version: str = __version__, results: Path | None = None
+) -> set[str]:
+    """Return the id of every run a sweep would reuse instead of computing.
+
+    A run counts if it is a finished run directory, or a completed Run
+    object, made by `software_version`: the same rule `run_sweep` applies,
+    so a plan can say beforehand which points are already computed.
+
+    Args:
+        software_version: The version whose runs count as done.
+        results: Optional results-directory override.
+    """
+    root = results if results is not None else paths.results_directory()
+    found = set()
+    if root.is_dir():
+        for manifest in sorted(root.glob("*/manifest.json")):
+            identity = groups.run_identity_of(manifest.parent)
+            if identity is not None and identity[1] == software_version:
+                found.add(identity[0])
+    return found | set(_completed_objects(software_version, results))
+
+
 def _member_runs(
     study: StudyManifest, software_version: str, results: Path | None
 ) -> tuple[dict[str, Path], dict[str, Path]]:

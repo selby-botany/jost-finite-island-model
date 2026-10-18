@@ -40,6 +40,11 @@ const sweepPlanHead = document.getElementById("sweep-plan-head");
 const sweepPlanBody = document.getElementById("sweep-plan-body");
 const sweepProgressView = document.getElementById("sweep-progress");
 const sweepProgressText = document.getElementById("sweep-progress-text");
+const sweepProgressEta = document.getElementById("sweep-progress-eta");
+const sweepCost = document.getElementById("sweep-cost");
+const sweepCostTime = document.getElementById("sweep-cost-time");
+const sweepCostDisk = document.getElementById("sweep-cost-disk");
+const sweepCostProbe = document.getElementById("sweep-cost-probe");
 const sweepProgressSpec = document.getElementById("sweep-progress-spec");
 const sweepProgressBar = document.getElementById("sweep-progress-bar");
 const sweepProgressHead = document.getElementById("sweep-progress-head");
@@ -59,6 +64,7 @@ let sweepConfirmArmed = false;
 // pressed in the dialog, else `null`.
 let sweepConfig = null;
 let sweepLastPlan = null;
+let sweepEtaSequence = 0;
 let sweepLastStudyId = null;
 
 window.__fimSweepPlanReady = false;
@@ -391,6 +397,38 @@ async function refreshSweepPlan() {
     sweepLastPlan = plan;
     drawSweepPlan(plan);
     window.__fimSweepPlanReady = true;
+    await refreshSweepCost(sequence, request);
+}
+
+/**
+ * Measure the engine for the drawn plan and write the time, disk and probe
+ * lines. It is a separate request from the plan because the first
+ * measurement of a size class takes a few seconds (it is remembered after
+ * that), and the plan is redrawn on every edit; a newer plan discards it.
+ * @param {number} sequence The plan this estimate is for.
+ * @param {object} request The bridge request the plan was made from.
+ */
+async function refreshSweepCost(sequence, request) {
+    window.__fimSweepCostReady = false;
+    sweepCost.hidden = false;
+    sweepCostTime.textContent = "Measuring the engine…";
+    sweepCostDisk.textContent = "";
+    sweepCostProbe.textContent = "";
+    const estimate = await window.pywebview.api.estimate_sweep_cost(
+        sweepBaseValues,
+        request
+    );
+    if (sequence !== sweepPlanSequence) {
+        return;
+    }
+    if (!estimate.ok) {
+        sweepCostTime.textContent = estimate.message;
+    } else {
+        sweepCostTime.textContent = estimate.time;
+        sweepCostDisk.textContent = estimate.disk ?? "";
+        sweepCostProbe.textContent = estimate.probe ?? "";
+    }
+    window.__fimSweepCostReady = true;
 }
 
 /**
@@ -399,6 +437,8 @@ async function refreshSweepPlan() {
  */
 function drawSweepPlanProblem(message) {
     sweepLastPlan = null;
+    sweepCost.hidden = true;
+    window.__fimSweepCostReady = true;
     sweepPlanSummary.textContent = message;
     sweepPlanSummary.classList.add("sweep-plan-problem");
     sweepPlanTable.hidden = true;
@@ -575,7 +615,7 @@ async function enterSweepProgress(studyId) {
         `${status.name}: ${keys.join(" × ")}, ${status.points.length} points ` +
         `(${status.axes.map((axis) => `${axis.key} ${axis.values.length}`).join(" × ")}).`;
     window.fim.attachDetails(sweepProgressSpec, sweepStudyDetails(status));
-    sweepProgressHead.replaceChildren(sweepHeaderRow(["#", ...keys, "State"]));
+    sweepProgressHead.replaceChildren(sweepHeaderRow(["#", ...keys, "State", "Took"]));
     sweepProgressBody.replaceChildren();
     for (const point of status.points) {
         const row = document.createElement("tr");
@@ -591,6 +631,9 @@ async function enterSweepProgress(studyId) {
         const state = document.createElement("td");
         state.className = "sweep-point-state";
         row.appendChild(state);
+        const took = document.createElement("td");
+        took.className = "sweep-point-took";
+        row.appendChild(took);
         sweepProgressBody.appendChild(row);
         setSweepPointState(point.index, sweepStoredStateText(point));
     }
@@ -598,9 +641,53 @@ async function enterSweepProgress(studyId) {
     sweepProgressBar.max = Math.max(status.points.length, 1);
     sweepProgressBar.value = done;
     sweepProgressText.textContent = `${done} of ${status.points.length} points done`;
+    await refreshSweepEta();
 }
 
 window.fim.showSweepProgress = enterSweepProgress;
+
+/**
+ * A duration the way a person says it: "40 s", "12 min", "3 h 10 min".
+ * @param {number} seconds
+ * @returns {string}
+ */
+function sweepDurationText(seconds) {
+    const total = Math.max(0, Math.round(seconds));
+    if (total < SECONDS_PER_MINUTE) {
+        return `${total} s`;
+    }
+    const minutes = Math.round(total / SECONDS_PER_MINUTE);
+    if (minutes < MINUTES_PER_HOUR) {
+        return `${minutes} min`;
+    }
+    const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+    const rest = minutes % MINUTES_PER_HOUR;
+    if (hours < HOURS_PER_DAY) {
+        return rest ? `${hours} h ${rest} min` : `${hours} h`;
+    }
+    const days = Math.floor(hours / HOURS_PER_DAY);
+    const spare = hours % HOURS_PER_DAY;
+    return spare ? `${days} d ${spare} h` : `${days} d`;
+}
+
+/**
+ * Ask how much of the sweep is left and write it under the progress text.
+ * Called when the progress view opens and after every finished point, so it
+ * sharpens as the sweep runs.
+ */
+async function refreshSweepEta() {
+    if (sweepLastStudyId === null) {
+        return;
+    }
+    const sequence = (sweepEtaSequence += 1);
+    window.__fimSweepEtaReady = false;
+    const eta = await window.pywebview.api.get_sweep_eta(sweepLastStudyId);
+    if (sequence !== sweepEtaSequence) {
+        return;
+    }
+    sweepProgressEta.textContent = eta.ok ? `Time left: ${eta.text}` : "";
+    window.__fimSweepEtaReady = true;
+}
 
 /**
  * Describe a point's stored state when the progress table opens. A point
@@ -668,6 +755,14 @@ window.fim.onSweepEvent = function onSweepEvent(event) {
     } else if (event.kind === "point_failed") {
         setSweepPointState(event.index, `failed (${event.detail})`);
     }
+    if (event.kind === "point_done" && event.detail && event.detail.seconds !== undefined) {
+        const row = sweepProgressBody.querySelector(`tr[data-index="${event.index}"]`);
+        if (row !== null) {
+            row.querySelector(".sweep-point-took").textContent = sweepDurationText(
+                event.detail.seconds
+            );
+        }
+    }
     if (event.kind === "point_differs") {
         showSweepBanner(
             "Reproducibility warning: a point recomputed under this software " +
@@ -689,6 +784,7 @@ window.fim.onSweepEvent = function onSweepEvent(event) {
     ) {
         sweepProgressBar.value = event.position;
         sweepProgressText.textContent = `${event.position} of ${event.total} points finished`;
+        refreshSweepEta();
     }
     if (event.kind === "sweep_done" || event.kind === "sweep_cancelled") {
         finishSweep(event.kind === "sweep_cancelled");
@@ -713,6 +809,7 @@ function finishSweep(cancelled) {
     sweepProgressText.textContent = cancelled
         ? "Cancelled. Finished points are kept; resume the study from Home."
         : "Every point has been run. The study is in Home.";
+    refreshSweepEta();
     sweepCancelButton.hidden = true;
     sweepSetupButton.hidden = false;
     sweepHomeButton.hidden = false;

@@ -15,7 +15,14 @@ from pathlib import Path
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.sweep import enumerate_points
-from fim.sweep_cost import Actual, Remaining, read_actual, remaining_cost, static_cost
+from fim.sweep_cost import (
+    Actual,
+    Remaining,
+    format_duration,
+    read_actual,
+    remaining_cost,
+    static_cost,
+)
 from fim.sweep_run import (
     PointStatus,
     read_failures,
@@ -150,3 +157,35 @@ def _finished_points(
             if actual is not None:
                 found[run_id] = actual
     return found
+
+
+def describe_remaining(status: SweepStatus) -> str:
+    """Say in a sentence how much of the sweep is left and how long it may take.
+
+    Args:
+        status: A snapshot from `read_sweep_status`.
+
+    Returns:
+        For example `"about 2 h 10 min for 14 point(s), from the speed of the
+        6 finished point(s) (an upper figure: ...)"`, or why there is no
+        estimate yet.
+    """
+    remaining = status.remaining
+    if remaining is None:
+        return (
+            "unknown: the stored plan no longer matches this version "
+            f"(fim sweep replan {status.study_id})"
+        )
+    if remaining.points == 0:
+        return "none: every point is done"
+    if remaining.calibrated_seconds is None:
+        return (
+            f"not yet known for {remaining.points} point(s): the first finished "
+            "point calibrates it"
+        )
+    return (
+        f"about {format_duration(remaining.calibrated_seconds)} for "
+        f"{remaining.points} point(s), from the speed of the "
+        f"{remaining.finished_points} finished point(s) (an upper figure: points "
+        "that settle early finish sooner)"
+    )

@@ -11,8 +11,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from fim import paths
-from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
@@ -24,6 +22,7 @@ from fim.sweep import (
 from fim.sweep_compare import ComparedPoint, SweepRef, compare_sweeps
 from fim.sweep_cost import static_cost
 from fim.sweep_run import (
+    completed_run_ids,
     sweep_point_results,
     sweep_point_statuses,
     sweep_spec_of,
@@ -75,17 +74,20 @@ def spec_from_request(base: Mapping[str, Any], request: Mapping[str, Any]) -> Sw
     return SweepSpec(base=dict(base), axes=tuple(axes), seed_policy=policy)
 
 
+def existing_run_ids(results: Path | None = None) -> set[str]:
+    """Return the id of every run a sweep would reuse, so a plan can mark them.
+
+    Counts finished run directories and completed Run objects made by this
+    software version, as `run_sweep` does.
+    """
+    return completed_run_ids(results=results)
+
+
 def plan_payload(
     spec: SweepSpec, plan: SweepPlan, *, results: Path | None = None
 ) -> dict[str, Any]:
     """Describe a plan for the page, marking points whose run already exists."""
-    existing = {
-        run_id
-        for run_id in (
-            groups.run_id_of(directory.parent) for directory in _run_manifests(results)
-        )
-        if run_id is not None
-    }
+    existing = existing_run_ids(results)
     points = [
         {
             "index": point.index,
@@ -355,9 +357,3 @@ def results_payload(
         for result in sweep_point_results(study, results=results)
     ]
     return payload
-
-
-def _run_manifests(results: Path | None) -> list[Path]:
-    """Return every run manifest path directly under the results directory."""
-    root = results if results is not None else paths.results_directory()
-    return sorted(root.glob("*/manifest.json")) if root.is_dir() else []

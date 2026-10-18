@@ -47,6 +47,7 @@ from fim.sweep_run import (
     SweepEvent,
     SweepLockedError,
     classify_failure,
+    completed_run_ids,
     create_sweep_study,
     failures_path,
     read_failures,
@@ -1629,3 +1630,24 @@ def test_a_finished_points_event_carries_how_long_it_took(results: Path) -> None
         study_id, LocalPointRunner(), again.append, threading.Event(), points_at_once=1
     )
     assert [e.kind for e in again if e.kind.startswith("point_")] == []
+
+
+def test_completed_run_ids_are_the_points_a_sweep_would_reuse(results: Path) -> None:
+    study_id = _burn_in_sweep(results)
+    point_ids = {str(e["run_id"]) for e in stored_points(groups.get_study(study_id))}
+    assert completed_run_ids() == set()
+
+    _run(study_id, points_at_once=1)
+
+    assert completed_run_ids() == point_ids
+    assert completed_run_ids(software_version=_OTHER_VERSION) == set()
+    assert completed_run_ids(results=results / "nowhere") == set()
+
+
+def test_a_run_that_did_not_complete_is_not_counted(results: Path) -> None:
+    study_id = _burn_in_sweep(results)
+    first = str(stored_points(groups.get_study(study_id))[0]["run_id"])
+
+    _run(study_id, _Failing(lambda _params: True), points_at_once=1)
+
+    assert first not in completed_run_ids()

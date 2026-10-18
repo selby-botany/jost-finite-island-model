@@ -3301,6 +3301,23 @@ fieldset.combinator-choice label {
     margin: 0.5rem 0;
 }
 
+/* What a sweep may cost: a label and a sentence per line. The sentences are
+ * ranges, so they wrap rather than truncate. */
+.sweep-cost {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.15rem 0.75rem;
+    margin: 0.25rem 0 0.75rem;
+}
+
+.sweep-cost dt {
+    color: var(--fim-muted);
+}
+
+.sweep-cost dd {
+    margin: 0;
+}
+
 .sweep-plan-problem {
     color: var(--fim-warning-mark);
     font-weight: 600;

@@ -820,3 +820,112 @@ def test_plan_sweep_reports_the_cost_bands_and_the_points_at_once(api: Api) -> N
     assert cost["work"]["high"] == pytest.approx(
         cost["replicates"]["high"] * 2 * cost["generations"]["high"]
     )
+
+
+def test_estimate_sweep_cost_states_time_disk_and_what_was_measured(
+    api: Api, _no_real_engine_probe: Any
+) -> None:
+    reply = api.estimate_sweep_cost(_form(), _request(_D_AXIS))
+
+    assert reply["ok"] is True
+    assert reply["time"].startswith("about ") and "point(s) at once on" in reply["time"]
+    assert "with the full trajectory log" in reply["disk"]
+    assert reply["probe"].startswith("2 shape class(es) measured")  # d = 2 and d = 3
+    assert reply["cost"]["points"] == 2
+    assert reply["cost"]["probe"]["classes"] == 2
+    assert _no_real_engine_probe.asked == [200, 200]
+
+
+def test_a_repeated_estimate_uses_the_remembered_measurement(
+    api: Api, tmp_path: Path, _no_real_engine_probe: Any
+) -> None:
+    api.estimate_sweep_cost(_form(), _request(_D_AXIS))
+    api.estimate_sweep_cost(_form(), _request(_D_AXIS))
+
+    assert _no_real_engine_probe.asked == [200, 200]  # measured once, then cached
+    assert (tmp_path / "sweep-throughput.json").is_file()  # beside the preferences
+
+
+def test_points_that_are_already_computed_cost_nothing_to_run(
+    api: Api, window: _FakeWindow, _no_real_engine_probe: Any
+) -> None:
+    _finished_sweep(api, window)
+    _no_real_engine_probe.asked.clear()
+
+    reply = api.estimate_sweep_cost(_form(), _request(_D_AXIS))
+
+    assert reply == {
+        "ok": True,
+        "none": True,
+        "time": "nothing to run: every point is already computed",
+    }
+    assert _no_real_engine_probe.asked == []
+
+
+def test_an_estimate_that_cannot_be_made_says_so_instead_of_failing(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Broken:
+        def measure(self, params: Any, generations: int) -> Any:
+            del params, generations
+            raise RuntimeError("the engine would not start")
+
+    monkeypatch.setattr(app_module, "EngineProbe", Broken)
+
+    reply = api.estimate_sweep_cost(_form(), _request(_D_AXIS))
+
+    assert reply == {
+        "ok": False,
+        "message": "could not estimate: the engine would not start",
+    }
+    assert (
+        api.estimate_sweep_cost(_form(), _request({"key": "d", "values": [1]}))["ok"]
+        is False
+    )
+
+
+def test_get_sweep_eta_says_what_is_left_and_when_it_is_done(
+    api: Api, window: _FakeWindow
+) -> None:
+    from fim.sweep import SweepSpec, enumerate_points, expand_axis  # noqa: PLC0415
+    from fim.sweep_run import create_sweep_study  # noqa: PLC0415
+
+    spec = SweepSpec(
+        base={
+            "N": 8,
+            "ploidy": "haploid",
+            "d": 2,
+            "m": 0.1,
+            "mu": 0.2,
+            "seed": 7,
+            "n_replicates": 1,
+            "precision": 0.1,
+        },
+        axes=(expand_axis("N", [8, 16]),),
+    )
+    fresh = create_sweep_study(spec, enumerate_points(spec), "Eta").study_id
+    finished = _finished_sweep(api, window)
+
+    waiting = api.get_sweep_eta(fresh)
+    done = api.get_sweep_eta(finished)
+
+    assert waiting["ok"] is True
+    assert (waiting["done"], waiting["total"], waiting["remainingPoints"]) == (0, 2, 2)
+    assert waiting["text"].startswith("not yet known for 2 point(s)")
+    assert done["text"] == "none: every point is done"
+    assert (done["done"], done["total"]) == (2, 2)
+    assert api.get_sweep_eta("study-ffffffff")["ok"] is False
+
+
+def test_a_plan_marks_the_points_a_finished_sweep_already_computed(
+    api: Api, window: _FakeWindow
+) -> None:
+    """The runs a sweep makes are Run objects; a plan must count them."""
+    before = api.plan_sweep(_form(), _request(_D_AXIS))
+    _finished_sweep(api, window)
+
+    after = api.plan_sweep(_form(), _request(_D_AXIS))
+
+    assert (before["newCount"], before["reusedCount"]) == (2, 0)
+    assert (after["newCount"], after["reusedCount"]) == (0, 2)
+    assert [point["exists"] for point in after["points"]] == [True, True]

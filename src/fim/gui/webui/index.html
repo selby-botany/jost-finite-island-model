@@ -950,6 +950,7 @@
     <div id="sweep-progress" hidden>
       <p id="sweep-progress-spec" class="sweep-progress-spec"></p>
       <p id="sweep-progress-text" aria-live="polite"></p>
+      <p id="sweep-progress-eta" class="hint" aria-live="polite"></p>
       <progress id="sweep-progress-bar" value="0" max="1"></progress>
       <table id="sweep-progress-table" class="results-table">
         <thead id="sweep-progress-head"></thead>
@@ -2628,6 +2629,14 @@
       <p id="sweep-concurrency-note" class="hint"></p>
     </div>
     <p id="sweep-plan-summary" class="sweep-plan-summary" aria-live="polite"></p>
+    <dl id="sweep-cost" class="sweep-cost" aria-live="polite" hidden>
+      <dt>Time</dt>
+      <dd id="sweep-cost-time"></dd>
+      <dt>Disk</dt>
+      <dd id="sweep-cost-disk"></dd>
+      <dt>Measured</dt>
+      <dd id="sweep-cost-probe"></dd>
+    </dl>
     <details id="sweep-plan-details">
       <summary>Show every point</summary>
       <div class="sweep-plan-scroll">

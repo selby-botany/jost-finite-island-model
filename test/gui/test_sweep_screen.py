@@ -483,3 +483,97 @@ def test_a_paused_point_is_shown_as_paused_when_the_sweep_reopens(
         return poll_until(states, lambda s: s is not None and len(s) == 2)
 
     assert _drive(window, steps) == ["paused", "waiting"]
+
+
+_COST_STATE = """({
+    planReady: window.__fimSweepPlanReady,
+    costReady: window.__fimSweepCostReady,
+    shown: !document.getElementById('sweep-cost').hidden,
+    time: document.getElementById('sweep-cost-time').textContent,
+    disk: document.getElementById('sweep-cost-disk').textContent,
+    probe: document.getElementById('sweep-cost-probe').textContent,
+})"""
+
+
+def test_the_dialog_shows_the_three_cost_lines_and_updates_them_on_an_edit(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        first = poll_until(
+            _COST_STATE, lambda s: s["costReady"] is True and s["shown"] is True
+        )
+        window.evaluate_js(_AXIS_D_LIST)
+        second = poll_until(
+            _COST_STATE,
+            lambda s: (
+                s["costReady"] is True and s["probe"].startswith("2 shape class(es)")
+            ),
+        )
+        return first, second
+
+    first, second = _drive(window, steps)
+
+    assert first["time"].startswith("about ")
+    assert "with the full trajectory log" in first["disk"]
+    assert first["probe"].startswith("1 shape class(es) measured")
+    assert second["probe"].startswith("2 shape class(es) measured")  # d = 2 and 3
+
+
+def test_a_plan_with_a_problem_hides_the_cost(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        poll_until(_COST_STATE, lambda s: s["costReady"] is True and s["shown"] is True)
+        window.evaluate_js(_AXIS_D_LIST)
+        poll_until(_COST_STATE, lambda s: s["costReady"] is True)
+        window.evaluate_js(
+            "const list = document.querySelector('.sweep-axis-list');"
+            "list.value = 'two';"
+            "list.dispatchEvent(new Event('input', {bubbles: true}));"
+        )
+        return poll_until(_COST_STATE, lambda s: s["shown"] is False)
+
+    state = _drive(window, steps)
+
+    assert state["shown"] is False
+
+
+_PROGRESS_STATE = """({
+    eta: document.getElementById('sweep-progress-eta').textContent,
+    took: Array.from(document.querySelectorAll('.sweep-point-took'))
+        .map((cell) => cell.textContent),
+    header: Array.from(document.querySelectorAll('#sweep-progress-head th'))
+        .map((cell) => cell.textContent),
+    etaReady: window.__fimSweepEtaReady,
+})"""
+
+
+def test_the_progress_view_shows_the_time_left_and_how_long_each_point_took(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        window.evaluate_js(_AXIS_D_LIST)
+        poll_until(
+            _SCREEN_STATE, lambda s: s["planReady"] is True and s["tableRows"] == 2
+        )
+        window.evaluate_js(_START)
+        _wait_for_sweep_finished(window)
+        return poll_until(
+            _PROGRESS_STATE,
+            lambda s: (
+                s["etaReady"] is True
+                and s["eta"] == "Time left: none: every point is done"
+            ),
+        )
+
+    state = _drive(window, steps)
+
+    assert state["header"][-2:] == ["State", "Took"]
+    assert len(state["took"]) == 2
+    assert all(text.endswith(("s", "min", "h")) for text in state["took"])

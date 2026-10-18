@@ -942,7 +942,12 @@ and <code>disk about 62 MB to 12 GB with the full trajectory log; 17 MB to 3.2 G
 configuration, thrown away afterwards, so it reflects this computer. Points
 of a similar size share one measurement, and the results are remembered
 beside your preferences file (<code>sweep-throughput.json</code>), so planning again is
-instant. <code>--no-probe</code> skips the measurement and prints the work range only.</li>
+instant. <code>--no-probe</code> skips the measurement and prints the work range only.
+The app's Sweep dialog shows the same three lines (time, disk, and what was
+measured) under the plan, for the points that still have to run; it says
+&quot;Measuring the engine…&quot; for the first few seconds of a new size, and a
+running sweep's progress view shows the time left and how long each point
+took.</li>
 <li>A sweep starts the points that may take longest first, so the last point to
 finish is not one that could have started at the beginning. This changes no
 result; each point is stored by its configuration. Each finished point's line

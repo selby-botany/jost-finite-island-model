@@ -156,7 +156,7 @@ import signal
 import sys
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 import webview
@@ -679,6 +679,32 @@ def drive() -> Callable[..., Any]:
 # which is enough in practice (a single test's own runtime dwarfs the
 # helper-process launch delay that caused the miss).
 _last_known_webkit_pids: set[int] = set()
+
+
+class FastEngineProbe:
+    """Stands in for `EngineProbe` in the app: fixed figures, nothing timed.
+
+    The Sweep dialog asks for a cost estimate after every plan. A real
+    measurement takes seconds and depends on the machine, so no GUI test
+    makes one; a test of the estimate itself reads `asked`.
+    """
+
+    asked: ClassVar[list[int]] = []
+
+    def measure(self, params: Any, generations: int) -> Any:
+        from fim.sweep_cost import Throughput  # noqa: PLC0415
+
+        del params
+        self.asked.append(generations)
+        return Throughput(0.001, 50.0, 5.0, 4.0)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_engine_probe(monkeypatch: pytest.MonkeyPatch) -> type[FastEngineProbe]:
+    """Keep every GUI test from timing the real engine for a sweep estimate."""
+    FastEngineProbe.asked = []
+    monkeypatch.setattr("fim.gui.app.EngineProbe", FastEngineProbe)
+    return FastEngineProbe
 
 
 @pytest.fixture(autouse=True)

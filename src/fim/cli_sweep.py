@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import platform
 import sys
 import threading
 import time
@@ -40,8 +39,7 @@ from fim.sweep_cost import (
     EngineProbe,
     SweepCost,
     ThroughputCache,
-    band_text,
-    format_bytes,
+    describe_cost,
     format_duration,
     order_costliest_first,
     point_cost,
@@ -58,7 +56,7 @@ from fim.sweep_run import (
     resolve_concurrency,
     run_sweep,
 )
-from fim.sweep_status import SweepStatus, read_sweep_status
+from fim.sweep_status import SweepStatus, describe_remaining, read_sweep_status
 from fim.sweep_table import ALL_STATISTICS, ResultTable
 
 
@@ -395,27 +393,11 @@ def _print_plan(
 
 def _print_probed(cost: SweepCost, chosen: Concurrency | None) -> None:
     """Print the time, disk and probe lines of a measured cost."""
-    assert cost.wall_seconds is not None and cost.disk_bytes is not None
-    where = (
-        f" ({chosen.points_at_once} point(s) at once on {chosen.cores} core(s))"
-        if chosen is not None
-        else ""
-    )
-    print(f"time   about {band_text(cost.wall_seconds, format_duration)}{where}")
-    statistics = (
-        f"; {band_text(cost.statistics_bytes, format_bytes)} statistics only"
-        if cost.statistics_bytes is not None
-        else ""
-    )
-    print(
-        f"disk   about {band_text(cost.disk_bytes, format_bytes)} with the "
-        f"full trajectory log{statistics}"
-    )
-    nearest = sum(p.probe == "nearest" for p in cost.points)
-    print(
-        f"probe  {cost.classes_measured} shape class(es) measured, "
-        f"{nearest} point(s) matched to the nearest; machine: {platform.node()}"
-    )
+    lines = describe_cost(cost, cores=chosen.cores if chosen is not None else None)
+    assert lines is not None
+    print(f"time   {lines.time}")
+    print(f"disk   {lines.disk}")
+    print(f"probe  {lines.probe}")
 
 
 def _run(arguments: argparse.Namespace) -> int:
@@ -495,26 +477,7 @@ def _print_pilot_report(
 
 def _print_remaining(status: SweepStatus) -> None:
     """Print the time left, from the calibrated estimate."""
-    remaining = status.remaining
-    if remaining is None:
-        print(
-            "time left   unknown: the stored plan no longer matches this version "
-            f"(fim sweep replan {status.study_id})"
-        )
-    elif remaining.points == 0:
-        print("time left   none: every point is done")
-    elif remaining.calibrated_seconds is None:
-        print(
-            f"time left   not yet known for {remaining.points} point(s): the first "
-            "finished point calibrates it"
-        )
-    else:
-        print(
-            f"time left   about {format_duration(remaining.calibrated_seconds)} "
-            f"for {remaining.points} point(s), from the speed of the "
-            f"{remaining.finished_points} finished point(s) (an upper figure: "
-            "points that settle early finish sooner)"
-        )
+    print(f"time left   {describe_remaining(status)}")
 
 
 def _status(arguments: argparse.Namespace) -> int:

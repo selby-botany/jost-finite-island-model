@@ -189,7 +189,8 @@ from fim.statistics.catalog import (
 from fim.statistics.genetic_distance import nei_distance_from_identity
 from fim.statistics.interval import confidence_interval
 from fim.statistics.theory import equilibrium_numeric_predictions, theory_at
-from fim.sweep import SweepSpec, enumerate_points
+from fim.sweep import SweepPlan, SweepSpec, enumerate_points
+from fim.sweep_cost import EngineProbe, ThroughputCache, describe_cost, probed_cost
 from fim.sweep_run import (
     LocalPointRunner,
     SweepEvent,
@@ -200,6 +201,7 @@ from fim.sweep_run import (
     sweep_spec_of,
     write_reproducibility_note,
 )
+from fim.sweep_status import describe_remaining, read_sweep_status
 from fim.sweep_table import ALL_STATISTICS, ResultTable
 from fim.viz.scatter import (
     deme_pair_panel,
@@ -5627,6 +5629,98 @@ class Api:
             return sweep_bridge.results_payload(groups.get_study(study_id))
         except ValueError as error:
             return {"ok": False, "message": str(error)}
+
+    @_log_bridge_call
+    def estimate_sweep_cost(
+        self, values: dict[str, str], request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Estimate the time and disk of the sweep's new points by measuring the engine.
+
+        Separate from `plan_sweep` because the first measurement of a size
+        class takes a few seconds (the result is remembered beside the
+        preferences file), and a plan is redrawn on every edit. Points whose
+        run already exists cost nothing and are left out.
+
+        Args:
+            values: The Configure form's values, the base configuration.
+            request: As for `plan_sweep`.
+
+        Returns:
+            `{"ok": True, "time", "disk", "probe", "cost"}`, the three
+            sentences of `fim.sweep_cost.describe_cost` and the cost as
+            numbers; `{"ok": True, "none": True, "time": ...}` when every
+            point is already computed; or `{"ok": False, "message": ...}`.
+        """
+        try:
+            spec = self._sweep_spec(values, request)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        plan = enumerate_points(spec)
+        existing = sweep_bridge.existing_run_ids()
+        new = tuple(point for point in plan.points if point.run_id not in existing)
+        if not plan.points:
+            return {"ok": False, "message": "the sweep has no valid points"}
+        if not new:
+            return {
+                "ok": True,
+                "none": True,
+                "time": "nothing to run: every point is already computed",
+            }
+        at_once, max_workers = self._sweep_run_options(values, request)
+        chosen = resolve_concurrency(
+            points=len(new),
+            params=SimulationParams.from_mapping(new[0].params),
+            requested=at_once,
+            max_workers=max_workers,
+        )
+        cache = ThroughputCache(
+            self._preferences_path.with_name("sweep-throughput.json")
+        )
+        try:
+            cost = probed_cost(
+                spec,
+                SweepPlan(new, (), 0, plan.grid_size),
+                EngineProbe(),
+                points_at_once=chosen.points_at_once,
+                workers_per_point=chosen.workers_per_point or 1,
+                cache=cache,
+            )
+        except (ValueError, OSError, RuntimeError) as error:
+            return {"ok": False, "message": f"could not estimate: {error}"}
+        lines = describe_cost(cost, cores=chosen.cores)
+        assert lines is not None
+        return {
+            "ok": True,
+            "time": lines.time,
+            "disk": lines.disk,
+            "probe": lines.probe,
+            "cost": cost.to_dict(),
+        }
+
+    @_log_bridge_call
+    def get_sweep_eta(self, study_id: str) -> dict[str, Any]:
+        """Say how much of a sweep is left and how long it may take.
+
+        Worked out from the points that have finished
+        (`fim.sweep_status.read_sweep_status`), so it sharpens as the sweep
+        goes, and read from files, so it works while the sweep runs.
+
+        Returns:
+            `{"ok": True, "text": ..., "done", "total", "remainingPoints"}`
+            or `{"ok": False, "message": ...}`.
+        """
+        try:
+            status = read_sweep_status(study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        remaining = status.remaining
+        return {
+            "ok": True,
+            "text": describe_remaining(status),
+            "done": status.counts.get("done", 0),
+            "total": status.total,
+            "remainingPoints": remaining.points if remaining is not None else None,
+        }
 
     @_log_bridge_call
     def get_sweep_series(
