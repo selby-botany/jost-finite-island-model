@@ -499,18 +499,19 @@ loci:
     length: 100
 engine_backend: auto
 convergence_statistic: D
-n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
 ```console
 fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 ```
 
-Converges at generation 60,743, after about half a minute, with D = 0.093 and
-an average D of 0.071 ± 0.005 (the model's expectation is 0.059; one locus
-swings slowly, so a single run's average can sit this far from it). Re-run with migrant_sampling
+The batch of 11 replicates takes about two minutes and gives an average D of
+0.082 ± 0.010 across replicates (the model's expectation is 0.059, which the
+average of D's values sits above; see the
+[example's README](examples/stochastic-migrant-counts/README.md)). Re-run with migrant_sampling
 removed (or set to `continuous`, the default) at the same seed to compare
-against the deterministic-migration baseline directly.
+against the deterministic-migration baseline directly. That batch gives an
+average D of 0.077 ± 0.010.
 
 ### Finite-length alleles (the K-allele model)
 

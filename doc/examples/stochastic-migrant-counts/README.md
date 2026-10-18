@@ -7,29 +7,21 @@ from a binomial distribution instead of using a deterministic
 `rate * N` fraction. This adds explicit migration-count randomness to
 the run.
 
-The run converges at generation 60,743, after about half a minute on a
-development machine. It burns in for 1,225 generations, then averages over a
-59,519-generation window: `D` = 0.071 ± 0.005 (one standard error) and `G_ST`
-= 0.0515 ± 0.0008. The island model's identity recursion predicts a `D` of
-0.059 for these parameters; the average sits about two standard errors above
-it, and the final generation's own value, 0.093, is one noisy draw. One locus
-swings slowly, and the run's own error bar (from the autocorrelation of all
-its generations, not only neighboring ones) is the honest measure of how far a
-single locus's average can sit from the expectation; a batch averages it
-out (see [Convergence](../../convergence.md)). To compare against continuous
-migration, remove `migrant_sampling` or set it to `continuous` while keeping
-the same seed and other parameters. Each single-locus result remains one
-stochastic outcome.
-
-## Why a single run
-
-This example sets `n_replicates: 1`. It was written when a run was always one
-run, and the numbers quoted here, and the outputs saved with it, are those of
-one run. The engine's default is `n_replicates: 200`, an adaptively stopped
-batch that reports a confidence interval, and that is what a researcher would
-normally use. One run's final numbers are one noisy draw: for an estimate with
-an error bar, run a batch (see
-[an adaptive replicate batch with a confidence interval](../an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
+The batch ran 11 replicates in about two minutes on a development machine and
+stopped because the 95% confidence interval for `D` was within the default
+±0.01. Each replicate burned in for 1,225 generations (5 relaxation times of
+231) and then averaged over a 4,624-generation window. Across the replicates
+`D` = 0.082 ± 0.010 and `G_ST` = 0.0531 ± 0.0016 (95% confidence half-widths).
+The island model's identity recursion predicts a `D` of 0.059 for these
+parameters. The batch's average of `D`'s values sits above it, and so does the
+same configuration with `migrant_sampling: continuous` (0.077 ± 0.010 over 20
+replicates): binomial migrant counts make no detectable difference to `D` here.
+The gap to 0.059 is the one between averaging `D`'s values and computing `D`
+from the averaged heterozygosities, which gives 0.057 for continuous migration
+and 0.065 for stochastic (see the section "Which average?" in
+[Convergence](../../convergence.md)). To repeat the comparison, remove
+`migrant_sampling` or set it to `continuous` while keeping the same seed and
+other parameters.
 
 ## Run
 

@@ -1,0 +1,81 @@
+{
+  "artifacts": {
+    "convergence": {
+      "bytes": 649743,
+      "sha256": "ae1f26bc2b2ae26c767fcef88698941cfbf63127642896199c95289834e11449"
+    },
+    "pairwise": {
+      "bytes": 807,
+      "sha256": "375fc0e29ad83284d173eeb6be865ebf8dfd5045b8ff0fb6aa03ab5ee6425a91"
+    },
+    "report": {
+      "bytes": 4596,
+      "sha256": "b0cdc64c8aee995d514591ee07731ab19d64af8dc0c6d043539f239344972745"
+    },
+    "scatter": {
+      "bytes": 126204,
+      "sha256": "92c11ea45135535b86fcdef6ffca04be1d2df9c8718cf3dd1174ef124ed58efe"
+    },
+    "trajectory": {
+      "bytes": 655130,
+      "sha256": "ae1be7a2e3be37e45e9363e8c33dd8f1dbf3d330ff570133dff1ec5bbd0e8353"
+    }
+  },
+  "auto_derived": [],
+  "convergence": {
+    "converged": true,
+    "generation": 5849,
+    "generation_count": 5850,
+    "reason": "averaging window complete",
+    "statistic": "D"
+  },
+  "ended_at": "2026-10-18T19:26:17.788502Z",
+  "engine_backend": "generational-vector",
+  "equilibrium_final_heterozygosity": null,
+  "equilibrium_generation_count": null,
+  "initial_condition_mode": "dirichlet",
+  "jit": "off",
+  "parameters": {
+    "N": 100,
+    "_read_only": true,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "confidence": 0.95,
+    "convergence_burn_in": 1225,
+    "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
+    "convergence_statistic": "D",
+    "d": 4,
+    "deme_weighting": "equal",
+    "engine_backend": "auto",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 100,
+        "locus_id": 1
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.05,
+    "max_generations": 200000,
+    "migrant_sampling": "stochastic",
+    "mu": 0.001,
+    "mutation_model": "infinite_alleles",
+    "n_replicates": 1,
+    "ploidy": "haploid",
+    "precision": 0.01,
+    "precision_method": "interval",
+    "replicate_averaging_window": 4624,
+    "replicate_minimum": 10,
+    "seed": 1271090953952351175,
+    "stop_batch_early": true,
+    "track_expensive_statistics": false
+  },
+  "relaxation_time": 231.18279569892474,
+  "run_id": "run-e0ea5cd25ff33d3b-r007",
+  "schema_version": 3,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-18T19:25:30.954753Z"
+}

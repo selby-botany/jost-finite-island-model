@@ -435,15 +435,16 @@ loci:
     length: 100
 engine_backend: auto
 convergence_statistic: D
-n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 </code></pre>
-<p>Converges at generation 60,743, after about half a minute, with D = 0.093 and
-an average D of 0.071 ± 0.005 (the model's expectation is 0.059; one locus
-swings slowly, so a single run's average can sit this far from it). Re-run with migrant_sampling
+<p>The batch of 11 replicates takes about two minutes and gives an average D of
+0.082 ± 0.010 across replicates (the model's expectation is 0.059, which the
+average of D's values sits above; see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/stochastic-migrant-counts/README.md">example's README</a>). Re-run with migrant_sampling
 removed (or set to <code>continuous</code>, the default) at the same seed to compare
-against the deterministic-migration baseline directly.</p>
+against the deterministic-migration baseline directly. That batch gives an
+average D of 0.077 ± 0.010.</p>
 <h3 id="finite-length-alleles-the-k-allele-model">Finite-length alleles (the K-allele model)</h3>
 <p>By default (mutation_model: infinite_alleles), every mutation receives a
 globally unique identity — the standard population-genetics idealization
