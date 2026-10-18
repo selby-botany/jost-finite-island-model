@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import platform
 import sys
 import threading
 from collections.abc import Callable, Mapping
@@ -22,6 +23,7 @@ from typing import Any
 import yaml
 
 from fim.config.defaults import DEFAULT_SWEEP_MAX_ATTEMPTS
+from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
@@ -31,12 +33,24 @@ from fim.sweep import (
     spec_from_config,
 )
 from fim.sweep_compare import Comparison, SweepRef, compare_sweeps
-from fim.sweep_cost import Band, static_cost
+from fim.sweep_cost import (
+    Band,
+    EngineProbe,
+    SweepCost,
+    ThroughputCache,
+    band_text,
+    format_bytes,
+    format_duration,
+    probed_cost,
+    static_cost,
+)
 from fim.sweep_run import (
+    Concurrency,
     LocalPointRunner,
     SweepEvent,
     create_sweep_study,
     replan_sweep,
+    resolve_concurrency,
     run_sweep,
 )
 from fim.sweep_table import ALL_STATISTICS, ResultTable
@@ -52,6 +66,8 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         "plan", help="list the points a sweep file would run; runs nothing"
     )
     plan_parser.add_argument("file", metavar="FILE", help="a sweep file (YAML)")
+    _add_concurrency_arguments(plan_parser, retry=False)
+    _add_probe_argument(plan_parser)
     run_parser = sweep_subcommands.add_parser(
         "run", help="create the sweep's study and run its points"
     )
@@ -64,6 +80,7 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         help=f"confirm a sweep of {SIZE_CONFIRMATION_THRESHOLD} or more points",
     )
     _add_concurrency_arguments(run_parser)
+    _add_probe_argument(run_parser)
     resume_parser = sweep_subcommands.add_parser(
         "resume", help="run the points of a sweep study that are still missing"
     )
@@ -166,17 +183,31 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     )
 
 
-def _add_concurrency_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add the concurrency and retry flags to a subcommand."""
+def _add_probe_argument(parser: argparse.ArgumentParser) -> None:
+    """Add `--probe/--no-probe`, which turns the engine measurement on or off."""
     parser.add_argument(
-        "--max-attempts",
-        type=int,
-        default=DEFAULT_SWEEP_MAX_ATTEMPTS,
-        metavar="N",
-        help="times to try a point that failed for a transient reason, such as "
-        f"a worker process that died (default: {DEFAULT_SWEEP_MAX_ATTEMPTS}); "
-        "a failure the engine reports is never tried again",
+        "--probe",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="measure the engine for a few seconds to estimate time and disk "
+        "(default: on); --no-probe prints the work range only",
     )
+
+
+def _add_concurrency_arguments(
+    parser: argparse.ArgumentParser, *, retry: bool = True
+) -> None:
+    """Add the concurrency flags, and the retry flag unless `retry` is false."""
+    if retry:
+        parser.add_argument(
+            "--max-attempts",
+            type=int,
+            default=DEFAULT_SWEEP_MAX_ATTEMPTS,
+            metavar="N",
+            help="times to try a point that failed for a transient reason, such "
+            f"as a worker process that died (default: {DEFAULT_SWEEP_MAX_ATTEMPTS}); "
+            "a failure the engine reports is never tried again",
+        )
     parser.add_argument(
         "--points-at-once",
         default="auto",
@@ -230,7 +261,7 @@ def command_sweep(
 ) -> int:
     """Dispatch one `fim sweep` subcommand and return its exit status."""
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
-        "plan": lambda args: _plan(Path(args.file)),
+        "plan": _plan,
         "run": _run,
         "resume": _resume,
         "replan": _replan,
@@ -253,11 +284,11 @@ def _load(path: Path) -> tuple[SweepSpec, str | None]:
     return spec_from_config(payload)
 
 
-def _plan(path: Path) -> int:
+def _plan(arguments: argparse.Namespace) -> int:
     """Print the plan for a sweep file; run nothing."""
-    spec, _ = _load(path)
+    spec, _ = _load(Path(arguments.file))
     plan = enumerate_points(spec)
-    _print_plan(spec, plan)
+    _print_plan(spec, plan, arguments)
     return 0 if plan.points else 2
 
 
@@ -267,8 +298,45 @@ def _band_text(band: Band) -> str:
     return low if low == high else f"{low} to {high}"
 
 
-def _print_plan(spec: SweepSpec, plan: SweepPlan) -> None:
-    """Print the points, the invalid ones with reasons, and the size."""
+def _cost_for(
+    spec: SweepSpec,
+    plan: SweepPlan,
+    arguments: argparse.Namespace,
+) -> tuple[SweepCost, Concurrency | None]:
+    """Work out the cost bands of a plan, measuring the engine unless told not to.
+
+    Returns:
+        The cost, and the concurrency it assumed (`None` for an empty plan).
+    """
+    if not plan.points:
+        return static_cost(spec, plan), None
+    points_at_once, max_workers = _concurrency_options(arguments)
+    chosen = resolve_concurrency(
+        points=len(plan.points),
+        params=SimulationParams.from_mapping(plan.points[0].params),
+        requested=points_at_once,
+        max_workers=max_workers,
+    )
+    if not getattr(arguments, "probe", True):
+        return static_cost(spec, plan, points_at_once=chosen.points_at_once), chosen
+    from fim.gui.preferences import preferences_file_path  # noqa: PLC0415
+
+    cache = ThroughputCache(preferences_file_path().with_name("sweep-throughput.json"))
+    cost = probed_cost(
+        spec,
+        plan,
+        EngineProbe(),
+        points_at_once=chosen.points_at_once,
+        workers_per_point=chosen.workers_per_point or 1,
+        cache=cache,
+    )
+    return cost, chosen
+
+
+def _print_plan(
+    spec: SweepSpec, plan: SweepPlan, arguments: argparse.Namespace
+) -> None:
+    """Print the points, the invalid ones with reasons, and the size and cost."""
     keys = [axis.key for axis in spec.axes]
     print("  ".join(["point", *keys, "run_id"]))
     for point in plan.points:
@@ -277,7 +345,7 @@ def _print_plan(spec: SweepSpec, plan: SweepPlan) -> None:
     for invalid in plan.invalid:
         values = [_format(invalid.coordinates[key]) for key in keys]
         print("  ".join([f"{invalid.index:>5}", *values, f"INVALID: {invalid.reason}"]))
-    cost = static_cost(spec, plan)
+    cost, chosen = _cost_for(spec, plan, arguments)
     print(
         f"{len(plan.points)} valid point(s), {len(plan.invalid)} invalid, "
         f"{plan.collapsed} duplicate(s) of {plan.grid_size} grid position(s)"
@@ -288,6 +356,10 @@ def _print_plan(spec: SweepSpec, plan: SweepPlan) -> None:
         f"{_band_text(cost.work)} replicate-generations in all "
         "(a range, because nobody knows in advance how soon a run settles)"
     )
+    if cost.wall_seconds is not None and cost.disk_bytes is not None:
+        _print_probed(cost, chosen)
+    else:
+        print("time   not estimated (run without --no-probe to measure the engine)")
     if plan.needs_confirmation:
         print(
             f"This is {SIZE_CONFIRMATION_THRESHOLD} or more points; "
@@ -295,12 +367,37 @@ def _print_plan(spec: SweepSpec, plan: SweepPlan) -> None:
         )
 
 
+def _print_probed(cost: SweepCost, chosen: Concurrency | None) -> None:
+    """Print the time, disk and probe lines of a measured cost."""
+    assert cost.wall_seconds is not None and cost.disk_bytes is not None
+    where = (
+        f" ({chosen.points_at_once} point(s) at once on {chosen.cores} core(s))"
+        if chosen is not None
+        else ""
+    )
+    print(f"time   about {band_text(cost.wall_seconds, format_duration)}{where}")
+    statistics = (
+        f"; {band_text(cost.statistics_bytes, format_bytes)} statistics only"
+        if cost.statistics_bytes is not None
+        else ""
+    )
+    print(
+        f"disk   about {band_text(cost.disk_bytes, format_bytes)} with the "
+        f"full trajectory log{statistics}"
+    )
+    nearest = sum(p.probe == "nearest" for p in cost.points)
+    print(
+        f"probe  {cost.classes_measured} shape class(es) measured, "
+        f"{nearest} point(s) matched to the nearest; machine: {platform.node()}"
+    )
+
+
 def _run(arguments: argparse.Namespace) -> int:
     """Create the sweep's study and run it."""
     path = Path(arguments.file)
     spec, file_name = _load(path)
     plan = enumerate_points(spec)
-    _print_plan(spec, plan)
+    _print_plan(spec, plan, arguments)
     if not plan.points:
         print("fim: error: the sweep has no valid points to run", file=sys.stderr)
         return 2

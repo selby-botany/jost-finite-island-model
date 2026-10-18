@@ -4657,6 +4657,17 @@ Every expected number is derived here from the resolved configuration of the
 point itself (its burn-in, cap, and replicate settings), so the tests check
 the plumbing and the arithmetic, never an engine's speed.
 
+<a id="test.test_sweep_cost.test_a_burst_shorter_than_the_burn_in_does_not_warn"></a>
+
+#### test\_a\_burst\_shorter\_than\_the\_burn\_in\_does\_not\_warn
+
+```python
+def test_a_burst_shorter_than_the_burn_in_does_not_warn(
+        tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None
+```
+
+A derived burn-in is thousands of generations; a burst is 30.
+
 <a id="test.test_sweep_run"></a>
 
 # test.test\_sweep\_run

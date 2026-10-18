@@ -1074,6 +1074,15 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   range because nobody knows in advance how soon a run settles; a run that
   settles early sits near the low end. The same range appears in the app's
   Sweep dialog.
+  `plan` (and `run`, before it starts) then times the engine for a few seconds
+  and adds how long the sweep may take and how much disk it may use, for
+  example `time about 35 s to 1 h 50 min (1 point(s) at once on 10 core(s))`
+  and `disk about 62 MB to 12 GB with the full trajectory log; 17 MB to 3.2 GB
+  statistics only`. The measurement is of one short run of your own
+  configuration, thrown away afterwards, so it reflects this computer. Points
+  of a similar size share one measurement, and the results are remembered
+  beside your preferences file (`sweep-throughput.json`), so planning again is
+  instant. `--no-probe` skips the measurement and prints the work range only.
 - **Points run at the same time, by default as many as fill the machine, each
   in its own process.** A single run, or a batch on any engine but `lineal`
   (including `auto`), uses about one core; a `lineal` batch of `r` replicates

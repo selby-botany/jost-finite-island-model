@@ -932,7 +932,15 @@ stepped one generation): at least the burn-in for the fewest replicates a
 point may stop at, at most the generation cap for every replicate. It is a
 range because nobody knows in advance how soon a run settles; a run that
 settles early sits near the low end. The same range appears in the app's
-Sweep dialog.</li>
+Sweep dialog.
+<code>plan</code> (and <code>run</code>, before it starts) then times the engine for a few seconds
+and adds how long the sweep may take and how much disk it may use, for
+example <code>time about 35 s to 1 h 50 min (1 point(s) at once on 10 core(s))</code>
+and <code>disk about 62 MB to 12 GB with the full trajectory log; 17 MB to 3.2 GB statistics only</code>. The measurement is of one short run of your own
+configuration, thrown away afterwards, so it reflects this computer. Points
+of a similar size share one measurement, and the results are remembered
+beside your preferences file (<code>sweep-throughput.json</code>), so planning again is
+instant. <code>--no-probe</code> skips the measurement and prints the work range only.</li>
 <li><strong>Points run at the same time, by default as many as fill the machine, each
 in its own process.</strong> A single run, or a batch on any engine but <code>lineal</code>
 (including <code>auto</code>), uses about one core; a <code>lineal</code> batch of <code>r</code> replicates

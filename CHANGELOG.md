@@ -8,6 +8,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`fim sweep plan` estimates time and disk.** It times a short run of your
+  own configuration (a few seconds, thrown away, remembered for next time) and
+  prints how long the sweep may take, how many points run at once, how much
+  disk it may use with and without the trajectory logs, and how many size
+  classes were measured. The figures are ranges, because no one knows in
+  advance how soon a run settles. `--no-probe` skips the measurement; `run`
+  prints the same lines before it starts.
+
 - **Editable per-run execution settings.** Configure's Run settings editor
   can override loaded examples, presets, YAML, and fresh configurations
   without changing saved Settings. The shared controls can use a snapshot

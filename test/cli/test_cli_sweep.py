@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, ClassVar
 
 import pytest
 
 from fim import cli
 from fim.persistence import groups
+from fim.sweep_cost import Throughput
 
 _SWEEP_FILE = """\
 N: 16
@@ -24,6 +26,26 @@ sweep:
   axes:
     d: [2, 3]
 """
+
+
+class _FastProbe:
+    """Stands in for `EngineProbe`: fixed figures, nothing run, calls recorded."""
+
+    asked: ClassVar[list[int]] = []
+
+    def measure(self, params: Any, generations: int) -> Throughput:
+        del params
+        self.asked.append(generations)
+        return Throughput(0.001, 50.0, 5.0, 4.0)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> type[_FastProbe]:
+    """Never time the real engine from a CLI test, or touch the user's cache."""
+    monkeypatch.setenv("FIM_PREFERENCES_FILE", str(tmp_path / "prefs" / "p.json"))
+    _FastProbe.asked = []
+    monkeypatch.setattr("fim.cli_sweep.EngineProbe", _FastProbe)
+    return _FastProbe
 
 
 @pytest.fixture
@@ -584,3 +606,69 @@ def test_plan_states_the_work_as_a_range(
     assert "1 replicate(s) each" in work  # a single run: nothing to range over
     assert "generations each" in work and "replicate-generations in all" in work
     assert "nobody knows in advance how soon a run settles" in work
+
+
+def test_plan_measures_the_engine_and_states_time_disk_and_probe(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    _no_real_probe: type[_FastProbe],
+) -> None:
+    assert _main(tmp_path, "sweep", "plan", str(sweep_file)) == 0
+
+    lines = capsys.readouterr().out.splitlines()
+    time_line = next(line for line in lines if line.startswith("time"))
+    disk_line = next(line for line in lines if line.startswith("disk"))
+    probe_line = next(line for line in lines if line.startswith("probe"))
+    assert time_line.startswith("time   about ") and "point(s) at once" in time_line
+    assert "with the full trajectory log" in disk_line
+    assert "statistics only" in disk_line
+    # d = 2 and d = 3 are two shape classes, each measured with the default burst.
+    assert probe_line.startswith("probe  2 shape class(es) measured")
+    assert _no_real_probe.asked == [200, 200]
+    assert (tmp_path / "prefs" / "sweep-throughput.json").is_file()
+
+
+def test_a_repeated_plan_uses_the_cached_measurement(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    _no_real_probe: type[_FastProbe],
+) -> None:
+    _main(tmp_path, "sweep", "plan", str(sweep_file))
+    _main(tmp_path, "sweep", "plan", str(sweep_file))
+
+    assert _no_real_probe.asked == [200, 200]  # measured once, then remembered
+    assert capsys.readouterr().out.count("probe  2 shape class(es) measured") == 2
+
+
+def test_no_probe_prints_the_work_range_only(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    _no_real_probe: type[_FastProbe],
+) -> None:
+    assert _main(tmp_path, "sweep", "plan", str(sweep_file), "--no-probe") == 0
+
+    output = capsys.readouterr().out
+    assert "work   " in output
+    assert "time   not estimated" in output
+    assert "disk   " not in output
+    assert _no_real_probe.asked == []
+
+
+def test_run_prints_the_same_cost_lines_before_it_starts(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _main(tmp_path, "sweep", "run", str(sweep_file)) == 0
+
+    output = capsys.readouterr().out
+    assert output.index("time   about") < output.index("Created sweep study")
+
+
+def test_the_points_at_once_flag_reaches_the_time_estimate(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _main(tmp_path, "sweep", "plan", str(sweep_file), "--sequential")
+
+    assert "(1 point(s) at once on" in capsys.readouterr().out

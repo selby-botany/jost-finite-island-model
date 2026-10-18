@@ -1583,6 +1583,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [welch\_difference](#fim.sweep_compare.welch_difference)
   * [compare\_sweeps](#fim.sweep_compare.compare_sweeps)
 * [fim.sweep\_cost](#fim.sweep_cost)
+  * [DEFAULT\_PROBE\_GENERATIONS](#fim.sweep_cost.DEFAULT_PROBE_GENERATIONS)
+  * [DEFAULT\_PROBED\_CLASSES](#fim.sweep_cost.DEFAULT_PROBED_CLASSES)
   * [Band](#fim.sweep_cost.Band)
     * [\_\_post\_init\_\_](#fim.sweep_cost.Band.__post_init__)
     * [\_\_add\_\_](#fim.sweep_cost.Band.__add__)
@@ -1596,6 +1598,26 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [replicate\_band](#fim.sweep_cost.SweepCost.replicate_band)
   * [point\_cost](#fim.sweep_cost.point_cost)
   * [static\_cost](#fim.sweep_cost.static_cost)
+  * [Throughput](#fim.sweep_cost.Throughput)
+    * [to\_dict](#fim.sweep_cost.Throughput.to_dict)
+  * [ThroughputProbe](#fim.sweep_cost.ThroughputProbe)
+    * [measure](#fim.sweep_cost.ThroughputProbe.measure)
+  * [ShapeClass](#fim.sweep_cost.ShapeClass)
+    * [of](#fim.sweep_cost.ShapeClass.of)
+    * [key](#fim.sweep_cost.ShapeClass.key)
+    * [distance](#fim.sweep_cost.ShapeClass.distance)
+  * [nearest\_class](#fim.sweep_cost.nearest_class)
+  * [ThroughputCache](#fim.sweep_cost.ThroughputCache)
+    * [key\_for](#fim.sweep_cost.ThroughputCache.key_for)
+    * [get](#fim.sweep_cost.ThroughputCache.get)
+    * [put](#fim.sweep_cost.ThroughputCache.put)
+    * [save](#fim.sweep_cost.ThroughputCache.save)
+  * [EngineProbe](#fim.sweep_cost.EngineProbe)
+    * [measure](#fim.sweep_cost.EngineProbe.measure)
+  * [probed\_cost](#fim.sweep_cost.probed_cost)
+  * [format\_duration](#fim.sweep_cost.format_duration)
+  * [format\_bytes](#fim.sweep_cost.format_bytes)
+  * [band\_text](#fim.sweep_cost.band_text)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
   * [SweepLockedError](#fim.sweep_run.SweepLockedError)
@@ -37137,7 +37159,27 @@ engine actually spends: replicate-generations. Seconds and bytes come from
 measuring the engine (a later layer builds them on these types), and a sweep
 that has started refines the band from the points that have finished.
 
-Nothing here runs a simulation or touches disk.
+Seconds and bytes come from a `ThroughputProbe`: a short timed burst of one
+point's own configuration, kept apart from the model by a `Protocol` so a test
+supplies exact figures and never a clock. Points are grouped by shape class
+(deme count, engine, loci, population size), the few biggest classes are
+measured, and every other point takes the nearest measured class.
+
+The static bands above run nothing; only `EngineProbe` runs a simulation, and
+it throws its work away.
+
+<a id="fim.sweep_cost.DEFAULT_PROBE_GENERATIONS"></a>
+
+#### DEFAULT\_PROBE\_GENERATIONS
+
+Generations in the shorter of the two timed bursts a probe runs (the longer
+is twice this).
+
+<a id="fim.sweep_cost.DEFAULT_PROBED_CLASSES"></a>
+
+#### DEFAULT\_PROBED\_CLASSES
+
+Most shape classes one plan measures; the rest take the nearest.
 
 <a id="fim.sweep_cost.Band"></a>
 
@@ -37226,6 +37268,14 @@ What one point is expected to cost.
   `n_replicates` (a single run is exactly one).
 - `work` - Replicate-generations for the whole point, the product of the
   two bands above.
+- `seconds` - Wall seconds for the whole point, once a probe has measured
+  (or been matched to) its shape class; else `None`.
+- `trace_bytes` - Size of its trajectory log, or `None`.
+- `statistic_bytes` - Size of its convergence history and deme-pair
+  statistics, or `None`.
+- `probe` - Where its throughput came from: `measured` (its own shape
+  class was timed), `nearest` (the closest timed class), or
+  `unprobed`.
 
 <a id="fim.sweep_cost.SweepCost"></a>
 
@@ -37244,6 +37294,13 @@ What a sweep is expected to cost.
 - `work` - Replicate-generations for the whole sweep.
 - `points_at_once` - How many points run at the same time, or `None` if
   it is not yet known.
+- `wall_seconds` - Wall-clock time for the sweep with that many points at
+  once, or `None` if it was not probed.
+- `disk_bytes` - Disk the sweep's results take with the full trajectory
+  log kept, or `None`.
+- `statistics_bytes` - Disk if only the statistics were kept (no
+  trajectory log), or `None`.
+- `classes_measured` - How many shape classes were timed.
 
 <a id="fim.sweep_cost.SweepCost.to_dict"></a>
 
@@ -37327,6 +37384,325 @@ Return the static cost bands of a plan's points.
 **Returns**:
 
   Each point's cost and the sweep's total work.
+
+<a id="fim.sweep_cost.Throughput"></a>
+
+## Throughput Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Throughput()
+```
+
+What running one shape class costs, per unit of work.
+
+**Attributes**:
+
+- `seconds_per_replicate_generation` - Wall seconds to step one replicate
+  one generation.
+- `trace_bytes_per_generation` - Trajectory-log bytes one replicate adds
+  each generation.
+- `statistic_bytes_per_generation` - Convergence-history bytes one
+  replicate adds each generation.
+- `pairwise_bytes_per_pair` - Bytes `pairwise.json` spends on one deme
+  pair of one replicate.
+
+<a id="fim.sweep_cost.Throughput.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, float]
+```
+
+Return the figures as plain values, for the cache.
+
+<a id="fim.sweep_cost.ThroughputProbe"></a>
+
+## ThroughputProbe Objects
+
+```python
+class ThroughputProbe(Protocol)
+```
+
+Measures the throughput of one configuration.
+
+<a id="fim.sweep_cost.ThroughputProbe.measure"></a>
+
+#### measure
+
+```python
+def measure(params: SimulationParams, generations: int) -> Throughput
+```
+
+Run a short burst of `params` and report its throughput.
+
+**Arguments**:
+
+- `params` - One point's resolved configuration.
+- `generations` - The length of the shorter timed burst.
+
+<a id="fim.sweep_cost.ShapeClass"></a>
+
+## ShapeClass Objects
+
+```python
+@dataclass(frozen=True, slots=True, order=True)
+class ShapeClass()
+```
+
+What decides how fast a configuration runs and how big its files are.
+
+**Attributes**:
+
+- `d` - Number of demes.
+- `engine` - The configured engine backend.
+- `loci` - Number of loci.
+- `locus_length` - Length of the longest locus.
+- `size_bucket` - Base-2 logarithm of the largest deme's gene copies,
+- `rounded` - populations within a factor of about 1.4 share a bucket.
+
+<a id="fim.sweep_cost.ShapeClass.of"></a>
+
+#### of
+
+```python
+@classmethod
+def of(cls, params: SimulationParams) -> ShapeClass
+```
+
+Return the shape class of a resolved configuration.
+
+<a id="fim.sweep_cost.ShapeClass.key"></a>
+
+#### key
+
+```python
+@property
+def key() -> str
+```
+
+Return a text key for this class (the cache's key).
+
+<a id="fim.sweep_cost.ShapeClass.distance"></a>
+
+#### distance
+
+```python
+def distance(other: ShapeClass) -> float
+```
+
+Return how far apart two classes are, in (log d, log N).
+
+<a id="fim.sweep_cost.nearest_class"></a>
+
+#### nearest\_class
+
+```python
+def nearest_class(target: ShapeClass,
+                  measured: Sequence[ShapeClass]) -> ShapeClass
+```
+
+Return the measured class closest to `target`.
+
+The same engine is always preferred (engines differ in speed by far more
+than shapes do); within it, the least distance in `(log d, log N)` wins,
+and a tie goes to the class that sorts first, so the answer never depends
+on the order the classes were found in.
+
+**Arguments**:
+
+- `target` - The class to place.
+- `measured` - At least one measured class.
+
+
+**Raises**:
+
+- `ValueError` - `measured` is empty.
+
+<a id="fim.sweep_cost.ThroughputCache"></a>
+
+## ThroughputCache Objects
+
+```python
+class ThroughputCache()
+```
+
+Per-machine memory of measured throughput, so repeating a plan is instant.
+
+Keyed by software version, machine and shape class; a damaged or
+unwritable file is ignored (the figures are measured again).
+
+**Arguments**:
+
+- `path` - The cache file.
+
+<a id="fim.sweep_cost.ThroughputCache.key_for"></a>
+
+#### key\_for
+
+```python
+@staticmethod
+def key_for(shape: ShapeClass) -> str
+```
+
+Return the cache key of a shape class on this machine.
+
+<a id="fim.sweep_cost.ThroughputCache.get"></a>
+
+#### get
+
+```python
+def get(shape: ShapeClass) -> Throughput | None
+```
+
+Return the cached throughput of a class, or `None`.
+
+<a id="fim.sweep_cost.ThroughputCache.put"></a>
+
+#### put
+
+```python
+def put(shape: ShapeClass, throughput: Throughput) -> None
+```
+
+Remember a class's throughput.
+
+<a id="fim.sweep_cost.ThroughputCache.save"></a>
+
+#### save
+
+```python
+def save() -> None
+```
+
+Write the cache if it changed; a failure is logged, never raised.
+
+<a id="fim.sweep_cost.EngineProbe"></a>
+
+## EngineProbe Objects
+
+```python
+class EngineProbe()
+```
+
+Measures throughput by running two short bursts of a real configuration.
+
+Each burst runs one replicate of the point's own configuration into a
+temporary directory through the real saved-run path (so bytes include the
+real codec), then deletes it. Two bursts, one twice the length of the
+other, are timed and their difference is used, so costs that do not grow
+with generations (starting the engine, the scatter plot) cancel out.
+
+**Arguments**:
+
+- `timer` - A clock returning seconds; the test seam.
+- `scratch` - Directory to make the temporary directories in; the
+  system's when `None`.
+
+<a id="fim.sweep_cost.EngineProbe.measure"></a>
+
+#### measure
+
+```python
+def measure(params: SimulationParams, generations: int) -> Throughput
+```
+
+Time bursts of `generations` and twice that, and return the rates.
+
+<a id="fim.sweep_cost.probed_cost"></a>
+
+#### probed\_cost
+
+```python
+def probed_cost(
+        spec: SweepSpec,
+        plan: SweepPlan,
+        probe: ThroughputProbe,
+        *,
+        points_at_once: int | None = None,
+        workers_per_point: int = 1,
+        generations: int = DEFAULT_PROBE_GENERATIONS,
+        max_classes: int = DEFAULT_PROBED_CLASSES,
+        cache: ThroughputCache | None = None,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES) -> SweepCost
+```
+
+Add seconds and bytes to the static bands of a plan.
+
+Points are grouped by shape class. The `max_classes` classes with the
+most work are measured (each by its first point in grid order, or taken
+from `cache`); every other point takes the nearest measured class.
+
+**Arguments**:
+
+- `spec` - The sweep specification.
+- `plan` - The enumerated plan.
+- `probe` - Measures a configuration's throughput.
+- `points_at_once` - How many points run at the same time (the wall-clock
+  time divides the work over them); one if `None`.
+- `workers_per_point` - Processes sharing one point's replicates (a lineal
+  batch), which speeds a point up by that factor.
+- `generations` - Length of the shorter timed burst.
+- `max_classes` - Most shape classes to measure.
+- `cache` - Remembered measurements, read and extended.
+- `pairwise_max_demes` - Largest deme count for which a run saves its
+  deme-pair statistics.
+
+
+**Returns**:
+
+  The static cost with seconds, trace and statistic bytes, wall-clock
+  time and disk added.
+
+<a id="fim.sweep_cost.format_duration"></a>
+
+#### format\_duration
+
+```python
+def format_duration(seconds: float) -> str
+```
+
+Write a duration the way a person would say it.
+
+**Arguments**:
+
+- `seconds` - A non-negative number of seconds.
+
+
+**Returns**:
+
+  For example `"40 s"`, `"12 min"`, `"3 h 10 min"` or `"2 d 4 h"`;
+  the two largest units that are not zero, rounded to the smaller one.
+
+<a id="fim.sweep_cost.format_bytes"></a>
+
+#### format\_bytes
+
+```python
+def format_bytes(size: float) -> str
+```
+
+Write a size in decimal units, to two significant figures.
+
+**Arguments**:
+
+- `size` - A non-negative number of bytes.
+
+
+**Returns**:
+
+  For example `"820 B"`, `"4.2 MB"` or `"140 GB"`.
+
+<a id="fim.sweep_cost.band_text"></a>
+
+#### band\_text
+
+```python
+def band_text(band: Band, formatter: Callable[[float], str]) -> str
+```
+
+Write a band as "a to b", or just "a" when both ends read the same.
 
 <a id="fim.sweep_run"></a>
 
