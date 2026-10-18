@@ -549,16 +549,15 @@ loci:
 engine_backend: auto
 convergence_statistic: D
 precision: 0.02   # looser than the 0.01 default: under a minute
-n_replicates: 1   # a single scalar run; the default (200) would batch
 ```
 
 ```console
 fim run finite-alleles.yaml --output results/finite-alleles --quiet
 ```
 
-Converges at generation 6,771, after about ten seconds, with an average D
-of 0.614 ± 0.009 (`precision: 0.02` is twice the default plus-or-minus, which
-keeps the run short; see the
+The batch of 20 replicates takes about twenty seconds and gives an average D
+of 0.602 ± 0.019 across replicates (`precision: 0.02` is twice the default
+plus-or-minus, which keeps the batch short; see the
 [example's README](examples/finite-length-alleles-the-k-allele-model/README.md)).
 This is the Kimura-Crow
 finite-allele setting in miniature: `length: 3` gives 64 possible allele

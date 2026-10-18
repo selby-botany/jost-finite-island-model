@@ -478,13 +478,12 @@ loci:
 engine_backend: auto
 convergence_statistic: D
 precision: 0.02   # looser than the 0.01 default: under a minute
-n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
 </code></pre>
-<p>Converges at generation 6,771, after about ten seconds, with an average D
-of 0.614 ± 0.009 (<code>precision: 0.02</code> is twice the default plus-or-minus, which
-keeps the run short; see the
+<p>The batch of 20 replicates takes about twenty seconds and gives an average D
+of 0.602 ± 0.019 across replicates (<code>precision: 0.02</code> is twice the default
+plus-or-minus, which keeps the batch short; see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/finite-length-alleles-the-k-allele-model/README.md">example's README</a>).
 This is the Kimura-Crow
 finite-allele setting in miniature: <code>length: 3</code> gives 64 possible allele
