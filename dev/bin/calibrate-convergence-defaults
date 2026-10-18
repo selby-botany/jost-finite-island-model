@@ -89,7 +89,7 @@ REGIMES: dict[str, tuple[int, int, float | list[list[float]], float]] = {
     "golden-part-vi": (4, 100, 0.01, 0.005),
     "ring": (6, 50, _ring(6, 0.2), 0.01),
     # Too slow for the test suite (about 30 minutes a run); the committed
-    # `doc/examples/dear-nolan-low` report is its seeded run.
+    # `test/validation/dear-nolan-low-single-run-report.json` is its seeded run.
     "dear-nolan-low": (5, 100, 1e-4, 1e-6),
 }
 

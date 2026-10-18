@@ -41729,6 +41729,16 @@ The same evidence file records how fast the allele-spectrum statistics settle
 next to `D`, which keeps `spectrum_burn_in_multiplier` at 1, and the
 Dear-Nolan low scenario, whose seeded run is the committed example report.
 
+<a id="validation.test_convergence_rule_calibration.DEAR_NOLAN_LOW_REPORT"></a>
+
+#### DEAR\_NOLAN\_LOW\_REPORT
+
+A seeded single run of the Dear-Nolan low scenario (`n_replicates: 1`).
+
+It was the committed output of `doc/examples/dear-nolan-low` while that example
+was a single run; the example now runs as the default batch, and this file
+keeps the single-run evidence for the convergence rule on that scenario.
+
 <a id="validation.test_convergence_rule_calibration.RUNS"></a>
 
 #### RUNS
@@ -41830,7 +41840,7 @@ The derived burn-in is at least five relaxation times for these regimes.
 def test_dear_nolan_low_report_matches_its_analytic_value() -> None
 ```
 
-Dear-Nolan low: the committed seeded run converges, and agrees with theory.
+Dear-Nolan low: the kept seeded single run converges, and agrees with theory.
 
 The run stops because D met the requested precision (its effective sample
 size is above the floor, and the start of its window agrees with the end),

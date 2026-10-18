@@ -40,7 +40,14 @@ from fim.convergence.defaults import derive_convergence_defaults
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "test" / "validation" / "convergence-rule-calibration-evidence.json"
-DEAR_NOLAN_LOW_REPORT = ROOT / "doc" / "examples" / "dear-nolan-low" / "report.json"
+DEAR_NOLAN_LOW_REPORT = (
+    ROOT / "test" / "validation" / "dear-nolan-low-single-run-report.json"
+)
+"""A seeded single run of the Dear-Nolan low scenario (`n_replicates: 1`).
+
+It was the committed output of `doc/examples/dear-nolan-low` while that example
+was a single run; the example now runs as the default batch, and this file
+keeps the single-run evidence for the convergence rule on that scenario."""
 
 RUNS = 12
 """Seeded runs per regime."""
@@ -166,7 +173,7 @@ def test_derived_burn_in_covers_the_settling_time() -> None:
 
 
 def test_dear_nolan_low_report_matches_its_analytic_value() -> None:
-    """Dear-Nolan low: the committed seeded run converges, and agrees with theory.
+    """Dear-Nolan low: the kept seeded single run converges, and agrees with theory.
 
     The run stops because D met the requested precision (its effective sample
     size is above the floor, and the start of its window agrees with the end),
