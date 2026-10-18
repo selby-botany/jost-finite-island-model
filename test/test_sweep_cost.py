@@ -7,6 +7,7 @@ the plumbing and the arithmetic, never an engine's speed.
 
 from __future__ import annotations
 
+import json
 import random
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ import pytest
 from fim.model.params import SimulationParams
 from fim.sweep import SweepPlan, SweepSpec, enumerate_points, expand_axis
 from fim.sweep_cost import (
+    Actual,
     Band,
     EngineProbe,
     ShapeClass,
@@ -25,8 +27,11 @@ from fim.sweep_cost import (
     format_bytes,
     format_duration,
     nearest_class,
+    order_costliest_first,
     point_cost,
     probed_cost,
+    read_actual,
+    remaining_cost,
     static_cost,
 )
 from fim.sweep_run import resolve_concurrency
@@ -531,3 +536,159 @@ def test_a_band_reads_as_a_range_unless_both_ends_read_the_same() -> None:
     assert band_text(Band(11400, 75600), format_duration) == "3 h 10 min to 21 h"
     assert band_text(Band(10, 11), format_duration) == "10 s to 11 s"
     assert band_text(Band(3600.0, 3601.0), format_duration) == "1 h"
+
+
+def test_points_are_ordered_by_the_top_of_their_work_band_then_the_bottom() -> None:
+    spec = _spec(expand_axis("m", [0.01, 0.00001]), max_generations=None, mu=1e-6)
+    plan = enumerate_points(spec)
+    assert [p.index for p in plan.points] == [0, 1]
+
+    ordered = order_costliest_first(plan.points)
+
+    assert [p.index for p in ordered] == [
+        1,
+        0,
+    ]  # the slower migration has the bigger cap
+
+
+def test_equal_cost_points_keep_their_grid_order() -> None:
+    spec = _spec(expand_axis("d", [4, 6, 8, 10]))  # an explicit cap: every band alike
+    plan = enumerate_points(spec)
+
+    assert [p.index for p in order_costliest_first(plan.points)] == [0, 1, 2, 3]
+    assert order_costliest_first([]) == []
+
+
+def test_the_ordering_is_a_pure_function_of_the_points() -> None:
+    spec = _spec(
+        expand_axis("m", [0.01, 0.001, 0.00001]), max_generations=None, mu=1e-6
+    )
+    points = list(enumerate_points(spec).points)
+    answers = set()
+    for seed in range(6):
+        shuffled = list(points)
+        random.Random(seed).shuffle(shuffled)
+        answers.add(tuple(p.index for p in order_costliest_first(shuffled)))
+
+    assert len(answers) == 1
+
+
+# --- calibration from finished points -------------------------------------
+
+
+def _write_manifest(path: Path, started: str, ended: str, **extra: Any) -> None:
+    """Write a run manifest with just the fields calibration reads."""
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "manifest.json").write_text(
+        json.dumps({"started_at": started, "ended_at": ended, **extra}),
+        encoding="utf-8",
+    )
+
+
+def test_a_single_runs_duration_and_work_come_from_its_manifest(
+    tmp_path: Path,
+) -> None:
+    _write_manifest(
+        tmp_path,
+        "2026-10-17T10:00:00.000000Z",
+        "2026-10-17T10:00:12.500000Z",
+        convergence={"generation_count": 4000},
+    )
+
+    actual = read_actual("run-a", tmp_path)
+
+    assert actual == Actual("run-a", 12.5, 4000.0, "2026-10-17T10:00:12.500000Z")
+
+
+def test_a_batchs_work_is_the_sum_over_its_replicates(tmp_path: Path) -> None:
+    _write_manifest(tmp_path, "2026-10-17T10:00:00Z", "2026-10-17T10:01:00Z")
+    for number, count in enumerate((1000, 1500, 2500), start=1):
+        _write_manifest(
+            tmp_path / f"replicate-{number:03d}",
+            "2026-10-17T10:00:00Z",
+            "2026-10-17T10:00:30Z",
+            convergence={"generation_count": count},
+        )
+
+    actual = read_actual("run-b", tmp_path)
+
+    assert actual is not None
+    assert (actual.seconds, actual.work) == (60.0, 5000.0)
+
+
+@pytest.mark.parametrize("damage", ["missing", "no-times", "bad-times", "no-count"])
+def test_a_manifest_that_cannot_be_read_gives_no_actual(
+    tmp_path: Path, damage: str
+) -> None:
+    if damage == "no-times":
+        _write_manifest(tmp_path, "", "", convergence={"generation_count": 5})
+        (tmp_path / "manifest.json").write_text(
+            json.dumps({"convergence": {"generation_count": 5}}), encoding="utf-8"
+        )
+    elif damage == "bad-times":
+        _write_manifest(
+            tmp_path, "yesterday", "today", convergence={"generation_count": 5}
+        )
+    elif damage == "no-count":
+        _write_manifest(tmp_path, "2026-10-17T10:00:00Z", "2026-10-17T10:00:01Z")
+
+    assert read_actual("run-c", tmp_path) is None
+
+
+def test_the_remaining_time_scales_the_finished_speed_to_the_work_left() -> None:
+    spec, plan = _spec_and_plan(expand_axis("d", [4, 6, 8, 10]), n_replicates=20)
+    cost = static_cost(spec, plan, points_at_once=2)
+    first, second = cost.points[0], cost.points[1]
+    finished = {
+        first.run_id: Actual(first.run_id, 100.0, 1.0, "2026-10-17T10:00:00Z"),
+        second.run_id: Actual(second.run_id, 300.0, 1.0, "2026-10-17T10:05:00Z"),
+    }
+
+    result = remaining_cost(cost, finished)
+
+    predicted = first.work.high + second.work.high
+    left = cost.points[2].work.high + cost.points[3].work.high
+    assert result.points == 2
+    assert result.finished_points == 2
+    assert result.calibrated_seconds == pytest.approx(400.0 / predicted * left / 2)
+    assert result.work == cost.points[2].work + cost.points[3].work
+    assert result.plan_seconds is None  # the plan was not probed
+
+
+def test_nothing_finished_means_no_calibrated_estimate_yet() -> None:
+    spec, plan = _spec_and_plan(expand_axis("d", [4, 6]))
+    cost = static_cost(spec, plan)
+
+    result = remaining_cost(cost, {})
+
+    assert result.calibrated_seconds is None
+    assert result.points == 2 and result.finished_points == 0
+
+
+def test_when_everything_has_finished_nothing_remains() -> None:
+    spec, plan = _spec_and_plan(expand_axis("d", [4, 6]))
+    cost = static_cost(spec, plan)
+    finished = {
+        p.run_id: Actual(p.run_id, 10.0, 1.0, "2026-10-17T10:00:00Z")
+        for p in cost.points
+    }
+
+    result = remaining_cost(cost, finished)
+
+    assert result.points == 0
+    assert result.calibrated_seconds == 0.0
+    assert result.work == Band(0, 0)
+
+
+def test_the_plans_own_remaining_time_is_kept_when_it_was_probed() -> None:
+    spec, plan = _spec_and_plan(expand_axis("d", [4, 6, 8]), n_replicates=20)
+    cost = probed_cost(spec, plan, _FakeProbe(), points_at_once=1)
+    done = cost.points[0]
+
+    result = remaining_cost(
+        cost, {done.run_id: Actual(done.run_id, 5.0, 1.0, "2026-10-17T10:00:00Z")}
+    )
+
+    assert result.plan_seconds is not None
+    left = [p.seconds for p in cost.points[1:] if p.seconds]
+    assert result.plan_seconds.high == pytest.approx(sum(b.high for b in left))

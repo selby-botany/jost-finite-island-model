@@ -470,6 +470,10 @@ def test_a_paused_point_is_shown_as_paused_when_the_sweep_reopens(
         cancel_at_first_progress,
         cancel,
         points_at_once=1,
+        # The test is about how a paused point is shown, so which point starts
+        # first must not matter: pin grid order (the default starts the
+        # costliest first).
+        costliest_first=False,
     )
     states = """Array.from(document.querySelectorAll('.sweep-point-state'))
         .map((cell) => cell.textContent)"""

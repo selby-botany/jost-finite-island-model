@@ -8,6 +8,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`fim sweep status`, `--pilot`, and costliest-first order.** `fim sweep
+  status STUDY_ID` shows a sweep's points by state, whether a process is
+  running it, its failures, and the time left, calibrated from the points that
+  have finished (`--watch SECONDS` repeats it). `fim sweep run --pilot K` runs
+  the K costliest points first, shows planned against actual, and asks before
+  continuing. A sweep now starts its longest points first, which shortens it
+  when several run at once and changes no result, and each finished point's
+  line says how long it took.
+
 - **`fim sweep plan` estimates time and disk.** It times a short run of your
   own configuration (a few seconds, thrown away, remembered for next time) and
   prints how long the sweep may take, how many points run at once, how much

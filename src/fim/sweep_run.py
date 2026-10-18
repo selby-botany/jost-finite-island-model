@@ -34,7 +34,8 @@ import os
 import queue
 import shutil
 import threading
-from collections.abc import Callable, Mapping
+import time
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.process import BrokenProcessPool
@@ -84,6 +85,7 @@ from fim.sweep import (
     point_run_description,
     point_run_name,
 )
+from fim.sweep_cost import order_costliest_first
 from fim.sweep_table import (
     HealthCache,
     PointRow,
@@ -1064,6 +1066,8 @@ class _Context:
     rerun_ids: frozenset[str] = frozenset()
     # Times a point that failed for a transient reason is tried in all.
     max_attempts: int = 1
+    # Seconds from a clock that never goes backwards (a point's duration).
+    clock: Callable[[], float] = time.monotonic
 
     def emit(
         self, kind: EventKind, point: SweepPoint, detail: object = None, *, finish: bool
@@ -1090,6 +1094,9 @@ def run_sweep(
     points_at_once: int | None = None,
     max_workers: int | None = None,
     max_attempts: int = 1,
+    costliest_first: bool = True,
+    only: Collection[str] | None = None,
+    clock: Callable[[], float] = time.monotonic,
     results: Path | None = None,
 ) -> SweepOutcome:
     """Run every point of a sweep Study that is not already present.
@@ -1135,6 +1142,15 @@ def run_sweep(
             deterministic failure is never tried again. The attempts are
             back to back, with no delay, so the result never depends on a
             clock.
+        costliest_first: Start the points that may take longest first, which
+            shortens the whole sweep when several run at once (the standard
+            longest-job-first rule). Points are stored by id, so the order
+            changes no result. `False` keeps grid order.
+        only: Run just the points with these ids (a pilot of the costliest
+            few, say); the others are left as they were, neither run nor
+            counted as skipped. `None` runs every point that needs it.
+        clock: Seconds, from a clock that never goes backwards; each finished
+            point's duration is reported in its event. A test seam.
         results: Optional results-directory override.
 
     Returns:
@@ -1165,6 +1181,9 @@ def run_sweep(
                 points_at_once=points_at_once,
                 max_workers=max_workers,
                 max_attempts=max_attempts,
+                costliest_first=costliest_first,
+                only=only,
+                clock=clock,
                 results=results,
             )
     except LockUnavailableError:
@@ -1209,6 +1228,9 @@ def _run_sweep_locked(
     points_at_once: int | None = None,
     max_workers: int | None = None,
     max_attempts: int = 1,
+    costliest_first: bool = True,
+    only: Collection[str] | None = None,
+    clock: Callable[[], float] = time.monotonic,
     results: Path | None = None,
 ) -> SweepOutcome:
     """Run the sweep; the caller holds the Study's sweep lock."""
@@ -1238,18 +1260,17 @@ def _run_sweep_locked(
         ),
         0,
     )
-    todo: list[SweepPoint] = []
-    for point in planned:
-        if point.run_id in rerun_ids:
-            todo.append(point)
-        elif point.run_id in present:
-            tally["already_present"] += 1
-        elif _is_skipped_failure(
-            point.run_id, failures, objects, results, retry_failed=retry_failed
-        ):
-            tally["skipped"] += 1
-        else:
-            todo.append(point)
+    todo, tally["already_present"], tally["skipped"] = _points_to_run(
+        planned,
+        rerun_ids=rerun_ids,
+        present=present,
+        failures=failures,
+        objects=objects,
+        results=results,
+        retry_failed=retry_failed,
+        only=only,
+        costliest_first=costliest_first,
+    )
     first_params = SimulationParams.from_mapping(planned[0].params)
     uses_objects = isinstance(runner, ObjectPointRunner) and _object_supported(
         first_params
@@ -1290,6 +1311,7 @@ def _run_sweep_locked(
         ),
         rerun_ids=rerun_ids,
         max_attempts=max_attempts,
+        clock=clock,
     )
     cancelled = False
 
@@ -1329,6 +1351,45 @@ def _run_sweep_locked(
         recomputed=tally["recomputed"],
         differing=tally["differs"],
     )
+
+
+def _points_to_run(
+    planned: Sequence[SweepPoint],
+    *,
+    rerun_ids: frozenset[str],
+    present: Mapping[str, Path],
+    failures: Mapping[str, Any],
+    objects: Mapping[str, str],
+    results: Path | None,
+    retry_failed: bool,
+    only: Collection[str] | None,
+    costliest_first: bool,
+) -> tuple[list[SweepPoint], int, int]:
+    """Choose the points a sweep has to run, and in what order.
+
+    Returns:
+        The points to run (restricted to `only`, and costliest first if
+        asked), how many were already present, and how many were skipped
+        because they failed before and `retry_failed` is off.
+    """
+    todo: list[SweepPoint] = []
+    already_present = skipped = 0
+    for point in planned:
+        if point.run_id in rerun_ids:
+            todo.append(point)
+        elif point.run_id in present:
+            already_present += 1
+        elif _is_skipped_failure(
+            point.run_id, failures, objects, results, retry_failed=retry_failed
+        ):
+            skipped += 1
+        else:
+            todo.append(point)
+    if only is not None:
+        todo = [point for point in todo if point.run_id in only]
+    if costliest_first:
+        todo = order_costliest_first(todo)
+    return todo, already_present, skipped
 
 
 def _require_attempts(max_attempts: int) -> None:
@@ -1756,7 +1817,9 @@ def _run_one_point(
         def progress(message: object) -> None:
             context.emit("point_progress", point, message, finish=False)
 
+        dispatched = context.clock()
         result, object_id = _dispatch_point(context, point, progress)
+        elapsed = context.clock() - dispatched
     if isinstance(result, PointPaused):
         return "cancelled"
     if isinstance(result, PointFailure):
@@ -1783,8 +1846,11 @@ def _run_one_point(
     )
     if older is not None and older.resolve() != result.resolve():
         return _compare_with_older(context, point, older, result)
-    context.emit("point_reused" if reused else "point_done", point, finish=True)
-    return "reused" if reused else "done"
+    if reused:
+        context.emit("point_reused", point, finish=True)
+        return "reused"
+    context.emit("point_done", point, {"seconds": elapsed}, finish=True)
+    return "done"
 
 
 def _name_point_run(context: _Context, point: SweepPoint, directory: Path) -> None:

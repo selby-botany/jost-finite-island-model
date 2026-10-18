@@ -1618,6 +1618,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [format\_duration](#fim.sweep_cost.format_duration)
   * [format\_bytes](#fim.sweep_cost.format_bytes)
   * [band\_text](#fim.sweep_cost.band_text)
+  * [order\_costliest\_first](#fim.sweep_cost.order_costliest_first)
+  * [Actual](#fim.sweep_cost.Actual)
+  * [read\_actual](#fim.sweep_cost.read_actual)
+  * [Remaining](#fim.sweep_cost.Remaining)
+  * [remaining\_cost](#fim.sweep_cost.remaining_cost)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
   * [SweepLockedError](#fim.sweep_run.SweepLockedError)
@@ -1660,6 +1665,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_reproducibility\_note](#fim.sweep_run.write_reproducibility_note)
   * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
   * [health\_cache\_path](#fim.sweep_run.health_cache_path)
+* [fim.sweep\_status](#fim.sweep_status)
+  * [FailedPoint](#fim.sweep_status.FailedPoint)
+  * [SweepStatus](#fim.sweep_status.SweepStatus)
+    * [finished](#fim.sweep_status.SweepStatus.finished)
+  * [read\_sweep\_status](#fim.sweep_status.read_sweep_status)
 * [fim.sweep\_table](#fim.sweep_table)
   * [HealthClass](#fim.sweep_table.HealthClass)
   * [StatisticCell](#fim.sweep_table.StatisticCell)
@@ -2401,7 +2411,7 @@ def add_sweep_subcommands(
         subcommands: argparse._SubParsersAction[Any]) -> None
 ```
 
-Wire `fim sweep plan/run/resume/replan/export/compare/report`.
+Wire `fim sweep plan/run/resume/replan/status/export/compare/report`.
 
 <a id="fim.cli_sweep.command_sweep"></a>
 
@@ -37704,6 +37714,124 @@ def band_text(band: Band, formatter: Callable[[float], str]) -> str
 
 Write a band as "a to b", or just "a" when both ends read the same.
 
+<a id="fim.sweep_cost.order_costliest_first"></a>
+
+#### order\_costliest\_first
+
+```python
+def order_costliest_first(points: Sequence[SweepPoint]) -> list[SweepPoint]
+```
+
+Order points longest-job-first by their work band.
+
+For independent jobs on parallel workers, starting the longest first is
+the standard rule for keeping the last finisher close to the best
+possible. Points are ranked by the top of their work band, then by its
+bottom (a longer burn-in first), and ties keep grid order, so the order
+is a pure function of the points. A point's stored result does not
+depend on when it ran.
+
+**Arguments**:
+
+- `points` - Planned points, in any order.
+
+
+**Returns**:
+
+  The same points, most work first, grid order within equal work.
+
+<a id="fim.sweep_cost.Actual"></a>
+
+## Actual Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Actual()
+```
+
+What a finished point really cost, read back from its manifests.
+
+**Attributes**:
+
+- `run_id` - The point's id.
+- `seconds` - Wall seconds from the run's start to its end.
+- `work` - Replicate-generations actually run, summed over replicates.
+- `ended_at` - When it ended (UTC text).
+
+<a id="fim.sweep_cost.read_actual"></a>
+
+#### read\_actual
+
+```python
+def read_actual(run_id: str, directory: Path) -> Actual | None
+```
+
+Read how long a finished point took and how much it ran.
+
+The duration is the batch (or single run) manifest's `started_at` to
+`ended_at`; the work is the sum of each replicate's `generation_count`
+(a single run's own). Nothing is stored for this: the inputs are
+already in the manifests every run writes.
+
+**Arguments**:
+
+- `run_id` - The point's id.
+- `directory` - The point's run directory.
+
+
+**Returns**:
+
+  The actual cost, or `None` if the manifests cannot be read.
+
+<a id="fim.sweep_cost.Remaining"></a>
+
+## Remaining Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Remaining()
+```
+
+What is left of a sweep, with the estimate calibrated by what has run.
+
+**Attributes**:
+
+- `points` - Points not yet finished.
+- `work` - Replicate-generations still to come, from the plan's bands.
+- `calibrated_seconds` - Wall seconds to finish, from the speed and the
+  fraction of its cap that the finished points actually used;
+  `None` until at least one point has finished.
+- `finished_points` - Points the calibration is based on.
+- `plan_seconds` - The plan's own (probe-based) wall-clock band for the
+  remaining points, or `None` if the plan was not probed.
+
+<a id="fim.sweep_cost.remaining_cost"></a>
+
+#### remaining\_cost
+
+```python
+def remaining_cost(cost: SweepCost, finished: Mapping[str,
+                                                      Actual]) -> Remaining
+```
+
+Estimate what is left of a sweep from the points that have finished.
+
+The ratio of the finished points' actual seconds to the top of their
+predicted work band says how fast this machine runs and how much of its
+cap a point really uses, in one number; applied to the top of the
+remaining points' work bands it gives the time still to come, divided
+over the points run at once. It sharpens as more points finish.
+
+**Arguments**:
+
+- `cost` - The plan's cost (`static_cost` or `probed_cost`).
+- `finished` - Actual figures of the finished points, by run id.
+
+
+**Returns**:
+
+  The points and work left, and the calibrated and planned time.
+
 <a id="fim.sweep_run"></a>
 
 # fim.sweep\_run
@@ -38281,6 +38409,9 @@ def run_sweep(study_id: str,
               points_at_once: int | None = None,
               max_workers: int | None = None,
               max_attempts: int = 1,
+              costliest_first: bool = True,
+              only: Collection[str] | None = None,
+              clock: Callable[[], float] = time.monotonic,
               results: Path | None = None) -> SweepOutcome
 ```
 
@@ -38328,6 +38459,15 @@ falls back to the runner's `run_point`.
   deterministic failure is never tried again. The attempts are
   back to back, with no delay, so the result never depends on a
   clock.
+- `costliest_first` - Start the points that may take longest first, which
+  shortens the whole sweep when several run at once (the standard
+  longest-job-first rule). Points are stored by id, so the order
+  changes no result. `False` keeps grid order.
+- `only` - Run just the points with these ids (a pilot of the costliest
+  few, say); the others are left as they were, neither run nor
+  counted as skipped. `None` runs every point that needs it.
+- `clock` - Seconds, from a clock that never goes backwards; each finished
+  point's duration is reported in its event. A test seam.
 - `results` - Optional results-directory override.
 
 
@@ -38529,6 +38669,97 @@ def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
 ```
 
 Return the disposable cache of a sweep's point health counts.
+
+<a id="fim.sweep_status"></a>
+
+# fim.sweep\_status
+
+Where a sweep stands: its points by state, who is running it, and the ETA.
+
+Everything here is read from what a sweep already stores (its plan, its
+status file, its runs' manifests and its lock), so any process can ask while
+another is running the sweep, and nothing is written.
+
+<a id="fim.sweep_status.FailedPoint"></a>
+
+## FailedPoint Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class FailedPoint()
+```
+
+A point that failed, and what is known about why.
+
+**Attributes**:
+
+- `index` - The point's grid index.
+- `coordinates` - The varied values, by axis key.
+- `reason` - Why it failed.
+- `attempts` - Times it was tried, or `None` if not recorded.
+
+<a id="fim.sweep_status.SweepStatus"></a>
+
+## SweepStatus Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepStatus()
+```
+
+A snapshot of a sweep.
+
+**Attributes**:
+
+- `study_id` - The sweep Study's id.
+- `name` - The Study's name.
+- `total` - Planned points.
+- `counts` - Points in each state (`done`, `waiting`, `running`, ...).
+- `running` - The points running now (or interrupted mid-run).
+- `failures` - The points that failed.
+- `locked` - Whether a process is running the sweep right now.
+- `last_finished` - When the most recently finished point ended (UTC
+  text), or `None` if none has.
+- `remaining` - What is left, with the calibrated time to finish, or
+  `None` if the stored plan no longer matches this version.
+
+<a id="fim.sweep_status.SweepStatus.finished"></a>
+
+#### finished
+
+```python
+@property
+def finished() -> bool
+```
+
+Whether every point is done and no process is running the sweep.
+
+<a id="fim.sweep_status.read_sweep_status"></a>
+
+#### read\_sweep\_status
+
+```python
+def read_sweep_status(study_id: str,
+                      *,
+                      results: Path | None = None) -> SweepStatus
+```
+
+Read a sweep Study's status.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  The snapshot.
+
+
+**Raises**:
+
+- `ValueError` - The Study does not exist or is not a sweep.
 
 <a id="fim.sweep_table"></a>
 

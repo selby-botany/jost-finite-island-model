@@ -672,3 +672,159 @@ def test_the_points_at_once_flag_reaches_the_time_estimate(
     _main(tmp_path, "sweep", "plan", str(sweep_file), "--sequential")
 
     assert "(1 point(s) at once on" in capsys.readouterr().out
+
+
+def test_a_finished_points_line_says_how_long_it_took(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _main(tmp_path, "sweep", "run", str(sweep_file), "--no-probe") == 0
+
+    done = [line for line in capsys.readouterr().out.splitlines() if ": done" in line]
+    assert len(done) == 2
+    assert all(" in " in line and line.rstrip().endswith(("s", "min")) for line in done)
+
+
+def test_status_shows_the_counts_the_lock_and_the_time_left(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+
+    assert _main(tmp_path, "sweep", "status", study_id) == 0
+
+    output = capsys.readouterr().out
+    assert f"Sweep Demes ({study_id}): 2 of 2 points done" in output
+    assert "2 done" in output
+    assert "no process is running this sweep" in output
+    assert "last point finished: 20" in output  # an ISO date, this century
+    assert "time left   none: every point is done" in output
+
+
+def test_status_lists_failures_with_the_command_to_retry_them(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fim.sweep_run import PointFailure  # noqa: PLC0415
+
+    class Failing:
+        def run_point(self, *args: Any, **kwargs: Any) -> PointFailure:
+            del args, kwargs
+            return PointFailure("the engine exploded")
+
+    monkeypatch.setattr("fim.cli_sweep.LocalPointRunner", Failing)
+    assert _main(tmp_path, "sweep", "run", str(sweep_file), "--no-probe") == 1
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    capsys.readouterr()
+
+    assert _main(tmp_path, "sweep", "status", study.study_id) == 0
+
+    output = capsys.readouterr().out
+    assert "failed: point 0 (d=2): the engine exploded" in output
+    assert (
+        f"retry them with: fim sweep resume {study.study_id} --retry-failed" in output
+    )
+
+
+def test_watch_repeats_until_the_sweep_is_finished(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    # Make the sweep look unfinished by holding its lock, then release it
+    # when the loop first sleeps.
+    from fim.persistence.object_lock import exclusive_lock  # noqa: PLC0415
+    from fim.sweep_run import sweep_lock_path  # noqa: PLC0415
+
+    results = tmp_path / "results"
+    lock = exclusive_lock(sweep_lock_path(study_id, results=results), blocking=False)
+    lock.__enter__()
+    slept: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+        lock.__exit__(None, None, None)
+
+    monkeypatch.setattr("fim.cli_sweep.time.sleep", fake_sleep)
+
+    assert _main(tmp_path, "sweep", "status", study_id, "--watch", "7") == 0
+
+    output = capsys.readouterr().out
+    assert slept == [7.0]
+    assert output.count("points done") == 2
+    assert "a process is running this sweep now" in output
+    assert "no process is running this sweep" in output
+
+
+def test_a_pilot_runs_the_costliest_then_asks_and_continues_on_yes(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    status = _main(
+        tmp_path, "sweep", "run", str(sweep_file), "--pilot", "1", "--yes", "--no-probe"
+    )
+
+    output = capsys.readouterr().out
+    assert status == 0
+    assert "Pilot: running the 1 costliest of 2 point(s)" in output
+    assert "Pilot result" in output and "planned " in output and "actual " in output
+    assert "time left   about " in output or "time left   none" in output
+    assert output.count(": done") == 2  # the pilot point, then the rest
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    assert study.run_count == 2
+
+
+def test_a_pilot_stops_when_the_answer_is_no(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked: list[str] = []
+
+    def say_no(prompt: str = "") -> str:
+        asked.append(prompt)
+        return "n"
+
+    monkeypatch.setattr("builtins.input", say_no)
+
+    status = _main(
+        tmp_path, "sweep", "run", str(sweep_file), "--pilot", "1", "--no-probe"
+    )
+
+    output = capsys.readouterr().out
+    assert status == 0
+    assert asked == ["Run the remaining points? [y/N] "]
+    assert "Stopped after the pilot. Continue with: fim sweep resume" in output
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    assert study.run_count == 1  # the pilot point is a real, stored result
+
+
+def test_a_pilot_with_no_answer_does_not_continue(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def end_of_input(prompt: str = "") -> str:
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", end_of_input)
+
+    assert (
+        _main(tmp_path, "sweep", "run", str(sweep_file), "--pilot", "1", "--no-probe")
+        == 0
+    )
+    assert "Stopped after the pilot" in capsys.readouterr().out
+
+
+def test_a_pilot_of_nothing_is_a_plain_error(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    status = _main(
+        tmp_path, "sweep", "run", str(sweep_file), "--pilot", "0", "--no-probe"
+    )
+
+    assert status == 2
+    assert "--pilot must be at least 1" in capsys.readouterr().err

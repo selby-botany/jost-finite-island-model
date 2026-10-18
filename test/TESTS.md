@@ -43,6 +43,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sweep_compare`](#test.test_sweep_compare)
   - [`test_sweep_cost`](#test.test_sweep_cost)
   - [`test_sweep_run`](#test.test_sweep_run)
+  - [`test_sweep_status`](#test.test_sweep_status)
   - [`test_sweep_table`](#test.test_sweep_table)
   - [`test_termination`](#test.test_termination)
   - [`test_update`](#test.test_update)
@@ -4753,6 +4754,23 @@ def test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs(
 
 The fixture is a Study whose stored plan and failure file use ids from
 before the identity change (2026-10-15), written directly.
+
+<a id="test.test_sweep_status"></a>
+
+# test.test\_sweep\_status
+
+Tests for `fim.sweep_status`: a sweep's snapshot, read while it runs.
+
+<a id="test.test_sweep_status.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Point the results directory at a temporary one for the test.
 
 <a id="test.test_sweep_table"></a>
 

@@ -1059,6 +1059,8 @@ fim sweep resume STUDY_ID            # run only the points still missing
 fim sweep resume STUDY_ID --retry-failed
 fim sweep resume STUDY_ID --rerun   # also recompute the completed points
 fim sweep replan STUDY_ID [--dry-run]   # after an upgrade changed run ids
+fim sweep status STUDY_ID [--watch SECONDS]   # where it stands, time left
+fim sweep run sweep.yaml --pilot 2   # the 2 costliest points first, then ask
 fim sweep report STUDY_ID --statistic D --csv
 fim sweep export STUDY_ID results.csv [--statistic D --statistic G_ST] [--wide] [--with-theory]
 fim sweep compare STUDY_A STUDY_B [--statistic D] [--on m] [--csv out.csv]
@@ -1083,6 +1085,23 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   of a similar size share one measurement, and the results are remembered
   beside your preferences file (`sweep-throughput.json`), so planning again is
   instant. `--no-probe` skips the measurement and prints the work range only.
+- A sweep starts the points that may take longest first, so the last point to
+  finish is not one that could have started at the beginning. This changes no
+  result; each point is stored by its configuration. Each finished point's line
+  says how long it took.
+- `fim sweep status STUDY_ID` shows the points by state, whether a process is
+  running the sweep now (it reads the sweep's lock, so it works from another
+  terminal), the last point finished, any failures with the command to retry
+  them, and the time left. The time left is worked out from the points that
+  have finished: their real duration against the top of what the plan allowed
+  them, applied to the points still to come, so it sharpens as the sweep goes
+  and is an upper figure (a point that settles early finishes sooner).
+  `--watch SECONDS` repeats it until the sweep is finished.
+- `fim sweep run FILE --pilot K` runs the K points that may take longest first,
+  prints each one's planned range against what it took and the time left for
+  the rest, and asks before running the rest (`--yes` answers yes). The pilot
+  points are real stored results, so nothing is wasted whichever you answer,
+  and a sweep you stop there continues with `fim sweep resume`.
 - **Points run at the same time, by default as many as fill the machine, each
   in its own process.** A single run, or a batch on any engine but `lineal`
   (including `auto`), uses about one core; a `lineal` batch of `r` replicates

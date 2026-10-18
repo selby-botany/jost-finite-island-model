@@ -6,6 +6,7 @@ generations), so the run ids, manifests and attachments are the real ones.
 
 from __future__ import annotations
 
+import itertools
 import json
 import shutil
 import subprocess
@@ -1536,3 +1537,95 @@ def test_replan_refuses_a_study_that_is_not_a_sweep(results: Path) -> None:
 
     with pytest.raises(ValueError, match="not a sweep"):
         replan_sweep(study.study_id)
+
+
+def _burn_in_sweep(results: Path) -> str:
+    """A tiny real sweep whose points differ in burn-in and so in expected cost."""
+    spec = SweepSpec(
+        base={
+            "N": 8,
+            "ploidy": "haploid",
+            "d": 2,
+            "m": 0.1,
+            "mu": 0.2,
+            "seed": 7,
+            "n_replicates": 1,
+            "precision": 0.1,
+        },
+        axes=(expand_axis("N", [8, 32]),),
+    )
+    return create_sweep_study(spec, enumerate_points(spec), "Order").study_id
+
+
+def _started(events: list[SweepEvent]) -> list[int]:
+    """The grid indices of the points, in the order they started."""
+    return [e.index for e in events if e.kind == "point_started"]
+
+
+def test_the_costliest_point_starts_first_and_the_stored_study_is_the_same(
+    results: Path, tmp_path: Path
+) -> None:
+    ordered_id = _burn_in_sweep(results)
+    ordered_outcome, ordered_events = _run(ordered_id, points_at_once=1)
+    ordered_runs = {
+        groups.run_id_of(d): d
+        for d in groups.study_run_directories(groups.get_study(ordered_id))
+    }
+    other_root = tmp_path / "grid-order"
+    other_root.mkdir()
+    paths.set_results_directory_override(other_root)
+    plain_id = _burn_in_sweep(other_root)
+
+    plain_outcome, plain_events = _run(
+        plain_id, points_at_once=1, costliest_first=False
+    )
+
+    assert _started(ordered_events) == [1, 0]  # the larger N has the longer burn-in
+    assert _started(plain_events) == [0, 1]
+    assert (ordered_outcome.done, plain_outcome.done) == (2, 2)
+    plain_runs = {
+        groups.run_id_of(d): d
+        for d in groups.study_run_directories(groups.get_study(plain_id))
+    }
+    assert set(ordered_runs) == set(plain_runs) and len(plain_runs) == 2
+    for run_id, directory in ordered_runs.items():
+        assert compare_runs(plain_runs[run_id], directory).identical
+
+
+def test_only_runs_the_chosen_points_and_leaves_the_others_waiting(
+    results: Path,
+) -> None:
+    study_id = _burn_in_sweep(results)
+    first, second = (e["run_id"] for e in stored_points(groups.get_study(study_id)))
+
+    outcome, _ = _run(study_id, points_at_once=1, only={second})
+
+    assert (outcome.done, outcome.skipped_failed, outcome.failed) == (1, 0, 0)
+    states = [s.state for s in sweep_point_statuses(groups.get_study(study_id))]
+    assert states == ["waiting", "done"]
+    finish, _ = _run(study_id, points_at_once=1)
+    assert finish.done == 1 and finish.already_present == 1
+    assert first != second
+
+
+def test_a_finished_points_event_carries_how_long_it_took(results: Path) -> None:
+    study_id = _burn_in_sweep(results)
+    ticks = itertools.count(0, 5)
+    events: list[SweepEvent] = []
+
+    run_sweep(
+        study_id,
+        LocalPointRunner(),
+        events.append,
+        threading.Event(),
+        points_at_once=1,
+        clock=lambda: float(next(ticks)),
+    )
+
+    done = [e for e in events if e.kind == "point_done"]
+    assert [e.detail for e in done] == [{"seconds": 5.0}, {"seconds": 5.0}]
+    again: list[SweepEvent] = []
+    run_sweep(
+        study_id, LocalPointRunner(), again.append, threading.Event(), points_at_once=1
+    )
+    assert [e.kind for e in again if e.kind.startswith("point_")] == []

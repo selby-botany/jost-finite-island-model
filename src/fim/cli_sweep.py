@@ -16,7 +16,8 @@ import csv
 import platform
 import sys
 import threading
-from collections.abc import Callable, Mapping
+import time
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,7 @@ from fim.persistence import groups
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
     SweepPlan,
+    SweepPoint,
     SweepSpec,
     enumerate_points,
     spec_from_config,
@@ -41,7 +43,10 @@ from fim.sweep_cost import (
     band_text,
     format_bytes,
     format_duration,
+    order_costliest_first,
+    point_cost,
     probed_cost,
+    read_actual,
     static_cost,
 )
 from fim.sweep_run import (
@@ -53,11 +58,12 @@ from fim.sweep_run import (
     resolve_concurrency,
     run_sweep,
 )
+from fim.sweep_status import SweepStatus, read_sweep_status
 from fim.sweep_table import ALL_STATISTICS, ResultTable
 
 
 def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
-    """Wire `fim sweep plan/run/resume/replan/export/compare/report`."""
+    """Wire `fim sweep plan/run/resume/replan/status/export/compare/report`."""
     sweep_parser = subcommands.add_parser(
         "sweep", help="run a configuration over a parameter space as one study"
     )
@@ -81,6 +87,14 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     )
     _add_concurrency_arguments(run_parser)
     _add_probe_argument(run_parser)
+    run_parser.add_argument(
+        "--pilot",
+        type=int,
+        metavar="K",
+        help="run the K points that may take longest first, show how long they "
+        "took against the estimate, and ask before running the rest "
+        "(--yes answers yes)",
+    )
     resume_parser = sweep_subcommands.add_parser(
         "resume", help="run the points of a sweep study that are still missing"
     )
@@ -98,6 +112,17 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         "match replaces it, a difference keeps both and is reported",
     )
     _add_concurrency_arguments(resume_parser)
+    status_parser = sweep_subcommands.add_parser(
+        "status",
+        help="show where a sweep stands: points by state, who runs it, time left",
+    )
+    status_parser.add_argument("study_id", metavar="STUDY_ID")
+    status_parser.add_argument(
+        "--watch",
+        type=float,
+        metavar="SECONDS",
+        help="show it again every SECONDS until the sweep is finished",
+    )
     export_parser = sweep_subcommands.add_parser(
         "export",
         help="write a sweep's results as a tidy CSV or JSON Lines table",
@@ -266,6 +291,7 @@ def command_sweep(
         "resume": _resume,
         "replan": _replan,
         "export": _export,
+        "status": _status,
         "compare": _compare,
         "report": lambda args: _report(args.study_id, args.statistic, as_csv=args.csv),
     }
@@ -407,7 +433,129 @@ def _run(arguments: argparse.Namespace) -> int:
     name = arguments.study or file_name or path.stem
     study = create_sweep_study(spec, plan, name, experiment_id=arguments.experiment)
     print(f"Created sweep study {study.study_id}: {study.name}")
+    if arguments.pilot is not None:
+        return _pilot(study.study_id, plan, arguments)
     return _execute(study.study_id, arguments)
+
+
+def _pilot(study_id: str, plan: SweepPlan, arguments: argparse.Namespace) -> int:
+    """Run the costliest points first, compare them with the plan, then ask.
+
+    The pilot points are real, stored results, so nothing is wasted whatever
+    the answer: continuing runs only the rest, and stopping leaves the
+    sweep resumable.
+    """
+    if arguments.pilot < 1:
+        raise ValueError("--pilot must be at least 1")
+    chosen = order_costliest_first(plan.points)[: arguments.pilot]
+    print(f"Pilot: running the {len(chosen)} costliest of {len(plan.points)} point(s)")
+    code = _execute(
+        study_id, arguments, only=frozenset(point.run_id for point in chosen)
+    )
+    if code != 0:
+        return code
+    status = read_sweep_status(study_id)
+    _print_pilot_report(study_id, chosen, status)
+    if not arguments.yes and not _confirmed("Run the remaining points? [y/N] "):
+        print(f"Stopped after the pilot. Continue with: fim sweep resume {study_id}")
+        return 0
+    return _execute(study_id, arguments)
+
+
+def _confirmed(question: str) -> bool:
+    """Ask a yes/no question on the terminal; end of input means no."""
+    try:
+        return input(question).strip().lower() in {"y", "yes"}
+    except EOFError:
+        return False
+
+
+def _print_pilot_report(
+    study_id: str, chosen: Sequence[SweepPoint], status: SweepStatus
+) -> None:
+    """Print the pilot points' actual cost against the plan's, and the ETA."""
+    study = groups.get_study(study_id)
+    directories = {groups.run_id_of(d): d for d in groups.study_run_directories(study)}
+    print("Pilot result (planned = the plan's range; actual = what the point took):")
+    for point in chosen:
+        planned = point_cost(point.run_id, SimulationParams.from_mapping(point.params))
+        directory = directories.get(point.run_id)
+        actual = read_actual(point.run_id, directory) if directory else None
+        where = ", ".join(f"{k}={_format(v)}" for k, v in point.coordinates.items())
+        if actual is None:
+            print(f"  point {point.index} ({where}): no result")
+            continue
+        print(
+            f"  point {point.index} ({where}): planned "
+            f"{_band_text(planned.work)} replicate-generations, actual "
+            f"{actual.work:,.0f} in {format_duration(actual.seconds)}"
+        )
+    _print_remaining(status)
+
+
+def _print_remaining(status: SweepStatus) -> None:
+    """Print the time left, from the calibrated estimate."""
+    remaining = status.remaining
+    if remaining is None:
+        print(
+            "time left   unknown: the stored plan no longer matches this version "
+            f"(fim sweep replan {status.study_id})"
+        )
+    elif remaining.points == 0:
+        print("time left   none: every point is done")
+    elif remaining.calibrated_seconds is None:
+        print(
+            f"time left   not yet known for {remaining.points} point(s): the first "
+            "finished point calibrates it"
+        )
+    else:
+        print(
+            f"time left   about {format_duration(remaining.calibrated_seconds)} "
+            f"for {remaining.points} point(s), from the speed of the "
+            f"{remaining.finished_points} finished point(s) (an upper figure: "
+            "points that settle early finish sooner)"
+        )
+
+
+def _status(arguments: argparse.Namespace) -> int:
+    """Show a sweep's status, once or on a fixed interval."""
+    try:
+        while True:
+            status = read_sweep_status(arguments.study_id)
+            _print_status(status)
+            if arguments.watch is None or status.finished:
+                return 0
+            time.sleep(arguments.watch)
+            print()
+    except KeyboardInterrupt:
+        print()
+        return 0
+
+
+def _print_status(status: SweepStatus) -> None:
+    """Print one snapshot of a sweep's status."""
+    done = status.counts.get("done", 0)
+    print(
+        f"Sweep {status.name} ({status.study_id}): {done} of {status.total} points done"
+    )
+    states = ", ".join(f"{n} {state}" for state, n in sorted(status.counts.items()))
+    print(f"  {states}")
+    print(
+        "  a process is running this sweep now"
+        if status.locked
+        else "  no process is running this sweep"
+    )
+    for point in status.running:
+        where = ", ".join(f"{k}={_format(v)}" for k, v in point.coordinates.items())
+        print(f"  running: point {point.index} ({where})")
+    print(f"  last point finished: {status.last_finished or 'none yet'}")
+    _print_remaining(status)
+    for failure in status.failures:
+        where = ", ".join(f"{k}={_format(v)}" for k, v in failure.coordinates.items())
+        tries = f", {failure.attempts} attempt(s)" if failure.attempts else ""
+        print(f"  failed: point {failure.index} ({where}): {failure.reason}{tries}")
+    if status.failures:
+        print(f"  retry them with: fim sweep resume {status.study_id} --retry-failed")
 
 
 def _compare(arguments: argparse.Namespace) -> int:
@@ -561,7 +709,12 @@ def _resume(arguments: argparse.Namespace) -> int:
     return _execute(arguments.study_id, arguments)
 
 
-def _execute(study_id: str, arguments: argparse.Namespace) -> int:
+def _execute(
+    study_id: str,
+    arguments: argparse.Namespace,
+    *,
+    only: frozenset[str] | None = None,
+) -> int:
     """Run a sweep study, print a line per point, and return an exit status."""
     points_at_once, max_workers = _concurrency_options(arguments)
     cancel_event = threading.Event()
@@ -576,6 +729,7 @@ def _execute(study_id: str, arguments: argparse.Namespace) -> int:
             points_at_once=points_at_once,
             max_workers=max_workers,
             max_attempts=arguments.max_attempts,
+            only=only,
         )
     except KeyboardInterrupt:
         cancel_event.set()
@@ -624,7 +778,10 @@ def _print_event(event: SweepEvent) -> None:
     if event.kind == "point_started":
         print(f"{prefix}: running", flush=True)
     elif event.kind == "point_done":
-        print(f"{prefix}: done", flush=True)
+        took = ""
+        if isinstance(event.detail, dict) and "seconds" in event.detail:
+            took = f" in {format_duration(float(event.detail['seconds']))}"
+        print(f"{prefix}: done{took}", flush=True)
     elif event.kind == "point_reused":
         print(f"{prefix}: reused an existing run", flush=True)
     elif event.kind == "point_recomputed":

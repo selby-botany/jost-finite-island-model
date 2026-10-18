@@ -30,6 +30,7 @@ import tempfile
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
 
@@ -38,7 +39,7 @@ from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.model.params import SimulationParams
 
 if TYPE_CHECKING:
-    from fim.sweep import SweepPlan, SweepSpec
+    from fim.sweep import SweepPlan, SweepPoint, SweepSpec
 
 logger = logging.getLogger(__name__)
 
@@ -716,3 +717,175 @@ def band_text(band: Band, formatter: Callable[[float], str]) -> str:
     """Write a band as "a to b", or just "a" when both ends read the same."""
     low, high = formatter(band.low), formatter(band.high)
     return low if low == high else f"{low} to {high}"
+
+
+def order_costliest_first(points: Sequence[SweepPoint]) -> list[SweepPoint]:
+    """Order points longest-job-first by their work band.
+
+    For independent jobs on parallel workers, starting the longest first is
+    the standard rule for keeping the last finisher close to the best
+    possible. Points are ranked by the top of their work band, then by its
+    bottom (a longer burn-in first), and ties keep grid order, so the order
+    is a pure function of the points. A point's stored result does not
+    depend on when it ran.
+
+    Args:
+        points: Planned points, in any order.
+
+    Returns:
+        The same points, most work first, grid order within equal work.
+    """
+    work = {
+        point.run_id: point_cost(
+            point.run_id, SimulationParams.from_mapping(point.params)
+        ).work
+        for point in points
+    }
+    return sorted(
+        points,
+        key=lambda point: (
+            -work[point.run_id].high,
+            -work[point.run_id].low,
+            point.index,
+        ),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Actual:
+    """What a finished point really cost, read back from its manifests.
+
+    Attributes:
+        run_id: The point's id.
+        seconds: Wall seconds from the run's start to its end.
+        work: Replicate-generations actually run, summed over replicates.
+        ended_at: When it ended (UTC text).
+    """
+
+    run_id: str
+    seconds: float
+    work: float
+    ended_at: str
+
+
+def _timestamp(text: object) -> datetime | None:
+    """Parse a manifest timestamp such as `2026-10-17T16:51:55.222224Z`."""
+    if not isinstance(text, str):
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _read_object(path: Path) -> dict[str, object] | None:
+    """Return the JSON object in `path`, or `None` if it cannot be read."""
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def read_actual(run_id: str, directory: Path) -> Actual | None:
+    """Read how long a finished point took and how much it ran.
+
+    The duration is the batch (or single run) manifest's `started_at` to
+    `ended_at`; the work is the sum of each replicate's `generation_count`
+    (a single run's own). Nothing is stored for this: the inputs are
+    already in the manifests every run writes.
+
+    Args:
+        run_id: The point's id.
+        directory: The point's run directory.
+
+    Returns:
+        The actual cost, or `None` if the manifests cannot be read.
+    """
+    manifest = _read_object(directory / "manifest.json")
+    if manifest is None:
+        return None
+    started, ended = (
+        _timestamp(manifest.get("started_at")),
+        _timestamp(manifest.get("ended_at")),
+    )
+    if started is None or ended is None:
+        return None
+    sources = [
+        _read_object(path)
+        for path in sorted(directory.glob("replicate-*/manifest.json"))
+    ] or [manifest]
+    work = 0.0
+    for source in sources:
+        convergence = source.get("convergence") if source else None
+        count = (
+            convergence.get("generation_count")
+            if isinstance(convergence, dict)
+            else None
+        )
+        if not isinstance(count, int | float):
+            return None
+        work += float(count)
+    return Actual(
+        run_id,
+        max((ended - started).total_seconds(), 0.0),
+        work,
+        str(manifest["ended_at"]),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Remaining:
+    """What is left of a sweep, with the estimate calibrated by what has run.
+
+    Attributes:
+        points: Points not yet finished.
+        work: Replicate-generations still to come, from the plan's bands.
+        calibrated_seconds: Wall seconds to finish, from the speed and the
+            fraction of its cap that the finished points actually used;
+            `None` until at least one point has finished.
+        finished_points: Points the calibration is based on.
+        plan_seconds: The plan's own (probe-based) wall-clock band for the
+            remaining points, or `None` if the plan was not probed.
+    """
+
+    points: int
+    work: Band
+    calibrated_seconds: float | None
+    finished_points: int
+    plan_seconds: Band | None
+
+
+def remaining_cost(cost: SweepCost, finished: Mapping[str, Actual]) -> Remaining:
+    """Estimate what is left of a sweep from the points that have finished.
+
+    The ratio of the finished points' actual seconds to the top of their
+    predicted work band says how fast this machine runs and how much of its
+    cap a point really uses, in one number; applied to the top of the
+    remaining points' work bands it gives the time still to come, divided
+    over the points run at once. It sharpens as more points finish.
+
+    Args:
+        cost: The plan's cost (`static_cost` or `probed_cost`).
+        finished: Actual figures of the finished points, by run id.
+
+    Returns:
+        The points and work left, and the calibrated and planned time.
+    """
+    done = [p for p in cost.points if p.run_id in finished]
+    left = [p for p in cost.points if p.run_id not in finished]
+    work = _total(p.work for p in left)
+    predicted = sum(p.work.high for p in done)
+    spent = sum(finished[p.run_id].seconds for p in done)
+    machines = max(cost.points_at_once or 1, 1)
+    calibrated = spent / predicted * work.high / machines if predicted > 0 else None
+    planned = [p.seconds for p in left if p.seconds is not None]
+    return Remaining(
+        points=len(left),
+        work=work,
+        calibrated_seconds=calibrated,
+        finished_points=len(done),
+        plan_seconds=_wall_seconds(left, machines)
+        if planned and len(planned) == len(left)
+        else None,
+    )
