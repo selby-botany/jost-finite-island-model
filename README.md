@@ -149,9 +149,20 @@ See [installation alternatives](install/README.md) and the
 
 ## Outputs
 
-Each scalar CLI run (`n_replicates: 1`; the library default is actually
-`200`, an adaptively-stopped batch — see [n_replicates](doc/configuration.md#n_replicates))
-writes these artifacts:
+A run you do not configure (the default, `n_replicates: 200`) is a batch of
+independent replicates that stops once the confidence interval across them is
+as narrow as `precision`, usually after a few more than the minimum of 10. It
+writes a directory with:
+
+| File | Purpose |
+|---|---|
+| `summary.json` | Each reported statistic's mean across the replicates and its confidence interval |
+| `manifest.json` | The batch's parameters, seed, version, timestamps and the replicates that ran |
+| `replicate-NNN/` | One subdirectory per replicate, each holding the files below |
+
+A single run (`n_replicates: 1`, an explicit choice) writes the files below
+directly, with no `summary.json`. A batch writes one set per replicate
+subdirectory. Open a replicate in the desktop app to see it as a single run.
 
 | File | Purpose |
 |---|---|
@@ -165,11 +176,10 @@ writes these artifacts:
 
 The trajectory is stored as a compact binary log; `fim export` turns it into
 long-format JSON Lines (`trajectory.jsonl`), which can be loaded without a
-custom database (see [the trajectory log](doc/trajectory-log.md)).
-`n_replicates` greater than one runs a batch instead: one set of the
-above per replicate subdirectory, plus a batch-level `summary.json` — each
-reported statistic's mean and confidence interval across replicates — and
-its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
+custom database (see [the trajectory log](doc/trajectory-log.md)). See
+[n_replicates](doc/configuration.md#n_replicates) for how the batch decides
+when to stop, and [output schemas](doc/usage.md#output-schemas) for the
+files.
 
 ## Model contract
 
