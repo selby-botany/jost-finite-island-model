@@ -8,6 +8,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Any scalar setting can be a sweep axis, and `fim sweep keys`.** A sweep can
+  vary `n_loci`, `locus_lengths`, `initial_allele_count`, `mutation_model`,
+  `migrant_sampling`, `ploidy`, `precision` and every other setting that is one
+  number, word or on/off switch, not only the six it offered. `fim sweep keys`
+  lists them with their types and legal values. Settings that are lists or
+  groups, and `seed`, are refused with the reason.
+
 - **Retry failed and Recompute all on Home.** A study that holds a sweep shows
   **Retry failed (N)** while any point has failed, and **Recompute all…**
   (after a confirmation) once it has results. They are the desktop app's

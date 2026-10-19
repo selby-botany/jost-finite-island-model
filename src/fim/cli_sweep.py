@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 import threading
 import time
@@ -27,11 +28,14 @@ from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
+    AxisDefinition,
     SweepPlan,
     SweepPoint,
     SweepSpec,
+    axis_definition,
     enumerate_points,
     spec_from_config,
+    sweepable_key_names,
 )
 from fim.sweep_compare import Comparison, SweepRef, compare_sweeps
 from fim.sweep_cost import (
@@ -121,6 +125,12 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     _add_concurrency_arguments(resume_parser)
     _add_budget_arguments(resume_parser)
     _add_study_subcommands(sweep_subcommands)
+    keys_parser = sweep_subcommands.add_parser(
+        "keys", help="list the parameters a sweep can vary, with their types"
+    )
+    keys_parser.add_argument(
+        "--json", action="store_true", help="write JSON instead of a text table"
+    )
     report_parser = sweep_subcommands.add_parser(
         "report", help="print each point's statistic, with its interval"
     )
@@ -362,6 +372,7 @@ def command_sweep(
         "status": _status,
         "spec": _spec,
         "verify": _verify,
+        "keys": _keys,
         "compare": _compare,
         "report": lambda args: _report(args.study_id, args.statistic, as_csv=args.csv),
     }
@@ -369,6 +380,38 @@ def command_sweep(
     if handler is None:
         parser.error("a sweep subcommand is required")
     return handler(arguments)
+
+
+def _keys(arguments: argparse.Namespace) -> int:
+    """Print every sweepable key with its type and legal values."""
+    definitions = [axis_definition(key) for key in sweepable_key_names()]
+    if arguments.json:
+        print(json.dumps([item.to_dict() for item in definitions], indent=2))
+        return 0
+    width = max(len(definition.key) for definition in definitions)
+    for definition in definitions:
+        print(
+            f"{definition.key:<{width}}  {definition.kind:<6}  "
+            f"{_describe_values(definition)}"
+        )
+    return 0
+
+
+def _describe_values(definition: AxisDefinition) -> str:
+    """Return a key's legal values or range as one short phrase."""
+    if definition.choices:
+        return " | ".join(definition.choices)
+    low, high = definition.minimum, definition.maximum
+    if low is not None and high is not None:
+        bounds = f"{low:g} to {high:g}"
+    elif low is not None:
+        bounds = f"at least {low:g}"
+    elif high is not None:
+        bounds = f"at most {high:g}"
+    else:
+        bounds = "any number"
+    unit = f" ({definition.unit})" if definition.unit else ""
+    return bounds + unit
 
 
 def _load(path: Path) -> tuple[SweepSpec, str | None]:

@@ -14,10 +14,11 @@ from typing import Any
 from fim.persistence.groups import StudyManifest
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
-    SWEEPABLE_KEYS,
     SweepPlan,
     SweepSpec,
+    axis_definition,
     expand_axis,
+    sweepable_key_names,
 )
 from fim.sweep_compare import ComparedPoint, SweepRef, compare_sweeps
 from fim.sweep_cost import static_cost
@@ -44,8 +45,9 @@ def sweepable_keys_payload() -> list[dict[str, Any]]:
             "choices": list(key.choices),
             "displayDomain": list(key.display_domain) if key.display_domain else None,
             "closedForm": key.closed_form,
+            "generic": key.generic,
         }
-        for key in SWEEPABLE_KEYS.values()
+        for key in (axis_definition(name) for name in sweepable_key_names())
     ]
 
 

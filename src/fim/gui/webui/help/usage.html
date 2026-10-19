@@ -905,8 +905,16 @@ sweep:
     d: [4, 8, 16]
 </code></pre>
 <p>Each axis is a list of values or a <code>start</code>, <code>stop</code> and <code>count</code> range
-(<code>scale</code> is <code>linear</code> or <code>log</code>). The keys you can sweep are <code>N</code>, <code>d</code>, <code>m</code>, <code>mu</code>,
-<code>topology</code> (<code>island</code>, <code>ring</code>, <code>linear</code>, <code>torus</code>) and <code>deme_weighting</code>.</p>
+(<code>scale</code> is <code>linear</code> or <code>log</code>). Any setting that is one number, one word or
+one on/off switch can be swept: the common ones are <code>N</code>, <code>d</code>, <code>m</code>, <code>mu</code>,
+<code>topology</code> (<code>island</code>, <code>ring</code>, <code>linear</code>, <code>torus</code>) and <code>deme_weighting</code>, and the
+rest include <code>n_loci</code>, <code>locus_lengths</code>, <code>initial_allele_count</code>,
+<code>mutation_model</code>, <code>migrant_sampling</code>, <code>ploidy</code> and <code>precision</code>. A switch takes
+<code>true</code> and <code>false</code>. Settings that are lists or groups (<code>p_0</code>, <code>mu_b</code>, <code>loci</code>,
+<code>expert</code>) and <code>seed</code> (the sweep sets seeds, see below) cannot be swept.
+<code>fim sweep keys</code> lists every key with its type and legal values (<code>--json</code> for a
+program). A point whose settings do not fit together is reported by <code>plan</code>, not
+discovered while the sweep runs.</p>
 <p>In a sweep, <code>N</code> counts <strong>individuals per deme</strong> on an axis and in the base
 alike, the number the desktop app shows; the file's <code>ploidy</code> turns it into gene
 copies for each point.</p>

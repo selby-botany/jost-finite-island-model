@@ -1560,9 +1560,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SEED\_POLICIES](#fim.sweep.SEED_POLICIES)
   * [STRATEGIES](#fim.sweep.STRATEGIES)
   * [AxisDefinition](#fim.sweep.AxisDefinition)
+    * [is\_boolean](#fim.sweep.AxisDefinition.is_boolean)
     * [apply\_to](#fim.sweep.AxisDefinition.apply_to)
+    * [to\_dict](#fim.sweep.AxisDefinition.to_dict)
     * [check\_base](#fim.sweep.AxisDefinition.check_base)
   * [SWEEPABLE\_KEYS](#fim.sweep.SWEEPABLE_KEYS)
+  * [GENERIC\_KEYS](#fim.sweep.GENERIC_KEYS)
+  * [axis\_definition](#fim.sweep.axis_definition)
+  * [sweepable\_key\_names](#fim.sweep.sweepable_key_names)
   * [SweepAxis](#fim.sweep.SweepAxis)
     * [to\_dict](#fim.sweep.SweepAxis.to_dict)
   * [SweepSpec](#fim.sweep.SweepSpec)
@@ -36800,6 +36805,19 @@ definition survives a process boundary.
   `None` means a plain `mapping[key] = value`.
 - `requires` - Raises `ValueError` when the base configuration cannot
   take this axis; `None` means any base can.
+- `generic` - Whether the definition was synthesized from a configuration
+  key rather than curated.
+
+<a id="fim.sweep.AxisDefinition.is_boolean"></a>
+
+#### is\_boolean
+
+```python
+@property
+def is_boolean() -> bool
+```
+
+Return whether this is an on/off switch, written `true` or `false`.
 
 <a id="fim.sweep.AxisDefinition.apply_to"></a>
 
@@ -36810,6 +36828,16 @@ def apply_to(mapping: dict[str, Any], value: CoordinateValue) -> None
 ```
 
 Write `value` into `mapping`, the configuration of one point.
+
+<a id="fim.sweep.AxisDefinition.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return the description of this key as plain JSON-ready values.
 
 <a id="fim.sweep.AxisDefinition.check_base"></a>
 
@@ -36826,6 +36854,40 @@ Raise `ValueError` if `base` cannot take this axis.
 #### SWEEPABLE\_KEYS
 
 The curated parameters a sweep may vary, with labels, ranges and rules.
+
+<a id="fim.sweep.GENERIC_KEYS"></a>
+
+#### GENERIC\_KEYS
+
+Every other scalar configuration key a sweep may vary, by key.
+
+Types come from the key's default (or `_SENTINEL_DEFAULT_KINDS`); each
+generic entry has no label beyond its key and no display domain.
+
+<a id="fim.sweep.axis_definition"></a>
+
+#### axis\_definition
+
+```python
+def axis_definition(key: str) -> AxisDefinition
+```
+
+Return the definition of a sweepable key, curated or generic.
+
+**Raises**:
+
+- `ValueError` - The key cannot be swept; the message says why, or lists
+  the curated keys when the key is unknown.
+
+<a id="fim.sweep.sweepable_key_names"></a>
+
+#### sweepable\_key\_names
+
+```python
+def sweepable_key_names() -> tuple[str, ...]
+```
+
+Return every sweepable key: the curated ones, then the generic ones.
 
 <a id="fim.sweep.SweepAxis"></a>
 

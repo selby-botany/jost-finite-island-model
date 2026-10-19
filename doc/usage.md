@@ -1041,8 +1041,16 @@ sweep:
 ```
 
 Each axis is a list of values or a `start`, `stop` and `count` range
-(`scale` is `linear` or `log`). The keys you can sweep are `N`, `d`, `m`, `mu`,
-`topology` (`island`, `ring`, `linear`, `torus`) and `deme_weighting`.
+(`scale` is `linear` or `log`). Any setting that is one number, one word or
+one on/off switch can be swept: the common ones are `N`, `d`, `m`, `mu`,
+`topology` (`island`, `ring`, `linear`, `torus`) and `deme_weighting`, and the
+rest include `n_loci`, `locus_lengths`, `initial_allele_count`,
+`mutation_model`, `migrant_sampling`, `ploidy` and `precision`. A switch takes
+`true` and `false`. Settings that are lists or groups (`p_0`, `mu_b`, `loci`,
+`expert`) and `seed` (the sweep sets seeds, see below) cannot be swept.
+`fim sweep keys` lists every key with its type and legal values (`--json` for a
+program). A point whose settings do not fit together is reported by `plan`, not
+discovered while the sweep runs.
 
 In a sweep, `N` counts **individuals per deme** on an axis and in the base
 alike, the number the desktop app shows; the file's `ploidy` turns it into gene

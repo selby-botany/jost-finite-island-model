@@ -10,16 +10,19 @@ import yaml
 
 from fim.model.params import SimulationParams
 from fim.sweep import (
+    GENERIC_KEYS,
     SIZE_CONFIRMATION_THRESHOLD,
     SWEEPABLE_KEYS,
     AxisDefinition,
     SweepAxis,
     SweepSpec,
+    axis_definition,
     enumerate_points,
     expand_axis,
     point_run_description,
     point_run_name,
     spec_from_config,
+    sweepable_key_names,
 )
 
 _BASE: dict[str, Any] = {
@@ -466,3 +469,130 @@ def test_a_definition_refuses_a_base_it_cannot_take() -> None:
     with pytest.raises(ValueError, match="mu_b"):
         SWEEPABLE_KEYS["mu"].check_base({"mu_b": [0.1]})
     SWEEPABLE_KEYS["d"].check_base({})
+
+
+# --- generic configuration-key axes ---------------------------------------
+
+
+def test_every_scalar_configuration_key_is_sweepable() -> None:
+    names = set(sweepable_key_names())
+
+    assert names >= _CURATED_KEYS
+    assert {
+        "n_loci",
+        "locus_lengths",
+        "initial_allele_count",
+        "mutation_model",
+        "migrant_sampling",
+        "precision",
+        "ploidy",
+        "track_expensive_statistics",
+    } <= names
+    assert tuple(sweepable_key_names()[: len(_CURATED_KEYS)]) == tuple(SWEEPABLE_KEYS)
+
+
+@pytest.mark.parametrize(
+    ("key", "kind"),
+    [
+        ("n_loci", "int"),
+        ("locus_lengths", "int"),
+        ("initial_allele_count", "int"),
+        ("initial_concentration", "float"),
+        ("precision", "float"),
+        ("mutation_model", "choice"),
+        ("migrant_sampling", "choice"),
+        ("track_expensive_statistics", "choice"),
+        ("max_generations", "int"),
+        ("statistic_precision", "float"),
+    ],
+)
+def test_a_generic_keys_type_is_inferred(key: str, kind: str) -> None:
+    definition = axis_definition(key)
+
+    assert definition.generic is True
+    assert definition.kind == kind
+    assert definition.label == key
+
+
+@pytest.mark.parametrize(
+    ("key", "reason"),
+    [
+        ("seed", "seed_policy"),
+        ("p_0", "list of starting frequencies"),
+        ("mu_b", "per-locus"),
+        ("loci", "list of loci"),
+        ("convergence_statistic", "list of statistics"),
+        ("expert", "group of settings"),
+        ("not_a_key", "fim sweep keys"),
+    ],
+)
+def test_a_composite_or_unknown_key_is_refused_with_a_reason(
+    key: str, reason: str
+) -> None:
+    with pytest.raises(ValueError, match=reason):
+        axis_definition(key)
+    with pytest.raises(ValueError, match="cannot sweep"):
+        expand_axis(key, [1, 2])
+
+
+def test_sweeping_n_loci_gives_valid_points_that_differ() -> None:
+    plan = enumerate_points(_spec(expand_axis("n_loci", [1, 2, 4])))
+
+    assert [point.params["n_loci"] for point in plan.points] == [1, 2, 4]
+    assert not plan.invalid
+    assert len({point.run_id for point in plan.points}) == 3
+
+
+def test_sweeping_a_text_key_checks_its_words() -> None:
+    plan = enumerate_points(
+        _spec(expand_axis("migrant_sampling", ["continuous", "stochastic"]))
+    )
+
+    assert [point.params["migrant_sampling"] for point in plan.points] == [
+        "continuous",
+        "stochastic",
+    ]
+    with pytest.raises(ValueError, match="must be one of"):
+        expand_axis("migrant_sampling", ["continuous", "sometimes"])
+
+
+def test_a_switch_axis_writes_a_real_boolean() -> None:
+    spec = _spec(expand_axis("track_expensive_statistics", [False, True]))
+
+    plan = enumerate_points(spec)
+
+    assert spec.axes[0].values == ("false", "true")
+    assert [point.params["track_expensive_statistics"] for point in plan.points] == [
+        False,
+        True,
+    ]
+
+
+def test_a_generic_range_uses_the_inferred_type() -> None:
+    axis = expand_axis("initial_allele_count", {"start": 2, "stop": 8, "count": 4})
+
+    assert axis.values == (2, 4, 6, 8)
+    with pytest.raises(ValueError, match="at least 1"):
+        expand_axis("n_loci", [0, 1])
+
+
+def test_ploidy_is_swept_by_its_words() -> None:
+    plan = enumerate_points(_spec(expand_axis("ploidy", ["haploid", "diploid"]), N=40))
+
+    assert [point.params["ploidy"] for point in plan.points] == ["haploid", "diploid"]
+    with pytest.raises(ValueError, match="must be one of"):
+        expand_axis("ploidy", ["haploid", "double"])
+
+
+def test_the_generic_table_covers_no_curated_or_composite_key() -> None:
+    assert not set(GENERIC_KEYS) & set(SWEEPABLE_KEYS)
+    assert not set(GENERIC_KEYS) & {"seed", "expert", "mu_b", "loci", "p_0"}
+
+
+def test_generic_axes_round_trip_through_the_stored_form() -> None:
+    spec = _spec(
+        expand_axis("n_loci", [1, 2]),
+        expand_axis("track_expensive_statistics", [False, True]),
+    )
+
+    assert SweepSpec.from_dict(spec.to_dict()) == spec

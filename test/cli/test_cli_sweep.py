@@ -1011,3 +1011,28 @@ def test_verify_reports_a_difference_and_exits_nonzero(
     output = capsys.readouterr().out
     assert status == 1
     assert output.startswith("DIFFERS: 2 of 2 point(s) recomputed to different results")
+
+
+def test_keys_lists_the_curated_keys_first_then_the_generic_ones(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _main(tmp_path, "sweep", "keys") == 0
+    lines = capsys.readouterr().out.splitlines()
+
+    names = [line.split()[0] for line in lines]
+    assert names[:6] == ["N", "d", "m", "mu", "topology", "deme_weighting"]
+    assert {"n_loci", "mutation_model", "precision"} <= set(names)
+    mutation = next(line for line in lines if line.startswith("mutation_model"))
+    assert "infinite_alleles | finite_alleles" in mutation
+
+
+def test_keys_json_describes_each_key_with_its_type(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _main(tmp_path, "sweep", "keys", "--json") == 0
+    entries = {entry["key"]: entry for entry in json.loads(capsys.readouterr().out)}
+
+    assert entries["N"]["generic"] is False and entries["N"]["unit"] == "individuals"
+    assert entries["n_loci"]["generic"] is True
+    assert entries["n_loci"]["kind"] == "int"
+    assert entries["track_expensive_statistics"]["choices"] == ["true", "false"]

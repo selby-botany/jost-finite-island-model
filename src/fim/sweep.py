@@ -37,7 +37,8 @@ from typing import Any, Final, Literal
 import yaml
 
 from fim.engine import deterministic_run_id
-from fim.model.params import PARAMETER_DEFAULTS, SimulationParams
+from fim.model.params import PARAMETER_DEFAULTS, PLOIDY_WORDS, SimulationParams
+from fim.spec.fields import CONVERTED_KEYS, FIELD_MAP
 
 SWEEP_SPEC_VERSION: Final = 1
 """Schema version of the stored `sweep_spec` mapping."""
@@ -59,6 +60,9 @@ Scale = Literal["linear", "log"]
 SeedPolicy = Literal["spaced", "same"]
 CoordinateValue = int | float | str
 
+
+_BOOLEAN_CHOICES: Final = ("true", "false")
+"""The two words a switch takes in a spec, so every value is text."""
 
 ApplyAxis = Callable[[dict[str, Any], CoordinateValue], None]
 RequireBase = Callable[[Mapping[str, Any]], None]
@@ -117,6 +121,8 @@ class AxisDefinition:
             `None` means a plain `mapping[key] = value`.
         requires: Raises `ValueError` when the base configuration cannot
             take this axis; `None` means any base can.
+        generic: Whether the definition was synthesized from a configuration
+            key rather than curated.
     """
 
     key: str
@@ -131,13 +137,39 @@ class AxisDefinition:
     closed_form: bool = False
     apply: ApplyAxis | None = None
     requires: RequireBase | None = None
+    generic: bool = False
+
+    @property
+    def is_boolean(self) -> bool:
+        """Return whether this is an on/off switch, written `true` or `false`."""
+        return self.choices == _BOOLEAN_CHOICES
 
     def apply_to(self, mapping: dict[str, Any], value: CoordinateValue) -> None:
         """Write `value` into `mapping`, the configuration of one point."""
-        if self.apply is None:
-            mapping[self.key] = value
-        else:
+        if self.apply is not None:
             self.apply(mapping, value)
+        elif self.is_boolean:
+            mapping[self.key] = value == "true"
+        else:
+            mapping[self.key] = value
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the description of this key as plain JSON-ready values."""
+        return {
+            "key": self.key,
+            "label": self.label,
+            "kind": self.kind,
+            "unit": self.unit,
+            "scale": self.scale,
+            "minimum": self.minimum,
+            "maximum": self.maximum,
+            "choices": list(self.choices),
+            "display_domain": list(self.display_domain)
+            if self.display_domain
+            else None,
+            "closed_form": self.closed_form,
+            "generic": self.generic,
+        }
 
     def check_base(self, base: Mapping[str, Any]) -> None:
         """Raise `ValueError` if `base` cannot take this axis."""
@@ -211,6 +243,130 @@ SWEEPABLE_KEYS: Final[dict[str, AxisDefinition]] = {
 }
 """The curated parameters a sweep may vary, with labels, ranges and rules."""
 
+# Configuration keys no axis can take, with the reason shown to the person who
+# asked. Everything else that is one number, one word or one switch is open.
+_UNSWEEPABLE_REASONS: Final[dict[str, str]] = {
+    "seed": "seeds are set by the sweep's seed_policy",
+    "expert": "it is a group of settings, not one value",
+    "mu_b": "it is a list of per-locus rates, not one value",
+    "loci": "it is a list of loci, not one value",
+    "p_0": "it is a list of starting frequencies, not one value",
+    "convergence_statistic": "it is a list of statistics, not one value",
+}
+
+# Keys whose default is the "derive it" sentinel (`None`), so the default
+# cannot say what type the key takes.
+_SENTINEL_DEFAULT_KINDS: Final[dict[str, AxisKind]] = {
+    "convergence_burn_in": "int",
+    "max_generations": "int",
+    "statistic_precision": "float",
+    "replicate_averaging_window": "int",
+    "trajectory_thinning_start": "int",
+    "max_concurrent_replicates": "int",
+    "equilibrium_convergence_window": "int",
+    "equilibrium_convergence_tolerance": "float",
+    "equilibrium_max_generations": "int",
+    "ploidy": "choice",
+}
+
+# The words a text key accepts. A key missing here accepts any word and each
+# point is checked when the plan is built.
+_GENERIC_CHOICES: Final[dict[str, tuple[str, ...]]] = {
+    "migrant_sampling": ("continuous", "stochastic"),
+    "mutation_model": ("infinite_alleles", "finite_alleles"),
+    "locus_aggregation": ("ratio_of_means", "mean_of_ratios"),
+    "convergence_combinator": ("any", "all"),
+    "convergence_estimate": ("mean_of_values", "value_of_means", "auto"),
+    "precision_method": ("interval", "planned_replicates"),
+    "trajectory_retention": ("full", "thinned"),
+    "engine_backend": ("lineal", "auto", "generational", "generational-vector"),
+    "jit": ("off", "numba"),
+    "ploidy": tuple(PLOIDY_WORDS.values()),
+}
+
+_GENERIC_BOUNDS: Final[dict[str, tuple[float | None, float | None]]] = {
+    "n_loci": (1, None),
+    "locus_lengths": (1, None),
+    "initial_allele_count": (1, None),
+    "n_replicates": (1, None),
+    "precision": (0.0, None),
+    "confidence": (0.0, 1.0),
+}
+
+_LOG_SCALE_KEYS: Final = frozenset({"precision", "initial_concentration"})
+
+
+def _generic_kind(key: str) -> AxisKind | None:
+    """Return the axis kind a generic key takes, or `None` if it has none."""
+    if key in _SENTINEL_DEFAULT_KINDS:
+        return _SENTINEL_DEFAULT_KINDS[key]
+    default = PARAMETER_DEFAULTS.get(key)
+    if isinstance(default, bool | str):
+        return "choice"
+    if isinstance(default, int):
+        return "int"
+    if isinstance(default, float):
+        return "float"
+    return None
+
+
+def _build_generic_keys() -> dict[str, AxisDefinition]:
+    """Build a definition for every scalar configuration key not curated."""
+    names = {entry.key for entry in FIELD_MAP} | set(CONVERTED_KEYS)
+    found: dict[str, AxisDefinition] = {}
+    for key in sorted(names - SWEEPABLE_KEYS.keys() - _UNSWEEPABLE_REASONS.keys()):
+        kind = _generic_kind(key)
+        if kind is None:
+            continue
+        default = PARAMETER_DEFAULTS.get(key)
+        boolean = isinstance(default, bool)
+        minimum, maximum = _GENERIC_BOUNDS.get(key, (None, None))
+        found[key] = AxisDefinition(
+            key=key,
+            label=key,
+            kind=kind,
+            unit="",
+            scale="log" if key in _LOG_SCALE_KEYS else "linear",
+            minimum=minimum,
+            maximum=maximum,
+            choices=_BOOLEAN_CHOICES if boolean else _GENERIC_CHOICES.get(key, ()),
+            generic=True,
+        )
+    return found
+
+
+GENERIC_KEYS: Final[dict[str, AxisDefinition]] = _build_generic_keys()
+"""Every other scalar configuration key a sweep may vary, by key.
+
+Types come from the key's default (or `_SENTINEL_DEFAULT_KINDS`); each
+generic entry has no label beyond its key and no display domain.
+"""
+
+
+def axis_definition(key: str) -> AxisDefinition:
+    """Return the definition of a sweepable key, curated or generic.
+
+    Raises:
+        ValueError: The key cannot be swept; the message says why, or lists
+            the curated keys when the key is unknown.
+    """
+    definition = SWEEPABLE_KEYS.get(key) or GENERIC_KEYS.get(key)
+    if definition is not None:
+        return definition
+    reason = _UNSWEEPABLE_REASONS.get(key)
+    if reason is not None:
+        raise ValueError(f"cannot sweep {key!r}: {reason}")
+    curated = ", ".join(sorted(SWEEPABLE_KEYS))
+    raise ValueError(
+        f"cannot sweep {key!r}; it is not a scalar configuration key "
+        f"(the common ones are {curated}; `fim sweep keys` lists them all)"
+    )
+
+
+def sweepable_key_names() -> tuple[str, ...]:
+    """Return every sweepable key: the curated ones, then the generic ones."""
+    return (*SWEEPABLE_KEYS, *sorted(GENERIC_KEYS))
+
 
 @dataclass(frozen=True, slots=True)
 class SweepAxis:
@@ -257,11 +413,7 @@ class SweepSpec:
         if len(set(keys)) != len(keys):
             raise ValueError("a sweep axis key may appear only once")
         for axis in self.axes:
-            if axis.key not in SWEEPABLE_KEYS:
-                allowed = ", ".join(sorted(SWEEPABLE_KEYS))
-                raise ValueError(
-                    f"cannot sweep {axis.key!r}; the sweepable keys are {allowed}"
-                )
+            axis_definition(axis.key)
             if not axis.values:
                 raise ValueError(f"sweep axis {axis.key!r} has no values")
         _check_base_supports_axes(self.base, set(keys))
@@ -507,10 +659,7 @@ def expand_axis(key: str, definition: object) -> SweepAxis:
         ValueError: The key is not sweepable, or the definition is
             malformed or has a value outside the key's legal range.
     """
-    sweepable = SWEEPABLE_KEYS.get(key)
-    if sweepable is None:
-        allowed = ", ".join(sorted(SWEEPABLE_KEYS))
-        raise ValueError(f"cannot sweep {key!r}; the sweepable keys are {allowed}")
+    sweepable = axis_definition(key)
     if isinstance(definition, Mapping):
         values = _range_values(sweepable, definition)
     elif isinstance(definition, Sequence) and not isinstance(definition, str):
@@ -584,7 +733,7 @@ def apply_coordinates(
 
 def _apply_axis(mapping: dict[str, Any], key: str, value: CoordinateValue) -> None:
     """Apply one axis value to a point's configuration mapping in place."""
-    definition = SWEEPABLE_KEYS.get(key)
+    definition = SWEEPABLE_KEYS.get(key) or GENERIC_KEYS.get(key)
     if definition is not None:
         definition.apply_to(mapping, value)
 
@@ -604,15 +753,21 @@ def _with_topology(current: object, topology: str) -> object:
 
 def _check_base_supports_axes(base: Mapping[str, Any], keys: set[str]) -> None:
     """Reject a base that the chosen axes cannot be applied to."""
-    for key in sorted(keys & SWEEPABLE_KEYS.keys()):
-        SWEEPABLE_KEYS[key].check_base(base)
+    for key in sorted(keys):
+        definition = SWEEPABLE_KEYS.get(key) or GENERIC_KEYS.get(key)
+        if definition is not None:
+            definition.check_base(base)
 
 
 def _coerce(sweepable: AxisDefinition, value: object) -> CoordinateValue:
     """Return `value` as this key's type, or raise a `ValueError` naming it."""
     key = sweepable.key
     if sweepable.kind == "choice":
-        if not isinstance(value, str) or value not in sweepable.choices:
+        if sweepable.is_boolean and isinstance(value, bool):
+            return "true" if value else "false"
+        if not isinstance(value, str):
+            raise ValueError(f"{key} must be text, not {value!r}")
+        if sweepable.choices and value not in sweepable.choices:
             raise ValueError(f"{key} must be one of {list(sweepable.choices)}")
         return value
     if isinstance(value, bool) or not isinstance(value, int | float):
@@ -749,9 +904,7 @@ def _stored_axis(entry: object) -> SweepAxis:
     if not isinstance(entry, Mapping) or "key" not in entry or "values" not in entry:
         raise ValueError("each sweep axis needs a key and its values")
     key = str(entry["key"])
-    sweepable = SWEEPABLE_KEYS.get(key)
-    if sweepable is None:
-        raise ValueError(f"cannot sweep {key!r}")
+    sweepable = axis_definition(key)
     values = entry["values"]
     if not isinstance(values, Sequence) or isinstance(values, str):
         raise ValueError(f"sweep axis {key!r} values must be a list")
