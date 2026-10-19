@@ -18,6 +18,7 @@ from fim.sweep import (
     SweepAxis,
     SweepSpec,
     axis_definition,
+    derived_values,
     enumerate_points,
     expand_axis,
     point_run_description,
@@ -427,7 +428,7 @@ def test_a_sweep_file_keeps_the_base_in_order_and_names_the_policy() -> None:
 
 # --- the axis registry ---------------------------------------------------
 
-_CURATED_KEYS = {"N", "d", "m", "mu", "topology", "deme_weighting"}
+_CURATED_KEYS = {"N", "d", "m", "mu", "Nm", "topology", "deme_weighting"}
 
 
 def test_the_registry_holds_exactly_the_curated_keys() -> None:
@@ -769,3 +770,82 @@ def test_a_points_file_that_is_empty_or_doubled_is_refused(tmp_path: Path) -> No
         )
     with pytest.raises(ValueError, match="cannot read"):
         resolve_points_file({"sweep": {"points_file": "missing.csv"}}, tmp_path)
+
+
+# --- the derived Nm axis -------------------------------------------------
+
+
+@pytest.mark.parametrize(("individuals", "migrants"), [(40, 4.0), (100, 0.5), (8, 8.0)])
+def test_nm_sets_m_from_individuals_per_deme(individuals: int, migrants: float) -> None:
+    plan = enumerate_points(
+        _spec(expand_axis("Nm", [migrants]), N=individuals, ploidy="diploid")
+    )
+
+    (point,) = plan.points
+    assert point.params["m"] == pytest.approx(migrants / individuals)
+    assert SimulationParams.from_mapping(point.params).individuals == individuals
+
+
+def test_nm_with_an_n_axis_holds_the_migrants_per_deme_constant() -> None:
+    spec = _spec(expand_axis("N", [20, 40, 80]), expand_axis("Nm", [2.0]))
+
+    plan = enumerate_points(spec)
+
+    assert [p.params["m"] for p in plan.points] == pytest.approx([0.1, 0.05, 0.025])
+    # The listing order of the axes does not matter: Nm is applied last.
+    reversed_plan = enumerate_points(
+        _spec(expand_axis("Nm", [2.0]), expand_axis("N", [20, 40, 80]))
+    )
+    assert sorted(p.params["m"] for p in reversed_plan.points) == pytest.approx(
+        [0.025, 0.05, 0.1]
+    )
+
+
+def test_nm_counts_individuals_whatever_the_ploidy() -> None:
+    haploid = enumerate_points(_spec(expand_axis("Nm", [2.0]), N=20, ploidy="haploid"))
+    diploid = enumerate_points(_spec(expand_axis("Nm", [2.0]), N=20, ploidy="diploid"))
+
+    assert haploid.points[0].params["m"] == diploid.points[0].params["m"] == 0.1
+
+
+def test_nm_keeps_a_topology() -> None:
+    plan = enumerate_points(
+        _spec(expand_axis("topology", ["ring"]), expand_axis("Nm", [2.0]), N=20)
+    )
+
+    assert plan.points[0].params["m"] == {"topology": "ring", "rate": 0.1}
+
+
+def test_an_nm_that_needs_m_above_one_is_an_invalid_point() -> None:
+    plan = enumerate_points(_spec(expand_axis("Nm", [10.0, 100.0]), N=40))
+
+    assert len(plan.points) == 1
+    assert [invalid.coordinates for invalid in plan.invalid] == [{"Nm": 100.0}]
+
+
+def test_nm_and_m_cannot_both_vary_and_nm_needs_a_numeric_n() -> None:
+    with pytest.raises(ValueError, match="cannot vary both"):
+        _spec(expand_axis("Nm", [1.0]), expand_axis("m", [0.1]))
+    with pytest.raises(ValueError, match="one number of individuals"):
+        _spec(expand_axis("Nm", [1.0]), N=[20, 30])
+
+
+def test_the_convention_is_stored_and_read_back() -> None:
+    spec = _spec(expand_axis("Nm", [0.5, 2.0]))
+
+    stored = spec.to_dict()
+    axis = stored["axes"][0]  # type: ignore[index]
+
+    assert axis["convention"] == "N is individuals per deme"
+    assert SweepSpec.from_dict(stored) == spec
+    axis["convention"] = "N is gene copies per deme"
+    with pytest.raises(ValueError, match="convention"):
+        SweepSpec.from_dict(stored)
+
+
+def test_the_plan_shows_the_migration_rate_an_nm_axis_worked_out() -> None:
+    spec = _spec(expand_axis("Nm", [2.0]), N=20)
+    (point,) = enumerate_points(spec).points
+
+    assert derived_values(spec, point) == {"m": 0.1}
+    assert derived_values(_spec(expand_axis("d", [2])), point) == {}

@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A `Nm` axis (migrants per deme per generation).** A sweep can vary `Nm`
+  instead of `m`, alone or with `N`, to hold the number of migrants fixed as
+  population size changes. `N` counts individuals per deme, as everywhere
+  else; the plan shows the `m` it worked out and the stored sweep records the
+  convention.
+
 - **`zip` and `list` sweeps, and a points file.** Besides the full grid, a
   sweep can advance its axes together (`strategy: zip`) or run a hand-picked
   set of points (`points:` in the sweep file, or `points_file: design.csv`),

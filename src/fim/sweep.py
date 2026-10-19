@@ -92,6 +92,26 @@ def _apply_topology(mapping: dict[str, Any], value: CoordinateValue) -> None:
     mapping["m"] = _with_topology(mapping["m"], str(value))
 
 
+def _apply_migrants(mapping: dict[str, Any], value: CoordinateValue) -> None:
+    """Set `m` so that `N * m` migrants per deme arrive each generation.
+
+    `N` is individuals per deme, the base's or its own axis's, whichever the
+    point has. This runs after every plain axis (see `_apply_axes`).
+    """
+    individuals = mapping["N"]
+    _apply_migration_rate(mapping, _clean(float(value) / individuals))
+
+
+def _require_migrants_base(base: Mapping[str, Any]) -> None:
+    """Reject a base that cannot turn `N * m` into a migration rate."""
+    _require_migration(base)
+    population = base.get("N")
+    if isinstance(population, bool) or not isinstance(population, int | float):
+        raise ValueError(
+            "cannot sweep Nm unless the base N is one number of individuals per deme"
+        )
+
+
 def _require_migration(base: Mapping[str, Any]) -> None:
     """Reject a base whose `m` cannot take a rate or a topology."""
     migration = base.get("m")
@@ -131,6 +151,10 @@ class AxisDefinition:
             take this axis; `None` means any base can.
         generic: Whether the definition was synthesized from a configuration
             key rather than curated.
+        derived: Whether the axis is worked out from other settings (it is
+            applied after every plain axis, so it sees their values).
+        convention: What the axis's numbers count, recorded in the stored
+            spec so the sweep stays reproducible; empty when obvious.
     """
 
     key: str
@@ -146,6 +170,8 @@ class AxisDefinition:
     apply: ApplyAxis | None = None
     requires: RequireBase | None = None
     generic: bool = False
+    derived: bool = False
+    convention: str = ""
 
     @property
     def is_boolean(self) -> bool:
@@ -177,6 +203,8 @@ class AxisDefinition:
             else None,
             "closed_form": self.closed_form,
             "generic": self.generic,
+            "derived": self.derived,
+            "convention": self.convention,
         }
 
     def check_base(self, base: Mapping[str, Any]) -> None:
@@ -231,6 +259,19 @@ SWEEPABLE_KEYS: Final[dict[str, AxisDefinition]] = {
         display_domain=(0.000001, 0.1),
         closed_form=True,
         requires=_require_single_mutation_rate,
+    ),
+    "Nm": AxisDefinition(
+        key="Nm",
+        label="N·m (migrants per deme per generation)",
+        kind="float",
+        unit="migrants per deme per generation",
+        scale="log",
+        minimum=0.0,
+        display_domain=(0.01, 100.0),
+        apply=_apply_migrants,
+        requires=_require_migrants_base,
+        derived=True,
+        convention="N is individuals per deme",
     ),
     "topology": AxisDefinition(
         key="topology",
@@ -384,8 +425,15 @@ class SweepAxis:
     values: tuple[CoordinateValue, ...]
 
     def to_dict(self) -> dict[str, object]:
-        """Return the JSON-serializable stored form."""
-        return {"key": self.key, "values": list(self.values)}
+        """Return the JSON-serializable stored form.
+
+        A derived axis also records what its numbers count (`convention`).
+        """
+        stored: dict[str, object] = {"key": self.key, "values": list(self.values)}
+        definition = SWEEPABLE_KEYS.get(self.key)
+        if definition is not None and definition.convention:
+            stored["convention"] = definition.convention
+        return stored
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,6 +480,8 @@ class SweepSpec:
             axis_definition(axis.key)
             if not axis.values:
                 raise ValueError(f"sweep axis {axis.key!r} has no values")
+        if {"Nm", "m"} <= set(keys):
+            raise ValueError("Nm sets m, so a sweep cannot vary both Nm and m")
         _check_base_supports_axes(self.base, set(keys))
         _check_strategy(self, keys)
 
@@ -700,6 +750,22 @@ _STRATEGY_POINTS: Final[
 """Strategy name to the function that yields its coordinates in order."""
 
 
+def derived_values(spec: SweepSpec, point: SweepPoint) -> dict[str, CoordinateValue]:
+    """Return what a derived axis set at a point, for display.
+
+    For an `Nm` axis that is the migration rate `m` it worked out.
+
+    Returns:
+        A mapping of setting to value; empty when the sweep has no derived
+        axis.
+    """
+    shown: dict[str, CoordinateValue] = {}
+    if any(axis.key == "Nm" for axis in spec.axes):
+        migration = point.params["m"]
+        shown["m"] = migration["rate"] if isinstance(migration, Mapping) else migration
+    return shown
+
+
 def point_run_name(study_name: str, point: SweepPoint) -> str:
     """Return the name a sweep point's run is given: Study name plus its values.
 
@@ -896,9 +962,24 @@ def apply_coordinates(
     """
     _check_base_supports_axes(base, set(coordinates))
     mapping: dict[str, Any] = dict(base)
-    for key, value in coordinates.items():
-        _apply_axis(mapping, key, value)
+    _apply_axes(mapping, coordinates)
     return mapping
+
+
+def _apply_axes(
+    mapping: dict[str, Any], coordinates: Mapping[str, CoordinateValue]
+) -> None:
+    """Apply every axis value to `mapping`; derived axes last.
+
+    A derived axis (`Nm`) is worked out from the other settings, so it must
+    see the final `N` whatever order the axes were listed in.
+    """
+    ordered = sorted(
+        coordinates.items(),
+        key=lambda item: item[0] in SWEEPABLE_KEYS and SWEEPABLE_KEYS[item[0]].derived,
+    )
+    for key, value in ordered:
+        _apply_axis(mapping, key, value)
 
 
 def _apply_axis(mapping: dict[str, Any], key: str, value: CoordinateValue) -> None:
@@ -1004,8 +1085,7 @@ def _point_mapping(
 ) -> dict[str, Any]:
     """Return the configuration mapping for one grid position."""
     mapping: dict[str, Any] = dict(spec.base)
-    for key, value in coordinates.items():
-        _apply_axis(mapping, key, value)
+    _apply_axes(mapping, coordinates)
     if spec.seed_policy == "spaced":
         replicates = _integer_setting(mapping, "n_replicates")
         mapping["seed"] = _integer_setting(spec.base, "seed") + index * replicates
@@ -1100,6 +1180,12 @@ def _stored_axis(entry: object) -> SweepAxis:
         raise ValueError("each sweep axis needs a key and its values")
     key = str(entry["key"])
     sweepable = axis_definition(key)
+    convention = entry.get("convention", sweepable.convention)
+    if convention != sweepable.convention:
+        raise ValueError(
+            f"sweep axis {key!r} was stored with the convention {convention!r}, "
+            f"which this version does not use ({sweepable.convention!r})"
+        )
     values = entry["values"]
     if not isinstance(values, Sequence) or isinstance(values, str):
         raise ValueError(f"sweep axis {key!r} values must be a list")

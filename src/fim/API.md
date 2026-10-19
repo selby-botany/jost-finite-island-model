@@ -1585,6 +1585,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SweepPlan](#fim.sweep.SweepPlan)
     * [needs\_confirmation](#fim.sweep.SweepPlan.needs_confirmation)
   * [enumerate\_points](#fim.sweep.enumerate_points)
+  * [derived\_values](#fim.sweep.derived_values)
   * [point\_run\_name](#fim.sweep.point_run_name)
   * [point\_run\_description](#fim.sweep.point_run_description)
   * [expand\_axis](#fim.sweep.expand_axis)
@@ -36821,6 +36822,10 @@ definition survives a process boundary.
   take this axis; `None` means any base can.
 - `generic` - Whether the definition was synthesized from a configuration
   key rather than curated.
+- `derived` - Whether the axis is worked out from other settings (it is
+  applied after every plain axis, so it sees their values).
+- `convention` - What the axis's numbers count, recorded in the stored
+  spec so the sweep stays reproducible; empty when obvious.
 
 <a id="fim.sweep.AxisDefinition.is_boolean"></a>
 
@@ -36923,6 +36928,8 @@ def to_dict() -> dict[str, object]
 ```
 
 Return the JSON-serializable stored form.
+
+A derived axis also records what its numbers count (`convention`).
 
 <a id="fim.sweep.SweepSpec"></a>
 
@@ -37161,6 +37168,24 @@ Enumerate and validate every point of `spec`, without running any.
   The plan: valid points in fixed order (first axis slowest), the
   invalid ones with their reasons, and the count collapsed because
   two points resolved to the same configuration.
+
+<a id="fim.sweep.derived_values"></a>
+
+#### derived\_values
+
+```python
+def derived_values(spec: SweepSpec,
+                   point: SweepPoint) -> dict[str, CoordinateValue]
+```
+
+Return what a derived axis set at a point, for display.
+
+For an `Nm` axis that is the migration rate `m` it worked out.
+
+**Returns**:
+
+  A mapping of setting to value; empty when the sweep has no derived
+  axis.
 
 <a id="fim.sweep.point_run_name"></a>
 

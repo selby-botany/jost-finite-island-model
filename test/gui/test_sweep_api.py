@@ -118,7 +118,8 @@ def test_the_sweepable_keys_are_described_for_the_page(api: Api) -> None:
     assert keys["topology"]["choices"] == ["island", "ring", "linear", "torus"]
     assert keys["N"]["generic"] is False
     assert keys["n_loci"]["generic"] is True and keys["n_loci"]["kind"] == "int"
-    assert list(keys)[:6] == ["N", "d", "m", "mu", "topology", "deme_weighting"]
+    assert list(keys)[:7] == ["N", "d", "m", "mu", "Nm", "topology", "deme_weighting"]
+    assert keys["Nm"]["unit"] == "migrants per deme per generation"
 
 
 def test_plan_sweep_counts_points_and_reports_invalid_ones(api: Api) -> None:

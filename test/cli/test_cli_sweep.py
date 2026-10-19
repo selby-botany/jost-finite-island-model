@@ -1020,7 +1020,7 @@ def test_keys_lists_the_curated_keys_first_then_the_generic_ones(
     lines = capsys.readouterr().out.splitlines()
 
     names = [line.split()[0] for line in lines]
-    assert names[:6] == ["N", "d", "m", "mu", "topology", "deme_weighting"]
+    assert names[:7] == ["N", "d", "m", "mu", "Nm", "topology", "deme_weighting"]
     assert {"n_loci", "mutation_model", "precision"} <= set(names)
     mutation = next(line for line in lines if line.startswith("mutation_model"))
     assert "infinite_alleles | finite_alleles" in mutation
@@ -1080,3 +1080,17 @@ def test_a_zip_sweep_of_unequal_axes_is_a_usage_error(
 
     assert status != 0
     assert "equal lengths" in capsys.readouterr().err
+
+
+def test_plan_prints_the_rate_an_nm_axis_worked_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "nm.yaml"
+    path.write_text(_HEADER + "sweep:\n  axes:\n    Nm: [0.5, 2]\n", encoding="utf-8")
+
+    assert _main(tmp_path, "sweep", "plan", str(path), "--no-probe") == 0
+    out = capsys.readouterr().out
+
+    assert "Nm  m(derived)  run_id" in out
+    assert "0.5  0.03125" in out
+    assert "2  0.125" in out

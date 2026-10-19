@@ -1052,6 +1052,21 @@ rest include `n_loci`, `locus_lengths`, `initial_allele_count`,
 program). A point whose settings do not fit together is reported by `plan`, not
 discovered while the sweep runs.
 
+`Nm` is the number of migrants per deme per generation. Use it to hold that
+number fixed while `N` changes, or to sweep it directly: the sweep sets `m`
+to `Nm / N`, where `N` is **individuals per deme** (the same `N` as
+everywhere else, whatever the ploidy). `Nm` replaces `m` (a sweep cannot vary
+both), needs a single `N` in the base, and a value that would need `m` above 1
+is reported by `plan` as invalid. `plan` shows the `m` it worked out, and the
+stored sweep records that `N` counts individuals:
+
+```yaml
+sweep:
+  axes:
+    N: [20, 40, 80]
+    Nm: [0.5, 2]          # m = 0.025 .. 0.1, whatever N is
+```
+
 By default the axes form a grid: every combination, the first axis changing
 slowest. Two other designs are available with `strategy` in the `sweep:` block:
 

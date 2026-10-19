@@ -915,6 +915,18 @@ rest include <code>n_loci</code>, <code>locus_lengths</code>, <code>initial_alle
 <code>fim sweep keys</code> lists every key with its type and legal values (<code>--json</code> for a
 program). A point whose settings do not fit together is reported by <code>plan</code>, not
 discovered while the sweep runs.</p>
+<p><code>Nm</code> is the number of migrants per deme per generation. Use it to hold that
+number fixed while <code>N</code> changes, or to sweep it directly: the sweep sets <code>m</code>
+to <code>Nm / N</code>, where <code>N</code> is <strong>individuals per deme</strong> (the same <code>N</code> as
+everywhere else, whatever the ploidy). <code>Nm</code> replaces <code>m</code> (a sweep cannot vary
+both), needs a single <code>N</code> in the base, and a value that would need <code>m</code> above 1
+is reported by <code>plan</code> as invalid. <code>plan</code> shows the <code>m</code> it worked out, and the
+stored sweep records that <code>N</code> counts individuals:</p>
+<pre><code class="language-yaml">sweep:
+  axes:
+    N: [20, 40, 80]
+    Nm: [0.5, 2]          # m = 0.025 .. 0.1, whatever N is
+</code></pre>
 <p>By default the axes form a grid: every combination, the first axis changing
 slowest. Two other designs are available with <code>strategy</code> in the <code>sweep:</code> block:</p>
 <pre><code class="language-yaml">sweep:

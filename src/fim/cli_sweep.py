@@ -33,6 +33,7 @@ from fim.sweep import (
     SweepPoint,
     SweepSpec,
     axis_definition,
+    derived_values,
     enumerate_points,
     resolve_points_file,
     spec_from_config,
@@ -478,9 +479,16 @@ def _print_plan(
 ) -> None:
     """Print the points, the invalid ones with reasons, and the size and cost."""
     keys = [axis.key for axis in spec.axes]
-    print("  ".join(["point", *keys, "run_id"]))
-    for point in plan.points:
+    derived = [derived_values(spec, point) for point in plan.points]
+    worked_out = list(derived[0]) if derived else []
+    print(
+        "  ".join(
+            ["point", *keys, *(f"{name}(derived)" for name in worked_out), "run_id"]
+        )
+    )
+    for point, extra in zip(plan.points, derived, strict=True):
         values = [_format(point.coordinates[key]) for key in keys]
+        values += [_format(extra[name]) for name in worked_out]
         print("  ".join([f"{point.index:>5}", *values, point.run_id]))
     for invalid in plan.invalid:
         values = [_format(invalid.coordinates[key]) for key in keys]
