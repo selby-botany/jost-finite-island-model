@@ -65,9 +65,11 @@ from fim.sweep_run import (
     resolve_concurrency,
     run_sweep,
     sweep_spec_of,
+    trajectory_cache_path,
 )
 from fim.sweep_status import SweepStatus, describe_remaining, read_sweep_status
 from fim.sweep_table import ALL_STATISTICS, ResultTable
+from fim.sweep_trajectory import TrajectoryCache, write_trajectories_csv
 
 BUDGET_EXIT_STATUS = 3
 """Exit status of a run that stopped because it reached a budget (0 means done,
@@ -127,6 +129,21 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     _add_concurrency_arguments(resume_parser)
     _add_budget_arguments(resume_parser)
     _add_study_subcommands(sweep_subcommands)
+    trajectories_parser = sweep_subcommands.add_parser(
+        "trajectories",
+        help="write how each point approached equilibrium, generation by "
+        "generation, as CSV",
+    )
+    trajectories_parser.add_argument("study_id", metavar="STUDY_ID")
+    trajectories_parser.add_argument(
+        "--statistic", default="D", help="statistic to write (default: D)"
+    )
+    trajectories_parser.add_argument(
+        "--csv", required=True, metavar="OUT", help="file to write"
+    )
+    trajectories_parser.add_argument(
+        "--overwrite", action="store_true", help="replace OUT if it exists"
+    )
     keys_parser = sweep_subcommands.add_parser(
         "keys", help="list the parameters a sweep can vary, with their types"
     )
@@ -375,6 +392,7 @@ def command_sweep(
         "spec": _spec,
         "verify": _verify,
         "keys": _keys,
+        "trajectories": _trajectories,
         "compare": _compare,
         "report": lambda args: _report(args.study_id, args.statistic, as_csv=args.csv),
     }
@@ -382,6 +400,29 @@ def command_sweep(
     if handler is None:
         parser.error("a sweep subcommand is required")
     return handler(arguments)
+
+
+def _trajectories(arguments: argparse.Namespace) -> int:
+    """Write every finished point's sampled trajectory of one statistic as CSV."""
+    table = ResultTable.read(arguments.study_id)
+    target = Path(arguments.csv)
+    if target.exists() and not arguments.overwrite:
+        print(f"{target} exists; pass --overwrite to replace it", file=sys.stderr)
+        return 1
+    written = write_trajectories_csv(
+        table,
+        arguments.statistic,
+        target,
+        cache=TrajectoryCache(trajectory_cache_path(arguments.study_id)),
+    )
+    if written == 0:
+        print(
+            f"no finished point has a readable history of {arguments.statistic}",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"wrote {written} rows to {target}")
+    return 0
 
 
 def _keys(arguments: argparse.Namespace) -> int:

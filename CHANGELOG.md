@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`fim sweep trajectories`.** Writes how each point of a sweep approached
+  equilibrium as CSV: at most 512 generations per point, with the mean over the
+  replicates still running, its interval, the spread and how many replicates
+  contribute. The size does not depend on how long the runs were; a disposable
+  cache makes the second read fast.
+
 - **More parameters, any number of axes, and a choice of grid or together in
   the Sweep dialog.** The parameter menu lists the common parameters, then
   **More parameters** (every other scalar setting); add as many axes as

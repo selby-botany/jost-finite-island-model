@@ -1114,9 +1114,19 @@ fim sweep run sweep.yaml --pilot 2   # the 2 costliest points first, then ask
 fim sweep report STUDY_ID --statistic D --csv
 fim sweep export STUDY_ID results.csv [--statistic D --statistic G_ST] [--wide] [--with-theory]
 fim sweep compare STUDY_A STUDY_B [--statistic D] [--on m] [--csv out.csv]
+fim sweep trajectories STUDY_ID --csv out.csv [--statistic D]   # how each point approached equilibrium
+fim sweep keys [--json]               # every parameter a sweep can vary
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 ```
 
+- `trajectories` writes how each point approached equilibrium, not only where
+  it ended: for each finished point, at most 512 generations (generation 0, then
+  closely spaced early generations and evenly spaced later ones), with the mean
+  over the replicates still running, the interval of that mean, the spread, and
+  how many replicates contribute. `quorum` is `no` where fewer than half the
+  replicates are still running, so the later part of a curve is less sure. The
+  first read of a long sweep reads every replicate's history once (about 35
+  megabytes a second); the answer is kept in a cache that is safe to delete.
 - `plan` checks every point first. A combination that cannot run (a torus
   whose `rows * columns` differs from `d`) is listed with its reason.
 - A sweep of 100 points or more asks for `--yes`.

@@ -477,6 +477,7 @@ AXIS_DESCRIPTIONS: Final[Mapping[str, str]] = {
     "d": "Number of demes.",
     "m": "Migration rate per generation.",
     "mu": "Mutation rate per generation.",
+    "Nm": "Migrants per deme per generation (individuals per deme times m).",
     "topology": "Migration topology (island, ring, torus, ...).",
 }
 """What a swept configuration key means, for the sidecar's column dictionary."""

@@ -2243,6 +2243,13 @@ def health_cache_path(study_id: str, *, results: Path | None = None) -> Path:
     return failures_path(study_id, results=results).with_name(f"{study_id}.health.json")
 
 
+def trajectory_cache_path(study_id: str, *, results: Path | None = None) -> Path:
+    """Return the disposable folder of a sweep's cached point trajectories."""
+    return failures_path(study_id, results=results).with_name(
+        f"{study_id}.trajectories"
+    )
+
+
 def _read_point_row(
     entry: Mapping[str, Any], directory: Path, state: PointState, cache: HealthCache
 ) -> PointRow | None:

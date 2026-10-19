@@ -45,6 +45,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sweep_run`](#test.test_sweep_run)
   - [`test_sweep_status`](#test.test_sweep_status)
   - [`test_sweep_table`](#test.test_sweep_table)
+  - [`test_sweep_trajectory`](#test.test_sweep_trajectory)
   - [`test_termination`](#test.test_termination)
   - [`test_update`](#test.test_update)
   - [`test_workspace`](#test.test_workspace)
@@ -4825,6 +4826,15 @@ def results(tmp_path: Path) -> Iterator[Path]
 ```
 
 Point the results directory at a temporary one for the test.
+
+<a id="test.test_sweep_trajectory"></a>
+
+# test.test\_sweep\_trajectory
+
+Tests for `fim.sweep_trajectory`: the fixed-size view of a point's history.
+
+The histories are built by hand (a few JSON lines and a manifest per
+replicate), so no simulation runs and every figure is known in advance.
 
 <a id="test.test_termination"></a>
 

@@ -961,6 +961,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_id\_of](#fim.persistence.groups.run_id_of)
   * [run\_identity\_of](#fim.persistence.groups.run_identity_of)
   * [supersede\_run](#fim.persistence.groups.supersede_run)
+* [fim.persistence.history](#fim.persistence.history)
+  * [HISTORY\_FILENAME](#fim.persistence.history.HISTORY_FILENAME)
+  * [replicate\_directories](#fim.persistence.history.replicate_directories)
+  * [history\_path](#fim.persistence.history.history_path)
+  * [iter\_history\_rows](#fim.persistence.history.iter_history_rows)
 * [fim.persistence.manifest](#fim.persistence.manifest)
   * [ArtifactDigest](#fim.persistence.manifest.ArtifactDigest)
   * [hash\_file](#fim.persistence.manifest.hash_file)
@@ -1699,6 +1704,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_reproducibility\_note](#fim.sweep_run.write_reproducibility_note)
   * [sweep\_point\_results](#fim.sweep_run.sweep_point_results)
   * [health\_cache\_path](#fim.sweep_run.health_cache_path)
+  * [trajectory\_cache\_path](#fim.sweep_run.trajectory_cache_path)
 * [fim.sweep\_status](#fim.sweep_status)
   * [FailedPoint](#fim.sweep_status.FailedPoint)
   * [SweepStatus](#fim.sweep_status.SweepStatus)
@@ -1740,6 +1746,24 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [to\_jsonl](#fim.sweep_table.ResultTable.to_jsonl)
     * [metadata](#fim.sweep_table.ResultTable.metadata)
   * [relative\_difference](#fim.sweep_table.relative_difference)
+* [fim.sweep\_trajectory](#fim.sweep_trajectory)
+  * [MAX\_SAMPLES](#fim.sweep_trajectory.MAX_SAMPLES)
+  * [QUORUM\_FRACTION](#fim.sweep_trajectory.QUORUM_FRACTION)
+  * [CACHE\_SCHEMA](#fim.sweep_trajectory.CACHE_SCHEMA)
+  * [TrajectorySeries](#fim.sweep_trajectory.TrajectorySeries)
+  * [PointTrajectory](#fim.sweep_trajectory.PointTrajectory)
+    * [has\_quorum](#fim.sweep_trajectory.PointTrajectory.has_quorum)
+    * [to\_dict](#fim.sweep_trajectory.PointTrajectory.to_dict)
+    * [from\_dict](#fim.sweep_trajectory.PointTrajectory.from_dict)
+  * [trajectory\_grid](#fim.sweep_trajectory.trajectory_grid)
+  * [point\_trajectory](#fim.sweep_trajectory.point_trajectory)
+  * [TrajectoryCache](#fim.sweep_trajectory.TrajectoryCache)
+    * [get](#fim.sweep_trajectory.TrajectoryCache.get)
+    * [put](#fim.sweep_trajectory.TrajectoryCache.put)
+  * [TrajectoryEntry](#fim.sweep_trajectory.TrajectoryEntry)
+  * [TrajectoryCurve](#fim.sweep_trajectory.TrajectoryCurve)
+  * [table\_trajectories](#fim.sweep_trajectory.table_trajectories)
+  * [write\_trajectories\_csv](#fim.sweep_trajectory.write_trajectories_csv)
 * [fim.termination](#fim.termination)
   * [TERMINATED\_EXIT\_STATUS](#fim.termination.TERMINATED_EXIT_STATUS)
   * [sigterm\_raises\_exit](#fim.termination.sigterm_raises_exit)
@@ -24781,6 +24805,82 @@ every Study that held it now holds the new one.
 - `ReadOnlyError` - `old` is a read-only Run, which is never deleted;
   nothing is changed.
 
+<a id="fim.persistence.history"></a>
+
+# fim.persistence.history
+
+Reading a run's per-generation statistic history, whatever its format.
+
+Each replicate writes one row per generation (`convergence.jsonl`):
+`{"generation": N, "D": ..., "H_S": ..., ...}`. This module is the one place
+that knows how to find those files in a run directory and stream their rows,
+so a reader that only wants the history (the sweep trajectory overlay, the
+Results card, re-analysis) does not need to know how it was stored.
+
+<a id="fim.persistence.history.HISTORY_FILENAME"></a>
+
+#### HISTORY\_FILENAME
+
+The statistic history of one replicate or one scalar run.
+
+<a id="fim.persistence.history.replicate_directories"></a>
+
+#### replicate\_directories
+
+```python
+def replicate_directories(run_directory: Path) -> list[Path]
+```
+
+Return the directories that each hold one replicate's files.
+
+**Arguments**:
+
+- `run_directory` - A run directory: a batch (which holds
+  `replicate-NNN` folders) or a scalar run (which holds its own
+  files).
+
+
+**Returns**:
+
+  The replicate folders in order, or `[run_directory]` for a scalar
+  run.
+
+<a id="fim.persistence.history.history_path"></a>
+
+#### history\_path
+
+```python
+def history_path(replicate_directory: Path) -> Path
+```
+
+Return where a replicate's statistic history lives (it may not exist).
+
+<a id="fim.persistence.history.iter_history_rows"></a>
+
+#### iter\_history\_rows
+
+```python
+def iter_history_rows(path: Path) -> Iterator[HistoryRow]
+```
+
+Stream a history file's rows in generation order, one at a time.
+
+**Arguments**:
+
+- `path` - A history file (see `history_path`).
+
+
+**Yields**:
+
+  `(generation, {statistic: value})` for each row; a statistic that is
+  undefined at a generation is `None`.
+
+
+**Raises**:
+
+- `ValueError` - A row is not an object with an integer `generation`.
+- `OSError` - The file cannot be read.
+
 <a id="fim.persistence.manifest"></a>
 
 # fim.persistence.manifest
@@ -39294,6 +39394,18 @@ def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
 
 Return the disposable cache of a sweep's point health counts.
 
+<a id="fim.sweep_run.trajectory_cache_path"></a>
+
+#### trajectory\_cache\_path
+
+```python
+def trajectory_cache_path(study_id: str,
+                          *,
+                          results: Path | None = None) -> Path
+```
+
+Return the disposable folder of a sweep's cached point trajectories.
+
 <a id="fim.sweep_status"></a>
 
 # fim.sweep\_status
@@ -39992,6 +40104,308 @@ offered beside it, since some statistics span orders of magnitude).
 **Returns**:
 
   The ratio, or `None` if either is `None` or `reference` is 0.
+
+<a id="fim.sweep_trajectory"></a>
+
+# fim.sweep\_trajectory
+
+How each point of a sweep approached equilibrium, in a fixed small size.
+
+A sweep's results card shows where each point ended up. This module answers
+the other question the botanist asks: *how* it got there, and how fast.
+Every replicate keeps a statistic history, one row per generation, which for
+a long run is hundreds of megabytes across a sweep. A **point trajectory**
+reduces one point's replicates to at most `MAX_SAMPLES` generations, each
+with the mean across the replicates still running, the interval of that
+mean, the spread, and how many replicates contribute, so the overlay of
+all points is a few thousand numbers however long the runs were.
+
+The digest is a *view*, not a record: it is computed on demand by streaming
+each replicate's history once (bounded memory), and cached beside the sweep's
+other disposable status files, keyed by the history files' own checksums so a
+changed run recomputes. Deleting the cache loses nothing.
+
+<a id="fim.sweep_trajectory.MAX_SAMPLES"></a>
+
+#### MAX\_SAMPLES
+
+Most generations in one point trajectory.
+
+<a id="fim.sweep_trajectory.QUORUM_FRACTION"></a>
+
+#### QUORUM\_FRACTION
+
+A sample drawn from fewer than this fraction of a point's replicates is
+drawn dashed: the others have stopped, so the interval is less sure.
+
+<a id="fim.sweep_trajectory.CACHE_SCHEMA"></a>
+
+#### CACHE\_SCHEMA
+
+Version of the cached trajectory file; a different one recomputes.
+
+<a id="fim.sweep_trajectory.TrajectorySeries"></a>
+
+## TrajectorySeries Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TrajectorySeries()
+```
+
+One statistic's samples across a point's replicates.
+
+Every tuple has one entry per sampled generation of the trajectory.
+
+**Attributes**:
+
+- `mean` - Mean over the replicates still running at that generation.
+- `low` - Lower end of the interval of that mean (the mean itself when
+  only one replicate contributes).
+- `high` - Upper end of the interval.
+- `std` - Standard deviation across those replicates (0 for one).
+- `count` - How many replicates contribute at that generation.
+
+<a id="fim.sweep_trajectory.PointTrajectory"></a>
+
+## PointTrajectory Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class PointTrajectory()
+```
+
+A point's replicates reduced to a fixed small number of generations.
+
+**Attributes**:
+
+- `run_id` - The point's run id.
+- `generations` - The sampled generations, ascending, starting at 0.
+- `statistics` - Each statistic's series, by catalog key.
+- `replicates` - How many replicates the point has.
+- `burn_in` - The last burn-in generation, or `None` if the run has no
+  fixed one.
+- `confidence` - The confidence level of the intervals.
+
+<a id="fim.sweep_trajectory.PointTrajectory.has_quorum"></a>
+
+#### has\_quorum
+
+```python
+def has_quorum(position: int, statistic: str) -> bool
+```
+
+Return whether enough replicates contribute at a sampled position.
+
+**Arguments**:
+
+- `position` - Index into `generations`.
+- `statistic` - A statistic in `statistics`.
+
+<a id="fim.sweep_trajectory.PointTrajectory.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, Any]
+```
+
+Return the JSON-ready form, the cache's file content.
+
+<a id="fim.sweep_trajectory.PointTrajectory.from_dict"></a>
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, value: Mapping[str, Any]) -> PointTrajectory
+```
+
+Rebuild a trajectory from `to_dict`.
+
+**Raises**:
+
+- `ValueError` - The mapping is not a current trajectory.
+
+<a id="fim.sweep_trajectory.trajectory_grid"></a>
+
+#### trajectory\_grid
+
+```python
+def trajectory_grid(final: int, maximum: int = MAX_SAMPLES) -> tuple[int, ...]
+```
+
+Return the generations a trajectory samples, for a run ending at `final`.
+
+Generation 0, then a union of linear and logarithmic spacing up to
+`final` (logarithmic spacing shows the early transient, linear the
+plateau), de-duplicated and never more than `maximum` entries. A run
+short enough to fit is sampled at every generation.
+
+**Arguments**:
+
+- `final` - The longest replicate's final generation.
+- `maximum` - The most samples to return, at least 2.
+
+
+**Raises**:
+
+- `ValueError` - `maximum` is below 2.
+
+<a id="fim.sweep_trajectory.point_trajectory"></a>
+
+#### point\_trajectory
+
+```python
+def point_trajectory(run_directory: Path,
+                     run_id: str,
+                     *,
+                     cache: TrajectoryCache | None = None,
+                     maximum: int = MAX_SAMPLES) -> PointTrajectory | None
+```
+
+Reduce a point's replicates to a trajectory, from the cache if it holds one.
+
+**Arguments**:
+
+- `run_directory` - The point's run directory.
+- `run_id` - The point's run id.
+- `cache` - Where finished trajectories are kept, or `None` for none.
+- `maximum` - The most generations to sample.
+
+
+**Returns**:
+
+  The trajectory, or `None` when no replicate has a readable history
+  (a run that predates the history file, or one kept without it).
+
+<a id="fim.sweep_trajectory.TrajectoryCache"></a>
+
+## TrajectoryCache Objects
+
+```python
+class TrajectoryCache()
+```
+
+A disposable cache of point trajectories, one JSON file per run id.
+
+**Arguments**:
+
+- `directory` - Where the files live; created on the first write.
+
+<a id="fim.sweep_trajectory.TrajectoryCache.get"></a>
+
+#### get
+
+```python
+def get(run_id: str, key: str) -> PointTrajectory | None
+```
+
+Return the cached trajectory for `run_id` if it was made with `key`.
+
+<a id="fim.sweep_trajectory.TrajectoryCache.put"></a>
+
+#### put
+
+```python
+def put(run_id: str, key: str, trajectory: PointTrajectory) -> None
+```
+
+Store a trajectory; a cache that cannot be written is ignored.
+
+<a id="fim.sweep_trajectory.TrajectoryEntry"></a>
+
+## TrajectoryEntry Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TrajectoryEntry()
+```
+
+One point's trajectory with the point it belongs to.
+
+<a id="fim.sweep_trajectory.TrajectoryCurve"></a>
+
+## TrajectoryCurve Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TrajectoryCurve()
+```
+
+The trajectories of the points that share a value of the `by` axis.
+
+**Attributes**:
+
+- `by_value` - The value the curves are split by, or `None` for one group.
+- `entries` - The points' trajectories, in the sweep's point order.
+
+<a id="fim.sweep_trajectory.table_trajectories"></a>
+
+#### table\_trajectories
+
+```python
+def table_trajectories(
+        table: ResultTable,
+        *,
+        by: str | None = None,
+        held: Mapping[str, float | int | str] | None = None,
+        cache: TrajectoryCache | None = None) -> list[TrajectoryCurve]
+```
+
+Read the trajectories of a sweep's finished points, grouped for an overlay.
+
+**Arguments**:
+
+- `table` - The sweep's results.
+- `by` - The swept key whose values make one group each, or `None`.
+- `held` - A value for every other swept key (so one point per group
+  value remains); omitted keys keep every value.
+- `cache` - Where finished trajectories are kept.
+
+
+**Returns**:
+
+  One group per value of `by` (or one group), in the key's own order;
+  a finished point with no readable history is left out.
+
+
+**Raises**:
+
+- `ValueError` - `by` or a held key is not an axis of this sweep.
+
+<a id="fim.sweep_trajectory.write_trajectories_csv"></a>
+
+#### write\_trajectories\_csv
+
+```python
+def write_trajectories_csv(table: ResultTable,
+                           statistic: str,
+                           path: Path,
+                           *,
+                           cache: TrajectoryCache | None = None) -> int
+```
+
+Write every finished point's sampled trajectory of one statistic as CSV.
+
+Long format, one row per point and sampled generation: the sweep id, the
+point's index and coordinates, its run id, the generation, the mean over
+the replicates still running, the interval of the mean, the spread, how
+many replicates contribute, whether that is a quorum, and the point's
+health.
+
+**Arguments**:
+
+- `table` - The sweep's results.
+- `statistic` - A statistic's catalog key.
+- `path` - The file to write (replaced atomically).
+- `cache` - Where finished trajectories are kept.
+
+
+**Returns**:
+
+  The number of rows written; 0 (and no file) when no finished point has
+  a history of `statistic`.
 
 <a id="fim.termination"></a>
 

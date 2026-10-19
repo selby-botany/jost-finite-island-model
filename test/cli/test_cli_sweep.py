@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Any, ClassVar
@@ -1094,3 +1095,55 @@ def test_plan_prints_the_rate_an_nm_axis_worked_out(
     assert "Nm  m(derived)  run_id" in out
     assert "0.5  0.03125" in out
     assert "2  0.125" in out
+
+
+def test_trajectories_writes_each_points_sampled_history_as_csv(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    out = tmp_path / "trajectories.csv"
+
+    assert _main(tmp_path, "sweep", "trajectories", study_id, "--csv", str(out)) == 0
+    message = capsys.readouterr().out
+    assert _main(tmp_path, "sweep", "trajectories", study_id, "--csv", str(out)) == 1
+    refusal = capsys.readouterr().err
+
+    rows = list(csv.DictReader(out.read_text(encoding="utf-8").splitlines()))
+    assert f"wrote {len(rows)} rows" in message
+    assert {row["d"] for row in rows} == {"2", "3"}
+    assert rows[0]["generation"] == "0" and rows[0]["statistic"] == "D"
+    assert "--overwrite" in refusal
+    assert (
+        _main(
+            tmp_path,
+            "sweep",
+            "trajectories",
+            study_id,
+            "--csv",
+            str(out),
+            "--overwrite",
+        )
+        == 0
+    )
+
+
+def test_trajectories_of_an_unknown_statistic_writes_nothing(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    out = tmp_path / "none.csv"
+
+    status = _main(
+        tmp_path,
+        "sweep",
+        "trajectories",
+        study_id,
+        "--csv",
+        str(out),
+        "--statistic",
+        "nonsense",
+    )
+
+    assert status == 1
+    assert not out.exists()
+    assert "no finished point has a readable history" in capsys.readouterr().err
