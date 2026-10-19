@@ -849,3 +849,84 @@ def test_the_plan_shows_the_migration_rate_an_nm_axis_worked_out() -> None:
 
     assert derived_values(spec, point) == {"m": 0.1}
     assert derived_values(_spec(expand_axis("d", [2])), point) == {}
+
+
+# --- the recording block -----------------------------------------------------
+
+
+def test_a_sweep_writes_the_compact_history_unless_told_otherwise() -> None:
+    spec = _spec(expand_axis("d", [2, 3]))
+
+    plan = enumerate_points(spec)
+
+    assert {point.params["history_format"] for point in plan.points} == {"compact"}
+    exact = _spec(expand_axis("d", [2, 3]), history_format="exact")
+    assert {
+        point.params["history_format"] for point in enumerate_points(exact).points
+    } == {"exact"}
+
+
+def test_a_recording_block_sets_every_points_retention_over_the_base() -> None:
+    from dataclasses import replace  # noqa: PLC0415
+
+    spec = replace(
+        _spec(expand_axis("d", [2, 3]), trajectory_retention="thinned"),
+        recording={
+            "retention": "tapered",
+            "keep_last": 25,
+            "keep_burn_in": True,
+            "history": "exact",
+        },
+    )
+
+    for point in enumerate_points(spec).points:
+        assert point.params["trajectory_retention"] == "tapered"
+        assert point.params["trajectory_keep_last"] == 25
+        assert point.params["trajectory_keep_burn_in"] is True
+        assert point.params["history_format"] == "exact"
+
+
+def test_the_recording_does_not_change_a_points_identity() -> None:
+    from dataclasses import replace  # noqa: PLC0415
+
+    plain = _spec(expand_axis("d", [2, 3]))
+    kept = replace(plain, recording={"retention": "statistics", "history": "exact"})
+
+    assert [p.run_id for p in enumerate_points(plain).points] == [
+        p.run_id for p in enumerate_points(kept).points
+    ]
+    assert plain.digest() != kept.digest()  # the experiment, as asked, differs
+
+
+@pytest.mark.parametrize(
+    ("recording", "message"),
+    [
+        ({"retention": "sparse"}, "trajectory_retention"),
+        ({"keep_last": 0}, "trajectory_keep_last"),
+        ({"history": "tiny"}, "history_format"),
+        ({"keeps": "all"}, "unknown recording key"),
+    ],
+)
+def test_a_bad_recording_block_is_named(
+    recording: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        SweepSpec(base=_BASE, axes=(expand_axis("d", [2]),), recording=recording)
+
+
+def test_the_recording_block_round_trips_and_is_read_from_a_sweep_file() -> None:
+    from dataclasses import replace  # noqa: PLC0415
+
+    spec = replace(
+        _spec(expand_axis("d", [2, 3])),
+        recording={"retention": "tapered", "keep_last": 50},
+    )
+
+    assert SweepSpec.from_dict(spec.to_dict()) == spec
+    again, _ = spec_from_config(yaml.safe_load(spec.to_sweep_file("Recorded")))
+    assert again == spec
+    listed = SweepSpec.from_rows(
+        _BASE, [{"d": 2}, {"d": 3}], recording={"retention": "statistics"}
+    )
+    assert SweepSpec.from_dict(listed.to_dict()) == listed
+    assert "recording" not in _spec(expand_axis("d", [2])).to_dict()

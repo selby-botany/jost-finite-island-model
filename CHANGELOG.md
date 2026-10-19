@@ -8,6 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Choose what a sweep keeps: `--recording`, `--keep-last`, `--history`.** A
+  sweep file's `recording:` block (or the flags of `fim sweep plan` and `run`, or
+  the Keep choice in the Sweep dialog) sets each point's trajectory level (full,
+  thinned, tapered, statistics), the number of recent generations kept in full,
+  whether burn-in frames are kept, and the statistic history (compact by default
+  in a sweep, exact on request). `plan` prints the disk every level would take
+  side by side; a sweep whose estimate for its level reaches 50 GB needs
+  `--yes` (`--confirm-disk` changes the limit). The cost probe now also measures
+  the files a point always writes.
+
 - **`trajectory_retention: statistics`, and reuse that knows what a run kept.**
   A statistics-only run keeps no trajectory log: it holds its report, scatter
   plot, deme-pair statistics and a decimated statistic history (`history.json`,

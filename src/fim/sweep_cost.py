@@ -38,6 +38,8 @@ from typing import TYPE_CHECKING, Literal, Protocol
 from fim import __version__
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.model.params import SimulationParams
+from fim.persistence.history import DECIMATED_SAMPLES
+from fim.persistence.retention import TrajectoryRetention, tapered_generations
 
 if TYPE_CHECKING:
     from fim.sweep import SweepPlan, SweepPoint, SweepSpec
@@ -50,6 +52,20 @@ is twice this)."""
 
 DEFAULT_PROBED_CLASSES = 6
 """Most shape classes one plan measures; the rest take the nearest."""
+
+RECORDING_LEVELS = ("full", "thinned", "tapered", "statistics")
+"""The trajectory retention levels a plan prices side by side."""
+
+GAPPED_FRAME_FACTOR = 8.0
+"""Upper bound on how much more a kept frame of a thinned or tapered log costs
+than the average frame of a full log (a frame stored far from its neighbor is
+nearly a whole keyframe). A real tapered replicate measured about 2."""
+
+DECIMATED_VALUE_BYTES = 14
+"""Bytes a decimated history (`history.json`) spends on one value."""
+
+DECIMATED_STATISTICS = 7
+"""Statistics a decimated history is assumed to hold, for the estimate."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +121,8 @@ class PointCost:
         trace_bytes: Size of its trajectory log, or `None`.
         statistic_bytes: Size of its convergence history and deme-pair
             statistics, or `None`.
+        level_bytes: Its total size under each trajectory retention level
+            (`RECORDING_LEVELS`), or `None`.
         probe: Where its throughput came from: `measured` (its own shape
             class was timed), `nearest` (the closest timed class), or
             `unprobed`.
@@ -117,6 +135,7 @@ class PointCost:
     seconds: Band | None = None
     trace_bytes: Band | None = None
     statistic_bytes: Band | None = None
+    level_bytes: Mapping[str, Band] | None = None
     probe: Literal["measured", "nearest", "unprobed"] = "unprobed"
 
 
@@ -135,6 +154,8 @@ class SweepCost:
             log kept, or `None`.
         statistics_bytes: Disk if only the statistics were kept (no
             trajectory log), or `None`.
+        level_bytes: Disk under each trajectory retention level, or `None`.
+        recording_level: The level this sweep asks for.
         classes_measured: How many shape classes were timed.
     """
 
@@ -144,6 +165,8 @@ class SweepCost:
     wall_seconds: Band | None = None
     disk_bytes: Band | None = None
     statistics_bytes: Band | None = None
+    level_bytes: Mapping[str, Band] | None = None
+    recording_level: str = "full"
     classes_measured: int = 0
 
     def to_dict(self) -> dict[str, object]:
@@ -157,6 +180,17 @@ class SweepCost:
             "wallSeconds": _band_dict(self.wall_seconds),
             "diskBytes": _band_dict(self.disk_bytes),
             "statisticsBytes": _band_dict(self.statistics_bytes),
+            "levelBytes": (
+                None
+                if self.level_bytes is None
+                else {name: band.to_dict() for name, band in self.level_bytes.items()}
+            ),
+            "recordingLevel": self.recording_level,
+            "chosenBytes": _band_dict(
+                None
+                if self.level_bytes is None
+                else self.level_bytes[self.recording_level]
+            ),
             "probe": {
                 "measured": sum(p.probe == "measured" for p in self.points),
                 "nearest": sum(p.probe == "nearest" for p in self.points),
@@ -253,12 +287,15 @@ class Throughput:
             replicate adds each generation.
         pairwise_bytes_per_pair: Bytes `pairwise.json` spends on one deme
             pair of one replicate.
+        fixed_bytes_per_replicate: Bytes of everything else a replicate
+            writes (the report, the scatter plot, the manifest).
     """
 
     seconds_per_replicate_generation: float
     trace_bytes_per_generation: float
     statistic_bytes_per_generation: float
     pairwise_bytes_per_pair: float
+    fixed_bytes_per_replicate: float = 0.0
 
     def to_dict(self) -> dict[str, float]:
         """Return the figures as plain values, for the cache."""
@@ -267,6 +304,7 @@ class Throughput:
             "trace": self.trace_bytes_per_generation,
             "statistic": self.statistic_bytes_per_generation,
             "pair": self.pairwise_bytes_per_pair,
+            "fixed": self.fixed_bytes_per_replicate,
         }
 
 
@@ -301,6 +339,7 @@ class ShapeClass:
     loci: int
     locus_length: int
     size_bucket: int
+    history: str = "exact"
 
     @classmethod
     def of(cls, params: SimulationParams) -> ShapeClass:
@@ -313,14 +352,16 @@ class ShapeClass:
             loci=len(params.loci),
             locus_length=max(locus.length for locus in params.loci),
             size_bucket=round(math.log2(max(int(largest), 1))),
+            history=str(params.history_format),
         )
 
     @property
     def key(self) -> str:
         """Return a text key for this class (the cache's key)."""
+        suffix = "|compact" if self.history == "compact" else ""
         return (
             f"d{self.d}|{self.engine}|loci{self.loci}x{self.locus_length}"
-            f"|n2^{self.size_bucket}"
+            f"|n2^{self.size_bucket}{suffix}"
         )
 
     def distance(self, other: ShapeClass) -> float:
@@ -384,6 +425,7 @@ class ThroughputCache:
                 float(entry["trace"]),
                 float(entry["statistic"]),
                 float(entry["pair"]),
+                float(entry.get("fixed", 0.0)),
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -429,6 +471,7 @@ class _Burst:
     trace_bytes: int
     statistic_bytes: int
     pairwise_bytes: int
+    fixed_bytes: int = 0
 
 
 class EngineProbe:
@@ -477,6 +520,7 @@ class EngineProbe:
                 long.statistic_bytes, short.statistic_bytes
             ),
             pairwise_bytes_per_pair=long.pairwise_bytes / pairs,
+            fixed_bytes_per_replicate=float(long.fixed_bytes),
         )
 
     def _burst(self, params: SimulationParams, generations: int) -> _Burst:
@@ -504,6 +548,7 @@ class EngineProbe:
             burst = replace(
                 params,
                 n_replicates=1,
+                trajectory_retention="full",
                 max_generations=generations,
                 convergence_burn_in=min(params.convergence_burn_in, generations // 2),
             )
@@ -528,12 +573,20 @@ class EngineProbe:
                 path = run / name
                 return path.stat().st_size if path.is_file() else 0
 
+            counted = {"trajectory.tlog", history_path(run).name, "pairwise.json"}
+            others = sum(
+                entry.stat().st_size
+                for entry in run.iterdir()
+                if entry.is_file() and entry.name not in counted
+            )
+
             return _Burst(
                 seconds=elapsed,
                 generations=int(output.report["generation"]),
                 trace_bytes=size("trajectory.tlog"),
                 statistic_bytes=size(history_path(run).name),
                 pairwise_bytes=size("pairwise.json"),
+                fixed_bytes=others,
             )
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
@@ -607,14 +660,18 @@ def probed_cost(
         )
         for cost, params, shape in zip(base.points, configs, shapes, strict=True)
     )
+    levels = {
+        level: _total(p.level_bytes[level] for p in points if p.level_bytes is not None)
+        for level in RECORDING_LEVELS
+    }
     return replace(
         base,
         points=points,
         wall_seconds=_wall_seconds(points, points_at_once or 1),
-        disk_bytes=_total(
-            band for p in points for band in (p.trace_bytes, p.statistic_bytes) if band
-        ),
-        statistics_bytes=_total(p.statistic_bytes for p in points if p.statistic_bytes),
+        disk_bytes=levels["full"],
+        statistics_bytes=levels["statistics"],
+        level_bytes=levels,
+        recording_level=_requested_level(spec),
         classes_measured=len(measured),
     )
 
@@ -642,8 +699,79 @@ def _priced(
         ),
         trace_bytes=cost.work.scaled(figures.trace_bytes_per_generation),
         statistic_bytes=statistics,
+        level_bytes=_level_bytes(cost, params, figures, pairs),
         probe="measured" if own else "nearest",
     )
+
+
+def _requested_level(spec: SweepSpec) -> str:
+    """Return the trajectory retention level a sweep asks for."""
+    asked = spec.recording.get("retention") or spec.base.get("trajectory_retention")
+    return str(asked) if asked in RECORDING_LEVELS else "full"
+
+
+def _frames(level: str, params: SimulationParams, generations: int) -> int:
+    """Return how many frames a run of `generations` keeps under `level`."""
+    if level == "thinned":
+        start = params.trajectory_thinning_start or params.derived_thinning_start()
+        rule = TrajectoryRetention(
+            thinned=True,
+            start=start,
+            stride=params.trajectory_stride,
+            burn_in=params.convergence_burn_in,
+        )
+        return rule.count_through(generations)
+    return len(
+        tapered_generations(
+            generations,
+            params.trajectory_keep_last,
+            params.convergence_burn_in,
+            keep_burn_in=params.trajectory_keep_burn_in,
+        )
+    )
+
+
+def _level_bytes(
+    cost: PointCost, params: SimulationParams, figures: Throughput, pairs: int
+) -> dict[str, Band]:
+    """Return a point's size under every trajectory retention level.
+
+    The trajectory log is priced by the frames the level keeps (a thinned or
+    tapered frame costs up to `GAPPED_FRAME_FACTOR` times the full log's
+    average, never more than the whole log); the statistic history, the
+    deme-pair statistics and the fixed files are the same for every level
+    but `statistics`, whose history is the decimated one.
+    """
+    rate = figures.trace_bytes_per_generation
+    history = cost.work.scaled(figures.statistic_bytes_per_generation)
+    common = cost.replicates.scaled(
+        pairs * figures.pairwise_bytes_per_pair + figures.fixed_bytes_per_replicate
+    )
+    full_trace = cost.work.scaled(rate)
+    bands: dict[str, Band] = {"full": full_trace + history + common}
+    for level in ("thinned", "tapered"):
+        low = (
+            cost.replicates.low
+            * _frames(level, params, int(cost.generations.low))
+            * rate
+        )
+        high = (
+            cost.replicates.high
+            * _frames(level, params, int(cost.generations.high))
+            * rate
+            * GAPPED_FRAME_FACTOR
+        )
+        trace = Band(min(low, full_trace.low), min(max(high, low), full_trace.high))
+        bands[level] = trace + history + common
+    samples = Band(
+        min(cost.generations.low + 1, DECIMATED_SAMPLES),
+        min(cost.generations.high + 1, DECIMATED_SAMPLES),
+    )
+    decimated = (cost.replicates * samples).scaled(
+        DECIMATED_STATISTICS * DECIMATED_VALUE_BYTES
+    )
+    bands["statistics"] = decimated + common
+    return {level: bands[level] for level in RECORDING_LEVELS}
 
 
 def _total(bands: Iterable[Band]) -> Band:
@@ -927,9 +1055,20 @@ def describe_cost(
     if cost.points_at_once is not None:
         where = f" ({cost.points_at_once} point(s) at once"
         where += f" on {cores} core(s))" if cores is not None else ")"
-    statistics = (
-        f"; {band_text(cost.statistics_bytes, format_bytes)} statistics only"
-        if cost.statistics_bytes is not None
+    levels = cost.level_bytes or {}
+    others = "".join(
+        f"; {band_text(levels[name], format_bytes)} {label}"
+        for name, label in (
+            ("thinned", "thinned"),
+            ("tapered", "tapered"),
+            ("statistics", "statistics only"),
+        )
+        if name in levels
+    )
+    chosen = (
+        f" (this sweep keeps {cost.recording_level}: "
+        f"{band_text(levels[cost.recording_level], format_bytes)})"
+        if cost.recording_level != "full" and cost.recording_level in levels
         else ""
     )
     nearest = sum(p.probe == "nearest" for p in cost.points)
@@ -937,7 +1076,7 @@ def describe_cost(
         time=f"about {band_text(cost.wall_seconds, format_duration)}{where}",
         disk=(
             f"about {band_text(cost.disk_bytes, format_bytes)} with the full "
-            f"trajectory log{statistics}"
+            f"trajectory log{others}{chosen}"
         ),
         probe=(
             f"{cost.classes_measured} shape class(es) measured, {nearest} point(s) "

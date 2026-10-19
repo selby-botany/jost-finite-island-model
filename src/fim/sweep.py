@@ -32,14 +32,19 @@ import itertools
 import json
 import math
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final, Literal
 
 import yaml
 
 from fim.engine import deterministic_run_id
-from fim.model.params import PARAMETER_DEFAULTS, PLOIDY_WORDS, SimulationParams
+from fim.model.params import (
+    PARAMETER_DEFAULTS,
+    PLOIDY_WORDS,
+    SimulationParams,
+    validate_execution_settings,
+)
 from fim.spec.fields import CONVERTED_KEYS, FIELD_MAP
 
 SWEEP_SPEC_VERSION: Final = 2
@@ -62,6 +67,20 @@ STRATEGIES: Final = ("grid", "zip", "list")
 
 _SIGNIFICANT_DIGITS: Final = 12
 """Digits kept when expanding a range, so ids do not depend on float noise."""
+
+RECORDING_KEYS: Final[dict[str, str]] = {
+    "retention": "trajectory_retention",
+    "keep_last": "trajectory_keep_last",
+    "keep_burn_in": "trajectory_keep_burn_in",
+    "history": "history_format",
+}
+"""A sweep's `recording:` block keys and the configuration keys they set."""
+
+SWEEP_DEFAULT_HISTORY: Final = "compact"
+"""The statistic history format a sweep writes unless it is told otherwise."""
+
+DISK_CONFIRMATION_BYTES: Final = 50 * 1000**3
+"""Estimated disk (bytes) at or above which a plan should ask before running."""
 
 AxisKind = Literal["int", "float", "choice"]
 Scale = Literal["linear", "log"]
@@ -457,6 +476,12 @@ class SweepSpec:
             `same` gives every point the base seed.
         rows: For `list`, one mapping of axis key to value per point, in
             order. Empty otherwise.
+        recording: What every point keeps (the `recording:` block of a sweep
+            file): any of `retention` (`full`, `thinned`, `tapered`,
+            `statistics`), `keep_last`, `keep_burn_in` and `history`
+            (`exact`, `compact`). Only what is given is stored; a key left
+            out takes the base configuration's value, and the history
+            defaults to `compact` for a sweep.
     """
 
     base: Mapping[str, Any]
@@ -464,6 +489,7 @@ class SweepSpec:
     strategy: str = "grid"
     seed_policy: SeedPolicy = "spaced"
     rows: tuple[Mapping[str, CoordinateValue], ...] = ()
+    recording: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate the axes against the base and the sweepable-key table."""
@@ -486,6 +512,11 @@ class SweepSpec:
             raise ValueError("Nm sets m, so a sweep cannot vary both Nm and m")
         _check_base_supports_axes(self.base, set(keys))
         _check_strategy(self, keys)
+        _check_recording(self.recording)
+
+    def recording_config(self) -> dict[str, Any]:
+        """Return the recording block as configuration keys (`RECORDING_KEYS`)."""
+        return {RECORDING_KEYS[key]: value for key, value in self.recording.items()}
 
     @classmethod
     def from_rows(
@@ -493,6 +524,7 @@ class SweepSpec:
         base: Mapping[str, Any],
         rows: Sequence[Mapping[str, object]],
         seed_policy: SeedPolicy = "spaced",
+        recording: Mapping[str, Any] | None = None,
     ) -> SweepSpec:
         """Build a `list` spec from explicit rows, one mapping per point.
 
@@ -530,6 +562,7 @@ class SweepSpec:
             strategy="list",
             seed_policy=seed_policy,
             rows=tuple(coerced),
+            recording=dict(recording or {}),
         )
 
     @property
@@ -552,6 +585,8 @@ class SweepSpec:
         }
         if self.strategy == "list":
             stored["rows"] = [dict(row) for row in self.rows]
+        if self.recording:
+            stored["recording"] = dict(self.recording)
         return stored
 
     def digest(self, plan: SweepPlan | None = None) -> str:
@@ -602,6 +637,8 @@ class SweepSpec:
             block["points"] = [dict(row) for row in self.rows]
         else:
             block["axes"] = {axis.key: list(axis.values) for axis in self.axes}
+        if self.recording:
+            block["recording"] = dict(self.recording)
         document = {**dict(self.base), "sweep": block}
         return yaml.safe_dump(document, sort_keys=False, default_flow_style=None)
 
@@ -623,6 +660,7 @@ class SweepSpec:
                 base,
                 _stored_rows(value.get("rows")),
                 _seed_policy(value.get("seed_policy", "spaced")),
+                _stored_recording(value.get("recording")),
             )
         raw_axes = value.get("axes")
         if not isinstance(raw_axes, Sequence) or isinstance(raw_axes, str):
@@ -633,6 +671,7 @@ class SweepSpec:
             axes=axes,
             strategy=str(value.get("strategy", "grid")),
             seed_policy=_seed_policy(value.get("seed_policy", "spaced")),
+            recording=_stored_recording(value.get("recording")),
         )
 
 
@@ -859,7 +898,14 @@ def spec_from_config(config: Mapping[str, Any]) -> tuple[SweepSpec, str | None]:
     block = config.get("sweep")
     if not isinstance(block, Mapping):
         raise ValueError("a sweep file needs a 'sweep:' block")
-    unknown = set(block) - {"name", "axes", "seed_policy", "strategy", "points"}
+    unknown = set(block) - {
+        "name",
+        "axes",
+        "seed_policy",
+        "strategy",
+        "points",
+        "recording",
+    }
     if unknown:
         names = ", ".join(sorted(str(key) for key in unknown))
         raise ValueError(f"unknown sweep key(s): {names}")
@@ -868,12 +914,13 @@ def spec_from_config(config: Mapping[str, Any]) -> tuple[SweepSpec, str | None]:
     if name is not None and not isinstance(name, str):
         raise ValueError("sweep 'name' must be text")
     policy = _seed_policy(block.get("seed_policy", "spaced"))
+    recording = _stored_recording(block.get("recording"))
     strategy = str(block.get("strategy", "list" if "points" in block else "grid"))
     if strategy == "list":
         if "axes" in block:
             raise ValueError("a list sweep takes 'points', not 'axes'")
         return SweepSpec.from_rows(
-            base, _stored_rows(block.get("points")), policy
+            base, _stored_rows(block.get("points")), policy, recording
         ), name
     if "points" in block:
         raise ValueError("'points' belongs to the list strategy")
@@ -885,6 +932,7 @@ def spec_from_config(config: Mapping[str, Any]) -> tuple[SweepSpec, str | None]:
         axes=tuple(expand_axis(str(key), value) for key, value in raw_axes.items()),
         strategy=strategy,
         seed_policy=policy,
+        recording=recording,
     )
     return spec, name
 
@@ -1087,6 +1135,11 @@ def _point_mapping(
 ) -> dict[str, Any]:
     """Return the configuration mapping for one grid position."""
     mapping: dict[str, Any] = dict(spec.base)
+    # A sweep writes the compact history unless the base or the sweep says
+    # otherwise: of everything a point writes it is the largest file at a size
+    # that makes no difference to the answers.
+    mapping.setdefault("history_format", SWEEP_DEFAULT_HISTORY)
+    mapping.update(spec.recording_config())
     _apply_axes(mapping, coordinates)
     if spec.seed_policy == "spaced":
         replicates = _integer_setting(mapping, "n_replicates")
@@ -1149,6 +1202,28 @@ def _seed_policy(value: object) -> SeedPolicy:
     if value == "same":
         return "same"
     raise ValueError(f"sweep seed_policy must be one of {list(SEED_POLICIES)}")
+
+
+def _check_recording(recording: Mapping[str, Any]) -> None:
+    """Check a `recording:` block: known keys, and values the configuration accepts."""
+    unknown = set(recording) - RECORDING_KEYS.keys()
+    if unknown:
+        names = ", ".join(sorted(str(key) for key in unknown))
+        raise ValueError(
+            f"unknown recording key(s): {names} "
+            f"(the keys are {', '.join(RECORDING_KEYS)})"
+        )
+    settings = {RECORDING_KEYS[key]: value for key, value in recording.items()}
+    validate_execution_settings(settings)
+
+
+def _stored_recording(value: object) -> dict[str, Any]:
+    """Return a `recording:` block as a mapping, or raise if it is not one."""
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("sweep 'recording' must be a mapping")
+    return dict(value)
 
 
 def _check_strategy(spec: SweepSpec, keys: list[str]) -> None:

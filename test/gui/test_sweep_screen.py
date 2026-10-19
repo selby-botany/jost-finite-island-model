@@ -7,6 +7,7 @@ saw.
 
 from __future__ import annotations
 
+import json
 import queue
 from collections.abc import Callable
 from functools import partial
@@ -697,3 +698,51 @@ def test_axes_can_be_combined_together_instead_of_as_a_grid(
     assert zipped["summary"].startswith("2 points")
     assert "equal lengths" in unequal["summary"]
     assert unequal["doneDisabled"] is True
+
+
+_KEEP_STATE = """({
+    value: document.getElementById('sweep-keep').value,
+    detailHidden: document.getElementById('sweep-keep-detail').hidden,
+    labels: Array.from(document.querySelectorAll('#sweep-keep option'))
+        .map((option) => option.textContent),
+    note: document.getElementById('sweep-keep-note').textContent,
+    history: document.getElementById('sweep-history').value,
+    costReady: window.__fimSweepCostReady,
+    request: JSON.stringify(buildSweepRequest().recording)
+})"""
+
+_CHOOSE_KEEP = (
+    "const keep = document.getElementById('sweep-keep');"
+    "keep.value = '{value}';"
+    "keep.dispatchEvent(new Event('change', {{bubbles: true}}));"
+)
+
+
+def test_the_keep_selector_shows_a_disk_figure_for_each_choice(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        measured = poll_until(
+            _KEEP_STATE,
+            lambda s: s["costReady"] is True and "up to" in s["labels"][0],
+        )
+        window.evaluate_js(_CHOOSE_KEEP.format(value="tapered"))
+        tapered = poll_until(_KEEP_STATE, lambda s: s["detailHidden"] is False)
+        window.evaluate_js(_CHOOSE_KEEP.format(value="full"))
+        back = poll_until(_KEEP_STATE, lambda s: s["detailHidden"] is True)
+        return measured, tapered, back
+
+    measured, tapered, back = _drive(window, steps)
+
+    assert measured["value"] == "full" and measured["history"] == "compact"
+    assert all("up to" in label for label in measured["labels"])
+    assert json.loads(measured["request"]) == {
+        "retention": "full",
+        "keepLast": 1000,
+        "keepBurnIn": False,
+        "history": "compact",
+    }
+    assert json.loads(tapered["request"])["retention"] == "tapered"
+    assert back["value"] == "full"

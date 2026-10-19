@@ -5803,7 +5803,7 @@ class Api:
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         plan = enumerate_points(spec)
-        existing = sweep_bridge.existing_run_ids()
+        existing = sweep_bridge.reusable_run_ids(plan)
         new = tuple(point for point in plan.points if point.run_id not in existing)
         if not plan.points:
             return {"ok": False, "message": "the sweep has no valid points"}

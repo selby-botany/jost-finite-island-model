@@ -1093,3 +1093,54 @@ def test_a_sweep_study_is_not_pooled_by_open_study(
 
     assert reply["ok"] is False
     assert "holds a sweep" in reply["message"]
+
+
+def test_the_keep_choices_become_a_recording_block_without_the_defaults() -> None:
+    from fim.gui.sweep_bridge import recording_from_request  # noqa: PLC0415
+
+    assert recording_from_request(None) == {}
+    assert recording_from_request({"retention": "full", "history": "compact"}) == {}
+    assert recording_from_request(
+        {
+            "retention": "tapered",
+            "keepLast": 250,
+            "keepBurnIn": True,
+            "history": "exact",
+        }
+    ) == {
+        "retention": "tapered",
+        "keep_last": 250,
+        "keep_burn_in": True,
+        "history": "exact",
+    }
+    # The details of tapering do not leak into another level.
+    assert recording_from_request(
+        {"retention": "statistics", "keepLast": 250, "keepBurnIn": True}
+    ) == {"retention": "statistics"}
+    with pytest.raises(ValueError, match="recording must be an object"):
+        recording_from_request("tapered")
+
+
+def test_plan_and_estimate_carry_what_the_sweep_keeps(
+    api: Api, _no_real_engine_probe: Any
+) -> None:
+    request = _request(
+        _D_AXIS, recording={"retention": "tapered", "keepLast": 50, "history": "exact"}
+    )
+
+    plan = api.plan_sweep(_form(), request)
+    reply = api.estimate_sweep_cost(_form(), request)
+
+    assert plan["ok"] is True
+    assert reply["ok"] is True
+    assert reply["cost"]["recordingLevel"] == "tapered"
+    assert set(reply["cost"]["levelBytes"]) == {
+        "full",
+        "thinned",
+        "tapered",
+        "statistics",
+    }
+    assert reply["cost"]["chosenBytes"] == reply["cost"]["levelBytes"]["tapered"]
+    assert "this sweep keeps tapered" in reply["disk"]
+    bad = api.plan_sweep(_form(), _request(_D_AXIS, recording={"retention": "sparse"}))
+    assert bad["ok"] is False and "trajectory_retention" in bad["message"]

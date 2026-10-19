@@ -16,6 +16,7 @@ from fim.persistence.groups import StudyManifest
 from fim.persistence.recording import run_satisfies
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
+    SWEEP_DEFAULT_HISTORY,
     SweepPlan,
     SweepSpec,
     axis_definition,
@@ -83,8 +84,45 @@ def spec_from_request(base: Mapping[str, Any], request: Mapping[str, Any]) -> Sw
     if strategy not in {"grid", "zip"}:
         raise ValueError("strategy must be 'grid' or 'zip'")
     return SweepSpec(
-        base=dict(base), axes=tuple(axes), strategy=strategy, seed_policy=policy
+        base=dict(base),
+        axes=tuple(axes),
+        strategy=strategy,
+        seed_policy=policy,
+        recording=recording_from_request(request.get("recording")),
     )
+
+
+def recording_from_request(value: object) -> dict[str, Any]:
+    """Read the dialog's Keep choices into a sweep `recording:` block.
+
+    Only what differs from a sweep's defaults is kept (everything, a compact
+    history), so a sweep set up in the app and the same sweep written in a
+    file have one fingerprint.
+
+    Args:
+        value: `{"retention", "keepLast", "keepBurnIn", "history"}`, any of
+            them optional, or `None`.
+
+    Raises:
+        ValueError: A choice is not one the configuration accepts.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("recording must be an object")
+    block: dict[str, Any] = {}
+    retention = value.get("retention", "full")
+    if retention != "full":
+        block["retention"] = retention
+    if retention == "tapered":
+        if value.get("keepLast") is not None:
+            block["keep_last"] = value["keepLast"]
+        if value.get("keepBurnIn"):
+            block["keep_burn_in"] = True
+    history = value.get("history", SWEEP_DEFAULT_HISTORY)
+    if history != SWEEP_DEFAULT_HISTORY:
+        block["history"] = history
+    return block
 
 
 def trajectories_payload(

@@ -2097,7 +2097,7 @@ def test_a_plan_marks_only_the_runs_that_hold_what_it_asks(results: Path) -> Non
 @pytest.mark.parametrize(
     ("kept", "compared", "not_compared"),
     [
-        (_TAPERED, {"report", "pairwise", "convergence"}, {"trajectory"}),
+        (_TAPERED, {"report", "pairwise"}, {"trajectory", "convergence"}),
         (
             {"trajectory_retention": "statistics"},
             {"report", "pairwise"},
@@ -2122,7 +2122,8 @@ def test_runs_that_kept_different_things_agree_on_what_both_kept(
     # reuse it, so the second sweep computes the point again.
     short = _study(results, 2, **kept)
     _run(short)
-    full = _study(results, 2)
+    # (A sweep writes a compact history by default, so "everything" says exact.)
+    full = _study(results, 2, history_format="exact")
     outcome, _ = _run(full)
     assert outcome.done == 1
 

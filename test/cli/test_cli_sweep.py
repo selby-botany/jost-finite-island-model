@@ -14,7 +14,7 @@ from fim import cli
 from fim.persistence import groups
 from fim.sweep import enumerate_points, spec_from_config
 from fim.sweep_cost import Throughput
-from fim.sweep_run import LocalPointRunner, create_sweep_study
+from fim.sweep_run import LocalPointRunner, create_sweep_study, sweep_spec_of
 
 _SWEEP_FILE = """\
 N: 16
@@ -1147,3 +1147,73 @@ def test_trajectories_of_an_unknown_statistic_writes_nothing(
     assert status == 1
     assert not out.exists()
     assert "no finished point has a readable history" in capsys.readouterr().err
+
+
+def test_the_plan_prices_every_recording_level_and_names_the_one_asked_for(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert (
+        _main(tmp_path, "sweep", "plan", str(sweep_file), "--recording", "tapered") == 0
+    )
+    disk = next(
+        line for line in capsys.readouterr().out.splitlines() if line.startswith("disk")
+    )
+
+    for words in ("full trajectory log", "thinned", "tapered", "statistics only"):
+        assert words in disk
+    assert "this sweep keeps tapered" in disk
+
+
+def test_a_large_disk_estimate_needs_yes_and_a_light_recording_does_not(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    heavy = ["--confirm-disk", "1KB"]
+
+    refused = _main(tmp_path, "sweep", "run", str(sweep_file), *heavy)
+    refusal = capsys.readouterr()
+    allowed = _main(tmp_path, "sweep", "run", str(sweep_file), *heavy, "--yes")
+    capsys.readouterr()
+
+    assert refused == 2
+    assert "pass --yes" in refusal.err and "disk" in refusal.out
+    assert allowed == 0
+
+
+def test_the_recording_flags_decide_what_the_points_keep(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert (
+        _main(
+            tmp_path,
+            "sweep",
+            "run",
+            str(sweep_file),
+            "--recording",
+            "statistics",
+            "--history",
+            "exact",
+        )
+        == 0
+    )
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    capsys.readouterr()
+    runs = groups.study_run_directories(study, results=tmp_path / "results")
+
+    assert len(runs) == 2
+    for run in runs:
+        names = {path.name for path in run.iterdir()}
+        assert "history.json" in names and "trajectory.tlog" not in names
+        assert "convergence.jsonl" not in names  # statistics keeps the decimated one
+    spec = sweep_spec_of(study)
+    assert spec.recording == {"retention": "statistics", "history": "exact"}
+
+
+def test_a_sweep_keeps_the_compact_history_by_default(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _run_sweep_file(tmp_path, sweep_file, capsys)
+    (study,) = groups.list_studies(results=tmp_path / "results")
+
+    for run in groups.study_run_directories(study, results=tmp_path / "results"):
+        assert (run / "convergence.fhist").is_file()
+        assert not (run / "convergence.jsonl").exists()

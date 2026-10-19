@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from fim.config.defaults import DEFAULT_SWEEP_MAX_ATTEMPTS
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.sweep import (
+    DISK_CONFIRMATION_BYTES,
     SIZE_CONFIRMATION_THRESHOLD,
     AxisDefinition,
     SweepPlan,
@@ -41,11 +43,13 @@ from fim.sweep import (
 )
 from fim.sweep_compare import Comparison, SweepRef, compare_sweeps
 from fim.sweep_cost import (
+    RECORDING_LEVELS,
     Band,
     EngineProbe,
     SweepCost,
     ThroughputCache,
     describe_cost,
+    format_bytes,
     format_duration,
     order_costliest_first,
     parse_size,
@@ -88,6 +92,7 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     plan_parser.add_argument("file", metavar="FILE", help="a sweep file (YAML)")
     _add_concurrency_arguments(plan_parser, retry=False)
     _add_probe_argument(plan_parser)
+    _add_recording_arguments(plan_parser)
     run_parser = sweep_subcommands.add_parser(
         "run", help="create the sweep's study and run its points"
     )
@@ -102,6 +107,7 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     _add_concurrency_arguments(run_parser)
     _add_budget_arguments(run_parser)
     _add_probe_argument(run_parser)
+    _add_recording_arguments(run_parser)
     run_parser.add_argument(
         "--pilot",
         type=int,
@@ -305,6 +311,45 @@ def _budget_from(arguments: argparse.Namespace) -> SweepBudget | None:
     )
 
 
+def _add_recording_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the flags that choose what each point keeps, and when to ask about disk."""
+    parser.add_argument(
+        "--recording",
+        choices=RECORDING_LEVELS,
+        help="what each point keeps of its trajectory: full (the default), "
+        "thinned, tapered (the last generations in full, the past thinned "
+        "further back) or statistics (no trajectory log); overrides the file",
+    )
+    parser.add_argument(
+        "--keep-last",
+        type=int,
+        metavar="K",
+        help="with --recording tapered, the last K generations kept in full "
+        "(default 1000)",
+    )
+    parser.add_argument(
+        "--keep-burn-in",
+        action="store_true",
+        default=None,
+        help="with --recording tapered, keep the burn-in frames too (for a "
+        "study of the transient)",
+    )
+    parser.add_argument(
+        "--history",
+        choices=("exact", "compact"),
+        help="how each point stores its statistic history: compact (the sweep "
+        "default; rounded to about 1%% of the precision) or exact (full "
+        "precision, far larger)",
+    )
+    parser.add_argument(
+        "--confirm-disk",
+        metavar="SIZE",
+        default=None,
+        help="ask for --yes when the estimate for what the sweep keeps is at or "
+        "above SIZE (such as 50GB; default 50GB)",
+    )
+
+
 def _add_probe_argument(parser: argparse.ArgumentParser) -> None:
     """Add `--probe/--no-probe`, which turns the engine measurement on or off."""
     parser.add_argument(
@@ -466,9 +511,32 @@ def _load(path: Path) -> tuple[SweepSpec, str | None]:
     return spec_from_config(resolve_points_file(payload, path.resolve().parent))
 
 
+def _load_with_recording(
+    path: Path, arguments: argparse.Namespace
+) -> tuple[SweepSpec, str | None]:
+    """Read a sweep file and apply the recording flags over its `recording:` block."""
+    spec, name = _load(path)
+    given = {
+        "retention": getattr(arguments, "recording", None),
+        "keep_last": getattr(arguments, "keep_last", None),
+        "keep_burn_in": getattr(arguments, "keep_burn_in", None),
+        "history": getattr(arguments, "history", None),
+    }
+    overrides = {key: value for key, value in given.items() if value is not None}
+    if not overrides:
+        return spec, name
+    return replace(spec, recording={**spec.recording, **overrides}), name
+
+
+def _disk_threshold(arguments: argparse.Namespace) -> int:
+    """Return the disk estimate at or above which a run needs --yes."""
+    text = getattr(arguments, "confirm_disk", None)
+    return DISK_CONFIRMATION_BYTES if text is None else parse_size(text)
+
+
 def _plan(arguments: argparse.Namespace) -> int:
     """Print the plan for a sweep file; run nothing."""
-    spec, _ = _load(Path(arguments.file))
+    spec, _ = _load_with_recording(Path(arguments.file), arguments)
     plan = enumerate_points(spec)
     _print_plan(spec, plan, arguments)
     return 0 if plan.points else 2
@@ -517,7 +585,7 @@ def _cost_for(
 
 def _print_plan(
     spec: SweepSpec, plan: SweepPlan, arguments: argparse.Namespace
-) -> None:
+) -> SweepCost:
     """Print the points, the invalid ones with reasons, and the size and cost."""
     keys = [axis.key for axis in spec.axes]
     derived = [derived_values(spec, point) for point in plan.points]
@@ -555,6 +623,21 @@ def _print_plan(
             f"This is {SIZE_CONFIRMATION_THRESHOLD} or more points; "
             "'fim sweep run' will need --yes."
         )
+    if _needs_disk_confirmation(cost, arguments):
+        print(
+            f"The disk estimate for {cost.recording_level} is "
+            f"{format_bytes(int(cost.level_bytes[cost.recording_level].high))} or "  # type: ignore[index]
+            f"more, at or above {format_bytes(_disk_threshold(arguments))}; "
+            "'fim sweep run' will need --yes (or choose a lighter --recording)."
+        )
+    return cost
+
+
+def _needs_disk_confirmation(cost: SweepCost, arguments: argparse.Namespace) -> bool:
+    """Return whether the estimated disk for what the sweep keeps is large."""
+    if cost.level_bytes is None or cost.recording_level not in cost.level_bytes:
+        return False
+    return cost.level_bytes[cost.recording_level].high >= _disk_threshold(arguments)
 
 
 def _print_probed(cost: SweepCost, chosen: Concurrency | None) -> None:
@@ -569,14 +652,20 @@ def _print_probed(cost: SweepCost, chosen: Concurrency | None) -> None:
 def _run(arguments: argparse.Namespace) -> int:
     """Create the sweep's study and run it."""
     path = Path(arguments.file)
-    spec, file_name = _load(path)
+    spec, file_name = _load_with_recording(path, arguments)
     plan = enumerate_points(spec)
-    _print_plan(spec, plan, arguments)
+    cost = _print_plan(spec, plan, arguments)
     if not plan.points:
         print("fim: error: the sweep has no valid points to run", file=sys.stderr)
         return 2
     if plan.needs_confirmation and not arguments.yes:
         print("fim: error: pass --yes to run a sweep this large", file=sys.stderr)
+        return 2
+    if _needs_disk_confirmation(cost, arguments) and not arguments.yes:
+        print(
+            "fim: error: pass --yes to run a sweep that may need this much disk",
+            file=sys.stderr,
+        )
         return 2
     _budget_from(arguments)  # refuse a bad limit before anything is created
     name = arguments.study or file_name or path.stem

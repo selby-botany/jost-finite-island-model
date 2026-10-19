@@ -31,6 +31,12 @@ const sweepConfigureSummary = document.getElementById("configure-sweep-summary")
 const sweepBaseSummary = document.getElementById("sweep-base-summary");
 const sweepAxesContainer = document.getElementById("sweep-axes");
 const sweepAddAxisButton = document.getElementById("sweep-add-axis-button");
+const sweepKeepSelect = document.getElementById("sweep-keep");
+const sweepKeepNote = document.getElementById("sweep-keep-note");
+const sweepKeepDetail = document.getElementById("sweep-keep-detail");
+const sweepKeepLastInput = document.getElementById("sweep-keep-last");
+const sweepKeepBurnInBox = document.getElementById("sweep-keep-burn-in");
+const sweepHistorySelect = document.getElementById("sweep-history");
 const sweepStrategySelect = document.getElementById("sweep-strategy");
 const sweepSeedPolicySelect = document.getElementById("sweep-seed-policy");
 const sweepPointsAtOnceSelect = document.getElementById("sweep-points-at-once");
@@ -369,6 +375,12 @@ function buildSweepRequest() {
     );
     return {
         axes,
+        recording: {
+            retention: sweepKeepSelect.value,
+            keepLast: Number(sweepKeepLastInput.value),
+            keepBurnIn: sweepKeepBurnInBox.checked,
+            history: sweepHistorySelect.value,
+        },
         strategy: sweepStrategySelect.value,
         seedPolicy: sweepSeedPolicySelect.value,
         pointsAtOnce: sweepPointsAtOnceSelect.value,
@@ -423,6 +435,7 @@ async function refreshSweepCost(sequence, request) {
     window.__fimSweepCostReady = false;
     sweepCost.hidden = false;
     sweepCostTime.textContent = "Measuring the engine…";
+    showSweepKeepFigures(null);
     sweepCostDisk.textContent = "";
     sweepCostProbe.textContent = "";
     const estimate = await window.pywebview.api.estimate_sweep_cost(
@@ -438,8 +451,50 @@ async function refreshSweepCost(sequence, request) {
         sweepCostTime.textContent = estimate.time;
         sweepCostDisk.textContent = estimate.disk ?? "";
         sweepCostProbe.textContent = estimate.probe ?? "";
+        showSweepKeepFigures(estimate.cost ? estimate.cost.levelBytes : null);
     }
     window.__fimSweepCostReady = true;
+}
+
+/** Show the tapering details only when "recent generations" is chosen. */
+function syncSweepKeepControls() {
+    sweepKeepDetail.hidden = sweepKeepSelect.value !== "tapered";
+}
+
+/**
+ * A byte count as short text in decimal units.
+ * @param {number} bytes
+ * @returns {string}
+ */
+function sweepBytesText(bytes) {
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let value = bytes;
+    let unit = 0;
+    while (value >= SWEEP_BYTES_PER_UNIT && unit < units.length - 1) {
+        value /= SWEEP_BYTES_PER_UNIT;
+        unit += 1;
+    }
+    const digits = value >= SWEEP_BYTES_TENS ? 0 : 1;
+    return `${value.toFixed(digits)} ${units[unit]}`;
+}
+
+/**
+ * Write each Keep choice's disk estimate next to it, and flag a large one.
+ * @param {object|null} levelBytes `cost.levelBytes` from the estimate, or null.
+ */
+function showSweepKeepFigures(levelBytes) {
+    for (const option of sweepKeepSelect.options) {
+        const band = levelBytes === null ? null : levelBytes[option.value];
+        option.textContent =
+            band === null
+                ? option.dataset.label
+                : `${option.dataset.label} (up to ${sweepBytesText(band.high)})`;
+    }
+    const chosen = levelBytes === null ? null : levelBytes[sweepKeepSelect.value];
+    sweepKeepNote.textContent =
+        chosen !== null && chosen.high >= SWEEP_DISK_CONFIRMATION_BYTES
+            ? "This is a large amount of disk; consider keeping less."
+            : "";
 }
 
 /**
@@ -878,6 +933,12 @@ window.fim.openSweepDialog = async function openSweepDialog(options = {}) {
                 : sweepConfig.request.axes.map(sweepAxisInitial);
     }
     if (sweepConfig !== null) {
+        const recording = sweepConfig.request.recording ?? {};
+        sweepKeepSelect.value = recording.retention ?? "full";
+        sweepKeepLastInput.value = String(recording.keepLast ?? SWEEP_KEEP_LAST_DEFAULT);
+        sweepKeepBurnInBox.checked = Boolean(recording.keepBurnIn);
+        sweepHistorySelect.value = recording.history ?? "compact";
+        syncSweepKeepControls();
         sweepStrategySelect.value = sweepConfig.request.strategy ?? "grid";
         sweepSeedPolicySelect.value = sweepConfig.request.seedPolicy;
         sweepPointsAtOnceSelect.value = sweepConfig.request.pointsAtOnce ?? "auto";
@@ -987,6 +1048,17 @@ sweepCheckbox.addEventListener("change", async () => {
 });
 sweepConfigureButton.addEventListener("click", () => window.fim.openSweepDialog());
 sweepAddAxisButton.addEventListener("click", () => addSweepAxisRow());
+for (const control of [
+    sweepKeepSelect,
+    sweepKeepLastInput,
+    sweepKeepBurnInBox,
+    sweepHistorySelect,
+]) {
+    control.addEventListener("change", () => {
+        syncSweepKeepControls();
+        onSweepAxesChanged();
+    });
+}
 sweepStrategySelect.addEventListener("change", onSweepAxesChanged);
 sweepSeedPolicySelect.addEventListener("change", onSweepAxesChanged);
 sweepPointsAtOnceSelect.addEventListener("change", onSweepAxesChanged);

@@ -668,6 +668,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.sweep\_bridge](#fim.gui.sweep_bridge)
   * [sweepable\_keys\_payload](#fim.gui.sweep_bridge.sweepable_keys_payload)
   * [spec\_from\_request](#fim.gui.sweep_bridge.spec_from_request)
+  * [recording\_from\_request](#fim.gui.sweep_bridge.recording_from_request)
   * [trajectories\_payload](#fim.gui.sweep_bridge.trajectories_payload)
   * [existing\_run\_ids](#fim.gui.sweep_bridge.existing_run_ids)
   * [reusable\_run\_ids](#fim.gui.sweep_bridge.reusable_run_ids)
@@ -1605,6 +1606,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SIZE\_CONFIRMATION\_THRESHOLD](#fim.sweep.SIZE_CONFIRMATION_THRESHOLD)
   * [SEED\_POLICIES](#fim.sweep.SEED_POLICIES)
   * [STRATEGIES](#fim.sweep.STRATEGIES)
+  * [RECORDING\_KEYS](#fim.sweep.RECORDING_KEYS)
+  * [SWEEP\_DEFAULT\_HISTORY](#fim.sweep.SWEEP_DEFAULT_HISTORY)
+  * [DISK\_CONFIRMATION\_BYTES](#fim.sweep.DISK_CONFIRMATION_BYTES)
   * [AxisDefinition](#fim.sweep.AxisDefinition)
     * [is\_boolean](#fim.sweep.AxisDefinition.is_boolean)
     * [apply\_to](#fim.sweep.AxisDefinition.apply_to)
@@ -1618,6 +1622,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [to\_dict](#fim.sweep.SweepAxis.to_dict)
   * [SweepSpec](#fim.sweep.SweepSpec)
     * [\_\_post\_init\_\_](#fim.sweep.SweepSpec.__post_init__)
+    * [recording\_config](#fim.sweep.SweepSpec.recording_config)
     * [from\_rows](#fim.sweep.SweepSpec.from_rows)
     * [grid\_size](#fim.sweep.SweepSpec.grid_size)
     * [to\_dict](#fim.sweep.SweepSpec.to_dict)
@@ -1649,6 +1654,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.sweep\_cost](#fim.sweep_cost)
   * [DEFAULT\_PROBE\_GENERATIONS](#fim.sweep_cost.DEFAULT_PROBE_GENERATIONS)
   * [DEFAULT\_PROBED\_CLASSES](#fim.sweep_cost.DEFAULT_PROBED_CLASSES)
+  * [RECORDING\_LEVELS](#fim.sweep_cost.RECORDING_LEVELS)
+  * [GAPPED\_FRAME\_FACTOR](#fim.sweep_cost.GAPPED_FRAME_FACTOR)
+  * [DECIMATED\_VALUE\_BYTES](#fim.sweep_cost.DECIMATED_VALUE_BYTES)
+  * [DECIMATED\_STATISTICS](#fim.sweep_cost.DECIMATED_STATISTICS)
   * [Band](#fim.sweep_cost.Band)
     * [\_\_post\_init\_\_](#fim.sweep_cost.Band.__post_init__)
     * [\_\_add\_\_](#fim.sweep_cost.Band.__add__)
@@ -17337,6 +17346,30 @@ optional.
 **Raises**:
 
 - `ValueError` - An axis is malformed, or the spec is not valid.
+
+<a id="fim.gui.sweep_bridge.recording_from_request"></a>
+
+#### recording\_from\_request
+
+```python
+def recording_from_request(value: object) -> dict[str, Any]
+```
+
+Read the dialog's Keep choices into a sweep `recording:` block.
+
+Only what differs from a sweep's defaults is kept (everything, a compact
+history), so a sweep set up in the app and the same sweep written in a
+file have one fingerprint.
+
+**Arguments**:
+
+- `value` - `{"retention", "keepLast", "keepBurnIn", "history"}`, any of
+  them optional, or `None`.
+
+
+**Raises**:
+
+- `ValueError` - A choice is not one the configuration accepts.
 
 <a id="fim.gui.sweep_bridge.trajectories_payload"></a>
 
@@ -37734,6 +37767,24 @@ Points at or above which a plan should ask before running.
 
 `grid`: every combination; `zip`: axes advance together; `list`: explicit rows.
 
+<a id="fim.sweep.RECORDING_KEYS"></a>
+
+#### RECORDING\_KEYS
+
+A sweep's `recording:` block keys and the configuration keys they set.
+
+<a id="fim.sweep.SWEEP_DEFAULT_HISTORY"></a>
+
+#### SWEEP\_DEFAULT\_HISTORY
+
+The statistic history format a sweep writes unless it is told otherwise.
+
+<a id="fim.sweep.DISK_CONFIRMATION_BYTES"></a>
+
+#### DISK\_CONFIRMATION\_BYTES
+
+Estimated disk (bytes) at or above which a plan should ask before running.
+
 <a id="fim.sweep.AxisDefinition"></a>
 
 ## AxisDefinition Objects
@@ -37902,6 +37953,12 @@ What is held fixed (`base`) and what varies (`axes`).
   `same` gives every point the base seed.
 - `rows` - For `list`, one mapping of axis key to value per point, in
   order. Empty otherwise.
+- `recording` - What every point keeps (the `recording:` block of a sweep
+- `file)` - any of `retention` (`full`, `thinned`, `tapered`,
+  `statistics`), `keep_last`, `keep_burn_in` and `history`
+  (`exact`, `compact`). Only what is given is stored; a key left
+  out takes the base configuration's value, and the history
+  defaults to `compact` for a sweep.
 
 <a id="fim.sweep.SweepSpec.__post_init__"></a>
 
@@ -37913,6 +37970,16 @@ def __post_init__() -> None
 
 Validate the axes against the base and the sweepable-key table.
 
+<a id="fim.sweep.SweepSpec.recording_config"></a>
+
+#### recording\_config
+
+```python
+def recording_config() -> dict[str, Any]
+```
+
+Return the recording block as configuration keys (`RECORDING_KEYS`).
+
 <a id="fim.sweep.SweepSpec.from_rows"></a>
 
 #### from\_rows
@@ -37922,7 +37989,8 @@ Validate the axes against the base and the sweepable-key table.
 def from_rows(cls,
               base: Mapping[str, Any],
               rows: Sequence[Mapping[str, object]],
-              seed_policy: SeedPolicy = "spaced") -> SweepSpec
+              seed_policy: SeedPolicy = "spaced",
+              recording: Mapping[str, Any] | None = None) -> SweepSpec
 ```
 
 Build a `list` spec from explicit rows, one mapping per point.
@@ -38519,6 +38587,32 @@ is twice this).
 
 Most shape classes one plan measures; the rest take the nearest.
 
+<a id="fim.sweep_cost.RECORDING_LEVELS"></a>
+
+#### RECORDING\_LEVELS
+
+The trajectory retention levels a plan prices side by side.
+
+<a id="fim.sweep_cost.GAPPED_FRAME_FACTOR"></a>
+
+#### GAPPED\_FRAME\_FACTOR
+
+Upper bound on how much more a kept frame of a thinned or tapered log costs
+than the average frame of a full log (a frame stored far from its neighbor is
+nearly a whole keyframe). A real tapered replicate measured about 2.
+
+<a id="fim.sweep_cost.DECIMATED_VALUE_BYTES"></a>
+
+#### DECIMATED\_VALUE\_BYTES
+
+Bytes a decimated history (`history.json`) spends on one value.
+
+<a id="fim.sweep_cost.DECIMATED_STATISTICS"></a>
+
+#### DECIMATED\_STATISTICS
+
+Statistics a decimated history is assumed to hold, for the estimate.
+
 <a id="fim.sweep_cost.Band"></a>
 
 ## Band Objects
@@ -38611,6 +38705,8 @@ What one point is expected to cost.
 - `trace_bytes` - Size of its trajectory log, or `None`.
 - `statistic_bytes` - Size of its convergence history and deme-pair
   statistics, or `None`.
+- `level_bytes` - Its total size under each trajectory retention level
+  (`RECORDING_LEVELS`), or `None`.
 - `probe` - Where its throughput came from: `measured` (its own shape
   class was timed), `nearest` (the closest timed class), or
   `unprobed`.
@@ -38638,6 +38734,8 @@ What a sweep is expected to cost.
   log kept, or `None`.
 - `statistics_bytes` - Disk if only the statistics were kept (no
   trajectory log), or `None`.
+- `level_bytes` - Disk under each trajectory retention level, or `None`.
+- `recording_level` - The level this sweep asks for.
 - `classes_measured` - How many shape classes were timed.
 
 <a id="fim.sweep_cost.SweepCost.to_dict"></a>
@@ -38744,6 +38842,8 @@ What running one shape class costs, per unit of work.
   replicate adds each generation.
 - `pairwise_bytes_per_pair` - Bytes `pairwise.json` spends on one deme
   pair of one replicate.
+- `fixed_bytes_per_replicate` - Bytes of everything else a replicate
+  writes (the report, the scatter plot, the manifest).
 
 <a id="fim.sweep_cost.Throughput.to_dict"></a>
 

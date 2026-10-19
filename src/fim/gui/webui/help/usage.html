@@ -950,6 +950,33 @@ of the list; the points are worked out again from the settings when needed.</p>
 <p>In a sweep, <code>N</code> counts <strong>individuals per deme</strong> on an axis and in the base
 alike, the number the desktop app shows; the file's <code>ploidy</code> turns it into gene
 copies for each point.</p>
+<p>A sweep keeps every generation of every point unless told otherwise, but the
+largest sweeps need not. A <code>recording:</code> block in the <code>sweep:</code> section, or the
+flags of <code>fim sweep plan</code> and <code>fim sweep run</code>, choose what each point keeps:</p>
+<pre><code class="language-yaml">sweep:
+  recording:
+    retention: tapered     # full (default), thinned, tapered or statistics
+    keep_last: 1000        # tapered: the last generations kept in full
+    keep_burn_in: false    # tapered: keep the burn-in frames too
+    history: compact       # compact (the sweep default) or exact
+  axes: { d: [4, 8, 16] }
+</code></pre>
+<pre><code class="language-bash">fim sweep run sweep.yaml --recording tapered --keep-last 2000 --history exact
+fim sweep plan sweep.yaml --recording statistics   # the disk for every level, side by side
+</code></pre>
+<p><code>tapered</code> keeps the last generations in full and thins the past further back,
+so a point's frames grow with the logarithm of its length;
+<code>statistics</code> keeps no trajectory log (the point still has its report, summary,
+scatter plot and a decimated history of at most 2,048 generations); <code>thinned</code>
+keeps every Nth generation after a start. A point whose existing run kept less
+than the sweep asks for is computed again; a run that kept more is reused. The
+statistic history is <code>compact</code> in a sweep by default: each value rounded to
+about a hundredth of the precision, roughly 80 times smaller, which changes no
+answer the sweep reports. <code>exact</code> writes full precision (what a single <code>fim run</code>
+does). The plan prints the disk each level would take; a sweep whose estimate
+for the level it keeps reaches 50 GB (change it with <code>--confirm-disk SIZE</code>)
+needs <code>--yes</code>. In the desktop app the <strong>Keep</strong> choice in the Sweep dialog shows
+the same figures next to each option.</p>
 <p>By default every point gets its own seed (<code>base seed + point index times n_replicates</code>), so no two points share a replicate seed. Set
 <code>seed_policy: same</code> in the <code>sweep:</code> block to give every point the base seed.</p>
 <pre><code class="language-bash">fim sweep plan sweep.yaml            # list the points and their validity; runs nothing

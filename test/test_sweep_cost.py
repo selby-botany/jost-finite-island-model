@@ -208,6 +208,7 @@ FIGURES = Throughput(
     trace_bytes_per_generation=100.0,
     statistic_bytes_per_generation=10.0,
     pairwise_bytes_per_pair=7.0,
+    fixed_bytes_per_replicate=1000.0,
 )
 
 
@@ -239,8 +240,10 @@ def test_seconds_and_bytes_follow_exactly_from_the_probe_figures() -> None:
     )
     assert found.probe == "measured"
     assert found.run_id == point.run_id
-    assert cost.disk_bytes == found.trace_bytes + found.statistic_bytes
-    assert cost.statistics_bytes == found.statistic_bytes
+    fixed = static.replicates.scaled(1000.0)
+    assert cost.disk_bytes == found.trace_bytes + found.statistic_bytes + fixed
+    assert cost.disk_bytes == (cost.level_bytes or {})["full"]
+    assert cost.statistics_bytes == (cost.level_bytes or {})["statistics"]
     assert cost.classes_measured == 1
 
 
@@ -717,3 +720,91 @@ def test_sizes_are_read_with_decimal_units(text: str, size: int) -> None:
 def test_a_size_that_cannot_be_read_is_refused(text: str) -> None:
     with pytest.raises(ValueError, match="size"):
         parse_size(text)
+
+
+# --- disk under each recording level ----------------------------------------
+
+
+def _levels(**overrides: Any) -> dict[str, Any]:
+    spec, plan = _spec_and_plan(expand_axis("d", [4]), n_replicates=20, **overrides)
+    cost = probed_cost(spec, plan, _FakeProbe())
+    assert cost.level_bytes is not None
+    return {"cost": cost, "levels": cost.level_bytes, "spec": spec}
+
+
+def test_a_plan_prices_all_four_levels_and_each_is_cheaper_than_full() -> None:
+    found = _levels(max_generations=2_000_000)
+    levels = found["levels"]
+
+    assert list(levels) == ["full", "thinned", "tapered", "statistics"]
+    for name in ("thinned", "tapered", "statistics"):
+        assert levels[name].high <= levels["full"].high
+        assert levels[name].low <= levels["full"].low
+    # The upper bound of a gapped log is deliberately cautious (a frame far from
+    # its neighbor is nearly whole), so only tapering and statistics must show
+    # a clear saving there; the lower bound shows thinning's.
+    assert levels["tapered"].high < levels["full"].high
+    assert levels["statistics"].high < levels["full"].high
+    assert levels["statistics"].high <= levels["tapered"].high
+
+
+def test_the_tapered_frame_count_grows_with_the_logarithm_of_the_length() -> None:
+    from fim.sweep_cost import _frames  # noqa: PLC0415
+
+    params = SimulationParams.from_mapping(_BASE)
+
+    short = _frames("tapered", params, 50_000)
+    long = _frames("tapered", params, 5_000_000)
+
+    assert long < short * 3  # 100 times the generations, a few times the frames
+    assert _frames("thinned", params, 5_000_000) > 10 * long
+
+
+def test_a_thinned_run_shorter_than_its_start_costs_the_same_as_a_full_one() -> None:
+    levels = _levels(max_generations=100_000)["levels"]
+
+    assert levels["thinned"].high == levels["full"].high
+
+
+def test_the_level_a_sweep_asks_for_is_reported_and_priced() -> None:
+    found = _levels(trajectory_retention="tapered", max_generations=100_000)
+
+    assert found["cost"].recording_level == "tapered"
+    assert found["cost"].to_dict()["recordingLevel"] == "tapered"
+    chosen = found["cost"].to_dict()["chosenBytes"]
+    assert chosen["high"] == found["levels"]["tapered"].high
+
+
+def test_a_recording_block_chooses_the_level_over_the_base() -> None:
+    from dataclasses import replace  # noqa: PLC0415
+
+    spec, plan = _spec_and_plan(expand_axis("d", [4]), n_replicates=20)
+    asked = replace(spec, recording={"retention": "statistics"})
+
+    cost = probed_cost(asked, plan, _FakeProbe())
+
+    assert cost.recording_level == "statistics"
+
+
+def test_the_cost_lines_name_every_level() -> None:
+    from fim.sweep_cost import describe_cost  # noqa: PLC0415
+
+    found = _levels(trajectory_retention="tapered", max_generations=100_000)
+    lines = describe_cost(found["cost"])
+
+    assert lines is not None
+    for words in ("full trajectory log", "thinned", "tapered", "statistics only"):
+        assert words in lines.disk
+    assert "this sweep keeps tapered" in lines.disk
+
+
+def test_the_compact_history_has_its_own_throughput_cache_entry() -> None:
+    from fim.sweep_cost import ShapeClass  # noqa: PLC0415
+
+    exact = SimulationParams.from_mapping({**_BASE, "history_format": "exact"})
+    compact = SimulationParams.from_mapping({**_BASE, "history_format": "compact"})
+
+    assert ShapeClass.of(exact).key != ShapeClass.of(compact).key
+    assert ShapeClass.of(exact).key.endswith(
+        "n2^" + ShapeClass.of(exact).key.rsplit("^", 1)[1]
+    )

@@ -86,6 +86,14 @@ const FIELD_TOOLTIP_GAP_PX = 4;
 const SWEEP_PLAN_DEBOUNCE_MS = 300;
 const EXPLORE_SWEEP_DEBOUNCE_MS = 250;
 
+// The Keep selector in the Sweep dialog: the default number of recent
+// generations kept in full, and when to warn that the disk estimate is large
+// (the same 50 GB, in decimal units, that `fim sweep` asks about).
+const SWEEP_KEEP_LAST_DEFAULT = 1000;
+const SWEEP_DISK_CONFIRMATION_BYTES = 50e9;
+const SWEEP_BYTES_PER_UNIT = 1000;
+const SWEEP_BYTES_TENS = 10;
+
 // How many plan rows to draw; a larger plan says how many it omitted.
 const SWEEP_PLAN_ROW_LIMIT = 200;
 

@@ -2618,6 +2618,31 @@
       <button type="button" id="sweep-add-axis-button">Add axis</button>
     </fieldset>
     <div class="field">
+      <label for="sweep-keep">Keep</label>
+      <select id="sweep-keep">
+        <option value="full" data-label="Everything">Everything</option>
+        <option value="thinned" data-label="Every Nth generation">Every Nth generation</option>
+        <option value="tapered" data-label="Recent generations, thinning further back">Recent generations, thinning further back</option>
+        <option value="statistics" data-label="Statistics only">Statistics only</option>
+      </select>
+      <p id="sweep-keep-note" class="hint"></p>
+    </div>
+    <div class="field" id="sweep-keep-detail" hidden>
+      <label for="sweep-keep-last">Recent generations kept in full</label>
+      <input type="number" id="sweep-keep-last" min="1" step="1" value="1000">
+      <label>
+        <input type="checkbox" id="sweep-keep-burn-in">
+        Keep the burn-in frames too (for a study of the transient)
+      </label>
+    </div>
+    <div class="field">
+      <label for="sweep-history">Statistic history</label>
+      <select id="sweep-history">
+        <option value="compact">Compact (recommended; rounded to a hundredth of the precision)</option>
+        <option value="exact">Exact (full precision, far larger)</option>
+      </select>
+    </div>
+    <div class="field">
       <label for="sweep-strategy">Combine the axes</label>
       <select id="sweep-strategy">
         <option value="grid">Every combination (a grid)</option>

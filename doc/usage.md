@@ -1098,6 +1098,39 @@ In a sweep, `N` counts **individuals per deme** on an axis and in the base
 alike, the number the desktop app shows; the file's `ploidy` turns it into gene
 copies for each point.
 
+A sweep keeps every generation of every point unless told otherwise, but the
+largest sweeps need not. A `recording:` block in the `sweep:` section, or the
+flags of `fim sweep plan` and `fim sweep run`, choose what each point keeps:
+
+```yaml
+sweep:
+  recording:
+    retention: tapered     # full (default), thinned, tapered or statistics
+    keep_last: 1000        # tapered: the last generations kept in full
+    keep_burn_in: false    # tapered: keep the burn-in frames too
+    history: compact       # compact (the sweep default) or exact
+  axes: { d: [4, 8, 16] }
+```
+
+```bash
+fim sweep run sweep.yaml --recording tapered --keep-last 2000 --history exact
+fim sweep plan sweep.yaml --recording statistics   # the disk for every level, side by side
+```
+
+`tapered` keeps the last generations in full and thins the past further back,
+so a point's frames grow with the logarithm of its length;
+`statistics` keeps no trajectory log (the point still has its report, summary,
+scatter plot and a decimated history of at most 2,048 generations); `thinned`
+keeps every Nth generation after a start. A point whose existing run kept less
+than the sweep asks for is computed again; a run that kept more is reused. The
+statistic history is `compact` in a sweep by default: each value rounded to
+about a hundredth of the precision, roughly 80 times smaller, which changes no
+answer the sweep reports. `exact` writes full precision (what a single `fim run`
+does). The plan prints the disk each level would take; a sweep whose estimate
+for the level it keeps reaches 50 GB (change it with `--confirm-disk SIZE`)
+needs `--yes`. In the desktop app the **Keep** choice in the Sweep dialog shows
+the same figures next to each option.
+
 By default every point gets its own seed (`base seed + point index times
 n_replicates`), so no two points share a replicate seed. Set
 `seed_policy: same` in the `sweep:` block to give every point the base seed.
