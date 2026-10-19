@@ -577,3 +577,123 @@ def test_the_progress_view_shows_the_time_left_and_how_long_each_point_took(
     assert state["header"][-2:] == ["State", "Took"]
     assert len(state["took"]) == 2
     assert all(text.endswith(("s", "min", "h")) for text in state["took"])
+
+
+# Point axis row `index` at `key` with an explicit list of values.
+_SET_ROW = """
+function fire(element, type) {
+    element.dispatchEvent(new Event(type, {bubbles: true}));
+}
+function setRow(index, key, text) {
+    const row = document.querySelectorAll('.sweep-axis')[index];
+    const select = row.querySelector('.sweep-axis-key');
+    select.value = key; fire(select, 'change');
+    const mode = row.querySelector('.sweep-axis-mode');
+    mode.value = 'list'; fire(mode, 'change');
+    const list = row.querySelector('.sweep-axis-list');
+    list.value = text; fire(list, 'input');
+}
+"""
+
+_KEY_MENU = """(() => {
+    const select = document.querySelector('.sweep-axis-key');
+    const group = select.querySelector('optgroup');
+    return {
+        curated: Array.from(select.children)
+            .filter((child) => child.tagName === 'OPTION')
+            .map((option) => option.value),
+        groupLabel: group === null ? null : group.label,
+        more: group === null
+            ? []
+            : Array.from(group.querySelectorAll('option')).map((o) => o.value),
+    };
+})()"""
+
+
+def test_the_key_menu_lists_the_curated_parameters_then_more_parameters(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        return window.evaluate_js(_KEY_MENU)
+
+    menu = _drive(window, steps)
+
+    assert menu["curated"][:5] == ["N", "d", "m", "mu", "Nm"]
+    assert menu["groupLabel"] == "More parameters"
+    assert {"n_loci", "mutation_model", "track_expensive_statistics"} <= set(
+        menu["more"]
+    )
+    assert not set(menu["curated"]) & set(menu["more"])
+
+
+def test_a_generic_parameter_opens_on_a_list_and_a_third_axis_is_allowed(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        window.evaluate_js(_SET_ROW + "setRow(0, 'd', '2, 3');")
+        poll_until(_SCREEN_STATE, lambda s: s["planReady"] and s["tableRows"] == 2)
+        for _ in range(2):
+            window.evaluate_js(
+                "document.getElementById('sweep-add-axis-button').click();"
+            )
+        # Choosing a setting with no span of its own opens its row on a list.
+        opened_on = window.evaluate_js(
+            _SET_ROW + "const pick = document.querySelectorAll('.sweep-axis')[1]"
+            ".querySelector('.sweep-axis-key');"
+            "pick.value = 'n_loci'; fire(pick, 'change');"
+            "document.querySelectorAll('.sweep-axis')[1]"
+            ".querySelector('.sweep-axis-mode').value;"
+        )
+        window.evaluate_js(
+            _SET_ROW + "setRow(1, 'n_loci', '1, 2'); setRow(2, 'N', '20, 40');"
+        )
+        three = poll_until(
+            _SCREEN_STATE,
+            lambda s: s["rows"] == 3 and s["planReady"] and s["tableRows"] == 8,
+        )
+        return three, opened_on
+
+    three, opened_on = _drive(window, steps)
+
+    assert opened_on == "list"
+    assert three["summary"].startswith("8 points")
+    assert three["doneDisabled"] is False
+
+
+def test_axes_can_be_combined_together_instead_of_as_a_grid(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    set_strategy = (
+        "const strategy = document.getElementById('sweep-strategy');"
+        "strategy.value = '{value}';"
+        "strategy.dispatchEvent(new Event('change', {{bubbles: true}}));"
+    )
+
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        window.evaluate_js("document.getElementById('sweep-add-axis-button').click();")
+        window.evaluate_js(
+            _SET_ROW + "setRow(0, 'd', '2, 3'); setRow(1, 'N', '20, 40');"
+        )
+        grid = poll_until(
+            _SCREEN_STATE, lambda s: s["planReady"] and s["tableRows"] == 4
+        )
+        window.evaluate_js(set_strategy.format(value="zip"))
+        zipped = poll_until(
+            _SCREEN_STATE, lambda s: s["planReady"] and s["tableRows"] == 2
+        )
+        window.evaluate_js(_SET_ROW + "setRow(1, 'N', '20, 40, 80');")
+        unequal = poll_until(_SCREEN_STATE, lambda s: s["problem"] is True)
+        return grid, zipped, unequal
+
+    grid, zipped, unequal = _drive(window, steps)
+
+    assert grid["summary"].startswith("4 points")
+    assert zipped["summary"].startswith("2 points")
+    assert "equal lengths" in unequal["summary"]
+    assert unequal["doneDisabled"] is True

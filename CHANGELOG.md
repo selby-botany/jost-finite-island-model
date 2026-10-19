@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **More parameters, any number of axes, and a choice of grid or together in
+  the Sweep dialog.** The parameter menu lists the common parameters, then
+  **More parameters** (every other scalar setting); add as many axes as
+  there are parameters; **Combine the axes** picks every combination or values
+  taken together. The results card still draws two axes at a time.
+
 - **A `Nm` axis (migrants per deme per generation).** A sweep can vary `Nm`
   instead of `m`, alone or with `N`, to hold the number of migrants fixed as
   population size changes. `N` counts individuals per deme, as everywhere

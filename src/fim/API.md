@@ -17221,7 +17221,8 @@ Build a `SweepSpec` from the page's request and a validated base mapping.
 
 `request["axes"]` is a list of `{"key", "values"}` or `{"key",
 "range": {"start", "stop", "count", "scale"}}` entries, in axis order;
-`request["seedPolicy"]` is optional.
+`request["strategy"]` (`grid` or `zip`) and `request["seedPolicy"]` are
+optional.
 
 **Raises**:
 

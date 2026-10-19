@@ -1289,7 +1289,10 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   plain `resume` only runs the points still missing.
 - In the desktop app a sweep is part of Configure. Tick **Sweep**, choose
   what varies in the **Set up sweep…** dialog (a live count and, on request,
-  every point), and press **Run** as always: with **Sweep** on, Run runs the
+  every point; the parameter menu lists the common ones first and every other
+  setting under **More parameters**, there is no limit to the number of axes,
+  and **Combine the axes** chooses a grid or values taken together), and press
+  **Run** as always: with **Sweep** on, Run runs the
   configuration over those ranges into the study chosen at the bottom of
   Configure. That study then holds the sweep; a study holds at most one.
 - On Home, a study that holds a sweep has two more buttons beside **Continue

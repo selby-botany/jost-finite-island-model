@@ -31,6 +31,7 @@ const sweepConfigureSummary = document.getElementById("configure-sweep-summary")
 const sweepBaseSummary = document.getElementById("sweep-base-summary");
 const sweepAxesContainer = document.getElementById("sweep-axes");
 const sweepAddAxisButton = document.getElementById("sweep-add-axis-button");
+const sweepStrategySelect = document.getElementById("sweep-strategy");
 const sweepSeedPolicySelect = document.getElementById("sweep-seed-policy");
 const sweepPointsAtOnceSelect = document.getElementById("sweep-points-at-once");
 const sweepConcurrencyNote = document.getElementById("sweep-concurrency-note");
@@ -132,11 +133,18 @@ function addSweepAxisRow(preferredKey, initial = {}) {
     const keySelect = document.createElement("select");
     keySelect.className = "sweep-axis-key";
     keySelect.setAttribute("aria-label", "Parameter to vary");
+    // The curated parameters first, then every other scalar setting under
+    // "More parameters".
+    const moreParameters = document.createElement("optgroup");
+    moreParameters.label = "More parameters";
     for (const entry of sweepKeys) {
         const option = document.createElement("option");
         option.value = entry.key;
         option.textContent = entry.label;
-        keySelect.appendChild(option);
+        (entry.generic ? moreParameters : keySelect).appendChild(option);
+    }
+    if (moreParameters.children.length > 0) {
+        keySelect.appendChild(moreParameters);
     }
     keySelect.value = key;
 
@@ -287,10 +295,12 @@ function configureSweepAxisRow(row, key, initial) {
           }
         : { ...SWEEP_FALLBACK_RANGE };
     const range = { ...(SWEEP_DEFAULT_RANGES[key] || fallback), ...initial };
-    row.querySelector(".sweep-axis-mode").value = initial.mode || "range";
-    row.querySelector(".sweep-axis-range").hidden = (initial.mode || "range") !== "range";
+    // A setting with no sensible span of its own opens on a list to fill in.
+    const mode = initial.mode || (info.generic ? "list" : "range");
+    row.querySelector(".sweep-axis-mode").value = mode;
+    row.querySelector(".sweep-axis-range").hidden = mode !== "range";
     const listInput = row.querySelector(".sweep-axis-list");
-    listInput.hidden = (initial.mode || "range") !== "list";
+    listInput.hidden = mode !== "list";
     listInput.value = initial.list || "";
     row.querySelector(".sweep-axis-start").value = String(range.start);
     row.querySelector(".sweep-axis-stop").value = String(range.stop);
@@ -351,7 +361,7 @@ function readSweepAxisRow(row) {
 
 /**
  * Read every axis row and the seed policy into a bridge request.
- * @returns {{axes: object[], seedPolicy: string}}
+ * @returns {{axes: object[], strategy: string, seedPolicy: string}}
  */
 function buildSweepRequest() {
     const axes = Array.from(sweepAxesContainer.querySelectorAll(".sweep-axis")).map(
@@ -359,6 +369,7 @@ function buildSweepRequest() {
     );
     return {
         axes,
+        strategy: sweepStrategySelect.value,
         seedPolicy: sweepSeedPolicySelect.value,
         pointsAtOnce: sweepPointsAtOnceSelect.value,
     };
@@ -867,6 +878,7 @@ window.fim.openSweepDialog = async function openSweepDialog(options = {}) {
                 : sweepConfig.request.axes.map(sweepAxisInitial);
     }
     if (sweepConfig !== null) {
+        sweepStrategySelect.value = sweepConfig.request.strategy ?? "grid";
         sweepSeedPolicySelect.value = sweepConfig.request.seedPolicy;
         sweepPointsAtOnceSelect.value = sweepConfig.request.pointsAtOnce ?? "auto";
     }
@@ -895,7 +907,8 @@ function syncSweepControls() {
 function sweepSummaryText(plan) {
     const axes = plan.axes.map((axis) => `${axis.key} (${axis.values.length})`).join(", ");
     const count = plan.points.length;
-    return `Sweep: ${axes}, ${count} point${count === 1 ? "" : "s"}.`;
+    const together = plan.strategy === "zip" ? " together" : "";
+    return `Sweep: ${axes}${together}, ${count} point${count === 1 ? "" : "s"}.`;
 }
 
 /**
@@ -917,7 +930,7 @@ function saveSweepConfiguration(request, plan) {
  * @returns {Promise<{ok: boolean, message?: string}>}
  */
 window.fim.setSweepConfiguration = async function setSweepConfiguration(request) {
-    const full = { seedPolicy: "spaced", ...request };
+    const full = { strategy: "grid", seedPolicy: "spaced", ...request };
     const plan = await window.pywebview.api.plan_sweep(collectFormValues(), full);
     if (!plan.ok) {
         return plan;
@@ -974,6 +987,7 @@ sweepCheckbox.addEventListener("change", async () => {
 });
 sweepConfigureButton.addEventListener("click", () => window.fim.openSweepDialog());
 sweepAddAxisButton.addEventListener("click", () => addSweepAxisRow());
+sweepStrategySelect.addEventListener("change", onSweepAxesChanged);
 sweepSeedPolicySelect.addEventListener("change", onSweepAxesChanged);
 sweepPointsAtOnceSelect.addEventListener("change", onSweepAxesChanged);
 sweepDoneButton.addEventListener("click", () => sweepDialog.close("done"));

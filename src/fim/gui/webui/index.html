@@ -2611,6 +2611,13 @@
       <button type="button" id="sweep-add-axis-button">Add axis</button>
     </fieldset>
     <div class="field">
+      <label for="sweep-strategy">Combine the axes</label>
+      <select id="sweep-strategy">
+        <option value="grid">Every combination (a grid)</option>
+        <option value="zip">Together, value by value (equal counts)</option>
+      </select>
+    </div>
+    <div class="field">
       <label for="sweep-seed-policy">Seeds</label>
       <select id="sweep-seed-policy">
         <option value="spaced">Independent points (recommended)</option>

@@ -56,7 +56,8 @@ def spec_from_request(base: Mapping[str, Any], request: Mapping[str, Any]) -> Sw
 
     `request["axes"]` is a list of `{"key", "values"}` or `{"key",
     "range": {"start", "stop", "count", "scale"}}` entries, in axis order;
-    `request["seedPolicy"]` is optional.
+    `request["strategy"]` (`grid` or `zip`) and `request["seedPolicy"]` are
+    optional.
 
     Raises:
         ValueError: An axis is malformed, or the spec is not valid.
@@ -73,7 +74,12 @@ def spec_from_request(base: Mapping[str, Any], request: Mapping[str, Any]) -> Sw
     policy = request.get("seedPolicy", "spaced")
     if policy not in {"spaced", "same"}:
         raise ValueError("seed policy must be 'spaced' or 'same'")
-    return SweepSpec(base=dict(base), axes=tuple(axes), seed_policy=policy)
+    strategy = request.get("strategy", "grid")
+    if strategy not in {"grid", "zip"}:
+        raise ValueError("strategy must be 'grid' or 'zip'")
+    return SweepSpec(
+        base=dict(base), axes=tuple(axes), strategy=strategy, seed_policy=policy
+    )
 
 
 def existing_run_ids(results: Path | None = None) -> set[str]:
@@ -103,6 +109,7 @@ def plan_payload(
     return {
         "ok": True,
         "axes": [axis.to_dict() for axis in spec.axes],
+        "strategy": spec.strategy,
         "gridSize": plan.grid_size,
         "points": points,
         "invalid": [

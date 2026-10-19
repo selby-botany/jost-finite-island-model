@@ -1030,3 +1030,25 @@ def test_the_study_list_counts_the_failed_points_of_a_sweep(api: Api) -> None:
 
     assert rows[study.study_id]["sweepFailedCount"] == 2
     assert rows[plain.study_id]["sweepFailedCount"] == 0
+
+
+def test_plan_sweep_takes_a_strategy_and_a_generic_axis(api: Api) -> None:
+    zipped = api.plan_sweep(
+        _form(),
+        _request(
+            {"key": "d", "values": [2, 3]},
+            {"key": "N", "values": [20, 40]},
+            strategy="zip",
+        ),
+    )
+    grid = api.plan_sweep(
+        _form(),
+        _request({"key": "d", "values": [2, 3]}, {"key": "N", "values": [20, 40]}),
+    )
+    generic = api.plan_sweep(_form(), _request({"key": "n_loci", "values": [1, 2, 3]}))
+    bad = api.plan_sweep(_form(), _request(_D_AXIS, strategy="random"))
+
+    assert (zipped["strategy"], zipped["gridSize"]) == ("zip", 2)
+    assert (grid["strategy"], grid["gridSize"]) == ("grid", 4)
+    assert generic["ok"] is True and len(generic["points"]) == 3
+    assert bad["ok"] is False and "grid" in bad["message"]
