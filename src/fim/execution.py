@@ -811,7 +811,7 @@ def restore_lane(
     try:
         store.resume(run_id, frame_layout(params), position)
     except ValueError:
-        if params.trajectory_retention != "tapered":
+        if params.trajectory_retention not in ("tapered", "statistics"):
             raise
         store.resume_after_taper(
             run_id, frame_layout(params), int(payload["generation"])

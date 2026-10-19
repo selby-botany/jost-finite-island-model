@@ -172,4 +172,7 @@ def test_artifact_filenames_match_both_writers(tmp_path: Path) -> None:
     """The receipt keys agree with the CLI's and the GUI's artifact names."""
     expected = {key: tmp_path / name for key, name in ARTIFACT_FILENAMES.items()}
     expected["manifest"] = tmp_path / RECEIPT_FILENAME
+    # `history.json` exists only in a statistics-only run, so it is a receipt
+    # key but not among the artifacts every run can have.
+    del expected["history"]
     assert run_artifact_targets(tmp_path) == expected

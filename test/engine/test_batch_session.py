@@ -86,6 +86,7 @@ _CASES: dict[str, dict[str, Any]] = {
     "matched": _MATCHED,
     "matched-window": {**_MATCHED, "max_concurrent_replicates": 2},
     "tapered": {"trajectory_retention": "tapered", "trajectory_keep_last": 5},
+    "statistics": {"trajectory_retention": "statistics"},
     "thinned": {
         "trajectory_retention": "thinned",
         "trajectory_stride": 3,

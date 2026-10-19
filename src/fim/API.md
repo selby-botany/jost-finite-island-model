@@ -670,6 +670,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [spec\_from\_request](#fim.gui.sweep_bridge.spec_from_request)
   * [trajectories\_payload](#fim.gui.sweep_bridge.trajectories_payload)
   * [existing\_run\_ids](#fim.gui.sweep_bridge.existing_run_ids)
+  * [reusable\_run\_ids](#fim.gui.sweep_bridge.reusable_run_ids)
   * [plan\_payload](#fim.gui.sweep_bridge.plan_payload)
   * [status\_payload](#fim.gui.sweep_bridge.status_payload)
   * [series\_payload](#fim.gui.sweep_bridge.series_payload)
@@ -862,6 +863,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [convergence\_history\_rows](#fim.persistence.artifacts.convergence_history_rows)
   * [taper\_finished\_trajectory](#fim.persistence.artifacts.taper_finished_trajectory)
   * [write\_history](#fim.persistence.artifacts.write_history)
+  * [write\_decimated](#fim.persistence.artifacts.write_decimated)
   * [write\_run\_artifacts](#fim.persistence.artifacts.write_run_artifacts)
 * [fim.persistence.binary\_store](#fim.persistence.binary_store)
   * [TRAJECTORY\_LOG\_FILENAME](#fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME)
@@ -970,6 +972,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.persistence.history](#fim.persistence.history)
   * [HISTORY\_FILENAME](#fim.persistence.history.HISTORY_FILENAME)
   * [COMPACT\_FILENAME](#fim.persistence.history.COMPACT_FILENAME)
+  * [DECIMATED\_FILENAME](#fim.persistence.history.DECIMATED_FILENAME)
+  * [DECIMATED\_SAMPLES](#fim.persistence.history.DECIMATED_SAMPLES)
   * [HISTORY\_FILENAMES](#fim.persistence.history.HISTORY_FILENAMES)
   * [HistoryError](#fim.persistence.history.HistoryError)
   * [replicate\_directories](#fim.persistence.history.replicate_directories)
@@ -978,6 +982,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [iter\_history\_rows](#fim.persistence.history.iter_history_rows)
   * [read\_history\_columns](#fim.persistence.history.read_history_columns)
   * [sample\_history](#fim.persistence.history.sample_history)
+  * [decimated\_generations](#fim.persistence.history.decimated_generations)
+  * [write\_decimated\_history](#fim.persistence.history.write_decimated_history)
+  * [read\_decimated\_columns](#fim.persistence.history.read_decimated_columns)
   * [write\_compact\_history](#fim.persistence.history.write_compact_history)
   * [read\_compact\_columns](#fim.persistence.history.read_compact_columns)
 * [fim.persistence.manifest](#fim.persistence.manifest)
@@ -1019,6 +1026,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [satisfies](#fim.persistence.recording.Recording.satisfies)
     * [same\_frames\_as](#fim.persistence.recording.Recording.same_frames_as)
   * [comparable\_artifacts](#fim.persistence.recording.comparable_artifacts)
+  * [recording\_of\_run](#fim.persistence.recording.recording_of_run)
+  * [run\_satisfies](#fim.persistence.recording.run_satisfies)
 * [fim.persistence.report](#fim.persistence.report)
   * [write\_report](#fim.persistence.report.write_report)
   * [write\_jsonl\_rows](#fim.persistence.report.write_jsonl_rows)
@@ -1026,6 +1035,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [TrajectoryRetention](#fim.persistence.retention.TrajectoryRetention)
     * [from\_params](#fim.persistence.retention.TrajectoryRetention.from_params)
     * [skips\_generations](#fim.persistence.retention.TrajectoryRetention.skips_generations)
+    * [cuts\_at\_stop](#fim.persistence.retention.TrajectoryRetention.cuts_at_stop)
     * [kept\_generations](#fim.persistence.retention.TrajectoryRetention.kept_generations)
     * [keeps](#fim.persistence.retention.TrajectoryRetention.keeps)
     * [count\_through](#fim.persistence.retention.TrajectoryRetention.count_through)
@@ -1711,6 +1721,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [stored\_points](#fim.sweep_run.stored_points)
   * [sweep\_point\_statuses](#fim.sweep_run.sweep_point_statuses)
   * [completed\_run\_ids](#fim.sweep_run.completed_run_ids)
+  * [completed\_runs](#fim.sweep_run.completed_runs)
   * [SweepBudget](#fim.sweep_run.SweepBudget)
     * [\_\_post\_init\_\_](#fim.sweep_run.SweepBudget.__post_init__)
   * [\_LinkedEvent](#fim.sweep_run._LinkedEvent)
@@ -17358,6 +17369,20 @@ Return the id of every run a sweep would reuse, so a plan can mark them.
 Counts finished run directories and completed Run objects made by this
 software version, as `run_sweep` does.
 
+<a id="fim.gui.sweep_bridge.reusable_run_ids"></a>
+
+#### reusable\_run\_ids
+
+```python
+def reusable_run_ids(plan: SweepPlan, results: Path | None = None) -> set[str]
+```
+
+Return the planned points whose existing run holds what the plan asks.
+
+A run made by this version counts only if it kept at least as much as the
+point's configuration asks it to (a tapered run does not stand in for full
+frames), the rule `run_sweep` applies.
+
 <a id="fim.gui.sweep_bridge.plan_payload"></a>
 
 #### plan\_payload
@@ -19683,7 +19708,11 @@ functions that actually use each one.
   (`fim.persistence.retention`). Per-generation statistics are
   never thinned, so the graph, the bands and every number in the
   report are unaffected; reanalysis and the scrubber see only the
-  kept generations. `"tapered"`: the last `trajectory_keep_last`
+  kept generations. `"statistics"`: no trajectory log in the
+  finished run: it keeps its report, scatter plot, deme-pair
+  statistics and a decimated statistic history (`history.json`, at
+  most 2,048 generations), so it cannot be scrubbed or re-analyzed.
+- ``"tapered"`` - the last `trajectory_keep_last`
   generations in full and older ones thinned by a stride that
   doubles with their distance from the end, without the burn-in
   frames (generation 0 and the last burn-in generation stay;
@@ -22842,6 +22871,24 @@ smallest of `precision` and any per-statistic precision).
 
 - `HistoryError` - A compact history holds a value too large for the step.
 
+<a id="fim.persistence.artifacts.write_decimated"></a>
+
+#### write\_decimated
+
+```python
+def write_decimated(result: RunResult, path: Path) -> None
+```
+
+Write the decimated statistic history a statistics-only run keeps.
+
+At most 2,048 generations of every statistic, at full precision.
+
+**Arguments**:
+
+- `result` - A finished engine result.
+- `path` - Where it goes (`history.json` in the run directory; it is not
+  among `run_artifact_targets`, which names what every run can have).
+
 <a id="fim.persistence.artifacts.write_run_artifacts"></a>
 
 #### write\_run\_artifacts
@@ -25033,6 +25080,18 @@ The exact statistic history of one replicate or one scalar run.
 
 The compact statistic history of one replicate or one scalar run.
 
+<a id="fim.persistence.history.DECIMATED_FILENAME"></a>
+
+#### DECIMATED\_FILENAME
+
+The decimated history a statistics-only run keeps in place of the full one.
+
+<a id="fim.persistence.history.DECIMATED_SAMPLES"></a>
+
+#### DECIMATED\_SAMPLES
+
+Most generations in a decimated history.
+
 <a id="fim.persistence.history.HISTORY_FILENAMES"></a>
 
 #### HISTORY\_FILENAMES
@@ -25081,8 +25140,9 @@ def history_path(replicate_directory: Path) -> Path
 
 Return where a replicate's statistic history lives.
 
-The compact file if there is one, else the exact path (which may not
-exist: a run kept without a history, or one that predates it).
+The exact file, else the compact one, else the decimated one a
+statistics-only run keeps; if none exists, the exact path (a run kept
+without a history, or one that predates it).
 
 <a id="fim.persistence.history.fractional_bits"></a>
 
@@ -25177,6 +25237,70 @@ lacks, or a statistic undefined there, is `None`.
 
 - `path` - A history file in either format.
 - `grid` - Ascending generations to sample.
+
+<a id="fim.persistence.history.decimated_generations"></a>
+
+#### decimated\_generations
+
+```python
+def decimated_generations(final: int,
+                          maximum: int = DECIMATED_SAMPLES) -> list[int]
+```
+
+Return the generations a decimated history samples, for a run ending at `final`.
+
+Generation 0, then a union of logarithmic and linear spacing up to `final`
+(the same family as a sweep's trajectory grid, finer), never more than
+`maximum`; a run short enough to fit is sampled at every generation.
+
+**Arguments**:
+
+- `final` - The run's final generation.
+- `maximum` - The most samples, at least 2.
+
+
+**Raises**:
+
+- `ValueError` - `maximum` is below 2.
+
+<a id="fim.persistence.history.write_decimated_history"></a>
+
+#### write\_decimated\_history
+
+```python
+def write_decimated_history(path: Path,
+                            generations: Sequence[int],
+                            columns: Mapping[str, Sequence[float | None]],
+                            *,
+                            maximum: int = DECIMATED_SAMPLES) -> None
+```
+
+Write the decimated history of a run: at most `maximum` generations.
+
+Values are kept at full precision; only generations are left out.
+
+**Arguments**:
+
+- `path` - The file to write (replaced atomically).
+- `generations` - Every generation of the run, ascending.
+- `columns` - One sequence of values per statistic, aligned with
+  `generations`.
+- `maximum` - The most samples to keep.
+
+<a id="fim.persistence.history.read_decimated_columns"></a>
+
+#### read\_decimated\_columns
+
+```python
+def read_decimated_columns(path: Path) -> HistoryColumns
+```
+
+Read a decimated history as generations and one value list per statistic.
+
+**Raises**:
+
+- `HistoryError` - The file is not a decimated history.
+- `OSError` - The file cannot be read.
 
 <a id="fim.persistence.history.write_compact_history"></a>
 
@@ -25981,6 +26105,39 @@ wrote it in the same format.
 - `older` - The existing run's recording.
 - `newer` - The recomputed run's recording.
 
+<a id="fim.persistence.recording.recording_of_run"></a>
+
+#### recording\_of\_run
+
+```python
+def recording_of_run(directory: Path) -> Recording
+```
+
+Read what a finished run kept from its manifest.
+
+Works for a single run and for a batch (whose manifest records the
+configuration too). A run whose manifest cannot be read is taken to have
+kept everything, which is what a run that predates these settings did.
+
+**Arguments**:
+
+- `directory` - The run directory.
+
+<a id="fim.persistence.recording.run_satisfies"></a>
+
+#### run\_satisfies
+
+```python
+def run_satisfies(directory: Path, wanted: Mapping[str, Any]) -> bool
+```
+
+Return whether a finished run holds what a configuration asks it to keep.
+
+**Arguments**:
+
+- `directory` - A finished run.
+- `wanted` - The configuration (a sweep point's mapping) that would run now.
+
 <a id="fim.persistence.report"></a>
 
 # fim.persistence.report
@@ -26116,6 +26273,8 @@ The rule for which generations a run writes.
   written first; see the module docstring).
 - `keep_last` - With tapering, the last generations kept in full.
 - `keep_burn_in` - With tapering, whether burn-in frames are kept.
+- `statistics` - Whether the finished run keeps no trajectory log; while
+  it runs, a stopped replicate keeps only its final frame.
 
 <a id="fim.persistence.retention.TrajectoryRetention.from_params"></a>
 
@@ -26149,6 +26308,17 @@ def skips_generations() -> bool
 ```
 
 Return whether the finished log leaves out any generation.
+
+<a id="fim.persistence.retention.TrajectoryRetention.cuts_at_stop"></a>
+
+#### cuts\_at\_stop
+
+```python
+@property
+def cuts_at_stop() -> bool
+```
+
+Return whether a stopped replicate's log is cut down at once.
 
 <a id="fim.persistence.retention.TrajectoryRetention.kept_generations"></a>
 
@@ -32082,11 +32252,16 @@ The outcome of comparing an earlier run with its recomputation.
 
 **Attributes**:
 
-- `identical` - Whether every data artifact matches bit for bit.
+- `identical` - Whether every compared artifact matches bit for bit.
 - `differences` - Artifacts that differ, then the reported statistics
   that changed (at most `_MAXIMUM_DIFFERENCES`).
 - `old_version` - The earlier run's software version.
 - `new_version` - The recomputed run's software version.
+- `compared_on` - When the two runs kept different things (one tapered,
+  one full), the artifacts that were compared; empty when every
+  data artifact was.
+- `not_compared` - Artifacts left out because the runs kept them
+  differently.
 
 <a id="fim.reproducibility.Comparison.to_dict"></a>
 
@@ -39614,6 +39789,20 @@ def completed_run_ids(*,
 ```
 
 Return the id of every run a sweep would reuse instead of computing.
+
+See `completed_runs`; this is only the ids.
+
+<a id="fim.sweep_run.completed_runs"></a>
+
+#### completed\_runs
+
+```python
+def completed_runs(*,
+                   software_version: str = __version__,
+                   results: Path | None = None) -> dict[str, Path]
+```
+
+Return each run a sweep would reuse instead of computing, by run id.
 
 A run counts if it is a finished run directory, or a completed Run
 object, made by `software_version`: the same rule `run_sweep` applies,

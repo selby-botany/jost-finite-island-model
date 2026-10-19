@@ -58,6 +58,7 @@ from fim.persistence.object_lock import (
     exclusive_lock,
     is_lock_held,
 )
+from fim.persistence.recording import run_satisfies
 from fim.persistence.run_lifecycle import (
     ACTIVE_STATES,
     LifecycleError,
@@ -1055,6 +1056,16 @@ def completed_run_ids(
 ) -> set[str]:
     """Return the id of every run a sweep would reuse instead of computing.
 
+    See `completed_runs`; this is only the ids.
+    """
+    return set(completed_runs(software_version=software_version, results=results))
+
+
+def completed_runs(
+    *, software_version: str = __version__, results: Path | None = None
+) -> dict[str, Path]:
+    """Return each run a sweep would reuse instead of computing, by run id.
+
     A run counts if it is a finished run directory, or a completed Run
     object, made by `software_version`: the same rule `run_sweep` applies,
     so a plan can say beforehand which points are already computed.
@@ -1064,13 +1075,13 @@ def completed_run_ids(
         results: Optional results-directory override.
     """
     root = results if results is not None else paths.results_directory()
-    found = set()
+    found: dict[str, Path] = dict(_completed_objects(software_version, results))
     if root.is_dir():
         for manifest in sorted(root.glob("*/manifest.json")):
             identity = groups.run_identity_of(manifest.parent)
             if identity is not None and identity[1] == software_version:
-                found.add(identity[0])
-    return found | set(_completed_objects(software_version, results))
+                found[identity[0]] = manifest.parent
+    return found
 
 
 def _member_runs(
@@ -1430,6 +1441,15 @@ def _run_sweep_locked(
         if rerun
         else frozenset()
     )
+    # A run that kept less than this sweep asks for (a tapered run where full
+    # frames are wanted) is recomputed, and compared on what both kept.
+    short = frozenset(
+        point.run_id
+        for point in planned
+        if point.run_id in present
+        and not run_satisfies(present[point.run_id], point.params)
+    )
+    rerun_ids = rerun_ids | short
     older_runs = {**stale, **{run_id: present[run_id] for run_id in rerun_ids}}
     tally = dict.fromkeys(
         (
@@ -2071,6 +2091,9 @@ def _run_one_point(
     completed = (context.completed_objects or {}).get(point.run_id)
     if completed is not None:
         reusable.append(completed)
+    # A run that kept less than this point asks for (a tapered run where full
+    # frames are wanted) is not reused; the point is computed again.
+    reusable = [d for d in reusable if run_satisfies(d, point.params)]
     if point.run_id in context.rerun_ids:
         # Recomputing on purpose: the run it already has is the thing to
         # compare with, not a result to reuse.

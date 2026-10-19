@@ -78,7 +78,7 @@ ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
 ConvergenceEstimate = Literal["mean_of_values", "value_of_means", "auto"]
 PrecisionMethod = Literal["interval", "planned_replicates"]
-TrajectoryRetentionChoice = Literal["full", "thinned", "tapered"]
+TrajectoryRetentionChoice = Literal["full", "thinned", "tapered", "statistics"]
 HistoryFormat = Literal["exact", "compact"]
 MigrantSampling = Literal["continuous", "stochastic"]
 MutationModel = Literal["infinite_alleles", "finite_alleles"]
@@ -97,6 +97,11 @@ positive integer. Zero is safe as the sentinel because an explicit value must
 be positive (config parsing rejects an explicit `0`).
 """
 
+
+_RETENTION_CHOICES: Final = ("full", "thinned", "tapered", "statistics")
+_RETENTION_MESSAGE: Final = (
+    "trajectory_retention must be 'full', 'thinned', 'tapered' or 'statistics'"
+)
 
 PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "n_loci": 1,
@@ -423,7 +428,11 @@ class SimulationParams:
             (`fim.persistence.retention`). Per-generation statistics are
             never thinned, so the graph, the bands and every number in the
             report are unaffected; reanalysis and the scrubber see only the
-            kept generations. `"tapered"`: the last `trajectory_keep_last`
+            kept generations. `"statistics"`: no trajectory log in the
+            finished run: it keeps its report, scatter plot, deme-pair
+            statistics and a decimated statistic history (`history.json`, at
+            most 2,048 generations), so it cannot be scrubbed or re-analyzed.
+            `"tapered"`: the last `trajectory_keep_last`
             generations in full and older ones thinned by a stride that
             doubles with their distance from the end, without the burn-in
             frames (generation 0 and the last burn-in generation stay;
@@ -876,10 +885,8 @@ class SimulationParams:
             ValueError: If the retention is unknown, the stride is below 1 or
                 the start is negative.
         """
-        if self.trajectory_retention not in ("full", "thinned", "tapered"):
-            raise ValueError(
-                "trajectory_retention must be 'full', 'thinned' or 'tapered'"
-            )
+        if self.trajectory_retention not in _RETENTION_CHOICES:
+            raise ValueError(_RETENTION_MESSAGE)
         _require_integer("trajectory_stride", self.trajectory_stride, minimum=1)
         _require_integer("trajectory_keep_last", self.trajectory_keep_last, minimum=1)
         _require_bool("trajectory_keep_burn_in", self.trajectory_keep_burn_in)
@@ -1143,6 +1150,8 @@ class SimulationParams:
             result["trajectory_retention"] = self.trajectory_retention
             result["trajectory_stride"] = self.trajectory_stride
             result["trajectory_thinning_start"] = self.trajectory_thinning_start
+        elif self.trajectory_retention == "statistics":
+            result["trajectory_retention"] = self.trajectory_retention
         elif self.trajectory_retention == "tapered":
             # Likewise written only when tapering is on.
             result["trajectory_retention"] = self.trajectory_retention
@@ -1927,7 +1936,9 @@ def _parse_trajectory_retention(value: Any) -> TrajectoryRetentionChoice:
         return "thinned"
     if parsed == "tapered":
         return "tapered"
-    raise ValueError("trajectory_retention must be 'full', 'thinned' or 'tapered'")
+    if parsed == "statistics":
+        return "statistics"
+    raise ValueError(_RETENTION_MESSAGE)
 
 
 def _parse_precision_method(value: Any) -> PrecisionMethod:

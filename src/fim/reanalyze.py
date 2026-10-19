@@ -274,12 +274,15 @@ def read_persisted_convergence_history(
             recorded for it, and the two no longer match, or a row's
             own content is not the documented shape.
     """
-    if manifest.artifacts is None or "convergence" not in manifest.artifacts:
+    if manifest.artifacts is None:
+        return None
+    key = "convergence" if "convergence" in manifest.artifacts else "history"
+    if key not in manifest.artifacts:
         return None
     convergence_path = history_path(trajectory_path.parent)
     if not convergence_path.is_file():
         return None
-    expected = manifest.artifacts["convergence"]
+    expected = manifest.artifacts[key]
     actual = hash_file(convergence_path)
     if actual != expected:
         raise ValueError(
@@ -383,6 +386,12 @@ def reanalyze_trajectory(
         if manifest_path is not None
         else trajectory_path.with_name("manifest.json")
     )
+    if manifest.parameters.get("trajectory_retention") == "statistics":
+        raise ValueError(
+            "this run kept statistics only (trajectory_retention: statistics), "
+            "so it has no trajectory to re-analyze; its report.json, scatter.png "
+            "and history.json are in the run's folder"
+        )
     # The tamper/corruption check described in this function's own
     # docstring, above; raises before anything else here does real work
     # if the trajectory file no longer matches what the manifest

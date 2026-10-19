@@ -49,6 +49,8 @@ class TrajectoryRetention:
             written first; see the module docstring).
         keep_last: With tapering, the last generations kept in full.
         keep_burn_in: With tapering, whether burn-in frames are kept.
+        statistics: Whether the finished run keeps no trajectory log; while
+            it runs, a stopped replicate keeps only its final frame.
     """
 
     thinned: bool = False
@@ -58,6 +60,7 @@ class TrajectoryRetention:
     tapered: bool = False
     keep_last: int = 1
     keep_burn_in: bool = False
+    statistics: bool = False
 
     @classmethod
     def from_params(cls, params: SimulationParams) -> TrajectoryRetention:
@@ -71,6 +74,8 @@ class TrajectoryRetention:
             A rule that keeps everything unless `trajectory_retention` is
             `"thinned"` or `"tapered"`.
         """
+        if params.trajectory_retention == "statistics":
+            return cls(statistics=True)
         if params.trajectory_retention == "tapered":
             return cls(
                 tapered=True,
@@ -90,7 +95,12 @@ class TrajectoryRetention:
     @property
     def skips_generations(self) -> bool:
         """Return whether the finished log leaves out any generation."""
-        return self.thinned or self.tapered
+        return self.thinned or self.tapered or self.statistics
+
+    @property
+    def cuts_at_stop(self) -> bool:
+        """Return whether a stopped replicate's log is cut down at once."""
+        return self.tapered or self.statistics
 
     def kept_generations(self, final: int) -> list[int]:
         """Return the generations a finished tapered log holds, in order.
@@ -102,6 +112,8 @@ class TrajectoryRetention:
             Every generation `0..final` for a rule that does not taper, else
             the tapered set (`tapered_generations`).
         """
+        if self.statistics:
+            return [final]
         if not self.tapered:
             return [g for g in range(final + 1) if self.keeps(g) or g == final]
         return tapered_generations(
@@ -120,6 +132,7 @@ class TrajectoryRetention:
         """
         if (
             self.tapered
+            or self.statistics
             or not self.thinned
             or generation < self.start
             or generation == self.burn_in
@@ -136,7 +149,7 @@ class TrajectoryRetention:
         Returns:
             The number of distinct kept generations among `0..final`.
         """
-        if self.tapered:
+        if self.tapered or self.statistics:
             return len(self.kept_generations(final))
         if not self.thinned or final < self.start:
             return final + 1

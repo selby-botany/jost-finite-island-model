@@ -865,7 +865,7 @@ identity and is recorded in <code>manifest.json</code> only for a compact run. S
 write the compact form unless asked otherwise.</p>
 <h3 id="trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in">trajectory_retention, trajectory_stride, trajectory_thinning_start, trajectory_keep_last, trajectory_keep_burn_in</h3>
 <ul>
-<li><strong>trajectory_retention:</strong> <code>full</code>, <code>thinned</code> or <code>tapered</code>; default <code>full</code></li>
+<li><strong>trajectory_retention:</strong> <code>full</code>, <code>thinned</code>, <code>tapered</code> or <code>statistics</code>; default <code>full</code></li>
 <li><strong>trajectory_stride:</strong> integer at least 1; default <code>10</code></li>
 <li><strong>trajectory_thinning_start:</strong> positive integer, or <code>auto</code>; default <code>auto</code></li>
 <li><strong>trajectory_keep_last:</strong> integer at least 1; default <code>1000</code></li>
@@ -908,6 +908,22 @@ tapered run.</p>
 <pre><code class="language-yaml">trajectory_retention: tapered
 trajectory_keep_last: 2000
 </code></pre>
+<p><code>statistics</code> keeps no trajectory log at all, the floor of the ladder for a
+sweep where only the numbers matter. The finished run holds <code>report.json</code> (or a
+batch's <code>summary.json</code>), <code>scatter.png</code>, <code>pairwise.json</code>, and <code>history.json</code>: the
+statistic history at full precision for at most 2,048 generations (generation 0,
+then closely spaced early generations and evenly spaced later ones). The app
+opens such a run as a report with no curves, and re-analysis and the scrubber
+say that the run kept statistics only. Every reported number is the same as in
+a <code>full</code> run of the same seed. While a batch runs, a replicate that has stopped
+keeps only its final frame; the full log of each replicate still running is
+needed until it stops.</p>
+<p>A sweep reuses a point only if the run it already has kept at least what the
+sweep asks: a <code>full</code> run serves every level, a tapered run serves a tapered
+request with a smaller <code>trajectory_keep_last</code> and <code>statistics</code>, a <code>thinned</code>
+run serves the same thinning or a coarser one, and an exact history serves a
+compact request but not the reverse. Otherwise the point is computed again and
+compared with the old run on the artifacts both kept the same way.</p>
 <pre><code class="language-yaml">trajectory_retention: thinned
 trajectory_stride: 20
 </code></pre>
@@ -1677,7 +1693,7 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>trajectory_retention not <code>full</code>, <code>thinned</code> or <code>tapered</code></td>
+<td>trajectory_retention not <code>full</code>, <code>thinned</code>, <code>tapered</code> or <code>statistics</code></td>
 <td>rejected</td>
 </tr>
 <tr>

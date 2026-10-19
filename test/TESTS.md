@@ -181,6 +181,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_pairwise_file`](#persistence.test_pairwise_file)
   - [`test_read_only`](#persistence.test_read_only)
+  - [`test_recording`](#persistence.test_recording)
   - [`test_report`](#persistence.test_report)
   - [`test_retention`](#persistence.test_retention)
   - [`test_run_checkpoint`](#persistence.test_run_checkpoint)
@@ -35101,6 +35102,12 @@ def test_write_read_only_experiment_requires_the_experiment_prefix(
 ```
 
 A seeded Experiment id must look like every other Experiment id.
+
+<a id="persistence.test_recording"></a>
+
+# persistence.test\_recording
+
+Tests of `fim.persistence.recording`: what a run kept, and whether it is enough.
 
 <a id="persistence.test_report"></a>
 

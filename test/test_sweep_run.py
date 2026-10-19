@@ -2041,3 +2041,117 @@ def test_the_zip_and_list_strategies_run_as_sweeps(results: Path) -> None:
     assert outcome.done == 2
     rebuilt = sweep_spec_of(groups.get_study(study_id))
     assert rebuilt == spec
+
+
+# --- recording levels and reuse ----------------------------------------------
+
+_TAPERED: dict[str, Any] = {
+    "trajectory_retention": "tapered",
+    "trajectory_keep_last": 3,
+}
+
+
+def _point_directory(study_id: str) -> Path:
+    """Return the run directory of the first finished point of a sweep."""
+    rows = sweep_point_results(groups.get_study(study_id))
+    assert rows
+    return rows[0].directory
+
+
+def test_a_tapered_run_is_not_reused_where_full_frames_are_asked(
+    results: Path,
+) -> None:
+    tapered = _study(results, 2, 3, **_TAPERED)
+    first, _ = _run(tapered, points_at_once=1)
+    full = _study(results, 2, 3)
+
+    second, _ = _run(full, points_at_once=1)
+
+    assert first.done == 2
+    assert (second.done, second.reused) == (2, 0)
+    assert _point_directory(full) != _point_directory(tapered)
+
+
+def test_a_full_run_is_reused_where_tapered_frames_are_asked(results: Path) -> None:
+    full = _study(results, 2, 3)
+    _run(full, points_at_once=1)
+    tapered = _study(results, 2, 3, **_TAPERED)
+
+    outcome, _ = _run(tapered, points_at_once=1)
+
+    assert (outcome.done, outcome.reused) == (0, 2)
+
+
+def test_a_plan_marks_only_the_runs_that_hold_what_it_asks(results: Path) -> None:
+    from fim.gui.sweep_bridge import plan_payload  # noqa: PLC0415
+
+    _run(_study(results, 2, 3, **_TAPERED), points_at_once=1)
+    for changes, reused in (({}, 0), (_TAPERED, 2)):
+        spec = SweepSpec(base={**_BASE, **changes}, axes=(expand_axis("d", [2, 3]),))
+
+        plan = plan_payload(spec, enumerate_points(spec))
+
+        assert plan["reusedCount"] == reused
+
+
+@pytest.mark.parametrize(
+    ("kept", "compared", "not_compared"),
+    [
+        (_TAPERED, {"report", "pairwise", "convergence"}, {"trajectory"}),
+        (
+            {"trajectory_retention": "statistics"},
+            {"report", "pairwise"},
+            {"trajectory", "convergence", "history"},
+        ),
+        (
+            {"history_format": "compact"},
+            {"report", "pairwise", "trajectory"},
+            {"convergence"},
+        ),
+    ],
+)
+def test_runs_that_kept_different_things_agree_on_what_both_kept(
+    results: Path,
+    kept: dict[str, Any],
+    compared: set[str],
+    not_compared: set[str],
+) -> None:
+    from fim.reproducibility import compare_runs  # noqa: PLC0415
+
+    # The run that kept less comes first; a request for everything cannot
+    # reuse it, so the second sweep computes the point again.
+    short = _study(results, 2, **kept)
+    _run(short)
+    full = _study(results, 2)
+    outcome, _ = _run(full)
+    assert outcome.done == 1
+
+    comparison = compare_runs(_point_directory(short), _point_directory(full))
+
+    assert comparison.identical
+    assert compared <= set(comparison.compared_on)
+    assert not_compared == set(comparison.not_compared)
+
+
+def test_a_difference_in_what_both_kept_is_still_found(results: Path) -> None:
+    from fim.reproducibility import compare_runs  # noqa: PLC0415
+
+    statistics = _study(results, 2, trajectory_retention="statistics")
+    _run(statistics)
+    full = _study(results, 2)
+    _run(full)
+    left, right = _point_directory(statistics), _point_directory(full)
+    report = json.loads((right / "report.json").read_text())
+    report["D"] = report["D"] + 0.5
+    (right / "report.json").write_text(json.dumps(report))
+    manifest = json.loads((right / "manifest.json").read_text())
+    from fim.persistence.manifest import hash_file  # noqa: PLC0415
+
+    manifest["artifacts"]["report"] = hash_file(right / "report.json")
+    (right / "manifest.json").write_text(json.dumps(manifest))
+
+    comparison = compare_runs(left, right)
+
+    assert not comparison.identical
+    assert next(item.label for item in comparison.differences) == "report"
+    assert "trajectory" not in comparison.compared_on

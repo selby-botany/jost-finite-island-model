@@ -649,7 +649,7 @@ def build_replica_lane(
 
 
 def _taper_lane_log(lane: ReplicaLane, store: TrajectoryStore) -> None:
-    """Cut a tapered lane's finished log down the moment the lane stops.
+    """Cut a tapered (or statistics-only) lane's log down the moment it stops.
 
     The rule needs the run's end, which is known now. Doing it here rather
     than when the batch is published means a batch holds the full logs of
@@ -660,9 +660,12 @@ def _taper_lane_log(lane: ReplicaLane, store: TrajectoryStore) -> None:
     retention = TrajectoryRetention.from_params(lane.params)
     child_for = getattr(store, "store_for", None)
     child = child_for(lane.run_id) if callable(child_for) else store
-    if not retention.tapered or not isinstance(child, BinaryLogStore):
+    if not retention.cuts_at_stop or not isinstance(child, BinaryLogStore):
         return
-    if not child.path.is_file():
+    # A scalar run's store is closed by its owner after this; it is cut when
+    # the run is published. Rewriting a log a writer still holds would lose
+    # what the writer appends next.
+    if child.is_open() or not child.path.is_file():
         return
     taper_log(
         child.path,

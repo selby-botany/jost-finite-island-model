@@ -24,9 +24,11 @@ from fim.persistence.binary_store import (
 )
 from fim.persistence.history import (
     COMPACT_FILENAME,
+    DECIMATED_FILENAME,
     HISTORY_FILENAME,
     fractional_bits,
     write_compact_history,
+    write_decimated_history,
 )
 from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.pairwise import pairwise_payload, write_pairwise
@@ -39,6 +41,7 @@ __all__ = [
     "convergence_history_rows",
     "run_artifact_targets",
     "taper_finished_trajectory",
+    "write_decimated",
     "write_history",
     "write_run_artifacts",
 ]
@@ -113,6 +116,12 @@ def taper_finished_trajectory(result: RunResult, trajectory: Path) -> None:
         trajectory: The run's `trajectory.tlog`.
     """
     retention = TrajectoryRetention.from_params(result.params)
+    if retention.statistics:
+        # No trajectory log is kept: the frames were only ever written so the
+        # run could be checkpointed and resumed.
+        trajectory.unlink(missing_ok=True)
+        trajectory.with_name(EQUILIBRIUM_LOG_FILENAME).unlink(missing_ok=True)
+        return
     if not retention.tapered or not trajectory.is_file():
         return
     final = int(result.report["generation"])
@@ -148,6 +157,26 @@ def write_history(result: RunResult, path: Path) -> None:
         generations,
         columns,
         bits=fractional_bits(_smallest_precision(result.params)),
+    )
+
+
+def write_decimated(result: RunResult, path: Path) -> None:
+    """Write the decimated statistic history a statistics-only run keeps.
+
+    At most 2,048 generations of every statistic, at full precision.
+
+    Args:
+        result: A finished engine result.
+        path: Where it goes (`history.json` in the run directory; it is not
+            among `run_artifact_targets`, which names what every run can have).
+    """
+    rows = convergence_history_rows(result)
+    generations = [int(str(row["generation"])) for row in rows]
+    names = [name for name in (rows[0] if rows else {}) if name != "generation"]
+    write_decimated_history(
+        path,
+        generations,
+        {name: [_number(row[name]) for row in rows] for name in names},
     )
 
 
@@ -202,19 +231,28 @@ def write_run_artifacts(
     plt.close(figure)
     # The monitor's per-generation history, so reopening a run restores its
     # trajectory curves.
-    write_history(result, targets["convergence"])
+    statistics_only = TrajectoryRetention.from_params(result.params).statistics
+    if statistics_only:
+        write_decimated(result, directory / DECIMATED_FILENAME)
+    else:
+        write_history(result, targets["convergence"])
     # Every deme pair's Nei identities at the final generation, so any pair
     # can be compared later.
     write_pairwise(
         targets["pairwise"],
         pairwise_payload(result.final_state, max_demes=pairwise_max_demes),
     )
-    digested_names = ["trajectory", "report", "scatter", "convergence", "pairwise"]
+    digested_names = (
+        ["report", "scatter", "history", "pairwise"]
+        if statistics_only
+        else ["trajectory", "report", "scatter", "convergence", "pairwise"]
+    )
     if targets["equilibrium_trajectory"].is_file():
         digested_names.append("equilibrium_trajectory")
+    where = {**targets, "history": directory / DECIMATED_FILENAME}
     manifest = replace(
         result.manifest,
-        artifacts={name: hash_file(targets[name]) for name in digested_names},
+        artifacts={name: hash_file(where[name]) for name in digested_names},
     )
     write_manifest(targets["manifest"], manifest)
     return targets

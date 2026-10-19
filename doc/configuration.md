@@ -806,7 +806,7 @@ write the compact form unless asked otherwise.
 
 ### trajectory_retention, trajectory_stride, trajectory_thinning_start, trajectory_keep_last, trajectory_keep_burn_in
 
-- **trajectory_retention:** `full`, `thinned` or `tapered`; default `full`
+- **trajectory_retention:** `full`, `thinned`, `tapered` or `statistics`; default `full`
 - **trajectory_stride:** integer at least 1; default `10`
 - **trajectory_thinning_start:** positive integer, or `auto`; default `auto`
 - **trajectory_keep_last:** integer at least 1; default `1000`
@@ -853,6 +853,24 @@ tapered run.
 trajectory_retention: tapered
 trajectory_keep_last: 2000
 ```
+
+`statistics` keeps no trajectory log at all, the floor of the ladder for a
+sweep where only the numbers matter. The finished run holds `report.json` (or a
+batch's `summary.json`), `scatter.png`, `pairwise.json`, and `history.json`: the
+statistic history at full precision for at most 2,048 generations (generation 0,
+then closely spaced early generations and evenly spaced later ones). The app
+opens such a run as a report with no curves, and re-analysis and the scrubber
+say that the run kept statistics only. Every reported number is the same as in
+a `full` run of the same seed. While a batch runs, a replicate that has stopped
+keeps only its final frame; the full log of each replicate still running is
+needed until it stops.
+
+A sweep reuses a point only if the run it already has kept at least what the
+sweep asks: a `full` run serves every level, a tapered run serves a tapered
+request with a smaller `trajectory_keep_last` and `statistics`, a `thinned`
+run serves the same thinning or a coarser one, and an exact history serves a
+compact request but not the reverse. Otherwise the point is computed again and
+compared with the old run on the artifacts both kept the same way.
 
 ```yaml
 trajectory_retention: thinned
@@ -1481,7 +1499,7 @@ existed.
 | precision negative or non-finite | rejected |
 | statistic_precision naming an unwatched statistic, or a negative value | rejected |
 | stop_batch_early not a boolean | rejected |
-| trajectory_retention not `full`, `thinned` or `tapered` | rejected |
+| trajectory_retention not `full`, `thinned`, `tapered` or `statistics` | rejected |
 | history_format not `exact` or `compact` | rejected |
 | trajectory_keep_last less than 1 or not a whole number | rejected |
 | trajectory_keep_burn_in not a boolean | rejected |

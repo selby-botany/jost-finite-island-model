@@ -38,7 +38,13 @@ HISTORY_FILENAME: Final = "convergence.jsonl"
 COMPACT_FILENAME: Final = "convergence.fhist"
 """The compact statistic history of one replicate or one scalar run."""
 
-HISTORY_FILENAMES: Final = (HISTORY_FILENAME, COMPACT_FILENAME)
+DECIMATED_FILENAME: Final = "history.json"
+"""The decimated history a statistics-only run keeps in place of the full one."""
+
+DECIMATED_SAMPLES: Final = 2048
+"""Most generations in a decimated history."""
+
+HISTORY_FILENAMES: Final = (HISTORY_FILENAME, COMPACT_FILENAME, DECIMATED_FILENAME)
 """Every name a history file may have, exact first."""
 
 _MAGIC: Final = b"FIMHIST1"
@@ -82,12 +88,13 @@ def replicate_directories(run_directory: Path) -> list[Path]:
 def history_path(replicate_directory: Path) -> Path:
     """Return where a replicate's statistic history lives.
 
-    The compact file if there is one, else the exact path (which may not
-    exist: a run kept without a history, or one that predates it).
+    The exact file, else the compact one, else the decimated one a
+    statistics-only run keeps; if none exists, the exact path (a run kept
+    without a history, or one that predates it).
     """
-    compact = replicate_directory / COMPACT_FILENAME
-    if compact.is_file():
-        return compact
+    for name in (HISTORY_FILENAME, COMPACT_FILENAME, DECIMATED_FILENAME):
+        if (replicate_directory / name).is_file():
+            return replicate_directory / name
     return replicate_directory / HISTORY_FILENAME
 
 
@@ -123,6 +130,12 @@ def iter_history_rows(path: Path) -> Iterator[HistoryRow]:
         ValueError: A row is malformed, or a compact file is damaged.
         OSError: The file cannot be read.
     """
+    if path.name == DECIMATED_FILENAME:
+        generations, columns = read_decimated_columns(path)
+        names = list(columns)
+        for index, generation in enumerate(generations):
+            yield generation, {name: columns[name][index] for name in names}
+        return
     if path.suffix == Path(COMPACT_FILENAME).suffix:
         generations, columns = read_compact_columns(path)
         names = list(columns)
@@ -160,6 +173,8 @@ def read_history_columns(path: Path) -> HistoryColumns:
         ValueError: The file is malformed or damaged, or the statistics do
             not share one set of rows (an exact file whose rows differ).
     """
+    if path.name == DECIMATED_FILENAME:
+        return read_decimated_columns(path)
     if path.suffix == Path(COMPACT_FILENAME).suffix:
         return read_compact_columns(path)
     generations: list[int] = []
@@ -182,6 +197,8 @@ def sample_history(path: Path, grid: Sequence[int]) -> dict[str, list[float | No
         path: A history file in either format.
         grid: Ascending generations to sample.
     """
+    if path.name == DECIMATED_FILENAME:
+        return _sample_nearest(path, grid)
     if path.suffix == Path(COMPACT_FILENAME).suffix:
         return _sample_compact(path, grid)
     samples: dict[str, list[float | None]] = {}
@@ -196,6 +213,121 @@ def sample_history(path: Path, grid: Sequence[int]) -> dict[str, list[float | No
         for name, value in values.items():
             column = samples.setdefault(name, [None] * len(grid))
             column[position] = _finite(value)
+    return samples
+
+
+def decimated_generations(final: int, maximum: int = DECIMATED_SAMPLES) -> list[int]:
+    """Return the generations a decimated history samples, for a run ending at `final`.
+
+    Generation 0, then a union of logarithmic and linear spacing up to `final`
+    (the same family as a sweep's trajectory grid, finer), never more than
+    `maximum`; a run short enough to fit is sampled at every generation.
+
+    Args:
+        final: The run's final generation.
+        maximum: The most samples, at least 2.
+
+    Raises:
+        ValueError: `maximum` is below 2.
+    """
+    if maximum < 2:  # noqa: PLR2004 - both ends are needed
+        raise ValueError("a decimated history needs at least two samples")
+    if final <= 0:
+        return [0]
+    if final + 1 <= maximum:
+        return list(range(final + 1))
+    linear = (maximum - 1) // 2
+    logarithmic = maximum - 1 - linear
+    chosen = {0, final}
+    chosen.update(round(final * step / linear) for step in range(1, linear + 1))
+    chosen.update(
+        round(final ** (step / logarithmic)) for step in range(1, logarithmic + 1)
+    )
+    return sorted(chosen)
+
+
+def write_decimated_history(
+    path: Path,
+    generations: Sequence[int],
+    columns: Mapping[str, Sequence[float | None]],
+    *,
+    maximum: int = DECIMATED_SAMPLES,
+) -> None:
+    """Write the decimated history of a run: at most `maximum` generations.
+
+    Values are kept at full precision; only generations are left out.
+
+    Args:
+        path: The file to write (replaced atomically).
+        generations: Every generation of the run, ascending.
+        columns: One sequence of values per statistic, aligned with
+            `generations`.
+        maximum: The most samples to keep.
+    """
+    final = generations[-1] if generations else 0
+    wanted = set(decimated_generations(final, maximum))
+    keep = [
+        index for index, generation in enumerate(generations) if generation in wanted
+    ]
+    document = {
+        "format": "fim-decimated-history",
+        "generations": [generations[index] for index in keep],
+        "statistics": {
+            name: [_finite(values[index]) for index in keep]
+            for name, values in columns.items()
+        },
+    }
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(document, separators=(",", ":")), encoding="utf-8")
+    temporary.replace(path)
+
+
+def read_decimated_columns(path: Path) -> HistoryColumns:
+    """Read a decimated history as generations and one value list per statistic.
+
+    Raises:
+        HistoryError: The file is not a decimated history.
+        OSError: The file cannot be read.
+    """
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        generations = [int(g) for g in document["generations"]]
+        columns = {
+            str(name): [math.nan if v is None else float(v) for v in values]
+            for name, values in document["statistics"].items()
+        }
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        raise HistoryError(
+            f"{path.name} is not a decimated history: {error}"
+        ) from error
+    return generations, columns
+
+
+def _sample_nearest(path: Path, grid: Sequence[int]) -> dict[str, list[float | None]]:
+    """Sample a sparse history at `grid`, taking the nearest recorded generation.
+
+    A decimated history holds finer samples than a trajectory grid, so the
+    nearest one is within a fraction of the grid's own spacing. A generation
+    beyond the last recorded one has no value.
+    """
+    generations, columns = read_decimated_columns(path)
+    recorded = np.asarray(generations)
+    samples: dict[str, list[float | None]] = {name: [] for name in columns}
+    for wanted in grid:
+        if not generations or wanted > generations[-1]:
+            for name in columns:
+                samples[name].append(None)
+            continue
+        after = int(np.searchsorted(recorded, wanted))
+        before = max(after - 1, 0)
+        after = min(after, len(generations) - 1)
+        nearest = (
+            before
+            if abs(generations[before] - wanted) <= abs(generations[after] - wanted)
+            else after
+        )
+        for name, values in columns.items():
+            samples[name].append(_finite(values[nearest]))
     return samples
 
 

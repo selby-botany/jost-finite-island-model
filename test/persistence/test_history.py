@@ -280,11 +280,8 @@ def test_the_compact_file_is_far_smaller_than_the_json(tmp_path: Path) -> None:
     assert compact.stat().st_size * 20 < exact.stat().st_size
 
 
-def test_the_compact_file_wins_when_a_folder_holds_both(tmp_path: Path) -> None:
+def test_the_exact_path_is_named_when_a_folder_holds_no_history(tmp_path: Path) -> None:
     assert history_path(tmp_path) == tmp_path / HISTORY_FILENAME
-    (tmp_path / COMPACT_FILENAME).write_bytes(b"x")
-
-    assert history_path(tmp_path) == tmp_path / COMPACT_FILENAME
 
 
 def test_replicate_folders_are_those_with_a_manifest(tmp_path: Path) -> None:
@@ -295,3 +292,89 @@ def test_replicate_folders_are_those_with_a_manifest(tmp_path: Path) -> None:
             (tmp_path / name / "manifest.json").write_text("{}")
 
     assert replicate_directories(tmp_path) == [tmp_path / "replicate-001"]
+
+
+# --- the decimated history --------------------------------------------------
+
+
+def test_a_short_history_is_decimated_to_every_generation(tmp_path: Path) -> None:
+    from fim.persistence.history import (  # noqa: PLC0415
+        DECIMATED_FILENAME,
+        read_decimated_columns,
+        write_decimated_history,
+    )
+
+    columns = _walk(100, seed=7)
+    path = tmp_path / DECIMATED_FILENAME
+
+    write_decimated_history(path, list(range(100)), columns)
+
+    generations, decoded = read_decimated_columns(path)
+    assert generations == list(range(100))
+    assert decoded["D"] == columns["D"]
+
+
+def test_a_long_history_is_decimated_to_the_cap_and_keeps_both_ends(
+    tmp_path: Path,
+) -> None:
+    from fim.persistence.history import (  # noqa: PLC0415
+        DECIMATED_FILENAME,
+        read_decimated_columns,
+        write_decimated_history,
+    )
+
+    rows = 50_000
+    columns = {"D": [i / rows for i in range(rows)]}
+    path = tmp_path / DECIMATED_FILENAME
+
+    write_decimated_history(path, list(range(rows)), columns, maximum=256)
+
+    generations, decoded = read_decimated_columns(path)
+    assert len(generations) <= 256
+    assert generations[0] == 0 and generations[-1] == rows - 1
+    assert decoded["D"] == [g / rows for g in generations]
+    assert path.stat().st_size < 20_000
+
+
+def test_the_nearest_recorded_generation_answers_a_grid_sample(tmp_path: Path) -> None:
+    from fim.persistence.history import DECIMATED_FILENAME  # noqa: PLC0415
+
+    path = tmp_path / DECIMATED_FILENAME
+    path.write_text(
+        json.dumps(
+            {
+                "generations": [0, 10, 20, 100],
+                "statistics": {"D": [0.0, 0.1, 0.2, None]},
+            }
+        )
+    )
+
+    sampled = sample_history(path, [0, 4, 6, 18, 70, 100, 101])
+
+    assert sampled["D"] == [0.0, 0.0, 0.1, 0.2, None, None, None]
+
+
+def test_a_file_that_is_not_a_decimated_history_is_refused(tmp_path: Path) -> None:
+    from fim.persistence.history import (  # noqa: PLC0415
+        DECIMATED_FILENAME,
+        read_decimated_columns,
+    )
+
+    path = tmp_path / DECIMATED_FILENAME
+    path.write_text("[1, 2, 3]")
+
+    with pytest.raises(HistoryError, match="not a decimated history"):
+        read_decimated_columns(path)
+
+
+def test_the_history_path_prefers_exact_then_compact_then_decimated(
+    tmp_path: Path,
+) -> None:
+    from fim.persistence.history import DECIMATED_FILENAME  # noqa: PLC0415
+
+    (tmp_path / DECIMATED_FILENAME).write_text("{}")
+    assert history_path(tmp_path).name == DECIMATED_FILENAME
+    (tmp_path / COMPACT_FILENAME).write_bytes(b"x")
+    assert history_path(tmp_path).name == COMPACT_FILENAME
+    (tmp_path / HISTORY_FILENAME).write_text("")
+    assert history_path(tmp_path).name == HISTORY_FILENAME

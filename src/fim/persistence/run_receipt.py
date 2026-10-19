@@ -25,7 +25,11 @@ from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
 )
-from fim.persistence.history import COMPACT_FILENAME, HISTORY_FILENAME
+from fim.persistence.history import (
+    COMPACT_FILENAME,
+    DECIMATED_FILENAME,
+    HISTORY_FILENAME,
+)
 from fim.persistence.manifest import (
     ArtifactDigest,
     hash_file,
@@ -50,6 +54,7 @@ ARTIFACT_FILENAMES: Final = {
     "scatter": "scatter.png",
     "convergence": HISTORY_FILENAME,
     "pairwise": "pairwise.json",
+    "history": DECIMATED_FILENAME,
 }
 """Each scalar artifact key a receipt may list, and the file it names.
 
@@ -166,8 +171,9 @@ def _scalar_problem(directory: Path, run_id: str) -> str | None:
     if manifest.run_id != run_id:
         return f"receipt {path} names run {manifest.run_id!r}, not {run_id!r}"
     artifacts = manifest.artifacts
-    if not artifacts or "trajectory" not in artifacts:
-        return f"receipt {path} does not list the trajectory"
+    listing = _listing_problem(path, manifest.parameters, artifacts)
+    if listing is not None or artifacts is None:
+        return listing
     for key, digest in sorted(artifacts.items()):
         filename = ARTIFACT_FILENAMES.get(key)
         if filename is None:
@@ -175,6 +181,21 @@ def _scalar_problem(directory: Path, run_id: str) -> str | None:
         problem = _digest_problem(artifact_path(directory, key), digest)
         if problem is not None:
             return problem
+    return None
+
+
+def _listing_problem(
+    path: Path,
+    parameters: Mapping[str, object],
+    artifacts: Mapping[str, ArtifactDigest] | None,
+) -> str | None:
+    """Return why a receipt lists too little: the trajectory, or for a
+    statistics-only run (which keeps none) the decimated history."""
+    statistics_only = parameters.get("trajectory_retention") == "statistics"
+    if not artifacts or ("trajectory" not in artifacts and not statistics_only):
+        return f"receipt {path} does not list the trajectory"
+    if statistics_only and "history" not in artifacts:
+        return f"receipt {path} does not list the decimated history"
     return None
 
 

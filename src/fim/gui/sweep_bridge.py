@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from fim.persistence.groups import StudyManifest
+from fim.persistence.recording import run_satisfies
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
     SweepPlan,
@@ -25,6 +26,7 @@ from fim.sweep_compare import ComparedPoint, SweepRef, compare_sweeps
 from fim.sweep_cost import static_cost
 from fim.sweep_run import (
     completed_run_ids,
+    completed_runs,
     sweep_point_results,
     sweep_point_statuses,
     sweep_spec_of,
@@ -165,11 +167,26 @@ def existing_run_ids(results: Path | None = None) -> set[str]:
     return completed_run_ids(results=results)
 
 
+def reusable_run_ids(plan: SweepPlan, results: Path | None = None) -> set[str]:
+    """Return the planned points whose existing run holds what the plan asks.
+
+    A run made by this version counts only if it kept at least as much as the
+    point's configuration asks it to (a tapered run does not stand in for full
+    frames), the rule `run_sweep` applies.
+    """
+    runs = completed_runs(results=results)
+    return {
+        point.run_id
+        for point in plan.points
+        if point.run_id in runs and run_satisfies(runs[point.run_id], point.params)
+    }
+
+
 def plan_payload(
     spec: SweepSpec, plan: SweepPlan, *, results: Path | None = None
 ) -> dict[str, Any]:
     """Describe a plan for the page, marking points whose run already exists."""
-    existing = existing_run_ids(results)
+    existing = reusable_run_ids(plan, results)
     points = [
         {
             "index": point.index,

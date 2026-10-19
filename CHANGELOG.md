@@ -8,6 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`trajectory_retention: statistics`, and reuse that knows what a run kept.**
+  A statistics-only run keeps no trajectory log: it holds its report, scatter
+  plot, deme-pair statistics and a decimated statistic history (`history.json`,
+  at most 2,048 generations), and the app opens it as a report. A sweep reuses a
+  point only if its existing run kept at least what is asked (full serves every
+  level; tapered serves a smaller `trajectory_keep_last` and statistics; an
+  exact history serves a compact one), and a recomputed point is compared with
+  the old run on the artifacts both kept the same way. `fim sweep` plans mark
+  only the points that can be reused.
+
 - **A compact statistic history: `history_format: compact`.** Writes
   `convergence.fhist` in place of `convergence.jsonl`: each value is rounded to
   a fixed step of about one hundredth of `precision` and the differences

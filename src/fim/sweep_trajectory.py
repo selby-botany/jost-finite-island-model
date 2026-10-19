@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from fim.persistence.history import (
+    decimated_generations,
     history_path,
     iter_history_rows,
     replicate_directories,
@@ -168,20 +169,10 @@ def trajectory_grid(final: int, maximum: int = MAX_SAMPLES) -> tuple[int, ...]:
     Raises:
         ValueError: `maximum` is below 2.
     """
-    if maximum < 2:  # noqa: PLR2004 - the grid needs both ends
-        raise ValueError("a trajectory needs at least two samples")
-    if final <= 0:
-        return (0,)
-    if final + 1 <= maximum:
-        return tuple(range(final + 1))
-    linear = (maximum - 1) // 2
-    logarithmic = maximum - 1 - linear
-    chosen = {0, final}
-    chosen.update(round(final * step / linear) for step in range(1, linear + 1))
-    chosen.update(
-        round(final ** (step / logarithmic)) for step in range(1, logarithmic + 1)
-    )
-    return tuple(sorted(chosen))
+    try:
+        return tuple(decimated_generations(final, maximum))
+    except ValueError:
+        raise ValueError("a trajectory needs at least two samples") from None
 
 
 def point_trajectory(
@@ -446,7 +437,11 @@ def _cache_key(
     digests = []
     for manifest in manifests:
         artifacts = manifest.get("artifacts")
-        entry = artifacts.get("convergence") if isinstance(artifacts, dict) else None
+        entry = (
+            (artifacts.get("convergence") or artifacts.get("history"))
+            if isinstance(artifacts, dict)
+            else None
+        )
         digest = entry.get("sha256") if isinstance(entry, dict) else None
         if not isinstance(digest, str):
             return None

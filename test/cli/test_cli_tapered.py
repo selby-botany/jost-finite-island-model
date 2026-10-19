@@ -206,3 +206,107 @@ def test_a_compact_run_is_recorded_only_when_it_is_compact(tmp_path: Path) -> No
     )
     with pytest.raises(ValueError, match="history_format"):
         SimulationParams.from_mapping({**_BASE, "history_format": "tiny"})
+
+
+# --- the statistics level --------------------------------------------------------
+
+_STATISTICS: dict[str, object] = {"trajectory_retention": "statistics"}
+
+
+def test_a_statistics_run_keeps_no_trajectory_and_a_decimated_history(
+    tmp_path: Path,
+) -> None:
+    from fim.persistence.history import read_history_columns  # noqa: PLC0415
+
+    full = _run(tmp_path, "full")
+    kept = _run(tmp_path, "statistics", **_STATISTICS)
+
+    assert {path.name for path in kept.iterdir()} == {
+        "manifest.json",
+        "report.json",
+        "scatter.png",
+        "pairwise.json",
+        "history.json",
+    }
+    manifest = read_manifest(kept / "manifest.json")
+    assert manifest.artifacts is not None
+    assert set(manifest.artifacts) == {"report", "scatter", "pairwise", "history"}
+    assert manifest.run_id == read_manifest(full / "manifest.json").run_id
+    assert (kept / "report.json").read_bytes() == (full / "report.json").read_bytes()
+    assert (kept / "pairwise.json").read_bytes() == (
+        full / "pairwise.json"
+    ).read_bytes()
+    exact_generations, exact = read_history_columns(full / "convergence.jsonl")
+    generations, columns = read_history_columns(kept / "history.json")
+    assert generations[0] == 0 and generations[-1] == exact_generations[-1]
+    for name, values in columns.items():
+        picked = [exact[name][exact_generations.index(g)] for g in generations]
+        assert values == picked  # decimated, not rounded
+
+
+def test_a_statistics_batch_keeps_the_same_summary_as_a_full_one(
+    tmp_path: Path,
+) -> None:
+    full = _run(tmp_path, "full", n_replicates=3)
+    kept = _run(tmp_path, "statistics", n_replicates=3, **_STATISTICS)
+
+    assert (full / "summary.json").read_bytes() == (kept / "summary.json").read_bytes()
+    for replicate in sorted(kept.glob("replicate-*")):
+        assert not (replicate / "trajectory.tlog").exists()
+        assert (replicate / "history.json").is_file()
+        assert (replicate / "report.json").read_bytes() == (
+            full / replicate.name / "report.json"
+        ).read_bytes()
+
+
+def test_a_statistics_runs_receipt_verifies_without_a_trajectory(
+    tmp_path: Path,
+) -> None:
+    from fim.persistence.run_lifecycle import RunKind  # noqa: PLC0415
+    from fim.persistence.run_receipt import receipt_problem  # noqa: PLC0415
+
+    kept = _run(tmp_path, "statistics", **_STATISTICS)
+    run_id = read_manifest(kept / "manifest.json").run_id
+
+    assert receipt_problem(kept, kind=RunKind.SCALAR, run_id=run_id) is None
+    (kept / "history.json").write_text("{}")
+    assert receipt_problem(kept, kind=RunKind.SCALAR, run_id=run_id) is not None
+
+
+def test_stats_on_a_statistics_run_says_why_there_is_nothing_to_analyze(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    kept = _run(tmp_path, "statistics", **_STATISTICS)
+
+    status = cli.main(["stats", str(kept / "trajectory.tlog")])
+
+    assert status != 0
+    assert "kept statistics only" in capsys.readouterr().err
+
+
+def test_a_statistics_runs_history_is_read_back_for_the_graph(tmp_path: Path) -> None:
+    from fim.reanalyze import read_persisted_convergence_history  # noqa: PLC0415
+
+    kept = _run(tmp_path, "statistics", **_STATISTICS)
+    manifest = read_manifest(kept / "manifest.json")
+
+    found = read_persisted_convergence_history(kept / "trajectory.tlog", manifest)
+
+    assert found is not None
+    assert found[0][-1] == manifest.generation and "D" in found[1]
+
+
+def test_the_app_opens_a_statistics_run_as_a_report_without_a_trajectory(
+    tmp_path: Path,
+) -> None:
+    from fim.gui.app import Api  # noqa: PLC0415
+
+    kept = _run(tmp_path, "statistics", **_STATISTICS)
+    batch = _run(tmp_path, "statistics-batch", n_replicates=3, **_STATISTICS)
+    api = Api(preferences_path=tmp_path / "preferences.json")
+
+    single = api.open_run({"trajectoryPath": str(kept / "trajectory.tlog")})
+    many = api.open_batch(str(batch))
+
+    assert single["ok"] is True and single["reportOnly"] is True
+    assert many["ok"] is True and many["reportOnly"] is True
