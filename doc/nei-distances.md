@@ -188,7 +188,7 @@ J_{\mathrm{between}}=\frac{2}{d(d-1)}
 ```math
 I_{\mathrm{all,geo}}=
 \frac{J_{\mathrm{between}}}
-\left(\prod_{k=1}^{d}J_k\right)^{1/d} \tag{N.9}
+{\lparen\prod_{k=1}^{d}J_k\rparen^{1/d}} \tag{N.9}
 ```
 
 ```math
@@ -356,8 +356,13 @@ J_{\mathrm{between}}=\frac{1+0.001+0.001}{3}
 =\frac{1.002}{3}=0.334 \tag{N.21}
 ```
 
-The geometric denominator takes the cube root of the product of the
-three within identities:
+The geometric mean of $d$ positive values is their product raised to
+the power $1/d$, as in the denominator of (N.9). For two values,
+$d=2$, this is the familiar square root. Here there are three
+within-deme identities, so $d=3$ and the exponent is $1/3$: taking
+the cube root. This gives the single value whose product with itself
+three times equals the original product. Since
+$0.1\cdot0.1\cdot0.1=0.001$, the denominator is:
 
 ```math
 J_{\mathrm{within,geo}}=(1\cdot1\cdot0.001)^{1/3}=0.1 \tag{N.22}
