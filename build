@@ -29,6 +29,10 @@ usage() {
 Usage: build [--ci] [--coverage] [--dry-run]
              [--no-lint] [--no-type] [--no-test] [--no-docs] [--no-package]
              [--slow-only] [--help]
+
+With --ci, only --no-package is allowed. It defers artifact assembly and
+installed-wheel smoke checks; packaging tests still run. Complete the gate
+with: build --no-lint --no-type --no-test --no-docs
 EOF
 }
 
@@ -84,10 +88,9 @@ if "${ci}" && "${slow_only}"; then
 fi
 
 if "${ci}" && {
-    ! "${run_docs}" || ! "${run_lint}" || ! "${run_package}" \
-        || ! "${run_test}" || ! "${run_type}"
+    ! "${run_docs}" || ! "${run_lint}" || ! "${run_test}" || ! "${run_type}"
 }; then
-    printf '%s\n' '--ci cannot be combined with a --no-* option' >&2
+    printf '%s\n' '--ci only allows --no-package among --no-* options' >&2
     exit 2
 fi
 

@@ -47,12 +47,19 @@ integration, including branch coverage, deterministic statistical tests,
 documentation freshness, link checking, desktop-GUI asset checking, and
 package smoke tests.
 
-The CI full-gate step has a 30-minute end-to-end limit, including packaging
-after the test suites. A timeout is not proof of a stuck test: inspect the
-last command and stage durations first. Run `38103694509` passed all tests
-and documentation checks but exhausted the former 20-minute limit while
-building the source distribution. Slow tests remain in their separate
-scheduled/on-demand job; this allowance does not add them to the full gate.
+CI runs `./build --ci --no-package` with a 30-minute limit, then
+`./build --no-lint --no-type --no-test --no-docs` with a separate 15-minute
+limit for source/wheel assembly and installed-wheel smoke tests. Both steps
+must pass on each Python version. The first step still runs the packaging
+test and enforces combined coverage; only final artifact assembly and smoke
+tests move to the second step. Local `./build --ci` still runs both parts.
+
+A timeout is not proof of a stuck test: inspect the last command and stage
+durations first. Run `39280427237` passed every Python 3.13 test and
+documentation check, then exhausted the shared 30-minute limit while
+building the source distribution. Splitting the steps keeps assembly from
+competing with tests for that budget without dropping checks or raising
+the test limit. Slow tests remain in their separate scheduled/on-demand job.
 Full worked-example replays, including reference-backend (`lineal`) parity
 checks, belong to that `slow` layer. Do not schedule a replay using timings
 measured for a different backend. Example policy guards and focused engine

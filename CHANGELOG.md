@@ -1704,6 +1704,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Separate CI artifact assembly from the test budget.** Every Python
+  version still runs all non-slow tests, coverage, documentation checks,
+  and installed-wheel smoke tests. Distribution assembly now has its own
+  bounded step instead of consuming the test step's remaining time.
+
 - **The packaged macOS and Linux builds are smoke-tested on the default.** Their
   smoke steps pinned one run and never ran the default batch (the Windows steps
   already did); they now also run a shrunken default batch and expect

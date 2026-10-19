@@ -48,7 +48,8 @@ def test_the_expensive_scenario_layer_runs_as_its_own_named_budgeted_step() -> N
     full_step = next(
         step
         for step in run_steps
-        if str(step["run"]).strip() == "xvfb-run --auto-servernum ./build --ci"
+        if str(step["run"]).strip()
+        == "xvfb-run --auto-servernum ./build --ci --no-package"
     )
 
     # The fast step is the same deterministic layer `--ci` also covers
@@ -84,7 +85,8 @@ def test_each_test_step_has_a_nonflaky_wall_clock_budget() -> None:
     full_step = next(
         step
         for step in run_steps
-        if str(step["run"]).strip() == "xvfb-run --auto-servernum ./build --ci"
+        if str(step["run"]).strip()
+        == "xvfb-run --auto-servernum ./build --ci --no-package"
     )
 
     fast_budget = fast_step["timeout-minutes"]
@@ -96,21 +98,30 @@ def test_each_test_step_has_a_nonflaky_wall_clock_budget() -> None:
     assert fast_budget < full_budget
 
 
-def test_full_gate_budget_includes_packaging_after_the_test_layers() -> None:
-    """The complete gate retains its measured 30-minute end-to-end budget.
+def test_artifact_assembly_has_its_own_budget_after_the_ci_checks() -> None:
+    """Artifact assembly cannot exhaust the test step's 30-minute budget.
 
-    Run 38103694509 passed every test and documentation check, then was
-    killed building the sdist at 20 minutes. The packaging-test, parallel,
-    and GUI layers alone took about 18 minutes 40 seconds. The budget must
-    also cover lint, types, documentation, package builds, and wheel smoke;
-    this static guard checks the configured allowance, not elapsed time.
+    Run 39280427237 passed every Python 3.13 test and documentation check,
+    then timed out building the sdist. Keep every check, the packaging test,
+    and installed-wheel smoke, but budget final assembly separately.
     """
+    run_steps = _run_steps()
     full_step = next(
         step
-        for step in _run_steps()
-        if str(step["run"]).strip() == "xvfb-run --auto-servernum ./build --ci"
+        for step in run_steps
+        if str(step["run"]).strip()
+        == "xvfb-run --auto-servernum ./build --ci --no-package"
+    )
+    package_step = next(
+        step
+        for step in run_steps
+        if str(step["run"]).strip() == "./build --no-lint --no-type --no-test --no-docs"
     )
     assert full_step["timeout-minutes"] == 30
+    assert package_step["timeout-minutes"] == 15
+    assert run_steps.index(full_step) < run_steps.index(package_step)
+    assert "if" not in package_step
+    assert not package_step.get("continue-on-error", False)
 
 
 @pytest.mark.parametrize("marker", ["slow", "not slow"])

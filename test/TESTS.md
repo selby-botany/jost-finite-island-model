@@ -813,6 +813,38 @@ def test_ci_build_runs_non_gui_parallel_and_gui_serially() -> None
 
 `--ci` keeps stateful tests out of xdist while parallelizing the rest.
 
+<a id="test.test_build_ci_parallel.test_ci_can_defer_artifact_assembly_without_skipping_any_test"></a>
+
+#### test\_ci\_can\_defer\_artifact\_assembly\_without\_skipping\_any\_test
+
+```python
+def test_ci_can_defer_artifact_assembly_without_skipping_any_test() -> None
+```
+
+`--ci --no-package` retains all test layers and documentation gates.
+
+<a id="test.test_build_ci_parallel.test_ci_cannot_skip_validation"></a>
+
+#### test\_ci\_cannot\_skip\_validation
+
+```python
+@pytest.mark.parametrize("flag",
+                         ["--no-docs", "--no-lint", "--no-test", "--no-type"])
+def test_ci_cannot_skip_validation(flag: str) -> None
+```
+
+Deferring artifacts never permits skipping a CI validation layer.
+
+<a id="test.test_build_ci_parallel.test_artifact_only_build_runs_no_other_layers"></a>
+
+#### test\_artifact\_only\_build\_runs\_no\_other\_layers
+
+```python
+def test_artifact_only_build_runs_no_other_layers() -> None
+```
+
+The separate package step assembles artifacts without repeating checks.
+
 <a id="test.test_ci_workflows"></a>
 
 # test.test\_ci\_workflows
@@ -41718,21 +41750,19 @@ The fast budget must be at least ten minutes: run 38456360001
 completed its 4,296 tests in 306 seconds, exceeding the former
 five-minute allowance before step overhead.
 
-<a id="validation.test_ci_runtime_budget.test_full_gate_budget_includes_packaging_after_the_test_layers"></a>
+<a id="validation.test_ci_runtime_budget.test_artifact_assembly_has_its_own_budget_after_the_ci_checks"></a>
 
-#### test\_full\_gate\_budget\_includes\_packaging\_after\_the\_test\_layers
+#### test\_artifact\_assembly\_has\_its\_own\_budget\_after\_the\_ci\_checks
 
 ```python
-def test_full_gate_budget_includes_packaging_after_the_test_layers() -> None
+def test_artifact_assembly_has_its_own_budget_after_the_ci_checks() -> None
 ```
 
-The complete gate retains its measured 30-minute end-to-end budget.
+Artifact assembly cannot exhaust the test step's 30-minute budget.
 
-Run 38103694509 passed every test and documentation check, then was
-killed building the sdist at 20 minutes. The packaging-test, parallel,
-and GUI layers alone took about 18 minutes 40 seconds. The budget must
-also cover lint, types, documentation, package builds, and wheel smoke;
-this static guard checks the configured allowance, not elapsed time.
+Run 39280427237 passed every Python 3.13 test and documentation check,
+then timed out building the sdist. Keep every check, the packaging test,
+and installed-wheel smoke, but budget final assembly separately.
 
 <a id="validation.test_ci_runtime_budget.test_full_lineal_example_replays_belong_to_the_slow_layer"></a>
 
