@@ -38,7 +38,7 @@ from fim.config.defaults import (
 )
 from fim.config.expert import EXPERT_SETTING_INFO, ExpertSettings
 from fim.config.numerics import MINIMUM_REPLICATE_COUNT
-from fim.config.storage import TRAJECTORY_STRIDE
+from fim.config.storage import TRAJECTORY_KEEP_LAST, TRAJECTORY_STRIDE
 from fim.convergence.defaults import derive_convergence_defaults
 from fim.convergence.defaults import relaxation_time as estimate_relaxation_time
 from fim.model.allele import AlleleId
@@ -78,7 +78,7 @@ ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
 ConvergenceEstimate = Literal["mean_of_values", "value_of_means", "auto"]
 PrecisionMethod = Literal["interval", "planned_replicates"]
-TrajectoryRetentionChoice = Literal["full", "thinned"]
+TrajectoryRetentionChoice = Literal["full", "thinned", "tapered"]
 MigrantSampling = Literal["continuous", "stochastic"]
 MutationModel = Literal["infinite_alleles", "finite_alleles"]
 EngineBackend = Literal["lineal", "generational", "generational-vector", "auto"]
@@ -118,6 +118,8 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "trajectory_retention": "full",
     "trajectory_stride": TRAJECTORY_STRIDE,
     "trajectory_thinning_start": None,  # None means "auto": derive it
+    "trajectory_keep_last": TRAJECTORY_KEEP_LAST,
+    "trajectory_keep_burn_in": False,
     "replicate_averaging_window": None,  # None means "auto": match the batch
     "replicate_minimum": 10,
     "confidence": 0.95,
@@ -164,6 +166,8 @@ _CONFIG_KEYS: Final = frozenset(
         "trajectory_retention",
         "trajectory_stride",
         "trajectory_thinning_start",
+        "trajectory_keep_last",
+        "trajectory_keep_burn_in",
         "replicate_averaging_window",
         "replicate_minimum",
         "confidence",
@@ -190,6 +194,8 @@ IDENTITY_EXCLUDED_KEYS: Final[tuple[str, ...]] = (
     "trajectory_retention",
     "trajectory_stride",
     "trajectory_thinning_start",
+    "trajectory_keep_last",
+    "trajectory_keep_burn_in",
 )
 """Serialized keys that do not change a run's numbers.
 
@@ -413,9 +419,19 @@ class SimulationParams:
             (`fim.persistence.retention`). Per-generation statistics are
             never thinned, so the graph, the bands and every number in the
             report are unaffected; reanalysis and the scrubber see only the
-            kept generations.
+            kept generations. `"tapered"`: the last `trajectory_keep_last`
+            generations in full and older ones thinned by a stride that
+            doubles with their distance from the end, without the burn-in
+            frames (generation 0 and the last burn-in generation stay;
+            `trajectory_keep_burn_in` keeps them tapered like the rest). The
+            rule needs the run's end, so the log is written whole and
+            tapered when the replicate finishes.
         trajectory_stride: With thinning on, one generation in this many is
             kept from the thinning start on (at least 1).
+        trajectory_keep_last: With tapering on, the last this-many generations
+            are kept in full (at least 1).
+        trajectory_keep_burn_in: With tapering on, whether the burn-in
+            generations are kept (tapered like the rest) instead of dropped.
         trajectory_thinning_start: First generation thinning may skip.
             `AUTO_CONVERGENCE` (`0`, the default) derives it as the later of
             the Expert Setting `thinning_minimum_start` and the burn-in plus
@@ -598,6 +614,8 @@ class SimulationParams:
     trajectory_retention: TrajectoryRetentionChoice = "full"
     trajectory_stride: int = TRAJECTORY_STRIDE
     trajectory_thinning_start: int = AUTO_CONVERGENCE
+    trajectory_keep_last: int = TRAJECTORY_KEEP_LAST
+    trajectory_keep_burn_in: bool = False
     replicate_averaging_window: int = AUTO_CONVERGENCE
     replicate_minimum: int = 10
     confidence: float = 0.95
@@ -847,9 +865,13 @@ class SimulationParams:
             ValueError: If the retention is unknown, the stride is below 1 or
                 the start is negative.
         """
-        if self.trajectory_retention not in ("full", "thinned"):
-            raise ValueError("trajectory_retention must be 'full' or 'thinned'")
+        if self.trajectory_retention not in ("full", "thinned", "tapered"):
+            raise ValueError(
+                "trajectory_retention must be 'full', 'thinned' or 'tapered'"
+            )
         _require_integer("trajectory_stride", self.trajectory_stride, minimum=1)
+        _require_integer("trajectory_keep_last", self.trajectory_keep_last, minimum=1)
+        _require_bool("trajectory_keep_burn_in", self.trajectory_keep_burn_in)
         _require_integer(
             "trajectory_thinning_start", self.trajectory_thinning_start, minimum=0
         )
@@ -1106,6 +1128,11 @@ class SimulationParams:
             result["trajectory_retention"] = self.trajectory_retention
             result["trajectory_stride"] = self.trajectory_stride
             result["trajectory_thinning_start"] = self.trajectory_thinning_start
+        elif self.trajectory_retention == "tapered":
+            # Likewise written only when tapering is on.
+            result["trajectory_retention"] = self.trajectory_retention
+            result["trajectory_keep_last"] = self.trajectory_keep_last
+            result["trajectory_keep_burn_in"] = self.trajectory_keep_burn_in
         if changes := self.expert.changes():
             # Only the settings that differ from their defaults are written, so
             # a run with default Expert Settings keeps the parameters (and the
@@ -1316,6 +1343,19 @@ class SimulationParams:
                 config.get(
                     "trajectory_thinning_start",
                     PARAMETER_DEFAULTS["trajectory_thinning_start"],
+                ),
+            ),
+            trajectory_keep_last=_parse_int(
+                "trajectory_keep_last",
+                config.get(
+                    "trajectory_keep_last", PARAMETER_DEFAULTS["trajectory_keep_last"]
+                ),
+            ),
+            trajectory_keep_burn_in=_parse_bool(
+                "trajectory_keep_burn_in",
+                config.get(
+                    "trajectory_keep_burn_in",
+                    PARAMETER_DEFAULTS["trajectory_keep_burn_in"],
                 ),
             ),
             replicate_averaging_window=_parse_auto_int(
@@ -1851,13 +1891,15 @@ def _parse_statistic_precision(value: Any) -> tuple[tuple[str, float], ...]:
 
 
 def _parse_trajectory_retention(value: Any) -> TrajectoryRetentionChoice:
-    """Parse the two supported trajectory retention values."""
+    """Parse the supported trajectory retention values."""
     parsed = _parse_string("trajectory_retention", value)
     if parsed == "full":
         return "full"
     if parsed == "thinned":
         return "thinned"
-    raise ValueError("trajectory_retention must be 'full' or 'thinned'")
+    if parsed == "tapered":
+        return "tapered"
+    raise ValueError("trajectory_retention must be 'full', 'thinned' or 'tapered'")
 
 
 def _parse_precision_method(value: Any) -> PrecisionMethod:
@@ -2299,6 +2341,8 @@ EXECUTION_SETTING_NAMES: Final[tuple[str, ...]] = (
     "trajectory_retention",
     "trajectory_stride",
     "trajectory_thinning_start",
+    "trajectory_keep_last",
+    "trajectory_keep_burn_in",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -2346,9 +2390,12 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
         "auto_vector_min_d",
         "auto_vector_max_capacity",
         "trajectory_stride",
+        "trajectory_keep_last",
     ):
         if name in settings:
             _require_integer(name, settings[name], minimum=1)
+    if "trajectory_keep_burn_in" in settings:
+        _parse_bool("trajectory_keep_burn_in", settings["trajectory_keep_burn_in"])
     if "trajectory_retention" in settings:
         _parse_trajectory_retention(settings["trajectory_retention"])
     for name in (

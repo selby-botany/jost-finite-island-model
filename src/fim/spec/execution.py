@@ -15,7 +15,7 @@ from fim.config.defaults import (
     DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
     DEFAULT_AUTO_VECTOR_MIN_D,
 )
-from fim.config.storage import TRAJECTORY_STRIDE
+from fim.config.storage import TRAJECTORY_KEEP_LAST, TRAJECTORY_STRIDE
 from fim.model.params import EngineBackend, Jit, TrajectoryRetentionChoice
 from fim.spec.policy import Auto
 from fim.spec.validation import check_choice, check_int, check_int_or_auto
@@ -72,12 +72,18 @@ class Recording:
             `stride`.
         stride: Keep one generation in this many once thinning starts.
         thinning_start: Generation at which thinning starts, or ``"auto"``.
+        keep_last: With ``"tapered"`` retention, the last generations kept in
+            full.
+        keep_burn_in: With ``"tapered"`` retention, whether the burn-in
+            generations are kept instead of dropped.
     """
 
     directory: Path | str | None = None
     retention: TrajectoryRetentionChoice = "full"
     stride: int = TRAJECTORY_STRIDE
     thinning_start: int | Auto = "auto"
+    keep_last: int = TRAJECTORY_KEEP_LAST
+    keep_burn_in: bool = False
 
     def __post_init__(self) -> None:
         """Normalize the directory and check every value."""
@@ -86,3 +92,6 @@ class Recording:
         check_choice("recording.retention", self.retention, TrajectoryRetentionChoice)
         check_int("recording.stride", self.stride, minimum=1)
         check_int_or_auto("recording.thinning_start", self.thinning_start, minimum=1)
+        check_int("recording.keep_last", self.keep_last, minimum=1)
+        if not isinstance(self.keep_burn_in, bool):
+            raise ValueError("recording.keep_burn_in must be true or false")

@@ -411,7 +411,7 @@ def reanalyze_trajectory(
     retention = TrajectoryRetention.from_params(params)
     expected_count = (
         retention.count_through(manifest.generation)
-        if retention.thinned
+        if retention.skips_generations
         else manifest.generation_count
     )
     if observed_generation_count != expected_count:
@@ -422,6 +422,13 @@ def reanalyze_trajectory(
         )
     resolved_generation = generation if generation is not None else running_max
     if not generation_rows:
+        if retention.tapered:
+            raise ValueError(
+                f"trajectory has no generation {resolved_generation}: this run "
+                f"was tapered (the last {retention.keep_last} generations in "
+                "full, older ones thinned further back, plus generation 0 and "
+                "the last burn-in generation)"
+            )
         if retention.thinned:
             raise ValueError(
                 f"trajectory has no generation {resolved_generation}: this run "

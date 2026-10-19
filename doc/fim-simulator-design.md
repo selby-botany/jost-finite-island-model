@@ -1764,7 +1764,7 @@ Every generation is persisted (requirement 5) by default, as it is produced:
 rows are not batched in memory and flushed at the end, since a botanist's own
 future "what if" is likely to include "run it for a lot longer" long before it
 includes "keep less history." That second case exists as an opt-in
-([trajectory_retention](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start)):
+([trajectory_retention](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in)):
 a very long run may thin its file, keeping the transient whole and one
 generation in every stride after it; the per-generation statistics are never
 thinned. Row shape, one row per `(generation, deme,

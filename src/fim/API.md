@@ -111,6 +111,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [LOG\_KEY\_EVERY](#fim.config.storage.LOG_KEY_EVERY)
   * [LOG\_SYNC\_SECONDS](#fim.config.storage.LOG_SYNC_SECONDS)
   * [LOG\_BLOCK\_GENERATIONS](#fim.config.storage.LOG_BLOCK_GENERATIONS)
+  * [TRAJECTORY\_KEEP\_LAST](#fim.config.storage.TRAJECTORY_KEEP_LAST)
   * [TRAJECTORY\_STRIDE](#fim.config.storage.TRAJECTORY_STRIDE)
   * [THINNING\_TRANSIENT\_RELAXATION\_TIMES](#fim.config.storage.THINNING_TRANSIENT_RELAXATION_TIMES)
   * [THINNING\_MINIMUM\_START](#fim.config.storage.THINNING_MINIMUM_START)
@@ -859,6 +860,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.persistence.artifacts](#fim.persistence.artifacts)
   * [run\_artifact\_targets](#fim.persistence.artifacts.run_artifact_targets)
   * [convergence\_history\_rows](#fim.persistence.artifacts.convergence_history_rows)
+  * [taper\_finished\_trajectory](#fim.persistence.artifacts.taper_finished_trajectory)
   * [write\_run\_artifacts](#fim.persistence.artifacts.write_run_artifacts)
 * [fim.persistence.binary\_store](#fim.persistence.binary_store)
   * [TRAJECTORY\_LOG\_FILENAME](#fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME)
@@ -1004,8 +1006,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.persistence.retention](#fim.persistence.retention)
   * [TrajectoryRetention](#fim.persistence.retention.TrajectoryRetention)
     * [from\_params](#fim.persistence.retention.TrajectoryRetention.from_params)
+    * [skips\_generations](#fim.persistence.retention.TrajectoryRetention.skips_generations)
+    * [kept\_generations](#fim.persistence.retention.TrajectoryRetention.kept_generations)
     * [keeps](#fim.persistence.retention.TrajectoryRetention.keeps)
     * [count\_through](#fim.persistence.retention.TrajectoryRetention.count_through)
+  * [tapered\_generations](#fim.persistence.retention.tapered_generations)
 * [fim.persistence.run\_checkpoint](#fim.persistence.run_checkpoint)
   * [CheckpointError](#fim.persistence.run_checkpoint.CheckpointError)
   * [UnsupportedCheckpointError](#fim.persistence.run_checkpoint.UnsupportedCheckpointError)
@@ -1205,6 +1210,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close\_run](#fim.persistence.store.ReplicateFanoutStore.close_run)
     * [equilibrium\_store](#fim.persistence.store.ReplicateFanoutStore.equilibrium_store)
   * [normalize\_row](#fim.persistence.store.normalize_row)
+* [fim.persistence.taper](#fim.persistence.taper)
+  * [TaperResult](#fim.persistence.taper.TaperResult)
+  * [taper\_log](#fim.persistence.taper.taper_log)
 * [fim.persistence.tlog](#fim.persistence.tlog)
   * [FLAG\_SPARSE](#fim.persistence.tlog.FLAG_SPARSE)
   * [BLOCK\_HEADER\_SIZE](#fim.persistence.tlog.BLOCK_HEADER_SIZE)
@@ -3478,6 +3486,18 @@ Generations after which the open block of the log is sealed and written.
 A block is the unit that is checksummed and written, and the unit a reader can
 skip to. Larger blocks compress and write more efficiently; smaller ones lose
 less when a run is cut off and make a live view fresher.
+
+Kind: policy.
+
+<a id="fim.config.storage.TRAJECTORY_KEEP_LAST"></a>
+
+#### TRAJECTORY\_KEEP\_LAST
+
+Default `trajectory_keep_last`: with tapering on, the last generations kept in full.
+
+Older generations are kept at a stride that doubles with their distance from
+the end of the run. An equilibrium run is stationary, so a scatter plot or a
+scrubber looks at the end; a thousand frames is room for both.
 
 Kind: policy.
 
@@ -19637,9 +19657,19 @@ functions that actually use each one.
   (`fim.persistence.retention`). Per-generation statistics are
   never thinned, so the graph, the bands and every number in the
   report are unaffected; reanalysis and the scrubber see only the
-  kept generations.
+  kept generations. `"tapered"`: the last `trajectory_keep_last`
+  generations in full and older ones thinned by a stride that
+  doubles with their distance from the end, without the burn-in
+  frames (generation 0 and the last burn-in generation stay;
+  `trajectory_keep_burn_in` keeps them tapered like the rest). The
+  rule needs the run's end, so the log is written whole and
+  tapered when the replicate finishes.
 - `trajectory_stride` - With thinning on, one generation in this many is
   kept from the thinning start on (at least 1).
+- `trajectory_keep_last` - With tapering on, the last this-many generations
+  are kept in full (at least 1).
+- `trajectory_keep_burn_in` - With tapering on, whether the burn-in
+  generations are kept (tapered like the rest) instead of dropped.
 - `trajectory_thinning_start` - First generation thinning may skip.
   `AUTO_CONVERGENCE` (`0`, the default) derives it as the later of
   the Expert Setting `thinning_minimum_start` and the burn-in plus
@@ -22733,6 +22763,25 @@ generations it is missing is not recoverable from the monitor's record.
 
   The rows, in generation order.
 
+<a id="fim.persistence.artifacts.taper_finished_trajectory"></a>
+
+#### taper\_finished\_trajectory
+
+```python
+def taper_finished_trajectory(result: RunResult, trajectory: Path) -> None
+```
+
+Taper a finished run's log if its configuration asks for tapering.
+
+The log is written whole while the run goes (the rule needs the run's
+end), so this is the one place that cuts it down: before the artifact
+digests are taken. A run that does not taper is left alone.
+
+**Arguments**:
+
+- `result` - A finished engine result.
+- `trajectory` - The run's `trajectory.tlog`.
+
 <a id="fim.persistence.artifacts.write_run_artifacts"></a>
 
 #### write\_run\_artifacts
@@ -25645,6 +25694,18 @@ start), the last burn-in generation, and the final generation. The per-
 generation statistics (`convergence.jsonl`) are never thinned: the monitor,
 the trajectory graph and every number in the report come from them.
 
+**Tapering** keeps the end of a run in full and thins the past further the
+older it is. For a run that ends at generation `T` with `keep_last = K`, a
+generation `g` is kept when `g = 0`, `g` is the last burn-in generation,
+`T - g < K`, or, with `a = T - g` and `j = floor(log2(a / K))`, `g` is a
+multiple of `2**j`. Multiples of a power of two are nested, so thinning to
+stride `2**j` and later to `2**(j+1)` gives exactly what thinning once to
+`2**(j+1)` gives: the rule is *path independent*, and a log tapered while a
+run is going equals the one-shot taper of the full log. Burn-in frames (before
+the last burn-in generation) are dropped unless `keep_burn_in` is set. The
+rule needs the run's end, so unlike thinning it cannot decide a frame as it is
+written; `fim.persistence.taper` applies it when the replicate finishes.
+
 <a id="fim.persistence.retention.TrajectoryRetention"></a>
 
 ## TrajectoryRetention Objects
@@ -25663,6 +25724,10 @@ The rule for which generations a run writes.
 - `stride` - From `start` on, one generation in this many is kept.
 - `burn_in` - The last burn-in generation, always kept; 0 when the run has
   no fixed burn-in.
+- `tapered` - Whether the run is tapered when it finishes (every frame is
+  written first; see the module docstring).
+- `keep_last` - With tapering, the last generations kept in full.
+- `keep_burn_in` - With tapering, whether burn-in frames are kept.
 
 <a id="fim.persistence.retention.TrajectoryRetention.from_params"></a>
 
@@ -25684,7 +25749,38 @@ Build the rule a configuration asks for.
 **Returns**:
 
   A rule that keeps everything unless `trajectory_retention` is
-  `"thinned"`.
+  `"thinned"` or `"tapered"`.
+
+<a id="fim.persistence.retention.TrajectoryRetention.skips_generations"></a>
+
+#### skips\_generations
+
+```python
+@property
+def skips_generations() -> bool
+```
+
+Return whether the finished log leaves out any generation.
+
+<a id="fim.persistence.retention.TrajectoryRetention.kept_generations"></a>
+
+#### kept\_generations
+
+```python
+def kept_generations(final: int) -> list[int]
+```
+
+Return the generations a finished tapered log holds, in order.
+
+**Arguments**:
+
+- `final` - The final generation of the run.
+
+
+**Returns**:
+
+  Every generation `0..final` for a rule that does not taper, else
+  the tapered set (`tapered_generations`).
 
 <a id="fim.persistence.retention.TrajectoryRetention.keeps"></a>
 
@@ -25724,6 +25820,46 @@ Return how many generations a run that ended at `final` wrote.
 **Returns**:
 
   The number of distinct kept generations among `0..final`.
+
+<a id="fim.persistence.retention.tapered_generations"></a>
+
+#### tapered\_generations
+
+```python
+def tapered_generations(final: int,
+                        keep_last: int,
+                        burn_in: int = 0,
+                        *,
+                        keep_burn_in: bool = False) -> list[int]
+```
+
+Return the generations a tapered log of a run ending at `final` holds.
+
+The rule is in the module docstring. It is computed band by band
+(generations whose distance from the end lies in `[K * 2**j, K * 2**(j+1))`
+share the stride `2**j`), so the cost is the number of generations kept,
+not the length of the run.
+
+**Arguments**:
+
+- `final` - The run's final generation.
+- `keep_last` - How many of the last generations are kept in full (at
+  least 1).
+- `burn_in` - The last burn-in generation, or 0 if the run has none.
+- `keep_burn_in` - Whether generations before `burn_in` are tapered like
+  the rest instead of dropped.
+
+
+**Returns**:
+
+  The kept generations, ascending. Generation 0, the last burn-in
+  generation (if it is not after `final`) and `final` are always among
+  them.
+
+
+**Raises**:
+
+- `ValueError` - `final` is negative or `keep_last` is below 1.
 
 <a id="fim.persistence.run_checkpoint"></a>
 
@@ -29306,6 +29442,74 @@ than the batch it was handed in).
 
   A typed row with primitive values.
 
+<a id="fim.persistence.taper"></a>
+
+# fim.persistence.taper
+
+Rewrite a finished trajectory log so it holds only chosen generations.
+
+`fim.persistence.retention` decides which generations a tapered run keeps;
+this module applies that decision to a log that holds more. It reads the log
+once, in order, and writes a new log with only the kept frames (the writer
+stores a gap in the generation numbers as it does for a thinned run), then
+replaces the original. Because the result is a function of the frames kept and
+the writer options alone, tapering a full log gives the same bytes however the
+run got there, and tapering a log that is already tapered changes nothing.
+
+<a id="fim.persistence.taper.TaperResult"></a>
+
+## TaperResult Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TaperResult()
+```
+
+What a taper changed.
+
+**Attributes**:
+
+- `frames_before` - Generations the log held before.
+- `frames_after` - Generations it holds now.
+- `bytes_before` - The log's size before.
+- `bytes_after` - The log's size now.
+
+<a id="fim.persistence.taper.taper_log"></a>
+
+#### taper\_log
+
+```python
+def taper_log(path: Path | str,
+              kept: Collection[int],
+              *,
+              options: Mapping[str, Any] | None = None) -> TaperResult
+```
+
+Keep only the generations in `kept`, in place.
+
+The new log is written beside the old one and renamed over it, so a
+failure leaves the original untouched.
+
+**Arguments**:
+
+- `path` - The log to rewrite.
+- `kept` - The generations to keep; each must be in the log.
+- `options` - Keyword options for `tlog.LogWriter` (`key_every`,
+  `block_generations`, `sync_seconds`), normally the run's own
+  (`fim.persistence.binary_store.log_options`), so the new file is
+  what a run that wrote only these frames would have written.
+
+
+**Returns**:
+
+  The frame and byte counts before and after.
+
+
+**Raises**:
+
+- `tlog.TlogError` - The log is unusable.
+- `ValueError` - A generation in `kept` is not in the log.
+
 <a id="fim.persistence.tlog"></a>
 
 # fim.persistence.tlog
@@ -32680,6 +32884,10 @@ What a run writes down.
   `stride`.
 - `stride` - Keep one generation in this many once thinning starts.
 - `thinning_start` - Generation at which thinning starts, or ``"auto"``.
+- `keep_last` - With ``"tapered"`` retention, the last generations kept in
+  full.
+- `keep_burn_in` - With ``"tapered"`` retention, whether the burn-in
+  generations are kept instead of dropped.
 
 <a id="fim.spec.execution.Recording.__post_init__"></a>
 

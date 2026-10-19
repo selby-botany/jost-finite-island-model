@@ -19,15 +19,19 @@ from fim.engine.records import RunResult
 from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
+    log_options,
 )
 from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.pairwise import pairwise_payload, write_pairwise
 from fim.persistence.report import write_jsonl_rows, write_report
+from fim.persistence.retention import TrajectoryRetention
+from fim.persistence.taper import taper_log
 from fim.viz import plot_frequency_scatter
 
 __all__ = [
     "convergence_history_rows",
     "run_artifact_targets",
+    "taper_finished_trajectory",
     "write_run_artifacts",
 ]
 
@@ -84,6 +88,28 @@ def convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
     ]
 
 
+def taper_finished_trajectory(result: RunResult, trajectory: Path) -> None:
+    """Taper a finished run's log if its configuration asks for tapering.
+
+    The log is written whole while the run goes (the rule needs the run's
+    end), so this is the one place that cuts it down: before the artifact
+    digests are taken. A run that does not taper is left alone.
+
+    Args:
+        result: A finished engine result.
+        trajectory: The run's `trajectory.tlog`.
+    """
+    retention = TrajectoryRetention.from_params(result.params)
+    if not retention.tapered or not trajectory.is_file():
+        return
+    final = int(result.report["generation"])
+    taper_log(
+        trajectory,
+        retention.kept_generations(final),
+        options=log_options(result.params.expert),
+    )
+
+
 def write_run_artifacts(
     result: RunResult,
     directory: Path,
@@ -111,6 +137,7 @@ def write_run_artifacts(
         The artifact paths (see `run_artifact_targets`).
     """
     targets = run_artifact_targets(directory)
+    taper_finished_trajectory(result, targets["trajectory"])
     write_report(targets["report"], result.report)
     figure = plot_frequency_scatter(
         result.final_state, result.params, targets["scatter"]

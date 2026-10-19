@@ -57,6 +57,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_cli_labels`](#cli.test_cli_labels)
   - [`test_cli_objects`](#cli.test_cli_objects)
   - [`test_cli_sweep`](#cli.test_cli_sweep)
+  - [`test_cli_tapered`](#cli.test_cli_tapered)
   - [`test_export_command`](#cli.test_export_command)
   - [`test_trajectory_handles`](#cli.test_trajectory_handles)
 - [`test/convergence/`](#group-convergence)
@@ -192,6 +193,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_staging`](#persistence.test_staging)
   - [`test_store`](#persistence.test_store)
   - [`test_store_lifecycle`](#persistence.test_store_lifecycle)
+  - [`test_taper`](#persistence.test_taper)
   - [`test_tlog`](#persistence.test_tlog)
   - [`test_tlog_codec`](#persistence.test_tlog_codec)
   - [`test_tlog_export`](#persistence.test_tlog_export)
@@ -6752,6 +6754,17 @@ def sweep_file(tmp_path: Path) -> Path
 ```
 
 Write a two-point sweep file and return its path.
+
+<a id="cli.test_cli_tapered"></a>
+
+# cli.test\_cli\_tapered
+
+A tapered run end to end: the log is cut down when the replicate finishes.
+
+The run is the CLI's own, so the whole path is exercised: the engine writes
+every frame, `write_run_artifacts` tapers the log before it takes the
+digests, and the readers (`fim stats`, integrity, the run id) see a run that
+is whole but has gaps in its generations.
 
 <a id="cli.test_export_command"></a>
 
@@ -35131,6 +35144,27 @@ def test_a_run_shorter_than_the_start_is_not_thinned() -> None
 
 Thinning starts at `start`; before it every generation is kept.
 
+<a id="persistence.test_retention.test_tapering_is_path_independent"></a>
+
+#### test\_tapering\_is\_path\_independent
+
+```python
+@settings(max_examples=60, deadline=None)
+@given(
+    shorter=st.integers(min_value=0, max_value=600),
+    extra=st.integers(min_value=0, max_value=900),
+    keep_last=st.integers(min_value=1, max_value=40),
+)
+def test_tapering_is_path_independent(shorter: int, extra: int,
+                                      keep_last: int) -> None
+```
+
+What the final taper keeps was never lost by an earlier taper.
+
+Tapering when the run had reached `shorter` and then letting it go on
+leaves a log that holds everything the final rule needs, so tapering
+while the run goes equals tapering once at the end.
+
 <a id="persistence.test_run_checkpoint"></a>
 
 # persistence.test\_run\_checkpoint
@@ -37419,6 +37453,26 @@ def test_log_options_carry_the_expert_log_settings_to_the_store() -> None
 ```
 
 `log_options` maps the Expert Settings onto `BinaryLogStore`'s options.
+
+<a id="persistence.test_taper"></a>
+
+# persistence.test\_taper
+
+Tests of `fim.persistence.taper` and of tapering a finished run.
+
+The log is written with the real writer from synthetic frames, so what a
+taper keeps and what a log written from only those frames would hold can be
+compared byte for byte.
+
+<a id="persistence.test_taper.test_a_rolling_taper_equals_one_taper_at_the_end"></a>
+
+#### test\_a\_rolling\_taper\_equals\_one\_taper\_at\_the\_end
+
+```python
+def test_a_rolling_taper_equals_one_taper_at_the_end(tmp_path: Path) -> None
+```
+
+Tapering as the run goes, then again at the end, equals tapering once.
 
 <a id="persistence.test_tlog"></a>
 

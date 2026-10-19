@@ -66,9 +66,11 @@ Every setting, in alphabetical order, with the section that describes it.
 | [`statistic_precision`](#statistic_precision) | Convergence |
 | [`stop_batch_early`](#stop_batch_early) | Analysis and execution |
 | [`track_expensive_statistics`](#track_expensive_statistics) | Convergence |
-| [`trajectory_retention`](#trajectory_retention-trajectory_stride-trajectory_thinning_start) | Convergence |
-| [`trajectory_stride`](#trajectory_retention-trajectory_stride-trajectory_thinning_start) | Convergence |
-| [`trajectory_thinning_start`](#trajectory_retention-trajectory_stride-trajectory_thinning_start) | Convergence |
+| [`trajectory_keep_burn_in`](#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in) | Convergence |
+| [`trajectory_keep_last`](#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in) | Convergence |
+| [`trajectory_retention`](#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in) | Convergence |
+| [`trajectory_stride`](#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in) | Convergence |
+| [`trajectory_thinning_start`](#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in) | Convergence |
 
 ## Complete example
 
@@ -780,11 +782,13 @@ value?](convergence.md#how-precise-is-the-reported-value)); see
 the run before any averaging, and the run logs a warning. Setting only a
 burn-in raises the derived cap to leave `15 tau` after it.
 
-### trajectory_retention, trajectory_stride, trajectory_thinning_start
+### trajectory_retention, trajectory_stride, trajectory_thinning_start, trajectory_keep_last, trajectory_keep_burn_in
 
-- **trajectory_retention:** `full` or `thinned`; default `full`
+- **trajectory_retention:** `full`, `thinned` or `tapered`; default `full`
 - **trajectory_stride:** integer at least 1; default `10`
 - **trajectory_thinning_start:** positive integer, or `auto`; default `auto`
+- **trajectory_keep_last:** integer at least 1; default `1000`
+- **trajectory_keep_burn_in:** `true` or `false`; default `false`
 
 A long run's trajectory file (the per-generation allele frequencies) is the
 largest thing it writes: about 27 KB a generation for the biggest examples. The
@@ -804,6 +808,29 @@ The scrubber and animation, which show at most a hundred frames, snap to the
 nearest kept generation; re-analysis (`fim stats`, opening a run) works at the
 kept generations and says so for a skipped one. The settings are recorded in
 `manifest.json` only for a thinned run. In the app they are Settings, Storage.
+
+`tapered` keeps the end of a run in full and thins the past further the older
+it is: the last `trajectory_keep_last` generations, then every second
+generation for the next stretch of that length, every fourth for the next, and
+so on, so the number of frames grows with the logarithm of the run's length
+instead of the length itself (about 12,000 frames for a run of 2.6 million
+generations, against 295,000 for `thinned` at the shipped stride). Generation 0
+and the last burn-in generation are kept; the other burn-in frames are dropped
+unless `trajectory_keep_burn_in` is `true`, which tapers them like the rest.
+An equilibrium run is stationary, so a scatter plot or a scrubber looks at the
+end; use `keep_burn_in` for a transient study. The rule needs the run's end, so
+the log is written whole while the run goes and cut down when the run is
+published (for a batch, once every replicate has stopped): the disk needed
+while it runs is the full log of every replicate of the batch, and only the
+finished result is small. What is kept depends only on the generation
+number and the run's end, so a rerun keeps the same frames and the replicates of
+equal length align. The settings are recorded in `manifest.json` only for a
+tapered run.
+
+```yaml
+trajectory_retention: tapered
+trajectory_keep_last: 2000
+```
 
 ```yaml
 trajectory_retention: thinned
@@ -1432,7 +1459,9 @@ existed.
 | precision negative or non-finite | rejected |
 | statistic_precision naming an unwatched statistic, or a negative value | rejected |
 | stop_batch_early not a boolean | rejected |
-| trajectory_retention not `full` or `thinned` | rejected |
+| trajectory_retention not `full`, `thinned` or `tapered` | rejected |
+| trajectory_keep_last less than 1 or not a whole number | rejected |
+| trajectory_keep_burn_in not a boolean | rejected |
 | trajectory_stride less than 1 or not a whole number | rejected |
 | trajectory_thinning_start not a positive integer or `auto` | rejected |
 | precision_method not `interval` or `planned_replicates` | rejected |

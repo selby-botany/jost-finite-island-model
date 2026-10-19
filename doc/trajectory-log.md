@@ -87,7 +87,7 @@ matter to code that keeps a log open for long (the desktop app's live runs, and
 [saved runs](run-lifecycle.md), which resume from checkpoints).
 
 **Thinning.** A long run can write only some of its generations
-([`trajectory_retention`](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start)):
+([`trajectory_retention`](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in)):
 generation 0, everything before the thinning start, one in every stride
 after it, the last burn-in generation and the final generation. The log format
 already allows gaps in the generation numbers; a reader lists exactly the
@@ -95,6 +95,16 @@ generations that were written, `frame_at` raises `KeyError` for a skipped one,
 and `fim stats` and the app say the run was thinned. The count of generations
 in a thinned file is a function of the settings and the final generation, so
 the integrity check still catches a file that was cut or edited.
+
+**Tapering.** [`trajectory_retention: tapered`](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in)
+keeps the last `trajectory_keep_last` generations (1,000 by default) in full
+and thins the past by a stride that doubles with its distance from the end, so
+a run of 2.6 million generations keeps about 12,000 frames instead of 295,000
+at the thinned default. The rule needs the run's end, so the log is written
+whole and rewritten with only the kept frames when the run is published
+(`fim.persistence.taper`); the rewritten file is the file a run that had
+written only those frames would have written, and tapering it again changes
+nothing. While a batch runs, the disk must hold every replicate's full log.
 
 **Tuning.** The snapshot interval (256), the block size (512 generations) and
 the sync period (two seconds) are the Expert Settings `log_key_every`,

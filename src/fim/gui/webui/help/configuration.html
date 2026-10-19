@@ -192,15 +192,23 @@ the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <td>Convergence</td>
 </tr>
 <tr>
-<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start"><code>trajectory_retention</code></a></td>
+<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in"><code>trajectory_keep_burn_in</code></a></td>
 <td>Convergence</td>
 </tr>
 <tr>
-<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start"><code>trajectory_stride</code></a></td>
+<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in"><code>trajectory_keep_last</code></a></td>
 <td>Convergence</td>
 </tr>
 <tr>
-<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start"><code>trajectory_thinning_start</code></a></td>
+<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in"><code>trajectory_retention</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in"><code>trajectory_stride</code></a></td>
+<td>Convergence</td>
+</tr>
+<tr>
+<td><a href="#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in"><code>trajectory_thinning_start</code></a></td>
 <td>Convergence</td>
 </tr>
 </tbody>
@@ -831,11 +839,13 @@ value?</a>); see
 <a href="#convergence_burn_in">convergence_burn_in</a>. A cap at or below the burn-in ends
 the run before any averaging, and the run logs a warning. Setting only a
 burn-in raises the derived cap to leave <code>15 tau</code> after it.</p>
-<h3 id="trajectory_retention-trajectory_stride-trajectory_thinning_start">trajectory_retention, trajectory_stride, trajectory_thinning_start</h3>
+<h3 id="trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in">trajectory_retention, trajectory_stride, trajectory_thinning_start, trajectory_keep_last, trajectory_keep_burn_in</h3>
 <ul>
-<li><strong>trajectory_retention:</strong> <code>full</code> or <code>thinned</code>; default <code>full</code></li>
+<li><strong>trajectory_retention:</strong> <code>full</code>, <code>thinned</code> or <code>tapered</code>; default <code>full</code></li>
 <li><strong>trajectory_stride:</strong> integer at least 1; default <code>10</code></li>
 <li><strong>trajectory_thinning_start:</strong> positive integer, or <code>auto</code>; default <code>auto</code></li>
+<li><strong>trajectory_keep_last:</strong> integer at least 1; default <code>1000</code></li>
+<li><strong>trajectory_keep_burn_in:</strong> <code>true</code> or <code>false</code>; default <code>false</code></li>
 </ul>
 <p>A long run's trajectory file (the per-generation allele frequencies) is the
 largest thing it writes: about 27 KB a generation for the biggest examples. The
@@ -854,6 +864,26 @@ The scrubber and animation, which show at most a hundred frames, snap to the
 nearest kept generation; re-analysis (<code>fim stats</code>, opening a run) works at the
 kept generations and says so for a skipped one. The settings are recorded in
 <code>manifest.json</code> only for a thinned run. In the app they are Settings, Storage.</p>
+<p><code>tapered</code> keeps the end of a run in full and thins the past further the older
+it is: the last <code>trajectory_keep_last</code> generations, then every second
+generation for the next stretch of that length, every fourth for the next, and
+so on, so the number of frames grows with the logarithm of the run's length
+instead of the length itself (about 12,000 frames for a run of 2.6 million
+generations, against 295,000 for <code>thinned</code> at the shipped stride). Generation 0
+and the last burn-in generation are kept; the other burn-in frames are dropped
+unless <code>trajectory_keep_burn_in</code> is <code>true</code>, which tapers them like the rest.
+An equilibrium run is stationary, so a scatter plot or a scrubber looks at the
+end; use <code>keep_burn_in</code> for a transient study. The rule needs the run's end, so
+the log is written whole while the run goes and cut down when the run is
+published (for a batch, once every replicate has stopped): the disk needed
+while it runs is the full log of every replicate of the batch, and only the
+finished result is small. What is kept depends only on the generation
+number and the run's end, so a rerun keeps the same frames and the replicates of
+equal length align. The settings are recorded in <code>manifest.json</code> only for a
+tapered run.</p>
+<pre><code class="language-yaml">trajectory_retention: tapered
+trajectory_keep_last: 2000
+</code></pre>
 <pre><code class="language-yaml">trajectory_retention: thinned
 trajectory_stride: 20
 </code></pre>
@@ -1623,7 +1653,15 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>trajectory_retention not <code>full</code> or <code>thinned</code></td>
+<td>trajectory_retention not <code>full</code>, <code>thinned</code> or <code>tapered</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>trajectory_keep_last less than 1 or not a whole number</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>trajectory_keep_burn_in not a boolean</td>
 <td>rejected</td>
 </tr>
 <tr>

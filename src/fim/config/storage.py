@@ -40,6 +40,16 @@ less when a run is cut off and make a live view fresher.
 Kind: policy.
 """
 
+TRAJECTORY_KEEP_LAST: Final = 1000
+"""Default `trajectory_keep_last`: with tapering on, the last generations kept in full.
+
+Older generations are kept at a stride that doubles with their distance from
+the end of the run. An equilibrium run is stationary, so a scatter plot or a
+scrubber looks at the end; a thousand frames is room for both.
+
+Kind: policy.
+"""
+
 TRAJECTORY_STRIDE: Final = 10
 """Default `trajectory_stride`: with thinning on, one generation in this many is kept.
 

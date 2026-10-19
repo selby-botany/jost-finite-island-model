@@ -8,6 +8,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Tapered trajectory storage: `trajectory_retention: tapered`.** Keeps the
+  last `trajectory_keep_last` generations (1,000 by default) in full and thins
+  the past by a stride that doubles with its distance from the end, so the
+  number of frames grows with the logarithm of a run's length: 355,470
+  generations of a real replicate keep 9,012 frames, 9.2 MB becomes 0.47 MB.
+  Generation 0 and the last burn-in generation stay; the other burn-in frames
+  are dropped unless `trajectory_keep_burn_in: true`. The settings are outside a
+  run's identity and are recorded in `manifest.json` only for a tapered run.
+  The log is written whole while the run goes and cut down when the run is
+  published, so a batch still needs the disk for all its replicates' full logs
+  while it runs.
+
 - **A "How each point got there" view on the sweep results card.** Draws the
   statistic against generation, one curve per value of the "Curves by" axis,
   with the interval of the mean, the burn-in end, the stretch where fewer than
@@ -261,7 +273,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `trajectory_stride`, which makes the trajectory file of a very long run a
   tenth of the size. The convergence statistics and `convergence.jsonl` are
   never thinned, so reports are unchanged. See
-  [configuration](doc/configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start).
+  [configuration](doc/configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in).
 - **Seeded calibration of the rule.** `test/validation/test_convergence_rule_calibration.py`
   and `dev/bin/calibrate-convergence-defaults` check, with fixed seeds in
   three regimes, that averages land on their targets and that the error bar

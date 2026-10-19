@@ -327,7 +327,7 @@ _GENERIC_CHOICES: Final[dict[str, tuple[str, ...]]] = {
     "convergence_combinator": ("any", "all"),
     "convergence_estimate": ("mean_of_values", "value_of_means", "auto"),
     "precision_method": ("interval", "planned_replicates"),
-    "trajectory_retention": ("full", "thinned"),
+    "trajectory_retention": ("full", "thinned", "tapered"),
     "engine_backend": ("lineal", "auto", "generational", "generational-vector"),
     "jit": ("off", "numba"),
     "ploidy": tuple(PLOIDY_WORDS.values()),
@@ -338,6 +338,7 @@ _GENERIC_BOUNDS: Final[dict[str, tuple[float | None, float | None]]] = {
     "locus_lengths": (1, None),
     "initial_allele_count": (1, None),
     "n_replicates": (1, None),
+    "trajectory_keep_last": (1, None),
     "precision": (0.0, None),
     "confidence": (0.0, 1.0),
 }
