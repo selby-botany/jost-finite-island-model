@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pickle
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -21,6 +22,8 @@ from fim.sweep import (
     expand_axis,
     point_run_description,
     point_run_name,
+    read_points_csv,
+    resolve_points_file,
     spec_from_config,
     sweepable_key_names,
 )
@@ -596,3 +599,173 @@ def test_generic_axes_round_trip_through_the_stored_form() -> None:
     )
 
     assert SweepSpec.from_dict(spec.to_dict()) == spec
+
+
+# --- strategies -------------------------------------------------------------
+
+
+def test_grid_size_is_the_product_and_the_first_axis_is_slowest() -> None:
+    spec = _spec(expand_axis("d", [2, 3, 4]), expand_axis("m", [0.01, 0.1]))
+
+    plan = enumerate_points(spec)
+
+    assert spec.grid_size == 6
+    assert [tuple(p.coordinates.values()) for p in plan.points] == [
+        (2, 0.01),
+        (2, 0.1),
+        (3, 0.01),
+        (3, 0.1),
+        (4, 0.01),
+        (4, 0.1),
+    ]
+
+
+def test_zip_advances_the_axes_together() -> None:
+    spec = SweepSpec(
+        base=_BASE,
+        axes=(expand_axis("d", [2, 4, 8]), expand_axis("m", [0.1, 0.05, 0.01])),
+        strategy="zip",
+    )
+
+    plan = enumerate_points(spec)
+
+    assert spec.grid_size == 3
+    assert [tuple(p.coordinates.values()) for p in plan.points] == [
+        (2, 0.1),
+        (4, 0.05),
+        (8, 0.01),
+    ]
+
+
+def test_zip_needs_equal_lengths() -> None:
+    with pytest.raises(ValueError, match="equal lengths: d has 2, m has 3"):
+        SweepSpec(
+            base=_BASE,
+            axes=(expand_axis("d", [2, 4]), expand_axis("m", [0.1, 0.05, 0.01])),
+            strategy="zip",
+        )
+
+
+def test_list_runs_the_given_points_in_order() -> None:
+    spec = SweepSpec.from_rows(
+        _BASE, [{"d": 8, "m": 0.01}, {"d": 2, "m": 0.1}, {"d": 4, "m": 0.05}]
+    )
+
+    plan = enumerate_points(spec)
+
+    assert spec.strategy == "list"
+    assert [tuple(p.coordinates.values()) for p in plan.points] == [
+        (8, 0.01),
+        (2, 0.1),
+        (4, 0.05),
+    ]
+    assert [axis.key for axis in spec.axes] == ["d", "m"]
+    assert spec.axes[0].values == (8, 2, 4)
+
+
+def test_a_repeated_list_point_is_dropped_and_the_first_is_kept() -> None:
+    spec = SweepSpec.from_rows(_BASE, [{"d": 3}, {"d": 2}, {"d": 3}, {"d": 4}])
+
+    plan = enumerate_points(spec)
+
+    assert [p.coordinates["d"] for p in plan.points] == [3, 2, 4]
+    assert [p.params["seed"] for p in plan.points] == [1000, 1003, 1006]
+    assert plan.collapsed == 0
+
+
+@pytest.mark.parametrize(
+    ("rows", "message"),
+    [
+        ([], "at least one point"),
+        ([{"d": 2}, {"m": 0.1}], "same keys"),
+        ([{"d": 2.5}], "whole numbers"),
+        ([{"seed": 1}], "seed_policy"),
+    ],
+)
+def test_a_bad_list_is_named(rows: list[dict[str, Any]], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        SweepSpec.from_rows(_BASE, rows)
+
+
+def test_spaced_seeds_follow_the_strategys_point_order() -> None:
+    spec = SweepSpec.from_rows(_BASE, [{"d": 8}, {"d": 2}, {"d": 4}])
+
+    seeds = [point.params["seed"] for point in enumerate_points(spec).points]
+
+    assert seeds == [1000, 1003, 1006]  # base seed + position * n_replicates
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        SweepSpec(
+            base=_BASE,
+            axes=(expand_axis("d", [2, 4]), expand_axis("m", [0.1, 0.05])),
+            strategy="zip",
+        ),
+        SweepSpec.from_rows(_BASE, [{"d": 8, "m": 0.01}, {"d": 2, "m": 0.1}]),
+    ],
+)
+def test_the_stored_form_and_the_sweep_file_round_trip_per_strategy(
+    spec: SweepSpec,
+) -> None:
+    assert SweepSpec.from_dict(spec.to_dict()) == spec
+
+    again, _ = spec_from_config(yaml.safe_load(spec.to_sweep_file("Round trip")))
+
+    assert again == spec
+    assert again.digest() == spec.digest()
+
+
+def test_a_version_1_spec_is_still_read_as_a_grid() -> None:
+    spec = _spec(expand_axis("d", [2, 3]))
+    stored = {**spec.to_dict(), "spec_version": 1}
+
+    assert SweepSpec.from_dict(stored) == spec
+    assert spec.to_dict()["spec_version"] == 2
+
+
+def test_a_sweep_file_selects_a_strategy_and_its_points() -> None:
+    config = {
+        **_BASE,
+        "sweep": {"points": [{"d": 2, "m": 0.1}, {"d": 4, "m": 0.05}]},
+    }
+
+    spec, _ = spec_from_config(config)
+
+    assert spec.strategy == "list"
+    with pytest.raises(ValueError, match="not 'axes'"):
+        spec_from_config({**config, "sweep": {**config["sweep"], "axes": {"d": [2]}}})
+    with pytest.raises(ValueError, match="belongs to the list strategy"):
+        spec_from_config(
+            {**_BASE, "sweep": {"strategy": "grid", "axes": {"d": [2]}, "points": []}}
+        )
+
+
+def test_points_come_from_a_csv_file_with_typed_cells(tmp_path: Path) -> None:
+    (tmp_path / "design.csv").write_text(
+        "d,m,topology\n8,0.01,ring\n2,0.1,island\n", encoding="utf-8"
+    )
+    config = {**_BASE, "sweep": {"points_file": "design.csv"}}
+
+    resolved = resolve_points_file(config, tmp_path)
+    spec, _ = spec_from_config(resolved)
+
+    assert resolved["sweep"]["points"][0] == {"d": 8, "m": 0.01, "topology": "ring"}
+    assert [tuple(p.coordinates.values()) for p in enumerate_points(spec).points] == [
+        (8, 0.01, "ring"),
+        (2, 0.1, "island"),
+    ]
+
+
+def test_a_points_file_that_is_empty_or_doubled_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "empty.csv").write_text("d,m\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no points"):
+        read_points_csv(tmp_path / "empty.csv")
+    with pytest.raises(ValueError, match="not both"):
+        resolve_points_file(
+            {"sweep": {"points_file": "empty.csv", "points": [{"d": 2}]}}, tmp_path
+        )
+    with pytest.raises(ValueError, match="cannot read"):
+        resolve_points_file({"sweep": {"points_file": "missing.csv"}}, tmp_path)

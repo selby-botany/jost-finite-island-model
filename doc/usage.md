@@ -1052,6 +1052,33 @@ rest include `n_loci`, `locus_lengths`, `initial_allele_count`,
 program). A point whose settings do not fit together is reported by `plan`, not
 discovered while the sweep runs.
 
+By default the axes form a grid: every combination, the first axis changing
+slowest. Two other designs are available with `strategy` in the `sweep:` block:
+
+```yaml
+sweep:
+  strategy: zip          # the axes advance together; equal lengths required
+  axes:
+    d: [4, 8, 16]
+    m: [0.1, 0.05, 0.01]
+```
+
+```yaml
+sweep:                    # a hand-picked set: one mapping per point
+  points:
+    - { d: 8, m: 0.01 }
+    - { d: 2, m: 0.1 }
+```
+
+A long list can live in a CSV file with a header row of keys:
+`points_file: design.csv` (relative to the sweep file). A repeated point is
+dropped, keeping the first. A space-filling design (a Latin hypercube or a
+Sobol sequence) is made with a few lines of your own and written to that CSV;
+the sweep then runs it as a list. The seeds follow the order of the points.
+
+A sweep of more than 5,000 points stores a fingerprint and the count instead
+of the list; the points are worked out again from the settings when needed.
+
 In a sweep, `N` counts **individuals per deme** on an axis and in the base
 alike, the number the desktop app shows; the file's `ploidy` turns it into gene
 copies for each point.

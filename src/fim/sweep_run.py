@@ -820,6 +820,28 @@ def resolve_concurrency(
     return Concurrency(at_once, workers, available)
 
 
+STORED_PLAN_LIMIT: Final = 5000
+"""Points up to which a Study stores the whole plan.
+
+A larger plan stores its digest and point count only: the points are a pure
+function of the specification, so they are enumerated again when needed, and
+the digest keeps the check that the plan still matches this version."""
+
+
+def _stored_plan(spec: SweepSpec, plan: SweepPlan) -> dict[str, object]:
+    """Return what a Study stores of a plan: the spec, the digest, the points.
+
+    A plan above `STORED_PLAN_LIMIT` points keeps its count in place of the
+    list.
+    """
+    stored: dict[str, object] = {**spec.to_dict(), "digest": spec.digest(plan)}
+    if len(plan.points) > STORED_PLAN_LIMIT:
+        stored["point_count"] = len(plan.points)
+    else:
+        stored["points"] = [point.to_dict() for point in plan.points]
+    return stored
+
+
 def create_sweep_study(
     spec: SweepSpec,
     plan: SweepPlan,
@@ -849,11 +871,7 @@ def create_sweep_study(
     """
     if not plan.points:
         raise ValueError("the sweep has no valid points to run")
-    stored = {
-        **spec.to_dict(),
-        "points": [point.to_dict() for point in plan.points],
-        "digest": spec.digest(plan),
-    }
+    stored = _stored_plan(spec, plan)
     study = groups.create_study(name, description, results=results, sweep_spec=stored)
     if experiment_id is not None:
         try:
@@ -891,11 +909,7 @@ def attach_sweep_to_study(
         raise ValueError(
             f"study {study.name!r} already holds a sweep; choose another study"
         )
-    stored = {
-        **spec.to_dict(),
-        "points": [point.to_dict() for point in plan.points],
-        "digest": spec.digest(plan),
-    }
+    stored = _stored_plan(spec, plan)
     updated = replace(study, sweep_spec=stored)
     groups.write_study_manifest(
         groups.study_manifest_path(study_id, results=results), updated
@@ -923,6 +937,9 @@ def stored_points(study: StudyManifest) -> list[Mapping[str, Any]]:
     if study.sweep_spec is None:
         raise ValueError(f"study {study.study_id} is not a sweep")
     points = study.sweep_spec.get("points")
+    if points is None and "point_count" in study.sweep_spec:
+        plan = enumerate_points(sweep_spec_of(study))
+        return [point.to_dict() for point in plan.points]
     if not isinstance(points, list) or not all(
         isinstance(entry, Mapping) and "run_id" in entry and "index" in entry
         for entry in points
@@ -1781,7 +1798,10 @@ def replan_sweep(
     no longer matches (`run_sweep` refuses it). The plan is enumerated again
     from the stored specification and each new point is matched to its
     stored one by coordinates, never by id. The stored plan is rewritten, and
-    the recorded failures follow their points. Runs already in the Study are
+    the recorded failures follow their points. (A large plan stores only its
+    digest, so there are no old ids to pair: the digest is rewritten, every
+    point reads as unchanged, and a failure recorded under an old id no
+    longer applies.) Runs already in the Study are
     never touched: one whose id no longer matches any point stays attached as
     an ordinary run, listed in the result, and its point runs again.
 
@@ -1870,11 +1890,13 @@ def _write_replan(
 ) -> None:
     """Store the new plan and move the failure and object records with it."""
     assert study.sweep_spec is not None  # checked by `stored_points`
-    points = [point.to_dict() for point in plan.points]
-    digest = sweep_spec_of(study).digest(plan)
-    updated = replace(
-        study, sweep_spec={**study.sweep_spec, "points": points, "digest": digest}
-    )
+    stored = _stored_plan(sweep_spec_of(study), plan)
+    kept = {
+        key: value
+        for key, value in study.sweep_spec.items()
+        if key not in {"points", "point_count"}
+    }
+    updated = replace(study, sweep_spec={**kept, **stored})
     groups.write_study_manifest(
         groups.study_manifest_path(study.study_id, results=results), updated
     )
@@ -1890,9 +1912,14 @@ def _write_replan(
 
 def _matching_plan(study: StudyManifest, plan: SweepPlan) -> tuple[SweepPoint, ...]:
     """Return the enumerated points, after checking they match the stored plan."""
-    stored = [str(entry["run_id"]) for entry in stored_points(study)]
-    current = [point.run_id for point in plan.points]
-    if stored != current:
+    spec = study.sweep_spec or {}
+    if "points" not in spec and "point_count" in spec:
+        # A large plan keeps only its digest, so that is what must still match.
+        matches = spec.get("digest") == sweep_spec_of(study).digest(plan)
+    else:
+        stored = [str(entry["run_id"]) for entry in stored_points(study)]
+        matches = stored == [point.run_id for point in plan.points]
+    if not matches:
         raise ValueError(
             "the stored sweep plan no longer matches this version of the "
             "program (run ids differ); re-identify its points with "

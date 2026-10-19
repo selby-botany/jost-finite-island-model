@@ -1556,6 +1556,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [open\_run](#fim.stored.open_run)
 * [fim.sweep](#fim.sweep)
   * [SWEEP\_SPEC\_VERSION](#fim.sweep.SWEEP_SPEC_VERSION)
+  * [READABLE\_SPEC\_VERSIONS](#fim.sweep.READABLE_SPEC_VERSIONS)
   * [SIZE\_CONFIRMATION\_THRESHOLD](#fim.sweep.SIZE_CONFIRMATION_THRESHOLD)
   * [SEED\_POLICIES](#fim.sweep.SEED_POLICIES)
   * [STRATEGIES](#fim.sweep.STRATEGIES)
@@ -1572,6 +1573,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [to\_dict](#fim.sweep.SweepAxis.to_dict)
   * [SweepSpec](#fim.sweep.SweepSpec)
     * [\_\_post\_init\_\_](#fim.sweep.SweepSpec.__post_init__)
+    * [from\_rows](#fim.sweep.SweepSpec.from_rows)
     * [grid\_size](#fim.sweep.SweepSpec.grid_size)
     * [to\_dict](#fim.sweep.SweepSpec.to_dict)
     * [digest](#fim.sweep.SweepSpec.digest)
@@ -1587,6 +1589,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [point\_run\_description](#fim.sweep.point_run_description)
   * [expand\_axis](#fim.sweep.expand_axis)
   * [spec\_from\_config](#fim.sweep.spec_from_config)
+  * [read\_points\_csv](#fim.sweep.read_points_csv)
+  * [resolve\_points\_file](#fim.sweep.resolve_points_file)
   * [apply\_coordinates](#fim.sweep.apply_coordinates)
 * [fim.sweep\_compare](#fim.sweep_compare)
   * [Pairing](#fim.sweep_compare.Pairing)
@@ -1664,6 +1668,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close](#fim.sweep_run.ProcessPointRunner.close)
   * [Concurrency](#fim.sweep_run.Concurrency)
   * [resolve\_concurrency](#fim.sweep_run.resolve_concurrency)
+  * [STORED\_PLAN\_LIMIT](#fim.sweep_run.STORED_PLAN_LIMIT)
   * [create\_sweep\_study](#fim.sweep_run.create_sweep_study)
   * [attach\_sweep\_to\_study](#fim.sweep_run.attach_sweep_to_study)
   * [sweep\_spec\_of](#fim.sweep_run.sweep_spec_of)
@@ -36757,6 +36762,15 @@ Three ideas carry the design:
 
 Schema version of the stored `sweep_spec` mapping.
 
+Version 2 adds the `zip` and `list` strategies (and `rows`); a version 1
+spec is a grid and is still read.
+
+<a id="fim.sweep.READABLE_SPEC_VERSIONS"></a>
+
+#### READABLE\_SPEC\_VERSIONS
+
+Stored spec versions `SweepSpec.from_dict` accepts.
+
 <a id="fim.sweep.SIZE_CONFIRMATION_THRESHOLD"></a>
 
 #### SIZE\_CONFIRMATION\_THRESHOLD
@@ -36773,7 +36787,7 @@ Points at or above which a plan should ask before running.
 
 #### STRATEGIES
 
-Only the full grid exists; the field leaves room for later strategies.
+`grid`: every combination; `zip`: axes advance together; `list`: explicit rows.
 
 <a id="fim.sweep.AxisDefinition"></a>
 
@@ -36928,10 +36942,15 @@ What is held fixed (`base`) and what varies (`axes`).
   individuals per deme, and it must say `ploidy`; `N` is
   overwritten when it is an axis.
 - `axes` - The varied keys, first axis slowest in the enumeration.
-- `strategy` - `grid` (every combination).
+- `strategy` - `grid` (every combination, first axis slowest), `zip`
+  (the axes advance together and must have equal lengths) or
+  `list` (the explicit `rows`; see `from_rows`).
 - `seed_policy` - `spaced` gives point `i` the seed `base seed + i *
-  n_replicates`, so no two points share a replicate seed;
+  n_replicates`, where `i` is the point's position in the
+  strategy's order, so no two points share a replicate seed;
   `same` gives every point the base seed.
+- `rows` - For `list`, one mapping of axis key to value per point, in
+  order. Empty otherwise.
 
 <a id="fim.sweep.SweepSpec.__post_init__"></a>
 
@@ -36943,6 +36962,29 @@ def __post_init__() -> None
 
 Validate the axes against the base and the sweepable-key table.
 
+<a id="fim.sweep.SweepSpec.from_rows"></a>
+
+#### from\_rows
+
+```python
+@classmethod
+def from_rows(cls,
+              base: Mapping[str, Any],
+              rows: Sequence[Mapping[str, object]],
+              seed_policy: SeedPolicy = "spaced") -> SweepSpec
+```
+
+Build a `list` spec from explicit rows, one mapping per point.
+
+Every row names the same keys. Each key becomes an axis holding that
+key's distinct values in order of first appearance, which is what
+the results views plot against.
+
+**Raises**:
+
+- `ValueError` - There are no rows, a row names different keys from
+  the first, or a value does not fit its key.
+
 <a id="fim.sweep.SweepSpec.grid_size"></a>
 
 #### grid\_size
@@ -36952,7 +36994,7 @@ Validate the axes against the base and the sweepable-key table.
 def grid_size() -> int
 ```
 
-Return the number of points in the full grid.
+Return the number of positions the strategy enumerates.
 
 <a id="fim.sweep.SweepSpec.to_dict"></a>
 
@@ -37213,6 +37255,46 @@ and optionally `name`, `seed_policy` and `strategy`.
 **Raises**:
 
 - `ValueError` - The `sweep:` block is missing or malformed.
+
+<a id="fim.sweep.read_points_csv"></a>
+
+#### read\_points\_csv
+
+```python
+def read_points_csv(path: Path) -> list[dict[str, object]]
+```
+
+Read the points of a list sweep from a CSV file with a header row.
+
+Each cell becomes a whole number, a decimal number or text, in that
+order of preference, so `8` is an integer and `0.01` a float. Key names
+and values are then checked like any other list sweep.
+
+**Raises**:
+
+- `ValueError` - The file has no header or no points.
+
+<a id="fim.sweep.resolve_points_file"></a>
+
+#### resolve\_points\_file
+
+```python
+def resolve_points_file(config: Mapping[str, Any],
+                        directory: Path) -> dict[str, Any]
+```
+
+Return `config` with a `sweep.points_file` replaced by its `points`.
+
+**Arguments**:
+
+- `config` - A sweep file's contents.
+- `directory` - What a relative `points_file` is relative to (the sweep
+  file's folder).
+
+
+**Raises**:
+
+- `ValueError` - The block also lists `points`, or the file is unreadable.
 
 <a id="fim.sweep.apply_coordinates"></a>
 
@@ -38606,6 +38688,16 @@ point's worker count and shrinks how many fit.
   steps every replicate inside one process on any engine, so each
   point needs one core.
 
+<a id="fim.sweep_run.STORED_PLAN_LIMIT"></a>
+
+#### STORED\_PLAN\_LIMIT
+
+Points up to which a Study stores the whole plan.
+
+A larger plan stores its digest and point count only: the points are a pure
+function of the specification, so they are enumerated again when needed, and
+the digest keeps the check that the plan still matches this version.
+
 <a id="fim.sweep_run.create_sweep_study"></a>
 
 #### create\_sweep\_study
@@ -39105,7 +39197,10 @@ changes what the hash covers changes every id, and the stored plan then
 no longer matches (`run_sweep` refuses it). The plan is enumerated again
 from the stored specification and each new point is matched to its
 stored one by coordinates, never by id. The stored plan is rewritten, and
-the recorded failures follow their points. Runs already in the Study are
+the recorded failures follow their points. (A large plan stores only its
+digest, so there are no old ids to pair: the digest is rewritten, every
+point reads as unchanged, and a failure recorded under an old id no
+longer applies.) Runs already in the Study are
 never touched: one whose id no longer matches any point stays attached as
 an ordinary run, listed in the result, and its point runs again.
 

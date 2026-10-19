@@ -1036,3 +1036,47 @@ def test_keys_json_describes_each_key_with_its_type(
     assert entries["n_loci"]["generic"] is True
     assert entries["n_loci"]["kind"] == "int"
     assert entries["track_expensive_statistics"]["choices"] == ["true", "false"]
+
+
+_HEADER = _SWEEP_FILE.split("sweep:", maxsplit=1)[0]
+
+
+def test_plan_reads_a_zip_sweep_and_a_points_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    zipped = tmp_path / "zip.yaml"
+    zipped.write_text(
+        _HEADER + "sweep:\n  strategy: zip\n  axes:\n    d: [2, 3, 4]\n"
+        "    m: [0.1, 0.05, 0.01]\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "design.csv").write_text("d,m\n4,0.01\n2,0.1\n", encoding="utf-8")
+    listed = tmp_path / "list.yaml"
+    listed.write_text(_HEADER + "sweep:\n  points_file: design.csv\n", encoding="utf-8")
+
+    assert _main(tmp_path, "sweep", "plan", str(zipped), "--no-probe") == 0
+    zip_out = capsys.readouterr().out
+    assert _main(tmp_path, "sweep", "plan", str(listed), "--no-probe") == 0
+    list_out = capsys.readouterr().out
+
+    assert "3 valid point(s), 0 invalid" in zip_out
+    assert "2 valid point(s), 0 invalid" in list_out
+    rows = [
+        line.split() for line in list_out.splitlines() if line[:5].strip().isdigit()
+    ]
+    assert [row[1:3] for row in rows] == [["4", "0.01"], ["2", "0.1"]]
+
+
+def test_a_zip_sweep_of_unequal_axes_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    broken = tmp_path / "broken.yaml"
+    broken.write_text(
+        _HEADER + "sweep:\n  strategy: zip\n  axes:\n    d: [2, 3]\n    m: [0.1]\n",
+        encoding="utf-8",
+    )
+
+    status = _main(tmp_path, "sweep", "plan", str(broken), "--no-probe")
+
+    assert status != 0
+    assert "equal lengths" in capsys.readouterr().err

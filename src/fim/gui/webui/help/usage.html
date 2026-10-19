@@ -915,6 +915,26 @@ rest include <code>n_loci</code>, <code>locus_lengths</code>, <code>initial_alle
 <code>fim sweep keys</code> lists every key with its type and legal values (<code>--json</code> for a
 program). A point whose settings do not fit together is reported by <code>plan</code>, not
 discovered while the sweep runs.</p>
+<p>By default the axes form a grid: every combination, the first axis changing
+slowest. Two other designs are available with <code>strategy</code> in the <code>sweep:</code> block:</p>
+<pre><code class="language-yaml">sweep:
+  strategy: zip          # the axes advance together; equal lengths required
+  axes:
+    d: [4, 8, 16]
+    m: [0.1, 0.05, 0.01]
+</code></pre>
+<pre><code class="language-yaml">sweep:                    # a hand-picked set: one mapping per point
+  points:
+    - { d: 8, m: 0.01 }
+    - { d: 2, m: 0.1 }
+</code></pre>
+<p>A long list can live in a CSV file with a header row of keys:
+<code>points_file: design.csv</code> (relative to the sweep file). A repeated point is
+dropped, keeping the first. A space-filling design (a Latin hypercube or a
+Sobol sequence) is made with a few lines of your own and written to that CSV;
+the sweep then runs it as a list. The seeds follow the order of the points.</p>
+<p>A sweep of more than 5,000 points stores a fingerprint and the count instead
+of the list; the points are worked out again from the settings when needed.</p>
 <p>In a sweep, <code>N</code> counts <strong>individuals per deme</strong> on an axis and in the base
 alike, the number the desktop app shows; the file's <code>ploidy</code> turns it into gene
 copies for each point.</p>

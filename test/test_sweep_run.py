@@ -1974,3 +1974,70 @@ def test_a_missing_or_damaged_verification_reads_as_none(
         path.write_text(content, encoding="utf-8")
 
     assert read_verification(study_id) is None
+
+
+def test_a_large_plan_stores_its_digest_and_count_not_its_points(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fim.sweep_run.STORED_PLAN_LIMIT", 1)
+
+    study_id = _study(results, 2, 3, 4)
+
+    stored = groups.get_study(study_id).sweep_spec or {}
+    assert "points" not in stored
+    assert stored["point_count"] == 3
+    assert stored["digest"] == sweep_spec_of(groups.get_study(study_id)).digest()
+
+
+def test_a_digest_only_plan_still_lists_runs_and_resumes(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fim.sweep_run.STORED_PLAN_LIMIT", 1)
+    study_id = _study(results, 2, 3)
+    expected = [
+        p.run_id
+        for p in enumerate_points(sweep_spec_of(groups.get_study(study_id))).points
+    ]
+
+    assert _stored_ids(study_id) == expected
+    outcome, _ = _run(study_id, points_at_once=1)
+    assert outcome.done == 2
+    again, _ = _run(study_id, points_at_once=1)
+    assert again.done == 0
+    assert [s.state for s in sweep_point_statuses(groups.get_study(study_id))] == [
+        "done",
+        "done",
+    ]
+
+
+def test_a_digest_only_plan_notices_changed_run_ids_and_replan_repairs_it(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fim.sweep_run.STORED_PLAN_LIMIT", 1)
+    study_id = _study(results, 2, 3)
+    before = (groups.get_study(study_id).sweep_spec or {})["digest"]
+    _identity_changes(monkeypatch)
+
+    with pytest.raises(ValueError, match=f"fim sweep replan {study_id}"):
+        _run(study_id)
+    outcome = replan_sweep(study_id)
+
+    stored = groups.get_study(study_id).sweep_spec or {}
+    assert outcome.written
+    assert stored["digest"] != before
+    assert stored["point_count"] == 2 and "points" not in stored
+    assert _stored_ids(study_id) == [
+        p.run_id
+        for p in enumerate_points(sweep_spec_of(groups.get_study(study_id))).points
+    ]
+
+
+def test_the_zip_and_list_strategies_run_as_sweeps(results: Path) -> None:
+    spec = SweepSpec.from_rows(_BASE, [{"d": 3}, {"d": 2}])
+    study_id = create_sweep_study(spec, enumerate_points(spec), "List").study_id
+
+    outcome, _ = _run(study_id, points_at_once=1)
+
+    assert outcome.done == 2
+    rebuilt = sweep_spec_of(groups.get_study(study_id))
+    assert rebuilt == spec

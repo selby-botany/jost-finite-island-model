@@ -7346,7 +7346,10 @@ def _sweep_point_count(study: groups.StudyManifest) -> int | None:
     if study.sweep_spec is None:
         return None
     points = study.sweep_spec.get("points")
-    return len(points) if isinstance(points, list) else None
+    if isinstance(points, list):
+        return len(points)
+    count = study.sweep_spec.get("point_count")
+    return count if isinstance(count, int) else None
 
 
 def _push_sweep_event(window: _EvaluatesJs, event: SweepEvent) -> None:

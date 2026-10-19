@@ -26,12 +26,14 @@ Three ideas carry the design:
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import itertools
 import json
 import math
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Final, Literal
 
 import yaml
@@ -40,8 +42,14 @@ from fim.engine import deterministic_run_id
 from fim.model.params import PARAMETER_DEFAULTS, PLOIDY_WORDS, SimulationParams
 from fim.spec.fields import CONVERTED_KEYS, FIELD_MAP
 
-SWEEP_SPEC_VERSION: Final = 1
-"""Schema version of the stored `sweep_spec` mapping."""
+SWEEP_SPEC_VERSION: Final = 2
+"""Schema version of the stored `sweep_spec` mapping.
+
+Version 2 adds the `zip` and `list` strategies (and `rows`); a version 1
+spec is a grid and is still read."""
+
+READABLE_SPEC_VERSIONS: Final = (1, 2)
+"""Stored spec versions `SweepSpec.from_dict` accepts."""
 
 SIZE_CONFIRMATION_THRESHOLD: Final = 100
 """Points at or above which a plan should ask before running."""
@@ -49,8 +57,8 @@ SIZE_CONFIRMATION_THRESHOLD: Final = 100
 SEED_POLICIES: Final = ("spaced", "same")
 """`spaced`: independent points; `same`: every point uses the base seed."""
 
-STRATEGIES: Final = ("grid",)
-"""Only the full grid exists; the field leaves room for later strategies."""
+STRATEGIES: Final = ("grid", "zip", "list")
+"""`grid`: every combination; `zip`: axes advance together; `list`: explicit rows."""
 
 _SIGNIFICANT_DIGITS: Final = 12
 """Digits kept when expanding a range, so ids do not depend on float noise."""
@@ -390,16 +398,22 @@ class SweepSpec:
             individuals per deme, and it must say `ploidy`; `N` is
             overwritten when it is an axis.
         axes: The varied keys, first axis slowest in the enumeration.
-        strategy: `grid` (every combination).
+        strategy: `grid` (every combination, first axis slowest), `zip`
+            (the axes advance together and must have equal lengths) or
+            `list` (the explicit `rows`; see `from_rows`).
         seed_policy: `spaced` gives point `i` the seed `base seed + i *
-            n_replicates`, so no two points share a replicate seed;
+            n_replicates`, where `i` is the point's position in the
+            strategy's order, so no two points share a replicate seed;
             `same` gives every point the base seed.
+        rows: For `list`, one mapping of axis key to value per point, in
+            order. Empty otherwise.
     """
 
     base: Mapping[str, Any]
     axes: tuple[SweepAxis, ...]
     strategy: str = "grid"
     seed_policy: SeedPolicy = "spaced"
+    rows: tuple[Mapping[str, CoordinateValue], ...] = ()
 
     def __post_init__(self) -> None:
         """Validate the axes against the base and the sweepable-key table."""
@@ -409,6 +423,8 @@ class SweepSpec:
             raise ValueError(f"sweep seed_policy must be one of {list(SEED_POLICIES)}")
         if not self.axes:
             raise ValueError("a sweep needs at least one axis")
+        if self.strategy != "list" and self.rows:
+            raise ValueError("only the list strategy takes rows")
         keys = [axis.key for axis in self.axes]
         if len(set(keys)) != len(keys):
             raise ValueError("a sweep axis key may appear only once")
@@ -417,21 +433,74 @@ class SweepSpec:
             if not axis.values:
                 raise ValueError(f"sweep axis {axis.key!r} has no values")
         _check_base_supports_axes(self.base, set(keys))
+        _check_strategy(self, keys)
+
+    @classmethod
+    def from_rows(
+        cls,
+        base: Mapping[str, Any],
+        rows: Sequence[Mapping[str, object]],
+        seed_policy: SeedPolicy = "spaced",
+    ) -> SweepSpec:
+        """Build a `list` spec from explicit rows, one mapping per point.
+
+        Every row names the same keys. Each key becomes an axis holding that
+        key's distinct values in order of first appearance, which is what
+        the results views plot against.
+
+        Raises:
+            ValueError: There are no rows, a row names different keys from
+                the first, or a value does not fit its key.
+        """
+        if not rows:
+            raise ValueError("a list sweep needs at least one point")
+        keys = list(rows[0])
+        coerced: list[dict[str, CoordinateValue]] = []
+        for row in rows:
+            if set(row) != set(keys):
+                raise ValueError("every point of a list sweep needs the same keys")
+            coerced.append(
+                {key: _coerce(axis_definition(key), row[key]) for key in keys}
+            )
+        # A repeated point is dropped here, keeping the first, so the seeds of
+        # the points that remain follow the order the person gave.
+        first: dict[tuple[CoordinateValue, ...], dict[str, CoordinateValue]] = {}
+        for row in coerced:
+            first.setdefault(tuple(row[key] for key in keys), row)
+        coerced = list(first.values())
+        axes = tuple(
+            SweepAxis(key, tuple(dict.fromkeys(row[key] for row in coerced)))
+            for key in keys
+        )
+        return cls(
+            base=dict(base),
+            axes=axes,
+            strategy="list",
+            seed_policy=seed_policy,
+            rows=tuple(coerced),
+        )
 
     @property
     def grid_size(self) -> int:
-        """Return the number of points in the full grid."""
+        """Return the number of positions the strategy enumerates."""
+        if self.strategy == "list":
+            return len(self.rows)
+        if self.strategy == "zip":
+            return len(self.axes[0].values)
         return math.prod(len(axis.values) for axis in self.axes)
 
     def to_dict(self) -> dict[str, object]:
         """Return the JSON-serializable stored form (without the points)."""
-        return {
+        stored: dict[str, object] = {
             "spec_version": SWEEP_SPEC_VERSION,
             "strategy": self.strategy,
             "base": dict(self.base),
             "axes": [axis.to_dict() for axis in self.axes],
             "seed_policy": self.seed_policy,
         }
+        if self.strategy == "list":
+            stored["rows"] = [dict(row) for row in self.rows]
+        return stored
 
     def digest(self, plan: SweepPlan | None = None) -> str:
         """Return a fingerprint of this experiment: the spec and its points.
@@ -477,7 +546,10 @@ class SweepSpec:
             block["name"] = name
         block["strategy"] = self.strategy
         block["seed_policy"] = self.seed_policy
-        block["axes"] = {axis.key: list(axis.values) for axis in self.axes}
+        if self.strategy == "list":
+            block["points"] = [dict(row) for row in self.rows]
+        else:
+            block["axes"] = {axis.key: list(axis.values) for axis in self.axes}
         document = {**dict(self.base), "sweep": block}
         return yaml.safe_dump(document, sort_keys=False, default_flow_style=None)
 
@@ -489,11 +561,17 @@ class SweepSpec:
             ValueError: The mapping is malformed or its version is unknown.
         """
         version = value.get("spec_version")
-        if version != SWEEP_SPEC_VERSION:
+        if version not in READABLE_SPEC_VERSIONS:
             raise ValueError(f"unsupported sweep spec_version: {version!r}")
         base = value.get("base")
         if not isinstance(base, Mapping):
             raise ValueError("sweep spec 'base' must be an object")
+        if value.get("strategy") == "list":
+            return cls.from_rows(
+                base,
+                _stored_rows(value.get("rows")),
+                _seed_policy(value.get("seed_policy", "spaced")),
+            )
         raw_axes = value.get("axes")
         if not isinstance(raw_axes, Sequence) or isinstance(raw_axes, str):
             raise ValueError("sweep spec 'axes' must be a list")
@@ -580,10 +658,7 @@ def enumerate_points(spec: SweepSpec) -> SweepPlan:
     invalid: list[InvalidPoint] = []
     seen: set[str] = set()
     collapsed = 0
-    keys = [axis.key for axis in spec.axes]
-    combinations = itertools.product(*(axis.values for axis in spec.axes))
-    for index, combination in enumerate(combinations):
-        coordinates = dict(zip(keys, combination, strict=True))
+    for index, coordinates in enumerate(_STRATEGY_POINTS[spec.strategy](spec)):
         try:
             mapping = _point_mapping(spec, index, coordinates)
             params = SimulationParams.from_mapping(mapping)
@@ -597,6 +672,32 @@ def enumerate_points(spec: SweepSpec) -> SweepPlan:
         seen.add(run_id)
         points.append(SweepPoint(index, coordinates, mapping, run_id))
     return SweepPlan(tuple(points), tuple(invalid), collapsed, spec.grid_size)
+
+
+def _grid_points(spec: SweepSpec) -> Iterator[dict[str, CoordinateValue]]:
+    """Yield every combination of the axes, first axis slowest."""
+    keys = [axis.key for axis in spec.axes]
+    for combination in itertools.product(*(axis.values for axis in spec.axes)):
+        yield dict(zip(keys, combination, strict=True))
+
+
+def _zip_points(spec: SweepSpec) -> Iterator[dict[str, CoordinateValue]]:
+    """Yield the axes' values together, position by position."""
+    keys = [axis.key for axis in spec.axes]
+    for combination in zip(*(axis.values for axis in spec.axes), strict=True):
+        yield dict(zip(keys, combination, strict=True))
+
+
+def _list_points(spec: SweepSpec) -> Iterator[dict[str, CoordinateValue]]:
+    """Yield the explicit rows in the order given."""
+    for row in spec.rows:
+        yield dict(row)
+
+
+_STRATEGY_POINTS: Final[
+    dict[str, Callable[[SweepSpec], Iterator[dict[str, CoordinateValue]]]]
+] = {"grid": _grid_points, "zip": _zip_points, "list": _list_points}
+"""Strategy name to the function that yields its coordinates in order."""
 
 
 def point_run_name(study_name: str, point: SweepPoint) -> str:
@@ -690,24 +791,93 @@ def spec_from_config(config: Mapping[str, Any]) -> tuple[SweepSpec, str | None]:
     block = config.get("sweep")
     if not isinstance(block, Mapping):
         raise ValueError("a sweep file needs a 'sweep:' block")
-    unknown = set(block) - {"name", "axes", "seed_policy", "strategy"}
+    unknown = set(block) - {"name", "axes", "seed_policy", "strategy", "points"}
     if unknown:
         names = ", ".join(sorted(str(key) for key in unknown))
         raise ValueError(f"unknown sweep key(s): {names}")
-    raw_axes = block.get("axes")
-    if not isinstance(raw_axes, Mapping) or not raw_axes:
-        raise ValueError("sweep 'axes' must be a mapping of key to values or range")
     base = {key: value for key, value in config.items() if key != "sweep"}
     name = block.get("name")
     if name is not None and not isinstance(name, str):
         raise ValueError("sweep 'name' must be text")
+    policy = _seed_policy(block.get("seed_policy", "spaced"))
+    strategy = str(block.get("strategy", "list" if "points" in block else "grid"))
+    if strategy == "list":
+        if "axes" in block:
+            raise ValueError("a list sweep takes 'points', not 'axes'")
+        return SweepSpec.from_rows(
+            base, _stored_rows(block.get("points")), policy
+        ), name
+    if "points" in block:
+        raise ValueError("'points' belongs to the list strategy")
+    raw_axes = block.get("axes")
+    if not isinstance(raw_axes, Mapping) or not raw_axes:
+        raise ValueError("sweep 'axes' must be a mapping of key to values or range")
     spec = SweepSpec(
         base=base,
         axes=tuple(expand_axis(str(key), value) for key, value in raw_axes.items()),
-        strategy=str(block.get("strategy", "grid")),
-        seed_policy=_seed_policy(block.get("seed_policy", "spaced")),
+        strategy=strategy,
+        seed_policy=policy,
     )
     return spec, name
+
+
+def read_points_csv(path: Path) -> list[dict[str, object]]:
+    """Read the points of a list sweep from a CSV file with a header row.
+
+    Each cell becomes a whole number, a decimal number or text, in that
+    order of preference, so `8` is an integer and `0.01` a float. Key names
+    and values are then checked like any other list sweep.
+
+    Raises:
+        ValueError: The file has no header or no points.
+    """
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            raise ValueError(f"{path}: the points file needs a header row of keys")
+        rows = [
+            {key: _csv_value(text) for key, text in row.items() if key is not None}
+            for row in reader
+        ]
+    if not rows:
+        raise ValueError(f"{path}: the points file has no points")
+    return rows
+
+
+def resolve_points_file(config: Mapping[str, Any], directory: Path) -> dict[str, Any]:
+    """Return `config` with a `sweep.points_file` replaced by its `points`.
+
+    Args:
+        config: A sweep file's contents.
+        directory: What a relative `points_file` is relative to (the sweep
+            file's folder).
+
+    Raises:
+        ValueError: The block also lists `points`, or the file is unreadable.
+    """
+    block = config.get("sweep")
+    if not isinstance(block, Mapping) or "points_file" not in block:
+        return dict(config)
+    if "points" in block:
+        raise ValueError("a sweep takes 'points' or 'points_file', not both")
+    target = directory / str(block["points_file"])
+    try:
+        rows = read_points_csv(target)
+    except OSError as error:
+        raise ValueError(f"cannot read the points file {target}: {error}") from error
+    replaced = {key: value for key, value in block.items() if key != "points_file"}
+    return {**config, "sweep": {**replaced, "points": rows}}
+
+
+def _csv_value(text: str) -> object:
+    """Return one CSV cell as an int, a float or the text itself."""
+    cell = text.strip()
+    for convert in (int, float):
+        try:
+            return convert(cell)
+        except ValueError:
+            continue
+    return cell
 
 
 def apply_coordinates(
@@ -897,6 +1067,31 @@ def _seed_policy(value: object) -> SeedPolicy:
     if value == "same":
         return "same"
     raise ValueError(f"sweep seed_policy must be one of {list(SEED_POLICIES)}")
+
+
+def _check_strategy(spec: SweepSpec, keys: list[str]) -> None:
+    """Check what the strategy needs of the axes and rows."""
+    if spec.strategy == "zip":
+        lengths = {len(axis.values) for axis in spec.axes}
+        if len(lengths) > 1:
+            detail = ", ".join(
+                f"{axis.key} has {len(axis.values)}" for axis in spec.axes
+            )
+            raise ValueError(f"zip axes need equal lengths: {detail}")
+    elif spec.strategy == "list":
+        if not spec.rows:
+            raise ValueError("a list sweep needs at least one point")
+        if any(set(row) != set(keys) for row in spec.rows):
+            raise ValueError("every point of a list sweep needs the same keys")
+
+
+def _stored_rows(value: object) -> list[Mapping[str, object]]:
+    """Return the rows of a list sweep, checking their shape."""
+    if not isinstance(value, Sequence) or isinstance(value, str) or not value:
+        raise ValueError("a list sweep needs 'points': a list of one mapping per point")
+    if not all(isinstance(row, Mapping) and row for row in value):
+        raise ValueError("each point of a list sweep must be a mapping of key to value")
+    return list(value)
 
 
 def _stored_axis(entry: object) -> SweepAxis:

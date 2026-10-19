@@ -34,6 +34,7 @@ from fim.sweep import (
     SweepSpec,
     axis_definition,
     enumerate_points,
+    resolve_points_file,
     spec_from_config,
     sweepable_key_names,
 )
@@ -420,7 +421,7 @@ def _load(path: Path) -> tuple[SweepSpec, str | None]:
         payload = yaml.safe_load(handle)
     if not isinstance(payload, Mapping):
         raise ValueError("a sweep file's root must be a mapping")
-    return spec_from_config(payload)
+    return spec_from_config(resolve_points_file(payload, path.resolve().parent))
 
 
 def _plan(arguments: argparse.Namespace) -> int:

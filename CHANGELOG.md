@@ -8,6 +8,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`zip` and `list` sweeps, and a points file.** Besides the full grid, a
+  sweep can advance its axes together (`strategy: zip`) or run a hand-picked
+  set of points (`points:` in the sweep file, or `points_file: design.csv`),
+  which is also how a Latin hypercube or Sobol design is run. A sweep of more
+  than 5,000 points stores a fingerprint and the count, not the list. Stored
+  sweeps now carry `spec_version` 2; version 1 is still read.
+
 - **Any scalar setting can be a sweep axis, and `fim sweep keys`.** A sweep can
   vary `n_loci`, `locus_lengths`, `initial_allele_count`, `mutation_model`,
   `migrant_sampling`, `ploidy`, `precision` and every other setting that is one
