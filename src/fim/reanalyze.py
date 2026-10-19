@@ -35,6 +35,7 @@ from fim.engine import report_for_state, tracked_statistic_values
 from fim.examples.artifacts import materialize_outputs
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
+from fim.persistence.history import history_path, read_history_columns
 from fim.persistence.manifest import (
     RunManifest,
     hash_file,
@@ -275,37 +276,20 @@ def read_persisted_convergence_history(
     """
     if manifest.artifacts is None or "convergence" not in manifest.artifacts:
         return None
-    convergence_path = trajectory_path.with_name("convergence.jsonl")
+    convergence_path = history_path(trajectory_path.parent)
     if not convergence_path.is_file():
         return None
     expected = manifest.artifacts["convergence"]
     actual = hash_file(convergence_path)
     if actual != expected:
         raise ValueError(
-            f"convergence.jsonl does not match its manifest: expected sha256 "
+            f"{convergence_path.name} does not match its manifest: expected sha256 "
             f"{expected['sha256']} ({expected['bytes']} bytes), found "
             f"{actual['sha256']} ({actual['bytes']} bytes) — the file may "
             "have been edited, truncated, or replaced since the run "
             "completed"
         )
-    generations: list[int] = []
-    histories: dict[str, list[float]] = {}
-    with convergence_path.open("r", encoding="utf-8") as handle:
-        for raw_line in handle:
-            stripped = raw_line.strip()
-            if not stripped:
-                continue
-            row = json.loads(stripped)
-            if not isinstance(row, dict) or not isinstance(row.get("generation"), int):
-                raise ValueError(
-                    "convergence.jsonl row must be an object with an integer "
-                    "'generation'"
-                )
-            generations.append(row["generation"])
-            for name, value in row.items():
-                if name != "generation":
-                    histories.setdefault(name, []).append(value)
-    return generations, histories
+    return read_history_columns(convergence_path)
 
 
 def _select_generation_rows(

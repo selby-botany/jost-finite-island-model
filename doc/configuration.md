@@ -42,6 +42,7 @@ Every setting, in alphabetical order, with the section that describes it.
 | [`equilibrium_convergence_window`](#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations) | Initial conditions |
 | [`equilibrium_max_generations`](#equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations) | Initial conditions |
 | [`expert`](#expert) | Convergence |
+| [`history_format`](#history_format) | Analysis and execution |
 | [`initial_allele_count`](#initial_allele_count) | Initial conditions |
 | [`initial_concentration`](#initial_concentration) | Initial conditions |
 | [`jit`](#jit) | Engine backend and JIT |
@@ -782,6 +783,27 @@ value?](convergence.md#how-precise-is-the-reported-value)); see
 the run before any averaging, and the run logs a warning. Setting only a
 burn-in raises the derived cap to leave `15 tau` after it.
 
+### history_format
+
+- **Type:** `exact` or `compact`
+- **Default:** `exact`
+
+A run keeps, for every generation, the value of each statistic (`D`, `G_ST`,
+the heterozygosities): the statistic history that the app draws as the
+trajectory graph and that a sweep's trajectory view averages across replicates.
+`exact` writes it as `convergence.jsonl`, every value at full precision, about
+70 bytes a generation. `compact` writes `convergence.fhist` instead: each value
+is rounded to a fixed step of about one hundredth of `precision` (a power of
+two, so a stored value is exact in binary), and the differences between
+successive generations are packed to the narrowest integer that holds them and
+compressed. A real 355,000-generation replicate takes 0.3 MB in the compact
+form and 25 MB in the exact one. At the default precision (0.01) a value is
+within 0.00002 of the one computed, far inside the interval the run is asked
+to resolve. `report.json`, `summary.json` and every reported number are
+computed inside the run and are never rounded. The setting is outside a run's
+identity and is recorded in `manifest.json` only for a compact run. Sweeps
+write the compact form unless asked otherwise.
+
 ### trajectory_retention, trajectory_stride, trajectory_thinning_start, trajectory_keep_last, trajectory_keep_burn_in
 
 - **trajectory_retention:** `full`, `thinned` or `tapered`; default `full`
@@ -1460,6 +1482,7 @@ existed.
 | statistic_precision naming an unwatched statistic, or a negative value | rejected |
 | stop_batch_early not a boolean | rejected |
 | trajectory_retention not `full`, `thinned` or `tapered` | rejected |
+| history_format not `exact` or `compact` | rejected |
 | trajectory_keep_last less than 1 or not a whole number | rejected |
 | trajectory_keep_burn_in not a boolean | rejected |
 | trajectory_stride less than 1 or not a whole number | rejected |

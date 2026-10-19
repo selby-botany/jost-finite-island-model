@@ -328,6 +328,7 @@ _GENERIC_CHOICES: Final[dict[str, tuple[str, ...]]] = {
     "convergence_estimate": ("mean_of_values", "value_of_means", "auto"),
     "precision_method": ("interval", "planned_replicates"),
     "trajectory_retention": ("full", "thinned", "tapered"),
+    "history_format": ("exact", "compact"),
     "engine_backend": ("lineal", "auto", "generational", "generational-vector"),
     "jit": ("off", "numba"),
     "ploidy": tuple(PLOIDY_WORDS.values()),

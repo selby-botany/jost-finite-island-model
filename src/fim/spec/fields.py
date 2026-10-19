@@ -67,6 +67,7 @@ FIELD_MAP: tuple[FieldMap, ...] = (
     FieldMap("trajectory_thinning_start", "recording", "thinning_start", auto=True),
     FieldMap("trajectory_keep_last", "recording", "keep_last"),
     FieldMap("trajectory_keep_burn_in", "recording", "keep_burn_in"),
+    FieldMap("history_format", "recording", "history"),
 )
 """Every key that maps one-to-one onto a specification attribute."""
 

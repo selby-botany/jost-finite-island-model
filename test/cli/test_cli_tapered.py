@@ -129,3 +129,80 @@ def test_the_settings_are_validated_and_do_not_change_identity() -> None:
         SimulationParams.from_mapping({**_BASE, "trajectory_retention": "sparse"})
     with pytest.raises(ValueError, match="trajectory_keep_burn_in"):
         SimulationParams.from_mapping({**_BASE, "trajectory_keep_burn_in": "yes"})
+
+
+# --- the compact statistic history ---------------------------------------------
+
+_COMPACT: dict[str, object] = {"history_format": "compact"}
+
+
+def test_a_compact_run_writes_the_fixed_point_history_and_nothing_else_changes(
+    tmp_path: Path,
+) -> None:
+    from fim.persistence.history import read_history_columns  # noqa: PLC0415
+    from fim.persistence.manifest import hash_file  # noqa: PLC0415
+
+    exact = _run(tmp_path, "exact")
+    compact = _run(tmp_path, "compact", **_COMPACT)
+
+    assert (compact / "convergence.fhist").is_file()
+    assert not (compact / "convergence.jsonl").exists()
+    recorded = read_manifest(compact / "manifest.json").artifacts
+    assert recorded is not None
+    assert recorded["convergence"] == hash_file(compact / "convergence.fhist")
+    assert (exact / "report.json").read_bytes() == (
+        compact / "report.json"
+    ).read_bytes()
+    assert (exact / "trajectory.tlog").read_bytes() == (
+        compact / "trajectory.tlog"
+    ).read_bytes()
+    assert (
+        read_manifest(exact / "manifest.json").run_id
+        == read_manifest(compact / "manifest.json").run_id
+    )
+    step = 2.0 ** -(1 + 15)  # precision 1.0 in this fixture: 8 bits plus the guard
+    exact_generations, exact_columns = read_history_columns(exact / "convergence.jsonl")
+    generations, columns = read_history_columns(compact / "convergence.fhist")
+    assert generations == exact_generations
+    for name, values in exact_columns.items():
+        assert columns[name] == pytest.approx(values, abs=max(step, 2.0**-9))
+
+
+def test_a_compact_history_is_read_back_by_reanalysis(tmp_path: Path) -> None:
+    from fim.reanalyze import read_persisted_convergence_history  # noqa: PLC0415
+
+    compact = _run(tmp_path, "compact", **_COMPACT)
+    manifest = read_manifest(compact / "manifest.json")
+
+    found = read_persisted_convergence_history(compact / "trajectory.tlog", manifest)
+
+    assert found is not None
+    generations, histories = found
+    assert generations[0] == 0 and generations[-1] == manifest.generation
+    assert {"D", "H_S"} <= set(histories)
+
+
+def test_an_edited_compact_history_no_longer_matches_its_manifest(
+    tmp_path: Path,
+) -> None:
+    from fim.reanalyze import read_persisted_convergence_history  # noqa: PLC0415
+
+    compact = _run(tmp_path, "compact", **_COMPACT)
+    manifest = read_manifest(compact / "manifest.json")
+    path = compact / "convergence.fhist"
+    path.write_bytes(path.read_bytes() + b"\0")
+
+    with pytest.raises(ValueError, match=r"convergence\.fhist does not match"):
+        read_persisted_convergence_history(compact / "trajectory.tlog", manifest)
+
+
+def test_a_compact_run_is_recorded_only_when_it_is_compact(tmp_path: Path) -> None:
+    exact = _run(tmp_path, "exact")
+    compact = _run(tmp_path, "compact", **_COMPACT)
+
+    assert "history_format" not in read_manifest(exact / "manifest.json").parameters
+    assert read_manifest(compact / "manifest.json").parameters["history_format"] == (
+        "compact"
+    )
+    with pytest.raises(ValueError, match="history_format"):
+        SimulationParams.from_mapping({**_BASE, "history_format": "tiny"})

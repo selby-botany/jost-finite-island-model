@@ -16,10 +16,17 @@ from matplotlib import pyplot as plt
 
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.engine.records import RunResult
+from fim.model.params import HistoryFormat, SimulationParams
 from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
     log_options,
+)
+from fim.persistence.history import (
+    COMPACT_FILENAME,
+    HISTORY_FILENAME,
+    fractional_bits,
+    write_compact_history,
 )
 from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.pairwise import pairwise_payload, write_pairwise
@@ -32,11 +39,14 @@ __all__ = [
     "convergence_history_rows",
     "run_artifact_targets",
     "taper_finished_trajectory",
+    "write_history",
     "write_run_artifacts",
 ]
 
 
-def run_artifact_targets(directory: Path) -> dict[str, Path]:
+def run_artifact_targets(
+    directory: Path, *, history_format: HistoryFormat = "exact"
+) -> dict[str, Path]:
     """Return every documented scalar-run artifact path in one directory.
 
     The single source for these filenames, used by whatever writes a run
@@ -48,6 +58,8 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
 
     Args:
         directory: The run directory.
+        history_format: Which statistic history file the run writes
+            (`"exact"`: `convergence.jsonl`, `"compact"`: `convergence.fhist`).
 
     Returns:
         Artifact name to path.
@@ -58,7 +70,8 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
-        "convergence": directory / "convergence.jsonl",
+        "convergence": directory
+        / (COMPACT_FILENAME if history_format == "compact" else HISTORY_FILENAME),
         "pairwise": directory / "pairwise.json",
     }
 
@@ -110,6 +123,48 @@ def taper_finished_trajectory(result: RunResult, trajectory: Path) -> None:
     )
 
 
+def write_history(result: RunResult, path: Path) -> None:
+    """Write a run's statistic history in the format its configuration asks for.
+
+    A compact history is rounded to a step set by the run's precision (the
+    smallest of `precision` and any per-statistic precision).
+
+    Args:
+        result: A finished engine result.
+        path: Where the history goes (`run_artifact_targets`' "convergence").
+
+    Raises:
+        HistoryError: A compact history holds a value too large for the step.
+    """
+    rows = convergence_history_rows(result)
+    if path.suffix != Path(COMPACT_FILENAME).suffix:
+        write_jsonl_rows(path, rows)
+        return
+    generations = [int(str(row["generation"])) for row in rows]
+    names = [name for name in (rows[0] if rows else {}) if name != "generation"]
+    columns = {name: [_number(row[name]) for row in rows] for name in names}
+    write_compact_history(
+        path,
+        generations,
+        columns,
+        bits=fractional_bits(_smallest_precision(result.params)),
+    )
+
+
+def _number(value: object) -> float | None:
+    """Return a history value as a float, or `None` if it is not a number."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def _smallest_precision(params: SimulationParams) -> float:
+    """Return the smallest precision a run was asked for, overall or per statistic."""
+    levels = [params.precision]
+    levels.extend(float(level) for _, level in params.statistic_precision or ())
+    return min(level for level in levels if level > 0)
+
+
 def write_run_artifacts(
     result: RunResult,
     directory: Path,
@@ -136,7 +191,9 @@ def write_run_artifacts(
     Returns:
         The artifact paths (see `run_artifact_targets`).
     """
-    targets = run_artifact_targets(directory)
+    targets = run_artifact_targets(
+        directory, history_format=result.params.history_format
+    )
     taper_finished_trajectory(result, targets["trajectory"])
     write_report(targets["report"], result.report)
     figure = plot_frequency_scatter(
@@ -145,7 +202,7 @@ def write_run_artifacts(
     plt.close(figure)
     # The monitor's per-generation history, so reopening a run restores its
     # trajectory curves.
-    write_jsonl_rows(targets["convergence"], convergence_history_rows(result))
+    write_history(result, targets["convergence"])
     # Every deme pair's Nei identities at the final generation, so any pair
     # can be compared later.
     write_pairwise(

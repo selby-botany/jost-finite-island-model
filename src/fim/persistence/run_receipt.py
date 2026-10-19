@@ -25,6 +25,7 @@ from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
 )
+from fim.persistence.history import COMPACT_FILENAME, HISTORY_FILENAME
 from fim.persistence.manifest import (
     ArtifactDigest,
     hash_file,
@@ -47,10 +48,14 @@ ARTIFACT_FILENAMES: Final = {
     "equilibrium_trajectory": EQUILIBRIUM_LOG_FILENAME,
     "report": "report.json",
     "scatter": "scatter.png",
-    "convergence": "convergence.jsonl",
+    "convergence": HISTORY_FILENAME,
     "pairwise": "pairwise.json",
 }
 """Each scalar artifact key a receipt may list, and the file it names.
+
+The statistic history is `convergence.jsonl` or, for a compact run,
+`convergence.fhist` (`COMPACT_FILENAME`); `artifact_path` picks the one the run
+wrote.
 
 The same names `fim.persistence.artifacts.run_artifact_targets` and
 `fim.persistence.artifacts.run_artifact_targets` use, less the receipt itself; a test
@@ -167,10 +172,24 @@ def _scalar_problem(directory: Path, run_id: str) -> str | None:
         filename = ARTIFACT_FILENAMES.get(key)
         if filename is None:
             return f"receipt {path} lists an unknown artifact {key!r}"
-        problem = _digest_problem(directory / filename, digest)
+        problem = _digest_problem(artifact_path(directory, key), digest)
         if problem is not None:
             return problem
     return None
+
+
+def artifact_path(directory: Path, key: str) -> Path:
+    """Return the file a receipt's artifact key names in `directory`.
+
+    Args:
+        directory: A replicate's directory.
+        key: An artifact key of `ARTIFACT_FILENAMES`.
+    """
+    if key == "convergence":
+        compact = directory / COMPACT_FILENAME
+        if compact.is_file():
+            return compact
+    return directory / ARTIFACT_FILENAMES[key]
 
 
 def _unreadable_receipt(path: Path, error: OSError | ValueError) -> str:

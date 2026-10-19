@@ -8,6 +8,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A compact statistic history: `history_format: compact`.** Writes
+  `convergence.fhist` in place of `convergence.jsonl`: each value is rounded to
+  a fixed step of about one hundredth of `precision` and the differences
+  between generations are packed and compressed. A real 355,470-generation
+  replicate takes 0.32 MB instead of 25.4 MB (79 times smaller), every value is
+  within 0.000015 of the one computed at the default precision, and reading it
+  back is about 15 times faster. `report.json`, `summary.json` and every
+  reported number are unaffected. The setting is outside a run's identity.
+
 - **Tapered trajectory storage: `trajectory_retention: tapered`.** Keeps the
   last `trajectory_keep_last` generations (1,000 by default) in full and thins
   the past by a stride that doubles with its distance from the end, so the

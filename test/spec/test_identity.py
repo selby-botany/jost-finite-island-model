@@ -116,4 +116,5 @@ def test_excluded_keys_are_real_serialized_keys() -> None:
         "trajectory_thinning_start",
         "trajectory_keep_last",
         "trajectory_keep_burn_in",
+        "history_format",
     } <= set(serialized)

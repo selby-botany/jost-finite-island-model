@@ -30,6 +30,7 @@ from fim.persistence.history import (
     history_path,
     iter_history_rows,
     replicate_directories,
+    sample_history,
 )
 from fim.statistics.interval import confidence_interval
 
@@ -218,7 +219,7 @@ def point_trajectory(
         return None
     grid = trajectory_grid(max(known), maximum)
     sampled = [
-        _sample_replicate(history_path(folder), grid)
+        sample_history(history_path(folder), grid)
         for folder in folders
         if history_path(folder).is_file()
     ]
@@ -469,31 +470,6 @@ def _final_generation(folder: Path, manifest: Mapping[str, Any]) -> int | None:
     for generation, _ in iter_history_rows(path):
         last = generation
     return last
-
-
-def _sample_replicate(path: Path, grid: Sequence[int]) -> dict[str, list[float | None]]:
-    """Stream one replicate's history once, keeping the values at `grid`.
-
-    Memory is the size of the grid, never of the file. A generation the file
-    lacks, or a statistic undefined there, is `None`.
-    """
-    samples: dict[str, list[float | None]] = {}
-    position = 0
-    for generation, values in iter_history_rows(path):
-        while position < len(grid) and grid[position] < generation:
-            position += 1
-        if position >= len(grid):
-            break
-        if grid[position] != generation:
-            continue
-        for name, value in values.items():
-            column = samples.setdefault(name, [None] * len(grid))
-            column[position] = (
-                float(value)
-                if isinstance(value, int | float) and math.isfinite(value)
-                else None
-            )
-    return samples
 
 
 def _combine(

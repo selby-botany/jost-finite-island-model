@@ -210,7 +210,7 @@ def test_a_cached_trajectory_is_used_until_a_history_changes(
     def refuse(*_: Any, **__: Any) -> Any:
         raise AssertionError("the history was read again")
 
-    monkeypatch.setattr("fim.sweep_trajectory.iter_history_rows", refuse)
+    monkeypatch.setattr("fim.sweep_trajectory.sample_history", refuse)
     second = point_trajectory(batch, "run-x", cache=cache)
 
     assert second == first

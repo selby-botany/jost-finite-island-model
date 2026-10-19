@@ -96,6 +96,10 @@ the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <td>Convergence</td>
 </tr>
 <tr>
+<td><a href="#history_format"><code>history_format</code></a></td>
+<td>Analysis and execution</td>
+</tr>
+<tr>
 <td><a href="#initial_allele_count"><code>initial_allele_count</code></a></td>
 <td>Initial conditions</td>
 </tr>
@@ -839,6 +843,26 @@ value?</a>); see
 <a href="#convergence_burn_in">convergence_burn_in</a>. A cap at or below the burn-in ends
 the run before any averaging, and the run logs a warning. Setting only a
 burn-in raises the derived cap to leave <code>15 tau</code> after it.</p>
+<h3 id="history_format">history_format</h3>
+<ul>
+<li><strong>Type:</strong> <code>exact</code> or <code>compact</code></li>
+<li><strong>Default:</strong> <code>exact</code></li>
+</ul>
+<p>A run keeps, for every generation, the value of each statistic (<code>D</code>, <code>G_ST</code>,
+the heterozygosities): the statistic history that the app draws as the
+trajectory graph and that a sweep's trajectory view averages across replicates.
+<code>exact</code> writes it as <code>convergence.jsonl</code>, every value at full precision, about
+70 bytes a generation. <code>compact</code> writes <code>convergence.fhist</code> instead: each value
+is rounded to a fixed step of about one hundredth of <code>precision</code> (a power of
+two, so a stored value is exact in binary), and the differences between
+successive generations are packed to the narrowest integer that holds them and
+compressed. A real 355,000-generation replicate takes 0.3 MB in the compact
+form and 25 MB in the exact one. At the default precision (0.01) a value is
+within 0.00002 of the one computed, far inside the interval the run is asked
+to resolve. <code>report.json</code>, <code>summary.json</code> and every reported number are
+computed inside the run and are never rounded. The setting is outside a run's
+identity and is recorded in <code>manifest.json</code> only for a compact run. Sweeps
+write the compact form unless asked otherwise.</p>
 <h3 id="trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in">trajectory_retention, trajectory_stride, trajectory_thinning_start, trajectory_keep_last, trajectory_keep_burn_in</h3>
 <ul>
 <li><strong>trajectory_retention:</strong> <code>full</code>, <code>thinned</code> or <code>tapered</code>; default <code>full</code></li>
@@ -1654,6 +1678,10 @@ existed.</p>
 </tr>
 <tr>
 <td>trajectory_retention not <code>full</code>, <code>thinned</code> or <code>tapered</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>history_format not <code>exact</code> or <code>compact</code></td>
 <td>rejected</td>
 </tr>
 <tr>

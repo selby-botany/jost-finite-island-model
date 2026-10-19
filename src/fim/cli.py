@@ -615,7 +615,9 @@ def _command_run_scalar(
         # Only what this run wrote: `_run_artifact_targets` names every
         # artifact a run *can* have (the equilibrium trajectory exists only
         # for an equilibrium-split run).
-        for label, path in run_artifact_targets(output_directory).items():
+        for label, path in run_artifact_targets(
+            output_directory, history_format=params.history_format
+        ).items():
             if path.exists():
                 print(f"{label.capitalize():10} -> {path}")
     return 0

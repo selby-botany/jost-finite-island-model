@@ -79,6 +79,7 @@ ConvergenceCombinator = Literal["any", "all"]
 ConvergenceEstimate = Literal["mean_of_values", "value_of_means", "auto"]
 PrecisionMethod = Literal["interval", "planned_replicates"]
 TrajectoryRetentionChoice = Literal["full", "thinned", "tapered"]
+HistoryFormat = Literal["exact", "compact"]
 MigrantSampling = Literal["continuous", "stochastic"]
 MutationModel = Literal["infinite_alleles", "finite_alleles"]
 EngineBackend = Literal["lineal", "generational", "generational-vector", "auto"]
@@ -120,6 +121,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "trajectory_thinning_start": None,  # None means "auto": derive it
     "trajectory_keep_last": TRAJECTORY_KEEP_LAST,
     "trajectory_keep_burn_in": False,
+    "history_format": "exact",
     "replicate_averaging_window": None,  # None means "auto": match the batch
     "replicate_minimum": 10,
     "confidence": 0.95,
@@ -168,6 +170,7 @@ _CONFIG_KEYS: Final = frozenset(
         "trajectory_thinning_start",
         "trajectory_keep_last",
         "trajectory_keep_burn_in",
+        "history_format",
         "replicate_averaging_window",
         "replicate_minimum",
         "confidence",
@@ -196,6 +199,7 @@ IDENTITY_EXCLUDED_KEYS: Final[tuple[str, ...]] = (
     "trajectory_thinning_start",
     "trajectory_keep_last",
     "trajectory_keep_burn_in",
+    "history_format",
 )
 """Serialized keys that do not change a run's numbers.
 
@@ -428,6 +432,12 @@ class SimulationParams:
             tapered when the replicate finishes.
         trajectory_stride: With thinning on, one generation in this many is
             kept from the thinning start on (at least 1).
+        history_format: How the per-generation statistic history is written.
+            `"exact"` (the default): `convergence.jsonl`, every value at full
+            precision. `"compact"`: `convergence.fhist`, each value rounded to a
+            fixed-point step of about 1% of `precision` and stored as zlib-packed
+            differences (`fim.persistence.history`), roughly 80 times smaller;
+            `report.json` and `summary.json` are always exact.
         trajectory_keep_last: With tapering on, the last this-many generations
             are kept in full (at least 1).
         trajectory_keep_burn_in: With tapering on, whether the burn-in
@@ -616,6 +626,7 @@ class SimulationParams:
     trajectory_thinning_start: int = AUTO_CONVERGENCE
     trajectory_keep_last: int = TRAJECTORY_KEEP_LAST
     trajectory_keep_burn_in: bool = False
+    history_format: HistoryFormat = "exact"
     replicate_averaging_window: int = AUTO_CONVERGENCE
     replicate_minimum: int = 10
     confidence: float = 0.95
@@ -872,6 +883,8 @@ class SimulationParams:
         _require_integer("trajectory_stride", self.trajectory_stride, minimum=1)
         _require_integer("trajectory_keep_last", self.trajectory_keep_last, minimum=1)
         _require_bool("trajectory_keep_burn_in", self.trajectory_keep_burn_in)
+        if self.history_format not in ("exact", "compact"):
+            raise ValueError("history_format must be 'exact' or 'compact'")
         _require_integer(
             "trajectory_thinning_start", self.trajectory_thinning_start, minimum=0
         )
@@ -1122,6 +1135,8 @@ class SimulationParams:
         }
         if self.statistic_precision:
             result["statistic_precision"] = dict(self.statistic_precision)
+        if self.history_format == "compact":
+            result["history_format"] = self.history_format
         if self.trajectory_retention == "thinned":
             # Written only when thinning is on, so a default run keeps the
             # parameters (and the run ID) it had before the setting existed.
@@ -1357,6 +1372,9 @@ class SimulationParams:
                     "trajectory_keep_burn_in",
                     PARAMETER_DEFAULTS["trajectory_keep_burn_in"],
                 ),
+            ),
+            history_format=_parse_history_format(
+                config.get("history_format", PARAMETER_DEFAULTS["history_format"])
             ),
             replicate_averaging_window=_parse_auto_int(
                 "replicate_averaging_window",
@@ -1890,6 +1908,16 @@ def _parse_statistic_precision(value: Any) -> tuple[tuple[str, float], ...]:
     return tuple(sorted(pairs))
 
 
+def _parse_history_format(value: Any) -> HistoryFormat:
+    """Parse the two supported history formats."""
+    parsed = _parse_string("history_format", value)
+    if parsed == "exact":
+        return "exact"
+    if parsed == "compact":
+        return "compact"
+    raise ValueError("history_format must be 'exact' or 'compact'")
+
+
 def _parse_trajectory_retention(value: Any) -> TrajectoryRetentionChoice:
     """Parse the supported trajectory retention values."""
     parsed = _parse_string("trajectory_retention", value)
@@ -2343,6 +2371,7 @@ EXECUTION_SETTING_NAMES: Final[tuple[str, ...]] = (
     "trajectory_thinning_start",
     "trajectory_keep_last",
     "trajectory_keep_burn_in",
+    "history_format",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -2398,6 +2427,8 @@ def validate_execution_settings(settings: Mapping[str, object]) -> None:
         _parse_bool("trajectory_keep_burn_in", settings["trajectory_keep_burn_in"])
     if "trajectory_retention" in settings:
         _parse_trajectory_retention(settings["trajectory_retention"])
+    if "history_format" in settings:
+        _parse_history_format(settings["history_format"])
     for name in (
         "max_generations",
         "convergence_burn_in",

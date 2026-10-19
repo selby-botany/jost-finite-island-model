@@ -495,6 +495,7 @@ class EngineProbe:
             BinaryLogStore,
             log_options,
         )
+        from fim.persistence.history import history_path  # noqa: PLC0415
 
         scratch = Path(tempfile.mkdtemp(prefix="fim-probe-", dir=self._scratch))
         try:
@@ -508,7 +509,7 @@ class EngineProbe:
             )
             run = scratch / "run"
             run.mkdir()
-            targets = run_artifact_targets(run)
+            targets = run_artifact_targets(run, history_format=burst.history_format)
             started = self._timer()
             with BinaryLogStore(
                 targets["trajectory"], **log_options(burst.expert)
@@ -531,7 +532,7 @@ class EngineProbe:
                 seconds=elapsed,
                 generations=int(output.report["generation"]),
                 trace_bytes=size("trajectory.tlog"),
-                statistic_bytes=size("convergence.jsonl"),
+                statistic_bytes=size(history_path(run).name),
                 pairwise_bytes=size("pairwise.json"),
             )
         finally:

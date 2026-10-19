@@ -16,7 +16,12 @@ from fim.config.defaults import (
     DEFAULT_AUTO_VECTOR_MIN_D,
 )
 from fim.config.storage import TRAJECTORY_KEEP_LAST, TRAJECTORY_STRIDE
-from fim.model.params import EngineBackend, Jit, TrajectoryRetentionChoice
+from fim.model.params import (
+    EngineBackend,
+    HistoryFormat,
+    Jit,
+    TrajectoryRetentionChoice,
+)
 from fim.spec.policy import Auto
 from fim.spec.validation import check_choice, check_int, check_int_or_auto
 
@@ -76,6 +81,9 @@ class Recording:
             full.
         keep_burn_in: With ``"tapered"`` retention, whether the burn-in
             generations are kept instead of dropped.
+        history: ``"exact"`` writes the statistic history at full precision;
+            ``"compact"`` rounds it to a step set by the precision and packs
+            it (see `fim.persistence.history`).
     """
 
     directory: Path | str | None = None
@@ -84,6 +92,7 @@ class Recording:
     thinning_start: int | Auto = "auto"
     keep_last: int = TRAJECTORY_KEEP_LAST
     keep_burn_in: bool = False
+    history: HistoryFormat = "exact"
 
     def __post_init__(self) -> None:
         """Normalize the directory and check every value."""
@@ -93,5 +102,6 @@ class Recording:
         check_int("recording.stride", self.stride, minimum=1)
         check_int_or_auto("recording.thinning_start", self.thinning_start, minimum=1)
         check_int("recording.keep_last", self.keep_last, minimum=1)
+        check_choice("recording.history", self.history, HistoryFormat)
         if not isinstance(self.keep_burn_in, bool):
             raise ValueError("recording.keep_burn_in must be true or false")

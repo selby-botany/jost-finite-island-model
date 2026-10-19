@@ -177,6 +177,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_binary_store`](#persistence.test_binary_store)
   - [`test_frame`](#persistence.test_frame)
   - [`test_groups`](#persistence.test_groups)
+  - [`test_history`](#persistence.test_history)
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_pairwise_file`](#persistence.test_pairwise_file)
   - [`test_read_only`](#persistence.test_read_only)
@@ -34524,6 +34525,12 @@ def test_experiments_containing_study_lists_each_holder(
 ```
 
 Every Experiment listing the Study is returned, and no other.
+
+<a id="persistence.test_history"></a>
+
+# persistence.test\_history
+
+Tests of `fim.persistence.history`: the exact and compact statistic histories.
 
 <a id="persistence.test_manifest"></a>
 

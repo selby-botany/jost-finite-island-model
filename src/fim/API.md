@@ -861,6 +861,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_artifact\_targets](#fim.persistence.artifacts.run_artifact_targets)
   * [convergence\_history\_rows](#fim.persistence.artifacts.convergence_history_rows)
   * [taper\_finished\_trajectory](#fim.persistence.artifacts.taper_finished_trajectory)
+  * [write\_history](#fim.persistence.artifacts.write_history)
   * [write\_run\_artifacts](#fim.persistence.artifacts.write_run_artifacts)
 * [fim.persistence.binary\_store](#fim.persistence.binary_store)
   * [TRAJECTORY\_LOG\_FILENAME](#fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME)
@@ -967,9 +968,17 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [supersede\_run](#fim.persistence.groups.supersede_run)
 * [fim.persistence.history](#fim.persistence.history)
   * [HISTORY\_FILENAME](#fim.persistence.history.HISTORY_FILENAME)
+  * [COMPACT\_FILENAME](#fim.persistence.history.COMPACT_FILENAME)
+  * [HISTORY\_FILENAMES](#fim.persistence.history.HISTORY_FILENAMES)
+  * [HistoryError](#fim.persistence.history.HistoryError)
   * [replicate\_directories](#fim.persistence.history.replicate_directories)
   * [history\_path](#fim.persistence.history.history_path)
+  * [fractional\_bits](#fim.persistence.history.fractional_bits)
   * [iter\_history\_rows](#fim.persistence.history.iter_history_rows)
+  * [read\_history\_columns](#fim.persistence.history.read_history_columns)
+  * [sample\_history](#fim.persistence.history.sample_history)
+  * [write\_compact\_history](#fim.persistence.history.write_compact_history)
+  * [read\_compact\_columns](#fim.persistence.history.read_compact_columns)
 * [fim.persistence.manifest](#fim.persistence.manifest)
   * [ArtifactDigest](#fim.persistence.manifest.ArtifactDigest)
   * [hash\_file](#fim.persistence.manifest.hash_file)
@@ -1142,6 +1151,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [BATCH\_SUMMARY\_FILENAME](#fim.persistence.run_receipt.BATCH_SUMMARY_FILENAME)
   * [ARTIFACT\_FILENAMES](#fim.persistence.run_receipt.ARTIFACT_FILENAMES)
   * [receipt\_problem](#fim.persistence.run_receipt.receipt_problem)
+  * [artifact\_path](#fim.persistence.run_receipt.artifact_path)
 * [fim.persistence.saved\_run](#fim.persistence.saved_run)
   * [replicate\_index](#fim.persistence.saved_run.replicate_index)
   * [replicate\_output\_directory](#fim.persistence.saved_run.replicate_output_directory)
@@ -19666,6 +19676,12 @@ functions that actually use each one.
   tapered when the replicate finishes.
 - `trajectory_stride` - With thinning on, one generation in this many is
   kept from the thinning start on (at least 1).
+- `history_format` - How the per-generation statistic history is written.
+- ``"exact"`` _the default_ - `convergence.jsonl`, every value at full
+  precision. `"compact"`: `convergence.fhist`, each value rounded to a
+  fixed-point step of about 1% of `precision` and stored as zlib-packed
+  differences (`fim.persistence.history`), roughly 80 times smaller;
+  `report.json` and `summary.json` are always exact.
 - `trajectory_keep_last` - With tapering on, the last this-many generations
   are kept in full (at least 1).
 - `trajectory_keep_burn_in` - With tapering on, whether the burn-in
@@ -22718,7 +22734,10 @@ command line, the desktop app, saved runs, and sweeps alike.
 #### run\_artifact\_targets
 
 ```python
-def run_artifact_targets(directory: Path) -> dict[str, Path]
+def run_artifact_targets(
+        directory: Path,
+        *,
+        history_format: HistoryFormat = "exact") -> dict[str, Path]
 ```
 
 Return every documented scalar-run artifact path in one directory.
@@ -22733,6 +22752,8 @@ streamed by the engine beside `trajectory.tlog`.
 **Arguments**:
 
 - `directory` - The run directory.
+- `history_format` - Which statistic history file the run writes
+- `(`"exact"`` - `convergence.jsonl`, `"compact"`: `convergence.fhist`).
 
 
 **Returns**:
@@ -22781,6 +22802,29 @@ digests are taken. A run that does not taper is left alone.
 
 - `result` - A finished engine result.
 - `trajectory` - The run's `trajectory.tlog`.
+
+<a id="fim.persistence.artifacts.write_history"></a>
+
+#### write\_history
+
+```python
+def write_history(result: RunResult, path: Path) -> None
+```
+
+Write a run's statistic history in the format its configuration asks for.
+
+A compact history is rounded to a step set by the run's precision (the
+smallest of `precision` and any per-statistic precision).
+
+**Arguments**:
+
+- `result` - A finished engine result.
+- `path` - Where the history goes (`run_artifact_targets`' "convergence").
+
+
+**Raises**:
+
+- `HistoryError` - A compact history holds a value too large for the step.
 
 <a id="fim.persistence.artifacts.write_run_artifacts"></a>
 
@@ -24905,19 +24949,54 @@ every Study that held it now holds the new one.
 
 # fim.persistence.history
 
-Reading a run's per-generation statistic history, whatever its format.
+A run's per-generation statistic history, in either of its two formats.
 
-Each replicate writes one row per generation (`convergence.jsonl`):
-`{"generation": N, "D": ..., "H_S": ..., ...}`. This module is the one place
-that knows how to find those files in a run directory and stream their rows,
-so a reader that only wants the history (the sweep trajectory overlay, the
-Results card, re-analysis) does not need to know how it was stored.
+Each replicate keeps one row per generation: `{"generation": N, "D": ...,
+"H_S": ..., ...}`. The **exact** format (`convergence.jsonl`) writes every
+value at full precision as JSON lines, about 70 bytes a generation. The
+**compact** format (`convergence.fhist`) rounds each value to a fixed-point
+step and stores the differences between successive generations, packed to the
+smallest integer width and compressed with zlib: on a real 355,000-generation
+replicate it takes 0.3 MB where the JSON takes 25 MB.
+
+Why rounding is safe: a run is asked for answers within `precision` (a
+confidence-interval half width), so values stored to about 1% of `precision`
+change no conclusion the history is used for. The step is a power of two
+(`2**-fractional_bits`), so a decoded value is exactly representable and the
+same file always decodes to the same numbers. `report.json` and `summary.json`
+are computed inside the run and are never rounded.
+
+This module is the one place that finds a run's replicate folders, finds a
+history file, and reads or writes it, so a reader that only wants the history
+does not need to know how it was stored.
 
 <a id="fim.persistence.history.HISTORY_FILENAME"></a>
 
 #### HISTORY\_FILENAME
 
-The statistic history of one replicate or one scalar run.
+The exact statistic history of one replicate or one scalar run.
+
+<a id="fim.persistence.history.COMPACT_FILENAME"></a>
+
+#### COMPACT\_FILENAME
+
+The compact statistic history of one replicate or one scalar run.
+
+<a id="fim.persistence.history.HISTORY_FILENAMES"></a>
+
+#### HISTORY\_FILENAMES
+
+Every name a history file may have, exact first.
+
+<a id="fim.persistence.history.HistoryError"></a>
+
+## HistoryError Objects
+
+```python
+class HistoryError(ValueError)
+```
+
+A compact history file is damaged, or a history cannot be compacted.
 
 <a id="fim.persistence.history.replicate_directories"></a>
 
@@ -24949,7 +25028,32 @@ Return the directories that each hold one replicate's files.
 def history_path(replicate_directory: Path) -> Path
 ```
 
-Return where a replicate's statistic history lives (it may not exist).
+Return where a replicate's statistic history lives.
+
+The compact file if there is one, else the exact path (which may not
+exist: a run kept without a history, or one that predates it).
+
+<a id="fim.persistence.history.fractional_bits"></a>
+
+#### fractional\_bits
+
+```python
+def fractional_bits(precision: float) -> int
+```
+
+Return the fixed-point fractional bits for a run's `precision`.
+
+The step `2**-bits` is at most `precision / 100`, with one guard bit, so a
+stored value is within about 0.5% of the precision of the value computed.
+
+**Arguments**:
+
+- `precision` - The run's smallest precision (a confidence half width).
+
+
+**Returns**:
+
+  The number of fractional bits, between 1 and 40.
 
 <a id="fim.persistence.history.iter_history_rows"></a>
 
@@ -24959,22 +25063,115 @@ Return where a replicate's statistic history lives (it may not exist).
 def iter_history_rows(path: Path) -> Iterator[HistoryRow]
 ```
 
-Stream a history file's rows in generation order, one at a time.
+Stream a history file's rows in generation order.
 
 **Arguments**:
 
-- `path` - A history file (see `history_path`).
+- `path` - A history file in either format (see `history_path`).
 
 
 **Yields**:
 
   `(generation, {statistic: value})` for each row; a statistic that is
-  undefined at a generation is `None`.
+  undefined at a generation is `None` (exact) or `nan` (compact).
 
 
 **Raises**:
 
-- `ValueError` - A row is not an object with an integer `generation`.
+- `ValueError` - A row is malformed, or a compact file is damaged.
+- `OSError` - The file cannot be read.
+
+<a id="fim.persistence.history.read_history_columns"></a>
+
+#### read\_history\_columns
+
+```python
+def read_history_columns(path: Path) -> HistoryColumns
+```
+
+Read a whole history as a generation list and one value list per statistic.
+
+**Arguments**:
+
+- `path` - A history file in either format.
+
+
+**Returns**:
+
+  `(generations, {statistic: values})`, each list as long as
+  `generations`.
+
+
+**Raises**:
+
+- `ValueError` - The file is malformed or damaged, or the statistics do
+  not share one set of rows (an exact file whose rows differ).
+
+<a id="fim.persistence.history.sample_history"></a>
+
+#### sample\_history
+
+```python
+def sample_history(path: Path,
+                   grid: Sequence[int]) -> dict[str, list[float | None]]
+```
+
+Return a history's values at the generations in `grid`.
+
+A compact file is decoded as arrays and indexed; an exact file is
+streamed once with memory the size of the grid. A generation the file
+lacks, or a statistic undefined there, is `None`.
+
+**Arguments**:
+
+- `path` - A history file in either format.
+- `grid` - Ascending generations to sample.
+
+<a id="fim.persistence.history.write_compact_history"></a>
+
+#### write\_compact\_history
+
+```python
+def write_compact_history(path: Path, generations: Sequence[int],
+                          columns: Mapping[str, Sequence[float | None]], *,
+                          bits: int) -> None
+```
+
+Write a compact history.
+
+Each value becomes `round(value * 2**bits)`; the differences between
+successive generations are zigzag-encoded, packed to the narrowest
+unsigned width that holds them, and compressed. A value that is not a
+finite number is recorded as missing.
+
+**Arguments**:
+
+- `path` - The file to write (replaced atomically).
+- `generations` - The generation of each row, ascending.
+- `columns` - One sequence of values per statistic, each as long as
+  `generations`.
+- `bits` - Fixed-point fractional bits (see `fractional_bits`).
+
+
+**Raises**:
+
+- `HistoryError` - A column has the wrong length, or a value is too large
+  to store at this precision (the caller falls back to the exact
+  format).
+
+<a id="fim.persistence.history.read_compact_columns"></a>
+
+#### read\_compact\_columns
+
+```python
+def read_compact_columns(path: Path) -> HistoryColumns
+```
+
+Read a compact history as generations and one float list per statistic.
+
+**Raises**:
+
+- `HistoryError` - The file is not a compact history, or is damaged.
 - `OSError` - The file cannot be read.
 
 <a id="fim.persistence.manifest"></a>
@@ -28147,6 +28344,10 @@ A completed batch's cross-replicate summary.
 
 Each scalar artifact key a receipt may list, and the file it names.
 
+The statistic history is `convergence.jsonl` or, for a compact run,
+`convergence.fhist` (`COMPACT_FILENAME`); `artifact_path` picks the one the run
+wrote.
+
 The same names `fim.persistence.artifacts.run_artifact_targets` and
 `fim.persistence.artifacts.run_artifact_targets` use, less the receipt itself; a test
 keeps the three in agreement.
@@ -28173,6 +28374,21 @@ Return why a run's completion receipt does not verify, or `None`.
 
   `None` when the receipt and every artifact it lists verify;
   otherwise a short description of the first problem found.
+
+<a id="fim.persistence.run_receipt.artifact_path"></a>
+
+#### artifact\_path
+
+```python
+def artifact_path(directory: Path, key: str) -> Path
+```
+
+Return the file a receipt's artifact key names in `directory`.
+
+**Arguments**:
+
+- `directory` - A replicate's directory.
+- `key` - An artifact key of `ARTIFACT_FILENAMES`.
 
 <a id="fim.persistence.saved_run"></a>
 
@@ -32888,6 +33104,9 @@ What a run writes down.
   full.
 - `keep_burn_in` - With ``"tapered"`` retention, whether the burn-in
   generations are kept instead of dropped.
+- `history` - ``"exact"`` writes the statistic history at full precision;
+  ``"compact"`` rounds it to a step set by the precision and packs
+  it (see `fim.persistence.history`).
 
 <a id="fim.spec.execution.Recording.__post_init__"></a>
 
