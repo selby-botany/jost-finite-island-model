@@ -30,7 +30,7 @@ import hashlib
 import itertools
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final, Literal
 
@@ -60,9 +60,47 @@ SeedPolicy = Literal["spaced", "same"]
 CoordinateValue = int | float | str
 
 
+ApplyAxis = Callable[[dict[str, Any], CoordinateValue], None]
+RequireBase = Callable[[Mapping[str, Any]], None]
+
+
+def _apply_n(mapping: dict[str, Any], value: CoordinateValue) -> None:
+    """Set the population size; an axis value counts individuals per deme."""
+    mapping["N"] = int(value)
+
+
+def _apply_migration_rate(mapping: dict[str, Any], value: CoordinateValue) -> None:
+    """Set the migration rate, keeping a topology the base already names."""
+    current = mapping["m"]
+    mapping["m"] = {**current, "rate": value} if isinstance(current, Mapping) else value
+
+
+def _apply_topology(mapping: dict[str, Any], value: CoordinateValue) -> None:
+    """Re-express the migration setting on a topology, keeping its rate."""
+    mapping["m"] = _with_topology(mapping["m"], str(value))
+
+
+def _require_migration(base: Mapping[str, Any]) -> None:
+    """Reject a base whose `m` cannot take a rate or a topology."""
+    migration = base.get("m")
+    if migration is None:
+        raise ValueError("the base configuration needs an m to sweep m or topology")
+    if isinstance(migration, Sequence) and not isinstance(migration, str | Mapping):
+        raise ValueError("cannot sweep m or topology over a migration matrix")
+
+
+def _require_single_mutation_rate(base: Mapping[str, Any]) -> None:
+    """Reject a base that sets per-locus rates, which one `mu` would override."""
+    if "mu_b" in base:
+        raise ValueError("cannot sweep mu when the base configuration sets mu_b")
+
+
 @dataclass(frozen=True, slots=True)
-class SweepKey:
+class AxisDefinition:
     """One parameter a sweep may vary, with the metadata its controls need.
+
+    `apply` and `requires` are module-level functions, never lambdas, so a
+    definition survives a process boundary.
 
     Attributes:
         key: Name used in a spec and in a sweep file.
@@ -75,6 +113,10 @@ class SweepKey:
         choices: The legal values of a `choice` key.
         display_domain: Default range a chart or a range control shows.
         closed_form: Whether Explore has a closed-form prediction for it.
+        apply: Writes one value into a point's configuration mapping;
+            `None` means a plain `mapping[key] = value`.
+        requires: Raises `ValueError` when the base configuration cannot
+            take this axis; `None` means any base can.
     """
 
     key: str
@@ -87,10 +129,24 @@ class SweepKey:
     choices: tuple[str, ...] = ()
     display_domain: tuple[float, float] | None = None
     closed_form: bool = False
+    apply: ApplyAxis | None = None
+    requires: RequireBase | None = None
+
+    def apply_to(self, mapping: dict[str, Any], value: CoordinateValue) -> None:
+        """Write `value` into `mapping`, the configuration of one point."""
+        if self.apply is None:
+            mapping[self.key] = value
+        else:
+            self.apply(mapping, value)
+
+    def check_base(self, base: Mapping[str, Any]) -> None:
+        """Raise `ValueError` if `base` cannot take this axis."""
+        if self.requires is not None:
+            self.requires(base)
 
 
-SWEEPABLE_KEYS: Final[dict[str, SweepKey]] = {
-    "N": SweepKey(
+SWEEPABLE_KEYS: Final[dict[str, AxisDefinition]] = {
+    "N": AxisDefinition(
         key="N",
         label="N (individuals per deme)",
         kind="int",
@@ -99,8 +155,9 @@ SWEEPABLE_KEYS: Final[dict[str, SweepKey]] = {
         minimum=1,
         display_domain=(5.0, 2500.0),
         closed_form=True,
+        apply=_apply_n,
     ),
-    "d": SweepKey(
+    "d": AxisDefinition(
         key="d",
         label="d (demes)",
         kind="int",
@@ -110,7 +167,7 @@ SWEEPABLE_KEYS: Final[dict[str, SweepKey]] = {
         display_domain=(2.0, 50.0),
         closed_form=True,
     ),
-    "m": SweepKey(
+    "m": AxisDefinition(
         key="m",
         label="m (migration rate)",
         kind="float",
@@ -120,8 +177,10 @@ SWEEPABLE_KEYS: Final[dict[str, SweepKey]] = {
         maximum=1.0,
         display_domain=(0.0001, 0.5),
         closed_form=True,
+        apply=_apply_migration_rate,
+        requires=_require_migration,
     ),
-    "mu": SweepKey(
+    "mu": AxisDefinition(
         key="mu",
         label="μ (mutation rate)",
         kind="float",
@@ -131,15 +190,18 @@ SWEEPABLE_KEYS: Final[dict[str, SweepKey]] = {
         maximum=1.0,
         display_domain=(0.000001, 0.1),
         closed_form=True,
+        requires=_require_single_mutation_rate,
     ),
-    "topology": SweepKey(
+    "topology": AxisDefinition(
         key="topology",
         label="migration topology",
         kind="choice",
         unit="topology",
         choices=("island", "ring", "linear", "torus"),
+        apply=_apply_topology,
+        requires=_require_migration,
     ),
-    "deme_weighting": SweepKey(
+    "deme_weighting": AxisDefinition(
         key="deme_weighting",
         label="deme weighting",
         kind="choice",
@@ -147,7 +209,7 @@ SWEEPABLE_KEYS: Final[dict[str, SweepKey]] = {
         choices=("equal", "size"),
     ),
 }
-"""Every parameter a sweep may vary. A table, not a free-for-all."""
+"""The curated parameters a sweep may vary, with labels, ranges and rules."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -522,17 +584,9 @@ def apply_coordinates(
 
 def _apply_axis(mapping: dict[str, Any], key: str, value: CoordinateValue) -> None:
     """Apply one axis value to a point's configuration mapping in place."""
-    if key == "N":
-        mapping["N"] = int(value)
-    elif key in {"d", "mu", "deme_weighting"}:
-        mapping[key] = value
-    elif key == "m":
-        current = mapping["m"]
-        mapping["m"] = (
-            {**current, "rate": value} if isinstance(current, Mapping) else value
-        )
-    elif key == "topology":
-        mapping["m"] = _with_topology(mapping["m"], str(value))
+    definition = SWEEPABLE_KEYS.get(key)
+    if definition is not None:
+        definition.apply_to(mapping, value)
 
 
 def _with_topology(current: object, topology: str) -> object:
@@ -550,17 +604,11 @@ def _with_topology(current: object, topology: str) -> object:
 
 def _check_base_supports_axes(base: Mapping[str, Any], keys: set[str]) -> None:
     """Reject a base that the chosen axes cannot be applied to."""
-    if keys & {"m", "topology"}:
-        migration = base.get("m")
-        if migration is None:
-            raise ValueError("the base configuration needs an m to sweep m or topology")
-        if isinstance(migration, Sequence) and not isinstance(migration, str | Mapping):
-            raise ValueError("cannot sweep m or topology over a migration matrix")
-    if "mu" in keys and "mu_b" in base:
-        raise ValueError("cannot sweep mu when the base configuration sets mu_b")
+    for key in sorted(keys & SWEEPABLE_KEYS.keys()):
+        SWEEPABLE_KEYS[key].check_base(base)
 
 
-def _coerce(sweepable: SweepKey, value: object) -> CoordinateValue:
+def _coerce(sweepable: AxisDefinition, value: object) -> CoordinateValue:
     """Return `value` as this key's type, or raise a `ValueError` naming it."""
     key = sweepable.key
     if sweepable.kind == "choice":
@@ -580,7 +628,7 @@ def _coerce(sweepable: SweepKey, value: object) -> CoordinateValue:
     return int(number) if sweepable.kind == "int" else _clean(number)
 
 
-def _check_bounds(sweepable: SweepKey, number: float) -> None:
+def _check_bounds(sweepable: AxisDefinition, number: float) -> None:
     """Raise if `number` is outside the key's legal range."""
     if sweepable.minimum is not None and number < sweepable.minimum:
         raise ValueError(f"{sweepable.key} must be at least {sweepable.minimum:g}")
@@ -640,7 +688,7 @@ def _point_mapping(
 
 
 def _range_values(
-    sweepable: SweepKey, definition: Mapping[Any, Any]
+    sweepable: AxisDefinition, definition: Mapping[Any, Any]
 ) -> tuple[CoordinateValue, ...]:
     """Expand a `{start, stop, count, scale}` range for a numeric key."""
     key = sweepable.key

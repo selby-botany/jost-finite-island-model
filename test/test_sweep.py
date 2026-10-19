@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pickle
 from typing import Any
 
 import pytest
@@ -10,6 +11,8 @@ import yaml
 from fim.model.params import SimulationParams
 from fim.sweep import (
     SIZE_CONFIRMATION_THRESHOLD,
+    SWEEPABLE_KEYS,
+    AxisDefinition,
     SweepAxis,
     SweepSpec,
     enumerate_points,
@@ -414,3 +417,52 @@ def test_a_sweep_file_keeps_the_base_in_order_and_names_the_policy() -> None:
         "seed_policy": "spaced",
         "axes": {"d": [4, 6]},
     }
+
+
+# --- the axis registry ---------------------------------------------------
+
+_CURATED_KEYS = {"N", "d", "m", "mu", "topology", "deme_weighting"}
+
+
+def test_the_registry_holds_exactly_the_curated_keys() -> None:
+    assert set(SWEEPABLE_KEYS) == _CURATED_KEYS
+    assert all(
+        isinstance(definition, AxisDefinition) and definition.key == key
+        for key, definition in SWEEPABLE_KEYS.items()
+    )
+
+
+@pytest.mark.parametrize("key", sorted(_CURATED_KEYS))
+def test_every_definition_survives_a_process_boundary(key: str) -> None:
+    definition = SWEEPABLE_KEYS[key]
+
+    assert pickle.loads(pickle.dumps(definition)) == definition
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [
+        ("N", 50, {"N": 50}),
+        ("d", 8, {"d": 8}),
+        ("m", 0.2, {"m": 0.2}),
+        ("mu", 0.01, {"mu": 0.01}),
+        ("deme_weighting", "size", {"deme_weighting": "size"}),
+        ("topology", "ring", {"m": {"topology": "ring", "rate": 0.01}}),
+    ],
+)
+def test_every_curated_key_writes_its_value_into_a_point(
+    key: str, value: Any, expected: dict[str, Any]
+) -> None:
+    mapping = dict(_BASE)
+
+    SWEEPABLE_KEYS[key].apply_to(mapping, value)
+
+    assert {name: mapping[name] for name in expected} == expected
+
+
+def test_a_definition_refuses_a_base_it_cannot_take() -> None:
+    with pytest.raises(ValueError, match="needs an m"):
+        SWEEPABLE_KEYS["m"].check_base({"N": 10})
+    with pytest.raises(ValueError, match="mu_b"):
+        SWEEPABLE_KEYS["mu"].check_base({"mu_b": [0.1]})
+    SWEEPABLE_KEYS["d"].check_base({})

@@ -189,7 +189,7 @@ from fim.statistics.catalog import (
 from fim.statistics.genetic_distance import nei_distance_from_identity
 from fim.statistics.interval import confidence_interval
 from fim.statistics.theory import equilibrium_numeric_predictions, theory_at
-from fim.sweep import SweepPlan, SweepSpec, enumerate_points
+from fim.sweep import SWEEPABLE_KEYS, SweepPlan, SweepSpec, enumerate_points
 from fim.sweep_cost import EngineProbe, ThroughputCache, describe_cost, probed_cost
 from fim.sweep_run import (
     LocalPointRunner,
@@ -1724,11 +1724,23 @@ def _recent_run_at_directory(directory: Path) -> recent_runs.RecentRun | None:
 # positive (never `0.0`) since `equilibrium_d` rejects `mu == 0`
 # outright (see that function's own docstring).
 _EQUILIBRIUM_SWEEP_POINTS: Final = 24
+# The domains come from the sweep axis registry (`fim.sweep`), the one
+# place a parameter's display range is kept. The registry counts `N` in
+# individuals, as every sweep does; Explore's closed forms take gene
+# copies, so `N` alone is converted, by the diploid factor.
+_EXPLORE_GENE_COPIES_PER_INDIVIDUAL: Final = 2.0
+
+
+def _explore_domain(key: str) -> tuple[float, float]:
+    """Return an Explore axis's display domain from the sweep registry."""
+    domain = SWEEPABLE_KEYS[key].display_domain
+    assert domain is not None, key  # the four Explore axes all have one
+    factor = _EXPLORE_GENE_COPIES_PER_INDIVIDUAL if key == "N" else 1.0
+    return (domain[0] * factor, domain[1] * factor)
+
+
 _EQUILIBRIUM_SWEEP_DOMAINS: Final[dict[str, tuple[float, float]]] = {
-    "N": (10.0, 5000.0),
-    "d": (2.0, 50.0),
-    "m": (0.0001, 0.5),
-    "mu": (0.000001, 0.1),
+    key: _explore_domain(key) for key in ("N", "d", "m", "mu")
 }
 
 # The fewest points `_geometric_sweep` can produce a real ratio from —

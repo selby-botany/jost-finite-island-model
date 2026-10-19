@@ -1559,7 +1559,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SIZE\_CONFIRMATION\_THRESHOLD](#fim.sweep.SIZE_CONFIRMATION_THRESHOLD)
   * [SEED\_POLICIES](#fim.sweep.SEED_POLICIES)
   * [STRATEGIES](#fim.sweep.STRATEGIES)
-  * [SweepKey](#fim.sweep.SweepKey)
+  * [AxisDefinition](#fim.sweep.AxisDefinition)
+    * [apply\_to](#fim.sweep.AxisDefinition.apply_to)
+    * [check\_base](#fim.sweep.AxisDefinition.check_base)
   * [SWEEPABLE\_KEYS](#fim.sweep.SWEEPABLE_KEYS)
   * [SweepAxis](#fim.sweep.SweepAxis)
     * [to\_dict](#fim.sweep.SweepAxis.to_dict)
@@ -36768,16 +36770,19 @@ Points at or above which a plan should ask before running.
 
 Only the full grid exists; the field leaves room for later strategies.
 
-<a id="fim.sweep.SweepKey"></a>
+<a id="fim.sweep.AxisDefinition"></a>
 
-## SweepKey Objects
+## AxisDefinition Objects
 
 ```python
 @dataclass(frozen=True, slots=True)
-class SweepKey()
+class AxisDefinition()
 ```
 
 One parameter a sweep may vary, with the metadata its controls need.
+
+`apply` and `requires` are module-level functions, never lambdas, so a
+definition survives a process boundary.
 
 **Attributes**:
 
@@ -36791,12 +36796,36 @@ One parameter a sweep may vary, with the metadata its controls need.
 - `choices` - The legal values of a `choice` key.
 - `display_domain` - Default range a chart or a range control shows.
 - `closed_form` - Whether Explore has a closed-form prediction for it.
+- `apply` - Writes one value into a point's configuration mapping;
+  `None` means a plain `mapping[key] = value`.
+- `requires` - Raises `ValueError` when the base configuration cannot
+  take this axis; `None` means any base can.
+
+<a id="fim.sweep.AxisDefinition.apply_to"></a>
+
+#### apply\_to
+
+```python
+def apply_to(mapping: dict[str, Any], value: CoordinateValue) -> None
+```
+
+Write `value` into `mapping`, the configuration of one point.
+
+<a id="fim.sweep.AxisDefinition.check_base"></a>
+
+#### check\_base
+
+```python
+def check_base(base: Mapping[str, Any]) -> None
+```
+
+Raise `ValueError` if `base` cannot take this axis.
 
 <a id="fim.sweep.SWEEPABLE_KEYS"></a>
 
 #### SWEEPABLE\_KEYS
 
-Every parameter a sweep may vary. A table, not a free-for-all.
+The curated parameters a sweep may vary, with labels, ranges and rules.
 
 <a id="fim.sweep.SweepAxis"></a>
 
