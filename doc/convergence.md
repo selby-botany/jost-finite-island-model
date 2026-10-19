@@ -13,7 +13,7 @@ generation cap are derived from your model instead of being fixed numbers.
 - [Where the formula comes from](#where-the-formula-comes-from)
 - [How precise is the reported value?](#how-precise-is-the-reported-value)
 - [Batches: replicates that average](#batches-replicates-that-average)
-- [Which average? Two forms for $D$ and $G_{ST}$](#which-average-two-forms-for-d-and-g_st)
+- [Which average? Two forms for each differentiation measure](#which-average-two-forms-for-each-differentiation-measure)
 - [Checking the numbers yourself](#checking-the-numbers-yourself)
 - [Limits](#limits)
 - [Notation and implementation map](#notation-and-implementation-map)
@@ -1271,7 +1271,7 @@ it is a planning target, not a promised final batch size.
 The realized interval must still be checked and reported.
 This is why a matched window is not itself a precision guarantee.
 
-## Which average? Two forms for $D$ and $G_{ST}$
+## Which average? Two forms for each differentiation measure
 
 *For analysts.* $D$ and $G_{ST}$ are functions of two heterozygosities,
 $X=f(H_S,H_T)$. Averaging a nonlinear function need not equal
