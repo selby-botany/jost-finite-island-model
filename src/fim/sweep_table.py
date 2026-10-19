@@ -581,6 +581,10 @@ class ResultTable:
         spec: The sweep specification.
         points: Every planned point, in grid order.
         policy: The thresholds that classify a point's health.
+        plan_digest: The experiment's fingerprint (`SweepSpec.digest`), or
+            `None` if not known.
+        verification: What the last full re-run found (see
+            `fim.sweep_run.read_verification`), or `None` if there was none.
     """
 
     def __init__(
@@ -590,12 +594,17 @@ class ResultTable:
         spec: SweepSpec,
         points: Sequence[TablePoint],
         policy: HealthPolicy = DEFAULT_HEALTH_POLICY,
+        *,
+        plan_digest: str | None = None,
+        verification: Mapping[str, Any] | None = None,
     ) -> None:
         self.study_id = study_id
         self.name = name
         self.spec = spec
         self.points: tuple[TablePoint, ...] = tuple(points)
         self.policy = policy
+        self.plan_digest = plan_digest
+        self.verification = dict(verification) if verification is not None else None
 
     @classmethod
     def read(cls, study_id: str, *, results: Path | None = None) -> ResultTable:
@@ -627,7 +636,15 @@ class ResultTable:
             )
             for status in sweep_run.sweep_point_statuses(study, results=results)
         ]
-        return cls(study.study_id, study.name, spec, points)
+        stored = (study.sweep_spec or {}).get("digest")
+        return cls(
+            study.study_id,
+            study.name,
+            spec,
+            points,
+            plan_digest=stored if isinstance(stored, str) else spec.digest(),
+            verification=sweep_run.read_verification(study_id, results=results),
+        )
 
     @property
     def axis_keys(self) -> tuple[str, ...]:
@@ -935,12 +952,17 @@ class ResultTable:
             "format_version": 1,
             "sweep": {"study_id": self.study_id, "name": self.name},
             "spec": self.spec.to_dict(),
+            "plan_digest": self.plan_digest,
+            "verification": self.verification,
             "points": [
                 {
                     "index": p.index,
                     "coordinates": dict(p.coordinates),
                     "run_id": p.run_id,
                     "state": p.state,
+                    "seed": p.row.seed if p.row else None,
+                    "engine_backend": p.row.engine_backend if p.row else None,
+                    "software_version": p.row.software_version if p.row else None,
                 }
                 for p in self.points
             ],

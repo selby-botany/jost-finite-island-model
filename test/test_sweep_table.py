@@ -788,3 +788,44 @@ def test_a_third_axis_must_be_held_and_the_hold_selects_its_points() -> None:
 def test_a_bad_curve_request_is_refused(x: str, by: str | None, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         _table().series(x, "D", by=by)
+
+
+def test_the_sidecar_carries_the_digest_the_verification_and_each_points_engine(
+    tmp_path: Path,
+) -> None:
+    verification = {
+        "verified_at": "2026-10-19T12:00:00Z",
+        "software_version": "1.2.0",
+        "result": "identical",
+        "points_checked": 3,
+    }
+    table = ResultTable(
+        "study-1",
+        "Demo",
+        _SPEC,
+        _table().points,
+        plan_digest="sha256:" + "ab" * 32,
+        verification=verification,
+    )
+
+    sidecar = table.to_csv(tmp_path / "t.csv")
+
+    meta = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert meta["plan_digest"] == "sha256:" + "ab" * 32
+    assert meta["verification"] == verification
+    first, _, waiting, _ = meta["points"]
+    assert (first["seed"], first["engine_backend"], first["software_version"]) == (
+        100,
+        "lineal",
+        "1.2.0",
+    )
+    assert (waiting["seed"], waiting["engine_backend"]) == (None, None)  # no result yet
+
+
+def test_a_table_without_a_verification_says_so(tmp_path: Path) -> None:
+    sidecar = _table().to_csv(tmp_path / "t.csv")
+
+    meta = json.loads(sidecar.read_text(encoding="utf-8"))
+
+    assert meta["verification"] is None
+    assert meta["plan_digest"] is None

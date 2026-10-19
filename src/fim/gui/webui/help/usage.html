@@ -960,6 +960,20 @@ have finished: their real duration against the top of what the plan allowed
 them, applied to the points still to come, so it sharpens as the sweep goes
 and is an upper figure (a point that settles early finishes sooner).
 <code>--watch SECONDS</code> repeats it until the sweep is finished.</li>
+<li>A sweep can be reproduced from its paper's supplement. <code>plan</code> prints a
+<code>digest sha256:...</code>, a fingerprint of the experiment (its base settings,
+axes, seed policy and the ids of its points; the order of keys does not
+matter). Two people who hold the same digest hold the same experiment.
+<code>fim sweep spec STUDY_ID &gt; sweep.yaml</code> writes the sweep file that
+regenerates a study, with every axis written out as its exact values, and
+<code>fim sweep plan sweep.yaml</code> then prints the same digest.
+<code>fim sweep verify STUDY_ID</code> recomputes every finished point, compares each
+with its stored result bit for bit, prints one line saying whether they all
+matched, and records the date, the software version and the verdict in
+<code>verified.json</code> beside the sweep's status file (exit status 1 if any
+differed; both runs are then kept). The export's <code>.meta.json</code> file carries
+the digest, that record, and for each point its seed, engine and software
+version, so the table can be read without the app.</li>
 <li>A run can be given limits so it cannot spend more than you meant to:
 <code>--max-hours H</code> (time), <code>--max-new-points N</code> (points it computes; reused
 ones are free) and <code>--max-disk SIZE</code> (for example <code>50GB</code>, counted as the size

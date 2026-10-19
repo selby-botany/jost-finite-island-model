@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+import yaml
 
 from fim.model.params import SimulationParams
 from fim.sweep import (
@@ -343,3 +344,73 @@ def test_a_point_run_description_places_it_in_its_sweep() -> None:
         'Point 6 of 8 of the sweep "Size": N=40 of N=[10..80] (4 values); '
         "topology=ring of topology=[island, ring]."
     )
+
+
+# --- the plan digest and the sweep file --------------------------------------
+
+
+def test_the_digest_is_a_sha256_that_is_the_same_for_the_same_experiment() -> None:
+    spec = _spec(expand_axis("d", [4, 6]))
+    again = _spec(expand_axis("d", [4, 6]))
+
+    digest = spec.digest()
+
+    assert digest.startswith("sha256:") and len(digest) == len("sha256:") + 64
+    assert int(digest.removeprefix("sha256:"), 16) >= 0
+    assert digest == again.digest() == spec.digest(enumerate_points(spec))
+
+
+def test_the_order_of_keys_in_the_base_does_not_change_the_digest() -> None:
+    forward = SweepSpec(base=dict(_BASE), axes=(expand_axis("d", [4, 6]),))
+    backward = SweepSpec(
+        base=dict(reversed(list(_BASE.items()))), axes=(expand_axis("d", [4, 6]),)
+    )
+
+    assert forward.digest() == backward.digest()
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        _spec(expand_axis("d", [4, 8])),  # a different axis value
+        _spec(expand_axis("d", [6, 4])),  # the same values, another order
+        _spec(expand_axis("m", [0.01, 0.02])),  # another axis
+        _spec(expand_axis("d", [4, 6]), seed=1001),  # another base value
+        SweepSpec(
+            base=dict(_BASE), axes=(expand_axis("d", [4, 6]),), seed_policy="same"
+        ),
+    ],
+)
+def test_any_change_to_the_experiment_changes_the_digest(other: SweepSpec) -> None:
+    assert other.digest() != _spec(expand_axis("d", [4, 6])).digest()
+
+
+def test_a_sweep_file_written_from_a_spec_reads_back_to_the_same_spec() -> None:
+    spec = SweepSpec(
+        base=dict(_BASE),
+        axes=(
+            expand_axis("d", [4, 6]),
+            expand_axis("m", {"start": 0.001, "stop": 0.1, "count": 3, "scale": "log"}),
+        ),
+        seed_policy="same",
+    )
+
+    text = spec.to_sweep_file("My sweep")
+    again, name = spec_from_config(yaml.safe_load(text))
+
+    assert again == spec
+    assert name == "My sweep"
+    assert again.digest() == spec.digest()
+    assert yaml.safe_load(text)["sweep"]["axes"]["m"] == [0.001, 0.01, 0.1]
+
+
+def test_a_sweep_file_keeps_the_base_in_order_and_names_the_policy() -> None:
+    text = _spec(expand_axis("d", [4, 6])).to_sweep_file()
+    document = yaml.safe_load(text)
+
+    assert list(document)[: len(_BASE)] == list(_BASE)
+    assert document["sweep"] == {
+        "strategy": "grid",
+        "seed_policy": "spaced",
+        "axes": {"d": [4, 6]},
+    }

@@ -7,10 +7,13 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
+import yaml
 
 from fim import cli
 from fim.persistence import groups
+from fim.sweep import enumerate_points, spec_from_config
 from fim.sweep_cost import Throughput
+from fim.sweep_run import LocalPointRunner, create_sweep_study
 
 _SWEEP_FILE = """\
 N: 16
@@ -900,3 +903,111 @@ def test_a_budget_that_makes_no_sense_is_a_plain_error(
     assert status == 2
     assert message in capsys.readouterr().err
     assert groups.list_studies(results=tmp_path / "results") == []  # nothing created
+
+
+def test_plan_prints_the_experiments_digest_and_it_is_stable(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _main(tmp_path, "sweep", "plan", str(sweep_file), "--no-probe")
+    first = capsys.readouterr().out
+    _main(tmp_path, "sweep", "plan", str(sweep_file), "--no-probe")
+    second = capsys.readouterr().out
+
+    digest = next(line for line in first.splitlines() if line.startswith("digest "))
+    assert (
+        digest.startswith("digest sha256:")
+        and len(digest) == len("digest sha256:") + 64
+    )
+    assert digest in second
+
+
+def test_spec_writes_the_file_that_regenerates_the_sweep(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+    _main(tmp_path, "sweep", "plan", str(sweep_file), "--no-probe")
+    original = next(
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("digest ")
+    )
+
+    assert _main(tmp_path, "sweep", "spec", study_id) == 0
+    regenerated = tmp_path / "regenerated.yaml"
+    regenerated.write_text(capsys.readouterr().out, encoding="utf-8")
+    _main(tmp_path, "sweep", "plan", str(regenerated), "--no-probe")
+
+    again = next(
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("digest ")
+    )
+    assert again == original  # the supplement's file is the same experiment
+    assert "name: Demes" in regenerated.read_text(encoding="utf-8")
+
+
+def test_verify_says_in_one_line_that_everything_matched_and_records_it(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+
+    status = _main(tmp_path, "sweep", "verify", study_id)
+
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert status == 0
+    assert len(lines) == 1
+    assert lines[0].startswith(
+        "Verified: all 2 point(s) recomputed to exactly the stored"
+    )
+    record = json.loads(
+        (
+            tmp_path
+            / "results"
+            / ".fim"
+            / "studies"
+            / "sweep-status"
+            / f"{study_id}.verified.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert record["result"] == "identical"
+
+
+def test_verify_with_nothing_finished_says_so(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec, name = spec_from_config(yaml.safe_load(sweep_file.read_text("utf-8")))
+    study = create_sweep_study(
+        spec, enumerate_points(spec), name or "x", results=tmp_path / "results"
+    )
+
+    assert _main(tmp_path, "sweep", "verify", study.study_id) == 0
+
+    # The verify run computed the points itself, so there was nothing to check.
+    assert "Nothing to verify" in capsys.readouterr().out
+
+
+def test_verify_reports_a_difference_and_exits_nonzero(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+
+    class Tampering:
+        def run_point(self, *args: Any, **kwargs: Any) -> Any:
+            result = LocalPointRunner().run_point(*args, **kwargs)
+            assert isinstance(result, Path)
+            manifest_path = result / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifacts"]["trajectory"]["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            return result
+
+    monkeypatch.setattr("fim.cli_sweep.LocalPointRunner", Tampering)
+
+    status = _main(tmp_path, "sweep", "verify", study_id)
+
+    output = capsys.readouterr().out
+    assert status == 1
+    assert output.startswith("DIFFERS: 2 of 2 point(s) recomputed to different results")

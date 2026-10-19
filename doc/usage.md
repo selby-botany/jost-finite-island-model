@@ -1102,6 +1102,20 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   them, applied to the points still to come, so it sharpens as the sweep goes
   and is an upper figure (a point that settles early finishes sooner).
   `--watch SECONDS` repeats it until the sweep is finished.
+- A sweep can be reproduced from its paper's supplement. `plan` prints a
+  `digest sha256:...`, a fingerprint of the experiment (its base settings,
+  axes, seed policy and the ids of its points; the order of keys does not
+  matter). Two people who hold the same digest hold the same experiment.
+  `fim sweep spec STUDY_ID > sweep.yaml` writes the sweep file that
+  regenerates a study, with every axis written out as its exact values, and
+  `fim sweep plan sweep.yaml` then prints the same digest.
+  `fim sweep verify STUDY_ID` recomputes every finished point, compares each
+  with its stored result bit for bit, prints one line saying whether they all
+  matched, and records the date, the software version and the verdict in
+  `verified.json` beside the sweep's status file (exit status 1 if any
+  differed; both runs are then kept). The export's `.meta.json` file carries
+  the digest, that record, and for each point its seed, engine and software
+  version, so the table can be read without the app.
 - A run can be given limits so it cannot spend more than you meant to:
   `--max-hours H` (time), `--max-new-points N` (points it computes; reused
   ones are free) and `--max-disk SIZE` (for example `50GB`, counted as the size

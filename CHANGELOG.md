@@ -8,6 +8,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A sweep's fingerprint, its sweep file, and `fim sweep verify`.** `plan`
+  prints a digest of the experiment; `fim sweep spec STUDY_ID` writes the sweep
+  file that regenerates a study (the same digest); `fim sweep verify STUDY_ID`
+  recomputes every finished point, says in one line whether each matched its
+  stored result bit for bit, and records the verdict. The export's sidecar now
+  carries the digest, the last verification, and each point's seed, engine and
+  software version.
+
 - **Limits for a sweep run: `--max-hours`, `--max-new-points`, `--max-disk`.**
   A run that reaches one starts no more points, pauses those in flight where
   it can, and exits with status 3 and a line naming the limit; the points it

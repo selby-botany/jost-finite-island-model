@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -23,7 +24,7 @@ import pytest
 import yaml
 from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message, join_or_fail
 
-from fim import paths
+from fim import __version__, paths
 from fim.gui.sweep_bridge import status_payload
 from fim.model.params import SimulationParams
 from fim.persistence import groups
@@ -53,6 +54,7 @@ from fim.sweep_run import (
     failures_path,
     read_failures,
     read_point_objects,
+    read_verification,
     replan_sweep,
     resolve_concurrency,
     run_sweep,
@@ -61,6 +63,8 @@ from fim.sweep_run import (
     sweep_lock_path,
     sweep_point_results,
     sweep_point_statuses,
+    sweep_spec_of,
+    verification_path,
 )
 
 _BASE: dict[str, Any] = {
@@ -1862,3 +1866,111 @@ def test_a_generous_budget_changes_nothing(results: Path) -> None:
 def test_a_limit_that_is_not_positive_is_refused(limits: dict[str, float]) -> None:
     with pytest.raises(ValueError, match="must be positive"):
         SweepBudget(**limits)  # type: ignore[arg-type]
+
+
+# --- the digest stored with a plan, and verified.json -------------------------
+
+
+def test_the_plan_is_stored_with_its_digest(results: Path) -> None:
+    study_id = _burn_in_sweep(results)
+    study = groups.get_study(study_id)
+
+    stored = (study.sweep_spec or {})["digest"]
+
+    assert stored == sweep_spec_of(study).digest()
+
+
+def test_replan_updates_the_stored_digest(
+    results: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fim.engine import deterministic_run_id  # noqa: PLC0415
+
+    study_id = _burn_in_sweep(results)
+    before = (groups.get_study(study_id).sweep_spec or {})["digest"]
+    monkeypatch.setattr(
+        "fim.sweep.deterministic_run_id", lambda p: "v2-" + deterministic_run_id(p)
+    )
+
+    replan_sweep(study_id)
+
+    after_study = groups.get_study(study_id)
+    assert (after_study.sweep_spec or {})["digest"] == sweep_spec_of(
+        after_study
+    ).digest()
+    assert (after_study.sweep_spec or {})["digest"] != before
+
+
+_ISO_UTC = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"
+
+
+def test_a_full_rerun_that_matches_records_a_verification(results: Path) -> None:
+    study_id = _burn_in_sweep(results)
+    _run(study_id, points_at_once=1)
+    assert read_verification(study_id) is None  # a plain run verifies nothing
+
+    outcome, _ = _run(study_id, points_at_once=1, rerun=True)
+
+    record = read_verification(study_id)
+    assert record is not None
+    assert (outcome.recomputed, outcome.differing) == (2, 0)
+    assert record["result"] == "identical"
+    assert (record["points_checked"], record["identical"], record["differing"]) == (
+        2,
+        2,
+        0,
+    )
+    assert record["software_version"] == __version__
+    assert (
+        record["plan_digest"] == (groups.get_study(study_id).sweep_spec or {})["digest"]
+    )
+    assert re.fullmatch(_ISO_UTC, record["verified_at"])
+    assert verification_path(study_id).is_file()
+
+
+def test_a_rerun_that_differs_records_it_and_keeps_both_runs(results: Path) -> None:
+    study_id = _burn_in_sweep(results)
+    _run(study_id, points_at_once=1)
+
+    _run(study_id, _Tampering(), points_at_once=1, rerun=True)
+
+    record = read_verification(study_id)
+    assert record is not None
+    assert record["result"] == "differs"
+    assert (record["points_checked"], record["identical"], record["differing"]) == (
+        2,
+        0,
+        2,
+    )
+
+
+def test_a_rerun_with_nothing_finished_verifies_nothing(results: Path) -> None:
+    study_id = _burn_in_sweep(results)
+
+    _run(study_id, points_at_once=1, rerun=True)
+
+    assert read_verification(study_id) is None  # the points were computed, not checked
+
+
+def test_a_stopped_rerun_does_not_claim_to_have_verified(results: Path) -> None:
+    study_id = _burn_in_sweep(results)
+    _run(study_id, points_at_once=1)
+
+    outcome, _ = _run(
+        study_id, points_at_once=1, rerun=True, budget=SweepBudget(max_new_points=1)
+    )
+
+    assert outcome.budget_reached is not None
+    assert read_verification(study_id) is None
+
+
+@pytest.mark.parametrize("content", [None, "not json", "[1]", ""])
+def test_a_missing_or_damaged_verification_reads_as_none(
+    results: Path, content: str | None
+) -> None:
+    study_id = _burn_in_sweep(results)
+    path = verification_path(study_id)
+    if content is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    assert read_verification(study_id) is None

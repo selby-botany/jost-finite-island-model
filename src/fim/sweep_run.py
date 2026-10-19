@@ -849,7 +849,11 @@ def create_sweep_study(
     """
     if not plan.points:
         raise ValueError("the sweep has no valid points to run")
-    stored = {**spec.to_dict(), "points": [point.to_dict() for point in plan.points]}
+    stored = {
+        **spec.to_dict(),
+        "points": [point.to_dict() for point in plan.points],
+        "digest": spec.digest(plan),
+    }
     study = groups.create_study(name, description, results=results, sweep_spec=stored)
     if experiment_id is not None:
         try:
@@ -887,7 +891,11 @@ def attach_sweep_to_study(
         raise ValueError(
             f"study {study.name!r} already holds a sweep; choose another study"
         )
-    stored = {**spec.to_dict(), "points": [point.to_dict() for point in plan.points]}
+    stored = {
+        **spec.to_dict(),
+        "points": [point.to_dict() for point in plan.points],
+        "digest": spec.digest(plan),
+    }
     updated = replace(study, sweep_spec=stored)
     groups.write_study_manifest(
         groups.study_manifest_path(study_id, results=results), updated
@@ -1507,7 +1515,7 @@ def _run_sweep_locked(
         else "sweep_done"
     )
     on_event(SweepEvent(kind, -1, "", context.finished, len(planned), budget_reason))
-    return SweepOutcome(
+    summary = SweepOutcome(
         done=tally["done"],
         reused=tally["reused"],
         already_present=tally["already_present"],
@@ -1518,6 +1526,9 @@ def _run_sweep_locked(
         differing=tally["differs"],
         budget_reached=budget_reason,
     )
+    if rerun and not cancelled and budget_reason is None:
+        _write_verification(study, spec, summary, results)
+    return summary
 
 
 def _points_to_run(
@@ -1557,6 +1568,64 @@ def _points_to_run(
     if costliest_first:
         todo = order_costliest_first(todo)
     return todo, already_present, skipped
+
+
+def verification_path(study_id: str, *, results: Path | None = None) -> Path:
+    """Return the file recording a sweep's last full re-run (`verified.json`).
+
+    Kept beside the status file, so the Study index's `*.json` scan does not
+    see it.
+    """
+    return failures_path(study_id, results=results).with_name(
+        f"{study_id}.verified.json"
+    )
+
+
+def read_verification(
+    study_id: str, *, results: Path | None = None
+) -> dict[str, Any] | None:
+    """Return what the last full re-run of a sweep found, or `None`.
+
+    Keys: `verified_at` (UTC text), `software_version`, `plan_digest`,
+    `points_checked`, `identical` and `differing` (points), and `result`
+    (`"identical"` if every recomputed point matched bit for bit, else
+    `"differs"`).
+    """
+    try:
+        loaded = json.loads(
+            verification_path(study_id, results=results).read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _write_verification(
+    study: StudyManifest,
+    spec: SweepSpec,
+    outcome: SweepOutcome,
+    results: Path | None,
+) -> None:
+    """Record a completed re-run that actually recomputed points.
+
+    A re-run that recomputed nothing (no point had finished) verifies
+    nothing and writes nothing.
+    """
+    checked = outcome.recomputed + outcome.differing
+    if checked == 0:
+        return
+    document = {
+        "verified_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "software_version": __version__,
+        "plan_digest": (study.sweep_spec or {}).get("digest") or spec.digest(),
+        "points_checked": checked,
+        "identical": outcome.recomputed,
+        "differing": outcome.differing,
+        "result": "identical" if outcome.differing == 0 else "differs",
+    }
+    path = verification_path(study.study_id, results=results)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
 def _require_attempts(max_attempts: int) -> None:
@@ -1802,7 +1871,10 @@ def _write_replan(
     """Store the new plan and move the failure and object records with it."""
     assert study.sweep_spec is not None  # checked by `stored_points`
     points = [point.to_dict() for point in plan.points]
-    updated = replace(study, sweep_spec={**study.sweep_spec, "points": points})
+    digest = sweep_spec_of(study).digest(plan)
+    updated = replace(
+        study, sweep_spec={**study.sweep_spec, "points": points, "digest": digest}
+    )
     groups.write_study_manifest(
         groups.study_manifest_path(study.study_id, results=results), updated
     )

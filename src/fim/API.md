@@ -1566,6 +1566,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_post\_init\_\_](#fim.sweep.SweepSpec.__post_init__)
     * [grid\_size](#fim.sweep.SweepSpec.grid_size)
     * [to\_dict](#fim.sweep.SweepSpec.to_dict)
+    * [digest](#fim.sweep.SweepSpec.digest)
+    * [to\_sweep\_file](#fim.sweep.SweepSpec.to_sweep_file)
     * [from\_dict](#fim.sweep.SweepSpec.from_dict)
   * [SweepPoint](#fim.sweep.SweepPoint)
     * [to\_dict](#fim.sweep.SweepPoint.to_dict)
@@ -1673,6 +1675,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_sweep](#fim.sweep_run.run_sweep)
   * [sweep\_lock\_held](#fim.sweep_run.sweep_lock_held)
   * [sweep\_lock\_path](#fim.sweep_run.sweep_lock_path)
+  * [verification\_path](#fim.sweep_run.verification_path)
+  * [read\_verification](#fim.sweep_run.read_verification)
   * [failures\_path](#fim.sweep_run.failures_path)
   * [read\_failures](#fim.sweep_run.read_failures)
   * [read\_point\_objects](#fim.sweep_run.read_point_objects)
@@ -2435,7 +2439,7 @@ def add_sweep_subcommands(
         subcommands: argparse._SubParsersAction[Any]) -> None
 ```
 
-Wire `fim sweep plan/run/resume/replan/status/export/compare/report`.
+Wire the `fim sweep` subcommands (plan, run, resume, verify, ...).
 
 <a id="fim.cli_sweep.command_sweep"></a>
 
@@ -36823,6 +36827,55 @@ def to_dict() -> dict[str, object]
 
 Return the JSON-serializable stored form (without the points).
 
+<a id="fim.sweep.SweepSpec.digest"></a>
+
+#### digest
+
+```python
+def digest(plan: SweepPlan | None = None) -> str
+```
+
+Return a fingerprint of this experiment: the spec and its points.
+
+The SHA-256 of the canonical JSON (sorted keys, no spaces) of the
+stored form of the spec and the ordered run ids of its valid points.
+Two people who hold the same digest hold the same experiment: the
+same base, axes, seed policy and software-independent point ids.
+The order of keys in the base does not matter.
+
+**Arguments**:
+
+- `plan` - The spec's enumerated plan; computed here if omitted.
+
+
+**Returns**:
+
+  `"sha256:"` followed by 64 hexadecimal digits.
+
+<a id="fim.sweep.SweepSpec.to_sweep_file"></a>
+
+#### to\_sweep\_file
+
+```python
+def to_sweep_file(name: str | None = None) -> str
+```
+
+Write this spec as a sweep file, the inverse of `spec_from_config`.
+
+The file holds the base configuration and a `sweep:` block with each
+axis as its exact list of values (a range is written out, so the file
+does not depend on how the values were first described), so reading
+it back gives an equal spec.
+
+**Arguments**:
+
+- `name` - The sweep's name, written into the `sweep:` block.
+
+
+**Returns**:
+
+  YAML text.
+
 <a id="fim.sweep.SweepSpec.from_dict"></a>
 
 #### from\_dict
@@ -38804,6 +38857,36 @@ Return the lock file a running sweep holds for its Study.
 Kept beside the failure file, so the Study index's `*.json` scan never
 sees it.
 
+<a id="fim.sweep_run.verification_path"></a>
+
+#### verification\_path
+
+```python
+def verification_path(study_id: str, *, results: Path | None = None) -> Path
+```
+
+Return the file recording a sweep's last full re-run (`verified.json`).
+
+Kept beside the status file, so the Study index's `*.json` scan does not
+see it.
+
+<a id="fim.sweep_run.read_verification"></a>
+
+#### read\_verification
+
+```python
+def read_verification(study_id: str,
+                      *,
+                      results: Path | None = None) -> dict[str, Any] | None
+```
+
+Return what the last full re-run of a sweep found, or `None`.
+
+Keys: `verified_at` (UTC text), `software_version`, `plan_digest`,
+`points_checked`, `identical` and `differing` (points), and `result`
+(`"identical"` if every recomputed point matched bit for bit, else
+`"differs"`).
+
 <a id="fim.sweep_run.failures_path"></a>
 
 #### failures\_path
@@ -39413,6 +39496,10 @@ An immutable view of a sweep's points, ready to write as data.
 - `spec` - The sweep specification.
 - `points` - Every planned point, in grid order.
 - `policy` - The thresholds that classify a point's health.
+- `plan_digest` - The experiment's fingerprint (`SweepSpec.digest`), or
+  `None` if not known.
+- `verification` - What the last full re-run found (see
+  `fim.sweep_run.read_verification`), or `None` if there was none.
 
 <a id="fim.sweep_table.ResultTable.read"></a>
 

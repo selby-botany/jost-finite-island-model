@@ -54,9 +54,11 @@ from fim.sweep_run import (
     SweepBudget,
     SweepEvent,
     create_sweep_study,
+    read_verification,
     replan_sweep,
     resolve_concurrency,
     run_sweep,
+    sweep_spec_of,
 )
 from fim.sweep_status import SweepStatus, describe_remaining, read_sweep_status
 from fim.sweep_table import ALL_STATISTICS, ResultTable
@@ -67,7 +69,7 @@ BUDGET_EXIT_STATUS = 3
 
 
 def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
-    """Wire `fim sweep plan/run/resume/replan/status/export/compare/report`."""
+    """Wire the `fim sweep` subcommands (plan, run, resume, verify, ...)."""
     sweep_parser = subcommands.add_parser(
         "sweep", help="run a configuration over a parameter space as one study"
     )
@@ -118,6 +120,35 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     )
     _add_concurrency_arguments(resume_parser)
     _add_budget_arguments(resume_parser)
+    _add_study_subcommands(sweep_subcommands)
+    report_parser = sweep_subcommands.add_parser(
+        "report", help="print each point's statistic, with its interval"
+    )
+    report_parser.add_argument("study_id", metavar="STUDY_ID")
+    report_parser.add_argument(
+        "--statistic", default="D", help="statistic to report (default: D)"
+    )
+    report_parser.add_argument(
+        "--csv", action="store_true", help="write CSV instead of a text table"
+    )
+
+
+def _add_study_subcommands(
+    sweep_subcommands: argparse._SubParsersAction[Any],
+) -> None:
+    """Add the subcommands that read or check a sweep study that already exists."""
+    spec_parser = sweep_subcommands.add_parser(
+        "spec",
+        help="write a sweep study's settings as a sweep file (to stdout)",
+    )
+    spec_parser.add_argument("study_id", metavar="STUDY_ID")
+    verify_parser = sweep_subcommands.add_parser(
+        "verify",
+        help="recompute every finished point and say whether each matches "
+        "its stored result bit for bit",
+    )
+    verify_parser.add_argument("study_id", metavar="STUDY_ID")
+    _add_concurrency_arguments(verify_parser, retry=False)
     status_parser = sweep_subcommands.add_parser(
         "status",
         help="show where a sweep stands: points by state, who runs it, time left",
@@ -201,16 +232,6 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         "--dry-run",
         action="store_true",
         help="show what would change and write nothing",
-    )
-    report_parser = sweep_subcommands.add_parser(
-        "report", help="print each point's statistic, with its interval"
-    )
-    report_parser.add_argument("study_id", metavar="STUDY_ID")
-    report_parser.add_argument(
-        "--statistic", default="D", help="statistic to report (default: D)"
-    )
-    report_parser.add_argument(
-        "--csv", action="store_true", help="write CSV instead of a text table"
     )
 
 
@@ -339,6 +360,8 @@ def command_sweep(
         "replan": _replan,
         "export": _export,
         "status": _status,
+        "spec": _spec,
+        "verify": _verify,
         "compare": _compare,
         "report": lambda args: _report(args.study_id, args.statistic, as_csv=args.csv),
     }
@@ -423,6 +446,7 @@ def _print_plan(
         f"{len(plan.points)} valid point(s), {len(plan.invalid)} invalid, "
         f"{plan.collapsed} duplicate(s) of {plan.grid_size} grid position(s)"
     )
+    print(f"digest {spec.digest(plan)}")
     print(
         f"work   {_band_text(cost.replicate_band())} replicate(s) each, "
         f"{_band_text(cost.generation_band())} generations each: "
@@ -528,6 +552,51 @@ def _print_pilot_report(
 def _print_remaining(status: SweepStatus) -> None:
     """Print the time left, from the calibrated estimate."""
     print(f"time left   {describe_remaining(status)}")
+
+
+def _spec(arguments: argparse.Namespace) -> int:
+    """Print a sweep study's settings as the sweep file that regenerates it."""
+    study = groups.get_study(arguments.study_id)
+    print(sweep_spec_of(study).to_sweep_file(study.name), end="")
+    return 0
+
+
+def _verify(arguments: argparse.Namespace) -> int:
+    """Recompute every finished point, compare each with its stored result, and
+    say in one line whether they all match bit for bit."""
+    points_at_once, max_workers = _concurrency_options(arguments)
+    study_id = arguments.study_id
+    groups.get_study(study_id)
+    try:
+        run_sweep(
+            study_id,
+            LocalPointRunner(),
+            lambda _event: None,
+            threading.Event(),
+            rerun=True,
+            points_at_once=points_at_once,
+            max_workers=max_workers,
+        )
+    except KeyboardInterrupt:
+        print(f"\nInterrupted. Verify again with: fim sweep verify {study_id}")
+        return 130
+    record = read_verification(study_id)
+    if record is None:
+        print(f"Nothing to verify: no point of {study_id} has finished.")
+        return 0
+    checked = record["points_checked"]
+    if record["result"] == "identical":
+        print(
+            f"Verified: all {checked} point(s) recomputed to exactly the stored "
+            f"results (fim {record['software_version']}, {record['verified_at']})."
+        )
+        return 0
+    print(
+        f"DIFFERS: {record['differing']} of {checked} point(s) recomputed to "
+        "different results; both runs are kept for inspection "
+        f"(fim {record['software_version']}, {record['verified_at']})."
+    )
+    return 1
 
 
 def _status(arguments: argparse.Namespace) -> int:

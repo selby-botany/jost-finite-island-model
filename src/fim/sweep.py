@@ -26,11 +26,15 @@ Three ideas carry the design:
 
 from __future__ import annotations
 
+import hashlib
 import itertools
+import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final, Literal
+
+import yaml
 
 from fim.engine import deterministic_run_id
 from fim.model.params import PARAMETER_DEFAULTS, SimulationParams
@@ -214,6 +218,54 @@ class SweepSpec:
             "axes": [axis.to_dict() for axis in self.axes],
             "seed_policy": self.seed_policy,
         }
+
+    def digest(self, plan: SweepPlan | None = None) -> str:
+        """Return a fingerprint of this experiment: the spec and its points.
+
+        The SHA-256 of the canonical JSON (sorted keys, no spaces) of the
+        stored form of the spec and the ordered run ids of its valid points.
+        Two people who hold the same digest hold the same experiment: the
+        same base, axes, seed policy and software-independent point ids.
+        The order of keys in the base does not matter.
+
+        Args:
+            plan: The spec's enumerated plan; computed here if omitted.
+
+        Returns:
+            `"sha256:"` followed by 64 hexadecimal digits.
+        """
+        found = plan if plan is not None else enumerate_points(self)
+        document = {
+            "spec": self.to_dict(),
+            "points": [point.run_id for point in found.points],
+        }
+        text = json.dumps(
+            document, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    def to_sweep_file(self, name: str | None = None) -> str:
+        """Write this spec as a sweep file, the inverse of `spec_from_config`.
+
+        The file holds the base configuration and a `sweep:` block with each
+        axis as its exact list of values (a range is written out, so the file
+        does not depend on how the values were first described), so reading
+        it back gives an equal spec.
+
+        Args:
+            name: The sweep's name, written into the `sweep:` block.
+
+        Returns:
+            YAML text.
+        """
+        block: dict[str, Any] = {}
+        if name is not None:
+            block["name"] = name
+        block["strategy"] = self.strategy
+        block["seed_policy"] = self.seed_policy
+        block["axes"] = {axis.key: list(axis.values) for axis in self.axes}
+        document = {**dict(self.base), "sweep": block}
+        return yaml.safe_dump(document, sort_keys=False, default_flow_style=None)
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> SweepSpec:
