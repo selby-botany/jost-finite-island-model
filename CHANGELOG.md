@@ -8,6 +8,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`fim sweep compact`: make a finished sweep smaller.** Reduces the points of
+  a sweep to tapered logs or to statistics only after the fact (`--to`), leaving
+  chosen points alone (`--keep corners`, `every=K`, `none`), with `--dry-run`. No
+  reported number changes, manifests are rewritten with the new settings and
+  digests, a run shared with another study is refused unless `--all-studies`,
+  and a repeat does nothing.
+
 - **Choose what a sweep keeps: `--recording`, `--keep-last`, `--history`.** A
   sweep file's `recording:` block (or the flags of `fim sweep plan` and `run`, or
   the Keep choice in the Sweep dialog) sets each point's trajectory level (full,

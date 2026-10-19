@@ -41,6 +41,7 @@ from fim.sweep import (
     spec_from_config,
     sweepable_key_names,
 )
+from fim.sweep_compact import CompactTarget, compact_sweep, parse_keep
 from fim.sweep_compare import Comparison, SweepRef, compare_sweeps
 from fim.sweep_cost import (
     RECORDING_LEVELS,
@@ -184,6 +185,50 @@ def _add_study_subcommands(
     )
     verify_parser.add_argument("study_id", metavar="STUDY_ID")
     _add_concurrency_arguments(verify_parser, retry=False)
+    compact_parser = sweep_subcommands.add_parser(
+        "compact",
+        help="make a finished sweep smaller: taper or drop the trajectory logs "
+        "of its points",
+        description="Reduce the finished points of a sweep to a lighter "
+        "recording after the fact, without changing any reported number. "
+        "--keep names the points to leave alone; the rest are reduced to "
+        "--to (statistics by default). A run another study also lists is "
+        "refused unless --all-studies is given.",
+    )
+    compact_parser.add_argument("study_id", metavar="STUDY_ID")
+    compact_parser.add_argument(
+        "--keep",
+        default="none",
+        metavar="RULE",
+        help="points to leave as they are: corners (the corners of the grid), "
+        "every=K (every Kth point) or none (default)",
+    )
+    compact_parser.add_argument(
+        "--to",
+        choices=("statistics", "tapered"),
+        default="statistics",
+        help="what to reduce the other points to (default: statistics)",
+    )
+    compact_parser.add_argument(
+        "--keep-last",
+        type=int,
+        default=1000,
+        metavar="K",
+        help="with --to tapered, the last K generations kept in full (default 1000)",
+    )
+    compact_parser.add_argument(
+        "--keep-burn-in",
+        action="store_true",
+        help="with --to tapered, keep the burn-in frames too",
+    )
+    compact_parser.add_argument(
+        "--all-studies",
+        action="store_true",
+        help="also reduce a run that another study lists",
+    )
+    compact_parser.add_argument(
+        "--dry-run", action="store_true", help="say what would change; change nothing"
+    )
     status_parser = sweep_subcommands.add_parser(
         "status",
         help="show where a sweep stands: points by state, who runs it, time left",
@@ -437,6 +482,7 @@ def command_sweep(
         "spec": _spec,
         "verify": _verify,
         "keys": _keys,
+        "compact": _compact,
         "trajectories": _trajectories,
         "compare": _compare,
         "report": lambda args: _report(args.study_id, args.statistic, as_csv=args.csv),
@@ -445,6 +491,38 @@ def command_sweep(
     if handler is None:
         parser.error("a sweep subcommand is required")
     return handler(arguments)
+
+
+def _compact(arguments: argparse.Namespace) -> int:
+    """Reduce the finished points of a sweep to a lighter recording."""
+    report = compact_sweep(
+        arguments.study_id,
+        keep=parse_keep(arguments.keep),
+        target=CompactTarget(
+            level=arguments.to,
+            keep_last=arguments.keep_last,
+            keep_burn_in=arguments.keep_burn_in,
+        ),
+        all_studies=arguments.all_studies,
+        dry_run=arguments.dry_run,
+    )
+    verb = "Would reduce" if report.dry_run else "Reduced"
+    print(
+        f"{verb} {len(report.changed)} point(s) to {arguments.to}; "
+        f"{len(report.kept)} kept as they were, {len(report.already_small)} "
+        "already small enough"
+    )
+    if report.changed:
+        after = "" if report.dry_run else f" to {format_bytes(report.bytes_after)}"
+        print(f"disk from {format_bytes(report.bytes_before)}{after}")
+    for run_id, studies in report.refused.items():
+        print(
+            f"refused {run_id}: also in {', '.join(studies)} (use --all-studies)",
+            file=sys.stderr,
+        )
+    for run_id in report.read_only:
+        print(f"skipped {run_id}: a shipped, read-only example", file=sys.stderr)
+    return 1 if report.refused else 0
 
 
 def _trajectories(arguments: argparse.Namespace) -> int:

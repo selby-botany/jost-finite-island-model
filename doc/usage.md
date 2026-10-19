@@ -1131,6 +1131,25 @@ for the level it keeps reaches 50 GB (change it with `--confirm-disk SIZE`)
 needs `--yes`. In the desktop app the **Keep** choice in the Sweep dialog shows
 the same figures next to each option.
 
+A sweep can also be made smaller after it has run, once its answers are in:
+
+```bash
+fim sweep compact STUDY_ID --dry-run                  # what would change
+fim sweep compact STUDY_ID --keep corners             # statistics only, except the corner points
+fim sweep compact STUDY_ID --to tapered --keep-last 2000
+```
+
+`--keep` names the points to leave exactly as they are (`corners` of the grid,
+`every=K` for every Kth point, or `none`, the default); the others are reduced
+to `--to`: `statistics` (the trajectory logs are dropped; the report, summary,
+scatter plot, deme-pair statistics and a decimated history stay) or `tapered`
+(a tapered log, the same file a run that had tapered itself would have written).
+No reported number changes and every run's manifest is rewritten to match, so
+the results card, exports and trajectory view keep working. A run that another
+study also lists is refused unless `--all-studies` is given, a run already
+small enough is left alone (so the command is safe to repeat), a thinned run
+cannot be tapered, and the sweep must not be running.
+
 By default every point gets its own seed (`base seed + point index times
 n_replicates`), so no two points share a replicate seed. Set
 `seed_policy: same` in the `sweep:` block to give every point the base seed.

@@ -40,6 +40,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_simulate`](#test.test_simulate)
   - [`test_stored`](#test.test_stored)
   - [`test_sweep`](#test.test_sweep)
+  - [`test_sweep_compact`](#test.test_sweep_compact)
   - [`test_sweep_compare`](#test.test_sweep_compare)
   - [`test_sweep_cost`](#test.test_sweep_cost)
   - [`test_sweep_run`](#test.test_sweep_run)
@@ -4653,6 +4654,23 @@ def test_a_point_run_description_places_it_in_its_sweep() -> None
 ```
 
 A long axis is summarized as a range; a short one is listed.
+
+<a id="test.test_sweep_compact"></a>
+
+# test.test\_sweep\_compact
+
+Tests for `fim.sweep_compact`: making a finished sweep smaller afterwards.
+
+<a id="test.test_sweep_compact.results"></a>
+
+#### results
+
+```python
+@pytest.fixture
+def results(tmp_path: Path) -> Iterator[Path]
+```
+
+Point the results directory at a temporary one for the test.
 
 <a id="test.test_sweep_compare"></a>
 

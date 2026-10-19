@@ -1643,6 +1643,16 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [read\_points\_csv](#fim.sweep.read_points_csv)
   * [resolve\_points\_file](#fim.sweep.resolve_points_file)
   * [apply\_coordinates](#fim.sweep.apply_coordinates)
+* [fim.sweep\_compact](#fim.sweep_compact)
+  * [TAPERING\_KEYS](#fim.sweep_compact.TAPERING_KEYS)
+  * [CompactTarget](#fim.sweep_compact.CompactTarget)
+    * [\_\_post\_init\_\_](#fim.sweep_compact.CompactTarget.__post_init__)
+    * [recording](#fim.sweep_compact.CompactTarget.recording)
+  * [CompactReport](#fim.sweep_compact.CompactReport)
+  * [parse\_keep](#fim.sweep_compact.parse_keep)
+  * [kept\_points](#fim.sweep_compact.kept_points)
+  * [compact\_sweep](#fim.sweep_compact.compact_sweep)
+  * [compact\_run](#fim.sweep_compact.compact_run)
 * [fim.sweep\_compare](#fim.sweep_compare)
   * [Pairing](#fim.sweep_compare.Pairing)
   * [SweepRef](#fim.sweep_compare.SweepRef)
@@ -38354,6 +38364,181 @@ coordinates, such as the closed-form theory along an axis.
 
 - `ValueError` - `base` cannot take one of the axes (for example an `m`
   axis with no `m` in the base).
+
+<a id="fim.sweep_compact"></a>
+
+# fim.sweep\_compact
+
+Make a finished sweep smaller after the fact.
+
+A sweep that kept every frame of every point can be cut down once its answers
+are in, without changing any reported number: a point's trajectory log can be
+tapered (the last generations in full, the past thinned further back), or
+dropped altogether, leaving the report, summary, scatter plot, deme-pair
+statistics and a decimated statistic history.
+
+`compact_sweep` does this for the points of one sweep Study. It leaves the
+points named by `--keep` (the corners of the grid, every Kth point) as they
+are, reduces the rest to a target level, rewrites each run's manifest with the
+new settings and digests, and refuses a run that another Study also lists
+(that Study's results would change too) unless told otherwise. A run already at
+or below the target is left alone, so running it twice changes nothing, and a
+tapered log is the same file a run that had tapered itself would have written.
+The sweep must not be running.
+
+<a id="fim.sweep_compact.TAPERING_KEYS"></a>
+
+#### TAPERING\_KEYS
+
+Configuration keys that mean something only for a tapered run.
+
+<a id="fim.sweep_compact.CompactTarget"></a>
+
+## CompactTarget Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class CompactTarget()
+```
+
+What compaction reduces a point to.
+
+**Attributes**:
+
+- `level` - `tapered` or `statistics`.
+- `keep_last` - With `tapered`, the last generations kept in full.
+- `keep_burn_in` - With `tapered`, whether burn-in frames are kept.
+
+<a id="fim.sweep_compact.CompactTarget.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Refuse a level compaction cannot produce, or a bad `keep_last`.
+
+<a id="fim.sweep_compact.CompactTarget.recording"></a>
+
+#### recording
+
+```python
+def recording() -> Recording
+```
+
+Return the recording a run at this target holds.
+
+<a id="fim.sweep_compact.CompactReport"></a>
+
+## CompactReport Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class CompactReport()
+```
+
+What a compaction did, or would do.
+
+**Attributes**:
+
+- `changed` - Run ids reduced.
+- `kept` - Run ids left as they were because `keep` named them.
+- `already_small` - Run ids already at or below the target.
+- `refused` - Run ids another Study also lists, with the Studies' ids.
+- `read_only` - Run ids that are shipped, read-only examples.
+- `bytes_before` - Size of the changed runs before.
+- `bytes_after` - Their size after (equal to `bytes_before` for a dry run).
+- `dry_run` - Whether nothing was written.
+
+<a id="fim.sweep_compact.parse_keep"></a>
+
+#### parse\_keep
+
+```python
+def parse_keep(text: str) -> KeepRule
+```
+
+Check a `--keep` rule: `corners`, `none` or `every=K`.
+
+**Raises**:
+
+- `ValueError` - The rule is none of these.
+
+<a id="fim.sweep_compact.kept_points"></a>
+
+#### kept\_points
+
+```python
+def kept_points(coordinates: Mapping[str, Mapping[str, Any]],
+                axes: Mapping[str, tuple[Any,
+                                         ...]], rule: KeepRule) -> set[str]
+```
+
+Return the run ids a `--keep` rule leaves alone.
+
+**Arguments**:
+
+- `coordinates` - Each finished point's coordinates by run id, in grid order.
+- `axes` - Each axis's values, by key.
+- `rule` - `corners` (every coordinate is its axis's first or last value),
+  `every=K` (the 1st, K+1st, ... point) or `none`.
+
+<a id="fim.sweep_compact.compact_sweep"></a>
+
+#### compact\_sweep
+
+```python
+def compact_sweep(study_id: str,
+                  *,
+                  keep: KeepRule = "none",
+                  target: CompactTarget | None = None,
+                  all_studies: bool = False,
+                  dry_run: bool = False,
+                  results: Path | None = None) -> CompactReport
+```
+
+Reduce the finished points of a sweep Study to a target level.
+
+**Arguments**:
+
+- `study_id` - A sweep Study that is not running.
+- `keep` - Which points to leave alone (see `kept_points`).
+- `target` - The level to reduce the other points to.
+- `all_studies` - Also reduce a run another Study lists.
+- `dry_run` - Report what would change and write nothing.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  What changed, or would.
+
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep.
+- `ClosedGroupError` - The Study is closed.
+- `SweepLockedError` - A process is running the sweep.
+
+<a id="fim.sweep_compact.compact_run"></a>
+
+#### compact\_run
+
+```python
+def compact_run(directory: Path, target: CompactTarget) -> None
+```
+
+Reduce one finished run (a single run or a batch) to `target`.
+
+The files are changed first and the manifests last, so a run that is
+stopped halfway has a manifest that still names what it had; running
+compaction again finishes the job.
+
+**Arguments**:
+
+- `directory` - The run directory.
+- `target` - The level to reduce it to.
 
 <a id="fim.sweep_compare"></a>
 
