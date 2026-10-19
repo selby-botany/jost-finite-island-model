@@ -1119,6 +1119,15 @@ fim sweep keys [--json]               # every parameter a sweep can vary
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 ```
 
+- In the desktop app the sweep results card has a **View** menu. **How each
+  point got there** draws the statistic against generation, one curve per
+  value of **Curves by**, with the interval of the mean as a band, a dotted
+  line where the burn-in ended, a dashed stretch where fewer than half the
+  replicates are still running, a hollow end marker for a point whose
+  replicates did not all settle, and the closed-form value as a dashed
+  horizontal line when **Show theory** is ticked. The x axis is logarithmic
+  automatically for runs of 1,000 generations or more (the **x scale** menu
+  overrides it). Click a curve to open that point's run.
 - `trajectories` writes how each point approached equilibrium, not only where
   it ended: for each finished point, at most 512 generations (generation 0, then
   closely spaced early generations and evenly spaced later ones), with the mean

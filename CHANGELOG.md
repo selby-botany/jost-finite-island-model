@@ -8,6 +8,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A "How each point got there" view on the sweep results card.** Draws the
+  statistic against generation, one curve per value of the "Curves by" axis,
+  with the interval of the mean, the burn-in end, the stretch where fewer than
+  half the replicates are still running, the health of the point and, on
+  request, the closed-form value. Opening a study that holds a sweep with the
+  pooling call is now refused, since pooling would blend points that differ on
+  purpose.
+
 - **`fim sweep trajectories`.** Writes how each point of a sweep approached
   equilibrium as CSV: at most 512 generations per point, with the mean over the
   replicates still running, its interval, the spread and how many replicates

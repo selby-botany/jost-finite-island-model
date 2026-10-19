@@ -968,6 +968,13 @@
       <p id="sweep-results-summary"></p>
       <div class="sweep-results-controls">
         <div class="field">
+          <label for="sweep-results-view">View</label>
+          <select id="sweep-results-view">
+            <option value="values">Final values</option>
+            <option value="trajectory">How each point got there</option>
+          </select>
+        </div>
+        <div class="field">
           <label for="sweep-results-statistic">Statistic</label>
           <select id="sweep-results-statistic"></select>
         </div>
@@ -2737,6 +2744,7 @@
 <script src="screens/sweep.js"></script>
 <script src="heatmap.js"></script>
 <script src="screens/sweep-results.js"></script>
+<script src="screens/sweep-trajectories.js"></script>
 <script src="screens/sweep-compare.js"></script>
 <script src="screens/explore-surface.js"></script>
 <script src="axis-range.js"></script>

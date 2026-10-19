@@ -318,6 +318,12 @@ const SWEEP_Y_TITLE_INSET = 14;
 const SWEEP_POINT_RADIUS = 2;
 const SWEEP_HIT_RADIUS_PX = 14;
 
+// The trajectory overlay: an automatic x scale turns logarithmic once the
+// longest run reaches this many generations, and an arrow key moves the
+// keyboard focus this many samples along a curve.
+const SWEEP_TRAJECTORY_AUTO_LOG_FROM = 1000;
+const SWEEP_TRAJECTORY_KEY_STEP = 4;
+
 // A flagged point is drawn hollow (a ring), crossed when no replicate settled:
 // ring radius, line width, and how far the cross reaches from the centre.
 const SWEEP_FLAG_RADIUS = 5;

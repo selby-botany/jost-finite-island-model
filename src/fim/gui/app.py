@@ -5897,6 +5897,32 @@ class Api:
         )
 
     @_log_bridge_call
+    def get_sweep_trajectories(
+        self,
+        study_id: str,
+        statistic: str,
+        by: str | None,
+        held: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return how each point approached equilibrium, for the overlay chart.
+
+        Args:
+            study_id: A sweep Study.
+            statistic: A statistic's catalog key.
+            by: A swept key giving one curve per value, or `None`.
+            held: A value for every swept key that is not `by`.
+
+        Returns:
+            `{"ok": True, "series": [{"byValue", "points": [{"generations",
+            "mean", "low", "high", "std", "count", "quorum", ...}]}]}` with
+            at most 512 samples per point, or `{"ok": False, "message": ...}`
+            for an unknown axis. A point with no readable history is left out.
+        """
+        return sweep_bridge.trajectories_payload(
+            study_id, statistic, by=by or None, held=held
+        )
+
+    @_log_bridge_call
     def compare_sweeps(
         self,
         study_ids: list[str],
@@ -6697,6 +6723,14 @@ class Api:
             study = groups.get_study(study_id)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
+        if study.sweep_spec is not None:
+            # Pooling every point of a sweep would blend runs that differ on
+            # purpose; the sweep screen is where its points are compared.
+            return {
+                "ok": False,
+                "message": "this study holds a sweep; open its sweep results "
+                "instead of pooling its points",
+            }
         reports: list[FinalReport] = []
         final_states: list[ModelState] = []
         replicate_ids: list[str] = []

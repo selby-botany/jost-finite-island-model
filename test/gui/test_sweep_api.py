@@ -1052,3 +1052,44 @@ def test_plan_sweep_takes_a_strategy_and_a_generic_axis(api: Api) -> None:
     assert (grid["strategy"], grid["gridSize"]) == ("grid", 4)
     assert generic["ok"] is True and len(generic["points"]) == 3
     assert bad["ok"] is False and "grid" in bad["message"]
+
+
+def test_sweep_trajectories_come_back_as_curves_with_a_quorum(
+    api: Api, window: _FakeWindow
+) -> None:
+    study_id = _finished_sweep(api, window)
+
+    reply = api.get_sweep_trajectories(study_id, "D", "d", {})
+
+    assert reply["ok"] is True
+    assert [curve["byValue"] for curve in reply["series"]] == [2, 3]
+    point = reply["series"][0]["points"][0]
+    assert point["generations"][0] == 0
+    assert len(point["mean"]) == len(point["generations"]) == len(point["quorum"])
+    assert point["nReplicates"] >= 1
+    assert point["health"] in {"healthy", "degraded", "unreliable"}
+    json.dumps(reply, allow_nan=False)  # no NaN reaches the page
+
+
+def test_sweep_trajectories_name_a_bad_axis_and_a_missing_statistic(
+    api: Api, window: _FakeWindow
+) -> None:
+    study_id = _finished_sweep(api, window)
+
+    bad = api.get_sweep_trajectories(study_id, "D", "nonsense", {})
+    none = api.get_sweep_trajectories(study_id, "no_such_statistic", "d", {})
+
+    assert bad["ok"] is False and "not an axis" in bad["message"]
+    assert none["ok"] is True
+    assert all(curve["points"] == [] for curve in none["series"])
+
+
+def test_a_sweep_study_is_not_pooled_by_open_study(
+    api: Api, window: _FakeWindow
+) -> None:
+    study_id = _finished_sweep(api, window)
+
+    reply = api.open_study(study_id)
+
+    assert reply["ok"] is False
+    assert "holds a sweep" in reply["message"]

@@ -7,6 +7,7 @@ draw. Nothing here touches a window or starts a run; `Api` owns that.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -27,8 +28,10 @@ from fim.sweep_run import (
     sweep_point_results,
     sweep_point_statuses,
     sweep_spec_of,
+    trajectory_cache_path,
 )
 from fim.sweep_table import PointHealth, ResultTable
+from fim.sweep_trajectory import TrajectoryCache, table_trajectories
 
 
 def sweepable_keys_payload() -> list[dict[str, Any]]:
@@ -80,6 +83,77 @@ def spec_from_request(base: Mapping[str, Any], request: Mapping[str, Any]) -> Sw
     return SweepSpec(
         base=dict(base), axes=tuple(axes), strategy=strategy, seed_policy=policy
     )
+
+
+def trajectories_payload(
+    study_id: str,
+    statistic: str,
+    *,
+    by: str | None,
+    held: Mapping[str, Any],
+    results: Path | None = None,
+) -> dict[str, Any]:
+    """Group a sweep's point trajectories into curves for the overlay chart.
+
+    Undefined samples (no replicate had a value) are sent as `null`, since a
+    page cannot read `NaN` from JSON.
+    """
+    try:
+        table = ResultTable.read(study_id, results=results)
+        curves = table_trajectories(
+            table,
+            by=by,
+            held=held,
+            cache=TrajectoryCache(trajectory_cache_path(study_id, results=results)),
+        )
+    except ValueError as error:
+        return {"ok": False, "message": str(error)}
+
+    def clean(values: Sequence[float]) -> list[float | None]:
+        return [None if math.isnan(value) else value for value in values]
+
+    series = []
+    for curve in curves:
+        points = []
+        for entry in curve.entries:
+            found = entry.trajectory.statistics.get(statistic)
+            if found is None:
+                continue
+            row = entry.point.row
+            health = None if row is None or row.health is None else row.health
+            points.append(
+                {
+                    "index": entry.point.index,
+                    "runId": entry.point.run_id,
+                    "directory": str(row.directory) if row is not None else "",
+                    "nReplicates": entry.trajectory.replicates,
+                    "burnIn": entry.trajectory.burn_in,
+                    "confidence": entry.trajectory.confidence,
+                    "generations": list(entry.trajectory.generations),
+                    "mean": clean(found.mean),
+                    "low": clean(found.low),
+                    "high": clean(found.high),
+                    "std": clean(found.std),
+                    "count": list(found.count),
+                    "quorum": [
+                        entry.trajectory.has_quorum(position, statistic)
+                        for position in range(len(found.count))
+                    ],
+                    "health": "healthy"
+                    if health is None
+                    else health.classify(table.policy),
+                    "healthReason": ""
+                    if health is None
+                    else health.describe(table.policy),
+                }
+            )
+        series.append({"byValue": curve.by_value, "points": points})
+    return {
+        "ok": True,
+        "by": by,
+        "statistic": statistic,
+        "series": series,
+    }
 
 
 def existing_run_ids(results: Path | None = None) -> set[str]:

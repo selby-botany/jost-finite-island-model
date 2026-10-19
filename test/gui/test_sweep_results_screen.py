@@ -169,6 +169,94 @@ def test_a_two_axis_sweep_draws_a_heat_map_in_all_three_modes(
         assert states[mode]["inked"] is True
 
 
+_TRAJECTORY_STATE = """({
+    ready: window.__fimSweepResultsReady,
+    view: document.getElementById('sweep-results-view').value,
+    kind: sweepResultsHit === null ? null : sweepResultsHit.kind,
+    curves: sweepTrajectoryLastSpec === null
+        ? 0 : sweepTrajectoryLastSpec.curves.length,
+    samples: sweepResultsHit === null || sweepResultsHit.kind !== 'trajectory'
+        ? 0 : sweepResultsHit.pixels.length,
+    by: document.getElementById('sweep-results-by').value,
+    theory: sweepTrajectoryLastSpec === null
+        ? [] : sweepTrajectoryLastSpec.curves.map((curve) => curve.theory),
+    xHidden: document.getElementById('sweep-results-x').closest('.field').hidden,
+    yHidden: document.getElementById('sweep-results-y').closest('.field').hidden,
+    byHidden: document.getElementById('sweep-results-by-field').hidden,
+    readout: document.getElementById('sweep-results-readout').textContent,
+    inked: (() => {
+        const canvas = document.getElementById('sweep-results-canvas');
+        const data = canvas.getContext('2d')
+            .getImageData(0, 0, canvas.width, canvas.height).data;
+        for (let i = 3; i < data.length; i += 4) { if (data[i] !== 0) { return true; } }
+        return false;
+    })()
+})"""
+
+_SELECT_VIEW = (
+    "const view = document.getElementById('sweep-results-view');"
+    "view.value = '{value}';"
+    "view.dispatchEvent(new Event('change', {{bubbles: true}}));"
+)
+
+
+def test_the_trajectory_view_draws_one_curve_per_value_and_can_be_left(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        _run_and_view_results(window, poll_until, _ONE_AXIS)
+        window.evaluate_js(_SELECT_VIEW.format(value="trajectory"))
+        shown = poll_until(
+            _TRAJECTORY_STATE,
+            lambda s: s["ready"] is True and s["kind"] == "trajectory",
+        )
+        # Hover the first sample, as the pointer would.
+        window.evaluate_js(
+            """(() => {
+                const canvas = document.getElementById('sweep-results-canvas');
+                const pixel = sweepResultsHit.pixels[0];
+                const box = canvas.getBoundingClientRect();
+                canvas.dispatchEvent(new MouseEvent('mousemove', {
+                    bubbles: true,
+                    clientX: box.left + pixel.x * box.width / canvas.width,
+                    clientY: box.top + pixel.y * box.height / canvas.height,
+                }));
+            })();"""
+        )
+        hovered = poll_until(_TRAJECTORY_STATE, lambda s: "generation" in s["readout"])
+        window.evaluate_js(
+            "const box = document.getElementById('sweep-results-theory');"
+            "box.checked = true;"
+            "box.dispatchEvent(new Event('change', {bubbles: true}));"
+        )
+        with_theory = poll_until(
+            _TRAJECTORY_STATE,
+            lambda s: s["ready"] is True and all(v is not None for v in s["theory"]),
+        )
+        window.evaluate_js(_SELECT_VIEW.format(value="values"))
+        back = poll_until(
+            _TRAJECTORY_STATE,
+            lambda s: s["ready"] is True and s["kind"] == "line",
+        )
+        return shown, hovered, with_theory, back
+
+    shown, hovered, with_theory, back = _drive(window, steps)
+
+    assert shown["by"] == "d"
+    assert shown["curves"] == 2
+    assert shown["samples"] > 2
+    assert shown["inked"] is True
+    assert (shown["xHidden"], shown["yHidden"], shown["byHidden"]) == (
+        True,
+        True,
+        False,
+    )
+    assert "replicates running" in hovered["readout"]
+    assert shown["theory"] == [None, None]
+    assert len(with_theory["theory"]) == 2 and with_theory["inked"] is True
+    assert back["view"] == "values" and back["xHidden"] is False
+
+
 def test_clicking_a_cell_opens_that_runs_results_card(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:

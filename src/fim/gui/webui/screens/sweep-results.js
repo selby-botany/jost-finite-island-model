@@ -23,6 +23,7 @@
  */
 
 const sweepResultsSummary = document.getElementById("sweep-results-summary");
+const sweepResultsViewSelect = document.getElementById("sweep-results-view");
 const sweepResultsStatistic = document.getElementById("sweep-results-statistic");
 const sweepResultsX = document.getElementById("sweep-results-x");
 const sweepResultsY = document.getElementById("sweep-results-y");
@@ -254,6 +255,7 @@ function populateSweepResultsControls(data) {
     }
     sweepResultsX.value = keys[0];
     sweepResultsY.value = keys.length > 1 ? keys[1] : "";
+    sweepResultsViewSelect.value = "values";
     sweepResultsMode.value = "simulation";
     sweepResultsTheory.checked = false;
     sweepResultsBy.value = "";
@@ -269,7 +271,7 @@ function populateSweepResultsControls(data) {
  */
 function refreshSweepByControl() {
     const previous = sweepResultsBy.value;
-    const taken = [sweepResultsX.value, sweepResultsY.value];
+    const taken = sweepShowsTrajectories() ? [] : [sweepResultsX.value, sweepResultsY.value];
     sweepResultsBy.replaceChildren();
     const none = document.createElement("option");
     none.value = "";
@@ -296,9 +298,11 @@ function refreshSweepByControl() {
  */
 function refreshSweepHeldControls() {
     refreshSweepByControl();
-    const shown = [sweepResultsX.value, sweepResultsY.value, sweepResultsBy.value].filter(
-        (key) => key !== ""
-    );
+    const shown = (
+        sweepShowsTrajectories()
+            ? [sweepResultsBy.value]
+            : [sweepResultsX.value, sweepResultsY.value, sweepResultsBy.value]
+    ).filter((key) => key !== "");
     sweepResultsHeld.replaceChildren();
     for (const axis of sweepResultsData.axes) {
         if (shown.includes(axis.key)) {
@@ -330,8 +334,9 @@ async function renderSweepResults() {
     const sequence = (sweepResultsRenderSequence += 1);
     window.__fimSweepResultsReady = false;
     const statistic = sweepResultsStatistic.value;
+    const trajectory = sweepShowsTrajectories();
     const xKey = sweepResultsX.value;
-    const yKey = sweepResultsY.value === xKey ? "" : sweepResultsY.value;
+    const yKey = !trajectory && sweepResultsY.value !== xKey ? sweepResultsY.value : "";
     const byKey = sweepResultsBy.value;
     const points = sweepFilteredPoints();
     const hasTheory = SWEEP_THEORY_STATISTICS.has(statistic);
@@ -344,6 +349,8 @@ async function renderSweepResults() {
     ]) {
         field.hidden = yKey !== "";
     }
+    sweepResultsX.closest(".field").hidden = trajectory;
+    sweepResultsY.closest(".field").hidden = trajectory;
     sweepResultsTheory.disabled = !hasTheory;
     sweepResultsModeField.hidden = yKey === "";
     for (const option of sweepResultsMode.options) {
@@ -361,7 +368,9 @@ async function renderSweepResults() {
         window.__fimSweepResultsReady = true;
         return;
     }
-    if (yKey === "") {
+    if (trajectory) {
+        await renderSweepTrajectories(sequence, byKey, statistic);
+    } else if (yKey === "") {
         await renderSweepLine(sequence, xKey, byKey, statistic);
     } else {
         await renderSweepHeatmap(sequence, points, xKey, yKey, statistic);
@@ -1117,6 +1126,14 @@ function sweepResultsTarget(event) {
     if (sweepResultsHit === null) {
         return null;
     }
+    if (sweepResultsHit.kind === "trajectory") {
+        const box = sweepResultsCanvas.getBoundingClientRect();
+        const x = ((event.clientX - box.left) * sweepResultsCanvas.width) / Math.max(box.width, 1);
+        const y =
+            ((event.clientY - box.top) * sweepResultsCanvas.height) / Math.max(box.height, 1);
+        const pixel = sweepTrajectorySampleAt(x, y);
+        return pixel === null ? null : { trajectory: pixel };
+    }
     if (sweepResultsHit.kind === "line") {
         const box = sweepResultsCanvas.getBoundingClientRect();
         const x = ((event.clientX - box.left) * sweepResultsCanvas.width) / Math.max(box.width, 1);
@@ -1153,7 +1170,9 @@ sweepResultsCanvas.addEventListener("mousemove", (event) => {
     if (target === null) {
         return;
     }
-    if (target.mark) {
+    if (target.trajectory) {
+        showSweepTrajectorySample(target.trajectory);
+    } else if (target.mark) {
         const point = sweepResultsData.points.find((entry) => entry.index === target.mark.index);
         sweepResultsReadout.textContent = sweepPointReadout(
             { ...point, result: sweepResultsByIndex().get(point.index) },
@@ -1178,6 +1197,10 @@ sweepResultsCanvas.addEventListener("mousemove", (event) => {
  * @param {KeyboardEvent} event
  */
 function moveSweepFocus(event) {
+    if (sweepResultsHit !== null && sweepResultsHit.kind === "trajectory") {
+        moveSweepTrajectoryFocus(event);
+        return;
+    }
     if (sweepResultsHit === null || sweepResultsHit.kind !== "line") {
         return;
     }
@@ -1229,9 +1252,15 @@ sweepResultsCanvas.addEventListener("click", async (event) => {
     if (target === null) {
         return;
     }
-    const result = target.mark
-        ? sweepResultsByIndex().get(target.mark.index)
-        : target.point && target.point.result;
+    let result;
+    if (target.trajectory) {
+        const curve = sweepTrajectoryLastSpec.curves[target.trajectory.curve];
+        result = sweepResultsByIndex().get(curve.points[target.trajectory.point].index);
+    } else {
+        result = target.mark
+            ? sweepResultsByIndex().get(target.mark.index)
+            : target.point && target.point.result;
+    }
     if (result) {
         await openSweepPoint(result);
     }
@@ -1372,6 +1401,16 @@ for (const control of [
 ]) {
     control.addEventListener("change", renderSweepResults);
 }
+sweepResultsViewSelect.addEventListener("change", () => {
+    // A trajectory view is one curve per value of an axis, so open on the
+    // first axis rather than on a single point.
+    if (sweepShowsTrajectories() && sweepResultsBy.value === "") {
+        refreshSweepByControl();
+        sweepResultsBy.value = sweepResultsData.axes[0].key;
+    }
+    refreshSweepHeldControls();
+    renderSweepResults();
+});
 for (const control of [sweepResultsX, sweepResultsY]) {
     control.addEventListener("change", () => {
         refreshSweepHeldControls();

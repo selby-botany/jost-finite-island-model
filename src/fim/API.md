@@ -495,6 +495,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [estimate\_sweep\_cost](#fim.gui.app.Api.estimate_sweep_cost)
     * [get\_sweep\_eta](#fim.gui.app.Api.get_sweep_eta)
     * [get\_sweep\_series](#fim.gui.app.Api.get_sweep_series)
+    * [get\_sweep\_trajectories](#fim.gui.app.Api.get_sweep_trajectories)
     * [compare\_sweeps](#fim.gui.app.Api.compare_sweeps)
     * [get\_sweep\_theory](#fim.gui.app.Api.get_sweep_theory)
     * [export\_sweep\_table](#fim.gui.app.Api.export_sweep_table)
@@ -666,6 +667,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.sweep\_bridge](#fim.gui.sweep_bridge)
   * [sweepable\_keys\_payload](#fim.gui.sweep_bridge.sweepable_keys_payload)
   * [spec\_from\_request](#fim.gui.sweep_bridge.spec_from_request)
+  * [trajectories\_payload](#fim.gui.sweep_bridge.trajectories_payload)
   * [existing\_run\_ids](#fim.gui.sweep_bridge.existing_run_ids)
   * [plan\_payload](#fim.gui.sweep_bridge.plan_payload)
   * [status\_payload](#fim.gui.sweep_bridge.status_payload)
@@ -12925,6 +12927,33 @@ Return a statistic as response curves across a sweep's axes.
   or `{"ok": False, "message": ...}` for an unknown axis or a
   missing held value. A point not yet finished is left out.
 
+<a id="fim.gui.app.Api.get_sweep_trajectories"></a>
+
+#### get\_sweep\_trajectories
+
+```python
+@_log_bridge_call
+def get_sweep_trajectories(study_id: str, statistic: str, by: str | None,
+                           held: dict[str, Any]) -> dict[str, Any]
+```
+
+Return how each point approached equilibrium, for the overlay chart.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `statistic` - A statistic's catalog key.
+- `by` - A swept key giving one curve per value, or `None`.
+- `held` - A value for every swept key that is not `by`.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "series": [{"byValue", "points": [{"generations",
+  "mean", "low", "high", "std", "count", "quorum", ...}]}]}` with
+  at most 512 samples per point, or `{"ok": False, "message": ...}`
+  for an unknown axis. A point with no readable history is left out.
+
 <a id="fim.gui.app.Api.compare_sweeps"></a>
 
 #### compare\_sweeps
@@ -17251,6 +17280,24 @@ optional.
 **Raises**:
 
 - `ValueError` - An axis is malformed, or the spec is not valid.
+
+<a id="fim.gui.sweep_bridge.trajectories_payload"></a>
+
+#### trajectories\_payload
+
+```python
+def trajectories_payload(study_id: str,
+                         statistic: str,
+                         *,
+                         by: str | None,
+                         held: Mapping[str, Any],
+                         results: Path | None = None) -> dict[str, Any]
+```
+
+Group a sweep's point trajectories into curves for the overlay chart.
+
+Undefined samples (no replicate had a value) are sent as `null`, since a
+page cannot read `NaN` from JSON.
 
 <a id="fim.gui.sweep_bridge.existing_run_ids"></a>
 
