@@ -42,6 +42,7 @@ from fim.sweep_cost import (
     describe_cost,
     format_duration,
     order_costliest_first,
+    parse_size,
     point_cost,
     probed_cost,
     read_actual,
@@ -50,6 +51,7 @@ from fim.sweep_cost import (
 from fim.sweep_run import (
     Concurrency,
     LocalPointRunner,
+    SweepBudget,
     SweepEvent,
     create_sweep_study,
     replan_sweep,
@@ -58,6 +60,10 @@ from fim.sweep_run import (
 )
 from fim.sweep_status import SweepStatus, describe_remaining, read_sweep_status
 from fim.sweep_table import ALL_STATISTICS, ResultTable
+
+BUDGET_EXIT_STATUS = 3
+"""Exit status of a run that stopped because it reached a budget (0 means done,
+1 a failure, 2 a usage error, 130 a cancel)."""
 
 
 def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
@@ -84,6 +90,7 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         help=f"confirm a sweep of {SIZE_CONFIRMATION_THRESHOLD} or more points",
     )
     _add_concurrency_arguments(run_parser)
+    _add_budget_arguments(run_parser)
     _add_probe_argument(run_parser)
     run_parser.add_argument(
         "--pilot",
@@ -110,6 +117,7 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
         "match replaces it, a difference keeps both and is reported",
     )
     _add_concurrency_arguments(resume_parser)
+    _add_budget_arguments(resume_parser)
     status_parser = sweep_subcommands.add_parser(
         "status",
         help="show where a sweep stands: points by state, who runs it, time left",
@@ -203,6 +211,47 @@ def add_sweep_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
     )
     report_parser.add_argument(
         "--csv", action="store_true", help="write CSV instead of a text table"
+    )
+
+
+def _add_budget_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the limits a run may spend before it stops: time, points and disk."""
+    parser.add_argument(
+        "--max-hours",
+        type=float,
+        metavar="H",
+        help="stop starting points after H hours of running; points in flight "
+        "pause and the rest wait for 'fim sweep resume'",
+    )
+    parser.add_argument(
+        "--max-new-points",
+        type=int,
+        metavar="N",
+        help="compute at most N new points in this run (reused ones are free)",
+    )
+    parser.add_argument(
+        "--max-disk",
+        metavar="SIZE",
+        help="stop once the points this run has finished take SIZE on disk, "
+        "for example 50GB",
+    )
+
+
+def _budget_from(arguments: argparse.Namespace) -> SweepBudget | None:
+    """Turn the budget flags into a `SweepBudget`, or `None` if none was given.
+
+    Raises:
+        ValueError: A limit is not positive, or a size cannot be read.
+    """
+    hours = getattr(arguments, "max_hours", None)
+    points = getattr(arguments, "max_new_points", None)
+    disk = getattr(arguments, "max_disk", None)
+    if hours is None and points is None and disk is None:
+        return None
+    return SweepBudget(
+        max_wall_seconds=None if hours is None else hours * 3600,
+        max_new_points=points,
+        max_disk_bytes=None if disk is None else parse_size(disk),
     )
 
 
@@ -412,6 +461,7 @@ def _run(arguments: argparse.Namespace) -> int:
     if plan.needs_confirmation and not arguments.yes:
         print("fim: error: pass --yes to run a sweep this large", file=sys.stderr)
         return 2
+    _budget_from(arguments)  # refuse a bad limit before anything is created
     name = arguments.study or file_name or path.stem
     study = create_sweep_study(spec, plan, name, experiment_id=arguments.experiment)
     print(f"Created sweep study {study.study_id}: {study.name}")
@@ -693,6 +743,7 @@ def _execute(
             max_workers=max_workers,
             max_attempts=arguments.max_attempts,
             only=only,
+            budget=_budget_from(arguments),
         )
     except KeyboardInterrupt:
         cancel_event.set()
@@ -714,6 +765,12 @@ def _execute(
             "both runs were kept for inspection",
             file=sys.stderr,
         )
+    if outcome.budget_reached is not None:
+        print(
+            f"Stopped: {outcome.budget_reached}. What was not started is waiting; "
+            f"continue with: fim sweep resume {study_id}"
+        )
+        return BUDGET_EXIT_STATUS
     if outcome.cancelled:
         print(f"Cancelled. Continue with: fim sweep resume {study_id}")
         return 130
@@ -757,6 +814,8 @@ def _print_event(event: SweepEvent) -> None:
         )
     elif event.kind == "point_failed":
         print(f"{prefix}: FAILED ({event.detail})", flush=True)
+    elif event.kind == "sweep_budget_reached":
+        print(f"{prefix}: stopped, {event.detail}", flush=True)
 
 
 def _report(study_id: str, statistic: str, *, as_csv: bool) -> int:

@@ -85,7 +85,7 @@ from fim.sweep import (
     point_run_description,
     point_run_name,
 )
-from fim.sweep_cost import order_costliest_first
+from fim.sweep_cost import format_bytes, format_duration, order_costliest_first
 from fim.sweep_table import (
     HealthCache,
     PointRow,
@@ -147,6 +147,7 @@ EventKind = Literal[
     "point_failed",
     "sweep_done",
     "sweep_cancelled",
+    "sweep_budget_reached",
 ]
 
 
@@ -238,7 +239,12 @@ class SweepEvent:
 
 @dataclass(frozen=True, slots=True)
 class SweepOutcome:
-    """The tally `run_sweep` returns."""
+    """The tally `run_sweep` returns.
+
+    `budget_reached` says which budget stopped the sweep (in words), or is
+    `None`; a sweep stopped by its budget is not `cancelled`, and what it did
+    not start stays waiting, to be resumed.
+    """
 
     done: int
     reused: int
@@ -248,6 +254,7 @@ class SweepOutcome:
     cancelled: bool
     recomputed: int = 0
     differing: int = 0
+    budget_reached: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1059,6 +1066,123 @@ def _member_runs(
     return current, stale
 
 
+@dataclass(frozen=True, slots=True)
+class SweepBudget:
+    """How much a call to `run_sweep` may spend before it stops.
+
+    Every limit is optional. A sweep that reaches one starts no more points,
+    pauses the ones in flight where they can pause (a Run object keeps its
+    checkpoint), and ends with a `sweep_budget_reached` event; the points it
+    did not start stay waiting for `fim sweep resume`.
+
+    Attributes:
+        max_wall_seconds: Wall-clock seconds, from the start of the call.
+        max_new_points: Points this call may compute (reused points are free).
+        max_disk_bytes: Bytes this call may write, counted as the size of the
+            runs it has finished.
+    """
+
+    max_wall_seconds: float | None = None
+    max_new_points: int | None = None
+    max_disk_bytes: int | None = None
+
+    def __post_init__(self) -> None:
+        """Refuse a limit that is not positive."""
+        for name in ("max_wall_seconds", "max_new_points", "max_disk_bytes"):
+            value = getattr(self, name)
+            if value is not None and value <= 0:
+                raise ValueError(f"{name} must be positive")
+
+
+class _LinkedEvent(threading.Event):
+    """A cancel event that is also set by this call's own budget.
+
+    The caller's event is only read, never set, so a budget stop is not
+    mistaken for the user cancelling.
+    """
+
+    def __init__(self, user: threading.Event) -> None:
+        super().__init__()
+        self._user = user
+
+    def is_set(self) -> bool:
+        """Return whether the caller cancelled or the budget stopped the sweep."""
+        return self._user.is_set() or super().is_set()
+
+
+class _BudgetTracker:
+    """Counts what a call has spent and decides when a budget is reached."""
+
+    def __init__(
+        self, budget: SweepBudget, clock: Callable[[], float], stop: threading.Event
+    ) -> None:
+        self._budget = budget
+        self._clock = clock
+        self._stop = stop
+        self._started = clock()
+        self._lock = threading.Lock()
+        self._reserved = 0
+        self._bytes = 0
+        self.reason: str | None = None
+
+    def reserve(self) -> bool:
+        """Claim one new point to compute; `False` once a budget is reached."""
+        with self._lock:
+            if self.reason is not None or self._tripped_locked():
+                return False
+            limit = self._budget.max_new_points
+            if limit is not None and self._reserved >= limit:
+                # Points already running were within the budget and finish.
+                self.reason = f"the limit of {limit} new point(s) was reached"
+                return False
+            self._reserved += 1
+            return True
+
+    def add_bytes(self, size: int) -> None:
+        """Count the bytes of a finished point, then check the budget."""
+        with self._lock:
+            self._bytes += size
+        self.check()
+
+    def check(self) -> None:
+        """Stop the sweep if the time or disk limit has been reached."""
+        with self._lock:
+            if self.reason is None:
+                self._tripped_locked()
+
+    def _tripped_locked(self) -> bool:
+        """Record and act on a reached time or disk limit; the lock is held."""
+        budget = self._budget
+        if (
+            budget.max_wall_seconds is not None
+            and self._clock() - self._started >= budget.max_wall_seconds
+        ):
+            limit = format_duration(budget.max_wall_seconds)
+            self.reason = f"the time limit of {limit} was reached"
+        elif budget.max_disk_bytes is not None and self._bytes >= budget.max_disk_bytes:
+            self.reason = (
+                f"the disk limit of {format_bytes(budget.max_disk_bytes)} was reached"
+            )
+        else:
+            return False
+        self._stop.set()
+        return True
+
+
+def _tree_bytes(path: Path) -> int:
+    """Return the total size of the files under `path` (0 if it is gone)."""
+    if path.is_file():
+        return path.stat().st_size
+    total = 0
+    for directory, _names, files in os.walk(path):
+        for name in files:
+            try:
+                total += (Path(directory) / name).stat().st_size
+            except OSError:
+                continue
+    return total
+
+
 @dataclass(slots=True)
 class _Context:
     """What every point of one `run_sweep` call shares."""
@@ -1091,6 +1215,8 @@ class _Context:
     max_attempts: int = 1
     # Seconds from a clock that never goes backwards (a point's duration).
     clock: Callable[[], float] = time.monotonic
+    # Counts spending against `run_sweep(budget=...)`; `None` without one.
+    budget: _BudgetTracker | None = None
 
     def emit(
         self, kind: EventKind, point: SweepPoint, detail: object = None, *, finish: bool
@@ -1119,6 +1245,7 @@ def run_sweep(
     max_attempts: int = 1,
     costliest_first: bool = True,
     only: Collection[str] | None = None,
+    budget: SweepBudget | None = None,
     clock: Callable[[], float] = time.monotonic,
     results: Path | None = None,
 ) -> SweepOutcome:
@@ -1172,8 +1299,14 @@ def run_sweep(
         only: Run just the points with these ids (a pilot of the costliest
             few, say); the others are left as they were, neither run nor
             counted as skipped. `None` runs every point that needs it.
+        budget: Limits on this call (time, new points, disk). When one is
+            reached the sweep starts no more points, pauses those in flight
+            where it can, emits `sweep_budget_reached`, and returns with
+            `SweepOutcome.budget_reached` set; it is not a cancel, and what
+            was not started stays waiting.
         clock: Seconds, from a clock that never goes backwards; each finished
-            point's duration is reported in its event. A test seam.
+            point's duration is reported in its event, and the time budget is
+            measured on it. A test seam.
         results: Optional results-directory override.
 
     Returns:
@@ -1206,6 +1339,7 @@ def run_sweep(
                 max_attempts=max_attempts,
                 costliest_first=costliest_first,
                 only=only,
+                budget=budget,
                 clock=clock,
                 results=results,
             )
@@ -1253,6 +1387,7 @@ def _run_sweep_locked(
     max_attempts: int = 1,
     costliest_first: bool = True,
     only: Collection[str] | None = None,
+    budget: SweepBudget | None = None,
     clock: Callable[[], float] = time.monotonic,
     results: Path | None = None,
 ) -> SweepOutcome:
@@ -1314,11 +1449,13 @@ def _run_sweep_locked(
             pairwise_max_demes=runner.pairwise_max_demes,
         )
         effective_runner = process_runner
+    stop: threading.Event = _LinkedEvent(cancel_event)
+    tracker = _BudgetTracker(budget, clock, stop) if budget is not None else None
     context = _Context(
         study_id,
         effective_runner,
         on_event,
-        cancel_event,
+        stop,
         software_version,
         results,
         len(planned),
@@ -1335,11 +1472,12 @@ def _run_sweep_locked(
         rerun_ids=rerun_ids,
         max_attempts=max_attempts,
         clock=clock,
+        budget=tracker,
     )
     cancelled = False
 
     def work(point: SweepPoint) -> str:
-        if cancel_event.is_set():
+        if stop.is_set():
             return "cancelled"
         return _run_one_point(context, point, older_runs.get(point.run_id))
 
@@ -1349,21 +1487,26 @@ def _run_sweep_locked(
                 for outcome in pool.map(work, todo):
                     if outcome == "cancelled":
                         cancelled = True
-                    else:
+                    elif outcome != "budget":
                         tally[outcome] += 1
     finally:
         if process_runner is not None:
             process_runner.close()
-    cancelled = cancelled or (cancel_event.is_set() and bool(todo))
-    on_event(
-        SweepEvent(
-            "sweep_cancelled" if cancelled else "sweep_done",
-            -1,
-            "",
-            context.finished,
-            len(planned),
-        )
+    budget_reason = tracker.reason if tracker is not None else None
+    if budget_reason is not None and not cancel_event.is_set():
+        # Stopped by its own budget, not by the caller: not a cancel.
+        cancelled = False
+    else:
+        budget_reason = None
+        cancelled = cancelled or (cancel_event.is_set() and bool(todo))
+    kind: EventKind = (
+        "sweep_budget_reached"
+        if budget_reason is not None
+        else "sweep_cancelled"
+        if cancelled
+        else "sweep_done"
     )
+    on_event(SweepEvent(kind, -1, "", context.finished, len(planned), budget_reason))
     return SweepOutcome(
         done=tally["done"],
         reused=tally["reused"],
@@ -1373,6 +1516,7 @@ def _run_sweep_locked(
         cancelled=cancelled,
         recomputed=tally["recomputed"],
         differing=tally["differs"],
+        budget_reached=budget_reason,
     )
 
 
@@ -1816,7 +1960,9 @@ def _dispatch_once(
 
 def _run_one_point(
     context: _Context, point: SweepPoint, stale_member: Path | None
-) -> Literal["done", "reused", "recomputed", "differs", "failed", "cancelled"]:
+) -> Literal[
+    "done", "reused", "recomputed", "differs", "failed", "cancelled", "budget"
+]:
     """Attach, reuse or compute one point; compare it with an older version's run."""
     reusable = groups.find_run_directories(
         point.run_id,
@@ -1835,10 +1981,14 @@ def _run_one_point(
     if reused:
         result: Path | PointFailure | PointPaused = reusable[0]
     else:
+        if context.budget is not None and not context.budget.reserve():
+            return "budget"
         context.emit("point_started", point, finish=False)
 
         def progress(message: object) -> None:
             context.emit("point_progress", point, message, finish=False)
+            if context.budget is not None:
+                context.budget.check()
 
         dispatched = context.clock()
         result, object_id = _dispatch_point(context, point, progress)
@@ -1869,11 +2019,15 @@ def _run_one_point(
     )
     if older is not None and older.resolve() != result.resolve():
         return _compare_with_older(context, point, older, result)
-    if reused:
-        context.emit("point_reused", point, finish=True)
-        return "reused"
-    context.emit("point_done", point, {"seconds": elapsed}, finish=True)
-    return "done"
+    context.emit(
+        "point_reused" if reused else "point_done",
+        point,
+        None if reused else {"seconds": elapsed},
+        finish=True,
+    )
+    if not reused and context.budget is not None:
+        context.budget.add_bytes(_tree_bytes(result))
+    return "reused" if reused else "done"
 
 
 def _name_point_run(context: _Context, point: SweepPoint, directory: Path) -> None:

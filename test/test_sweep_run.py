@@ -44,6 +44,7 @@ from fim.sweep_run import (
     LocalPointRunner,
     PointFailure,
     ProcessPointRunner,
+    SweepBudget,
     SweepEvent,
     SweepLockedError,
     classify_failure,
@@ -1651,3 +1652,213 @@ def test_a_run_that_did_not_complete_is_not_counted(results: Path) -> None:
     _run(study_id, _Failing(lambda _params: True), points_at_once=1)
 
     assert first not in completed_run_ids()
+
+
+# --- budgets -----------------------------------------------------------------
+
+
+def _budget_study(count: int) -> str:
+    """A tiny real sweep over `count` values of `N`; every point is cheap."""
+    spec = SweepSpec(
+        base={
+            "N": 8,
+            "ploidy": "haploid",
+            "d": 2,
+            "m": 0.1,
+            "mu": 0.2,
+            "seed": 7,
+            "n_replicates": 1,
+            "precision": 0.1,
+        },
+        axes=(expand_axis("N", [8, 16, 24, 32][:count]),),
+    )
+    return create_sweep_study(spec, enumerate_points(spec), "Budget").study_id
+
+
+def _states(study_id: str) -> list[str]:
+    """The state of every planned point."""
+    return [s.state for s in sweep_point_statuses(groups.get_study(study_id))]
+
+
+class _Clock:
+    """A clock the test moves by hand."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class _Spending:
+    """A runner that moves the clock as each point runs, then runs it for real."""
+
+    def __init__(self, clock: _Clock, seconds: float, *, report: bool = False) -> None:
+        self.clock, self.seconds, self.report = clock, seconds, report
+        self.local = LocalPointRunner()
+        self.saw_cancel: list[bool] = []
+
+    def run_point(
+        self,
+        params: SimulationParams,
+        cancel_event: threading.Event,
+        on_message: Callable[[object], None] | None = None,
+        max_workers: int | None = None,
+    ) -> Path | PointFailure:
+        self.clock.now += self.seconds
+        if self.report and on_message is not None:
+            on_message(("progress", 1))
+        self.saw_cancel.append(cancel_event.is_set())
+        if cancel_event.is_set():
+            return PointFailure("cancelled")
+        # Progress reaches the sweep (and so the budget) only if asked to.
+        forward = on_message if self.report else None
+        return self.local.run_point(params, cancel_event, forward, max_workers)
+
+
+def test_a_new_point_limit_stops_after_that_many_and_the_rest_wait(
+    results: Path,
+) -> None:
+    study_id = _budget_study(4)
+    user_cancel = threading.Event()
+
+    outcome, events = _run(
+        study_id,
+        cancel=user_cancel,
+        points_at_once=1,
+        budget=SweepBudget(max_new_points=2),
+    )
+
+    assert outcome.done == 2
+    assert outcome.budget_reached == "the limit of 2 new point(s) was reached"
+    assert outcome.cancelled is False and outcome.failed == 0
+    assert user_cancel.is_set() is False  # a budget stop is not the caller's cancel
+    assert [e.kind for e in events if e.kind.startswith("sweep_")] == [
+        "sweep_budget_reached"
+    ]
+    assert events[-1].detail == outcome.budget_reached
+    assert sorted(_states(study_id)) == ["done", "done", "waiting", "waiting"]
+    assert read_failures(study_id) == {}
+
+
+def test_the_points_a_budget_left_waiting_finish_on_the_next_call(
+    results: Path,
+) -> None:
+    study_id = _budget_study(4)
+    _run(study_id, points_at_once=1, budget=SweepBudget(max_new_points=3))
+
+    outcome, events = _run(study_id, points_at_once=1)
+
+    assert (outcome.done, outcome.already_present, outcome.budget_reached) == (
+        1,
+        3,
+        None,
+    )
+    assert events[-1].kind == "sweep_done"
+    assert _states(study_id) == ["done"] * 4
+
+
+def test_a_limit_equal_to_the_work_is_not_reached(results: Path) -> None:
+    study_id = _budget_study(2)
+
+    outcome, events = _run(
+        study_id, points_at_once=1, budget=SweepBudget(max_new_points=2)
+    )
+
+    assert (outcome.done, outcome.budget_reached) == (2, None)
+    assert events[-1].kind == "sweep_done"
+
+
+def test_reused_points_do_not_count_against_the_new_point_limit(
+    results: Path,
+) -> None:
+    first = _budget_study(2)
+    _run(first, points_at_once=1)
+    second = _budget_study(4)  # the same first two points, two new ones
+
+    outcome, _ = _run(second, points_at_once=1, budget=SweepBudget(max_new_points=2))
+
+    assert outcome.budget_reached is None
+    assert _states(second) == ["done"] * 4
+
+
+def test_a_time_limit_is_measured_on_the_injected_clock(results: Path) -> None:
+    study_id = _budget_study(4)
+    clock = _Clock()
+
+    outcome, _ = _run(
+        study_id,
+        _Spending(clock, 50.0),
+        points_at_once=1,
+        clock=clock,
+        budget=SweepBudget(max_wall_seconds=100.0),
+    )
+
+    # Two points take 100 s; the third is not started.
+    assert outcome.done == 2
+    assert outcome.budget_reached == "the time limit of 2 min was reached"
+    assert sorted(_states(study_id)) == ["done", "done", "waiting", "waiting"]
+
+
+def test_a_time_limit_reached_inside_a_point_pauses_it_instead_of_failing_it(
+    results: Path,
+) -> None:
+    study_id = _budget_study(3)
+    clock = _Clock()
+    runner = _Spending(clock, 500.0, report=True)
+
+    outcome, _ = _run(
+        study_id,
+        runner,
+        points_at_once=1,
+        clock=clock,
+        budget=SweepBudget(max_wall_seconds=100.0),
+    )
+
+    assert runner.saw_cancel == [True]  # the point was told to stop
+    assert (outcome.done, outcome.failed) == (0, 0)
+    assert outcome.budget_reached is not None and outcome.cancelled is False
+    assert _states(study_id) == ["waiting"] * 3  # not failed: resumable
+    assert read_failures(study_id) == {}
+
+
+def test_a_disk_limit_stops_once_the_finished_points_take_that_much(
+    results: Path,
+) -> None:
+    study_id = _budget_study(3)
+
+    outcome, _ = _run(study_id, points_at_once=1, budget=SweepBudget(max_disk_bytes=1))
+
+    assert outcome.done == 1
+    assert outcome.budget_reached == "the disk limit of 1 B was reached"
+    assert sorted(_states(study_id)) == ["done", "waiting", "waiting"]
+    (kept,) = groups.study_run_directories(groups.get_study(study_id))
+    assert (kept / "manifest.json").is_file()  # the finished point is readable
+
+
+def test_a_generous_budget_changes_nothing(results: Path) -> None:
+    study_id = _budget_study(2)
+
+    outcome, events = _run(
+        study_id,
+        points_at_once=1,
+        budget=SweepBudget(
+            max_wall_seconds=1e9, max_new_points=100, max_disk_bytes=10**12
+        ),
+    )
+
+    assert (outcome.done, outcome.budget_reached) == (2, None)
+    assert events[-1].kind == "sweep_done"
+
+
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"max_wall_seconds": 0.0},
+        {"max_new_points": 0},
+        {"max_disk_bytes": -1},
+    ],
+)
+def test_a_limit_that_is_not_positive_is_refused(limits: dict[str, float]) -> None:
+    with pytest.raises(ValueError, match="must be positive"):
+        SweepBudget(**limits)  # type: ignore[arg-type]

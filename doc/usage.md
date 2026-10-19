@@ -1102,6 +1102,15 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   them, applied to the points still to come, so it sharpens as the sweep goes
   and is an upper figure (a point that settles early finishes sooner).
   `--watch SECONDS` repeats it until the sweep is finished.
+- A run can be given limits so it cannot spend more than you meant to:
+  `--max-hours H` (time), `--max-new-points N` (points it computes; reused
+  ones are free) and `--max-disk SIZE` (for example `50GB`, counted as the size
+  of the points it has finished). They work on `run` and `resume`. When one is
+  reached the run starts no more points, pauses the ones in flight where it
+  can, says which limit it reached, and exits with status 3 (0 means done, 1 a
+  failure, 130 a cancel). Nothing is lost or marked failed: the points it did
+  not start are waiting, and `fim sweep resume` carries on, with a new limit
+  if you like. A limit equal to the work to do is not reached.
 - `fim sweep run FILE --pilot K` runs the K points that may take longest first,
   prints each one's planned range against what it took and the time left for
   the rest, and asks before running the rest (`--yes` answers yes). The pilot

@@ -8,6 +8,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Limits for a sweep run: `--max-hours`, `--max-new-points`, `--max-disk`.**
+  A run that reaches one starts no more points, pauses those in flight where
+  it can, and exits with status 3 and a line naming the limit; the points it
+  did not start wait for `fim sweep resume`, nothing is marked failed, and the
+  caller's own cancel is not touched. `run_sweep(budget=SweepBudget(...))` is
+  the same for programs.
+
 - **Time and disk in the Sweep dialog, time left in the progress view.** The
   dialog shows the same time, disk and measured lines as `fim sweep plan` for
   the points that have not run yet; a running sweep shows the time left,

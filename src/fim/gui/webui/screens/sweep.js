@@ -786,7 +786,10 @@ window.fim.onSweepEvent = function onSweepEvent(event) {
         sweepProgressText.textContent = `${event.position} of ${event.total} points finished`;
         refreshSweepEta();
     }
-    if (event.kind === "sweep_done" || event.kind === "sweep_cancelled") {
+    if (event.kind === "sweep_budget_reached") {
+        showSweepBanner(`Stopped: ${event.detail}. Continue the study from Home.`);
+        finishSweep(true);
+    } else if (event.kind === "sweep_done" || event.kind === "sweep_cancelled") {
         finishSweep(event.kind === "sweep_cancelled");
     }
 };

@@ -828,3 +828,75 @@ def test_a_pilot_of_nothing_is_a_plain_error(
 
     assert status == 2
     assert "--pilot must be at least 1" in capsys.readouterr().err
+
+
+def test_a_new_point_limit_ends_the_run_with_its_own_status_and_resume_finishes(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    status = _main(
+        tmp_path, "sweep", "run", str(sweep_file), "--no-probe", "--max-new-points", "1"
+    )
+
+    output = capsys.readouterr().out
+    assert status == 3  # not 0 (done), 1 (failed), 2 (usage) or 130 (cancelled)
+    assert "the limit of 1 new point(s) was reached" in output
+    assert "Stopped: the limit of 1 new point(s) was reached" in output
+    (study,) = groups.list_studies(results=tmp_path / "results")
+    assert study.run_count == 1
+    assert _main(tmp_path, "sweep", "resume", study.study_id) == 0
+    assert groups.get_study(study.study_id, results=tmp_path / "results").run_count == 2
+
+
+def test_resume_takes_the_same_limits(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    study_id = _run_sweep_file(tmp_path, sweep_file, capsys)
+
+    # Everything is already computed, so a limit of zero new points is never reached.
+    status = _main(
+        tmp_path,
+        "sweep",
+        "resume",
+        study_id,
+        "--max-new-points",
+        "1",
+        "--max-disk",
+        "5GB",
+    )
+
+    assert status == 0
+    assert "Stopped" not in capsys.readouterr().out
+
+
+def test_a_disk_limit_is_read_with_units(
+    tmp_path: Path, sweep_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    status = _main(
+        tmp_path, "sweep", "run", str(sweep_file), "--no-probe", "--max-disk", "1B"
+    )
+
+    assert status == 3
+    assert "the disk limit of 1 B was reached" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [
+        (["--max-hours", "0"], "max_wall_seconds must be positive"),
+        (["--max-new-points", "0"], "max_new_points must be positive"),
+        (["--max-disk", "lots"], "is not a size"),
+        (["--max-disk", "0"], "not a positive size"),
+    ],
+)
+def test_a_budget_that_makes_no_sense_is_a_plain_error(
+    tmp_path: Path,
+    sweep_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    flags: list[str],
+    message: str,
+) -> None:
+    status = _main(tmp_path, "sweep", "run", str(sweep_file), "--no-probe", *flags)
+
+    assert status == 2
+    assert message in capsys.readouterr().err
+    assert groups.list_studies(results=tmp_path / "results") == []  # nothing created

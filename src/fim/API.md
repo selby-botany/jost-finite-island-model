@@ -41,6 +41,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [add\_object\_subcommands](#fim.cli_objects.add_object_subcommands)
   * [command\_object](#fim.cli_objects.command_object)
 * [fim.cli\_sweep](#fim.cli_sweep)
+  * [BUDGET\_EXIT\_STATUS](#fim.cli_sweep.BUDGET_EXIT_STATUS)
   * [add\_sweep\_subcommands](#fim.cli_sweep.add_sweep_subcommands)
   * [command\_sweep](#fim.cli_sweep.command_sweep)
 * [fim.config](#fim.config)
@@ -1628,6 +1629,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [remaining\_cost](#fim.sweep_cost.remaining_cost)
   * [CostLines](#fim.sweep_cost.CostLines)
   * [describe\_cost](#fim.sweep_cost.describe_cost)
+  * [parse\_size](#fim.sweep_cost.parse_size)
 * [fim.sweep\_run](#fim.sweep_run)
   * [PointState](#fim.sweep_run.PointState)
   * [SweepLockedError](#fim.sweep_run.SweepLockedError)
@@ -1658,6 +1660,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [stored\_points](#fim.sweep_run.stored_points)
   * [sweep\_point\_statuses](#fim.sweep_run.sweep_point_statuses)
   * [completed\_run\_ids](#fim.sweep_run.completed_run_ids)
+  * [SweepBudget](#fim.sweep_run.SweepBudget)
+    * [\_\_post\_init\_\_](#fim.sweep_run.SweepBudget.__post_init__)
+  * [\_LinkedEvent](#fim.sweep_run._LinkedEvent)
+    * [is\_set](#fim.sweep_run._LinkedEvent.is_set)
+  * [\_BudgetTracker](#fim.sweep_run._BudgetTracker)
+    * [reserve](#fim.sweep_run._BudgetTracker.reserve)
+    * [add\_bytes](#fim.sweep_run._BudgetTracker.add_bytes)
+    * [check](#fim.sweep_run._BudgetTracker.check)
   * [\_Context](#fim.sweep_run._Context)
     * [emit](#fim.sweep_run._Context.emit)
   * [run\_sweep](#fim.sweep_run.run_sweep)
@@ -2408,6 +2418,13 @@ plus a `sweep:` block; `fim.sweep.spec_from_config` splits it, so the
 ordinary configuration validator never sees `sweep`. The work itself is in
 `fim.sweep` (what the points are) and `fim.sweep_run` (running them); this
 module parses arguments and prints.
+
+<a id="fim.cli_sweep.BUDGET_EXIT_STATUS"></a>
+
+#### BUDGET\_EXIT\_STATUS
+
+Exit status of a run that stopped because it reached a budget (0 means done,
+1 a failure, 2 a usage error, 130 a cancel).
 
 <a id="fim.cli_sweep.add_sweep_subcommands"></a>
 
@@ -37943,6 +37960,33 @@ Write a probed cost as three sentences.
 
   The three sentences, or `None` for a cost with no time or disk.
 
+<a id="fim.sweep_cost.parse_size"></a>
+
+#### parse\_size
+
+```python
+def parse_size(text: str) -> int
+```
+
+Read a size such as `500`, `500MB`, `1.5 GB` or `2tb` as bytes.
+
+The units are decimal (1 GB is 1,000,000,000 bytes), as `format_bytes`
+writes them, and a number with no unit is bytes.
+
+**Arguments**:
+
+- `text` - The size, with an optional unit.
+
+
+**Returns**:
+
+  The number of bytes, rounded to a whole byte.
+
+
+**Raises**:
+
+- `ValueError` - The text is not a positive size in a known unit.
+
 <a id="fim.sweep_run"></a>
 
 # fim.sweep\_run
@@ -38088,6 +38132,10 @@ class SweepOutcome()
 ```
 
 The tally `run_sweep` returns.
+
+`budget_reached` says which budget stopped the sweep (in words), or is
+`None`; a sweep stopped by its budget is not `cancelled`, and what it did
+not start stays waiting, to be resumed.
 
 <a id="fim.sweep_run.PointStatus"></a>
 
@@ -38500,6 +38548,102 @@ so a plan can say beforehand which points are already computed.
 - `software_version` - The version whose runs count as done.
 - `results` - Optional results-directory override.
 
+<a id="fim.sweep_run.SweepBudget"></a>
+
+## SweepBudget Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class SweepBudget()
+```
+
+How much a call to `run_sweep` may spend before it stops.
+
+Every limit is optional. A sweep that reaches one starts no more points,
+pauses the ones in flight where they can pause (a Run object keeps its
+checkpoint), and ends with a `sweep_budget_reached` event; the points it
+did not start stay waiting for `fim sweep resume`.
+
+**Attributes**:
+
+- `max_wall_seconds` - Wall-clock seconds, from the start of the call.
+- `max_new_points` - Points this call may compute (reused points are free).
+- `max_disk_bytes` - Bytes this call may write, counted as the size of the
+  runs it has finished.
+
+<a id="fim.sweep_run.SweepBudget.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Refuse a limit that is not positive.
+
+<a id="fim.sweep_run._LinkedEvent"></a>
+
+## \_LinkedEvent Objects
+
+```python
+class _LinkedEvent(threading.Event)
+```
+
+A cancel event that is also set by this call's own budget.
+
+The caller's event is only read, never set, so a budget stop is not
+mistaken for the user cancelling.
+
+<a id="fim.sweep_run._LinkedEvent.is_set"></a>
+
+#### is\_set
+
+```python
+def is_set() -> bool
+```
+
+Return whether the caller cancelled or the budget stopped the sweep.
+
+<a id="fim.sweep_run._BudgetTracker"></a>
+
+## \_BudgetTracker Objects
+
+```python
+class _BudgetTracker()
+```
+
+Counts what a call has spent and decides when a budget is reached.
+
+<a id="fim.sweep_run._BudgetTracker.reserve"></a>
+
+#### reserve
+
+```python
+def reserve() -> bool
+```
+
+Claim one new point to compute; `False` once a budget is reached.
+
+<a id="fim.sweep_run._BudgetTracker.add_bytes"></a>
+
+#### add\_bytes
+
+```python
+def add_bytes(size: int) -> None
+```
+
+Count the bytes of a finished point, then check the budget.
+
+<a id="fim.sweep_run._BudgetTracker.check"></a>
+
+#### check
+
+```python
+def check() -> None
+```
+
+Stop the sweep if the time or disk limit has been reached.
+
 <a id="fim.sweep_run._Context"></a>
 
 ## \_Context Objects
@@ -38543,6 +38687,7 @@ def run_sweep(study_id: str,
               max_attempts: int = 1,
               costliest_first: bool = True,
               only: Collection[str] | None = None,
+              budget: SweepBudget | None = None,
               clock: Callable[[], float] = time.monotonic,
               results: Path | None = None) -> SweepOutcome
 ```
@@ -38598,8 +38743,14 @@ falls back to the runner's `run_point`.
 - `only` - Run just the points with these ids (a pilot of the costliest
   few, say); the others are left as they were, neither run nor
   counted as skipped. `None` runs every point that needs it.
+- `budget` - Limits on this call (time, new points, disk). When one is
+  reached the sweep starts no more points, pauses those in flight
+  where it can, emits `sweep_budget_reached`, and returns with
+  `SweepOutcome.budget_reached` set; it is not a cancel, and what
+  was not started stays waiting.
 - `clock` - Seconds, from a clock that never goes backwards; each finished
-  point's duration is reported in its event. A test seam.
+  point's duration is reported in its event, and the time budget is
+  measured on it. A test seam.
 - `results` - Optional results-directory override.
 
 

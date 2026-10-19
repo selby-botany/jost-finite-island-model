@@ -25,6 +25,7 @@ import json
 import logging
 import math
 import platform
+import re
 import shutil
 import tempfile
 import time
@@ -942,3 +943,40 @@ def describe_cost(
             f"matched to the nearest; machine: {machine or platform.node()}"
         ),
     )
+
+
+_SIZE_UNITS: dict[str, int] = {
+    "": 1,
+    "b": 1,
+    "kb": 1000,
+    "mb": 1000**2,
+    "gb": 1000**3,
+    "tb": 1000**4,
+}
+
+
+def parse_size(text: str) -> int:
+    """Read a size such as `500`, `500MB`, `1.5 GB` or `2tb` as bytes.
+
+    The units are decimal (1 GB is 1,000,000,000 bytes), as `format_bytes`
+    writes them, and a number with no unit is bytes.
+
+    Args:
+        text: The size, with an optional unit.
+
+    Returns:
+        The number of bytes, rounded to a whole byte.
+
+    Raises:
+        ValueError: The text is not a positive size in a known unit.
+    """
+    match = re.fullmatch(r"\s*([0-9]*\.?[0-9]+)\s*([A-Za-z]*)\s*", text)
+    if match is None or match.group(2).lower() not in _SIZE_UNITS:
+        raise ValueError(
+            f"{text!r} is not a size; write a number with an optional unit, "
+            "such as 500MB or 1.5GB"
+        )
+    size = round(float(match.group(1)) * _SIZE_UNITS[match.group(2).lower()])
+    if size <= 0:
+        raise ValueError(f"{text!r} is not a positive size")
+    return size

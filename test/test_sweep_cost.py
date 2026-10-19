@@ -28,6 +28,7 @@ from fim.sweep_cost import (
     format_duration,
     nearest_class,
     order_costliest_first,
+    parse_size,
     point_cost,
     probed_cost,
     read_actual,
@@ -692,3 +693,27 @@ def test_the_plans_own_remaining_time_is_kept_when_it_was_probed() -> None:
     assert result.plan_seconds is not None
     left = [p.seconds for p in cost.points[1:] if p.seconds]
     assert result.plan_seconds.high == pytest.approx(sum(b.high for b in left))
+
+
+@pytest.mark.parametrize(
+    ("text", "size"),
+    [
+        ("500", 500),
+        ("500B", 500),
+        ("500MB", 500_000_000),
+        ("1.5 GB", 1_500_000_000),
+        ("2tb", 2_000_000_000_000),
+        (" 10 kb ", 10_000),
+        (".5GB", 500_000_000),
+    ],
+)
+def test_sizes_are_read_with_decimal_units(text: str, size: int) -> None:
+    assert parse_size(text) == size
+
+
+@pytest.mark.parametrize(
+    "text", ["", "GB", "five", "5 parsecs", "-5GB", "0", "1.2.3GB"]
+)
+def test_a_size_that_cannot_be_read_is_refused(text: str) -> None:
+    with pytest.raises(ValueError, match="size"):
+        parse_size(text)
