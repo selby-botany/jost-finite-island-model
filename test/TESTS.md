@@ -124,6 +124,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_nav_rail`](#gui.test_nav_rail)
   - [`test_object_bridge`](#gui.test_object_bridge)
   - [`test_object_runner`](#gui.test_object_runner)
+  - [`test_one_run_at_a_time`](#gui.test_one_run_at_a_time)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
   - [`test_p0_grid_screen`](#gui.test_p0_grid_screen)
   - [`test_preferences`](#gui.test_preferences)
@@ -22500,6 +22501,225 @@ def test_a_run_killed_after_publishing_reports_it_already_finished(
 ```
 
 A verified receipt from a killed attempt completes without a result.
+
+<a id="gui.test_one_run_at_a_time"></a>
+
+# gui.test\_one\_run\_at\_a\_time
+
+One run at a time: a second start is refused while a run is in flight.
+
+`Api.start_run` used to refuse only while a sweep ran, and the page kept
+"Run simulation" enabled during a run, so a second click -- or the Run
+menu, or Configure's own Run button -- started a second plain run. The
+second run took over the first's cancel event, worker and comparison
+target, and the first run's drain thread then cleared `_run_in_flight`
+while the second still ran, so closing the window could report nothing
+running. Both halves of the fix are pinned here: Python claims the one
+run slot under a lock (`Api._claim_run`), shared by `start_run` and
+`start_run_object`, and the page asks `Api.can_start_run` before it
+changes anything on screen (`startRunExclusively`).
+
+No run here simulates anything: `fim.gui.runner.start_run` is replaced
+by `_HeldRuns.start_run`, whose run waits until the test releases it and
+then reports a cancellation. A run therefore stays in flight for exactly
+as long as a test needs, whatever the machine, and its drain thread
+pushes nothing to the page until it is released.
+
+<a id="gui.test_one_run_at_a_time._HeldRuns"></a>
+
+## \_HeldRuns Objects
+
+```python
+class _HeldRuns()
+```
+
+Stands in for `fim.gui.runner.start_run`: each run waits to be released.
+
+A released run reports `("cancelled", 0)`, the one terminal message
+that needs no result, so its drain thread pushes `fim.onRunCancelled`
+and then releases the run claim (`Api._drain_then_release`).
+
+<a id="gui.test_one_run_at_a_time._HeldRuns.start_run"></a>
+
+#### start\_run
+
+```python
+def start_run(params: SimulationParams, output_directory: Path,
+              message_queue: queue.Queue[RunMessage],
+              cancel_event: threading.Event,
+              **_options: Any) -> threading.Thread
+```
+
+Start a worker thread that waits for `release_all`.
+
+**Arguments**:
+
+- `params` - Unused; the run never simulates.
+- `output_directory` - Recorded, so a test can count starts.
+- `message_queue` - Where the run's terminal message goes.
+- `cancel_event` - Unused; only the test ends a held run.
+- `**_options` - The real runner's keyword options, unused.
+  
+
+**Returns**:
+
+  The started, not yet released, worker thread.
+
+<a id="gui.test_one_run_at_a_time._HeldRuns.release_all"></a>
+
+#### release\_all
+
+```python
+def release_all() -> None
+```
+
+Let every held run report its cancellation.
+
+<a id="gui.test_one_run_at_a_time.held_runs"></a>
+
+#### held\_runs
+
+```python
+@pytest.fixture
+def held_runs(monkeypatch: pytest.MonkeyPatch) -> Iterator[_HeldRuns]
+```
+
+Replace the scalar runner with held runs, and release them all at the end.
+
+<a id="gui.test_one_run_at_a_time.test_a_second_run_is_refused_while_the_first_is_in_flight"></a>
+
+#### test\_a\_second\_run\_is\_refused\_while\_the\_first\_is\_in\_flight
+
+```python
+def test_a_second_run_is_refused_while_the_first_is_in_flight(
+        api: Api, window: _FakeWindow, held_runs: _HeldRuns) -> None
+```
+
+A second start is refused until the first run ends, then allowed again.
+
+<a id="gui.test_one_run_at_a_time.test_a_refused_start_leaves_the_running_saved_run_alone"></a>
+
+#### test\_a\_refused\_start\_leaves\_the\_running\_saved\_run\_alone
+
+```python
+def test_a_refused_start_leaves_the_running_saved_run_alone(api: Api) -> None
+```
+
+Refusing a plain run must not release the claim the saved run holds.
+
+<a id="gui.test_one_run_at_a_time.test_a_saved_run_cannot_start_while_a_run_is_in_flight"></a>
+
+#### test\_a\_saved\_run\_cannot\_start\_while\_a\_run\_is\_in\_flight
+
+```python
+def test_a_saved_run_cannot_start_while_a_run_is_in_flight(api: Api) -> None
+```
+
+`start_run_object` gives the same refusal, before reading the object.
+
+<a id="gui.test_one_run_at_a_time.test_a_sweep_in_flight_is_named_by_every_run_start"></a>
+
+#### test\_a\_sweep\_in\_flight\_is\_named\_by\_every\_run\_start
+
+```python
+def test_a_sweep_in_flight_is_named_by_every_run_start(api: Api) -> None
+```
+
+The page's check and both run starts agree while a sweep runs.
+
+<a id="gui.test_one_run_at_a_time.test_a_start_that_starts_nothing_releases_the_claim"></a>
+
+#### test\_a\_start\_that\_starts\_nothing\_releases\_the\_claim
+
+```python
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {
+            "ok": True,
+            "reused": True,
+            "isBatch": False,
+            "directory": "existing"
+        },
+        {
+            "ok": False,
+            "message": "the output directory cannot be allocated"
+        },
+    ],
+    ids=["reused", "refused"],
+)
+def test_a_start_that_starts_nothing_releases_the_claim(
+        api: Api, monkeypatch: pytest.MonkeyPatch, outcome: dict[str,
+                                                                 Any]) -> None
+```
+
+Reusing a computed run, or failing to start one, leaves no run in flight.
+
+<a id="gui.test_one_run_at_a_time.test_an_invalid_form_releases_the_claim"></a>
+
+#### test\_an\_invalid\_form\_releases\_the\_claim
+
+```python
+def test_an_invalid_form_releases_the_claim(api: Api) -> None
+```
+
+A form that does not validate starts nothing and leaves the slot free.
+
+<a id="gui.test_one_run_at_a_time.test_an_error_while_starting_releases_the_claim"></a>
+
+#### test\_an\_error\_while\_starting\_releases\_the\_claim
+
+```python
+def test_an_error_while_starting_releases_the_claim(
+        api: Api, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An unexpected exception cannot leave the slot claimed for good.
+
+<a id="gui.test_one_run_at_a_time.test_a_saved_run_start_that_fails_releases_the_claim"></a>
+
+#### test\_a\_saved\_run\_start\_that\_fails\_releases\_the\_claim
+
+```python
+def test_a_saved_run_start_that_fails_releases_the_claim(
+        api: Api, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+With no window to report to, a saved run starts nothing and frees the slot.
+
+<a id="gui.test_one_run_at_a_time.test_the_check_and_the_claim_happen_under_one_lock"></a>
+
+#### test\_the\_check\_and\_the\_claim\_happen\_under\_one\_lock
+
+```python
+def test_the_check_and_the_claim_happen_under_one_lock(
+        api: Api, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Two starts that arrive together cannot both see a free slot.
+
+Timing two real threads cannot prove this deterministically, so the
+test checks the property that makes it true: every check made while
+claiming runs with the claim lock held, and the claim is set before
+that lock is released (the second claim already sees it).
+
+<a id="gui.test_one_run_at_a_time.test_run_clicked_during_a_run_says_so_and_keeps_the_running_view"></a>
+
+#### test\_run\_clicked\_during\_a\_run\_says\_so\_and\_keeps\_the\_running\_view
+
+```python
+@pytest.mark.gui
+def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
+        fast_scalar_run_settings: Path, held_runs: _HeldRuns) -> None
+```
+
+Run and the Run menu, clicked during a run, are refused on the page.
+
+The refusal comes before anything on screen changes: the run view
+stays in `running`, Cancel stays enabled, and no second run starts.
+Once the first run ends, Run starts a new one. Page reads are safe
+while a run is held: a held run pushes nothing until it is released,
+so the page is never polled while a drain thread is pushing to it.
 
 <a id="gui.test_open_run_screen"></a>
 

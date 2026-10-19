@@ -2006,12 +2006,15 @@ class Api:
                 collides with — a real user's saved preferences.
         """
         self._cancel_event: threading.Event | None = None
-        # One active thing at a time: a run and a sweep cannot overlap
-        # (`start_run`, `start_sweep`). `_run_in_flight` is cleared by
-        # the run's own drain thread once it reports a terminal message;
-        # `_sweep_cancel_event` is non-`None` for exactly as long as a
-        # sweep's own thread is running.
+        # One active thing at a time: two runs, or a run and a sweep,
+        # cannot overlap (`start_run`, `start_run_object`, `start_sweep`).
+        # A run start claims `_run_in_flight` under `_run_claim_lock`
+        # (`_claim_run`), so two starts that arrive together cannot both
+        # pass the check; the run's own drain thread clears it once it
+        # reports a terminal message. `_sweep_cancel_event` is non-`None`
+        # for exactly as long as a sweep's own thread is running.
         self._run_in_flight = False
+        self._run_claim_lock = threading.Lock()
         # The saved run (`start_run_object`) now executing, if any, and its
         # worker thread; Pause and Cancel are routed to it.
         self._active_object_id: str | None = None
@@ -2161,7 +2164,11 @@ class Api:
             `"done"` push
             (`_drain_run_messages`). `{"ok": False, "message": ...}` if
             the form does not validate, `study_id` does not name an
-            existing Study, or the output directory cannot be allocated.
+            existing Study, the output directory cannot be allocated, or
+            another run (plain or saved) or a sweep is already in flight
+            (`_run_refusal`): the page has one running view, and the
+            cancel, comparison and close state belong to the run that
+            started first.
         """
         if study_id is not None:
             try:
@@ -2171,11 +2178,39 @@ class Api:
         run_details = RunDetails(
             run_name.strip() or None, run_description.strip() or None
         )
-        if self._sweep_cancel_event is not None:
-            return {
-                "ok": False,
-                "message": "a sweep is running; wait for it or cancel it first",
-            }
+        refusal = self._claim_run()
+        if refusal is not None:
+            return {"ok": False, "message": refusal}
+        started = False
+        try:
+            result = self._start_claimed_run(values, study_id, run_details)
+            started = bool(result["ok"]) and not result.get("reused", False)
+            return result
+        finally:
+            # Nothing started means no drain thread will ever release the
+            # claim, so release it here.
+            if not started:
+                self._release_run_claim()
+
+    def _start_claimed_run(
+        self,
+        values: dict[str, str],
+        study_id: str | None,
+        run_details: RunDetails,
+    ) -> dict[str, Any]:
+        """Do the work of `start_run` once it holds the run claim.
+
+        Split out of `start_run` so that every path that starts nothing,
+        including an unexpected exception, releases the claim in one place.
+
+        Args:
+            values: As for `start_run`.
+            study_id: An already-validated Study, or `None`.
+            run_details: The run's name and description.
+
+        Returns:
+            `start_run`'s result.
+        """
         values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
@@ -2231,6 +2266,65 @@ class Api:
         # reported back explicitly instead.
         result["isBatch"] = is_batch
         return result
+
+    def _claim_run(self) -> str | None:
+        """Claim the one run slot, or return why it is taken.
+
+        The check and the claim happen under `_run_claim_lock`, so two
+        starts that arrive together (a double click, or Run beside a saved
+        run's Start) cannot both see a free slot. The claim is released by
+        the run's drain thread (`_drain_then_release`), or by the starting
+        method itself when it starts nothing.
+
+        Returns:
+            `None` once claimed; otherwise `_run_refusal`'s message.
+        """
+        with self._run_claim_lock:
+            refusal = self._run_refusal()
+            if refusal is None:
+                self._run_in_flight = True
+            return refusal
+
+    def _release_run_claim(self) -> None:
+        """Release the run slot: no run, plain or saved, is in flight now.
+
+        Clears the saved run first, under the same lock as `_claim_run`,
+        so a run that claims the slot next never has its own saved run
+        cleared by the one that just ended.
+        """
+        with self._run_claim_lock:
+            self._active_object_id = None
+            self._run_in_flight = False
+
+    def _run_refusal(self) -> str | None:
+        """Return why a run cannot start now, or `None` if it can.
+
+        Shared by `start_run`, `start_run_object` and `can_start_run`, so
+        the page's own check before a start and the start itself always
+        give the same answer.
+        """
+        if self._sweep_cancel_event is not None:
+            return "a sweep is running; wait for it or cancel it first"
+        if self._run_in_flight:
+            return "a run is in progress; wait for it to finish or cancel it first"
+        return None
+
+    @_log_bridge_call
+    def can_start_run(self) -> dict[str, Any]:
+        """Say whether a run could start now, without starting one.
+
+        The page asks before it changes anything on screen: entering the
+        running view resets the live graphs, so a start that `start_run`
+        then refused would wipe the view of the run still in flight.
+
+        Returns:
+            `{"ok": True}`, or `{"ok": False, "message": ...}` with the
+            reason `start_run` or `start_run_object` would give.
+        """
+        refusal = self._run_refusal()
+        if refusal is not None:
+            return {"ok": False, "message": refusal}
+        return {"ok": True}
 
     def _start_scalar_run(
         self,
@@ -2334,8 +2428,7 @@ class Api:
             ):
                 _check_reproducibility(target[1], target[0], previous)
         finally:
-            self._run_in_flight = False
-            self._active_object_id = None
+            self._release_run_claim()
 
     def _start_batch_run(
         self,
@@ -2537,10 +2630,32 @@ class Api:
             object_id: The saved run.
 
         Returns:
-            `start_run`'s shape, or `{"ok": False, "message": ...}`.
+            `start_run`'s shape, or `{"ok": False, "message": ...}`,
+            including while another run or a sweep is in flight
+            (`_run_refusal`).
         """
-        if self._sweep_cancel_event is not None or self._run_in_flight:
-            return {"ok": False, "message": "a run is in progress; wait for it"}
+        refusal = self._claim_run()
+        if refusal is not None:
+            return {"ok": False, "message": refusal}
+        started = False
+        try:
+            result = self._start_claimed_run_object(object_id)
+            started = bool(result["ok"])
+            return result
+        finally:
+            # As in `start_run`: no worker, so no drain thread to release it.
+            if not started:
+                self._release_run_claim()
+
+    def _start_claimed_run_object(self, object_id: str) -> dict[str, Any]:
+        """Do the work of `start_run_object` once it holds the run claim.
+
+        Args:
+            object_id: The saved run.
+
+        Returns:
+            `start_run_object`'s result.
+        """
         window = _active_window()
         if window is None:
             return {"ok": False, "message": "no active window"}

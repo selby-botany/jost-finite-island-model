@@ -31,6 +31,12 @@ const runDescriptionInput = document.getElementById("run-description-input");
 // select's tooltip can show the chosen Study's description.
 let runStudiesById = new Map();
 
+// True while a run start is being decided (`startRunExclusively`), so a
+// second request meanwhile -- a double click, the Run menu, Configure's
+// own Run, or a saved run's Start -- is ignored rather than starting a
+// second run.
+let runStartPending = false;
+
 function showRunBanner(message) {
     if (!message) {
         runBanner.hidden = true;
@@ -42,12 +48,64 @@ function showRunBanner(message) {
 }
 
 /**
+ * Start a run only when no other run, plain or saved, and no sweep is
+ * starting or in flight.
+ *
+ * Asks Python first (`Api.can_start_run`), before anything on screen
+ * changes: entering the running state resets the live view, so a start
+ * that Python then refused would wipe the view of the run still in
+ * flight and leave nothing to watch or cancel it with. `Api.start_run`
+ * and `Api.start_run_object` refuse a second run too; this is the page's
+ * half of the same rule. `window.__fimRunStartSettled` is false while a
+ * start is being decided and true once it is, for tests (the
+ * `__fimCancelRunSettled` pattern).
+ *
+ * @param {() => Promise<void>} start Begins the run; called only when
+ *     Python says a run can start now.
+ * @param {(message: string) => void} [showRefusal] Shows why not, where
+ *     the request came from (default: the Run card's banner).
+ * @returns {Promise<void>}
+ */
+async function startRunExclusively(start, showRefusal = showRunBanner) {
+    if (runStartPending) {
+        return;
+    }
+    runStartPending = true;
+    window.__fimRunStartSettled = false;
+    try {
+        const allowed = await window.pywebview.api.can_start_run();
+        // `null` once the window is committed to closing: start nothing.
+        if (!allowed) {
+            return;
+        }
+        if (!allowed.ok) {
+            showRefusal(allowed.message);
+            return;
+        }
+        await start();
+    } finally {
+        runStartPending = false;
+        window.__fimRunStartSettled = true;
+    }
+}
+
+/**
  * "Run simulation" -- works identically from any state (design §3.2.1:
  * a fresh click while `completed` is showing is itself one of the two
  * ways `completed → initial → running` happens, reusing the current
- * form values, no separate "New run" step needed).
+ * form values, no separate "New run" step needed), except while another
+ * run or a sweep is in flight: then it only says so
+ * (`startRunExclusively`).
  */
 async function onRunClicked() {
+    await startRunExclusively(startConfiguredRun);
+}
+
+/**
+ * Start the run Configure describes, once `onRunClicked` knows that no
+ * other run is starting or in flight.
+ */
+async function startConfiguredRun() {
     // "New study…" selected but never actually created (or cancelled)
     // -- `Api.start_run` would otherwise reject this as an unknown
     // study id, a confusing failure mode for a botanist who simply
@@ -494,6 +552,7 @@ window.addEventListener("fim:details-saved", (event) => {
 });
 
 window.fim.showRunBanner = showRunBanner;
+window.fim.startRunExclusively = startRunExclusively;
 
 whenApiReady(wireRunViewControls);
 

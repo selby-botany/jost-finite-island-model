@@ -390,6 +390,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [Api](#fim.gui.app.Api)
     * [\_\_init\_\_](#fim.gui.app.Api.__init__)
     * [start\_run](#fim.gui.app.Api.start_run)
+    * [can\_start\_run](#fim.gui.app.Api.can_start_run)
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
     * [pause\_run](#fim.gui.app.Api.pause_run)
     * [save\_run\_object](#fim.gui.app.Api.save_run_object)
@@ -10256,7 +10257,31 @@ driver thread, before this method was written; see
   `"done"` push
   (`_drain_run_messages`). `{"ok": False, "message": ...}` if
   the form does not validate, `study_id` does not name an
-  existing Study, or the output directory cannot be allocated.
+  existing Study, the output directory cannot be allocated, or
+  another run (plain or saved) or a sweep is already in flight
+- `(`_run_refusal`)` - the page has one running view, and the
+  cancel, comparison and close state belong to the run that
+  started first.
+
+<a id="fim.gui.app.Api.can_start_run"></a>
+
+#### can\_start\_run
+
+```python
+@_log_bridge_call
+def can_start_run() -> dict[str, Any]
+```
+
+Say whether a run could start now, without starting one.
+
+The page asks before it changes anything on screen: entering the
+running view resets the live graphs, so a start that `start_run`
+then refused would wipe the view of the run still in flight.
+
+**Returns**:
+
+- ``{"ok"` - True}`, or `{"ok": False, "message": ...}` with the
+  reason `start_run` or `start_run_object` would give.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
@@ -10385,7 +10410,9 @@ its own object directory.
 
 **Returns**:
 
-  `start_run`'s shape, or `{"ok": False, "message": ...}`.
+  `start_run`'s shape, or `{"ok": False, "message": ...}`,
+  including while another run or a sweep is in flight
+  (`_run_refusal`).
 
 <a id="fim.gui.app.Api.cancel_run_object"></a>
 

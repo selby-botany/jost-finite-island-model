@@ -201,10 +201,21 @@ async function editSavedRun(objectId) {
 
 /**
  * Start a planned saved run, or resume a paused or stopped one, in the
- * same running view "Run simulation" uses.
+ * same running view "Run simulation" uses. While another run or a sweep
+ * is in flight, only says so here on Home, and leaves the running view
+ * alone (`startRunExclusively`, `run-view-controls.js`).
  * @param {object} run The row's saved run.
  */
 async function startSavedRun(run) {
+    await window.fim.startRunExclusively(() => beginSavedRun(run), showSavedRunsBanner);
+}
+
+/**
+ * Show the running view and start `run`, once `startSavedRun` knows that
+ * no other run is starting or in flight.
+ * @param {object} run The row's saved run.
+ */
+async function beginSavedRun(run) {
     window.fim.showScreen("screen-run");
     window.fim.showRunBanner("");
     window.fim.enterRunningState(false);

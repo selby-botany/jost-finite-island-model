@@ -1704,6 +1704,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Run simulation no longer starts a second run during a run.** The desktop
+  app accepted a second run while one was in flight, from Run, the Run menu,
+  or Configure's own Run button. The second run took over the first run's
+  Cancel, and closing the window could then report nothing running. A start
+  during a run, or during a sweep, now says why it cannot start and leaves the
+  running view alone; a saved run's Start or Resume on Home does the same. Two
+  starts that arrive together cannot both begin.
+
 - **Separate CI artifact assembly from the test budget.** Every Python
   version still runs all non-slow tests, coverage, documentation checks,
   and installed-wheel smoke tests. Distribution assembly now has its own
