@@ -151,7 +151,7 @@ If a log will not open:
 
 All integers are little-endian.
 
-```text
+<pre style="white-space: pre; overflow-x: auto;"><code>
 file header   "FIMTLOG1" | u16 version | u16 flags | u32 demes | u32 loci
               | u32 key_every | u16 run_id length | run_id (UTF-8)
               | varint deme_sizes[demes] | varint locus_ids[loci] | u32 crc32
@@ -160,7 +160,7 @@ block         "FTB1" | u32 payload_len | u64 first_generation
               | payload (n_records records) | u32 chain_crc
 record        padded-4 varint body_len | padded-4 varint rows | u8 kind
               | varint gen_delta | body
-```
+</code></pre>
 
 - `chain_crc` is the CRC-32 of the block header and payload, seeded with the
   previous block's `chain_crc` (the first block is seeded with the CRC of the
