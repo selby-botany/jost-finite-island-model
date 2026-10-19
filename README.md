@@ -168,11 +168,17 @@ subdirectory. Open a replicate in the desktop app to see it as a single run.
 |---|---|
 | `trajectory.tlog` | Every nonzero `(generation, deme, locus, allele)` frequency, as a compact binary log |
 | `equilibrium_trajectory.tlog` | The ancestral phase's own trajectory; written only by an equilibrium-split run |
-| `convergence.jsonl` | One row per generation of each watched convergence statistic |
+| `convergence.jsonl` | One row per generation of each watched convergence statistic (a compact run writes `convergence.fhist` instead) |
+| `history.json` | The statistic history at full precision for at most 2,048 generations; written instead of the two above by a statistics-only run |
 | `manifest.json` | Replayable parameters, seed, version, timestamps, and stop outcome |
 | `report.json` | Final `H_S`, `H_T`, `G_ST`, Jost's `D`, `E_ST`, and `K_ST` |
 | `pairwise.json` | Every deme pair's Nei identities and pairwise `F_ST` at the final generation |
 | `scatter.png` | Canonical allele-frequency scatter or labeled projection |
+
+A run can keep less of itself: `trajectory_retention` chooses every generation (the
+default), every Nth, the recent ones in full with the past thinned further back, or
+statistics only, and `history_format: compact` rounds the statistic history to a
+hundredth of the precision (see [the configuration reference](doc/configuration.md)).
 
 The trajectory is stored as a compact binary log; `fim export` turns it into
 long-format JSON Lines (`trajectory.jsonl`), which can be loaded without a

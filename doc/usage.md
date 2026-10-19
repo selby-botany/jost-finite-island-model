@@ -1168,6 +1168,7 @@ fim sweep export STUDY_ID results.csv [--statistic D --statistic G_ST] [--wide] 
 fim sweep compare STUDY_A STUDY_B [--statistic D] [--on m] [--csv out.csv]
 fim sweep trajectories STUDY_ID --csv out.csv [--statistic D]   # how each point approached equilibrium
 fim sweep keys [--json]               # every parameter a sweep can vary
+fim sweep compact STUDY_ID [--keep corners] [--to tapered]   # make a finished sweep smaller
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 ```
 
