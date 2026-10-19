@@ -275,6 +275,8 @@ function studyGroup(study) {
         runDirectories: study.runDirectories,
         // The planned number of points for a sweep Study, else `null`.
         sweepPointCount: study.sweepPointCount ?? null,
+        // How many of a sweep Study's points failed (0 for any other Study).
+        sweepFailedCount: study.sweepFailedCount ?? 0,
         // A closed Study's run list is frozen until it is reopened.
         closed: Boolean(study.closed),
         // The server-derived summary (`group_lifecycle.GroupSummary`).
@@ -1127,6 +1129,12 @@ function buildGroupActionControls(group) {
         container.appendChild(buildSweepResultsButton(group));
         if (group.runCount < group.sweepPointCount && !group.closed) {
             container.appendChild(buildContinueSweepButton(group));
+        }
+        if (group.sweepFailedCount > 0 && !group.closed) {
+            container.appendChild(buildRetryFailedButton(group));
+        }
+        if (group.runCount > 0 && !group.closed) {
+            container.appendChild(buildRecomputeAllButton(group));
         }
     }
     if (!group.readOnly && !isDefaultGroup(group)) {
@@ -1997,6 +2005,26 @@ function buildCompareSweepsButton(group) {
 }
 
 /**
+ * Start a sweep Study's run from Home and show its progress, or say why not.
+ * @param {string} studyId
+ * @param {{retryFailed?: boolean, rerun?: boolean}} options
+ */
+async function startSweepFromHome(studyId, options) {
+    const result = await window.pywebview.api.resume_sweep(
+        studyId,
+        Boolean(options.retryFailed),
+        null,
+        Boolean(options.rerun)
+    );
+    if (!result.ok) {
+        showOpenRunBanner(result.message);
+        return;
+    }
+    window.fim.showScreen("screen-sweep");
+    await window.fim.showSweepProgress(studyId);
+}
+
+/**
  * "Continue sweep" on an unfinished sweep Study's row: runs only the
  * points still missing (`Api.resume_sweep`), showing the sweep screen's
  * own progress view.
@@ -2010,13 +2038,54 @@ function buildContinueSweepButton(group) {
     button.textContent = "Continue sweep";
     button.addEventListener("click", async (event) => {
         event.stopPropagation();
-        const result = await window.pywebview.api.resume_sweep(group.studyId);
-        if (!result.ok) {
-            showOpenRunBanner(result.message);
-            return;
-        }
-        window.fim.showScreen("screen-sweep");
-        await window.fim.showSweepProgress(group.studyId);
+        await startSweepFromHome(group.studyId, {});
+    });
+    return button;
+}
+
+/**
+ * "Retry failed" on a sweep Study with failed points: runs the points that
+ * failed before, as well as any still missing.
+ * @param {{studyId: string, sweepFailedCount: number}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildRetryFailedButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = `Retry failed (${group.sweepFailedCount})`;
+    button.title = "Run the points that failed before, and any still missing";
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await startSweepFromHome(group.studyId, { retryFailed: true });
+    });
+    return button;
+}
+
+/**
+ * "Recompute all…" on a sweep Study with finished points: recompute every
+ * one and compare it with its stored result bit for bit, so a researcher can
+ * check a result still reproduces. A match replaces the old run; a
+ * difference keeps both and is reported. It takes as long as the sweep did,
+ * so it asks first.
+ * @param {{studyId: string}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildRecomputeAllButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = "Recompute all…";
+    button.title =
+        "Recompute every finished point and check it matches its stored result exactly";
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        confirmThenRun(
+            button,
+            "Recompute every finished point and compare it with its stored result? " +
+                "This takes as long as the sweep did.",
+            () => startSweepFromHome(group.studyId, { rerun: true })
+        );
     });
     return button;
 }

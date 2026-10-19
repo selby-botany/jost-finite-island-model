@@ -1100,6 +1100,12 @@ what varies in the <strong>Set up sweep…</strong> dialog (a live count and, on
 every point), and press <strong>Run</strong> as always: with <strong>Sweep</strong> on, Run runs the
 configuration over those ranges into the study chosen at the bottom of
 Configure. That study then holds the sweep; a study holds at most one.</li>
+<li>On Home, a study that holds a sweep has two more buttons beside <strong>Continue
+sweep</strong>. <strong>Retry failed (N)</strong> appears while N points have failed and runs
+just those again (<code>fim sweep resume --retry-failed</code>). <strong>Recompute all…</strong>
+asks you to confirm, then recomputes every finished point and compares each
+with its stored run (<code>fim sweep resume --rerun</code>). Both open the sweep's
+progress view.</li>
 <li>A failed point is recorded and the sweep continues. Press Ctrl+C to stop;
 finished points stay in the study.</li>
 <li>Every point keeps its full trajectories. A sweep multiplies disk use by its

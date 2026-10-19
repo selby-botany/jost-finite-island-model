@@ -198,6 +198,7 @@ from fim.sweep_run import (
     create_sweep_study,
     resolve_concurrency,
     run_sweep,
+    sweep_point_statuses,
     sweep_spec_of,
     write_reproducibility_note,
 )
@@ -4921,6 +4922,7 @@ class Api:
                     "createdAt": study.created_at,
                     "runDirectories": directories,
                     "sweepPointCount": _sweep_point_count(study),
+                    "sweepFailedCount": _sweep_failed_count(study, results),
                     "readOnly": study.read_only,
                     "closed": study.closed,
                     "lifecycle": group_lifecycle.study_summary(
@@ -5581,8 +5583,25 @@ class Api:
         study_id: str,
         retry_failed: bool = False,
         points_at_once: int | None = None,
+        rerun: bool = False,
     ) -> dict[str, Any]:
-        """Run the points of an existing sweep Study that are still missing."""
+        """Run the points of an existing sweep Study that are still missing.
+
+        Args:
+            study_id: A sweep Study.
+            retry_failed: Also retry the points that failed before.
+            points_at_once: Points to run at the same time, or `None` for
+                automatic.
+            rerun: Also recompute every finished point and compare it with
+                its stored result bit for bit (a match replaces the old run;
+                a difference keeps both and is reported). A completed re-run
+                is recorded as the sweep's verification.
+
+        Returns:
+            `{"ok": True, "studyId": ...}`, or `{"ok": False, "message":
+            ...}` if a run or another sweep is in progress or the Study is
+            not a sweep.
+        """
         busy = self._busy_message()
         if busy is not None:
             return {"ok": False, "message": busy}
@@ -5599,6 +5618,7 @@ class Api:
             window,
             study_id,
             retry_failed=retry_failed,
+            rerun=rerun,
             points_at_once=points_at_once,
             max_workers=_parse_max_workers(saved.get("max_workers", "")),
         )
@@ -5898,6 +5918,7 @@ class Api:
         study_id: str,
         *,
         retry_failed: bool,
+        rerun: bool = False,
         points_at_once: int | None = None,
         max_workers: int | None = None,
     ) -> None:
@@ -5919,6 +5940,7 @@ class Api:
                     push,
                     cancel_event,
                     retry_failed=retry_failed,
+                    rerun=rerun,
                     points_at_once=points_at_once,
                     max_workers=max_workers,
                     max_attempts=DEFAULT_SWEEP_MAX_ATTEMPTS,
@@ -7179,6 +7201,17 @@ def _check_reproducibility(
 def _default_sweep_name(spec: SweepSpec) -> str:
     """Name a Study for a sweep from the parameters it varies."""
     return f"Sweep of {' and '.join(axis.key for axis in spec.axes)}"
+
+
+def _sweep_failed_count(study: groups.StudyManifest, results: Path | None) -> int:
+    """Return how many points of a sweep Study failed (0 for any other Study)."""
+    if study.sweep_spec is None:
+        return 0
+    try:
+        statuses = sweep_point_statuses(study, results=results)
+    except ValueError:
+        return 0
+    return sum(1 for status in statuses if status.state == "failed")
 
 
 def _sweep_point_count(study: groups.StudyManifest) -> int | None:

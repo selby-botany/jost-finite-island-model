@@ -8,6 +8,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Retry failed and Recompute all on Home.** A study that holds a sweep shows
+  **Retry failed (N)** while any point has failed, and **Recompute all…**
+  (after a confirmation) once it has results. They are the desktop app's
+  `fim sweep resume --retry-failed` and `--rerun`.
+
 - **A sweep's fingerprint, its sweep file, and `fim sweep verify`.** `plan`
   prints a digest of the experiment; `fim sweep spec STUDY_ID` writes the sweep
   file that regenerates a study (the same digest); `fim sweep verify STUDY_ID`

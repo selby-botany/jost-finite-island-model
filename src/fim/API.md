@@ -12727,10 +12727,29 @@ at or over the size threshold, until `confirmed` is true.
 @_log_bridge_call
 def resume_sweep(study_id: str,
                  retry_failed: bool = False,
-                 points_at_once: int | None = None) -> dict[str, Any]
+                 points_at_once: int | None = None,
+                 rerun: bool = False) -> dict[str, Any]
 ```
 
 Run the points of an existing sweep Study that are still missing.
+
+**Arguments**:
+
+- `study_id` - A sweep Study.
+- `retry_failed` - Also retry the points that failed before.
+- `points_at_once` - Points to run at the same time, or `None` for
+  automatic.
+- `rerun` - Also recompute every finished point and compare it with
+  its stored result bit for bit (a match replaces the old run;
+  a difference keeps both and is reported). A completed re-run
+  is recorded as the sweep's verification.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "studyId": ...}`, or `{"ok": False, "message":
+  ...}` if a run or another sweep is in progress or the Study is
+  not a sweep.
 
 <a id="fim.gui.app.Api.cancel_sweep"></a>
 

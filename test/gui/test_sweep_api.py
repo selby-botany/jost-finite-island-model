@@ -929,3 +929,100 @@ def test_a_plan_marks_the_points_a_finished_sweep_already_computed(
     assert (before["newCount"], before["reusedCount"]) == (2, 0)
     assert (after["newCount"], after["reusedCount"]) == (0, 2)
     assert [point["exists"] for point in after["points"]] == [True, True]
+
+
+def _capture_run_sweep(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Replace the app's `run_sweep` with one that records its options."""
+    calls: list[dict[str, Any]] = []
+
+    def record(study_id: str, *args: Any, **kwargs: Any) -> None:
+        del args
+        calls.append({"study_id": study_id, **kwargs})
+
+    monkeypatch.setattr(app_module, "run_sweep", record)
+    return calls
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "retry", "rerun"),
+    [
+        ({}, False, False),
+        ({"retry_failed": True}, True, False),
+        ({"rerun": True}, False, True),
+        ({"retry_failed": True, "rerun": True}, True, True),
+    ],
+)
+def test_resume_sweep_passes_the_retry_and_recompute_flags_on(
+    api: Api,
+    window: _FakeWindow,
+    monkeypatch: pytest.MonkeyPatch,
+    kwargs: dict[str, bool],
+    retry: bool,
+    rerun: bool,
+) -> None:
+    study_id = _finished_sweep(api, window)
+    calls = _capture_run_sweep(monkeypatch)
+
+    reply = api.resume_sweep(study_id, **kwargs)
+    assert api._sweep_thread is not None
+    api._sweep_thread.join(30)
+
+    assert reply == {"ok": True, "studyId": study_id}
+    assert len(calls) == 1
+    assert (calls[0]["retry_failed"], calls[0]["rerun"]) == (retry, rerun)
+
+
+def test_recomputing_all_through_the_app_verifies_the_sweep(
+    api: Api, window: _FakeWindow
+) -> None:
+    from fim.sweep_run import read_verification  # noqa: PLC0415
+
+    study_id = _finished_sweep(api, window)
+    window.pushed.clear()
+    window.finished.clear()
+
+    assert api.resume_sweep(study_id, rerun=True)["ok"] is True
+    _wait_until_idle(api)
+
+    kinds = [event["kind"] for event in window.events()]
+    assert kinds.count("point_recomputed") == 2
+    record = read_verification(study_id)
+    assert record is not None and record["result"] == "identical"
+
+
+def test_the_study_list_counts_the_failed_points_of_a_sweep(api: Api) -> None:
+    from fim.sweep import SweepSpec, enumerate_points, expand_axis  # noqa: PLC0415
+    from fim.sweep_run import (  # noqa: PLC0415
+        PointFailure,
+        create_sweep_study,
+        run_sweep,
+    )
+
+    class Failing:
+        def run_point(self, *args: Any, **kwargs: Any) -> PointFailure:
+            del args, kwargs
+            return PointFailure("the engine exploded")
+
+    spec = SweepSpec(
+        base={
+            "N": 8,
+            "ploidy": "haploid",
+            "d": 2,
+            "m": 0.1,
+            "mu": 0.2,
+            "seed": 7,
+            "n_replicates": 1,
+            "precision": 0.1,
+        },
+        axes=(expand_axis("N", [8, 16]),),
+    )
+    study = create_sweep_study(spec, enumerate_points(spec), "Failing")
+    plain = groups.create_study("Plain")
+    run_sweep(
+        study.study_id, Failing(), lambda _e: None, threading.Event(), points_at_once=1
+    )
+
+    rows = {row["studyId"]: row for row in api.list_studies()}
+
+    assert rows[study.study_id]["sweepFailedCount"] == 2
+    assert rows[plain.study_id]["sweepFailedCount"] == 0

@@ -1242,6 +1242,12 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   every point), and press **Run** as always: with **Sweep** on, Run runs the
   configuration over those ranges into the study chosen at the bottom of
   Configure. That study then holds the sweep; a study holds at most one.
+- On Home, a study that holds a sweep has two more buttons beside **Continue
+  sweep**. **Retry failed (N)** appears while N points have failed and runs
+  just those again (`fim sweep resume --retry-failed`). **Recompute all…**
+  asks you to confirm, then recomputes every finished point and compares each
+  with its stored run (`fim sweep resume --rerun`). Both open the sweep's
+  progress view.
 - A failed point is recorded and the sweep continues. Press Ctrl+C to stop;
   finished points stay in the study.
 - Every point keeps its full trajectories. A sweep multiplies disk use by its

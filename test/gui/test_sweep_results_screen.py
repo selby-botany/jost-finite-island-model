@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
 
+from fim.gui import app as app_module
 from fim.persistence import groups
 from fim.sweep import SweepSpec, enumerate_points, expand_axis
-from fim.sweep_run import LocalPointRunner, create_sweep_study, run_sweep
+from fim.sweep_run import (
+    LocalPointRunner,
+    PointFailure,
+    create_sweep_study,
+    run_sweep,
+)
 
 from .test_sweep_screen import (
     _OPEN_SWEEP,
@@ -248,6 +255,151 @@ def test_home_offers_sweep_results_and_continue_only_for_a_sweep_study(
     assert "Re-run all…" not in sweep and "Re-run all…" not in by_hand
     assert "Sweep results…" not in by_hand
     assert "Continue sweep" not in by_hand
+
+
+class _FailingRunner:
+    """A point runner whose every point fails, to leave failed points behind."""
+
+    def run_point(self, *args: Any, **kwargs: Any) -> PointFailure:
+        del args, kwargs
+        return PointFailure("the engine exploded")
+
+
+_GROUP_BUTTONS = (
+    "Array.from(document.querySelectorAll('.open-run-group-header'))"
+    ".map((group) => ({"
+    "header: group.textContent,"
+    "buttons: Array.from(group.querySelectorAll('.open-run-group-actions button'))"
+    ".map((button) => button.textContent.trim())}))"
+)
+
+
+def _planned_sweep(name: str) -> tuple[SweepSpec, Any]:
+    """A two-point sweep study, returned with its plan."""
+    spec = SweepSpec(
+        base={
+            "N": 16,
+            "ploidy": "haploid",
+            "d": 2,
+            "m": 0.1,
+            "mu": 0.01,
+            "seed": 7,
+            "n_replicates": 1,
+            "max_generations": 10,
+        },
+        axes=(expand_axis("d", [2, 3]),),
+    )
+    return spec, create_sweep_study(spec, enumerate_points(spec), name)
+
+
+def test_home_offers_retry_failed_and_recompute_all_only_where_they_apply(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    _, finished = _planned_sweep("Finished sweep")
+    run_sweep(finished.study_id, LocalPointRunner(), lambda _e: None, threading.Event())
+    _, broken = _planned_sweep("Broken sweep")
+    run_sweep(
+        broken.study_id,
+        _FailingRunner(),
+        lambda _e: None,
+        threading.Event(),
+        points_at_once=1,
+    )
+    _planned_sweep("Planned sweep")
+
+    def steps(poll_until: Poll) -> Any:
+        return poll_until(
+            _GROUP_BUTTONS,
+            lambda seen: any("Sweep results…" in g["buttons"] for g in seen),
+        )
+
+    seen = {g["header"]: g["buttons"] for g in _drive(window, steps)}
+
+    finished_buttons = next(b for h, b in seen.items() if "Finished sweep" in h)
+    broken_buttons = next(b for h, b in seen.items() if "Broken sweep" in h)
+    planned_buttons = next(b for h, b in seen.items() if "Planned sweep" in h)
+    assert "Recompute all…" in finished_buttons
+    assert not any(b.startswith("Retry failed") for b in finished_buttons)
+    assert "Retry failed (2)" in broken_buttons
+    assert "Recompute all…" not in planned_buttons
+    assert not any(b.startswith("Retry failed") for b in planned_buttons)
+    for buttons in (finished_buttons, broken_buttons, planned_buttons):
+        assert "Re-run all…" not in buttons
+
+
+@pytest.mark.parametrize(
+    ("label", "needs_confirm", "retry", "rerun"),
+    [("Retry failed (2)", False, True, False), ("Recompute all…", True, False, True)],
+)
+def test_the_home_buttons_start_the_sweep_with_their_own_flags(
+    fast_scalar_run_settings: Path,
+    window: webview.Window,
+    monkeypatch: pytest.MonkeyPatch,
+    label: str,
+    needs_confirm: bool,
+    retry: bool,
+    rerun: bool,
+) -> None:
+    _, study = _planned_sweep("Broken sweep")
+    run_sweep(
+        study.study_id,
+        _FailingRunner(),
+        lambda _e: None,
+        threading.Event(),
+        points_at_once=1,
+    )
+    # `Recompute all…` needs a stored run to exist; one finished point does.
+    if rerun:
+        run_sweep(
+            study.study_id,
+            LocalPointRunner(),
+            lambda _e: None,
+            threading.Event(),
+            retry_failed=True,
+        )
+    calls: list[dict[str, Any]] = []
+
+    def record(study_id: str, *args: Any, **kwargs: Any) -> None:
+        del args
+        calls.append({"study_id": study_id, **kwargs})
+
+    monkeypatch.setattr(app_module, "run_sweep", record)
+    click = (
+        "const group = Array.from(document.querySelectorAll('.open-run-group-header'))"
+        ".find((g) => g.textContent.includes('Broken sweep'));"
+        "const press = (text) => Array.from(group.querySelectorAll('button'))"
+        ".find((b) => b.textContent.trim() === text);"
+        f"press({label!r}).click();"
+    )
+
+    def steps(poll_until: Poll) -> Any:
+        poll_until(
+            _GROUP_BUTTONS,
+            lambda seen: any(label in g["buttons"] for g in seen),
+        )
+        window.evaluate_js(click)
+        if needs_confirm:
+            poll_until(
+                "Array.from(document.querySelectorAll('.open-run-inline-confirm'))"
+                ".map((row) => row.textContent)",
+                lambda rows: len(rows) == 1 and "Confirm" in rows[0],
+            )
+            assert calls == []
+            window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                "'.open-run-inline-confirm button'))"
+                ".find((b) => b.textContent.trim() === 'Confirm').click();"
+            )
+        deadline = time.monotonic() + 20
+        while not calls and time.monotonic() < deadline:
+            time.sleep(0.05)
+        return list(calls)
+
+    seen = _drive(window, steps)
+
+    assert len(seen) == 1
+    assert seen[0]["study_id"] == study.study_id
+    assert (seen[0]["retry_failed"], seen[0]["rerun"]) == (retry, rerun)
 
 
 def test_home_shows_only_studies_that_exist_without_removed_actions(
