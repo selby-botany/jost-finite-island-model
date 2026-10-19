@@ -841,10 +841,10 @@ and the last burn-in generation are kept; the other burn-in frames are dropped
 unless `trajectory_keep_burn_in` is `true`, which tapers them like the rest.
 An equilibrium run is stationary, so a scatter plot or a scrubber looks at the
 end; use `keep_burn_in` for a transient study. The rule needs the run's end, so
-the log is written whole while the run goes and cut down when the run is
-published (for a batch, once every replicate has stopped): the disk needed
-while it runs is the full log of every replicate of the batch, and only the
-finished result is small. What is kept depends only on the generation
+the log is written whole while the run goes and cut down the moment the
+replicate stops (a single run: when it is published): the disk needed while a
+batch runs is the full log of the replicates still running, and a replicate
+that has stopped is already small. What is kept depends only on the generation
 number and the run's end, so a rerun keeps the same frames and the replicates of
 equal length align. The settings are recorded in `manifest.json` only for a
 tapered run.

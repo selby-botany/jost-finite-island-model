@@ -101,10 +101,16 @@ keeps the last `trajectory_keep_last` generations (1,000 by default) in full
 and thins the past by a stride that doubles with its distance from the end, so
 a run of 2.6 million generations keeps about 12,000 frames instead of 295,000
 at the thinned default. The rule needs the run's end, so the log is written
-whole and rewritten with only the kept frames when the run is published
-(`fim.persistence.taper`); the rewritten file is the file a run that had
-written only those frames would have written, and tapering it again changes
-nothing. While a batch runs, the disk must hold every replicate's full log.
+whole and rewritten with only the kept frames the moment a replicate stops
+(or, for a single run, when it is published; `fim.persistence.taper`). The
+rewritten file is the file a run that had written only those frames would
+have written, and tapering it again changes nothing. While a batch runs, the
+disk holds the full logs of the replicates still running and the small
+tapered logs of those that have stopped. If a process stops after a replicate
+was cut down but before the next checkpoint, the checkpoint's recorded
+position no longer matches the file, so the log is cut back to the
+checkpoint's generation by content; the frames the cut removed would be
+removed again when the replicate stops.
 
 **Tuning.** The snapshot interval (256), the block size (512 generations) and
 the sync period (two seconds) are the Expert Settings `log_key_every`,

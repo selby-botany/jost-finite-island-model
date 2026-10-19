@@ -8667,6 +8667,28 @@ def test_advance_refuses_negative_ticks_and_finalize_an_unstopped_batch(
 
 The stepping contract is checked.
 
+<a id="engine.test_batch_session.test_a_tapered_replicate_is_cut_down_when_it_stops_not_when_the_batch_ends"></a>
+
+#### test\_a\_tapered\_replicate\_is\_cut\_down\_when\_it\_stops\_not\_when\_the\_batch\_ends
+
+```python
+def test_a_tapered_replicate_is_cut_down_when_it_stops_not_when_the_batch_ends(
+        tmp_path: Path) -> None
+```
+
+Peak disk is the replicates still running, not the whole batch.
+
+<a id="engine.test_batch_session.test_a_log_cut_down_after_its_checkpoint_resumes_by_content"></a>
+
+#### test\_a\_log\_cut\_down\_after\_its\_checkpoint\_resumes\_by\_content
+
+```python
+def test_a_log_cut_down_after_its_checkpoint_resumes_by_content(
+        tmp_path: Path) -> None
+```
+
+The window between a lane stopping and the next checkpoint is safe.
+
 <a id="engine.test_engine"></a>
 
 # engine.test\_engine
@@ -11647,8 +11669,12 @@ Tests for `fim.execution`: stepwise scalar sessions match the blocking run.
         {
             "engine_backend": "generational"
         },
+        {
+            "trajectory_retention": "tapered",
+            "trajectory_keep_last": 6
+        },
     ],
-    ids=["infinite", "finite", "thinned", "generational"],
+    ids=["infinite", "finite", "thinned", "generational", "tapered"],
 )
 @pytest.mark.parametrize("steps", [[], [1], [0, 3, 1, 7], [1] * 12])
 def test_stepwise_session_matches_blocking_run(changes: dict[str, Any],
@@ -11985,6 +12011,17 @@ def test_thinned_retention_leaves_every_reported_number_unchanged() -> None
 ```
 
 Keeping fewer stored generations never changes what is reported.
+
+<a id="engine.test_identity_neutrality.test_tapered_retention_and_a_compact_history_leave_every_number_unchanged"></a>
+
+#### test\_tapered\_retention\_and\_a\_compact\_history\_leave\_every\_number\_unchanged
+
+```python
+def test_tapered_retention_and_a_compact_history_leave_every_number_unchanged(
+) -> None
+```
+
+Keeping fewer frames, or rounding the stored history, changes no report.
 
 <a id="engine.test_identity_neutrality.test_process_count_leaves_an_adaptive_batch_unchanged"></a>
 

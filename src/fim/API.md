@@ -882,6 +882,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [frames](#fim.persistence.binary_store.BinaryLogStore.frames)
     * [checkpoint](#fim.persistence.binary_store.BinaryLogStore.checkpoint)
     * [resume](#fim.persistence.binary_store.BinaryLogStore.resume)
+    * [resume\_after\_taper](#fim.persistence.binary_store.BinaryLogStore.resume_after_taper)
     * [frame\_at](#fim.persistence.binary_store.BinaryLogStore.frame_at)
     * [discard](#fim.persistence.binary_store.BinaryLogStore.discard)
     * [flush](#fim.persistence.binary_store.BinaryLogStore.flush)
@@ -1009,6 +1010,15 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_pairwise](#fim.persistence.pairwise.write_pairwise)
   * [read\_pairwise](#fim.persistence.pairwise.read_pairwise)
   * [pair\_value](#fim.persistence.pairwise.pair_value)
+* [fim.persistence.recording](#fim.persistence.recording)
+  * [LEVELS](#fim.persistence.recording.LEVELS)
+  * [Recording](#fim.persistence.recording.Recording)
+    * [from\_parameters](#fim.persistence.recording.Recording.from_parameters)
+    * [keeps\_trajectory](#fim.persistence.recording.Recording.keeps_trajectory)
+    * [absent\_artifacts](#fim.persistence.recording.Recording.absent_artifacts)
+    * [satisfies](#fim.persistence.recording.Recording.satisfies)
+    * [same\_frames\_as](#fim.persistence.recording.Recording.same_frames_as)
+  * [comparable\_artifacts](#fim.persistence.recording.comparable_artifacts)
 * [fim.persistence.report](#fim.persistence.report)
   * [write\_report](#fim.persistence.report.write_report)
   * [write\_jsonl\_rows](#fim.persistence.report.write_jsonl_rows)
@@ -9649,6 +9659,12 @@ the recorded positions.
 - `replica_index` - The lane's zero-based index in its batch.
 - `awaiting_window` - Whether the lane was built waiting for the
   batch's averaging window (its monitor is in window mode).
+
+  A tapered run's log may have been cut down since the checkpoint named
+  its position (the lane finished, and was tapered, before the process
+  stopped). The frames the cut dropped would be dropped again when the
+  resumed lane finishes, so the log is cut back to the checkpoint's
+  generation by content instead.
 
 
 **Returns**:
@@ -23191,6 +23207,41 @@ generation and is stored as a keyframe.
 - `TlogError` - If the file is another run's, another layout, or unusable.
 - `FileNotFoundError` - If there is no log to resume.
 
+<a id="fim.persistence.binary_store.BinaryLogStore.resume_after_taper"></a>
+
+#### resume\_after\_taper
+
+```python
+def resume_after_taper(run_id: str, layout: FrameLayout,
+                       generation: int) -> tlog.LogPosition
+```
+
+Continue a log that was tapered after the checkpoint that names it.
+
+A tapered run cuts a replicate's log down when the replicate stops. A
+process that stopped after that, before the next checkpoint, leaves a
+log the last checkpoint no longer matches by position. The frames the
+cut removed are removed again when the continued run finishes, so the
+log is rewritten keeping only what is at or before `generation` (the
+checkpoint's), and then resumed at its last block.
+
+**Arguments**:
+
+- `run_id` - The run the log holds.
+- `layout` - Its layout.
+- `generation` - The checkpoint's generation.
+
+
+**Returns**:
+
+  The committed position resumed at.
+
+
+**Raises**:
+
+- `ValueError` - If the store is already writing.
+- `FileNotFoundError` - If there is no log to resume.
+
 <a id="fim.persistence.binary_store.BinaryLogStore.frame_at"></a>
 
 #### frame\_at
@@ -25789,6 +25840,146 @@ Return one pair's saved value, or `None` if the file has none.
   The value (a deme with itself: identity 1, F_ST 0); `None` when the
   matrices were skipped for a large deme count, or the value is
   undefined (a `null` pairwise F_ST).
+
+<a id="fim.persistence.recording"></a>
+
+# fim.persistence.recording
+
+What a run kept, and whether it kept enough for what is asked of it.
+
+A run can write down more or less of itself: every generation's allele
+frequencies or only some (the trajectory log), the statistic history at full
+precision or rounded, or only the statistics. The settings that choose this
+are outside a run's identity, so two runs with one id can differ in what they
+hold. This module reads what a run promised from its recorded parameters and
+answers two questions without touching the files:
+
+- `satisfies`: does an existing run hold at least what a new request asks for?
+  (A sweep reuses a point only if it does.)
+- `comparable_artifacts`: which artifacts of two runs must agree bit for bit?
+  (Two runs of one seed agree on everything both kept the same way.)
+
+The ladder, from most to least kept: `full`, then `thinned` and `tapered`
+(different frames, neither a superset of the other unless equal), then
+`statistics` (no trajectory log at all). `full` satisfies every level.
+
+<a id="fim.persistence.recording.LEVELS"></a>
+
+#### LEVELS
+
+The trajectory retention levels, most kept first.
+
+<a id="fim.persistence.recording.Recording"></a>
+
+## Recording Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Recording()
+```
+
+What a run keeps of itself.
+
+**Attributes**:
+
+- `level` - `full`, `thinned`, `tapered` or `statistics`.
+- `stride` - With thinning, one generation in this many.
+- `thinning_start` - With thinning, the first generation that may be
+  skipped (0 when not recorded).
+- `keep_last` - With tapering, the last generations kept in full.
+- `keep_burn_in` - With tapering, whether burn-in frames are kept.
+- `history` - `exact` or `compact`.
+
+<a id="fim.persistence.recording.Recording.from_parameters"></a>
+
+#### from\_parameters
+
+```python
+@classmethod
+def from_parameters(cls, parameters: Mapping[str, Any]) -> Recording
+```
+
+Read a recording from a run's parameters (a manifest's or a point's).
+
+A setting that is absent has its default, which is how a run records
+that it kept everything.
+
+**Arguments**:
+
+- `parameters` - A configuration mapping or a manifest's `parameters`.
+
+<a id="fim.persistence.recording.Recording.keeps_trajectory"></a>
+
+#### keeps\_trajectory
+
+```python
+@property
+def keeps_trajectory() -> bool
+```
+
+Whether the run has a trajectory log at all.
+
+<a id="fim.persistence.recording.Recording.absent_artifacts"></a>
+
+#### absent\_artifacts
+
+```python
+@property
+def absent_artifacts() -> frozenset[str]
+```
+
+The artifact keys this run deliberately does not have.
+
+<a id="fim.persistence.recording.Recording.satisfies"></a>
+
+#### satisfies
+
+```python
+def satisfies(wanted: Recording) -> bool
+```
+
+Return whether a run with this recording serves a request for `wanted`.
+
+**Arguments**:
+
+- `wanted` - What a new run would be asked to keep.
+
+
+**Returns**:
+
+  `True` when everything `wanted` asks for is held here: the
+  statistic history is at least as exact, and the frames kept are
+  at least those `wanted` keeps.
+
+<a id="fim.persistence.recording.Recording.same_frames_as"></a>
+
+#### same\_frames\_as
+
+```python
+def same_frames_as(other: Recording) -> bool
+```
+
+Return whether two runs keep exactly the same trajectory frames.
+
+<a id="fim.persistence.recording.comparable_artifacts"></a>
+
+#### comparable\_artifacts
+
+```python
+def comparable_artifacts(older: Recording, newer: Recording) -> frozenset[str]
+```
+
+Return the artifact keys two runs of one seed must hold identically.
+
+The report, the pairwise statistics and (for a batch) the summary do not
+depend on what was kept. The trajectory log does, so it is compared only
+when both kept the same frames; the statistic history only when both
+wrote it in the same format.
+
+**Arguments**:
+
+- `older` - The existing run's recording.
+- `newer` - The recomputed run's recording.
 
 <a id="fim.persistence.report"></a>
 
@@ -29696,9 +29887,10 @@ What a taper changed.
 
 ```python
 def taper_log(path: Path | str,
-              kept: Collection[int],
+              kept: Collection[int] | None,
               *,
-              options: Mapping[str, Any] | None = None) -> TaperResult
+              options: Mapping[str, Any] | None = None,
+              through: int | None = None) -> TaperResult
 ```
 
 Keep only the generations in `kept`, in place.
@@ -29709,7 +29901,9 @@ failure leaves the original untouched.
 **Arguments**:
 
 - `path` - The log to rewrite.
-- `kept` - The generations to keep; each must be in the log.
+- `kept` - The generations to keep; each must be in the log. `None`
+  keeps every generation up to `through`.
+- `through` - With `kept=None`, the last generation to keep.
 - `options` - Keyword options for `tlog.LogWriter` (`key_every`,
   `block_generations`, `sync_seconds`), normally the run's own
   (`fim.persistence.binary_store.log_options`), so the new file is

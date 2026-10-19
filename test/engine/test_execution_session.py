@@ -89,8 +89,9 @@ def _assert_same(left: RunResult, right: RunResult) -> None:
             "trajectory_thinning_start": 8,
         },
         {"engine_backend": "generational"},
+        {"trajectory_retention": "tapered", "trajectory_keep_last": 6},
     ],
-    ids=["infinite", "finite", "thinned", "generational"],
+    ids=["infinite", "finite", "thinned", "generational", "tapered"],
 )
 @pytest.mark.parametrize("steps", [[], [1], [0, 3, 1, 7], [1] * 12])
 def test_stepwise_session_matches_blocking_run(
@@ -189,6 +190,7 @@ _VECTOR_CASES: dict[str, dict[str, Any]] = {
         "trajectory_stride": 5,
         "trajectory_thinning_start": 8,
     },
+    "tapered": {"trajectory_retention": "tapered", "trajectory_keep_last": 6},
 }
 
 

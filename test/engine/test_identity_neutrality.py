@@ -90,6 +90,20 @@ def test_thinned_retention_leaves_every_reported_number_unchanged() -> None:
     assert _run(thinned) == _run(full)
 
 
+def test_tapered_retention_and_a_compact_history_leave_every_number_unchanged() -> None:
+    """Keeping fewer frames, or rounding the stored history, changes no report."""
+    full = make_params(
+        300, loci=loci(1), d=3, n_replicates=3, mu=0.01, m=0.05, stop_batch_early=False
+    )
+    kept = replace(
+        full,
+        trajectory_retention="tapered",
+        trajectory_keep_last=20,
+        history_format="compact",
+    )
+    assert _run(kept) == _run(full)
+
+
 def test_process_count_leaves_an_adaptive_batch_unchanged(tmp_path: Path) -> None:
     """The `lineal` process pool judges the stop in replicate order."""
     params = _adaptive()

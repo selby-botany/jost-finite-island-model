@@ -85,6 +85,7 @@ _CASES: dict[str, dict[str, Any]] = {
     "adaptive-window": {**_ADAPTIVE, "max_concurrent_replicates": 2},
     "matched": _MATCHED,
     "matched-window": {**_MATCHED, "max_concurrent_replicates": 2},
+    "tapered": {"trajectory_retention": "tapered", "trajectory_keep_last": 5},
     "thinned": {
         "trajectory_retention": "thinned",
         "trajectory_stride": 3,
@@ -454,3 +455,41 @@ def test_advance_refuses_negative_ticks_and_finalize_an_unstopped_batch(
             session.advance(-1)
         with pytest.raises(ValueError, match="has not stopped"):
             session.finalize()
+
+
+def test_a_tapered_replicate_is_cut_down_when_it_stops_not_when_the_batch_ends(
+    tmp_path: Path,
+) -> None:
+    """Peak disk is the replicates still running, not the whole batch."""
+    from fim.persistence.retention import tapered_generations  # noqa: PLC0415
+
+    params = _params(
+        trajectory_retention="tapered", trajectory_keep_last=5, convergence_burn_in=1
+    )
+    with BatchSession.create(params, _factory(tmp_path), clock=_clock) as session:
+        session.advance()
+        assert session.stopped
+        # Every lane has stopped, but the batch has not been finalized yet.
+        for lane in session.lanes:
+            log = tmp_path / lane.run_id / "trajectory.tlog"
+            final = lane.state.generation
+            held = [frame.generation for frame in iter_frames(log)]
+            assert held == tapered_generations(final, 5, 1)
+            assert len(held) < final + 1
+        session.finalize()
+
+
+def test_a_log_cut_down_after_its_checkpoint_resumes_by_content(
+    tmp_path: Path,
+) -> None:
+    """The window between a lane stopping and the next checkpoint is safe."""
+    params = _params(trajectory_retention="tapered", trajectory_keep_last=4)
+    reference = _whole(params, tmp_path / "whole")
+    ticks = _ticks(params, tmp_path / "count")
+    # Checkpoint early, then run on until lanes have stopped and been cut down.
+    loaded = _interrupted(params, tmp_path / "a", checkpoint_at=ticks // 2, lost=ticks)
+
+    resumed = _resume(params, tmp_path / "a", loaded)
+
+    _assert_same_results(resumed, reference)
+    _assert_same_logs(tmp_path / "whole", tmp_path / "a" / "logs")

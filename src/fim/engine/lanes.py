@@ -39,6 +39,7 @@ from fim.model.operators import expand_population_sizes, step
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.model.vector_block import VectorBlock, VectorMigration
+from fim.persistence.binary_store import BinaryLogStore, log_options
 from fim.persistence.frame import FrameLayout, state_to_frame
 from fim.persistence.manifest import CURRENT_SCHEMA_VERSION, RunManifest
 from fim.persistence.retention import TrajectoryRetention
@@ -50,6 +51,7 @@ from fim.persistence.store import (
     equilibrium_store_for,
     store_wants_frames,
 )
+from fim.persistence.taper import taper_log
 
 logger = logging.getLogger(__name__)
 
@@ -646,6 +648,29 @@ def build_replica_lane(
     )
 
 
+def _taper_lane_log(lane: ReplicaLane, store: TrajectoryStore) -> None:
+    """Cut a tapered lane's finished log down the moment the lane stops.
+
+    The rule needs the run's end, which is known now. Doing it here rather
+    than when the batch is published means a batch holds the full logs of
+    only the replicates still running; the finished ones are already small.
+    Tapering again later (at publication, or when a checkpoint is restored)
+    changes nothing.
+    """
+    retention = TrajectoryRetention.from_params(lane.params)
+    child_for = getattr(store, "store_for", None)
+    child = child_for(lane.run_id) if callable(child_for) else store
+    if not retention.tapered or not isinstance(child, BinaryLogStore):
+        return
+    if not child.path.is_file():
+        return
+    taper_log(
+        child.path,
+        retention.kept_generations(lane.state.generation),
+        options=log_options(lane.params.expert),
+    )
+
+
 def finalize_replica_lane(
     lane: ReplicaLane,
     clock: Clock,
@@ -678,6 +703,7 @@ def finalize_replica_lane(
     # running (at most `max_concurrent_replicates`), never one per
     # replicate for the whole batch.
     close_run_store(store, lane.run_id)
+    _taper_lane_log(lane, store)
     outcome = lane.monitor.outcome()
     lane.vectorized_state = None
     if outcome.reason is None:

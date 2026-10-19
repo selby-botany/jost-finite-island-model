@@ -87,6 +87,7 @@ _CASES: dict[str, dict[str, Any]] = {
         "trajectory_stride": 5,
         "trajectory_thinning_start": 8,
     },
+    "tapered": {"trajectory_retention": "tapered", "trajectory_keep_last": 6},
     "generational": {"engine_backend": "generational"},
 }
 
@@ -562,6 +563,7 @@ _VECTOR_CASES: dict[str, dict[str, Any]] = {
         "trajectory_stride": 5,
         "trajectory_thinning_start": 8,
     },
+    "tapered": {"trajectory_retention": "tapered", "trajectory_keep_last": 6},
 }
 
 

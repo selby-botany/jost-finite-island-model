@@ -39,9 +39,10 @@ class TaperResult:
 
 def taper_log(
     path: Path | str,
-    kept: Collection[int],
+    kept: Collection[int] | None,
     *,
     options: Mapping[str, Any] | None = None,
+    through: int | None = None,
 ) -> TaperResult:
     """Keep only the generations in `kept`, in place.
 
@@ -50,7 +51,9 @@ def taper_log(
 
     Args:
         path: The log to rewrite.
-        kept: The generations to keep; each must be in the log.
+        kept: The generations to keep; each must be in the log. `None`
+            keeps every generation up to `through`.
+        through: With `kept=None`, the last generation to keep.
         options: Keyword options for `tlog.LogWriter` (`key_every`,
             `block_generations`, `sync_seconds`), normally the run's own
             (`fim.persistence.binary_store.log_options`), so the new file is
@@ -64,7 +67,9 @@ def taper_log(
         ValueError: A generation in `kept` is not in the log.
     """
     target = Path(path)
-    wanted = set(kept)
+    if kept is None and through is None:
+        raise ValueError("give the generations to keep, or `through`")
+    wanted = set(kept) if kept is not None else set()
     scan = tlog.recover(target, truncate=False)
     header = scan.header
     temporary = target.with_name(target.name + ".taper")
@@ -72,13 +77,21 @@ def taper_log(
     before = target.stat().st_size
     seen = 0
     written: set[int] = set()
-    writer = tlog.LogWriter(
-        temporary, header.run_id, header.layout, **dict(options or {})
-    )
+    # The new log is written in the old one's mode and keyframe interval, so
+    # a writer resumed on it (a restored checkpoint) finds the same kind of log.
+    settings = {
+        "mode": "sparse" if header.flags & tlog.FLAG_SPARSE else "dense",
+        "key_every": header.key_every,
+        **dict(options or {}),
+    }
+    settings["key_every"] = header.key_every
+    writer = tlog.LogWriter(temporary, header.run_id, header.layout, **settings)
     try:
         for frame in tlog.iter_frames(target, scan=scan):
             seen += 1
-            if frame.generation in wanted:
+            if frame.generation in wanted or (
+                kept is None and through is not None and frame.generation <= through
+            ):
                 writer.submit(frame)
                 written.add(frame.generation)
         writer.close()

@@ -25,9 +25,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Generation 0 and the last burn-in generation stay; the other burn-in frames
   are dropped unless `trajectory_keep_burn_in: true`. The settings are outside a
   run's identity and are recorded in `manifest.json` only for a tapered run.
-  The log is written whole while the run goes and cut down when the run is
-  published, so a batch still needs the disk for all its replicates' full logs
-  while it runs.
+  A batch cuts each replicate's log down the moment that replicate stops, so
+  it holds the full logs of only the replicates still running; a single run is
+  cut down when it is published.
 
 - **A "How each point got there" view on the sweep results card.** Draws the
   statistic against generation, one curve per value of the "Curves by" axis,

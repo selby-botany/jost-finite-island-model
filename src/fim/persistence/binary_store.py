@@ -36,6 +36,7 @@ from fim.persistence.frame import (
     rows_to_frame,
 )
 from fim.persistence.store import TrajectoryRow
+from fim.persistence.taper import taper_log
 from fim.persistence.tlog_reader import LogReader
 
 logger = logging.getLogger(__name__)
@@ -349,6 +350,46 @@ class BinaryLogStore:
                 **self._options,
             )
             return self._writer.position()
+
+    def resume_after_taper(
+        self, run_id: str, layout: FrameLayout, generation: int
+    ) -> tlog.LogPosition:
+        """Continue a log that was tapered after the checkpoint that names it.
+
+        A tapered run cuts a replicate's log down when the replicate stops. A
+        process that stopped after that, before the next checkpoint, leaves a
+        log the last checkpoint no longer matches by position. The frames the
+        cut removed are removed again when the continued run finishes, so the
+        log is rewritten keeping only what is at or before `generation` (the
+        checkpoint's), and then resumed at its last block.
+
+        Args:
+            run_id: The run the log holds.
+            layout: Its layout.
+            generation: The checkpoint's generation.
+
+        Returns:
+            The committed position resumed at.
+
+        Raises:
+            ValueError: If the store is already writing.
+            FileNotFoundError: If there is no log to resume.
+        """
+        with self._lock:
+            if self._writer is not None or self._finished:
+                raise ValueError("resume must come before any write")
+            if not self.path.is_file():
+                raise FileNotFoundError(f"trajectory log does not exist: {self.path}")
+            taper_log(
+                self.path,
+                None,
+                through=generation,
+                options={
+                    name: self._options[name]
+                    for name in ("block_generations", "sync_seconds")
+                },
+            )
+            return self.resume(run_id, layout)
 
     def frame_at(self, generation: int) -> TrajectoryFrame:
         """Rebuild one committed generation as a frame, without reading the rest.

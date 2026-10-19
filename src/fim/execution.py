@@ -763,6 +763,12 @@ def restore_lane(
         awaiting_window: Whether the lane was built waiting for the
             batch's averaging window (its monitor is in window mode).
 
+        A tapered run's log may have been cut down since the checkpoint named
+        its position (the lane finished, and was tapered, before the process
+        stopped). The frames the cut dropped would be dropped again when the
+        resumed lane finishes, so the log is cut back to the checkpoint's
+        generation by content instead.
+
     Returns:
         The lane, at the recorded generation.
 
@@ -801,9 +807,15 @@ def restore_lane(
         )
     if not monitor.generations or monitor.generations[-1] != state.generation:
         raise SnapshotError("the monitor's last generation is not the population's")
-    store.resume(
-        run_id, frame_layout(params), _position_from_json(payload["trajectory"])
-    )
+    position = _position_from_json(payload["trajectory"])
+    try:
+        store.resume(run_id, frame_layout(params), position)
+    except ValueError:
+        if params.trajectory_retention != "tapered":
+            raise
+        store.resume_after_taper(
+            run_id, frame_layout(params), int(payload["generation"])
+        )
     outcome, ancestral = _restore_equilibration(params, payload, arrays, store, run_id)
     return ReplicaLane(
         replica_index=replica_index,
