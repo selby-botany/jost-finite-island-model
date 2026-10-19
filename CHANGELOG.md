@@ -8,6 +8,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The benchmark tools share the sweep layer's axes and grid.**
+  `dev/bin/benchmark-engines` reads `--values` through the sweep layer, so a
+  value that does not fit its axis (a fractional deme count, a repeated value)
+  is refused up front with the sweep's own message, and `generate-heatmap-queue`
+  takes its (locus length, d) grid from `fim.sweep.enumerate_values`. Execution
+  stays separate. The documentation says where the boundary is.
+
 - **`fim sweep compact`: make a finished sweep smaller.** Reduces the points of
   a sweep to tapered logs or to statistics only after the fact (`--to`), leaving
   chosen points alone (`--keep corners`, `every=K`, `none`), with `--dry-run`. No

@@ -161,6 +161,7 @@ from fim.engine import (  # noqa: E402
     build_engine_backend,
 )
 from fim.model.locus import LocusSpec  # noqa: E402
+from fim.sweep import expand_axis  # noqa: E402
 from fim.model.params import SimulationParams  # noqa: E402
 from fim.persistence.binary_store import BinaryLogStore  # noqa: E402
 from fim.persistence.store import (  # noqa: E402
@@ -180,6 +181,43 @@ SWEEP_FIELDS = (
     "replicates",
     "max-concurrent-replicates",
 )
+
+# Each benchmark axis and the sweep axis key that defines it. The benchmark
+# shares the sweep layer's axes and value checks (`fim.sweep.expand_axis`), and
+# nothing of its execution: measurement, isolation and queueing stay here.
+SWEEP_AXIS_KEYS = {
+    "d": "d",
+    "N": "N",
+    "mu": "mu",
+    "m": "m",
+    "loci-length": "locus_lengths",
+    "replicates": "n_replicates",
+    "max-concurrent-replicates": "max_concurrent_replicates",
+}
+
+
+def _sweep_values(field: str, text: str) -> list[float]:
+    """Read a comma-separated `--values` list for an axis, checked like a sweep's.
+
+    Whole-number text stays an integer and any other number a float; the sweep
+    layer then checks each against the axis (a whole number where the axis
+    counts something, within its legal range) and refuses a repeat.
+
+    Args:
+        field: A name in `SWEEP_FIELDS`.
+        text: The comma-separated values.
+
+    Raises:
+        ValueError: A value is not a number or does not fit the axis.
+    """
+    numbers: list[float] = []
+    for part in text.split(","):
+        try:
+            numbers.append(int(part))
+        except ValueError:
+            numbers.append(float(part))
+    return list(expand_axis(SWEEP_AXIS_KEYS[field], numbers).values)  # type: ignore[arg-type]
+
 
 DEFAULT_D = 60
 DEFAULT_N = 500
@@ -1206,7 +1244,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--resume requires --output")
 
     baseline = _load_fixed_baseline(args.config)
-    values = [float(v) for v in args.values.split(",")]
+    try:
+        values = _sweep_values(args.sweep, args.values)
+    except ValueError as error:
+        parser.error(f"--values: {error}")
     fixed = {
         "N": baseline.n,
         "mu": baseline.mu,

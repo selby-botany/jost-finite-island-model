@@ -1636,6 +1636,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [needs\_confirmation](#fim.sweep.SweepPlan.needs_confirmation)
   * [enumerate\_points](#fim.sweep.enumerate_points)
   * [derived\_values](#fim.sweep.derived_values)
+  * [enumerate\_values](#fim.sweep.enumerate_values)
   * [point\_run\_name](#fim.sweep.point_run_name)
   * [point\_run\_description](#fim.sweep.point_run_description)
   * [expand\_axis](#fim.sweep.expand_axis)
@@ -38208,6 +38209,30 @@ For an `Nm` axis that is the migration rate `m` it worked out.
 
   A mapping of setting to value; empty when the sweep has no derived
   axis.
+
+<a id="fim.sweep.enumerate_values"></a>
+
+#### enumerate\_values
+
+```python
+def enumerate_values(spec: SweepSpec) -> Iterator[dict[str, CoordinateValue]]
+```
+
+Yield the coordinates of every position of a spec, in order.
+
+The pure grid layer of a sweep: the strategy's own order (first axis
+slowest for a grid), with no configuration built, validated or hashed. A
+caller that has its own way of running or checking a point (the benchmark
+tools) shares the axes and the ordering through this, and nothing else.
+
+**Arguments**:
+
+- `spec` - The sweep specification.
+
+
+**Yields**:
+
+  One mapping of axis key to value per position.
 
 <a id="fim.sweep.point_run_name"></a>
 

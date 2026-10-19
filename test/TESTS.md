@@ -221,6 +221,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 - [`test/validation/`](#group-validation)
   - [`test_api_docs`](#validation.test_api_docs)
   - [`test_benchmark_axes`](#validation.test_benchmark_axes)
+  - [`test_benchmark_grid_layer`](#validation.test_benchmark_grid_layer)
   - [`test_benchmark_provenance`](#validation.test_benchmark_provenance)
   - [`test_beta_workflow`](#validation.test_beta_workflow)
   - [`test_calibration_provenance`](#validation.test_calibration_provenance)
@@ -41789,6 +41790,19 @@ The benchmark tool's sweep axes reach the parameters they name.
 Nothing here times anything: `_median_of` and `_run_once` are replaced by
 recorders, so the test asserts which `SimulationParams` each backend would
 have been handed, which is a pure function of the commit.
+
+<a id="validation.test_benchmark_grid_layer"></a>
+
+# validation.test\_benchmark\_grid\_layer
+
+The benchmark tools share the sweep layer's axes and grid, nothing else.
+
+`benchmark-engines` reads its `--values` through `fim.sweep.expand_axis` and
+`generate-heatmap-queue` takes its (locus length, d) grid from
+`fim.sweep.enumerate_values`. These tests pin that: every benchmark axis is a
+registry key, the values come out exactly as they did when the tool parsed
+them by hand, a value that does not fit an axis is refused with the sweep
+layer's own message, and the heatmap queue has the jobs it always had.
 
 <a id="validation.test_benchmark_provenance"></a>
 

@@ -105,6 +105,16 @@ single-lineage-run-equivalents did this batch cost," a number that
 means roughly the same thing on a different machine, or a year from
 now on faster hardware.
 
+**How it relates to `fim sweep`:** The benchmark shares the sweep layer's axes
+and value checks (`fim.sweep.expand_axis`, so `--values` must be whole numbers
+for a count and within the axis's legal range), and `generate-heatmap-queue`
+takes its grid from `fim.sweep.enumerate_values`. It does not share
+execution: a benchmark runs points one at a time in fresh subprocesses on a
+quiet machine, takes medians of timed trials and discards its results, which is
+the opposite of a sweep's concurrent, stored points. (`N` is the benchmark's
+gene copies per deme, the number it has always meant; a sweep's `N` is
+individuals.)
+
 **Why it matters:** This project offers a choice between three engines
 that trade determinism, speed, and memory use against each other in
 ways that are not obvious from reading the code alone (see the

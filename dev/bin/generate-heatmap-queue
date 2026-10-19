@@ -59,6 +59,9 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "src"))
+
+from fim.sweep import SweepSpec, enumerate_values, expand_axis  # noqa: E402
 
 # The same reference-scale defaults `benchmark-engines` itself compiles
 # in (`DEFAULT_N`/`DEFAULT_M`/`DEFAULT_MU`) -- kept in sync by eye, not
@@ -158,9 +161,23 @@ def _build_queue(
     `_resolve_command` -- once `sys.executable` occupies that slot, the
     script path is just another argument to it.
     """
-    d_values_arg = ",".join(str(value) for value in d_values)
+    # The (length, d) grid comes from the sweep layer, so its order (length
+    # slowest) is the sweep's own; one job takes every d of one length.
+    grid = SweepSpec(
+        base={},
+        axes=(
+            expand_axis("locus_lengths", list(length_values)),
+            expand_axis("d", list(d_values)),
+        ),
+    )
+    d_by_length: dict[int, list[int]] = {}
+    for coordinates in enumerate_values(grid):
+        d_by_length.setdefault(int(coordinates["locus_lengths"]), []).append(
+            int(coordinates["d"])
+        )
     jobs = []
-    for length in length_values:
+    for length, d_for_length in d_by_length.items():
+        d_values_arg = ",".join(str(value) for value in d_for_length)
         config_path = _write_length_config(
             out_dir,
             length,

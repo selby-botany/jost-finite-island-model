@@ -807,6 +807,23 @@ def derived_values(spec: SweepSpec, point: SweepPoint) -> dict[str, CoordinateVa
     return shown
 
 
+def enumerate_values(spec: SweepSpec) -> Iterator[dict[str, CoordinateValue]]:
+    """Yield the coordinates of every position of a spec, in order.
+
+    The pure grid layer of a sweep: the strategy's own order (first axis
+    slowest for a grid), with no configuration built, validated or hashed. A
+    caller that has its own way of running or checking a point (the benchmark
+    tools) shares the axes and the ordering through this, and nothing else.
+
+    Args:
+        spec: The sweep specification.
+
+    Yields:
+        One mapping of axis key to value per position.
+    """
+    yield from _STRATEGY_POINTS[spec.strategy](spec)
+
+
 def point_run_name(study_name: str, point: SweepPoint) -> str:
     """Return the name a sweep point's run is given: Study name plus its values.
 
