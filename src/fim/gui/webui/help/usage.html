@@ -131,6 +131,12 @@ checkpoint (1,000 generations or 60 seconds). The desktop app's
 <strong>Save for later</strong> and <strong>Saved runs</strong> use the same objects. See
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/run-lifecycle.md">saved runs: pause, resume, and recover</a> for every state,
 command, and recovery case.</p>
+<p><strong>Sweep setup is not stored with a saved run.</strong> If you edit a sweep setup,
+<strong>Save and close</strong> saves the run configuration but keeps the close dialog
+open with an explanation. Choose <strong>Keep working</strong> to retain the setup in
+the current session, or <strong>Close without saving</strong> to discard that setup.
+Saving the run configuration alone does not clear the sweep's unsaved-edit
+warning.</p>
 <h2 id="worked-examples">Worked examples</h2>
 <p>Each example below is a complete config and the command that runs it: save
 the YAML, run the command, and the reported values match those shown here,

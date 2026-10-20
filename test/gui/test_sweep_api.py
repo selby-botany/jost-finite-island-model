@@ -586,8 +586,13 @@ class _SavingWindow(_FakeWindow):
 
 
 def _finished_sweep(api: Api, window: _FakeWindow) -> str:
-    """Run the two-point sweep to its end and return its Study id."""
-    started = api.start_sweep(_form(), _request(_D_AXIS))
+    """Run two tiny points serially and return the finished Study id.
+
+    These bridge/metadata tests do not test process concurrency. Automatic
+    concurrency starts child interpreters and their engine imports, which
+    exceeded the completion backstop under the full slow-suite load.
+    """
+    started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
     _wait_until_idle(api)
     assert window.finished.is_set()
     job_events = [
@@ -599,6 +604,19 @@ def _finished_sweep(api: Api, window: _FakeWindow) -> str:
     snapshot = api.get_job_snapshot(job_events[-1]["jobId"])
     assert snapshot["snapshot"]["type"] == "finished"
     return str(started["studyId"])
+
+
+def test_finished_sweep_helper_does_not_spawn_point_processes(
+    api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Metadata fixtures must not depend on concurrent child-process startup."""
+
+    def unexpected_process_pool(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("the metadata helper must run its points serially")
+
+    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", unexpected_process_pool)
+    study_id = _finished_sweep(api, window)
+    assert groups.get_study(study_id).run_count == 2
 
 
 def test_export_sweep_table_writes_the_table_and_its_sidecar(

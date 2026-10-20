@@ -157,6 +157,13 @@ checkpoint (1,000 generations or 60 seconds). The desktop app's
 [saved runs: pause, resume, and recover](run-lifecycle.md) for every state,
 command, and recovery case.
 
+**Sweep setup is not stored with a saved run.** If you edit a sweep setup,
+**Save and close** saves the run configuration but keeps the close dialog
+open with an explanation. Choose **Keep working** to retain the setup in
+the current session, or **Close without saving** to discard that setup.
+Saving the run configuration alone does not clear the sweep's unsaved-edit
+warning.
+
 ## Worked examples
 
 Each example below is a complete config and the command that runs it: save

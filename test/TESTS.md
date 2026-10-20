@@ -28397,6 +28397,18 @@ def api(tmp_path: Path, results: Path) -> Api
 
 An `Api` whose defaults make every point a tiny single run.
 
+<a id="gui.test_sweep_api.test_finished_sweep_helper_does_not_spawn_point_processes"></a>
+
+#### test\_finished\_sweep\_helper\_does\_not\_spawn\_point\_processes
+
+```python
+def test_finished_sweep_helper_does_not_spawn_point_processes(
+        api: Api, window: _FakeWindow,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Metadata fixtures must not depend on concurrent child-process startup.
+
 <a id="gui.test_sweep_api.test_a_plan_marks_the_points_a_finished_sweep_already_computed"></a>
 
 #### test\_a\_plan\_marks\_the\_points\_a\_finished\_sweep\_already\_computed
