@@ -202,6 +202,69 @@ window.fim.setScrubberMode = function setScrubberMode(mode) {
 };
 
 /**
+ * Return the index of whichever frame's own generation is closest to
+ * `targetGeneration`, breaking a tie toward the earlier frame.
+ *
+ * Only ever called right after `decimateLiveFramesIfNeeded` has removed
+ * frames out from under `currentIndex` -- `frames` is short enough even
+ * for a very long run (bounded by `MAX_LIVE_SCRUBBER_FRAMES`) that a
+ * linear scan here costs nothing next to how rarely decimation itself
+ * runs.
+ *
+ * @param {number} targetGeneration
+ * @returns {number}
+ */
+function nearestFrameIndexForGeneration(targetGeneration) {
+    let nearestIndex = 0;
+    let nearestDistance = Infinity;
+    for (let index = 0; index < frames.length; index += 1) {
+        const distance = Math.abs(frames[index].generation - targetGeneration);
+        if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestIndex = index;
+        }
+    }
+    return nearestIndex;
+}
+
+/**
+ * Keep a live run's own frame buffer bounded, however long the run goes.
+ *
+ * `appendLiveFrame` below calls this after every push. Below `MAX_LIVE_
+ * SCRUBBER_FRAMES` it is a no-op. Once that cap is crossed, the first
+ * frame (so the run's own start is never lost) and the newer half
+ * (dense, since that is what live tracking and most scrubbing actually
+ * look at) are kept whole; the older half -- everything else -- is
+ * thinned to every other frame. Because the split point is recomputed
+ * from the *current* length every time this runs, repeated crossings
+ * thin progressively older stretches again each time they age out of
+ * the newer half, so the buffer settles into roughly half the cap full
+ * right after a thin and never grows past the cap by more than one
+ * frame. `currentIndex`, if it is not tracking the live head, is
+ * remapped to the nearest surviving generation -- indices into `frames`
+ * are not stable across a thin, only generations are.
+ */
+function decimateLiveFramesIfNeeded() {
+    if (frames.length <= MAX_LIVE_SCRUBBER_FRAMES) {
+        return;
+    }
+    const trackedGeneration = isLiveTracking
+        ? null
+        : frames[currentIndex]
+          ? frames[currentIndex].generation
+          : null;
+    const first = frames[0];
+    const splitIndex = Math.floor(frames.length / 2);
+    const olderMiddle = frames.slice(1, splitIndex);
+    const newerHalf = frames.slice(splitIndex);
+    const thinnedOlderMiddle = olderMiddle.filter((_frame, index) => index % 2 === 0);
+    frames = [first, ...thinnedOlderMiddle, ...newerHalf];
+    if (trackedGeneration !== null) {
+        currentIndex = nearestFrameIndexForGeneration(trackedGeneration);
+    }
+}
+
+/**
  * Append one live frame during an active simulation run and update the
  * controls. If `isLiveTracking` is true, automatically advances the
  * cursor to the newest frame and repaints the view.
@@ -213,6 +276,7 @@ window.fim.appendLiveFrame = function appendLiveFrame(frame, drawFrame) {
     scrubberMode = "live";
     onFrame = drawFrame;
     frames.push(frame);
+    decimateLiveFramesIfNeeded();
     const canAnimate = frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
     scrubberForwardButton.disabled = !canAnimate;
     scrubberBackwardButton.disabled = !canAnimate;
