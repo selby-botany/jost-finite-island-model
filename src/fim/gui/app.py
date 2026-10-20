@@ -2344,19 +2344,14 @@ class Api:
                 self._job_id = self._jobs.new_job_id()
             return refusal
 
-    def _release_run_claim(self) -> None:
+    def _release_run_claim(self, *, retain_snapshot: bool = False) -> None:
         """Release the run slot: no run, plain or saved, is in flight now.
 
         Clears the saved run first, under the same lock as `_claim_run`,
         so a run that claims the slot next never has its own saved run
-        cleared by the one that just ended. Forgets `self._job_id`'s own
-        sequence bookkeeping after releasing that lock, not under it --
-        `JobAdmission.lock` is a plain, non-reentrant `threading.Lock`,
-        and `forget` takes it itself (`fim.gui.jobs.JobAdmission.forget`'s
-        own docstring), so calling it while still holding the lock here
-        would deadlock the releasing thread against itself. Safe either
-        way, since `forget` only ever touches the one, never-reused id
-        this call already owns.
+        cleared by the one that just ended. A completed job retains its
+        snapshot for the owning document; an unsuccessful start has no
+        document to retain and forgets its empty registry entry.
         """
         with self._jobs.lock:
             self._active_object_id = None
@@ -2374,7 +2369,7 @@ class Api:
                     reservation,
                     error,
                 )
-        if job_id is not None:
+        if job_id is not None and not retain_snapshot:
             self._jobs.forget(job_id)
 
     def _claim_sweep(self) -> str | None:
@@ -2404,17 +2399,16 @@ class Api:
             self._job_id = self._jobs.new_job_id()
             return None
 
-    def _release_sweep_claim(self) -> None:
+    def _release_sweep_claim(self, *, retain_snapshot: bool = False) -> None:
         """Release the sweep slot: no sweep is in flight now.
 
-        Forgets `self._job_id`'s own sequence bookkeeping after
-        releasing `self._jobs.lock`, not under it -- see `_release_run_
-        claim`'s own identical note on why.
+        A completed sweep retains its snapshot for the owning document;
+        an unsuccessful start has no document to retain.
         """
         with self._jobs.lock:
             self._sweep_cancel_event = None
             job_id, self._job_id = self._job_id, None
-        if job_id is not None:
+        if job_id is not None and not retain_snapshot:
             self._jobs.forget(job_id)
 
     def _run_refusal(self) -> str | None:
@@ -2452,28 +2446,34 @@ class Api:
 
     @_log_bridge_call
     def get_job_snapshot(self, job_id: str) -> dict[str, Any]:
-        """Return the active job's view level and latest addressed event.
+        """Return a retained job's view level and latest addressed event.
 
         Args:
-            job_id: A job this process currently has claimed
-                (`self._job_id`) -- the run, saved run, or sweep now
-                executing. Any other value, including a job that has
-                already finished, is "no such job": there is exactly
-                one job at a time in this release, and nothing is kept
-                about one once it ends.
+            job_id: A job still retained for its open document.
 
         Returns:
             The current view level, sequence, and latest event snapshot;
-            a refusal if `job_id` is not currently claimed.
+            a refusal if `job_id` is unknown or its document has closed.
         """
         snapshot = self._jobs.snapshot(job_id)
-        if job_id != self._job_id or snapshot is None:
+        if snapshot is None:
             return {"ok": False, "message": "no such job"}
         return {
             "ok": True,
             "jobId": job_id,
             **snapshot,
         }
+
+    @_log_bridge_call
+    def close_job_document(self, job_id: str) -> dict[str, Any]:
+        """Release a finished job's snapshot after its document closes."""
+        if self._jobs.snapshot(job_id) is None:
+            return {"ok": False, "message": "no such job"}
+        with self._jobs.lock:
+            if job_id == self._job_id:
+                return {"ok": False, "message": "job is still active"}
+        self._jobs.forget(job_id)
+        return {"ok": True}
 
     @_log_bridge_call
     def set_job_view(self, job_id: str, level: str) -> dict[str, Any]:
@@ -2580,32 +2580,67 @@ class Api:
         }
 
     def _drain_then_release(
-        self, drain: Callable[..., None], *arguments: Any, **keyword_arguments: Any
+        self,
+        drain: Callable[..., None],
+        window: _EvaluatesJs,
+        *arguments: Any,
+        publisher: Publisher,
+        job_admission: jobs.JobAdmission,
+        job_id: str,
+        **keyword_arguments: Any,
     ) -> None:
         """Run a run's drain function, then mark no run as in flight.
 
         The drain functions return once the run reports a terminal
         message, so this is what lets `start_sweep` know a run has ended.
 
-        `**keyword_arguments` exists for `publisher` alone: `_drain_run_
-        messages`/`_drain_batch_messages` take it keyword-only (every
-        other argument stays positional, in `args`), so each call
-        site's own `threading.Thread(..., kwargs={"publisher": self.
-        _publisher})` reaches `drain` through here unchanged.
+        `publisher`, `job_admission`, and `job_id` are shared by this
+        wrapper and the drain. Remaining keyword arguments belong to the
+        drain, such as the batch view-level callback.
         """
         previous = self._previous_version_run
         target = self._comparison_target
         self._previous_version_run = None
         try:
-            drain(*arguments, **keyword_arguments)
+            drain(
+                window,
+                *arguments,
+                publisher=publisher,
+                job_admission=job_admission,
+                job_id=job_id,
+                **keyword_arguments,
+            )
             if (
                 previous is not None
                 and target is not None
                 and (target[0] / "manifest.json").is_file()
             ):
-                _check_reproducibility(target[1], target[0], previous, self._publisher)
+                _check_reproducibility(
+                    target[1],
+                    target[0],
+                    previous,
+                    publisher,
+                    job_admission,
+                    job_id,
+                )
         finally:
-            self._release_run_claim()
+            delivered = threading.Event()
+
+            def release_after_finished() -> None:
+                """Release the run slot after the page evaluates `finished`."""
+                self._release_run_claim(retain_snapshot=True)
+                delivered.set()
+
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "finished",
+                {},
+                on_delivered=release_after_finished,
+            )
+            delivered.wait()
 
     def _start_batch_run(
         self,
@@ -6341,7 +6376,23 @@ class Api:
                     job_id,
                 )
             finally:
-                self._release_sweep_claim()
+                delivered = threading.Event()
+
+                def release_after_finished() -> None:
+                    """Release the sweep slot after the page evaluates `finished`."""
+                    self._release_sweep_claim(retain_snapshot=True)
+                    delivered.set()
+
+                _push_job_event(
+                    window,
+                    self._publisher,
+                    self._jobs,
+                    job_id,
+                    "finished",
+                    {},
+                    on_delivered=release_after_finished,
+                )
+                delivered.wait()
 
         self._sweep_thread = threading.Thread(target=work, daemon=True)
         self._sweep_thread.start()
@@ -7556,7 +7607,12 @@ class Api:
 
 
 def _check_reproducibility(
-    window: _EvaluatesJs, recomputed: Path, previous: Path, publisher: Publisher
+    window: _EvaluatesJs,
+    recomputed: Path,
+    previous: Path,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
 ) -> None:
     """Compare a recomputed run with the same configuration from another version.
 
@@ -7564,14 +7620,9 @@ def _check_reproducibility(
     it holds the recomputed one and the old directory is removed. Different:
     both are kept, the difference is recorded beside the new run, and the
     page is told, since the simulator guarantees bit-for-bit reproducibility
-    and a difference is a break of that guarantee. Either way the page hears
-    of it through `fim.onReproducibilityChecked` -- an annotation on top of
-    the run's own already-delivered terminal push, so it is queued through
-    `publisher` with no `coalesce_key`: it must never be dropped, and it
-    must never be delivered before the terminal push it follows (`_drain_
-    then_release`'s own calling order already guarantees that; `publisher`
-    only has to not reorder two `None`-keyed pushes relative to each other,
-    which it never does).
+    and a difference is a break of that guarantee. Either way, the page
+    hears of it as an addressed `"annotation"` event after the terminal
+    event. The publisher does not coalesce or reorder it.
     """
     try:
         comparison = compare_runs(previous, recomputed)
@@ -7596,11 +7647,13 @@ def _check_reproducibility(
             [item.label for item in comparison.differences],
         )
         write_reproducibility_note(recomputed, payload)
-    _publish_and_wait(
-        publisher,
+    _push_job_event(
         window,
-        f"fim.onReproducibilityChecked({json.dumps(payload)})",
-        label="a reproducibility result",
+        publisher,
+        job_admission,
+        job_id,
+        "annotation",
+        payload,
     )
 
 
@@ -7951,25 +8004,20 @@ def _push_job_event(
     payload: Any,
     *,
     coalesce_key: Hashable | None = None,
+    on_delivered: Callable[[], None] | None = None,
 ) -> None:
     """Publish one addressed `fim.onJobEvent`, alongside whichever legacy push.
 
-    Additive, never a replacement: every call site here sits right
-    beside the existing `fim.onRun*`/`fim.onBatch*`/`fim.onSweep*` push
-    that already carries this same event to the page's one document
-    (`20261019-claude-opus-5-5-fim-gui-tabs-design.md` §7.3).
-    `webui/jobs.js` tracks the sequence and retains the latest event
-    snapshot; document rendering starts at A9.
+    Progress, status, and terminal events accompany the existing
+    `fim.onRun*`/`fim.onBatch*`/`fim.onSweep*` pushes. Annotations and
+    `finished` are addressed-only events. `webui/jobs.js` tracks the
+    sequence and retains the latest event snapshot; document rendering
+    starts at A9.
 
-    `event_type` is `"progress"`, `"status"`, or `"terminal"` for this
-    commit; `"annotation"` and `"finished"` are a later commit's own
-    job (§7.3: annotations follow the terminal event, and `finished` --
-    after every follow-up, releasing the reservation -- comes last of
-    all). Never waits for delivery (`publisher.publish`, never
-    `_publish_and_wait`): nothing yet depends on this channel's own
-    push having landed before anything else proceeds, unlike the
-    legacy terminal push beside it, which `_drain_then_release`'s own
-    claim release still only waits for.
+    Event types include `"progress"`, `"status"`, `"terminal"`,
+    `"annotation"`, and `"finished"`. A delivery callback is used for
+    `"finished"` so claim and output-reservation release cannot precede
+    the final addressed event.
 
     Args:
         window: Where the push lands.
@@ -8000,6 +8048,7 @@ def _push_job_event(
         f"fim.onJobEvent({json.dumps(envelope)})",
         coalesce_key=coalesce_key,
         label=f"a {event_type} job event",
+        on_delivered=on_delivered,
     )
 
 

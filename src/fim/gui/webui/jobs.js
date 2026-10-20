@@ -35,6 +35,7 @@ const appliedJobEventCount = new Map();
 const latestAppliedJobEventPayload = new Map();
 const latestJobSnapshot = new Map();
 const jobViewLevel = new Map();
+const closedJobIds = new Set();
 
 window.fim = window.fim || {};
 window.fim.jobs = window.fim.jobs || {};
@@ -58,6 +59,7 @@ function requestJobSnapshot(jobId) {
 
 function applyJobSnapshot(jobId, snapshot) {
     if (
+        closedJobIds.has(jobId) ||
         !snapshot ||
         !snapshot.ok ||
         snapshot.jobId !== jobId ||
@@ -92,6 +94,25 @@ window.fim.jobs.setView = function setView(jobId, level) {
         return snapshot;
     });
 };
+window.fim.jobs.closeDocument = function closeDocument(jobId) {
+    closedJobIds.add(jobId);
+    lastJobEventSequence.delete(jobId);
+    appliedJobEventCount.delete(jobId);
+    latestAppliedJobEventPayload.delete(jobId);
+    latestJobSnapshot.delete(jobId);
+    jobViewLevel.delete(jobId);
+    return window.pywebview.api.close_job_document(jobId).then((result) => {
+        if (!result || !result.ok) {
+            throw new Error(
+                result?.message || "could not release the closed job document"
+            );
+        }
+        return result;
+    });
+};
+window.fim.jobs.isDocumentClosed = function isDocumentClosed(jobId) {
+    return closedJobIds.has(jobId);
+};
 
 /**
  * Receive one addressed job push, in the order the publisher attempted it.
@@ -103,15 +124,18 @@ window.fim.jobs.setView = function setView(jobId, level) {
  * relative to, and progress may legitimately arrive naming a `jobId`
  * this script has not yet attached to anything else (design doc §7.3:
  * "progress may arrive before the start reply; it is routed by jobId").
- * A gap ahead of a `"status"` or `"terminal"` event (never true for
- * `"progress"`, which the publisher coalesces by design, so a skipped
- * sequence there is routine, not a loss) asks for a snapshot instead of
- * applying the event that revealed it.
+ * A gap ahead of a `"status"` or `"terminal"` event asks for a snapshot
+ * instead of applying the event that revealed it. A gap before
+ * `"annotation"` or `"finished"` can be caused by coalesced progress,
+ * so those ordered follow-up events request a snapshot and still apply.
  *
  * @param {{jobId: string, sequence: number, type: string, payload: *}} event
  */
 window.fim.onJobEvent = function onJobEvent(event) {
     const { jobId, sequence, type, payload } = event;
+    if (closedJobIds.has(jobId)) {
+        return;
+    }
     const last = lastJobEventSequence.has(jobId)
         ? lastJobEventSequence.get(jobId)
         : null;
@@ -120,12 +144,20 @@ window.fim.onJobEvent = function onJobEvent(event) {
     }
     if (type !== "progress" && last !== null && sequence > last + 1) {
         window.fim.jobs.requestSnapshot(jobId);
-        return;
+        if (type !== "annotation" && type !== "finished") {
+            return;
+        }
     }
     lastJobEventSequence.set(jobId, sequence);
     appliedJobEventCount.set(jobId, (appliedJobEventCount.get(jobId) || 0) + 1);
     latestAppliedJobEventPayload.set(jobId, payload);
     latestJobSnapshot.set(jobId, { sequence, type, payload });
+    if (
+        type === "annotation" &&
+        typeof window.fim.onJobAnnotation === "function"
+    ) {
+        window.fim.onJobAnnotation(jobId, payload);
+    }
 };
 
 // Test-only introspection -- no production caller reads these.

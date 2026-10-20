@@ -393,6 +393,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [start\_run](#fim.gui.app.Api.start_run)
     * [can\_start\_run](#fim.gui.app.Api.can_start_run)
     * [get\_job\_snapshot](#fim.gui.app.Api.get_job_snapshot)
+    * [close\_job\_document](#fim.gui.app.Api.close_job_document)
     * [set\_job\_view](#fim.gui.app.Api.set_job_view)
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
     * [pause\_run](#fim.gui.app.Api.pause_run)
@@ -10426,22 +10427,28 @@ then refused would wipe the view of the run still in flight.
 def get_job_snapshot(job_id: str) -> dict[str, Any]
 ```
 
-Return the active job's view level and latest addressed event.
+Return a retained job's view level and latest addressed event.
 
 **Arguments**:
 
-- `job_id` - A job this process currently has claimed
-- `(`self._job_id`)` - the run, saved run, or sweep now
-  executing. Any other value, including a job that has
-  already finished, is "no such job": there is exactly
-  one job at a time in this release, and nothing is kept
-  about one once it ends.
+- `job_id` - A job still retained for its open document.
 
 
 **Returns**:
 
   The current view level, sequence, and latest event snapshot;
-  a refusal if `job_id` is not currently claimed.
+  a refusal if `job_id` is unknown or its document has closed.
+
+<a id="fim.gui.app.Api.close_job_document"></a>
+
+#### close\_job\_document
+
+```python
+@_log_bridge_call
+def close_job_document(job_id: str) -> dict[str, Any]
+```
+
+Release a finished job's snapshot after its document closes.
 
 <a id="fim.gui.app.Api.set_job_view"></a>
 
@@ -15283,14 +15290,14 @@ same instant.
 
 Commit A5 of that same schedule ("addressed job events and controls")
 adds a `jobId` and one sequence per job to every addressed push. Commit
-A7 adds the active job's view level and latest event snapshot, so a page
+A7 adds each job's view level and latest event snapshot, so a page
 can switch between full and summary rendering and recover after a gap.
 `Api._job_id` is carried as a plain argument into each drain/push
 function; background threads never read a later claim's id from `Api`.
 
-This Release A registry still admits only one active job. Its retained
-snapshot is discarded when that job's claim is released; multi-job
-records and per-document retention belong to later commits.
+This Release A registry still admits only one active job. Completed
+snapshots remain available until the owning document closes; later
+commits add the document lifecycle that removes them.
 
 <a id="fim.gui.jobs.JobAdmission"></a>
 
@@ -15342,8 +15349,8 @@ def view_level(job_id: str) -> ViewLevel
 
 Return the job's current rendering level.
 
-A released job has no retained view state; callers that outlive a
-claim receive the full level rather than failing during shutdown.
+A closed job has no retained view state; callers that outlive a
+document receive the full level rather than failing during shutdown.
 
 <a id="fim.gui.jobs.JobAdmission.set_view_level"></a>
 
@@ -15373,7 +15380,7 @@ Assign an event sequence and retain its payload for snapshots.
 def snapshot(job_id: str) -> dict[str, Any] | None
 ```
 
-Return the current view level and latest event for a claimed job.
+Return the current view level and latest event for a retained job.
 
 <a id="fim.gui.jobs.JobAdmission.next_sequence"></a>
 
@@ -15416,13 +15423,12 @@ own "nothing yet" case, distinct from a real sequence of `0`.
 def forget(job_id: str) -> None
 ```
 
-Drop `job_id`'s sequence, view, and snapshot when its claim is released.
+Drop `job_id`'s sequence, view, and snapshot when its document closes.
 
 Keeps this dict from growing for the life of the process, one
-entry per job ever claimed -- harmless at any one point, but
-needless to keep once nothing can call `next_sequence` for
-`job_id` again (`Api._release_run_claim`/`_release_sweep_claim`,
-the only callers, clear `Api._job_id` in the same breath).
+entry per job ever claimed. The owning document calls this after
+it closes; claim release alone must not discard a finished job's
+snapshot, which can still be needed to resynchronize its page.
 
 <a id="fim.gui.literature_visuals"></a>
 

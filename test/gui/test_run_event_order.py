@@ -7,8 +7,8 @@ later commits could introduce while they move these same mechanisms
 behind a job registry (A4) and a single publisher thread (A3): a push
 must never be delivered after the claim it belongs to has already been
 released, and an annotation -- the reproducibility check a stale-version
-run gets -- must always land strictly after the terminal push it
-annotates, never before or interleaved with it.
+run gets -- must always land after the terminal push it annotates and
+before the final `finished` event.
 
 Existing coverage this suite does not repeat: `test_one_run_at_a_time.py`
 (a second start is refused while one run is in flight, and the claim is
@@ -26,6 +26,7 @@ being released one push early.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -70,24 +71,42 @@ class _OrderWindow:
     later, is the only way to know the claim's state *as of* each push.
     """
 
-    def __init__(self, read_claim: Callable[[], bool]) -> None:
+    def __init__(
+        self,
+        read_claim: Callable[[], bool],
+        read_reservation: Callable[[], bool] = lambda: False,
+    ) -> None:
         self._read_claim = read_claim
-        self.observations: list[tuple[str, bool]] = []
+        self._read_reservation = read_reservation
+        self.observations: list[tuple[str, bool, bool, str]] = []
 
     def evaluate_js(self, script: str) -> Any:
         name = script.split("(", 1)[0]
-        self.observations.append((name, self._read_claim()))
+        self.observations.append(
+            (name, self._read_claim(), self._read_reservation(), script)
+        )
         return None
 
     def names(self) -> list[str]:
-        return [name for name, _ in self.observations]
+        return [name for name, _, _, _ in self.observations]
 
     def claim_held_when(self, name: str) -> bool:
         """Return the claim state recorded at `name`'s first occurrence."""
-        for observed_name, claim_held in self.observations:
+        for observed_name, claim_held, _, _ in self.observations:
             if observed_name == name:
                 return claim_held
         raise AssertionError(f"{name!r} was never pushed; saw {self.names()}")
+
+    def reservation_held_when(self, name: str) -> bool:
+        """Return whether the output reservation existed at a push."""
+        for observed_name, _, reservation_held, _ in self.observations:
+            if observed_name == name:
+                return reservation_held
+        raise AssertionError(f"{name!r} was never pushed; saw {self.names()}")
+
+    def scripts(self) -> list[str]:
+        """Return the scripts in delivery order."""
+        return [script for _, _, _, script in self.observations]
 
 
 def _form() -> dict[str, str]:
@@ -135,12 +154,15 @@ def _wait_for_a_push(window: _OrderWindow, name: str) -> None:
     )
 
 
-def test_a_stale_version_runs_reproducibility_push_follows_its_done_push(
+def test_a_stale_version_annotation_and_finished_follow_the_done_push(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The annotation push lands after "done", with the claim still held at both."""
     api = _api_with_settings(tmp_path, _FAST_SETTINGS)
-    window = _OrderWindow(lambda: api._run_in_flight)
+    window = _OrderWindow(
+        lambda: api._run_in_flight,
+        lambda: api._output_reservation is not None,
+    )
     monkeypatch.setattr(app_module, "_active_window", lambda: window)
     study = groups.create_study("Runs")
 
@@ -164,11 +186,33 @@ def test_a_stale_version_runs_reproducibility_push_follows_its_done_push(
 
     names = window.names()
     assert "fim.onRunDone" in names
-    assert "fim.onReproducibilityChecked" in names
-    assert names.index("fim.onRunDone") < names.index("fim.onReproducibilityChecked")
+    event_observations = [
+        (
+            index,
+            json.loads(script[len("fim.onJobEvent(") : -1]),
+        )
+        for index, (_, _, _, script) in enumerate(window.observations)
+        if script.startswith("fim.onJobEvent(")
+    ]
+    events = [event for _, event in event_observations]
+    assert [event["type"] for event in events][-3:] == [
+        "terminal",
+        "annotation",
+        "finished",
+    ]
+    terminal_index = next(
+        index for index, event in event_observations if event["type"] == "terminal"
+    )
+    finished_index = next(
+        index for index, event in event_observations if event["type"] == "finished"
+    )
+    assert names.index("fim.onRunDone") < terminal_index
     assert window.claim_held_when("fim.onRunDone") is True
-    assert window.claim_held_when("fim.onReproducibilityChecked") is True
+    assert window.observations[finished_index][1] is True
+    assert window.observations[finished_index][2] is True
     assert api._run_in_flight is False
+    assert api._output_reservation is None
+    assert api.get_job_snapshot(events[-1]["jobId"])["snapshot"]["type"] == "finished"
 
 
 def test_a_saved_runs_pause_push_lands_before_the_claim_is_released(

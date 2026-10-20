@@ -4,9 +4,10 @@ Commits A5 and A7 of `20261019-claude-opus-5-5-fim-gui-tabs-design.md`'s
 Release A schedule add an addressed push channel alongside each existing
 named one (`fim.onRunProgress`, `fim.onBatchDone`, `fim.onSweepEvent`,
 ...): `fim.onJobEvent({jobId, sequence, type, payload})`, one sequence
-per job. The job registry retains the active job's view level and latest
-event snapshot; `webui/jobs.js` adopts snapshots after a gap or view
-change, but does not yet render document state (that starts at A9).
+per job. The job registry retains a finished job's view level and latest event
+snapshot until its document closes; `webui/jobs.js` adopts snapshots
+after a gap or view change, but does not yet render document state
+(that starts at A9).
 
 Three groups of tests:
 
@@ -122,6 +123,45 @@ def test_claim_sweep_mints_a_job_id_and_release_clears_it(tmp_path: Path) -> Non
     api._release_sweep_claim()
     assert api._job_id is None
     assert api._sweep_cancel_event is None
+
+
+def test_a_finished_job_snapshot_survives_claim_release(tmp_path: Path) -> None:
+    """Finished jobs remain available for page resynchronization."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    assert api._claim_run() is None
+    job_id = api._job_id
+    assert job_id is not None
+    api._jobs.record_event(job_id, "finished", {})
+
+    api._release_run_claim(retain_snapshot=True)
+
+    assert api._job_id is None
+    assert api.get_job_snapshot(job_id) == {
+        "ok": True,
+        "jobId": job_id,
+        "viewLevel": "full",
+        "sequence": 0,
+        "snapshot": {
+            "sequence": 0,
+            "type": "finished",
+            "payload": {},
+        },
+    }
+
+
+def test_closing_a_finished_job_document_forgets_its_snapshot(
+    tmp_path: Path,
+) -> None:
+    """Closing a document drops the finished job's retained event state."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    assert api._claim_run() is None
+    job_id = api._job_id
+    assert job_id is not None
+    api._jobs.record_event(job_id, "finished", {})
+    api._release_run_claim(retain_snapshot=True)
+
+    assert api.close_job_document(job_id) == {"ok": True}
+    assert api.get_job_snapshot(job_id) == {"ok": False, "message": "no such job"}
 
 
 def test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id(
@@ -607,4 +647,122 @@ def test_a_late_snapshot_does_not_overwrite_a_newer_event() -> None:
         "sequence": 2,
         "type": "progress",
         "payload": "new",
+    }
+
+
+@pytest.mark.gui
+def test_an_annotation_for_a_closed_document_is_dropped() -> None:
+    """A late annotation cannot reach a document that has closed."""
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(
+                """
+                window.__annotationCount = 0;
+                window.pywebview.api.close_job_document = function () {
+                    return Promise.resolve({ok: true});
+                };
+                window.fim.onJobAnnotation = function () {
+                    window.__annotationCount += 1;
+                };
+                window.fim.jobs.closeDocument("job-closed");
+                window.fim.onJobEvent({
+                    jobId: "job-closed",
+                    sequence: 0,
+                    type: "annotation",
+                    payload: {identical: true}
+                });
+                """
+            )
+            outcome.put(
+                window.evaluate_js(
+                    """({
+                        annotationCount: window.__annotationCount,
+                        lastSequence:
+                            window.fim.jobs.lastSequenceFor("job-closed"),
+                        isClosed:
+                            window.fim.jobs.isDocumentClosed("job-closed")
+                    })"""
+                )
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    state = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert state == {
+        "annotationCount": 0,
+        "lastSequence": None,
+        "isClosed": True,
+    }
+
+
+@pytest.mark.gui
+def test_an_annotation_after_coalesced_progress_is_applied() -> None:
+    """Progress coalescing does not suppress the following annotation."""
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(
+                """
+                window.__annotationCount = 0;
+                window.__snapshotRequests = 0;
+                window.pywebview.api.get_job_snapshot = function () {
+                    window.__snapshotRequests += 1;
+                    return Promise.resolve({
+                        ok: true,
+                        jobId: "job-annotated",
+                        sequence: 2,
+                        viewLevel: "full",
+                        snapshot: {
+                            sequence: 2,
+                            type: "annotation",
+                            payload: {identical: true}
+                        }
+                    });
+                };
+                window.fim.onJobAnnotation = function () {
+                    window.__annotationCount += 1;
+                };
+                window.fim.onJobEvent({
+                    jobId: "job-annotated",
+                    sequence: 0,
+                    type: "progress",
+                    payload: {}
+                });
+                window.fim.onJobEvent({
+                    jobId: "job-annotated",
+                    sequence: 2,
+                    type: "annotation",
+                    payload: {identical: true}
+                });
+                """
+            )
+            outcome.put(
+                window.evaluate_js(
+                    """({
+                        annotationCount: window.__annotationCount,
+                        snapshotRequests: window.__snapshotRequests,
+                        lastSequence:
+                            window.fim.jobs.lastSequenceFor("job-annotated")
+                    })"""
+                )
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    state = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert state == {
+        "annotationCount": 1,
+        "snapshotRequests": 1,
+        "lastSequence": 2,
     }

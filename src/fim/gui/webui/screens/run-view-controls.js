@@ -557,14 +557,18 @@ window.fim.startRunExclusively = startRunExclusively;
 whenApiReady(wireRunViewControls);
 
 /**
- * Report the result of comparing a recomputed run with the same
- * configuration from another software version (`Api._check_reproducibility`).
+ * Report a reproducibility annotation for an open job's document
+ * (`Api._check_reproducibility`).
  * The simulator guarantees bit-for-bit reproducibility, so a difference is
  * a warning, not a detail.
+ * @param {string} jobId
  * @param {{identical: boolean, oldVersion: string, newVersion: string,
  *     differences: Array<{label: string, old: *, new: *}>}} comparison
  */
-window.fim.onReproducibilityChecked = function onReproducibilityChecked(comparison) {
+window.fim.onJobAnnotation = function onJobAnnotation(jobId, comparison) {
+    if (window.fim.jobs.isDocumentClosed(jobId)) {
+        return;
+    }
     if (comparison.identical) {
         showRunBanner(
             `Recomputed with version ${comparison.newVersion}: the earlier result ` +

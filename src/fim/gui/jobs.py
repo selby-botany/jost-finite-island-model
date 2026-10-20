@@ -22,14 +22,14 @@ same instant.
 
 Commit A5 of that same schedule ("addressed job events and controls")
 adds a `jobId` and one sequence per job to every addressed push. Commit
-A7 adds the active job's view level and latest event snapshot, so a page
+A7 adds each job's view level and latest event snapshot, so a page
 can switch between full and summary rendering and recover after a gap.
 `Api._job_id` is carried as a plain argument into each drain/push
 function; background threads never read a later claim's id from `Api`.
 
-This Release A registry still admits only one active job. Its retained
-snapshot is discarded when that job's claim is released; multi-job
-records and per-document retention belong to later commits.
+This Release A registry still admits only one active job. Completed
+snapshots remain available until the owning document closes; later
+commits add the document lifecycle that removes them.
 """
 
 from __future__ import annotations
@@ -81,8 +81,8 @@ class JobAdmission:
     def view_level(self, job_id: str) -> ViewLevel:
         """Return the job's current rendering level.
 
-        A released job has no retained view state; callers that outlive a
-        claim receive the full level rather than failing during shutdown.
+        A closed job has no retained view state; callers that outlive a
+        document receive the full level rather than failing during shutdown.
         """
         with self.lock:
             return self._view_levels.get(job_id, "full")
@@ -108,7 +108,7 @@ class JobAdmission:
             return sequence
 
     def snapshot(self, job_id: str) -> dict[str, Any] | None:
-        """Return the current view level and latest event for a claimed job."""
+        """Return the current view level and latest event for a retained job."""
         with self.lock:
             if job_id not in self._view_levels:
                 return None
@@ -149,13 +149,12 @@ class JobAdmission:
             return None if assigned is None else assigned - 1
 
     def forget(self, job_id: str) -> None:
-        """Drop `job_id`'s sequence, view, and snapshot when its claim is released.
+        """Drop `job_id`'s sequence, view, and snapshot when its document closes.
 
         Keeps this dict from growing for the life of the process, one
-        entry per job ever claimed -- harmless at any one point, but
-        needless to keep once nothing can call `next_sequence` for
-        `job_id` again (`Api._release_run_claim`/`_release_sweep_claim`,
-        the only callers, clear `Api._job_id` in the same breath).
+        entry per job ever claimed. The owning document calls this after
+        it closes; claim release alone must not discard a finished job's
+        snapshot, which can still be needed to resynchronize its page.
         """
         with self.lock:
             self._next_sequence.pop(job_id, None)

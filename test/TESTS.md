@@ -17248,11 +17248,9 @@ uses, and waits on `Api`'s own `on_message` hook rather than polling the
 DOM for "the run view is showing `completed`" — see `test/gui/
 test_running_screen.py`'s own module docstring for why a DOM-polling
 test-driving loop, run concurrently with a real background thread's own
-`evaluate_js` pushes, is the wrong tool here. Once `done_event` fires,
-`_drain_batch_messages`'s thread has already returned (the terminal
-message is the last thing it processes), so the one verification
-`evaluate_js` call each test below makes is never concurrent with
-anything.
+`evaluate_js` pushes, is the wrong tool here. The hook marks delivery of
+the legacy terminal push; tests that start another run also wait for the
+page's start request and the addressed `finished` event to settle.
 
 <a id="gui.test_batch_results_screen.test_batch_trajectory_domain_excludes_a_thin_samples_own_band"></a>
 
@@ -21999,9 +21997,10 @@ Commits A5 and A7 of `20261019-claude-opus-5-5-fim-gui-tabs-design.md`'s
 Release A schedule add an addressed push channel alongside each existing
 named one (`fim.onRunProgress`, `fim.onBatchDone`, `fim.onSweepEvent`,
 ...): `fim.onJobEvent({jobId, sequence, type, payload})`, one sequence
-per job. The job registry retains the active job's view level and latest
-event snapshot; `webui/jobs.js` adopts snapshots after a gap or view
-change, but does not yet render document state (that starts at A9).
+per job. The job registry retains a finished job's view level and latest event
+snapshot until its document closes; `webui/jobs.js` adopts snapshots
+after a gap or view change, but does not yet render document state
+(that starts at A9).
 
 Three groups of tests:
 
@@ -22074,6 +22073,28 @@ def test_claim_sweep_mints_a_job_id_and_release_clears_it(
 ```
 
 `_claim_sweep` mints `Api._job_id`; `_release_sweep_claim` clears it.
+
+<a id="gui.test_job_events.test_a_finished_job_snapshot_survives_claim_release"></a>
+
+#### test\_a\_finished\_job\_snapshot\_survives\_claim\_release
+
+```python
+def test_a_finished_job_snapshot_survives_claim_release(
+        tmp_path: Path) -> None
+```
+
+Finished jobs remain available for page resynchronization.
+
+<a id="gui.test_job_events.test_closing_a_finished_job_document_forgets_its_snapshot"></a>
+
+#### test\_closing\_a\_finished\_job\_document\_forgets\_its\_snapshot
+
+```python
+def test_closing_a_finished_job_document_forgets_its_snapshot(
+        tmp_path: Path) -> None
+```
+
+Closing a document drops the finished job's retained event state.
 
 <a id="gui.test_job_events.test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id"></a>
 
@@ -22252,6 +22273,28 @@ def test_a_late_snapshot_does_not_overwrite_a_newer_event() -> None
 ```
 
 A delayed snapshot cannot move event tracking backward.
+
+<a id="gui.test_job_events.test_an_annotation_for_a_closed_document_is_dropped"></a>
+
+#### test\_an\_annotation\_for\_a\_closed\_document\_is\_dropped
+
+```python
+@pytest.mark.gui
+def test_an_annotation_for_a_closed_document_is_dropped() -> None
+```
+
+A late annotation cannot reach a document that has closed.
+
+<a id="gui.test_job_events.test_an_annotation_after_coalesced_progress_is_applied"></a>
+
+#### test\_an\_annotation\_after\_coalesced\_progress\_is\_applied
+
+```python
+@pytest.mark.gui
+def test_an_annotation_after_coalesced_progress_is_applied() -> None
+```
+
+Progress coalescing does not suppress the following annotation.
 
 <a id="gui.test_literature_visuals"></a>
 
@@ -25940,8 +25983,8 @@ later commits could introduce while they move these same mechanisms
 behind a job registry (A4) and a single publisher thread (A3): a push
 must never be delivered after the claim it belongs to has already been
 released, and an annotation -- the reproducibility check a stale-version
-run gets -- must always land strictly after the terminal push it
-annotates, never before or interleaved with it.
+run gets -- must always land after the terminal push it annotates and
+before the final `finished` event.
 
 Existing coverage this suite does not repeat: `test_one_run_at_a_time.py`
 (a second start is refused while one run is in flight, and the claim is
@@ -25982,12 +26025,32 @@ def claim_held_when(name: str) -> bool
 
 Return the claim state recorded at `name`'s first occurrence.
 
-<a id="gui.test_run_event_order.test_a_stale_version_runs_reproducibility_push_follows_its_done_push"></a>
+<a id="gui.test_run_event_order._OrderWindow.reservation_held_when"></a>
 
-#### test\_a\_stale\_version\_runs\_reproducibility\_push\_follows\_its\_done\_push
+#### reservation\_held\_when
 
 ```python
-def test_a_stale_version_runs_reproducibility_push_follows_its_done_push(
+def reservation_held_when(name: str) -> bool
+```
+
+Return whether the output reservation existed at a push.
+
+<a id="gui.test_run_event_order._OrderWindow.scripts"></a>
+
+#### scripts
+
+```python
+def scripts() -> list[str]
+```
+
+Return the scripts in delivery order.
+
+<a id="gui.test_run_event_order.test_a_stale_version_annotation_and_finished_follow_the_done_push"></a>
+
+#### test\_a\_stale\_version\_annotation\_and\_finished\_follow\_the\_done\_push
+
+```python
+def test_a_stale_version_annotation_and_finished_follow_the_done_push(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
@@ -26039,12 +26102,12 @@ A run window that also keeps every script it was sent.
 def reproducibility_script() -> str | None
 ```
 
-Return the reproducibility push, if the run sent one.
+Return the addressed annotation event, if the run sent one.
 
-Read only after `_wait_idle`: the comparison runs synchronously
-on the run's own drain thread before it clears the in-flight
-guard, so once idle, a push that was ever going to be sent has
-been.
+Read only after `_wait_idle`: the comparison and final `finished`
+event run on the drain thread before it clears the in-flight
+guard, so once idle, any annotation that was going to be sent has
+landed.
 
 <a id="gui.test_run_settings_notice_screen"></a>
 

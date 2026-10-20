@@ -590,6 +590,14 @@ def _finished_sweep(api: Api, window: _FakeWindow) -> str:
     started = api.start_sweep(_form(), _request(_D_AXIS))
     _wait_until_idle(api)
     assert window.finished.is_set()
+    job_events = [
+        json.loads(script[len("fim.onJobEvent(") : -1])
+        for script in window.pushed
+        if script.startswith("fim.onJobEvent(")
+    ]
+    assert job_events[-1]["type"] == "finished"
+    snapshot = api.get_job_snapshot(job_events[-1]["jobId"])
+    assert snapshot["snapshot"]["type"] == "finished"
     return str(started["studyId"])
 
 

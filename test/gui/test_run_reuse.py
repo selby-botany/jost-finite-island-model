@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from pathlib import Path
 from typing import Any
@@ -131,15 +132,18 @@ class _RecordingWindow(_RunWindow):
         return super().evaluate_js(script)
 
     def reproducibility_script(self) -> str | None:
-        """Return the reproducibility push, if the run sent one.
+        """Return the addressed annotation event, if the run sent one.
 
-        Read only after `_wait_idle`: the comparison runs synchronously
-        on the run's own drain thread before it clears the in-flight
-        guard, so once idle, a push that was ever going to be sent has
-        been.
+        Read only after `_wait_idle`: the comparison and final `finished`
+        event run on the drain thread before it clears the in-flight
+        guard, so once idle, any annotation that was going to be sent has
+        landed.
         """
         for script in self.scripts:
-            if script.startswith("fim.onReproducibilityChecked("):
+            if not script.startswith("fim.onJobEvent("):
+                continue
+            event = json.loads(script[len("fim.onJobEvent(") : -1])
+            if event["type"] == "annotation":
                 return script
         return None
 
@@ -148,9 +152,9 @@ def _wait_idle(instance: Api) -> None:
     """Wait for the run's drain thread to clear the in-flight guard.
 
     `start_run` sets `_run_in_flight` before returning and the drain
-    thread clears it in its own `finally`, after its terminal push and
-    any reproducibility check, so this returns once the run has ended
-    however it ended. This used to give up silently after 60 seconds and
+    thread clears it in its own `finally`, after its terminal event,
+    annotation, and finished event, so this returns once the run has
+    ended however it ended. This used to give up silently after 60 seconds and
     let the test read a run still in progress; it now has no timing
     budget, since how long a run takes depends on machine load, not on
     the commit. The poll interval affects only how soon this notices;
