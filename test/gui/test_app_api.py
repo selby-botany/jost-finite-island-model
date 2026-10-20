@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 import webview
 import yaml
-from conftest import FAST_EXPERT_SETTINGS
+from conftest import COMPLETION_BACKSTOP_SECONDS, FAST_EXPERT_SETTINGS
 from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
@@ -58,6 +58,7 @@ from fim.gui.preferences import (
     preferences_file_override,
     save_preferences,
 )
+from fim.gui.publisher import Publisher
 from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
 from fim.gui.trajectory_history import sampled_statistic_history
@@ -3077,7 +3078,11 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     store.write_generation(replicate_run_id, 0, state.to_rows(replicate_run_id))
     window = _FakeWindow()
 
-    app_module._push_batch_progress(window, params, run_id, tmp_path)
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window, params, run_id, tmp_path, publisher=publisher
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     payload = _one_call_payload(window, "onBatchProgress")
     assert payload["replicateCount"] == 2
@@ -3157,7 +3162,11 @@ def test_push_batch_progress_includes_a_generation_zero_baseline(
         )
     window = _FakeWindow()
 
-    app_module._push_batch_progress(window, params, run_id, tmp_path)
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window, params, run_id, tmp_path, publisher=publisher
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     payload = _one_call_payload(window, "onBatchProgress")
     assert payload["meanReportedGeneration"] == 2
@@ -3182,7 +3191,11 @@ def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
     params = replace(tiny_params, n_replicates=2)
     window = _FakeWindow()
 
-    app_module._push_batch_progress(window, params, "batch-run-1", tmp_path)
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window, params, "batch-run-1", tmp_path, publisher=publisher
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     payload = _one_call_payload(window, "onBatchProgress")
     assert payload["replicateCount"] == 2
@@ -3226,7 +3239,11 @@ def test_push_batch_progress_includes_a_live_deme_pair_panel_when_selected(
     store.write_generation(replicate_run_id, 0, state.to_rows(replicate_run_id))
     window = _FakeWindow()
 
-    app_module._push_batch_progress(window, params, run_id, tmp_path, lambda: (1, 2))
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window, params, run_id, tmp_path, lambda: (1, 2), publisher=publisher
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     payload = _one_call_payload(window, "onBatchProgress")
     pair_panel = payload["pairPanel"]
@@ -3281,6 +3298,7 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     message_queue.put(("cancelled", 3))
     window = _FakeWindow()
 
+    publisher = Publisher()
     app_module._drain_run_messages(
         window,
         message_queue,
@@ -3288,7 +3306,9 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
         deme_count=3,
         output_directory=Path("/unused"),
         live_deme_pair=lambda: (1, 3),
+        publisher=publisher,
     )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     progress_payload = json.loads(window.scripts[0][len("fim.onRunProgress(") : -1])
     pair_panel = progress_payload["pairPanel"]
@@ -3413,13 +3433,16 @@ def test_drain_run_messages_forwards_a_status_note_and_keeps_draining() -> None:
     message_queue.put(("cancelled", 3))
     window = _FakeWindow()
 
+    publisher = Publisher()
     app_module._drain_run_messages(
         window,
         message_queue,
         max_generations=10,
         deme_count=300,
         output_directory=Path("/unused"),
+        publisher=publisher,
     )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     assert window.scripts[0].startswith("fim.onRunStatus(")
     assert "44,850 pairs of 300 demes" in window.scripts[0]

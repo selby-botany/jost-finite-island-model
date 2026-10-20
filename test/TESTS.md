@@ -133,6 +133,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_preferences`](#gui.test_preferences)
   - [`test_presets`](#gui.test_presets)
   - [`test_presets_screen`](#gui.test_presets_screen)
+  - [`test_publisher`](#gui.test_publisher)
   - [`test_read_only_bridge`](#gui.test_read_only_bridge)
   - [`test_read_only_screen`](#gui.test_read_only_screen)
   - [`test_recent_runs`](#gui.test_recent_runs)
@@ -24324,6 +24325,148 @@ An explicit reset to starter values has nothing left to fork.
 `screens/presets.js`'s own `lastLoadedPresetTitle` docstring: an
 explicit "New configuration" is not "the loaded preset, plus edits"
 any more.
+
+<a id="gui.test_publisher"></a>
+
+# gui.test\_publisher
+
+Tests for `fim.gui.publisher.Publisher` (no real window, no `gui` marker).
+
+Every ordering claim here is driven by events a fake window's own
+`evaluate_js` sets or waits on, never by a sleep: a regression that makes
+`publish` block, or that lets delivery reorder or drop something it must
+not, hangs at the real line responsible rather than racing a clock.
+
+<a id="gui.test_publisher.test_a_fresh_publisher_starts_no_thread"></a>
+
+#### test\_a\_fresh\_publisher\_starts\_no\_thread
+
+```python
+def test_a_fresh_publisher_starts_no_thread() -> None
+```
+
+The delivery thread is lazy: nothing is spent until the first publish.
+
+<a id="gui.test_publisher.test_terminal_pushes_keep_arrival_order_and_are_never_dropped"></a>
+
+#### test\_terminal\_pushes\_keep\_arrival\_order\_and\_are\_never\_dropped
+
+```python
+def test_terminal_pushes_keep_arrival_order_and_are_never_dropped() -> None
+```
+
+Every `coalesce_key=None` push is delivered, in the order it was sent.
+
+<a id="gui.test_publisher.test_publish_never_blocks_while_delivery_is_stuck_on_an_earlier_push"></a>
+
+#### test\_publish\_never\_blocks\_while\_delivery\_is\_stuck\_on\_an\_earlier\_push
+
+```python
+def test_publish_never_blocks_while_delivery_is_stuck_on_an_earlier_push(
+) -> None
+```
+
+A producer's own call returns at once, even mid-delivery of another push.
+
+Also proves coalescing: two progress ticks published while delivery is
+stuck on an unrelated push collapse into one -- only the newer one is
+ever handed to `evaluate_js`.
+
+<a id="gui.test_publisher.test_a_coalesced_key_is_scoped_to_its_own_window"></a>
+
+#### test\_a\_coalesced\_key\_is\_scoped\_to\_its\_own\_window
+
+```python
+def test_a_coalesced_key_is_scoped_to_its_own_window() -> None
+```
+
+Two windows' progress ticks never coalesce into each other.
+
+<a id="gui.test_publisher.test_a_failed_push_does_not_stop_delivery_of_the_rest"></a>
+
+#### test\_a\_failed\_push\_does\_not\_stop\_delivery\_of\_the\_rest
+
+```python
+def test_a_failed_push_does_not_stop_delivery_of_the_rest() -> None
+```
+
+One push raising does not break the ones queued after it.
+
+<a id="gui.test_publisher.test_stop_drains_the_backlog_then_refuses_new_pushes"></a>
+
+#### test\_stop\_drains\_the\_backlog\_then\_refuses\_new\_pushes
+
+```python
+def test_stop_drains_the_backlog_then_refuses_new_pushes() -> None
+```
+
+`stop` waits for what is already queued, then `publish` becomes a no-op.
+
+<a id="gui.test_publisher.test_stop_bounds_the_wait_when_delivery_cannot_finish"></a>
+
+#### test\_stop\_bounds\_the\_wait\_when\_delivery\_cannot\_finish
+
+```python
+def test_stop_bounds_the_wait_when_delivery_cannot_finish() -> None
+```
+
+A push that never returns makes `stop` report it did not drain in time.
+
+<a id="gui.test_publisher.test_on_delivered_fires_once_actual_delivery_is_attempted"></a>
+
+#### test\_on\_delivered\_fires\_once\_actual\_delivery\_is\_attempted
+
+```python
+def test_on_delivered_fires_once_actual_delivery_is_attempted() -> None
+```
+
+The hook `Api`'s own `on_message` is built from fires after the real push.
+
+<a id="gui.test_publisher.test_a_coalesced_away_entry_never_fires_its_own_on_delivered"></a>
+
+#### test\_a\_coalesced\_away\_entry\_never\_fires\_its\_own\_on\_delivered
+
+```python
+def test_a_coalesced_away_entry_never_fires_its_own_on_delivered() -> None
+```
+
+Only the surviving entry's own `on_delivered` fires, not the replaced one's.
+
+<a id="gui.test_publisher.test_on_delivered_fires_even_when_the_push_itself_fails"></a>
+
+#### test\_on\_delivered\_fires\_even\_when\_the\_push\_itself\_fails
+
+```python
+def test_on_delivered_fires_even_when_the_push_itself_fails() -> None
+```
+
+A test-only hook learns the attempt happened, whether or not it succeeded.
+
+Matches `Publisher._deliver`'s own documented trade-off: a failed
+push is logged and does not stop delivery of the rest, so a test-
+only observer built from `on_delivered` must not be left waiting
+forever just because the one page-side handler it is watching
+happens to be broken.
+
+<a id="gui.test_publisher.test_a_push_declined_after_stop_still_fires_on_delivered"></a>
+
+#### test\_a\_push\_declined\_after\_stop\_still\_fires\_on\_delivered
+
+```python
+def test_a_push_declined_after_stop_still_fires_on_delivered() -> None
+```
+
+A push that loses the shutdown race still releases a blocking waiter.
+
+Regression test: `stop` can run on another thread between a producer
+deciding to publish and that producer's own `publish` call actually
+taking the lock -- `fim.gui.app._publish_and_wait` (every run's or
+batch's own terminal push, and a saved run's own pause/cancel push)
+blocks on exactly this entry's `on_delivered`, so a push declined
+after `stop` must call it anyway, synchronously, right here, or that
+caller hangs forever. Found live: `test_closing_pauses_a_running_
+saved_run_at_a_checkpoint` timed out at the 120 s completion backstop
+before this fix, with the run claim never released.
 
 <a id="gui.test_read_only_bridge"></a>
 

@@ -629,6 +629,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [load\_bundle\_catalog](#fim.gui.presets.load_bundle_catalog)
   * [split\_configuration](#fim.gui.presets.split_configuration)
   * [strip\_internal\_yaml\_keys](#fim.gui.presets.strip_internal_yaml_keys)
+* [fim.gui.publisher](#fim.gui.publisher)
+  * [EvaluatesJs](#fim.gui.publisher.EvaluatesJs)
+  * [Publisher](#fim.gui.publisher.Publisher)
+    * [publish](#fim.gui.publisher.Publisher.publish)
+    * [stop](#fim.gui.publisher.Publisher.stop)
 * [fim.gui.recent\_runs](#fim.gui.recent_runs)
   * [RecentRun](#fim.gui.recent_runs.RecentRun)
   * [list\_recent\_runs](#fim.gui.recent_runs.list_recent_runs)
@@ -10606,6 +10611,13 @@ run checkpoints and pauses (and resumes later), a run, batch, or
 sweep is cancelled. A worker that misses the bound is logged, and
 the deadman still ends the process.
 
+`_drain_thread` is joined before the publisher is ever told to
+stop accepting (`self._drain_thread`'s own comment in `__init__`
+has the full reason): only once it has actually returned has its
+own terminal push already been delivered (`_publish_and_wait`),
+so the publisher's backlog is, by then, at most whatever a
+sweep's own thread had already queued, never still growing.
+
 **Arguments**:
 
 - `timeout` - Longest total wait for the workers, in seconds.
@@ -16621,6 +16633,148 @@ stay, since `fim run` records them as the new run's name.
 
   The same text with each top-level `_key:` entry, and any
   indented lines belonging to it, removed.
+
+<a id="fim.gui.publisher"></a>
+
+# fim.gui.publisher
+
+One thread delivers every push to the page, in order.
+
+Before this module existed, every background thread that had something
+to tell the page -- a run's drain thread, a batch's progress poller, the
+sweep's own event callback, the reproducibility check -- called `window.
+evaluate_js` directly, itself, and blocked on it
+(`20261019-claude-opus-5-5-fim-gui-tabs-design-review.md`, finding M4).
+The sweep's own callback did this while holding its own context lock
+(`fim.sweep_run._Context.emit`), so a page slow to answer one tick's
+`evaluate_js` round trip stalled every other point thread waiting on
+that same lock, not merely the page.
+
+A `Publisher` is the one place any of them has to touch `evaluate_js`
+now. `publish` only ever appends to (or, for a coalescible push, updates
+in place within) an in-memory list and returns; it never blocks on the
+page. One background thread drains that list, delivering each entry in
+turn, never while holding any lock that a producer might need to make
+progress of its own.
+
+Progress is the one kind of push that is fine to coalesce: only the
+newest tick of a given `coalesce_key` is ever worth delivering, so an
+older, still-undelivered one is simply replaced rather than queued
+again. Everything else -- a terminal outcome, an annotation such as a
+reproducibility result, a one-off status note -- is queued with no
+`coalesce_key` at all, and is always delivered, in the order it was
+published, never dropped and never reordered relative to another
+non-coalesced push for the same window.
+
+<a id="fim.gui.publisher.EvaluatesJs"></a>
+
+## EvaluatesJs Objects
+
+```python
+class EvaluatesJs(Protocol)
+```
+
+Structural stand-in for the one capability a push actually needs.
+
+Matches `fim.gui.app._EvaluatesJs`: any real caller passes a real
+`webview.Window`, which already satisfies this; a test can pass a
+lightweight fake with no real window or `gui` marker needed.
+
+<a id="fim.gui.publisher.Publisher"></a>
+
+## Publisher Objects
+
+```python
+class Publisher()
+```
+
+Delivers every push handed to `publish`, from one background thread.
+
+One instance belongs to one `Api` (`Api.__init__`'s own `self.
+_publisher`), the same way `_close_gate` does — never a module-level
+singleton, so tests building several `Api` instances never share a
+delivery thread or queue. The thread itself starts lazily, on the
+first call to `publish`: most `Api` instances in this suite are
+built and never push anything at all, and starting a thread only
+once one is actually needed keeps those instances just as cheap as
+they were before this module existed.
+
+<a id="fim.gui.publisher.Publisher.publish"></a>
+
+#### publish
+
+```python
+def publish(window: EvaluatesJs,
+            script: str,
+            *,
+            coalesce_key: Hashable | None = None,
+            label: str | None = None,
+            on_delivered: Callable[[], None] | None = None) -> None
+```
+
+Enqueue one push; returns at once, never calling `evaluate_js` itself.
+
+**Arguments**:
+
+- `window` - Where `script` will eventually be delivered.
+- `script` - The JavaScript to evaluate there.
+- `coalesce_key` - When given, a still-undelivered entry already
+  queued for the same `window` and the same key is
+  overwritten by this one instead of being queued again --
+  the right behavior for a progress tick, where only the
+  newest is ever worth showing. `None` (the default)
+  queues unconditionally, preserving arrival order against
+  every other `None`-keyed push to the same window: the
+  shape every terminal outcome, annotation, and one-off
+  status note needs. A replaced entry's own `on_delivered`
+  is simply dropped along with it -- never called -- since
+  it never actually reached the page.
+- `label` - Named in a delivery failure's log line, in place of
+  `script`'s own handler name.
+- `on_delivered` - Called from the delivery thread, with no
+  arguments, immediately after this exact entry's own
+  `evaluate_js` attempt returns or raises -- the hook
+  `Api`'s own `on_message`/`on_run_started` test-only
+  callbacks (see `Api.__init__`'s own docstring) are built
+  from, so a test observing it still knows the real push
+  it names has actually been attempted, in order, not
+  merely accepted. Called whether or not that attempt
+- `succeeded` - every real page already has every handler
+  `fim.gui.webui` pushes to, so a failure here means the
+  window itself is gone, which no test-only hook needs to
+  distinguish from success. Called synchronously, on the
+  calling thread, right here -- never queued at all -- if
+  `stop` has already been called: `fim.gui.app._publish_
+  and_wait` blocks on exactly this callback, and a push
+  that arrives once `stop` has already won the shutdown
+  race must still release that wait, since nothing further
+  will ever be delivered to call it from.
+
+<a id="fim.gui.publisher.Publisher.stop"></a>
+
+#### stop
+
+```python
+def stop(timeout: float) -> bool
+```
+
+Stop accepting new pushes, then wait for the rest to be delivered.
+
+Called once, at shutdown (`Api.stop_active_work`), inside the
+same overall deadline that already bounds joining every worker
+thread — this only waits for the publisher's own backlog, which
+in practice is empty or near it, since nothing new is being
+produced once every worker has itself been asked to stop.
+
+**Arguments**:
+
+- `timeout` - Longest wait for the queue to drain, in seconds.
+
+
+**Returns**:
+
+  Whether every already-queued push was delivered before
+  `timeout` ran out.
 
 <a id="fim.gui.recent_runs"></a>
 

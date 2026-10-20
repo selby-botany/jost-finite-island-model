@@ -21,10 +21,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import COMPLETION_BACKSTOP_SECONDS
 
 from fim import paths
 from fim.gui import app as app_module
 from fim.gui.app import Api
+from fim.gui.publisher import Publisher
 from fim.persistence import groups
 from fim.persistence.run_metadata import read_run_metadata, run_metadata_path
 
@@ -461,7 +463,9 @@ def test_a_matching_recompute_of_a_read_only_run_keeps_it_and_tells_the_page(
     monkeypatch.setattr(app_module, "compare_runs", lambda *_: _Identical())
     window = _RecordingWindow()
 
-    app_module._check_reproducibility(window, recomputed, previous)
+    publisher = Publisher()
+    app_module._check_reproducibility(window, recomputed, previous, publisher)
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     assert previous.is_dir()
     assert window.scripts == ['fim.onReproducibilityChecked({"identical": true})']
