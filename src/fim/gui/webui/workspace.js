@@ -5,8 +5,18 @@ const workspace = (() => {
     const documents = new Map();
     const documentByJob = new Map();
     const documentByResource = new Map();
+    const selectionListeners = new Set();
     let selectedId = null;
     let nextId = 1;
+
+    function notifySelectionChange(previousId) {
+        if (previousId === selectedId) {
+            return;
+        }
+        for (const listener of selectionListeners) {
+            listener(selectedId, previousId);
+        }
+    }
 
     // Existing screens use these globals until each call site migrates.
     const globalAliases = [
@@ -70,6 +80,7 @@ const workspace = (() => {
     }
 
     function createDocument(initialState = {}, options = {}) {
+        const previousId = selectedId;
         const tabId = `document-${nextId}`;
         nextId += 1;
         const state = {
@@ -104,6 +115,7 @@ const workspace = (() => {
         }
         if (options.select !== false) {
             selectedId = tabId;
+            notifySelectionChange(previousId);
         }
         return tabId;
     }
@@ -121,12 +133,20 @@ const workspace = (() => {
         }
         if (selectedId === tabId) {
             selectedId = orderedIds[Math.min(index, orderedIds.length - 1)] ?? null;
+            notifySelectionChange(tabId);
         }
     }
 
     function select(tabId) {
+        const previousId = selectedId;
         documentFor(tabId);
         selectedId = tabId;
+        notifySelectionChange(previousId);
+    }
+
+    function onSelectionChange(listener) {
+        selectionListeners.add(listener);
+        return () => selectionListeners.delete(listener);
     }
 
     function setResourceKey(tabId, resourceKey) {
@@ -205,6 +225,7 @@ const workspace = (() => {
         createDocument,
         closeDocument,
         select,
+        onSelectionChange,
         selectedId: () => selectedId,
         selected: () => (selectedId === null ? null : documentFor(selectedId)),
         get: (tabId) => documents.get(tabId) ?? null,

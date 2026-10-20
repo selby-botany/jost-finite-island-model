@@ -28931,6 +28931,17 @@ def test_job_and_resource_indexes_follow_document_lifecycle(
 
 Indexes resolve to their owner and are cleared when it closes.
 
+<a id="gui.test_workspace.test_scrubber_and_graph_state_restore_for_each_document"></a>
+
+#### test\_scrubber\_and\_graph\_state\_restore\_for\_each\_document
+
+```python
+def test_scrubber_and_graph_state_restore_for_each_document(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Frames, playback, graph choices, and scatter style stay document-local.
+
 
 
 <a id="group-model"></a>

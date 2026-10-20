@@ -70,38 +70,33 @@ const RUN_GRAPHS = [
     },
 ];
 
-const graphAvailability = new Map();
 const graphRedrawers = new Map();
-// The graphs the user asked for, which are not always the ones on screen.
-// Kept apart from `visibleGraphKeys` because availability arrives in an
-// order nobody controls: the scatter declares itself at `load`, long
-// before a run has produced a trajectory. Collapsing the two would let
-// that first fallback overwrite the preference permanently, so the
-// trajectory would never appear even once it had data -- which is
-// exactly the defect this pair replaced. The preference is only ever
-// changed by the user (or `showGraph`); what is *shown* is recomputed
-// against what has data on every sync.
-let preferredGraphKeys = [...DEFAULT_GRAPH_KEYS];
-let visibleGraphKeys = [];
-// The graph "the" active one for callers that ask for a single graph
-// (`getActiveGraph`): the pane last double-clicked, else the first shown.
-let focusedGraphKey = null;
-let graphColumns = DEFAULT_GRAPH_COLUMNS;
-let zoomedGraphKey = null;
-let zoomScale = 1;
+function getGraphStageState(tabId = window.fim.workspace.selectedId()) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.graphStage) {
+        documentState.graphStage = {
+            availability: new Map(),
+            preferredGraphKeys: [...DEFAULT_GRAPH_KEYS],
+            visibleGraphKeys: [],
+            focusedGraphKey: null,
+            graphColumns: DEFAULT_GRAPH_COLUMNS,
+            zoomedGraphKey: null,
+            zoomScale: 1,
+            redrawingActiveGraph: false,
+        };
+    }
+    return documentState.graphStage;
+}
+
+let activeGraphStage = getGraphStageState();
 // Which statistics table `openGraphZoom` moved, if any -- remembered
 // rather than re-queried at close time, because by then it has been
 // moved *out* of `#run-plot-row`, so `activeStatsTable()`'s own
 // `#run-plot-row > ...` scope would no longer find it.
 let zoomedStatsTable = null;
-// Guards the repaint at the end of `syncRunGraphStage`, not the sync
-// itself. A render function is allowed to call `setGraphAvailable` --
-// `renderTrajectory` does, every time it decides it has something to
-// draw -- and that call syncs the stage, which would repaint by calling
-// the very render function already running. The DOM half of the sync
-// still runs in that nested call, so nothing is left stale; only the
-// recursive repaint is skipped.
-let redrawingActiveGraph = false;
 
 /**
  * Look up one entry of `RUN_GRAPHS` by key.
@@ -130,9 +125,12 @@ function runGraphPane(key) {
  * @returns {Array<string>}
  */
 function availableGraphKeys() {
-    return RUN_GRAPHS.filter((entry) => graphAvailability.get(entry.key) === true).map(
-        (entry) => entry.key
-    );
+    if (!activeGraphStage) {
+        return [];
+    }
+    return RUN_GRAPHS.filter(
+        (entry) => activeGraphStage.availability.get(entry.key) === true
+    ).map((entry) => entry.key);
 }
 
 /**
@@ -204,12 +202,16 @@ function isOffered(entry) {
  * @returns {void}
  */
 function syncGraphMenu(available) {
+    const state = activeGraphStage;
+    if (!state) {
+        return;
+    }
     const list = document.getElementById("run-graph-menu-list");
     const summary = document.getElementById("run-graph-menu-summary");
     if (!list) {
         return;
     }
-    const chosen = new Set(visibleGraphKeys);
+    const chosen = new Set(state.visibleGraphKeys);
     const signature = RUN_GRAPHS.filter(isOffered)
         .map((entry) => {
             const title = document.getElementById(entry.titleId);
@@ -220,7 +222,7 @@ function syncGraphMenu(available) {
         })
         .join("\u0001");
     if (summary) {
-        summary.textContent = `Graphs (${visibleGraphKeys.length})`;
+        summary.textContent = `Graphs (${state.visibleGraphKeys.length})`;
     }
     if (list.dataset.signature === signature) {
         return;
@@ -261,6 +263,10 @@ function syncGraphMenu(available) {
  * @returns {void}
  */
 function applyGraphLayout() {
+    const state = activeGraphStage;
+    if (!state) {
+        return;
+    }
     const panels = document.getElementById("run-visual-panels");
     if (!panels) {
         return;
@@ -269,9 +275,12 @@ function applyGraphLayout() {
     const fits =
         width > 0
             ? Math.max(1, Math.floor((width + GRAPH_GAP_PX) / (MIN_PANE_WIDTH_PX + GRAPH_GAP_PX)))
-            : graphColumns;
-    const columns = Math.max(1, Math.min(graphColumns, visibleGraphKeys.length, fits));
-    const weights = visibleGraphKeys
+            : state.graphColumns;
+    const columns = Math.max(
+        1,
+        Math.min(state.graphColumns, state.visibleGraphKeys.length, fits)
+    );
+    const weights = state.visibleGraphKeys
         .slice(0, columns)
         .map((key) => runGraphEntry(key).weight ?? 1);
     panels.style.gridTemplateColumns = weights
@@ -298,7 +307,7 @@ function applyGraphLayout() {
  * @param {number} columns How many columns the first row has.
  */
 function matchScatterAndTrajectoryHeights(panels, columns) {
-    const firstRow = visibleGraphKeys.slice(0, columns);
+    const firstRow = activeGraphStage.visibleGraphKeys.slice(0, columns);
     const scatterIndex = firstRow.indexOf("scatter");
     const trajectoryIndex = firstRow.indexOf("trajectory");
     if (scatterIndex === -1 || trajectoryIndex === -1) {
@@ -349,6 +358,10 @@ function matchScatterAndTrajectoryHeights(panels, columns) {
  * @returns {void}
  */
 function syncRunGraphStage() {
+    const state = activeGraphStage;
+    if (!state) {
+        return;
+    }
     const stage = document.getElementById("run-graph-stage");
     if (!stage) {
         return;
@@ -361,14 +374,17 @@ function syncRunGraphStage() {
     // state change never leaves the stage blank; the preference itself
     // is never written here, so a graph that is merely not ready yet
     // appears as soon as it becomes ready.
-    visibleGraphKeys = RUN_GRAPHS.filter(
-        (entry) => preferredGraphKeys.includes(entry.key) && available.includes(entry.key)
+    state.visibleGraphKeys = RUN_GRAPHS.filter(
+        (entry) =>
+            state.preferredGraphKeys.includes(entry.key) &&
+            available.includes(entry.key)
     ).map((entry) => entry.key);
-    if (visibleGraphKeys.length === 0 && available.length > 0) {
-        visibleGraphKeys = [available[0]];
+    if (state.visibleGraphKeys.length === 0 && available.length > 0) {
+        state.visibleGraphKeys = [available[0]];
     }
-    if (!visibleGraphKeys.includes(focusedGraphKey)) {
-        focusedGraphKey = visibleGraphKeys.length > 0 ? visibleGraphKeys[0] : null;
+    if (!state.visibleGraphKeys.includes(state.focusedGraphKey)) {
+        state.focusedGraphKey =
+            state.visibleGraphKeys.length > 0 ? state.visibleGraphKeys[0] : null;
     }
     stage.hidden = available.length === 0;
     syncGraphMenu(available);
@@ -390,17 +406,17 @@ function syncRunGraphStage() {
         if (!pane) {
             continue;
         }
-        pane.hidden = !visibleGraphKeys.includes(entry.key);
+        pane.hidden = !state.visibleGraphKeys.includes(entry.key);
     }
     applyGraphLayout();
-    if (!redrawingActiveGraph) {
-        redrawingActiveGraph = true;
+    if (!state.redrawingActiveGraph) {
+        state.redrawingActiveGraph = true;
         try {
-            for (const key of visibleGraphKeys) {
+            for (const key of state.visibleGraphKeys) {
                 redrawGraph(key);
             }
         } finally {
-            redrawingActiveGraph = false;
+            state.redrawingActiveGraph = false;
         }
     }
 }
@@ -413,7 +429,10 @@ function syncRunGraphStage() {
  * @returns {void}
  */
 window.fim.setGraphAvailable = function setGraphAvailable(key, available) {
-    graphAvailability.set(key, Boolean(available));
+    if (!activeGraphStage) {
+        return;
+    }
+    activeGraphStage.availability.set(key, Boolean(available));
     syncRunGraphStage();
 };
 
@@ -441,11 +460,15 @@ window.fim.registerGraphDraw = function registerGraphDraw(key, redraw) {
  * @returns {void}
  */
 window.fim.redrawActiveGraph = function redrawActiveGraph() {
-    if (zoomedGraphKey !== null) {
-        redrawGraph(zoomedGraphKey);
+    const state = activeGraphStage;
+    if (!state) {
         return;
     }
-    for (const key of visibleGraphKeys) {
+    if (state.zoomedGraphKey !== null) {
+        redrawGraph(state.zoomedGraphKey);
+        return;
+    }
+    for (const key of state.visibleGraphKeys) {
         redrawGraph(key);
     }
 };
@@ -472,12 +495,16 @@ function saveRunCardChoice(method, ...args) {
  * @returns {void}
  */
 window.fim.setVisibleGraphs = function setVisibleGraphs(keys) {
+    const state = activeGraphStage;
+    if (!state) {
+        return;
+    }
     const known = RUN_GRAPHS.map((entry) => entry.key);
     const chosen = known.filter((key) => keys.includes(key));
     if (chosen.length === 0) {
         return;
     }
-    preferredGraphKeys = chosen;
+    state.preferredGraphKeys = chosen;
     syncRunGraphStage();
     saveRunCardChoice("set_run_graphs", chosen);
 };
@@ -491,7 +518,10 @@ window.fim.setVisibleGraphs = function setVisibleGraphs(keys) {
  * @returns {void}
  */
 window.fim.showGraph = function showGraph(key) {
-    preferredGraphKeys = [key];
+    if (!activeGraphStage) {
+        return;
+    }
+    activeGraphStage.preferredGraphKeys = [key];
     syncRunGraphStage();
 };
 
@@ -503,7 +533,13 @@ window.fim.showGraph = function showGraph(key) {
  * @returns {void}
  */
 window.fim.setGraphColumns = function setGraphColumns(columns) {
-    graphColumns = Math.max(1, Math.floor(columns) || DEFAULT_GRAPH_COLUMNS);
+    if (!activeGraphStage) {
+        return;
+    }
+    activeGraphStage.graphColumns = Math.max(
+        1,
+        Math.floor(columns) || DEFAULT_GRAPH_COLUMNS
+    );
     applyGraphLayout();
     window.fim.redrawActiveGraph();
 };
@@ -514,7 +550,7 @@ window.fim.setGraphColumns = function setGraphColumns(columns) {
  * @returns {Array<string>}
  */
 window.fim.getVisibleGraphs = function getVisibleGraphs() {
-    return [...visibleGraphKeys];
+    return activeGraphStage ? [...activeGraphStage.visibleGraphKeys] : [];
 };
 
 /**
@@ -526,7 +562,12 @@ window.fim.getVisibleGraphs = function getVisibleGraphs() {
  * @returns {string|null}
  */
 window.fim.getActiveGraph = function getActiveGraph() {
-    return zoomedGraphKey === null ? focusedGraphKey : zoomedGraphKey;
+    if (!activeGraphStage) {
+        return null;
+    }
+    return activeGraphStage.zoomedGraphKey === null
+        ? activeGraphStage.focusedGraphKey
+        : activeGraphStage.zoomedGraphKey;
 };
 
 /**
@@ -583,8 +624,11 @@ window.fim.exportActiveGraphImage = async function exportActiveGraphImage() {
  * @returns {void}
  */
 window.fim.resetGraphStage = function resetGraphStage() {
-    graphAvailability.clear();
-    visibleGraphKeys = [];
+    if (!activeGraphStage) {
+        return;
+    }
+    activeGraphStage.availability.clear();
+    activeGraphStage.visibleGraphKeys = [];
     if (typeof window.fim.resetScatterZoomView === "function") {
         window.fim.resetScatterZoomView();
     }
@@ -618,12 +662,13 @@ function activeStatsTable() {
  * @returns {void}
  */
 function applyGraphZoom() {
+    const state = activeGraphStage;
     const graphColumn = document.getElementById("graph-zoom-graph-column");
     const level = document.getElementById("graph-zoom-level");
-    if (!graphColumn || zoomedGraphKey === null) {
+    if (!state || !graphColumn || state.zoomedGraphKey === null) {
         return;
     }
-    const pane = runGraphPane(zoomedGraphKey);
+    const pane = runGraphPane(state.zoomedGraphKey);
     if (pane) {
         // Scale 1 means "exactly as large as the frame's graph column
         // leaves room for", so both base sizes come from that column
@@ -658,13 +703,13 @@ function applyGraphZoom() {
             ZOOM_FRAME_MIN_WIDTH_PX
         );
         const baseHeight = Math.max(Math.floor(columnBox.height), ZOOM_FRAME_MIN_HEIGHT_PX);
-        pane.style.width = `${Math.floor(baseWidth * zoomScale)}px`;
-        pane.style.height = `${Math.floor(baseHeight * zoomScale)}px`;
+        pane.style.width = `${Math.floor(baseWidth * state.zoomScale)}px`;
+        pane.style.height = `${Math.floor(baseHeight * state.zoomScale)}px`;
     }
     if (level) {
-        level.textContent = `${Math.round(zoomScale * 100)}%`;
+        level.textContent = `${Math.round(state.zoomScale * 100)}%`;
     }
-    redrawGraph(zoomedGraphKey);
+    redrawGraph(state.zoomedGraphKey);
 }
 
 /**
@@ -674,7 +719,14 @@ function applyGraphZoom() {
  * @returns {void}
  */
 function stepGraphZoom(delta) {
-    zoomScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomScale + delta));
+    const state = activeGraphStage;
+    if (!state) {
+        return;
+    }
+    state.zoomScale = Math.min(
+        ZOOM_MAX,
+        Math.max(ZOOM_MIN, state.zoomScale + delta)
+    );
     applyGraphZoom();
 }
 
@@ -739,13 +791,18 @@ function restoreFromZoomFrame(element, placeholderId) {
  * @returns {void}
  */
 window.fim.openGraphZoom = function openGraphZoom(requestedKey) {
+    const state = activeGraphStage;
     const modal = document.getElementById("graph-zoom-modal");
     const body = document.getElementById("graph-zoom-body");
     const key =
-        requestedKey !== undefined && visibleGraphKeys.includes(requestedKey)
+        state &&
+        requestedKey !== undefined &&
+        state.visibleGraphKeys.includes(requestedKey)
             ? requestedKey
-            : focusedGraphKey;
-    if (!modal || !body || key === null || zoomedGraphKey !== null) {
+            : state
+              ? state.focusedGraphKey
+              : null;
+    if (!state || !modal || !body || key === null || state.zoomedGraphKey !== null) {
         return;
     }
     const entry = runGraphEntry(key);
@@ -771,9 +828,9 @@ window.fim.openGraphZoom = function openGraphZoom(requestedKey) {
     }
     zoomedStatsTable = statsTable;
 
-    zoomedGraphKey = key;
-    focusedGraphKey = key;
-    zoomScale = 1;
+    state.zoomedGraphKey = key;
+    state.focusedGraphKey = key;
+    state.zoomScale = 1;
     pane.classList.add("graph-zoom-pane");
     // Drag-to-zoom (`scatter.js`'s own `wireScatterZoomInteraction`) is
     // only wired to the scatter pane -- the one pane a botanist actually
@@ -823,14 +880,19 @@ window.fim.openGraphZoom = function openGraphZoom(requestedKey) {
  *
  * @returns {void}
  */
-function restoreZoomedPane() {
-    if (zoomedGraphKey === null) {
+function restoreZoomedPane({ resetScatterView = true } = {}) {
+    const state = activeGraphStage;
+    if (!state || state.zoomedGraphKey === null) {
         return;
     }
-    if (zoomedGraphKey === "scatter" && typeof window.fim.resetScatterZoomView === "function") {
+    if (
+        resetScatterView &&
+        state.zoomedGraphKey === "scatter" &&
+        typeof window.fim.resetScatterZoomView === "function"
+    ) {
         window.fim.resetScatterZoomView();
     }
-    const pane = runGraphPane(zoomedGraphKey);
+    const pane = runGraphPane(state.zoomedGraphKey);
     restoreFromZoomFrame(
         document.getElementById("scrubber-controls"),
         "graph-zoom-scrubber-placeholder"
@@ -850,9 +912,9 @@ function restoreZoomedPane() {
     if (statsColumn) {
         statsColumn.remove();
     }
-    zoomedGraphKey = null;
+    state.zoomedGraphKey = null;
     zoomedStatsTable = null;
-    zoomScale = 1;
+    state.zoomScale = 1;
     syncRunGraphStage();
 }
 
@@ -880,20 +942,41 @@ function graphKeyForTarget(target) {
  * @returns {Promise<void>}
  */
 async function loadRunCardLayout() {
+    const tabId = window.fim.workspace.selectedId();
+    const state = getGraphStageState(tabId);
     const layout = await window.pywebview.api.get_run_card_layout();
-    preferredGraphKeys = layout.graphs;
-    graphColumns = layout.columns;
+    if (!state || !window.fim.workspace.get(tabId)) {
+        return;
+    }
+    state.preferredGraphKeys = layout.graphs;
+    state.graphColumns = layout.columns;
     if (typeof window.fim.setScatterStyle === "function") {
-        window.fim.setScatterStyle(layout.scatterStyle);
+        window.fim.setScatterStyle(layout.scatterStyle, tabId);
     }
-    if (typeof window.fim.setTrajectoryDisplay === "function") {
-        window.fim.setTrajectoryDisplay(layout.trajectoryDisplay);
+    if (window.fim.workspace.selectedId() === tabId) {
+        if (typeof window.fim.setTrajectoryDisplay === "function") {
+            window.fim.setTrajectoryDisplay(layout.trajectoryDisplay);
+        }
+        if (typeof window.fim.setTrajectoryBandWidth === "function") {
+            window.fim.setTrajectoryBandWidth(layout.bandWidth);
+        }
+        activeGraphStage = state;
+        syncRunGraphStage();
     }
-    if (typeof window.fim.setTrajectoryBandWidth === "function") {
-        window.fim.setTrajectoryBandWidth(layout.bandWidth);
-    }
-    syncRunGraphStage();
 }
+
+window.fim.workspace.onSelectionChange((selectedId) => {
+    if (activeGraphStage && activeGraphStage.zoomedGraphKey !== null) {
+        restoreZoomedPane({ resetScatterView: false });
+        const modal = document.getElementById("graph-zoom-modal");
+        if (modal && modal.open) {
+            modal.close();
+        }
+    }
+    activeGraphStage =
+        selectedId === null ? null : getGraphStageState(selectedId);
+    syncRunGraphStage();
+});
 
 window.addEventListener("load", () => {
     const menu = document.getElementById("run-graph-menu");
@@ -955,7 +1038,9 @@ window.addEventListener("load", () => {
         const fit = document.getElementById("graph-zoom-fit");
         if (fit) {
             fit.addEventListener("click", () => {
-                zoomScale = 1;
+                if (activeGraphStage) {
+                    activeGraphStage.zoomScale = 1;
+                }
                 applyGraphZoom();
             });
         }

@@ -181,3 +181,84 @@ def test_job_and_resource_indexes_follow_document_lifecycle(
     assert state["jobAfterClose"] is None
     assert state["selected"] == state["second"] == "document-2"
     assert state["remaining"] == ["document-2"]
+
+
+def test_scrubber_and_graph_state_restore_for_each_document(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Frames, playback, graph choices, and scatter style stay document-local."""
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const first = workspace.selectedId();
+            const drawFrame = () => {};
+            window.fim.setScrubberFrames(
+                [{generation: 10}, {generation: 20}, {generation: 30}],
+                drawFrame,
+                1
+            );
+            window.fim.setGraphAvailable("scatter", true);
+            window.fim.showGraph("scatter");
+            window.fim.setGraphColumns(2);
+            window.fim.setScatterStyle("density");
+            document.getElementById("scrubber-step-forward").click();
+            const firstBefore = window.fim.getScrubberState();
+
+            const second = workspace.createDocument();
+            window.fim.setScrubberFrames(
+                [{generation: 100}, {generation: 200}],
+                drawFrame,
+                0
+            );
+            window.fim.setGraphAvailable("trajectory", true);
+            window.fim.showGraph("trajectory");
+            window.fim.setGraphColumns(1);
+            window.fim.setScatterStyle("circles");
+            const secondState = window.fim.getScrubberState();
+            const secondGraph = workspace.get(second).graphStage.graphColumns;
+            const secondGraphs = window.fim.getVisibleGraphs();
+            const secondStyle = window.fim.getScatterStyle();
+
+            workspace.select(first);
+            const restored = window.fim.getScrubberState();
+            const result = {
+                first,
+                second,
+                firstBefore,
+                restored,
+                secondState,
+                firstGraph: workspace.get(first).graphStage.graphColumns,
+                secondGraph,
+                firstGraphs: window.fim.getVisibleGraphs(),
+                secondGraphs,
+                firstStyle: window.fim.getScatterStyle(),
+                secondStyle,
+                slider: document.getElementById("scrubber-range").value,
+                label: document.getElementById("scrubber-label").textContent,
+            };
+            window.fim.resetScrubber();
+            return result;
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["firstBefore"] == {
+        "generations": [10, 20, 30],
+        "currentIndex": 1,
+        "playDirection": 1,
+        "mode": "replay",
+        "isLiveTracking": False,
+    }
+    assert state["restored"] == state["firstBefore"]
+    assert state["secondState"]["generations"] == [100, 200]
+    assert state["secondState"]["currentIndex"] == 0
+    assert state["secondState"]["playDirection"] == 0
+    assert state["firstGraph"] == 2
+    assert state["secondGraph"] == 1
+    assert state["firstGraphs"] == ["scatter"]
+    assert state["secondGraphs"] == ["trajectory"]
+    assert state["firstStyle"] == "density"
+    assert state["secondStyle"] == "circles"
+    assert state["slider"] == "1"
+    assert state["label"] == "Generation 20"

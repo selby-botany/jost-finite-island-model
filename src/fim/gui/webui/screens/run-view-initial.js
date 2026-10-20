@@ -53,7 +53,7 @@ const ibdCanvas = document.getElementById("ibd-canvas");
 const ibdNote = document.getElementById("ibd-note");
 
 function clearRunCanvas() {
-    _currentPanel = null;
+    window.fim.clearScatterPanel();
     runCanvas.getContext("2d").clearRect(0, 0, runCanvas.width, runCanvas.height);
 }
 

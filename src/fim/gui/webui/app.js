@@ -473,6 +473,7 @@ const fim = {
 };
 
 window.fim = fim;
+window.fim.workspace.onSelectionChange(() => syncHistoryControls());
 
 document
     .getElementById("history-back-button")
