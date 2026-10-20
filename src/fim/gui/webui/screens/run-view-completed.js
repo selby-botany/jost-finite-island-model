@@ -68,38 +68,95 @@ const G_ST_CAUTION_TEXT =
     "is this high, even between demes that share no alleles at all " +
     "— Jost's D does not have this artifact.";
 
-// The two "always present" info lines (design: the run's own outcome,
-// and the derived-convergence-settings note when the window/cap were
-// auto-derived) -- set once per `enterCompletedState` call, then carried
-// through every later `renderRunMessages` call (a scrub tick, an
-// effective-allele re-render) so a transient warning's own comings and
-// goings never drop them. Empty for whichever state has not populated
-// them yet.
-let baseRunMessages = [];
-
 // The statistic(s) a completed scalar run stopped on (`report.
 // converged_on`), so a run that stopped on a statistic the researcher has
 // hidden can say so; `null` when no such run is shown, or when the run hit
 // its cap (it then stopped on no statistic).
-let completedConvergedOn = null;
 
 // The statistics the completed run's convergence rule watches (its
 // `convergence_statistic`), whether or not it stopped on them; `[]` when no
 // run is shown. These are the ones the statistics panel marks and the
 // messages explain first.
-let completedWatchedStatistics = [];
 
-// The statistics the run on screen watches, live or completed, which the
-// statistics table underlines (`markWatchedStatisticRow`).
-let watchedStatisticNames = [];
+/** Create the completed-view state defaults for one workspace document. */
+function createCompletedViewState() {
+    return {
+        baseRunMessages: [],
+        completedConvergedOn: null,
+        completedWatchedStatistics: [],
+        watchedStatisticNames: [],
+        hiddenTrajectoryStatistics: new Set(
+            DEFAULT_HIDDEN_TRAJECTORY_STATISTICS
+        ),
+        lastTrajectoryRenderArgs: null,
+        activeTrajectoryRenderMode: null,
+        completedTrajectoryGenerations: null,
+        completedTrajectoryHistories: null,
+        completedSigmaBand: null,
+        completedEquilibrium: null,
+        completedIdentityRecovery: null,
+        completedClosedForm: null,
+        completedWindowStatistics: null,
+        completedGenerationCount: null,
+        completedFinalStatistics: null,
+        completedEffectiveAlleles: null,
+        completedReport: null,
+        completedFinalLiteratureVisuals: null,
+        completedReportReason: null,
+        highlightedTrajectoryStatistic: null,
+        completedClosedFormComparisons: {},
+        completedEstimateSource: null,
+        completedConvergenceWindow: null,
+        completedConvergenceBurnIn: null,
+        trajectoryDisplay: DEFAULT_TRAJECTORY_DISPLAY,
+        trajectoryBandWidth: DEFAULT_TRAJECTORY_BAND_WIDTH,
+        currentScrubGeneration: null,
+        currentScrubIsFinal: true,
+        currentScrubStatistics: null,
+        isBatch: false,
+        hasCompletedResult: false,
+    };
+}
+
+/** Return the completed-view state for `tabId`, creating it when needed. */
+function completedViewStateFor(tabId) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.completedView) {
+        documentState.completedView = createCompletedViewState();
+    }
+    return documentState.completedView;
+}
+
+let activeCompletedViewState = completedViewStateFor(
+    window.fim.workspace.selectedId()
+);
 
 /**
  * Say which statistics the run on screen watches, and underline their rows.
  *
  * @param {string[]|null|undefined} names `convergence_statistic`, normalized.
  */
-window.fim.setWatchedStatistics = function setWatchedStatistics(names) {
-    watchedStatisticNames = Array.isArray(names) ? names : [];
+window.fim.setWatchedStatistics = function setWatchedStatistics(
+    names,
+    isCompletedResult = false
+) {
+    if (
+        window.fim.getRunViewState() === "completed" &&
+        !isCompletedResult
+    ) {
+        return;
+    }
+    const state = completedViewStateFor(window.fim.workspace.selectedId());
+    if (!state) {
+        return;
+    }
+    activeCompletedViewState = state;
+    state.watchedStatisticNames = Array.isArray(names)
+        ? names
+        : [];
     for (const row of document.querySelectorAll("[data-trajectory-statistic]")) {
         markWatchedStatisticRow(row, row.dataset.trajectoryStatistic);
     }
@@ -116,7 +173,7 @@ window.fim.setWatchedStatistics = function setWatchedStatistics(names) {
  * @param {string} name
  */
 function markWatchedStatisticRow(row, name) {
-    const watched = watchedStatisticNames.includes(name);
+    const watched = activeCompletedViewState.watchedStatisticNames.includes(name);
     row.classList.toggle("stat-watched", watched);
     const cell = row.querySelector(".stat-name");
     if (cell === null) {
@@ -509,17 +566,21 @@ function statisticMessages() {
     if (window.fim.getRunViewState() !== "completed") {
         return [];
     }
-    if (completedBatch && completedBatchSummary) {
+    if (
+        activeCompletedViewState.isBatch &&
+        completedBatch &&
+        completedBatchSummary
+    ) {
         return batchMessagesFor(completedBatch, completedBatchSummary);
     }
-    if (!completedWindowStatistics) {
+    if (!activeCompletedViewState.completedWindowStatistics) {
         return [];
     }
     return statisticMessagesFor(
-        completedWindowStatistics,
-        completedWatchedStatistics,
-        completedClosedFormComparisons,
-        completedEstimateSource
+        activeCompletedViewState.completedWindowStatistics,
+        activeCompletedViewState.completedWatchedStatistics,
+        activeCompletedViewState.completedClosedFormComparisons,
+        activeCompletedViewState.completedEstimateSource
     );
 }
 
@@ -531,12 +592,14 @@ function statisticMessages() {
  * @returns {Array<{severity: "info", text: string}>}
  */
 function hiddenStopMessages() {
-    if (completedConvergedOn === null) {
+    if (activeCompletedViewState.completedConvergedOn === null) {
         return [];
     }
-    const watched = Array.isArray(completedConvergedOn)
-        ? completedConvergedOn
-        : [completedConvergedOn];
+    const watched = Array.isArray(
+        activeCompletedViewState.completedConvergedOn
+    )
+        ? activeCompletedViewState.completedConvergedOn
+        : [activeCompletedViewState.completedConvergedOn];
     const hidden = watched.filter((key) => statisticSpec(key) && !isStatisticShown(key));
     if (hidden.length === 0) {
         return [];
@@ -569,7 +632,7 @@ window.fim.onShownStatisticsChanged = function onShownStatisticsChanged() {
  * @param {Array<{severity: "info"|"warning"|"error", text: string}>} messages
  */
 function setBaseRunMessages(messages) {
-    baseRunMessages = messages;
+    activeCompletedViewState.baseRunMessages = messages;
 }
 
 /**
@@ -598,7 +661,7 @@ const RUN_MESSAGE_CLASSES = {
 
 function renderRunMessages(extraMessages = []) {
     const messages = [
-        ...baseRunMessages,
+        ...activeCompletedViewState.baseRunMessages,
         ...hiddenStopMessages(),
         ...statisticMessages(),
         ...extraMessages,
@@ -670,18 +733,14 @@ window.__fimScrubberPending = 0;
 // the ordinary running->completed transition of the *same* run, so a
 // mid-run choice to hide a noisy curve survives into that run's own
 // completed view rather than silently reverting the instant the run
-// finishes. Module-scope, page-session-only state, matching this
-// file's own `showingLiveDemePair`-style precedent (`run-view-
-// running.js`) for "a user-driven, page-local display toggle" -- no
-// need to survive a reload.
+// finishes. The choice belongs to the workspace document, so switching
+// tabs does not change another run's display; it does not survive reload.
 // Statistics whose trajectory curve starts hidden come from the
 // catalog's `default_plotted` (`DEFAULT_HIDDEN_TRAJECTORY_STATISTICS`,
 // `statistics-catalog.js`): `A_CGD`, `Delta` (δ_G) and `MI` (I) are not
 // on the `[0, 1]` scale the report statistics share, so one of them can
 // stretch the shared y-axis until every other curve is a flat band near
 // the bottom. They stay in the legend and the table, one click away.
-
-let hiddenTrajectoryStatistics = new Set(DEFAULT_HIDDEN_TRAJECTORY_STATISTICS);
 
 /**
  * Whether `name`'s curve is left off the trajectory chart: hidden with
@@ -691,13 +750,20 @@ let hiddenTrajectoryStatistics = new Set(DEFAULT_HIDDEN_TRAJECTORY_STATISTICS);
  * @returns {boolean}
  */
 function isTrajectoryHidden(name) {
-    return hiddenTrajectoryStatistics.has(name) || !isStatisticShown(name);
+    return (
+        activeCompletedViewState.hiddenTrajectoryStatistics.has(name) ||
+        !isStatisticShown(name)
+    );
 }
 
 // The catalog arrives after this script loads: the default-hidden
 // curves and the results tables' statistic columns exist only then.
 onStatisticCatalogReady(() => {
-    hiddenTrajectoryStatistics = new Set(DEFAULT_HIDDEN_TRAJECTORY_STATISTICS);
+    if (activeCompletedViewState) {
+        activeCompletedViewState.hiddenTrajectoryStatistics = new Set(
+            DEFAULT_HIDDEN_TRAJECTORY_STATISTICS
+        );
+    }
     wireResultsTableHeaders(document.getElementById("batch-results-table"), 2);
     wireResultsTableHeaders(runResultsTableEl, 1);
 });
@@ -707,8 +773,6 @@ onStatisticCatalogReady(() => {
 // scrub position, if any, was last shown), only a different visibility
 // set, without its caller needing to re-invoke this file with a live
 // history it may no longer have close at hand.
-let lastTrajectoryRenderArgs = null;
-
 // The batch counterpart to `lastTrajectoryRenderArgs` (batch trajectory
 // panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
 // design.md`, `selby/restricted`, commit 2) -- `renderBatchTrajectory`'s
@@ -727,7 +791,6 @@ let lastPooledConvergenceHistories = null;
 // scrubber nudge. The scalar path never had this gap, since
 // `lastTrajectoryRenderArgs` already carries its scrub argument.
 let lastBatchScrubGeneration = null;
-let activeTrajectoryRenderMode = null;
 
 /**
  * Reset the trajectory legend's own hidden-statistic set to this
@@ -739,7 +802,9 @@ let activeTrajectoryRenderMode = null;
  * call).
  */
 window.fim.resetTrajectoryLegendVisibility = function resetTrajectoryLegendVisibility() {
-    hiddenTrajectoryStatistics = new Set(DEFAULT_HIDDEN_TRAJECTORY_STATISTICS);
+    activeCompletedViewState.hiddenTrajectoryStatistics = new Set(
+        DEFAULT_HIDDEN_TRAJECTORY_STATISTICS
+    );
 };
 
 const resultsRunId = document.getElementById("results-run-id");
@@ -838,12 +903,6 @@ const OMITTED_SCRUB_TEXT = "not known at this generation";
 // named scope boundary, not an oversight): there is no per-generation
 // history of any kind to answer a scrub tick with there, only the one
 // single reanalyzed generation the whole payload already describes.
-let completedTrajectoryGenerations = null;
-let completedTrajectoryHistories = null;
-let completedSigmaBand = null;
-let completedEquilibrium = null;
-let completedIdentityRecovery = null;
-let completedClosedForm = null;
 // The just-shown run's own `report.window_statistics` (design doc
 // `20260927-claude-sonnet-5-noise-aware-convergence-design.md`,
 // `selby/restricted`) -- how precisely each recorded statistic's
@@ -851,10 +910,6 @@ let completedClosedForm = null;
 // statistic name. `null` for a batch (no single trailing window; the
 // pooled confidence interval already answers the analogous question) or
 // before any run has been shown at all.
-let completedWindowStatistics = null;
-let completedGenerationCount = null;
-let completedFinalStatistics = null;
-let completedFinalLiteratureVisuals = null;
 // The batch entry's own counterpart to `completedFinalStatistics`: the
 // authoritative final pooled summary and effective-allele rows, kept
 // so a scrub tick that lands back on the final frame restores them
@@ -876,17 +931,14 @@ let completedBatch = null;
 // final frame restores the two derived rows (`renderEffectiveAlleles`)
 // verbatim rather than re-deriving them from the pooled histories it
 // never came from.
-let completedEffectiveAlleles = null;
 // The scalar per-generation results table's own one extra fact: the
 // stop reason to print on its own final row. Kept beside the scrub-
 // replay state above because it shares that lifetime exactly -- set by
 // `enterCompletedState`'s own scalar branch, nulled by its batch one.
-let completedReportReason = null;
 
 // The statistic under the pointer or keyboard focus in the stats panel
 // or a results-table header. Its curve is drawn heavier and the others
 // fade, so a row, a column and a line are visibly the same statistic.
-let highlightedTrajectoryStatistic = null;
 
 /**
  * Line width and opacity for one statistic's curve given the current
@@ -896,10 +948,10 @@ let highlightedTrajectoryStatistic = null;
  * @returns {{width: number, alpha: number}}
  */
 function trajectoryEmphasis(name) {
-    if (highlightedTrajectoryStatistic === null) {
+    if (activeCompletedViewState.highlightedTrajectoryStatistic === null) {
         return { width: TRAJECTORY_LINE_WIDTH, alpha: 1 };
     }
-    return name === highlightedTrajectoryStatistic
+    return name === activeCompletedViewState.highlightedTrajectoryStatistic
         ? { width: TRAJECTORY_HIGHLIGHT_LINE_WIDTH, alpha: 1 }
         : { width: TRAJECTORY_LINE_WIDTH, alpha: TRAJECTORY_FADED_ALPHA };
 }
@@ -911,10 +963,10 @@ function trajectoryEmphasis(name) {
  * @param {string|null} name
  */
 function setHighlightedTrajectoryStatistic(name) {
-    if (highlightedTrajectoryStatistic === name) {
+    if (activeCompletedViewState.highlightedTrajectoryStatistic === name) {
         return;
     }
-    highlightedTrajectoryStatistic = name;
+    activeCompletedViewState.highlightedTrajectoryStatistic = name;
     for (const element of document.querySelectorAll(
         "[data-statistic], [data-trajectory-statistic]"
     )) {
@@ -1122,19 +1174,15 @@ function predictionSentence(name, entry, estimate) {
 
 // The completed run's comparisons with its predictions, computed once per
 // completed entry and reused by every scrub tick.
-let completedClosedFormComparisons = {};
 
 // What `windowEstimate` reads for the completed run (its histories, the
 // convergence window and tolerance, and where each grown evidence window
 // starts), or `null` for a batch or a run reopened without a history.
-let completedEstimateSource = null;
 
 // The completed run's convergence window, in generations: the span the
 // trajectory graph's trailing mean averages over (its evidence window,
 // from the burn-in to its last generation, once it has finished), and the
 // burn-in where averaging began.
-let completedConvergenceWindow = null;
-let completedConvergenceBurnIn = null;
 
 /**
  * The completed run's averaging settings for the trajectory graph
@@ -1145,13 +1193,15 @@ let completedConvergenceBurnIn = null;
  *     number>}|null}
  */
 function completedAveraging() {
-    if (completedConvergenceWindow === null) {
+    if (activeCompletedViewState.completedConvergenceWindow === null) {
         return null;
     }
     return {
-        window: completedConvergenceWindow,
-        burnIn: completedConvergenceBurnIn,
-        anchors: completedEstimateSource ? completedEstimateSource.anchors : {},
+        window: activeCompletedViewState.completedConvergenceWindow,
+        burnIn: activeCompletedViewState.completedConvergenceBurnIn,
+        anchors: activeCompletedViewState.completedEstimateSource
+            ? activeCompletedViewState.completedEstimateSource.anchors
+            : {},
     };
 }
 
@@ -1387,7 +1437,8 @@ function averagedSeries(values, startFor, tauInt = null) {
             count.push(0);
             continue;
         }
-        const halfWidth = trajectoryBandWidth * estimate.standardError;
+        const halfWidth =
+            activeCompletedViewState.trajectoryBandWidth * estimate.standardError;
         mean.push(estimate.mean);
         low.push(estimate.mean - halfWidth);
         high.push(estimate.mean + halfWidth);
@@ -1756,11 +1807,17 @@ function estimateDecimals(standardError) {
  * @returns {string|undefined} `undefined` when there is none to show.
  */
 function completedEstimateCellText(name, index = null) {
-    const fromHistory = estimateCellText(completedEstimateSource, name, index);
+    const fromHistory = estimateCellText(
+        activeCompletedViewState.completedEstimateSource,
+        name,
+        index
+    );
     if (fromHistory !== undefined || index !== null) {
         return fromHistory;
     }
-    const stats = completedWindowStatistics && completedWindowStatistics[name];
+    const stats =
+        activeCompletedViewState.completedWindowStatistics &&
+        activeCompletedViewState.completedWindowStatistics[name];
     if (!stats || !Number.isFinite(stats.mean)) {
         return undefined;
     }
@@ -1821,7 +1878,9 @@ function refreshTrajectoryStatisticRowStates() {
         updateTrajectoryStatisticRowState(row, row.dataset.trajectoryStatistic);
     }
     for (const element of document.querySelectorAll("[data-statistic]")) {
-        const visible = !hiddenTrajectoryStatistics.has(element.dataset.statistic);
+        const visible = !activeCompletedViewState.hiddenTrajectoryStatistics.has(
+            element.dataset.statistic
+        );
         element.classList.toggle("stat-plot-hidden", !visible);
         if (element.classList.contains("stat-column-header")) {
             element.setAttribute("aria-pressed", String(visible));
@@ -1846,10 +1905,16 @@ function refreshTrajectoryStatisticRowStates() {
  * @returns {void}
  */
 function repaintTrajectory() {
-    if (activeTrajectoryRenderMode === "scalar" && lastTrajectoryRenderArgs) {
-        renderTrajectory(...lastTrajectoryRenderArgs);
+    if (
+        activeCompletedViewState.activeTrajectoryRenderMode === "scalar" &&
+        activeCompletedViewState.lastTrajectoryRenderArgs
+    ) {
+        renderTrajectory(...activeCompletedViewState.lastTrajectoryRenderArgs);
     }
-    if (activeTrajectoryRenderMode === "batch" && lastPooledConvergenceHistories) {
+    if (
+        activeCompletedViewState.activeTrajectoryRenderMode === "batch" &&
+        lastPooledConvergenceHistories
+    ) {
         renderBatchTrajectory(lastPooledConvergenceHistories, lastBatchScrubGeneration);
     }
 }
@@ -1859,7 +1924,6 @@ function repaintTrajectory() {
 // convergence window, or its cumulative mean from where averaging began,
 // the two averages with a standard-error band. Loaded from preferences
 // by `run-graph-stage.js`'s own `loadRunCardLayout`.
-let trajectoryDisplay = DEFAULT_TRAJECTORY_DISPLAY;
 
 /**
  * Apply a trajectory display choice and repaint the graph with it.
@@ -1872,7 +1936,7 @@ window.fim.setTrajectoryDisplay = function setTrajectoryDisplay(display) {
     if (!TRAJECTORY_DISPLAYS.includes(display)) {
         return;
     }
-    trajectoryDisplay = display;
+    activeCompletedViewState.trajectoryDisplay = display;
     runTrajectoryDisplay.value = display;
     repaintTrajectory();
 };
@@ -1881,7 +1945,6 @@ window.fim.setTrajectoryDisplay = function setTrajectoryDisplay(display) {
 // generation" display) or standard errors (the averaged displays); one of
 // `TRAJECTORY_BAND_WIDTHS`. Loaded from preferences by `run-graph-stage.js`'s
 // own `loadRunCardLayout`.
-let trajectoryBandWidth = DEFAULT_TRAJECTORY_BAND_WIDTH;
 
 /**
  * Apply a band width and repaint the graph with it.
@@ -1894,13 +1957,20 @@ window.fim.setTrajectoryBandWidth = function setTrajectoryBandWidth(width) {
     if (!TRAJECTORY_BAND_WIDTHS.includes(width)) {
         return;
     }
-    trajectoryBandWidth = width;
+    activeCompletedViewState.trajectoryBandWidth = width;
     runTrajectoryBandWidth.value = String(width);
     // The sigma band is `width` sigmas wide, so a retained one is rebuilt;
     // the cached arguments of a live run carry none.
-    completedSigmaBand = evidenceSigmaBand(completedWindowStatistics, width);
-    if (lastTrajectoryRenderArgs && lastTrajectoryRenderArgs[2]) {
-        lastTrajectoryRenderArgs[2] = completedSigmaBand;
+    activeCompletedViewState.completedSigmaBand = evidenceSigmaBand(
+        activeCompletedViewState.completedWindowStatistics,
+        width
+    );
+    if (
+        activeCompletedViewState.lastTrajectoryRenderArgs &&
+        activeCompletedViewState.lastTrajectoryRenderArgs[2]
+    ) {
+        activeCompletedViewState.lastTrajectoryRenderArgs[2] =
+            activeCompletedViewState.completedSigmaBand;
     }
     repaintTrajectory();
 };
@@ -1927,8 +1997,11 @@ function canAverage(hasCurve, averaging) {
  * @returns {string|null} `"trailing_mean"` or `"cumulative_mean"`.
  */
 function averagedDisplayMode(hasCurve, averaging) {
-    return trajectoryDisplay !== "every_generation" && canAverage(hasCurve, averaging)
-        ? trajectoryDisplay
+    return (
+        activeCompletedViewState.trajectoryDisplay !== "every_generation" &&
+        canAverage(hasCurve, averaging)
+    )
+        ? activeCompletedViewState.trajectoryDisplay
         : null;
 }
 
@@ -1959,7 +2032,9 @@ runTrajectoryDisplay.addEventListener("change", async () => {
     const result = await window.pywebview.api.set_trajectory_display(
         runTrajectoryDisplay.value
     );
-    window.fim.setTrajectoryDisplay(result.ok ? result.display : trajectoryDisplay);
+    window.fim.setTrajectoryDisplay(
+        result.ok ? result.display : activeCompletedViewState.trajectoryDisplay
+    );
 });
 
 runTrajectoryBandWidth.addEventListener("change", async () => {
@@ -1968,14 +2043,16 @@ runTrajectoryBandWidth.addEventListener("change", async () => {
             Number(runTrajectoryBandWidth.value)
         )
     );
-    window.fim.setTrajectoryBandWidth(result.ok ? result.width : trajectoryBandWidth);
+    window.fim.setTrajectoryBandWidth(
+        result.ok ? result.width : activeCompletedViewState.trajectoryBandWidth
+    );
 });
 
 function toggleTrajectoryStatistic(name) {
-    if (hiddenTrajectoryStatistics.has(name)) {
-        hiddenTrajectoryStatistics.delete(name);
+    if (activeCompletedViewState.hiddenTrajectoryStatistics.has(name)) {
+        activeCompletedViewState.hiddenTrajectoryStatistics.delete(name);
     } else {
-        hiddenTrajectoryStatistics.add(name);
+        activeCompletedViewState.hiddenTrajectoryStatistics.add(name);
     }
     repaintTrajectory();
     refreshTrajectoryStatisticRowStates();
@@ -1988,7 +2065,7 @@ function toggleTrajectoryStatistic(name) {
  * @param {string} name
  */
 function updateTrajectoryStatisticRowState(row, name) {
-    const visible = !hiddenTrajectoryStatistics.has(name);
+    const visible = !activeCompletedViewState.hiddenTrajectoryStatistics.has(name);
     row.classList.add("stat-plot-toggle-row");
     row.classList.toggle("stat-plot-hidden", !visible);
     row.tabIndex = 0;
@@ -2907,7 +2984,7 @@ function setTrajectoryFrameHidden(hidden) {
  * @returns {Array<[string, string]>} `[swatch class, text]` pairs.
  */
 function averagedLegendEntries(mode, window, generations, starts, windowMarker) {
-    const plusMinus = `± ${trajectoryBandWidth} SE`;
+    const plusMinus = `± ${activeCompletedViewState.trajectoryBandWidth} SE`;
     const entries = [];
     if (mode === "trailing_mean") {
         entries.push([
@@ -3008,7 +3085,7 @@ function renderTrajectory(
     // re-render with the identical underlying data and scrub position,
     // only a different `hiddenTrajectoryStatistics` set, without
     // needing this data handed to it again from outside.
-    lastTrajectoryRenderArgs = [
+    activeCompletedViewState.lastTrajectoryRenderArgs = [
         generations,
         histories,
         sigmaBand,
@@ -3023,12 +3100,12 @@ function renderTrajectory(
     runTrajectoryDisplayControl.hidden = !canAverage(hasCurve, averaging);
     runTrajectoryBandWidthControl.hidden = !(hasCurve || sigmaBand);
     if (!hasCurve && !sigmaBand) {
-        activeTrajectoryRenderMode = null;
+        activeCompletedViewState.activeTrajectoryRenderMode = null;
         setTrajectoryFrameHidden(true);
         runTrajectoryLegend.replaceChildren();
         return;
     }
-    activeTrajectoryRenderMode = "scalar";
+    activeCompletedViewState.activeTrajectoryRenderMode = "scalar";
     const effectiveGenerations = hasCurve
         ? generations
         : [Math.max(0, generationCount - sigmaBand.window), generationCount];
@@ -3134,13 +3211,18 @@ function renderTrajectory(
             if (start === null) {
                 continue;
             }
-            const tauInt = tauIntFor(completedWindowStatistics, name);
+            const tauInt = tauIntFor(
+                activeCompletedViewState.completedWindowStatistics,
+                name
+            );
             const average = (series) =>
                 cumulative
                     ? cumulativeMeanSeries(series, start, tauInt)
                     : trailingMeanSeries(effectiveGenerations, series, window, tauInt);
             const display = cumulative ? `cumulative:${start}` : `trailing:${window}`;
-            const key = `${display}:${tauInt}:${trajectoryBandWidth}`;
+            const key =
+                `${display}:${tauInt}:` +
+                `${activeCompletedViewState.trajectoryBandWidth}`;
             const series = cachedAveragedSeries(key, effectiveGenerations, values, () =>
                 average(values)
             );
@@ -3463,12 +3545,12 @@ function renderBatchTrajectory(pooledConvergenceHistories, scrubGeneration) {
     runTrajectoryBandWidthControl.hidden = true;
     const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
     if (names.length === 0) {
-        activeTrajectoryRenderMode = null;
+        activeCompletedViewState.activeTrajectoryRenderMode = null;
         setTrajectoryFrameHidden(true);
         runTrajectoryLegend.replaceChildren();
         return;
     }
-    activeTrajectoryRenderMode = "batch";
+    activeCompletedViewState.activeTrajectoryRenderMode = "batch";
     setTrajectoryFrameHidden(false);
     const canvas = runTrajectoryCanvas;
     canvas.width = canvas.clientWidth || canvas.width;
@@ -3728,10 +3810,11 @@ function renderBatchTable(replicates, p0Statistics) {
  *     generations, ascending.
  */
 function renderScalarTable(frameGenerations, frameStatistics = []) {
+    const state = activeCompletedViewState;
     runResultsTableBody.replaceChildren();
     if (
-        !completedTrajectoryGenerations ||
-        completedTrajectoryGenerations.length === 0 ||
+        !state.completedTrajectoryGenerations ||
+        state.completedTrajectoryGenerations.length === 0 ||
         !frameGenerations ||
         frameGenerations.length === 0
     ) {
@@ -3742,21 +3825,21 @@ function renderScalarTable(frameGenerations, frameStatistics = []) {
     for (const [index, generation] of frameGenerations.entries()) {
         const isFinal = index === lastIndex;
         const scrubGeneration = nearestGeneration(
-            completedTrajectoryGenerations,
+            state.completedTrajectoryGenerations,
             generation
         );
-        const scrubIndex = completedTrajectoryGenerations.indexOf(scrubGeneration);
+        const scrubIndex = state.completedTrajectoryGenerations.indexOf(scrubGeneration);
         const values = STATISTIC_NAMES.map((name) => {
-            if (isFinal && completedFinalStatistics) {
-                return completedFinalStatistics[name];
+            if (isFinal && state.completedFinalStatistics) {
+                return state.completedFinalStatistics[name];
             }
             // A statistic with no per-generation history takes the
             // frame's own value (`Api.get_animation_frames`).
             if (frameStatistics[index] && name in frameStatistics[index]) {
                 return frameStatistics[index][name];
             }
-            const history = completedTrajectoryHistories
-                ? completedTrajectoryHistories[name]
+            const history = state.completedTrajectoryHistories
+                ? state.completedTrajectoryHistories[name]
                 : undefined;
             const value = history && scrubIndex >= 0 ? history[scrubIndex] : undefined;
             // Same raw-float-to-display rounding `updateScrubbedTrajectory`
@@ -3775,8 +3858,8 @@ function renderScalarTable(frameGenerations, frameStatistics = []) {
         if (generation === 0) {
             // Italic: the inputs the run started from, not an output.
             row.classList.add("row-initial");
-        } else if (isFinal && completedReportReason === "hit the cap") {
-            markNotConverged(row, completedReportReason);
+        } else if (isFinal && state.completedReportReason === "hit the cap") {
+            markNotConverged(row, state.completedReportReason);
         }
         runResultsTableBody.appendChild(row);
     }
@@ -3859,7 +3942,15 @@ function nearestGeneration(generations, target) {
  *     most.
  */
 function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
-    if (!completedTrajectoryGenerations || completedTrajectoryGenerations.length === 0) {
+    const state = completedViewStateFor(window.fim.workspace.selectedId());
+    if (!state) {
+        return;
+    }
+    activeCompletedViewState = state;
+    if (
+        !state.completedTrajectoryGenerations ||
+        state.completedTrajectoryGenerations.length === 0
+    ) {
         return;
     }
     if (isFinalFrame) {
@@ -3874,7 +3965,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
                 element,
                 buildPointMeter(
                     name,
-                    completedFinalStatistics[name],
+                    state.completedFinalStatistics[name],
                     "",
                     completedEstimateCellText(name)
                 )
@@ -3884,25 +3975,28 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         // The two derived rows restore from the retained final payload,
         // not from a history lookup -- they were computed from the
         // run's own final report server-side.
-        renderEffectiveAlleles(completedEffectiveAlleles);
+        renderEffectiveAlleles(state.completedEffectiveAlleles);
         renderTrajectory(
-            completedTrajectoryGenerations,
-            completedTrajectoryHistories,
-            completedSigmaBand,
-            completedGenerationCount,
-            completedEquilibrium,
-            completedIdentityRecovery,
-            completedClosedForm,
+            state.completedTrajectoryGenerations,
+            state.completedTrajectoryHistories,
+            state.completedSigmaBand,
+            state.completedGenerationCount,
+            state.completedEquilibrium,
+            state.completedIdentityRecovery,
+            state.completedClosedForm,
             null,
             completedAveraging()
         );
         return;
     }
-    const scrubGeneration = nearestGeneration(completedTrajectoryGenerations, frameGeneration);
-    const scrubIndex = completedTrajectoryGenerations.indexOf(scrubGeneration);
+    const scrubGeneration = nearestGeneration(
+        state.completedTrajectoryGenerations,
+        frameGeneration
+    );
+    const scrubIndex = state.completedTrajectoryGenerations.indexOf(scrubGeneration);
     for (const name of STATISTIC_NAMES) {
         const element = document.getElementById(`stat-${name}`);
-        const history = completedTrajectoryHistories[name];
+        const history = state.completedTrajectoryHistories[name];
         // Only the watched statistic(s) have a history at all
         // (`completedTrajectoryHistories`'s own comment); and even a
         // watched one can be undefined on some particular recorded tick
@@ -3948,7 +4042,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         ["stat-Ne_S", withinLabel, withinHistoryKey, withinDescription],
         ["stat-Ne_T", totalLabel, totalHistoryKey, totalDescription],
     ]) {
-        const history = completedTrajectoryHistories[historyKey];
+        const history = state.completedTrajectoryHistories[historyKey];
         const value = history && scrubIndex >= 0 ? history[scrubIndex] : undefined;
         const cells =
             Number.isFinite(value) && value < 1
@@ -3962,17 +4056,72 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
     }
     renderRunMessages();
     renderTrajectory(
-        completedTrajectoryGenerations,
-        completedTrajectoryHistories,
-        completedSigmaBand,
-        completedGenerationCount,
-        completedEquilibrium,
-        completedIdentityRecovery,
-        completedClosedForm,
+        state.completedTrajectoryGenerations,
+        state.completedTrajectoryHistories,
+        state.completedSigmaBand,
+        state.completedGenerationCount,
+        state.completedEquilibrium,
+        state.completedIdentityRecovery,
+        state.completedClosedForm,
         scrubGeneration,
         completedAveraging()
     );
 }
+
+/** Repaint the selected document's retained scalar completed result. */
+function restoreCompletedViewForSelectedDocument() {
+    const state = activeCompletedViewState;
+    if (
+        !state ||
+        !state.hasCompletedResult ||
+        state.isBatch ||
+        window.fim.getRunViewState() !== "completed"
+    ) {
+        return;
+    }
+    runTrajectoryDisplay.value = state.trajectoryDisplay;
+    runTrajectoryBandWidth.value = String(state.trajectoryBandWidth);
+    window.fim.setWatchedStatistics(state.watchedStatisticNames, true);
+    refreshTrajectoryStatisticRowStates();
+    if (
+        state.currentScrubGeneration !== null &&
+        state.completedTrajectoryGenerations &&
+        state.completedTrajectoryGenerations.length > 0
+    ) {
+        updateScrubbedTrajectory(
+            state.currentScrubGeneration,
+            state.currentScrubIsFinal
+        );
+        if (!state.currentScrubIsFinal && state.currentScrubStatistics) {
+            renderHistoryFreeStatistics(state.currentScrubStatistics);
+        }
+    } else {
+        for (const name of STATISTIC_NAMES) {
+            const element = document.getElementById(`stat-${name}`);
+            applyStatRow(
+                element,
+                buildPointMeter(
+                    name,
+                    state.completedFinalStatistics[name],
+                    "",
+                    completedEstimateCellText(name)
+                )
+            );
+            decorateTrajectoryStatisticRow(element, name);
+        }
+        renderEffectiveAlleles(state.completedEffectiveAlleles);
+        renderDifferentiationQ(state.completedReport);
+        renderRunMessages();
+        repaintTrajectory();
+    }
+    renderSupplementalPanels(state.completedFinalLiteratureVisuals);
+}
+
+window.fim.workspace.onSelectionChange((selectedId) => {
+    activeCompletedViewState =
+        selectedId === null ? null : completedViewStateFor(selectedId);
+    restoreCompletedViewForSelectedDocument();
+});
 
 /**
  * Answer one completed-batch scrubber tick: re-render the pooled
@@ -4156,13 +4305,17 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
                 if (!isFinal) {
                     renderHistoryFreeStatistics(frame.statistics);
                 }
+                const state = activeCompletedViewState;
+                state.currentScrubGeneration = frame.generation;
+                state.currentScrubIsFinal = isFinal;
+                state.currentScrubStatistics = frame.statistics || null;
                 lastScrubbedPairFrame = { frame, index, isFinal };
                 renderPairStatistics(
                     pairStatisticsForFrame(frame, index, isFinal),
                     "loading the values for this pair…"
                 );
-                if (isFinal && completedFinalLiteratureVisuals) {
-                    renderSupplementalPanels(completedFinalLiteratureVisuals);
+                if (isFinal && state.completedFinalLiteratureVisuals) {
+                    renderSupplementalPanels(state.completedFinalLiteratureVisuals);
                 } else if (frame.literatureVisuals) {
                     renderSupplementalPanels(frame.literatureVisuals);
                 }
@@ -4313,6 +4466,13 @@ runSavedResultRunButton.addEventListener("click", async () => {
 });
 
 window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) {
+    const state = completedViewStateFor(window.fim.workspace.selectedId());
+    if (!state) {
+        return;
+    }
+    activeCompletedViewState = state;
+    state.hasCompletedResult = true;
+    state.isBatch = Boolean(isBatch);
     window.fim.setRunViewState("completed");
     if (window.fim.resetGraphStage) {
         window.fim.resetGraphStage();
@@ -4432,7 +4592,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedBatchSummary = payload.summary || null;
         // The statistics whose intervals decide the batch's stop are marked
         // like a single run's watched statistics.
-        window.fim.setWatchedStatistics(completedBatch ? completedBatch.statistics : []);
+        window.fim.setWatchedStatistics(
+            completedBatch ? completedBatch.statistics : [],
+            true
+        );
         renderBatchSummary(payload.summary, payload.effectiveAlleles);
         renderBatchTable(payload.replicates, payload.p0Statistics);
         // A batch's own completed scrubber replays the pooled scatter
@@ -4454,23 +4617,29 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         // pooledConvergenceHistories`'s own per-point-scoped
         // generations do not hold) draws the real, authoritative
         // cross-replicate aggregate.
-        completedTrajectoryGenerations = null;
-        completedTrajectoryHistories = null;
-        completedSigmaBand = null;
-        completedEquilibrium = null;
-        completedIdentityRecovery = null;
-        completedClosedForm = null;
-        completedWindowStatistics = null;
-        completedGenerationCount = null;
-        completedFinalStatistics = null;
-        completedFinalLiteratureVisuals = null;
-        completedReportReason = null;
-        completedConvergedOn = null;
-        completedWatchedStatistics = [];
-        completedClosedFormComparisons = {};
-        completedEstimateSource = null;
-        completedConvergenceWindow = null;
-        completedConvergenceBurnIn = null;
+        state.completedTrajectoryGenerations = null;
+        state.completedTrajectoryHistories = null;
+        state.completedSigmaBand = null;
+        state.completedEquilibrium = null;
+        state.completedIdentityRecovery = null;
+        state.completedClosedForm = null;
+        state.completedWindowStatistics = null;
+        state.completedGenerationCount = null;
+        state.completedFinalStatistics = null;
+        state.completedEffectiveAlleles = null;
+        state.completedReport = null;
+        state.completedFinalLiteratureVisuals = null;
+        state.completedReportReason = null;
+        state.completedConvergedOn = null;
+        state.completedWatchedStatistics = [];
+        state.watchedStatisticNames = [];
+        state.completedClosedFormComparisons = {};
+        state.completedEstimateSource = null;
+        state.completedConvergenceWindow = null;
+        state.completedConvergenceBurnIn = null;
+        state.currentScrubGeneration = null;
+        state.currentScrubIsFinal = true;
+        state.currentScrubStatistics = null;
         completedPair = [1, 2];
         completedFinalPairStatistics = null;
         completedPairFrameStatistics = null;
@@ -4487,7 +4656,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                     window.__fimScrubberPending -= 1;
                 });
         }
-        completedEffectiveAlleles = null;
+        state.completedEffectiveAlleles = null;
         completedBatchSummary = payload.summary || null;
         completedBatchEffectiveAlleles = payload.effectiveAlleles || null;
         completedBatch = payload.batch || null;
@@ -4512,11 +4681,12 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 ? [{ severity: "info", text: payload.convergenceNote }]
                 : []),
         ]);
-        completedReportReason = report.reason;
-        completedConvergedOn = report.converged_on ?? null;
-        completedWatchedStatistics =
+        state.completedReportReason = report.reason;
+        state.completedReport = report;
+        state.completedConvergedOn = report.converged_on ?? null;
+        state.completedWatchedStatistics =
             (payload.convergence && payload.convergence.statistics) || [];
-        window.fim.setWatchedStatistics(completedWatchedStatistics);
+        window.fim.setWatchedStatistics(state.completedWatchedStatistics, true);
         completedPair = [1, 2];
         completedFinalPairStatistics = payload.pairStatistics || null;
         completedPairFrameStatistics = null;
@@ -4529,26 +4699,30 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         // order, which meant every row's own tooltip always showed the
         // *previous* run's window statistics (or none, on the first run
         // of a session), never this one's.
-        completedWindowStatistics = report.window_statistics || null;
-        completedClosedFormComparisons = closedFormComparisons(
+        state.completedWindowStatistics = report.window_statistics || null;
+        state.completedClosedFormComparisons = closedFormComparisons(
             payload.convergenceGenerations,
             payload.convergenceHistories,
             payload.closedForm,
             payload.equilibrium
         );
-        completedConvergenceWindow = payload.convergence ? payload.convergence.window : null;
-        completedConvergenceBurnIn = payload.convergence ? payload.convergence.burnIn : null;
-        completedEstimateSource =
+        state.completedConvergenceWindow = payload.convergence
+            ? payload.convergence.window
+            : null;
+        state.completedConvergenceBurnIn = payload.convergence
+            ? payload.convergence.burnIn
+            : null;
+        state.completedEstimateSource =
             payload.convergenceGenerations && payload.convergenceHistories
                 ? {
                       generations: payload.convergenceGenerations,
                       histories: payload.convergenceHistories,
-                      comparisons: completedClosedFormComparisons,
+                      comparisons: state.completedClosedFormComparisons,
                       convergence: payload.convergence || null,
                       anchors: evidenceWindowAnchors(
                           report.window_statistics,
                           payload.convergenceGenerations.length,
-                          completedConvergenceWindow
+                          state.completedConvergenceWindow
                       ),
                       tauInt: Object.fromEntries(
                           Object.keys(report.window_statistics || {}).map((name) => [
@@ -4573,7 +4747,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             );
             decorateTrajectoryStatisticRow(element, name);
         }
-        renderEffectiveAlleles(payload.effectiveAlleles);
+        state.completedEffectiveAlleles = payload.effectiveAlleles || null;
+        renderEffectiveAlleles(state.completedEffectiveAlleles);
         renderDifferentiationQ(report);
         // Retained so a later scrub tick (`updateScrubbedTrajectory`,
         // via `wireCompletedScrubber`'s own `setScrubberFrames` callback,
@@ -4585,26 +4760,29 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         // `enterCompletedState`'s own batch branch above, the signal
         // `updateScrubbedTrajectory` reads as "nothing to answer a scrub
         // tick with."
-        completedTrajectoryGenerations = payload.convergenceGenerations || null;
-        completedTrajectoryHistories = payload.convergenceHistories || null;
-        completedSigmaBand = evidenceSigmaBand(
-            completedWindowStatistics,
-            trajectoryBandWidth
+        state.completedTrajectoryGenerations = payload.convergenceGenerations || null;
+        state.completedTrajectoryHistories = payload.convergenceHistories || null;
+        state.completedSigmaBand = evidenceSigmaBand(
+            state.completedWindowStatistics,
+            state.trajectoryBandWidth
         );
-        completedEquilibrium = payload.equilibrium || null;
-        completedIdentityRecovery = payload.identityRecovery || null;
-        completedClosedForm = payload.closedForm || null;
-        completedGenerationCount = payload.generationCount;
-        completedFinalStatistics = payload.statistics;
-        completedFinalLiteratureVisuals = payload.literatureVisuals || null;
+        state.completedEquilibrium = payload.equilibrium || null;
+        state.completedIdentityRecovery = payload.identityRecovery || null;
+        state.completedClosedForm = payload.closedForm || null;
+        state.completedGenerationCount = payload.generationCount;
+        state.completedFinalStatistics = payload.statistics;
+        state.completedFinalLiteratureVisuals = payload.literatureVisuals || null;
         completedBatchSummary = null;
         completedBatchEffectiveAlleles = null;
         completedBatch = null;
-        completedEffectiveAlleles = payload.effectiveAlleles || null;
+        state.completedEffectiveAlleles = payload.effectiveAlleles || null;
+        state.currentScrubGeneration = null;
+        state.currentScrubIsFinal = true;
+        state.currentScrubStatistics = payload.statistics || null;
         renderTrajectory(
             payload.convergenceGenerations,
             payload.convergenceHistories,
-            completedSigmaBand,
+            state.completedSigmaBand,
             payload.generationCount,
             payload.equilibrium,
             payload.identityRecovery,

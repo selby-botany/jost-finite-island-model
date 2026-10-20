@@ -264,6 +264,101 @@ def test_scrubber_and_graph_state_restore_for_each_document(
     assert state["label"] == "Generation 20"
 
 
+def test_completed_view_state_restores_for_each_document(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Completed statistics and trajectory choices survive document switches."""
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const first = workspace.selectedId();
+            const firstState = workspace.get(first).completedView;
+            const statistic = TRAJECTORY_STATISTIC_NAMES.find(
+                (name) => !DEFAULT_HIDDEN_TRAJECTORY_STATISTICS.includes(name)
+            );
+            const finalStatistics = (value) =>
+                Object.fromEntries(STATISTIC_NAMES.map((name) => [name, value]));
+            Object.assign(firstState, {
+                hasCompletedResult: true,
+                isBatch: false,
+                completedFinalStatistics: finalStatistics("0.42"),
+                completedTrajectoryGenerations: [0, 10],
+                completedTrajectoryHistories: {
+                    [statistic]: [0.24, 0.42],
+                },
+                completedGenerationCount: 10,
+                completedEffectiveAlleles: null,
+                completedReport: {},
+                currentScrubGeneration: 0,
+                currentScrubIsFinal: false,
+            });
+            firstState.hiddenTrajectoryStatistics.add(statistic);
+            window.fim.setRunViewState("completed");
+            window.fim.setTrajectoryDisplay("trailing_mean");
+            window.fim.setTrajectoryBandWidth(2);
+            window.fim.setWatchedStatistics([statistic], true);
+
+            const second = workspace.createDocument();
+            const secondState = workspace.get(second).completedView;
+            Object.assign(secondState, {
+                hasCompletedResult: true,
+                isBatch: false,
+                completedFinalStatistics: finalStatistics("0.17"),
+                completedEffectiveAlleles: null,
+                completedReport: {},
+                currentScrubGeneration: null,
+                currentScrubIsFinal: true,
+            });
+            secondState.hiddenTrajectoryStatistics.delete(statistic);
+            window.fim.setTrajectoryDisplay("every_generation");
+            window.fim.setTrajectoryBandWidth(1);
+
+            workspace.select(first);
+            const firstView = {
+                display: document.getElementById("run-trajectory-display").value,
+                bandWidth:
+                    document.getElementById("run-trajectory-band-width").value,
+                statistic: document
+                    .getElementById(`stat-${statistic}`)
+                    .querySelector(".stat-value").textContent,
+                hidden: workspace.get(first).completedView
+                    .hiddenTrajectoryStatistics.has(statistic),
+                watched: document
+                    .getElementById(`stat-${statistic}`)
+                    .classList.contains("stat-watched"),
+            };
+            workspace.select(second);
+            const secondView = {
+                display: document.getElementById("run-trajectory-display").value,
+                bandWidth:
+                    document.getElementById("run-trajectory-band-width").value,
+                statistic: document
+                    .getElementById(`stat-${statistic}`)
+                    .querySelector(".stat-value").textContent,
+                hidden: workspace.get(second).completedView
+                    .hiddenTrajectoryStatistics.has(statistic),
+            };
+            return {firstView, secondView};
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["firstView"] == {
+        "display": "trailing_mean",
+        "bandWidth": "2",
+        "statistic": "0.24",
+        "hidden": True,
+        "watched": True,
+    }
+    assert state["secondView"] == {
+        "display": "every_generation",
+        "bandWidth": "1",
+        "statistic": "0.17",
+        "hidden": False,
+    }
+
+
 def test_live_progress_is_owned_by_the_addressed_document(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

@@ -28938,6 +28938,17 @@ def test_scrubber_and_graph_state_restore_for_each_document(
 
 Frames, playback, graph choices, and scatter style stay document-local.
 
+<a id="gui.test_workspace.test_completed_view_state_restores_for_each_document"></a>
+
+#### test\_completed\_view\_state\_restores\_for\_each\_document
+
+```python
+def test_completed_view_state_restores_for_each_document(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Completed statistics and trajectory choices survive document switches.
+
 <a id="gui.test_workspace.test_live_progress_is_owned_by_the_addressed_document"></a>
 
 #### test\_live\_progress\_is\_owned\_by\_the\_addressed\_document
