@@ -137,6 +137,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_read_only_screen`](#gui.test_read_only_screen)
   - [`test_recent_runs`](#gui.test_recent_runs)
   - [`test_results_screen`](#gui.test_results_screen)
+  - [`test_run_event_order`](#gui.test_run_event_order)
   - [`test_run_reuse`](#gui.test_run_reuse)
   - [`test_run_settings_notice_screen`](#gui.test_run_settings_notice_screen)
   - [`test_runner`](#gui.test_runner)
@@ -144,6 +145,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_saved_runs_api`](#gui.test_saved_runs_api)
   - [`test_saved_runs_screen`](#gui.test_saved_runs_screen)
   - [`test_scatter_styles`](#gui.test_scatter_styles)
+  - [`test_scrubber_frame_cap`](#gui.test_scrubber_frame_cap)
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_shutdown_signals`](#gui.test_shutdown_signals)
@@ -25445,6 +25447,94 @@ The two default graphs are boxes of one height; the width they share moves.
 The scatter canvas is square, so equalizing heights takes width from
 (or gives it to) the trajectory rather than stretching the scatter.
 
+<a id="gui.test_run_event_order"></a>
+
+# gui.test\_run\_event\_order
+
+Pin when a job's pushes land relative to the run claim being released.
+
+A characterization suite, not a feature test: every assertion here already
+holds on `dev` before the tabs work begins (`20261019-claude-opus-5-5-fim-
+gui-tabs-design.md`, commit A1). Its job is to catch a regression the
+later commits could introduce while they move these same mechanisms
+behind a job registry (A4) and a single publisher thread (A3): a push
+must never be delivered after the claim it belongs to has already been
+released, and an annotation -- the reproducibility check a stale-version
+run gets -- must always land strictly after the terminal push it
+annotates, never before or interleaved with it.
+
+Existing coverage this suite does not repeat: `test_one_run_at_a_time.py`
+(a second start is refused while one run is in flight, and the claim is
+released on every path that starts nothing); `test_close_guard.py`
+(`close_requirements`' three booleans, read from the same fields);
+`test_running_screen.py::test_correcting_the_run_kind_keeps_live_state_a_
+tick_already_delivered` (progress that arrives before `start_run`'s own
+reply must not be discarded). This file adds the one thing none of them
+pins directly: *where in the push sequence* the claim is still held, by
+reading `Api._run_in_flight` from inside a fake window's own
+`evaluate_js`, synchronously, on the same thread that is about to release
+it -- not by polling after the fact, which could never catch the claim
+being released one push early.
+
+<a id="gui.test_run_event_order._OrderWindow"></a>
+
+## \_OrderWindow Objects
+
+```python
+class _OrderWindow()
+```
+
+Records each push's name alongside whatever `read_claim` answers
+at the exact moment that push is delivered.
+
+`evaluate_js` runs on the same drain thread that will, immediately
+afterward for a terminal push, release the run claim in its own
+`finally` -- so a direct, synchronous read here, never a poll taken
+later, is the only way to know the claim's state *as of* each push.
+
+<a id="gui.test_run_event_order._OrderWindow.claim_held_when"></a>
+
+#### claim\_held\_when
+
+```python
+def claim_held_when(name: str) -> bool
+```
+
+Return the claim state recorded at `name`'s first occurrence.
+
+<a id="gui.test_run_event_order.test_a_stale_version_runs_reproducibility_push_follows_its_done_push"></a>
+
+#### test\_a\_stale\_version\_runs\_reproducibility\_push\_follows\_its\_done\_push
+
+```python
+def test_a_stale_version_runs_reproducibility_push_follows_its_done_push(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The annotation push lands after "done", with the claim still held at both.
+
+<a id="gui.test_run_event_order.test_a_saved_runs_pause_push_lands_before_the_claim_is_released"></a>
+
+#### test\_a\_saved\_runs\_pause\_push\_lands\_before\_the\_claim\_is\_released
+
+```python
+def test_a_saved_runs_pause_push_lands_before_the_claim_is_released(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Pausing a saved run: the push lands while the claim is still held.
+
+<a id="gui.test_run_event_order.test_a_saved_runs_cancel_push_lands_before_the_claim_is_released"></a>
+
+#### test\_a\_saved\_runs\_cancel\_push\_lands\_before\_the\_claim\_is\_released
+
+```python
+def test_a_saved_runs_cancel_push_lands_before_the_claim_is_released(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Cancelling a saved run: the push lands while the claim is still held.
+
 <a id="gui.test_run_reuse"></a>
 
 # gui.test\_run\_reuse
@@ -26346,6 +26436,98 @@ Measured as ink: with the original circles the 48-allele pile covers
 a large disc at the corner; the badge styles draw a small dot and a
 label there instead, so a patch of the canvas just above and right of
 the origin holds far less ink.
+
+<a id="gui.test_scrubber_frame_cap"></a>
+
+# gui.test\_scrubber\_frame\_cap
+
+The live scrubber's own frame buffer stays bounded under a long run.
+
+`scrubber.js`'s `appendLiveFrame` used to grow `frames` without limit for
+the life of a run (`20261019-claude-opus-5-5-fim-gui-tabs-design-review.md`,
+finding B2), so an hour-long scalar run could hold tens of thousands of
+panels in memory. `decimateLiveFramesIfNeeded` bounds it at
+`MAX_LIVE_SCRUBBER_FRAMES` by thinning the older half of the buffer every
+time that cap is crossed again, while always keeping the first frame and
+the newest half intact.
+
+Both tests here drive the real page synchronously, with no real run: a
+JS loop calls `window.fim.appendLiveFrame` directly, many times, in one
+`evaluate_js` round trip, so nothing here depends on how fast a real
+simulation reports progress.
+
+<a id="gui.test_scrubber_frame_cap._Scrubber"></a>
+
+## \_Scrubber Objects
+
+```python
+class _Scrubber()
+```
+
+Replicates `decimateLiveFramesIfNeeded`/`appendLiveFrame` exactly, in Python.
+
+Mirrors the JS line for line -- the push order, the decimation
+triggered after each one, and the live-tracking reassignment -- so a
+test can assert the real page's output *equals* this, not merely
+falls within some guessed tolerance. `frames` holds generation
+numbers alone, since that is the only field either implementation
+reads.
+
+**Arguments**:
+
+- `cap` - `MAX_LIVE_SCRUBBER_FRAMES`.
+
+<a id="gui.test_scrubber_frame_cap._Scrubber.push"></a>
+
+#### push
+
+```python
+def push(generation: int) -> None
+```
+
+Append one frame, exactly as one `appendLiveFrame` call does.
+
+<a id="gui.test_scrubber_frame_cap._Scrubber.push_many"></a>
+
+#### push\_many
+
+```python
+def push_many(generations: range) -> None
+```
+
+Append every generation in `generations`, in order.
+
+<a id="gui.test_scrubber_frame_cap._Scrubber.drag_to"></a>
+
+#### drag\_to
+
+```python
+def drag_to(index: int) -> None
+```
+
+Select `index`, exactly as dragging the range input to it does.
+
+<a id="gui.test_scrubber_frame_cap.test_the_live_frame_buffer_stays_bounded_and_ordered_under_a_long_run"></a>
+
+#### test\_the\_live\_frame\_buffer\_stays\_bounded\_and\_ordered\_under\_a\_long\_run
+
+```python
+def test_the_live_frame_buffer_stays_bounded_and_ordered_under_a_long_run(
+) -> None
+```
+
+5,000 pushes while live-tracking: the cap holds; the first and newest survive.
+
+<a id="gui.test_scrubber_frame_cap.test_an_inspected_generation_is_remapped_after_the_buffer_is_thinned"></a>
+
+#### test\_an\_inspected\_generation\_is\_remapped\_after\_the\_buffer\_is\_thinned
+
+```python
+def test_an_inspected_generation_is_remapped_after_the_buffer_is_thinned(
+) -> None
+```
+
+Scrubbing to an old frame, then pushing past the cap, keeps the nearest one.
 
 <a id="gui.test_settings_modal"></a>
 
