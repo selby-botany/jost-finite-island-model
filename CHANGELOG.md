@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Source-line links in generated references.** API and test-suite headings
+  now link modules, classes, functions, methods, tests, and documented data
+  to their Python declarations on GitHub, preserving section anchors.
+  Links adapt to custom output locations; freshness checks render beside
+  the committed references to retain identical relative paths.
+
 - **The benchmark tools share the sweep layer's axes and grid.**
   `dev/bin/benchmark-engines` reads `--values` through the sweep layer, so a
   value that does not fit its axis (a fractional deme count, a repeated value)

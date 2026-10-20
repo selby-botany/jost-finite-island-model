@@ -17,6 +17,8 @@ Usage: dev/bin/generate-api-docs [OUTPUT_PATH]
 Regenerate `src/fim/API.md`, the committed reference listing every public
 module, class, and function in the `fim` package together with its
 docstring.
+Headings link to the source declaration line; existing section anchors
+and table-of-contents links are preserved.
 
 Why this exists:
   The API reference is meant to be read on GitHub by anyone who wants to
@@ -58,6 +60,9 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 PATH="${root}/bin:${PATH}"
 export PATH
 output=${1:-"${root}/src/fim/API.md"}
+if [[ "${output}" != /* ]]; then
+    output="${PWD}/${output}"
+fi
 # `pydoc-markdown` writes to this temporary path first, not straight to
 # `${output}`, so an interrupted or failing run (a real crash, or a
 # `Ctrl-C`) never leaves the committed API reference half-written --
@@ -113,7 +118,8 @@ trap cleanup EXIT
     cd -- "${root}"
     pydoc-markdown -q -I src "${module_args[@]}" --render-toc \
         | sed 's/[[:blank:]]*$//'
-} >"${temporary}"
+} | python3 "${root}/dev/lib/docsource.py" --source-root "${root}/src" \
+    --output "${output}" >"${temporary}"
 
 mkdir -p -- "$(dirname -- "${output}")"
 mv -- "${temporary}" "${output}"

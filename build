@@ -228,7 +228,7 @@ fi
 
 if "${run_docs}"; then
     if "${ci}"; then
-        api_temporary=$(mktemp "${TMPDIR:-/tmp}/fim-api.XXXXXX")
+        api_temporary=$(mktemp "src/fim/.fim-api.XXXXXX")
         trap 'rm -f -- "${api_temporary}"' EXIT
         run dev/bin/generate-api-docs "${api_temporary}"
         run diff -u -- src/fim/API.md "${api_temporary}"
@@ -243,7 +243,7 @@ if "${run_docs}"; then
     # above: `test/TESTS.md` is `src/fim/API.md`'s test-suite
     # counterpart, generated from `test/`'s own docstrings the same way.
     if "${ci}"; then
-        tests_temporary=$(mktemp "${TMPDIR:-/tmp}/fim-tests.XXXXXX")
+        tests_temporary=$(mktemp "test/.fim-tests.XXXXXX")
         trap 'rm -f -- "${tests_temporary}"' EXIT
         run dev/bin/generate-test-docs "${tests_temporary}"
         run diff -u -- test/TESTS.md "${tests_temporary}"

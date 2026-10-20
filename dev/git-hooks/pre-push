@@ -73,7 +73,7 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
     if [[ -x dev/bin/generate-api-docs ]] \
         && command -v pydoc-markdown >/dev/null 2>&1
     then
-        temporary=$(mktemp "${TMPDIR:-/tmp}/fim-api.XXXXXX")
+        temporary=$(mktemp "src/fim/.fim-api.XXXXXX")
         # Each trap here replaces the previous handler outright (bash
         # traps do not stack) -- always re-including the lock-dir
         # cleanup from the top of this script, not just this block's
@@ -94,7 +94,7 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
     if [[ -x dev/bin/generate-test-docs ]] \
         && command -v pydoc-markdown >/dev/null 2>&1
     then
-        tests_temporary=$(mktemp "${TMPDIR:-/tmp}/fim-tests.XXXXXX")
+        tests_temporary=$(mktemp "test/.fim-tests.XXXXXX")
         trap 'rm -f -- "${tests_temporary}"; rm -rf -- "${lock_dir}"' EXIT
         dev/bin/generate-test-docs "${tests_temporary}"
         diff -u -- test/TESTS.md "${tests_temporary}"

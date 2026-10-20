@@ -1872,13 +1872,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 
 <a id="fim"></a>
 
-# fim
+# [fim](./__init__.py#L1)
 
 Public package metadata for the finite island model simulator.
 
 <a id="fim.__getattr__"></a>
 
-#### \_\_getattr\_\_
+#### [\_\_getattr\_\_](./__init__.py#L232)
 
 ```python
 def __getattr__(name: str) -> object
@@ -1902,7 +1902,7 @@ Load a facade name from its module on first use.
 
 <a id="fim.__dir__"></a>
 
-#### \_\_dir\_\_
+#### [\_\_dir\_\_](./__init__.py#L252)
 
 ```python
 def __dir__() -> list[str]
@@ -1912,7 +1912,7 @@ List the facade names along with the module's own.
 
 <a id="fim.batch_session"></a>
 
-# fim.batch\_session
+# [fim.batch\_session](./batch_session.py#L1)
 
 Resumable execution sessions for a batch of replicates.
 
@@ -1942,31 +1942,31 @@ unrecoverable.
 
 <a id="fim.batch_session.BATCH_CHECKPOINT_KIND"></a>
 
-#### BATCH\_CHECKPOINT\_KIND
+#### [BATCH\_CHECKPOINT\_KIND](./batch_session.py#L86)
 
 The `kind` a batch session's checkpoint payload carries.
 
 <a id="fim.batch_session.BATCH_CHECKPOINT_VERSION"></a>
 
-#### BATCH\_CHECKPOINT\_VERSION
+#### [BATCH\_CHECKPOINT\_VERSION](./batch_session.py#L89)
 
 Version of the batch payload layout this build writes.
 
 <a id="fim.batch_session.READABLE_BATCH_CHECKPOINT_VERSIONS"></a>
 
-#### READABLE\_BATCH\_CHECKPOINT\_VERSIONS
+#### [READABLE\_BATCH\_CHECKPOINT\_VERSIONS](./batch_session.py#L92)
 
 Batch payload versions this build restores.
 
 <a id="fim.batch_session.MINIMUM_BATCH_REPLICATES"></a>
 
-#### MINIMUM\_BATCH\_REPLICATES
+#### [MINIMUM\_BATCH\_REPLICATES](./batch_session.py#L95)
 
 The fewest replicates a batch session runs; one runs as a scalar session.
 
 <a id="fim.batch_session.BatchSession"></a>
 
-## BatchSession Objects
+## [BatchSession Objects](./batch_session.py#L120)
 
 ```python
 class BatchSession()
@@ -1980,7 +1980,7 @@ the session is a context manager that closes it on exit.
 
 <a id="fim.batch_session.BatchSession.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./batch_session.py#L128)
 
 ```python
 def __init__(params: SimulationParams, store: ReplicateFanoutStore,
@@ -2001,7 +2001,7 @@ Set up an empty session; use `create` or `restore` instead.
 
 <a id="fim.batch_session.BatchSession.__enter__"></a>
 
-#### \_\_enter\_\_
+#### [\_\_enter\_\_](./batch_session.py#L170)
 
 ```python
 def __enter__() -> BatchSession
@@ -2011,7 +2011,7 @@ Return this session for a `with` block.
 
 <a id="fim.batch_session.BatchSession.__exit__"></a>
 
-#### \_\_exit\_\_
+#### [\_\_exit\_\_](./batch_session.py#L174)
 
 ```python
 def __exit__(*_: object) -> None
@@ -2021,7 +2021,7 @@ Close the session's stores, whether or not it finished.
 
 <a id="fim.batch_session.BatchSession.create"></a>
 
-#### create
+#### [create](./batch_session.py#L179)
 
 ```python
 @classmethod
@@ -2056,7 +2056,7 @@ Build the first window of lanes, each through generation zero.
 
 <a id="fim.batch_session.BatchSession.restore"></a>
 
-#### restore
+#### [restore](./batch_session.py#L221)
 
 ```python
 @classmethod
@@ -2097,7 +2097,7 @@ built again.
 
 <a id="fim.batch_session.BatchSession.generation"></a>
 
-#### generation
+#### [generation](./batch_session.py#L289)
 
 ```python
 @property
@@ -2111,7 +2111,7 @@ count is the generation the longest-running lane has reached.
 
 <a id="fim.batch_session.BatchSession.lanes"></a>
 
-#### lanes
+#### [lanes](./batch_session.py#L298)
 
 ```python
 @property
@@ -2122,7 +2122,7 @@ Every lane built so far, in replicate order; read-only use only.
 
 <a id="fim.batch_session.BatchSession.params"></a>
 
-#### params
+#### [params](./batch_session.py#L303)
 
 ```python
 @property
@@ -2133,7 +2133,7 @@ The batch's configuration.
 
 <a id="fim.batch_session.BatchSession.run_id"></a>
 
-#### run\_id
+#### [run\_id](./batch_session.py#L308)
 
 ```python
 @property
@@ -2144,7 +2144,7 @@ The batch's run ID; replicate IDs are `<run_id>-rNNN`.
 
 <a id="fim.batch_session.BatchSession.stopped"></a>
 
-#### stopped
+#### [stopped](./batch_session.py#L313)
 
 ```python
 @property
@@ -2155,7 +2155,7 @@ Whether every lane finished or the adaptive stop fired.
 
 <a id="fim.batch_session.BatchSession.store"></a>
 
-#### store
+#### [store](./batch_session.py#L320)
 
 ```python
 @property
@@ -2166,7 +2166,7 @@ The fan-out store every lane writes through.
 
 <a id="fim.batch_session.BatchSession.ticks"></a>
 
-#### ticks
+#### [ticks](./batch_session.py#L325)
 
 ```python
 @property
@@ -2177,7 +2177,7 @@ How many ticks have run; a checkpoint's committed generation.
 
 <a id="fim.batch_session.BatchSession.advance"></a>
 
-#### advance
+#### [advance](./batch_session.py#L329)
 
 ```python
 def advance(ticks: int | None = None) -> bool
@@ -2202,7 +2202,7 @@ Run up to `ticks` more ticks, stopping early once the batch stops.
 
 <a id="fim.batch_session.BatchSession.capture"></a>
 
-#### capture
+#### [capture](./batch_session.py#L352)
 
 ```python
 def capture() -> SessionCapture
@@ -2223,7 +2223,7 @@ Export the batch's exact state at the current safe point.
 
 <a id="fim.batch_session.BatchSession.checkpoint"></a>
 
-#### checkpoint
+#### [checkpoint](./batch_session.py#L422)
 
 ```python
 def checkpoint(lease: ExecutionLease,
@@ -2245,7 +2245,7 @@ Capture the batch and publish it as the object's latest checkpoint.
 
 <a id="fim.batch_session.BatchSession.close"></a>
 
-#### close
+#### [close](./batch_session.py#L444)
 
 ```python
 def close() -> None
@@ -2255,7 +2255,7 @@ Release every lane's open files; idempotent.
 
 <a id="fim.batch_session.BatchSession.commit_logs"></a>
 
-#### commit\_logs
+#### [commit\_logs](./batch_session.py#L450)
 
 ```python
 def commit_logs() -> int
@@ -2277,7 +2277,7 @@ tick count is what the lifecycle records as committed.
 
 <a id="fim.batch_session.BatchSession.finalize"></a>
 
-#### finalize
+#### [finalize](./batch_session.py#L469)
 
 ```python
 def finalize() -> tuple[RunResult, ...]
@@ -2300,7 +2300,7 @@ discarded from the store first, as `fim.engine.run_batch` does.
 
 <a id="fim.batch_session.check_batch_session_support"></a>
 
-#### check\_batch\_session\_support
+#### [check\_batch\_session\_support](./batch_session.py#L768)
 
 ```python
 def check_batch_session_support(params: SimulationParams) -> SessionBackend
@@ -2326,7 +2326,7 @@ Refuse a batch configuration a resumable batch session cannot run.
 
 <a id="fim.cli"></a>
 
-# fim.cli
+# [fim.cli](./cli.py#L1)
 
 Researcher-facing command-line interface for the simulator.
 
@@ -2382,7 +2382,7 @@ the desktop app (`fim.gui`) without duplicating it.
 
 <a id="fim.cli.load_config"></a>
 
-#### load\_config
+#### [load\_config](./cli.py#L184)
 
 ```python
 def load_config(path: Path | str) -> SimulationParams
@@ -2412,7 +2412,7 @@ re-check any of that.
 
 <a id="fim.cli.main"></a>
 
-#### main
+#### [main](./cli.py#L231)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -2454,7 +2454,7 @@ a full traceback instead of being hidden behind a generic message.
 
 <a id="fim.cli_objects"></a>
 
-# fim.cli\_objects
+# [fim.cli\_objects](./cli_objects.py#L1)
 
 `fim object`: save, inspect, and control persisted Run objects.
 
@@ -2477,7 +2477,7 @@ saves its configuration as a new object that starts from generation zero.
 
 <a id="fim.cli_objects.add_object_subcommands"></a>
 
-#### add\_object\_subcommands
+#### [add\_object\_subcommands](./cli_objects.py#L63)
 
 ```python
 def add_object_subcommands(
@@ -2488,7 +2488,7 @@ Wire `fim object` and its subcommands, `create` through `reclaim`.
 
 <a id="fim.cli_objects.command_object"></a>
 
-#### command\_object
+#### [command\_object](./cli_objects.py#L126)
 
 ```python
 def command_object(arguments: argparse.Namespace,
@@ -2510,7 +2510,7 @@ Dispatch one `fim object` invocation.
 
 <a id="fim.cli_sweep"></a>
 
-# fim.cli\_sweep
+# [fim.cli\_sweep](./cli_sweep.py#L1)
 
 `fim sweep`: plan, run, resume and report a parameter sweep.
 
@@ -2524,14 +2524,14 @@ module parses arguments and prints.
 
 <a id="fim.cli_sweep.BUDGET_EXIT_STATUS"></a>
 
-#### BUDGET\_EXIT\_STATUS
+#### [BUDGET\_EXIT\_STATUS](./cli_sweep.py#L79)
 
 Exit status of a run that stopped because it reached a budget (0 means done,
 1 a failure, 2 a usage error, 130 a cancel).
 
 <a id="fim.cli_sweep.add_sweep_subcommands"></a>
 
-#### add\_sweep\_subcommands
+#### [add\_sweep\_subcommands](./cli_sweep.py#L84)
 
 ```python
 def add_sweep_subcommands(
@@ -2542,7 +2542,7 @@ Wire the `fim sweep` subcommands (plan, run, resume, verify, ...).
 
 <a id="fim.cli_sweep.command_sweep"></a>
 
-#### command\_sweep
+#### [command\_sweep](./cli_sweep.py#L471)
 
 ```python
 def command_sweep(arguments: argparse.Namespace,
@@ -2553,7 +2553,7 @@ Dispatch one `fim sweep` subcommand and return its exit status.
 
 <a id="fim.config"></a>
 
-# fim.config
+# [fim.config](./config/__init__.py#L1)
 
 Named constants for convergence, statistics, limits and defaults.
 
@@ -2564,7 +2564,7 @@ for the scan that enforces it.
 
 <a id="fim.config.convergence"></a>
 
-# fim.config.convergence
+# [fim.config.convergence](./config/convergence.py#L1)
 
 Convergence policy constants.
 
@@ -2582,7 +2582,7 @@ See `README.md` in this directory for the table of every constant.
 
 <a id="fim.config.convergence.BURN_IN_MINIMUM_RELAXATION_TIMES"></a>
 
-#### BURN\_IN\_MINIMUM\_RELAXATION\_TIMES
+#### [BURN\_IN\_MINIMUM\_RELAXATION\_TIMES](./config/convergence.py#L20)
 
 Fewest relaxation times `tau` the burn-in lasts: the floor of `k`.
 
@@ -2598,7 +2598,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.FIRST_CHECK_RELAXATION_TIMES"></a>
 
-#### FIRST\_CHECK\_RELAXATION\_TIMES
+#### [FIRST\_CHECK\_RELAXATION\_TIMES](./config/convergence.py#L34)
 
 First check, in relaxation times after the burn-in ends.
 
@@ -2609,7 +2609,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.FIRST_CHECK_MINIMUM"></a>
 
-#### FIRST\_CHECK\_MINIMUM
+#### [FIRST\_CHECK\_MINIMUM](./config/convergence.py#L43)
 
 Fewest generations after the burn-in before the first check.
 
@@ -2620,7 +2620,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.MINIMUM_EFFECTIVE_SAMPLE_SIZE"></a>
 
-#### MINIMUM\_EFFECTIVE\_SAMPLE\_SIZE
+#### [MINIMUM\_EFFECTIVE\_SAMPLE\_SIZE](./config/convergence.py#L52)
 
 Smallest effective sample size an evidence window must hold to be trusted.
 
@@ -2634,7 +2634,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.CHECK_GROWTH"></a>
 
-#### CHECK\_GROWTH
+#### [CHECK\_GROWTH](./config/convergence.py#L64)
 
 Factor by which the evidence window grows between checks (doubling).
 
@@ -2646,7 +2646,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.FRACTIONAL_BURN_IN"></a>
 
-#### FRACTIONAL\_BURN\_IN
+#### [FRACTIONAL\_BURN\_IN](./config/convergence.py#L74)
 
 Share of a run discarded as burn-in when no relaxation time is available.
 
@@ -2659,7 +2659,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.CAP_RELAXATION_MULTIPLE"></a>
 
-#### CAP\_RELAXATION\_MULTIPLE
+#### [CAP\_RELAXATION\_MULTIPLE](./config/convergence.py#L85)
 
 Default `max_generations`, in relaxation times, beyond the burn-in.
 
@@ -2673,7 +2673,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.MINIMUM_MAX_GENERATIONS"></a>
 
-#### MINIMUM\_MAX\_GENERATIONS
+#### [MINIMUM\_MAX\_GENERATIONS](./config/convergence.py#L97)
 
 Smallest derived cap.
 
@@ -2691,7 +2691,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.ABSOLUTE_MAX_GENERATIONS"></a>
 
-#### ABSOLUTE\_MAX\_GENERATIONS
+#### [ABSOLUTE\_MAX\_GENERATIONS](./config/convergence.py#L113)
 
 Ceiling on a derived cap, so a nearly isolated system stays finite.
 
@@ -2699,7 +2699,7 @@ Kind: policy (safety).
 
 <a id="fim.config.convergence.GEWEKE_FIRST_FRACTION"></a>
 
-#### GEWEKE\_FIRST\_FRACTION
+#### [GEWEKE\_FIRST\_FRACTION](./config/convergence.py#L119)
 
 Share of an evidence window, from its start, that Geweke's `z` compares.
 
@@ -2707,7 +2707,7 @@ Kind: convention (Geweke 1992: the first 10% against the last 50%).
 
 <a id="fim.config.convergence.GEWEKE_LAST_FRACTION"></a>
 
-#### GEWEKE\_LAST\_FRACTION
+#### [GEWEKE\_LAST\_FRACTION](./config/convergence.py#L125)
 
 Share of an evidence window, from its end, that Geweke's `z` compares.
 
@@ -2715,7 +2715,7 @@ Kind: convention (Geweke 1992: the first 10% against the last 50%).
 
 <a id="fim.config.convergence.START_DRIFT_ALERT_Z"></a>
 
-#### START\_DRIFT\_ALERT\_Z
+#### [START\_DRIFT\_ALERT\_Z](./config/convergence.py#L131)
 
 Absolute Geweke `z` above which the report says the burn-in may be too short.
 
@@ -2727,7 +2727,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.SPECTRUM_BURN_IN_MULTIPLIER"></a>
 
-#### SPECTRUM\_BURN\_IN\_MULTIPLIER
+#### [SPECTRUM\_BURN\_IN\_MULTIPLIER](./config/convergence.py#L141)
 
 Factor on the burn-in when an allele-spectrum statistic is watched.
 
@@ -2740,7 +2740,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.REPLICATE_WAVE_MULTIPLE"></a>
 
-#### REPLICATE\_WAVE\_MULTIPLE
+#### [REPLICATE\_WAVE\_MULTIPLE](./config/convergence.py#L152)
 
 Replicate waves a batch aims for: `R_target = max(replicate_minimum, m * W)`.
 
@@ -2753,7 +2753,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.BATCH_WIDTH"></a>
 
-#### BATCH\_WIDTH
+#### [BATCH\_WIDTH](./config/convergence.py#L163)
 
 Replicates assumed to run at once, when `max_concurrent_replicates` is unset.
 
@@ -2767,7 +2767,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.AVERAGING_MULTIPLE_MINIMUM"></a>
 
-#### AVERAGING\_MULTIPLE\_MINIMUM
+#### [AVERAGING\_MULTIPLE\_MINIMUM](./config/convergence.py#L175)
 
 Smallest matched averaging window, in relaxation times.
 
@@ -2778,7 +2778,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.AVERAGING_MULTIPLE_MAXIMUM"></a>
 
-#### AVERAGING\_MULTIPLE\_MAXIMUM
+#### [AVERAGING\_MULTIPLE\_MAXIMUM](./config/convergence.py#L184)
 
 Largest matched averaging window, in relaxation times.
 
@@ -2790,7 +2790,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.FIRST_WAVE_AVERAGING_MULTIPLE"></a>
 
-#### FIRST\_WAVE\_AVERAGING\_MULTIPLE
+#### [FIRST\_WAVE\_AVERAGING\_MULTIPLE](./config/convergence.py#L194)
 
 Averaging window, in relaxation times, of the first wave of replicates.
 
@@ -2802,7 +2802,7 @@ Kind: policy.
 
 <a id="fim.config.defaults"></a>
 
-# fim.config.defaults
+# [fim.config.defaults](./config/defaults.py#L1)
 
 Default values of regular settings.
 
@@ -2814,7 +2814,7 @@ See `README.md` in this directory for the table of every constant.
 
 <a id="fim.config.defaults.DEFAULT_LOCUS_LENGTH"></a>
 
-#### DEFAULT\_LOCUS\_LENGTH
+#### [DEFAULT\_LOCUS\_LENGTH](./config/defaults.py#L14)
 
 `DEFAULT_LOCUS_LENGTH`.
 
@@ -2822,7 +2822,7 @@ Kind: policy; a regular setting.
 
 <a id="fim.config.defaults.DEFAULT_AUTO_VECTOR_MIN_D"></a>
 
-#### DEFAULT\_AUTO\_VECTOR\_MIN\_D
+#### [DEFAULT\_AUTO\_VECTOR\_MIN\_D](./config/defaults.py#L20)
 
 `"auto"`'s own default deme-count cutover, below which it never picks
 `"generational-vector"` even when the config is otherwise eligible for it.
@@ -2892,7 +2892,7 @@ Kind: policy; already an Expert Setting.
 
 <a id="fim.config.defaults.DEFAULT_AUTO_VECTOR_MAX_CAPACITY"></a>
 
-#### DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY
+#### [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](./config/defaults.py#L88)
 
 `"auto"`'s own default per-locus capacity ceiling for `"generational-
 vector"` — above it, `"auto"` picks `"generational"` instead, regardless
@@ -2992,7 +2992,7 @@ Kind: policy; already an Expert Setting.
 
 <a id="fim.config.defaults.DEFAULT_N_REPLICATES"></a>
 
-#### DEFAULT\_N\_REPLICATES
+#### [DEFAULT\_N\_REPLICATES](./config/defaults.py#L186)
 
 How many independently seeded replicates a run tries by default.
 
@@ -3014,7 +3014,7 @@ Kind: policy; a regular setting.
 
 <a id="fim.config.defaults.DEFAULT_PRECISION"></a>
 
-#### DEFAULT\_PRECISION
+#### [DEFAULT\_PRECISION](./config/defaults.py#L206)
 
 Default `precision`: plus or minus this much, in each statistic's units.
 
@@ -3031,7 +3031,7 @@ Kind: policy; a regular setting.
 
 <a id="fim.config.defaults.DEFAULT_SWEEP_MAX_ATTEMPTS"></a>
 
-#### DEFAULT\_SWEEP\_MAX\_ATTEMPTS
+#### [DEFAULT\_SWEEP\_MAX\_ATTEMPTS](./config/defaults.py#L221)
 
 Times the command line and the app try a sweep point that failed for a
 transient reason (a worker process that died, a file system error) before
@@ -3043,7 +3043,7 @@ Kind: policy; a regular setting.
 
 <a id="fim.config.defaults.DEFAULT_PAIRWISE_MAX_DEMES"></a>
 
-#### DEFAULT\_PAIRWISE\_MAX\_DEMES
+#### [DEFAULT\_PAIRWISE\_MAX\_DEMES](./config/defaults.py#L231)
 
 Largest deme count whose full all-pairs matrices are saved by default.
 
@@ -3057,7 +3057,7 @@ Kind: policy; a regular setting.
 
 <a id="fim.config.display"></a>
 
-# fim.config.display
+# [fim.config.display](./config/display.py#L1)
 
 Display policy constants.
 
@@ -3067,7 +3067,7 @@ See `README.md` in this directory for the table of every constant.
 
 <a id="fim.config.display.GUI_ANIMATION_MAX_FRAMES"></a>
 
-#### GUI\_ANIMATION\_MAX\_FRAMES
+#### [GUI\_ANIMATION\_MAX\_FRAMES](./config/display.py#L12)
 
 `GUI_ANIMATION_MAX_FRAMES`.
 
@@ -3075,7 +3075,7 @@ Kind: policy (display).
 
 <a id="fim.config.expert"></a>
 
-# fim.config.expert
+# [fim.config.expert](./config/expert.py#L1)
 
 Expert Settings: the policy constants a run's configuration may change.
 
@@ -3092,7 +3092,7 @@ Numerical guards and derivable constants are not Expert Settings (design
 
 <a id="fim.config.expert.ExpertSettings"></a>
 
-## ExpertSettings Objects
+## [ExpertSettings Objects](./config/expert.py#L54)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -3158,7 +3158,7 @@ The convergence policy constants one run uses.
 
 <a id="fim.config.expert.ExpertSettings.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./config/expert.py#L138)
 
 ```python
 def __post_init__() -> None
@@ -3172,7 +3172,7 @@ Validate every field against its documented range.
 
 <a id="fim.config.expert.ExpertSettings.from_mapping"></a>
 
-#### from\_mapping
+#### [from\_mapping](./config/expert.py#L171)
 
 ```python
 @classmethod
@@ -3198,7 +3198,7 @@ Build the settings a configuration's `expert:` mapping asks for.
 
 <a id="fim.config.expert.ExpertSettings.changes"></a>
 
-#### changes
+#### [changes](./config/expert.py#L202)
 
 ```python
 def changes() -> dict[str, float | int]
@@ -3212,7 +3212,7 @@ Return the fields that differ from their defaults, by name.
 
 <a id="fim.config.expert.expert_template"></a>
 
-#### expert\_template
+#### [expert\_template](./config/expert.py#L216)
 
 ```python
 def expert_template() -> str
@@ -3230,7 +3230,7 @@ them taking effect.
 
 <a id="fim.config.expert.ExpertSettingInfo"></a>
 
-## ExpertSettingInfo Objects
+## [ExpertSettingInfo Objects](./config/expert.py#L284)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -3248,19 +3248,19 @@ How the app presents one Expert Setting.
 
 <a id="fim.config.expert.EXPERT_GROUPS"></a>
 
-#### EXPERT\_GROUPS
+#### [EXPERT\_GROUPS](./config/expert.py#L299)
 
 The Settings subsections, in display order.
 
 <a id="fim.config.expert.EXPERT_SETTING_INFO"></a>
 
-#### EXPERT\_SETTING\_INFO
+#### [EXPERT\_SETTING\_INFO](./config/expert.py#L302)
 
 Presentation of every Expert Setting, by name (a test checks the keys).
 
 <a id="fim.config.expert.describe_expert_settings"></a>
 
-#### describe\_expert\_settings
+#### [describe\_expert\_settings](./config/expert.py#L462)
 
 ```python
 def describe_expert_settings() -> list[dict[str, str]]
@@ -3276,7 +3276,7 @@ Return every Expert Setting as the app lists it, in display order.
 
 <a id="fim.config.limits"></a>
 
-# fim.config.limits
+# [fim.config.limits](./config/limits.py#L1)
 
 Run-time limits.
 
@@ -3287,7 +3287,7 @@ See `README.md` in this directory for the table of every constant.
 
 <a id="fim.config.limits.MAXIMUM_RECURSION_DEMES"></a>
 
-#### MAXIMUM\_RECURSION\_DEMES
+#### [MAXIMUM\_RECURSION\_DEMES](./config/limits.py#L13)
 
 Largest `d` for which the `d² by d²` eigenvalue route is used.
 
@@ -3299,7 +3299,7 @@ Kind: policy (run time).
 
 <a id="fim.config.limits.MINIMUM_EQUILIBRIUM_N"></a>
 
-#### MINIMUM\_EQUILIBRIUM\_N
+#### [MINIMUM\_EQUILIBRIUM\_N](./config/limits.py#L23)
 
 Smallest population size the closed-form equilibrium formulas accept.
 
@@ -3307,7 +3307,7 @@ Kind: numerical guard.
 
 <a id="fim.config.limits.MINIMUM_EQUILIBRIUM_DEMES"></a>
 
-#### MINIMUM\_EQUILIBRIUM\_DEMES
+#### [MINIMUM\_EQUILIBRIUM\_DEMES](./config/limits.py#L29)
 
 Smallest deme count the closed-form equilibrium formulas accept.
 
@@ -3315,7 +3315,7 @@ Kind: numerical guard.
 
 <a id="fim.config.numerics"></a>
 
-# fim.config.numerics
+# [fim.config.numerics](./config/numerics.py#L1)
 
 Numerical guards and derivable constants.
 
@@ -3327,7 +3327,7 @@ See `README.md` in this directory for the table of every constant.
 
 <a id="fim.config.numerics.MAXIMUM_LAG1_CORRELATION"></a>
 
-#### MAXIMUM\_LAG1\_CORRELATION
+#### [MAXIMUM\_LAG1\_CORRELATION](./config/numerics.py#L14)
 
 A lag-1 correlation this close to 1 makes `tau_int` (below) blow up
 numerically for a reason that is itself informative -- the window has not
@@ -3339,7 +3339,7 @@ Kind: numerical guard.
 
 <a id="fim.config.numerics.MINIMUM_WINDOW_VALUES"></a>
 
-#### MINIMUM\_WINDOW\_VALUES
+#### [MINIMUM\_WINDOW\_VALUES](./config/numerics.py#L24)
 
 `window_statistics` needs at least this many values to define a lag-1
 correlation at all (two consecutive-pair terms and a variance).
@@ -3348,7 +3348,7 @@ Kind: derivable.
 
 <a id="fim.config.numerics.MINIMUM_CRITERION_WINDOW"></a>
 
-#### MINIMUM\_CRITERION\_WINDOW
+#### [MINIMUM\_CRITERION\_WINDOW](./config/numerics.py#L31)
 
 `MINIMUM_CRITERION_WINDOW`.
 
@@ -3356,7 +3356,7 @@ Kind: derivable.
 
 <a id="fim.config.numerics.MINIMUM_REPLICATE_COUNT"></a>
 
-#### MINIMUM\_REPLICATE\_COUNT
+#### [MINIMUM\_REPLICATE\_COUNT](./config/numerics.py#L37)
 
 `MINIMUM_REPLICATE_COUNT`.
 
@@ -3364,7 +3364,7 @@ Kind: derivable.
 
 <a id="fim.config.numerics.EXACT_SCALE_BITS"></a>
 
-#### EXACT\_SCALE\_BITS
+#### [EXACT\_SCALE\_BITS](./config/numerics.py#L43)
 
 Every finite double is an integer multiple of `2 ** -1074`.
 
@@ -3372,7 +3372,7 @@ Kind: derivable (IEEE 754).
 
 <a id="fim.config.numerics.MINIMUM_DEMES"></a>
 
-#### MINIMUM\_DEMES
+#### [MINIMUM\_DEMES](./config/numerics.py#L49)
 
 The recursion needs a between-deme identity, so at least two demes.
 
@@ -3380,7 +3380,7 @@ Kind: derivable.
 
 <a id="fim.config.numerics.DEGENERACY_TOLERANCE"></a>
 
-#### DEGENERACY\_TOLERANCE
+#### [DEGENERACY\_TOLERANCE](./config/numerics.py#L55)
 
 Eigenvalues closer than this (relative to the larger) make the 2 by 2
 eigenvector matrix numerically singular.
@@ -3389,7 +3389,7 @@ Kind: numerical guard.
 
 <a id="fim.config.numerics.SINGULAR_FIXED_POINT"></a>
 
-#### SINGULAR\_FIXED\_POINT
+#### [SINGULAR\_FIXED\_POINT](./config/numerics.py#L62)
 
 Below these, the fixed-point system or the eigenvector matrix is singular
 to double precision.
@@ -3398,7 +3398,7 @@ Kind: numerical guard.
 
 <a id="fim.config.numerics.SINGULAR_EIGENVECTORS"></a>
 
-#### SINGULAR\_EIGENVECTORS
+#### [SINGULAR\_EIGENVECTORS](./config/numerics.py#L69)
 
 `SINGULAR_EIGENVECTORS`.
 
@@ -3406,7 +3406,7 @@ Kind: numerical guard.
 
 <a id="fim.config.numerics.MAXIMUM_CONDITION"></a>
 
-#### MAXIMUM\_CONDITION
+#### [MAXIMUM\_CONDITION](./config/numerics.py#L75)
 
 The eigenvector matrix is trusted only while it is this well conditioned
 and reproduces the operator to this relative accuracy.
@@ -3415,7 +3415,7 @@ Kind: numerical guard.
 
 <a id="fim.config.numerics.RECONSTRUCTION_TOLERANCE"></a>
 
-#### RECONSTRUCTION\_TOLERANCE
+#### [RECONSTRUCTION\_TOLERANCE](./config/numerics.py#L82)
 
 `RECONSTRUCTION_TOLERANCE`.
 
@@ -3423,7 +3423,7 @@ Kind: numerical guard.
 
 <a id="fim.config.numerics.MINIMUM_SAMPLE_GENE_COPIES"></a>
 
-#### MINIMUM\_SAMPLE\_GENE\_COPIES
+#### [MINIMUM\_SAMPLE\_GENE\_COPIES](./config/numerics.py#L88)
 
 `MINIMUM_SAMPLE_GENE_COPIES`.
 
@@ -3431,7 +3431,7 @@ Kind: derivable.
 
 <a id="fim.config.numerics.DIFFERENTIATION_TOLERANCE"></a>
 
-#### DIFFERENTIATION\_TOLERANCE
+#### [DIFFERENTIATION\_TOLERANCE](./config/numerics.py#L94)
 
 `DIFFERENTIATION_TOLERANCE`.
 
@@ -3439,7 +3439,7 @@ Kind: numerical guard.
 
 <a id="fim.config.numerics.EULER_GAMMA"></a>
 
-#### EULER\_GAMMA
+#### [EULER\_GAMMA](./config/numerics.py#L100)
 
 Euler-Mascheroni constant gamma = -psi(1), to full double precision
 (Abramowitz & Stegun 1972, table 1.1) -- the additive constant every
@@ -3451,7 +3451,7 @@ Kind: derivable (a mathematical constant).
 
 <a id="fim.config.numerics.DIGAMMA_ASYMPTOTIC_THRESHOLD"></a>
 
-#### DIGAMMA\_ASYMPTOTIC\_THRESHOLD
+#### [DIGAMMA\_ASYMPTOTIC\_THRESHOLD](./config/numerics.py#L110)
 
 Threshold above which `_digamma`'s asymptotic series (Abramowitz &
 Stegun 1972, formula 6.3.18 -- the same one Chao et al.'s own S2
@@ -3462,7 +3462,7 @@ Kind: numerical guard, derivable.
 
 <a id="fim.config.statistics"></a>
 
-# fim.config.statistics
+# [fim.config.statistics](./config/statistics.py#L1)
 
 Statistics policy constants.
 
@@ -3473,7 +3473,7 @@ See `README.md` in this directory for the table of every constant.
 
 <a id="fim.config.statistics.ESTIMATE_AUTO_DENOMINATOR"></a>
 
-#### ESTIMATE\_AUTO\_DENOMINATOR
+#### [ESTIMATE\_AUTO\_DENOMINATOR](./config/statistics.py#L13)
 
 Denominator below which a generation counts as degenerate for `auto`.
 
@@ -3487,7 +3487,7 @@ Kind: policy.
 
 <a id="fim.config.statistics.ESTIMATE_AUTO_FRACTION"></a>
 
-#### ESTIMATE\_AUTO\_FRACTION
+#### [ESTIMATE\_AUTO\_FRACTION](./config/statistics.py#L25)
 
 Share of window generations that may be degenerate before `auto` switches.
 
@@ -3495,7 +3495,7 @@ Kind: policy.
 
 <a id="fim.config.storage"></a>
 
-# fim.config.storage
+# [fim.config.storage](./config/storage.py#L1)
 
 Trajectory-log policy constants.
 
@@ -3507,7 +3507,7 @@ See `README.md` in this directory for the table of every constant.
 
 <a id="fim.config.storage.LOG_KEY_EVERY"></a>
 
-#### LOG\_KEY\_EVERY
+#### [LOG\_KEY\_EVERY](./config/storage.py#L14)
 
 Generations between keyframes in a sparse trajectory log.
 
@@ -3519,7 +3519,7 @@ Kind: policy.
 
 <a id="fim.config.storage.LOG_SYNC_SECONDS"></a>
 
-#### LOG\_SYNC\_SECONDS
+#### [LOG\_SYNC\_SECONDS](./config/storage.py#L24)
 
 Seconds between the log's group-commit syncs to disk.
 
@@ -3530,7 +3530,7 @@ Kind: policy.
 
 <a id="fim.config.storage.LOG_BLOCK_GENERATIONS"></a>
 
-#### LOG\_BLOCK\_GENERATIONS
+#### [LOG\_BLOCK\_GENERATIONS](./config/storage.py#L33)
 
 Generations after which the open block of the log is sealed and written.
 
@@ -3542,7 +3542,7 @@ Kind: policy.
 
 <a id="fim.config.storage.TRAJECTORY_KEEP_LAST"></a>
 
-#### TRAJECTORY\_KEEP\_LAST
+#### [TRAJECTORY\_KEEP\_LAST](./config/storage.py#L43)
 
 Default `trajectory_keep_last`: with tapering on, the last generations kept in full.
 
@@ -3554,7 +3554,7 @@ Kind: policy.
 
 <a id="fim.config.storage.TRAJECTORY_STRIDE"></a>
 
-#### TRAJECTORY\_STRIDE
+#### [TRAJECTORY\_STRIDE](./config/storage.py#L53)
 
 Default `trajectory_stride`: with thinning on, one generation in this many is kept.
 
@@ -3565,7 +3565,7 @@ Kind: policy.
 
 <a id="fim.config.storage.THINNING_TRANSIENT_RELAXATION_TIMES"></a>
 
-#### THINNING\_TRANSIENT\_RELAXATION\_TIMES
+#### [THINNING\_TRANSIENT\_RELAXATION\_TIMES](./config/storage.py#L62)
 
 Relaxation times after the burn-in that thinning keeps whole.
 
@@ -3576,7 +3576,7 @@ Kind: policy.
 
 <a id="fim.config.storage.THINNING_MINIMUM_START"></a>
 
-#### THINNING\_MINIMUM\_START
+#### [THINNING\_MINIMUM\_START](./config/storage.py#L71)
 
 Generation before which thinning never starts.
 
@@ -3588,7 +3588,7 @@ Kind: policy.
 
 <a id="fim.config.storage.CHECKPOINT_GENERATIONS"></a>
 
-#### CHECKPOINT\_GENERATIONS
+#### [CHECKPOINT\_GENERATIONS](./config/storage.py#L81)
 
 Generations between periodic checkpoints of a resumable run.
 
@@ -3600,7 +3600,7 @@ Kind: policy.
 
 <a id="fim.config.storage.CHECKPOINT_SECONDS"></a>
 
-#### CHECKPOINT\_SECONDS
+#### [CHECKPOINT\_SECONDS](./config/storage.py#L91)
 
 Seconds between periodic checkpoints of a resumable run.
 
@@ -3611,7 +3611,7 @@ Kind: policy.
 
 <a id="fim.convergence"></a>
 
-# fim.convergence
+# [fim.convergence](./convergence/__init__.py#L1)
 
 Convergence rules and run-loop monitoring.
 
@@ -3637,7 +3637,7 @@ The public names from the modules are re-exported here.
 
 <a id="fim.convergence.batch_window"></a>
 
-# fim.convergence.batch\_window
+# [fim.convergence.batch\_window](./convergence/batch_window.py#L1)
 
 How long each replicate of a batch averages: the matched window.
 
@@ -3660,7 +3660,7 @@ window mean estimates the same long-run value after the burn-in.
 
 <a id="fim.convergence.batch_window.WindowNoise"></a>
 
-## WindowNoise Objects
+## [WindowNoise Objects](./convergence/batch_window.py#L32)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -3676,7 +3676,7 @@ The noise of one statistic over one replicate's averaging window.
 
 <a id="fim.convergence.batch_window.target_replicate_count"></a>
 
-#### target\_replicate\_count
+#### [target\_replicate\_count](./convergence/batch_window.py#L44)
 
 ```python
 def target_replicate_count(*, minimum: int, wave_multiple: float,
@@ -3701,7 +3701,7 @@ replicates run at once, never below the fewest a batch may stop at.
 
 <a id="fim.convergence.batch_window.lane_standard_error"></a>
 
-#### lane\_standard\_error
+#### [lane\_standard\_error](./convergence/batch_window.py#L61)
 
 ```python
 def lane_standard_error(*, precision: float, confidence: float,
@@ -3732,7 +3732,7 @@ interval has half-width `t(R - 1) * SE / sqrt(R)`; setting that to
 
 <a id="fim.convergence.batch_window.matched_averaging_multiple"></a>
 
-#### matched\_averaging\_multiple
+#### [matched\_averaging\_multiple](./convergence/batch_window.py#L87)
 
 ```python
 def matched_averaging_multiple(wave: Sequence[Mapping[str, WindowNoise]], *,
@@ -3767,7 +3767,7 @@ The result is clamped to `[multiple_minimum, multiple_maximum]`.
 
 <a id="fim.convergence.batch_window.BatchWindowPlanner"></a>
 
-## BatchWindowPlanner Objects
+## [BatchWindowPlanner Objects](./convergence/batch_window.py#L132)
 
 ```python
 class BatchWindowPlanner()
@@ -3784,7 +3784,7 @@ measured.
 
 <a id="fim.convergence.batch_window.BatchWindowPlanner.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./convergence/batch_window.py#L143)
 
 ```python
 def __init__(*,
@@ -3832,7 +3832,7 @@ Initialize a planner.
 
 <a id="fim.convergence.batch_window.BatchWindowPlanner.first_wave"></a>
 
-#### first\_wave
+#### [first\_wave](./convergence/batch_window.py#L209)
 
 ```python
 @property
@@ -3843,7 +3843,7 @@ Return how many replicates form the first wave.
 
 <a id="fim.convergence.batch_window.BatchWindowPlanner.matched_window"></a>
 
-#### matched\_window
+#### [matched\_window](./convergence/batch_window.py#L214)
 
 ```python
 @property
@@ -3854,7 +3854,7 @@ Return the matched window in generations, once the wave is recorded.
 
 <a id="fim.convergence.batch_window.BatchWindowPlanner.earliest_window"></a>
 
-#### earliest\_window
+#### [earliest\_window](./convergence/batch_window.py#L219)
 
 ```python
 @property
@@ -3869,7 +3869,7 @@ its window can safely average this long without overshooting it.
 
 <a id="fim.convergence.batch_window.BatchWindowPlanner.window_for"></a>
 
-#### window\_for
+#### [window\_for](./convergence/batch_window.py#L228)
 
 ```python
 def window_for(index: int) -> int | None
@@ -3889,7 +3889,7 @@ Return the averaging window of replicate `index`, in generations.
 
 <a id="fim.convergence.batch_window.BatchWindowPlanner.record"></a>
 
-#### record
+#### [record](./convergence/batch_window.py#L244)
 
 ```python
 def record(index: int, noise: Mapping[str, WindowNoise]) -> int | None
@@ -3909,7 +3909,7 @@ Record one first-wave replicate's noise.
 
 <a id="fim.convergence.criteria"></a>
 
-# fim.convergence.criteria
+# [fim.convergence.criteria](./convergence/criteria.py#L1)
 
 Pluggable criteria for statistic-history stability across replicates.
 
@@ -3925,7 +3925,7 @@ averages (`fim.convergence.monitor.BurnInMonitor`).
 
 <a id="fim.convergence.criteria.ConvergenceCriterion"></a>
 
-## ConvergenceCriterion Objects
+## [ConvergenceCriterion Objects](./convergence/criteria.py#L25)
 
 ```python
 class ConvergenceCriterion(Protocol)
@@ -3942,7 +3942,7 @@ is `ConfidenceIntervalCriterion` or something built elsewhere entirely.
 
 <a id="fim.convergence.criteria.ConvergenceCriterion.is_stable"></a>
 
-#### is\_stable
+#### [is\_stable](./convergence/criteria.py#L36)
 
 ```python
 def is_stable(history: Sequence[float]) -> bool
@@ -3967,7 +3967,7 @@ Return whether the supplied history satisfies this criterion.
 
 <a id="fim.convergence.criteria.ConfidenceIntervalCriterion"></a>
 
-## ConfidenceIntervalCriterion Objects
+## [ConfidenceIntervalCriterion Objects](./convergence/criteria.py#L55)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -3987,7 +3987,7 @@ from fewer than `minimum_count` observations.
 
 <a id="fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./convergence/criteria.py#L72)
 
 ```python
 def __post_init__() -> None
@@ -4000,7 +4000,7 @@ themselves.
 
 <a id="fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable"></a>
 
-#### is\_stable
+#### [is\_stable](./convergence/criteria.py#L85)
 
 ```python
 def is_stable(history: Sequence[float]) -> bool
@@ -4016,7 +4016,7 @@ method's whole job is deciding whether that computed interval
 
 <a id="fim.convergence.defaults"></a>
 
-# fim.convergence.defaults
+# [fim.convergence.defaults](./convergence/defaults.py#L1)
 
 Derive convergence defaults from the modeled population's own timescale.
 
@@ -4042,7 +4042,7 @@ Two routes give `tau`:
 
 <a id="fim.convergence.defaults.DerivedConvergence"></a>
 
-## DerivedConvergence Objects
+## [DerivedConvergence Objects](./convergence/defaults.py#L39)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -4059,7 +4059,7 @@ Convergence settings derived from a model's relaxation time.
 
 <a id="fim.convergence.defaults.burn_in_multiple"></a>
 
-#### burn\_in\_multiple
+#### [burn\_in\_multiple](./convergence/defaults.py#L53)
 
 ```python
 def burn_in_multiple(precision: float, minimum: float) -> float
@@ -4084,7 +4084,7 @@ burn-in on its own. A precision of zero asks for an unbounded burn-in.
 
 <a id="fim.convergence.defaults.derive_burn_in"></a>
 
-#### derive\_burn\_in
+#### [derive\_burn\_in](./convergence/defaults.py#L73)
 
 ```python
 def derive_burn_in(relaxation_time: float,
@@ -4111,7 +4111,7 @@ Return the burn-in, in generations, for a relaxation time and precision.
 
 <a id="fim.convergence.defaults.derive_convergence_defaults"></a>
 
-#### derive\_convergence\_defaults
+#### [derive\_convergence\_defaults](./convergence/defaults.py#L100)
 
 ```python
 def derive_convergence_defaults(
@@ -4155,7 +4155,7 @@ its own burn-in.
 
 <a id="fim.convergence.defaults.describe_derived_convergence"></a>
 
-#### describe\_derived\_convergence
+#### [describe\_derived\_convergence](./convergence/defaults.py#L150)
 
 ```python
 def describe_derived_convergence(
@@ -4192,7 +4192,7 @@ thing.
 
 <a id="fim.convergence.defaults.island_relaxation_time"></a>
 
-#### island\_relaxation\_time
+#### [island\_relaxation\_time](./convergence/defaults.py#L196)
 
 ```python
 def island_relaxation_time(*, total_size: float, deme_count: int,
@@ -4226,7 +4226,7 @@ independent rate `2 mu`, and independent rates add, so
 
 <a id="fim.convergence.defaults.recursion_relaxation_time"></a>
 
-#### recursion\_relaxation\_time
+#### [recursion\_relaxation\_time](./convergence/defaults.py#L229)
 
 ```python
 def recursion_relaxation_time(*, deme_sizes: Sequence[int],
@@ -4261,7 +4261,7 @@ its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
 
 <a id="fim.convergence.defaults.relaxation_time"></a>
 
-#### relaxation\_time
+#### [relaxation\_time](./convergence/defaults.py#L275)
 
 ```python
 def relaxation_time(*, deme_sizes: Sequence[int], migration: MigrationInput,
@@ -4296,7 +4296,7 @@ size-weighted migrant pool) uses the recursion's eigenvalue.
 
 <a id="fim.convergence.defaults.PanmicticEquilibration"></a>
 
-## PanmicticEquilibration Objects
+## [PanmicticEquilibration Objects](./convergence/defaults.py#L325)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -4319,7 +4319,7 @@ How long one panmictic population takes to reach mutation-drift equilibrium.
 
 <a id="fim.convergence.defaults.panmictic_equilibration"></a>
 
-#### panmictic\_equilibration
+#### [panmictic\_equilibration](./convergence/defaults.py#L345)
 
 ```python
 def panmictic_equilibration(*, total_size: int,
@@ -4378,7 +4378,7 @@ The burn-in needs no such rule.
 
 <a id="fim.convergence.defaults.island_migration_matrix"></a>
 
-#### island\_migration\_matrix
+#### [island\_migration\_matrix](./convergence/defaults.py#L419)
 
 ```python
 def island_migration_matrix(sizes: Sequence[int],
@@ -4403,7 +4403,7 @@ form.
 
 <a id="fim.convergence.monitor"></a>
 
-# fim.convergence.monitor
+# [fim.convergence.monitor](./convergence/monitor.py#L1)
 
 Stateful convergence monitoring with an explicit hard-cap outcome.
 
@@ -4423,7 +4423,7 @@ which of the two things happened, if either yet has.
 
 <a id="fim.convergence.monitor.StopReason"></a>
 
-## StopReason Objects
+## [StopReason Objects](./convergence/monitor.py#L58)
 
 ```python
 class StopReason(StrEnum)
@@ -4444,7 +4444,7 @@ reasonable number of generations, and that is itself a useful finding.
 
 <a id="fim.convergence.monitor.ConvergenceOutcome"></a>
 
-## ConvergenceOutcome Objects
+## [ConvergenceOutcome Objects](./convergence/monitor.py#L79)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -4474,7 +4474,7 @@ which generation."
 
 <a id="fim.convergence.monitor.BurnInMonitor"></a>
 
-## BurnInMonitor Objects
+## [BurnInMonitor Objects](./convergence/monitor.py#L283)
 
 ```python
 class BurnInMonitor()
@@ -4521,7 +4521,7 @@ the form the stop was judged on. Such a monitor must record `H_S` and
 
 <a id="fim.convergence.monitor.BurnInMonitor.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./convergence/monitor.py#L324)
 
 ```python
 def __init__(
@@ -4593,7 +4593,7 @@ Initialize an empty monitor.
 
 <a id="fim.convergence.monitor.BurnInMonitor.generations"></a>
 
-#### generations
+#### [generations](./convergence/monitor.py#L449)
 
 ```python
 @property
@@ -4604,7 +4604,7 @@ Return recorded generations in order, parallel to `histories`' rounds.
 
 <a id="fim.convergence.monitor.BurnInMonitor.history"></a>
 
-#### history
+#### [history](./convergence/monitor.py#L454)
 
 ```python
 @property
@@ -4615,7 +4615,7 @@ Return the first watched statistic's recorded values.
 
 <a id="fim.convergence.monitor.BurnInMonitor.histories"></a>
 
-#### histories
+#### [histories](./convergence/monitor.py#L459)
 
 ```python
 @property
@@ -4628,7 +4628,7 @@ Covers the watched statistics and the display-only extras alike.
 
 <a id="fim.convergence.monitor.BurnInMonitor.value_generations"></a>
 
-#### value\_generations
+#### [value\_generations](./convergence/monitor.py#L467)
 
 ```python
 @property
@@ -4642,7 +4642,7 @@ it), so its history can be shorter than `generations`.
 
 <a id="fim.convergence.monitor.BurnInMonitor.window_start_generation"></a>
 
-#### window\_start\_generation
+#### [window\_start\_generation](./convergence/monitor.py#L476)
 
 ```python
 @property
@@ -4657,7 +4657,7 @@ start of the window the stop was judged on once the run has stopped.
 
 <a id="fim.convergence.monitor.BurnInMonitor.outcome"></a>
 
-#### outcome
+#### [outcome](./convergence/monitor.py#L485)
 
 ```python
 def outcome() -> ConvergenceOutcome
@@ -4669,7 +4669,7 @@ Safe to call at any time; never changes anything.
 
 <a id="fim.convergence.monitor.BurnInMonitor.reason"></a>
 
-#### reason
+#### [reason](./convergence/monitor.py#L492)
 
 ```python
 def reason() -> StopReason | None
@@ -4679,7 +4679,7 @@ Return the terminal reason, or `None` while running.
 
 <a id="fim.convergence.monitor.BurnInMonitor.should_stop"></a>
 
-#### should\_stop
+#### [should\_stop](./convergence/monitor.py#L496)
 
 ```python
 def should_stop() -> bool
@@ -4689,7 +4689,7 @@ Return whether the precision was reached or the cap hit.
 
 <a id="fim.convergence.monitor.BurnInMonitor.record"></a>
 
-#### record
+#### [record](./convergence/monitor.py#L500)
 
 ```python
 def record(generation: int,
@@ -4720,7 +4720,7 @@ Record one generation's value(s) and update the stop decision.
 
 <a id="fim.convergence.monitor.BurnInMonitor.awaiting_window"></a>
 
-#### awaiting\_window
+#### [awaiting\_window](./convergence/monitor.py#L554)
 
 ```python
 @property
@@ -4731,7 +4731,7 @@ Return whether this window-mode monitor is still waiting for its window.
 
 <a id="fim.convergence.monitor.BurnInMonitor.averaging_window"></a>
 
-#### averaging\_window
+#### [averaging\_window](./convergence/monitor.py#L559)
 
 ```python
 @property
@@ -4742,7 +4742,7 @@ Return the window mode's assigned window, or `None` if not known.
 
 <a id="fim.convergence.monitor.BurnInMonitor.set_averaging_window"></a>
 
-#### set\_averaging\_window
+#### [set\_averaging\_window](./convergence/monitor.py#L563)
 
 ```python
 def set_averaging_window(window: int) -> None
@@ -4764,7 +4764,7 @@ Assign the window of a monitor that was waiting for it.
 
 <a id="fim.convergence.monitor.BurnInMonitor.export_state"></a>
 
-#### export\_state
+#### [export\_state](./convergence/monitor.py#L585)
 
 ```python
 def export_state(
@@ -4784,7 +4784,7 @@ this state continues exactly as the original would have.
 
 <a id="fim.convergence.monitor.BurnInMonitor.restore_state"></a>
 
-#### restore\_state
+#### [restore\_state](./convergence/monitor.py#L626)
 
 ```python
 def restore_state(meta: Mapping[str, object],
@@ -4807,7 +4807,7 @@ Restore state written by `export_state` into a fresh monitor.
 
 <a id="fim.convergence.monitor.BurnInMonitor.stable_statistics"></a>
 
-#### stable\_statistics
+#### [stable\_statistics](./convergence/monitor.py#L740)
 
 ```python
 def stable_statistics() -> tuple[str, ...]
@@ -4822,7 +4822,7 @@ statistics that have a defined window mean.
 
 <a id="fim.convergence.monitor.BurnInMonitor.target_standard_error"></a>
 
-#### target\_standard\_error
+#### [target\_standard\_error](./convergence/monitor.py#L767)
 
 ```python
 @property
@@ -4833,7 +4833,7 @@ Return the largest standard error that meets the requested precision.
 
 <a id="fim.convergence.monitor.BurnInMonitor.target_standard_error_for"></a>
 
-#### target\_standard\_error\_for
+#### [target\_standard\_error\_for](./convergence/monitor.py#L771)
 
 ```python
 def target_standard_error_for(name: str, mean: float) -> float
@@ -4856,7 +4856,7 @@ Return the standard error `name`'s window must reach.
 
 <a id="fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size"></a>
 
-#### minimum\_effective\_sample\_size
+#### [minimum\_effective\_sample\_size](./convergence/monitor.py#L791)
 
 ```python
 @property
@@ -4867,7 +4867,7 @@ Return the effective-sample-size floor a window must meet.
 
 <a id="fim.convergence.monitor.BurnInMonitor.evidence_statistics"></a>
 
-#### evidence\_statistics
+#### [evidence\_statistics](./convergence/monitor.py#L795)
 
 ```python
 def evidence_statistics(name: str) -> WindowStatistics | None
@@ -4892,7 +4892,7 @@ describes, for a watched statistic and a display-only one alike.
 
 <a id="fim.convergence.monitor.BurnInMonitor.burn_in_generation"></a>
 
-#### burn\_in\_generation
+#### [burn\_in\_generation](./convergence/monitor.py#L818)
 
 ```python
 @property
@@ -4906,7 +4906,7 @@ start the run ended on.
 
 <a id="fim.convergence.monitor.BurnInMonitor.window_end_generation"></a>
 
-#### window\_end\_generation
+#### [window\_end\_generation](./convergence/monitor.py#L829)
 
 ```python
 @property
@@ -4917,7 +4917,7 @@ Return the last recorded generation, where the evidence window ends.
 
 <a id="fim.convergence.monitor.BurnInMonitor.evidence_geweke_z"></a>
 
-#### evidence\_geweke\_z
+#### [evidence\_geweke\_z](./convergence/monitor.py#L833)
 
 ```python
 def evidence_geweke_z(name: str) -> float | None
@@ -4941,7 +4941,7 @@ own per-generation values, whichever expected-value form is selected.
 
 <a id="fim.convergence.monitor.BurnInMonitor.projected_generations"></a>
 
-#### projected\_generations
+#### [projected\_generations](./convergence/monitor.py#L857)
 
 ```python
 @property
@@ -4958,7 +4958,7 @@ exists (zero precision, or a window with too few values).
 
 <a id="fim.convergence.monitor.BurnInMonitor.projected_generations_for"></a>
 
-#### projected\_generations\_for
+#### [projected\_generations\_for](./convergence/monitor.py#L868)
 
 ```python
 def projected_generations_for(name: str) -> int | None
@@ -4985,7 +4985,7 @@ reach `target` (design 6.10); the effective-sample-size floor needs
 
 <a id="fim.convergence.monitor.BurnInMonitor.estimate_forms"></a>
 
-#### estimate\_forms
+#### [estimate\_forms](./convergence/monitor.py#L928)
 
 ```python
 def estimate_forms(name: str) -> EstimateForms | None
@@ -5005,7 +5005,7 @@ Return `name`'s expected-value forms over the evidence window.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor"></a>
 
-## ConvergenceMonitor Objects
+## [ConvergenceMonitor Objects](./convergence/monitor.py#L1028)
 
 ```python
 class ConvergenceMonitor()
@@ -5027,7 +5027,7 @@ are recorded without ever affecting the stop.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./convergence/monitor.py#L1044)
 
 ```python
 def __init__(
@@ -5057,7 +5057,7 @@ Initialize an empty monitor.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.generations"></a>
 
-#### generations
+#### [generations](./convergence/monitor.py#L1083)
 
 ```python
 @property
@@ -5068,7 +5068,7 @@ Return the number recorded alongside each `record` call, in order.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.history"></a>
 
-#### history
+#### [history](./convergence/monitor.py#L1088)
 
 ```python
 @property
@@ -5079,7 +5079,7 @@ Return the first watched statistic's recorded values.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.histories"></a>
 
-#### histories
+#### [histories](./convergence/monitor.py#L1093)
 
 ```python
 @property
@@ -5090,7 +5090,7 @@ Return every recorded statistic's values, by name.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.outcome"></a>
 
-#### outcome
+#### [outcome](./convergence/monitor.py#L1097)
 
 ```python
 def outcome() -> ConvergenceOutcome
@@ -5100,7 +5100,7 @@ Return the current terminal or running outcome; never changes anything.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.reason"></a>
 
-#### reason
+#### [reason](./convergence/monitor.py#L1101)
 
 ```python
 def reason() -> StopReason | None
@@ -5110,7 +5110,7 @@ Return the terminal reason, or `None` while running.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.should_stop"></a>
 
-#### should\_stop
+#### [should\_stop](./convergence/monitor.py#L1105)
 
 ```python
 def should_stop() -> bool
@@ -5120,7 +5120,7 @@ Return whether the criterion was met or the cap hit.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.record"></a>
 
-#### record
+#### [record](./convergence/monitor.py#L1109)
 
 ```python
 def record(generation: int,
@@ -5149,7 +5149,7 @@ Record one ordered observation and update the stop decision.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.stable_statistics"></a>
 
-#### stable\_statistics
+#### [stable\_statistics](./convergence/monitor.py#L1163)
 
 ```python
 def stable_statistics() -> tuple[str, ...]
@@ -5159,7 +5159,7 @@ Return the watched statistics that passed on the most recent round.
 
 <a id="fim.convergence.window_statistics"></a>
 
-# fim.convergence.window\_statistics
+# [fim.convergence.window\_statistics](./convergence/window_statistics.py#L1)
 
 How precisely an evidence window's own mean is known, given correlated noise.
 
@@ -5180,7 +5180,7 @@ of a window with its end as a check that the burn-in was long enough.
 
 <a id="fim.convergence.window_statistics.WindowStatistics"></a>
 
-## WindowStatistics Objects
+## [WindowStatistics Objects](./convergence/window_statistics.py#L34)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -5210,7 +5210,7 @@ How well a window's own mean is known, given its internal correlation.
 
 <a id="fim.convergence.window_statistics.WindowStatistics.tau_int"></a>
 
-#### tau\_int
+#### [tau\_int](./convergence/window_statistics.py#L64)
 
 ```python
 @property
@@ -5221,7 +5221,7 @@ The integrated autocorrelation time: `window / effective_sample_size`.
 
 <a id="fim.convergence.window_statistics.WindowStatistics.meets"></a>
 
-#### meets
+#### [meets](./convergence/window_statistics.py#L68)
 
 ```python
 def meets(target_standard_error: float,
@@ -5244,7 +5244,7 @@ Return whether the mean is known well enough to stop on.
 
 <a id="fim.convergence.window_statistics.geyer_window_statistics"></a>
 
-#### geyer\_window\_statistics
+#### [geyer\_window\_statistics](./convergence/window_statistics.py#L88)
 
 ```python
 def geyer_window_statistics(
@@ -5288,7 +5288,7 @@ window of `L` values costs `O(L log L)`.
 
 <a id="fim.convergence.window_statistics.geweke_z"></a>
 
-#### geweke\_z
+#### [geweke\_z](./convergence/window_statistics.py#L165)
 
 ```python
 def geweke_z(values: Sequence[float] | npt.NDArray[np.float64],
@@ -5329,13 +5329,13 @@ stop or continue a run (design 6.5).
 
 <a id="fim.convergence.window_statistics.EstimateForm"></a>
 
-#### EstimateForm
+#### [EstimateForm](./convergence/window_statistics.py#L218)
 
 The two ways to estimate an identity statistic's expected value.
 
 <a id="fim.convergence.window_statistics.IdentityStatistic"></a>
 
-## IdentityStatistic Objects
+## [IdentityStatistic Objects](./convergence/window_statistics.py#L223)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -5356,7 +5356,7 @@ A statistic that is a function `X = f(H_S, H_T)` of the identities.
 
 <a id="fim.convergence.window_statistics.EstimateForms"></a>
 
-## EstimateForms Objects
+## [EstimateForms Objects](./convergence/window_statistics.py#L242)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -5380,7 +5380,7 @@ Both expected-value forms of one statistic over one evidence window.
 
 <a id="fim.convergence.window_statistics.EstimateForms.selected_statistics"></a>
 
-#### selected\_statistics
+#### [selected\_statistics](./convergence/window_statistics.py#L264)
 
 ```python
 @property
@@ -5391,7 +5391,7 @@ Return the selected form's statistics.
 
 <a id="fim.convergence.window_statistics.degenerate_share"></a>
 
-#### degenerate\_share
+#### [degenerate\_share](./convergence/window_statistics.py#L271)
 
 ```python
 def degenerate_share(h_s: npt.NDArray[np.float64],
@@ -5415,7 +5415,7 @@ Return the share of window generations whose denominator is below `threshold`.
 
 <a id="fim.convergence.window_statistics.select_form"></a>
 
-#### select\_form
+#### [select\_form](./convergence/window_statistics.py#L298)
 
 ```python
 def select_form(choice: str, *, undefined_generations: int, degenerate: float,
@@ -5440,7 +5440,7 @@ Return the form `choice` selects for one window.
 
 <a id="fim.convergence.window_statistics.value_of_means_statistics"></a>
 
-#### value\_of\_means\_statistics
+#### [value\_of\_means\_statistics](./convergence/window_statistics.py#L329)
 
 ```python
 def value_of_means_statistics(
@@ -5473,7 +5473,7 @@ accounted for.
 
 <a id="fim.engine"></a>
 
-# fim.engine
+# [fim.engine](./engine/__init__.py#L1)
 
 Public deterministic finite-island-model simulation engine.
 
@@ -5576,13 +5576,13 @@ reproducible too, not just each individual replicate in isolation.
 
 <a id="fim.engine.api"></a>
 
-# fim.engine.api
+# [fim.engine.api](./engine/api.py#L1)
 
 The engine entry point: `simulate_params`.
 
 <a id="fim.engine.api.simulate_params"></a>
 
-#### simulate\_params
+#### [simulate\_params](./engine/api.py#L21)
 
 ```python
 def simulate_params(
@@ -5659,13 +5659,13 @@ holds `SimulationParams`.
 
 <a id="fim.engine.backends"></a>
 
-# fim.engine.backends
+# [fim.engine.backends](./engine/backends.py#L1)
 
 Backend protocol, the generational backend, and the factory.
 
 <a id="fim.engine.backends.EngineBackend"></a>
 
-## EngineBackend Objects
+## [EngineBackend Objects](./engine/backends.py#L32)
 
 ```python
 class EngineBackend(Protocol)
@@ -5693,7 +5693,7 @@ contract.
 
 <a id="fim.engine.backends.EngineBackend.run"></a>
 
-#### run
+#### [run](./engine/backends.py#L54)
 
 ```python
 def run(params: SimulationParams, store: TrajectoryStore | None,
@@ -5704,7 +5704,7 @@ Run every replicate `params` describes; return the result(s).
 
 <a id="fim.engine.backends.GenerationalBackend"></a>
 
-## GenerationalBackend Objects
+## [GenerationalBackend Objects](./engine/backends.py#L65)
 
 ```python
 class GenerationalBackend()
@@ -5723,7 +5723,7 @@ class itself changing at all.
 
 <a id="fim.engine.backends.GenerationalBackend.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./engine/backends.py#L78)
 
 ```python
 def __init__(
@@ -5757,7 +5757,7 @@ Configure which `Advancer` drives this backend's own batches.
 
 <a id="fim.engine.backends.GenerationalBackend.run"></a>
 
-#### run
+#### [run](./engine/backends.py#L109)
 
 ```python
 def run(params: SimulationParams, store: TrajectoryStore | None,
@@ -5768,7 +5768,7 @@ Run `params`'s own replicate(s); see `simulate_params()`'s own docstring.
 
 <a id="fim.engine.backends.resolve_auto_engine_backend"></a>
 
-#### resolve\_auto\_engine\_backend
+#### [resolve\_auto\_engine\_backend](./engine/backends.py#L136)
 
 ```python
 def resolve_auto_engine_backend(
@@ -5812,7 +5812,7 @@ the manifest's `engine_backend` field.
 
 <a id="fim.engine.backends.numba_is_available"></a>
 
-#### numba\_is\_available
+#### [numba\_is\_available](./engine/backends.py#L186)
 
 ```python
 def numba_is_available() -> bool
@@ -5844,7 +5844,7 @@ actually uninstalling numba from the test environment.
 
 <a id="fim.engine.backends.build_engine_backend"></a>
 
-#### build\_engine\_backend
+#### [build\_engine\_backend](./engine/backends.py#L214)
 
 ```python
 def build_engine_backend(
@@ -5998,13 +5998,13 @@ class tree to maintain.
 
 <a id="fim.engine.batch"></a>
 
-# fim.engine.batch
+# [fim.engine.batch](./engine/batch.py#L1)
 
 The generation-first batch driver and its adaptive stop.
 
 <a id="fim.engine.batch.run_batch"></a>
 
-#### run\_batch
+#### [run\_batch](./engine/batch.py#L43)
 
 ```python
 def run_batch(params: SimulationParams, store: TrajectoryStore,
@@ -6088,7 +6088,7 @@ remove.
 
 <a id="fim.engine.batch.waiting_for_window"></a>
 
-#### waiting\_for\_window
+#### [waiting\_for\_window](./engine/batch.py#L233)
 
 ```python
 def waiting_for_window(lane: ReplicaLane,
@@ -6116,13 +6116,13 @@ had run when the wave ended, and so on the backend. It pauses there.
 
 <a id="fim.engine.identity"></a>
 
-# fim.engine.identity
+# [fim.engine.identity](./engine/identity.py#L1)
 
 Run and replicate identity: IDs and per-replicate parameters.
 
 <a id="fim.engine.identity.deterministic_run_id"></a>
 
-#### deterministic\_run\_id
+#### [deterministic\_run\_id](./engine/identity.py#L14)
 
 ```python
 def deterministic_run_id(params: SimulationParams) -> str
@@ -6148,7 +6148,7 @@ whichever backend ran it.
 
 <a id="fim.engine.identity.replicate_seed"></a>
 
-#### replicate\_seed
+#### [replicate\_seed](./engine/identity.py#L42)
 
 ```python
 def replicate_seed(seed: int, replicate_index: int) -> int
@@ -6173,7 +6173,7 @@ two batches with nearby seeds share no replicate.
 
 <a id="fim.engine.identity.params_for_replicate"></a>
 
-#### params\_for\_replicate
+#### [params\_for\_replicate](./engine/identity.py#L61)
 
 ```python
 def params_for_replicate(params: SimulationParams,
@@ -6204,7 +6204,7 @@ the replicate's manifest says exactly what it ran.
 
 <a id="fim.engine.identity.derive_replicate_run_id"></a>
 
-#### derive\_replicate\_run\_id
+#### [derive\_replicate\_run\_id](./engine/identity.py#L91)
 
 ```python
 def derive_replicate_run_id(params: SimulationParams, replicate_index: int,
@@ -6230,13 +6230,13 @@ Return the run ID of one replicate of a batch.
 
 <a id="fim.engine.lanes"></a>
 
-# fim.engine.lanes
+# [fim.engine.lanes](./engine/lanes.py#L1)
 
 Replicate lanes, advancers, and lane construction and finalization.
 
 <a id="fim.engine.lanes.ReplicaLane"></a>
 
-## ReplicaLane Objects
+## [ReplicaLane Objects](./engine/lanes.py#L60)
 
 ```python
 @dataclass(slots=True)
@@ -6284,7 +6284,7 @@ already streamed the ancestral phase's own trajectory (the
 
 <a id="fim.engine.lanes.Advancer"></a>
 
-## Advancer Objects
+## [Advancer Objects](./engine/lanes.py#L118)
 
 ```python
 class Advancer(Protocol)
@@ -6300,7 +6300,7 @@ protocol without `run_batch` itself ever changing.
 
 <a id="fim.engine.lanes.Advancer.advance"></a>
 
-#### advance
+#### [advance](./engine/lanes.py#L128)
 
 ```python
 def advance(active_lanes: Sequence[ReplicaLane],
@@ -6317,7 +6317,7 @@ returned without being stepped at all.
 
 <a id="fim.engine.lanes.SequentialAdvancer"></a>
 
-## SequentialAdvancer Objects
+## [SequentialAdvancer Objects](./engine/lanes.py#L144)
 
 ```python
 class SequentialAdvancer()
@@ -6336,7 +6336,7 @@ to another's changes nothing about that lane's own result).
 
 <a id="fim.engine.lanes.SequentialAdvancer.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./engine/lanes.py#L157)
 
 ```python
 def __init__(*, jit: bool = False) -> None
@@ -6356,7 +6356,7 @@ Configure whether this advancer's own lanes step with JIT.
 
 <a id="fim.engine.lanes.SequentialAdvancer.advance"></a>
 
-#### advance
+#### [advance](./engine/lanes.py#L171)
 
 ```python
 def advance(active_lanes: Sequence[ReplicaLane],
@@ -6370,7 +6370,7 @@ monitor.should_stop():` loop, per lane, in order.
 
 <a id="fim.engine.lanes.ThreadedAdvancer"></a>
 
-## ThreadedAdvancer Objects
+## [ThreadedAdvancer Objects](./engine/lanes.py#L240)
 
 ```python
 class ThreadedAdvancer()
@@ -6427,7 +6427,7 @@ this class's own current scope.
 
 <a id="fim.engine.lanes.ThreadedAdvancer.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./engine/lanes.py#L291)
 
 ```python
 def __init__(max_workers: int | None = None,
@@ -6470,7 +6470,7 @@ Configure how many blocks/threads this advancer fans out across.
 
 <a id="fim.engine.lanes.ThreadedAdvancer.advance"></a>
 
-#### advance
+#### [advance](./engine/lanes.py#L353)
 
 ```python
 def advance(active_lanes: Sequence[ReplicaLane],
@@ -6481,7 +6481,7 @@ Step every active lane by one generation, fanned out across threads.
 
 <a id="fim.engine.lanes.VectorizedAdvancer"></a>
 
-## VectorizedAdvancer Objects
+## [VectorizedAdvancer Objects](./engine/lanes.py#L374)
 
 ```python
 class VectorizedAdvancer()
@@ -6532,7 +6532,7 @@ exact sum per cell in the continuous case).
 
 <a id="fim.engine.lanes.VectorizedAdvancer.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./engine/lanes.py#L418)
 
 ```python
 def __init__(*, memory_ceiling_bytes: int | None = None) -> None
@@ -6546,7 +6546,7 @@ Remember the per-lane memory ceiling for new tables.
 
 <a id="fim.engine.lanes.VectorizedAdvancer.advance"></a>
 
-#### advance
+#### [advance](./engine/lanes.py#L426)
 
 ```python
 def advance(active_lanes: Sequence[ReplicaLane],
@@ -6574,7 +6574,7 @@ up to the identities the block minted.
 
 <a id="fim.engine.lanes.frame_layout"></a>
 
-#### frame\_layout
+#### [frame\_layout](./engine/lanes.py#L498)
 
 ```python
 def frame_layout(params: SimulationParams) -> FrameLayout
@@ -6593,7 +6593,7 @@ Return the frame layout of a run: its locus ids and gene copies per deme.
 
 <a id="fim.engine.lanes.equilibrium_frame_layout"></a>
 
-#### equilibrium\_frame\_layout
+#### [equilibrium\_frame\_layout](./engine/lanes.py#L513)
 
 ```python
 def equilibrium_frame_layout(params: SimulationParams) -> FrameLayout
@@ -6616,7 +6616,7 @@ size.
 
 <a id="fim.engine.lanes.persist_state"></a>
 
-#### persist\_state
+#### [persist\_state](./engine/lanes.py#L552)
 
 ```python
 def persist_state(store: TrajectoryStore, run_id: str,
@@ -6636,7 +6636,7 @@ construction validated every value, so they are written unvalidated.
 
 <a id="fim.engine.lanes.build_replica_lane"></a>
 
-#### build\_replica\_lane
+#### [build\_replica\_lane](./engine/lanes.py#L571)
 
 ```python
 def build_replica_lane(
@@ -6661,7 +6661,7 @@ two backends' own run ids agree for the same configuration.
 
 <a id="fim.engine.lanes.finalize_replica_lane"></a>
 
-#### finalize\_replica\_lane
+#### [finalize\_replica\_lane](./engine/lanes.py#L677)
 
 ```python
 def finalize_replica_lane(lane: ReplicaLane, clock: Clock,
@@ -6692,7 +6692,7 @@ begin with.
 
 <a id="fim.engine.lanes.generate_initial_state_with_outcome"></a>
 
-#### generate\_initial\_state\_with\_outcome
+#### [generate\_initial\_state\_with\_outcome](./engine/lanes.py#L791)
 
 ```python
 def generate_initial_state_with_outcome(
@@ -6731,7 +6731,7 @@ without a further, unchecked `None` for type-checking purposes.
 
 <a id="fim.engine.lanes.initial_condition_mode"></a>
 
-#### initial\_condition\_mode
+#### [initial\_condition\_mode](./engine/lanes.py#L850)
 
 ```python
 def initial_condition_mode(params: SimulationParams) -> str
@@ -6747,7 +6747,7 @@ uses for `engine_backend="auto"`.
 
 <a id="fim.engine.lanes.build_finite_allele_spaces"></a>
 
-#### build\_finite\_allele\_spaces
+#### [build\_finite\_allele\_spaces](./engine/lanes.py#L866)
 
 ```python
 def build_finite_allele_spaces(
@@ -6790,13 +6790,13 @@ alleles are already present in the population at generation zero.
 
 <a id="fim.engine.lineal"></a>
 
-# fim.engine.lineal
+# [fim.engine.lineal](./engine/lineal.py#L1)
 
 The lineal (reference) backend and its single-replicate loop.
 
 <a id="fim.engine.lineal.LinealBackend"></a>
 
-## LinealBackend Objects
+## [LinealBackend Objects](./engine/lineal.py#L58)
 
 ```python
 class LinealBackend()
@@ -6812,7 +6812,7 @@ own `run` is that same behavior, unchanged, moved behind
 
 <a id="fim.engine.lineal.LinealBackend.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./engine/lineal.py#L68)
 
 ```python
 def __init__(
@@ -6830,7 +6830,7 @@ Configure this backend's own concurrency and per-replicate storage.
 
 <a id="fim.engine.lineal.LinealBackend.run"></a>
 
-#### run
+#### [run](./engine/lineal.py#L83)
 
 ```python
 def run(params: SimulationParams, store: TrajectoryStore | None,
@@ -6841,7 +6841,7 @@ Run `params`'s own replicate(s); see `simulate_params()`'s own docstring.
 
 <a id="fim.engine.lineal.require_picklable"></a>
 
-#### require\_picklable
+#### [require\_picklable](./engine/lineal.py#L205)
 
 ```python
 def require_picklable(name: str, value: object) -> None
@@ -6880,7 +6880,7 @@ even started, naming the exact offending argument by name.
 
 <a id="fim.engine.lineal.run_batch_parallel"></a>
 
-#### run\_batch\_parallel
+#### [run\_batch\_parallel](./engine/lineal.py#L244)
 
 ```python
 def run_batch_parallel(
@@ -6937,7 +6937,7 @@ or was actually cancelled in time.
 
 <a id="fim.engine.lineal.run_one"></a>
 
-#### run\_one
+#### [run\_one](./engine/lineal.py#L464)
 
 ```python
 def run_one(params: SimulationParams, store: TrajectoryStore, run_id: str,
@@ -6956,13 +6956,13 @@ write re-opens its file.
 
 <a id="fim.engine.monitors"></a>
 
-# fim.engine.monitors
+# [fim.engine.monitors](./engine/monitors.py#L1)
 
 Construction of convergence monitors and batch window planners.
 
 <a id="fim.engine.monitors.burn_in_monitor"></a>
 
-#### burn\_in\_monitor
+#### [burn\_in\_monitor](./engine/monitors.py#L26)
 
 ```python
 def burn_in_monitor(params: SimulationParams,
@@ -6990,7 +6990,7 @@ Build the burn-in-then-average monitor one run is judged by.
 
 <a id="fim.engine.monitors.batch_window_planner"></a>
 
-#### batch\_window\_planner
+#### [batch\_window\_planner](./engine/monitors.py#L78)
 
 ```python
 def batch_window_planner(
@@ -7023,7 +7023,7 @@ hardware and under every backend.
 
 <a id="fim.engine.monitors.window_noise"></a>
 
-#### window\_noise
+#### [window\_noise](./engine/monitors.py#L142)
 
 ```python
 def window_noise(report: FinalReport,
@@ -7046,7 +7046,7 @@ Return how noisy each watched statistic was over a replicate's window.
 
 <a id="fim.engine.monitors.replicate_monitor"></a>
 
-#### replicate\_monitor
+#### [replicate\_monitor](./engine/monitors.py#L167)
 
 ```python
 def replicate_monitor(params: SimulationParams) -> ConvergenceMonitor | None
@@ -7070,7 +7070,7 @@ Returns ``None`` whenever `SimulationParams.stop_batch_early` is off
 
 <a id="fim.engine.monitors.replicate_stopping_values"></a>
 
-#### replicate\_stopping\_values
+#### [replicate\_stopping\_values](./engine/monitors.py#L200)
 
 ```python
 def replicate_stopping_values(result: RunResult,
@@ -7099,13 +7099,13 @@ same sample the summary will report, never a different one.
 
 <a id="fim.engine.records"></a>
 
-# fim.engine.records
+# [fim.engine.records](./engine/records.py#L1)
 
 Result records and shared aliases for the engine.
 
 <a id="fim.engine.records.FinalReport"></a>
 
-## FinalReport Objects
+## [FinalReport Objects](./engine/records.py#L20)
 
 ```python
 class FinalReport(TypedDict)
@@ -7243,7 +7243,7 @@ Fields:
 
 <a id="fim.engine.records.RunResult"></a>
 
-## RunResult Objects
+## [RunResult Objects](./engine/records.py#L186)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -7334,7 +7334,7 @@ Fields:
 
 <a id="fim.engine.records.format_timestamp"></a>
 
-#### format\_timestamp
+#### [format\_timestamp](./engine/records.py#L301)
 
 ```python
 def format_timestamp(value: datetime) -> str
@@ -7354,7 +7354,7 @@ misinterpreted as if they shared a timezone when they do not.
 
 <a id="fim.engine.records.utc_now"></a>
 
-#### utc\_now
+#### [utc\_now](./engine/records.py#L319)
 
 ```python
 def utc_now() -> datetime
@@ -7373,13 +7373,13 @@ check exists to accept.
 
 <a id="fim.engine.report"></a>
 
-# fim.engine.report
+# [fim.engine.report](./engine/report.py#L1)
 
 The final report of a run and report-level statistic access.
 
 <a id="fim.engine.report.window_statistics_payload"></a>
 
-#### window\_statistics\_payload
+#### [window\_statistics\_payload](./engine/report.py#L26)
 
 ```python
 def window_statistics_payload(
@@ -7413,7 +7413,7 @@ same evidence window, from the monitor's window start to the stop (design
 
 <a id="fim.engine.report.report_for_state"></a>
 
-#### report\_for\_state
+#### [report\_for\_state](./engine/report.py#L117)
 
 ```python
 def report_for_state(
@@ -7489,7 +7489,7 @@ that produced it, not a whole run in progress.
 
 <a id="fim.engine.report.replicate_statistic"></a>
 
-#### replicate\_statistic
+#### [replicate\_statistic](./engine/report.py#L257)
 
 ```python
 def replicate_statistic(report: FinalReport, statistic: str) -> float | None
@@ -7518,7 +7518,7 @@ progress report), contributes its final-state value.
 
 <a id="fim.engine.report.final_report_statistic"></a>
 
-#### final\_report\_statistic
+#### [final\_report\_statistic](./engine/report.py#L285)
 
 ```python
 def final_report_statistic(report: FinalReport,
@@ -7536,7 +7536,7 @@ Python's own generic `KeyError`.
 
 <a id="fim.engine.report.report_statistic"></a>
 
-#### report\_statistic
+#### [report\_statistic](./engine/report.py#L301)
 
 ```python
 def report_statistic(report: FinalReport, statistic: str) -> float | None
@@ -7566,13 +7566,13 @@ The public form of the engine's own lookup, for callers that iterate
 
 <a id="fim.engine.summary"></a>
 
-# fim.engine.summary
+# [fim.engine.summary](./engine/summary.py#L1)
 
 Across-replicate summaries and pooled histories.
 
 <a id="fim.engine.summary.reports_summary"></a>
 
-#### reports\_summary
+#### [reports\_summary](./engine/summary.py#L24)
 
 ```python
 def reports_summary(
@@ -7648,7 +7648,7 @@ at all" case too.
 
 <a id="fim.engine.summary.replicate_summary"></a>
 
-#### replicate\_summary
+#### [replicate\_summary](./engine/summary.py#L179)
 
 ```python
 def replicate_summary(
@@ -7714,7 +7714,7 @@ docstring for why it does not raise this same case itself).
 
 <a id="fim.engine.summary.pooled_convergence_histories"></a>
 
-#### pooled\_convergence\_histories
+#### [pooled\_convergence\_histories](./engine/summary.py#L243)
 
 ```python
 def pooled_convergence_histories(
@@ -7806,7 +7806,7 @@ future version place these correctly instead of dropping them.
 
 <a id="fim.engine.summary.pooled_convergence_histories_from_pairs"></a>
 
-#### pooled\_convergence\_histories\_from\_pairs
+#### [pooled\_convergence\_histories\_from\_pairs](./engine/summary.py#L333)
 
 ```python
 def pooled_convergence_histories_from_pairs(
@@ -7845,7 +7845,7 @@ exactly this pair and nothing else a `RunResult` would carry.
 
 <a id="fim.engine.summary.bootstrap_replicate_summary"></a>
 
-#### bootstrap\_replicate\_summary
+#### [bootstrap\_replicate\_summary](./engine/summary.py#L494)
 
 ```python
 def bootstrap_replicate_summary(
@@ -7918,13 +7918,13 @@ fundamentally different treatment, not as a general replacement.
 
 <a id="fim.engine.tracking"></a>
 
-# fim.engine.tracking
+# [fim.engine.tracking](./engine/tracking.py#L1)
 
 Per-generation statistic extraction for the convergence monitor.
 
 <a id="fim.engine.tracking.identity_statistics"></a>
 
-#### identity\_statistics
+#### [identity\_statistics](./engine/tracking.py#L31)
 
 ```python
 def identity_statistics(
@@ -7944,7 +7944,7 @@ Describe `D` and `G_ST` as functions of `H_S` and `H_T` for `params`.
 
 <a id="fim.engine.tracking.identity_statistics_for"></a>
 
-#### identity\_statistics\_for
+#### [identity\_statistics\_for](./engine/tracking.py#L43)
 
 ```python
 def identity_statistics_for(deme_count: int) -> dict[str, IdentityStatistic]
@@ -7969,7 +7969,7 @@ standard error; a test checks them against finite differences.
 
 <a id="fim.engine.tracking.derived_fields"></a>
 
-#### derived\_fields
+#### [derived\_fields](./engine/tracking.py#L100)
 
 ```python
 def derived_fields(h_s: float, h_t: float, deme_count: int) -> _DerivedFields
@@ -7979,7 +7979,7 @@ Return `derived_differentiation` for the pooled heterozygosities.
 
 <a id="fim.engine.tracking.nei_all_demes_fields"></a>
 
-#### nei\_all\_demes\_fields
+#### [nei\_all\_demes\_fields](./engine/tracking.py#L128)
 
 ```python
 def nei_all_demes_fields(state: ModelState) -> _NeiAllDemesFields
@@ -7994,7 +7994,7 @@ beside it is always finite.
 
 <a id="fim.engine.tracking.ALWAYS_TRACKED_STATISTICS"></a>
 
-#### ALWAYS\_TRACKED\_STATISTICS
+#### [ALWAYS\_TRACKED\_STATISTICS](./engine/tracking.py#L168)
 
 Derived from `fim.statistics.catalog` (`history == "always"`).
 
@@ -8031,13 +8031,13 @@ for those two as well (see `_statistics_to_compute`, below).
 
 <a id="fim.engine.tracking.UNBOUNDED_STATISTICS"></a>
 
-#### UNBOUNDED\_STATISTICS
+#### [UNBOUNDED\_STATISTICS](./engine/tracking.py#L207)
 
 Statistics with an open end, judged by a relative precision by default.
 
 <a id="fim.engine.tracking.extra_tracked_statistics"></a>
 
-#### extra\_tracked\_statistics
+#### [extra\_tracked\_statistics](./engine/tracking.py#L285)
 
 ```python
 def extra_tracked_statistics(params: SimulationParams) -> tuple[str, ...]
@@ -8060,7 +8060,7 @@ return keys.
 
 <a id="fim.engine.tracking.convergence_values"></a>
 
-#### convergence\_values
+#### [convergence\_values](./engine/tracking.py#L308)
 
 ```python
 def convergence_values(state: ModelState,
@@ -8110,7 +8110,7 @@ way (`pooled_g_st_and_d`'s own docstring).
 
 <a id="fim.engine.tracking.tracked_statistic_values"></a>
 
-#### tracked\_statistic\_values
+#### [tracked\_statistic\_values](./engine/tracking.py#L365)
 
 ```python
 def tracked_statistic_values(state: ModelState,
@@ -8146,7 +8146,7 @@ would diverge the first time either changed.
 
 <a id="fim.engine.tracking.convergence_values_vectorized"></a>
 
-#### convergence\_values\_vectorized
+#### [convergence\_values\_vectorized](./engine/tracking.py#L396)
 
 ```python
 def convergence_values_vectorized(
@@ -8184,7 +8184,7 @@ Python implementation raises its own, specific error.
 
 <a id="fim.engine.tracking.pair_statistic_values"></a>
 
-#### pair\_statistic\_values
+#### [pair\_statistic\_values](./engine/tracking.py#L647)
 
 ```python
 def pair_statistic_values(state: ModelState, first: int,
@@ -8219,7 +8219,7 @@ that deme is fixed).
 
 <a id="fim.engine.tracking.history_free_statistic_values"></a>
 
-#### history\_free\_statistic\_values
+#### [history\_free\_statistic\_values](./engine/tracking.py#L717)
 
 ```python
 def history_free_statistic_values(
@@ -8247,7 +8247,7 @@ expensive statistic. `Gs` and `Gd` equal `report_for_state`'s.
 
 <a id="fim.engine.tracking.mean"></a>
 
-#### mean
+#### [mean](./engine/tracking.py#L757)
 
 ```python
 def mean(values: Sequence[float]) -> float
@@ -8265,7 +8265,7 @@ no real cost to always using the more careful version.
 
 <a id="fim.engine.tracking.mean_g_st_across_loci"></a>
 
-#### mean\_g\_st\_across\_loci
+#### [mean\_g\_st\_across\_loci](./engine/tracking.py#L773)
 
 ```python
 def mean_g_st_across_loci(
@@ -8287,7 +8287,7 @@ applies when building the published cross-replicate sample.
 
 <a id="fim.engine.tracking.pooled_g_st_and_d"></a>
 
-#### pooled\_g\_st\_and\_d
+#### [pooled\_g\_st\_and\_d](./engine/tracking.py#L795)
 
 ```python
 def pooled_g_st_and_d(
@@ -8319,7 +8319,7 @@ a plain per-locus mean regardless, computed by the caller.
 
 <a id="fim.engine.tracking.statistics_for_locus"></a>
 
-#### statistics\_for\_locus
+#### [statistics\_for\_locus](./engine/tracking.py#L835)
 
 ```python
 def statistics_for_locus(
@@ -8361,7 +8361,7 @@ contract).
 
 <a id="fim.errors"></a>
 
-# fim.errors
+# [fim.errors](./errors.py#L1)
 
 Exceptions raised by `fim` for problems a caller can correct.
 
@@ -8371,7 +8371,7 @@ Python convention that a bad argument raises `ValueError`.
 
 <a id="fim.errors.FimError"></a>
 
-## FimError Objects
+## [FimError Objects](./errors.py#L18)
 
 ```python
 class FimError(Exception)
@@ -8381,7 +8381,7 @@ Root of every exception `fim` raises deliberately.
 
 <a id="fim.errors.ConfigurationError"></a>
 
-## ConfigurationError Objects
+## [ConfigurationError Objects](./errors.py#L22)
 
 ```python
 class ConfigurationError(FimError, ValueError)
@@ -8394,7 +8394,7 @@ The message names the offending field by its path, for example
 
 <a id="fim.errors.UnsupportedError"></a>
 
-## UnsupportedError Objects
+## [UnsupportedError Objects](./errors.py#L30)
 
 ```python
 class UnsupportedError(FimError, ValueError)
@@ -8407,7 +8407,7 @@ too large for the machine.
 
 <a id="fim.errors.StoreError"></a>
 
-## StoreError Objects
+## [StoreError Objects](./errors.py#L38)
 
 ```python
 class StoreError(FimError)
@@ -8420,7 +8420,7 @@ read-only run.
 
 <a id="fim.examples"></a>
 
-# fim.examples
+# [fim.examples](./examples/__init__.py#L1)
 
 The shipped worked examples and the run classes that group them.
 
@@ -8435,13 +8435,13 @@ another.
 
 <a id="fim.examples.artifacts"></a>
 
-# fim.examples.artifacts
+# [fim.examples.artifacts](./examples/artifacts.py#L1)
 
 Lossless, bounded-size storage of complete worked-example run artifacts.
 
 <a id="fim.examples.artifacts.archive_target"></a>
 
-#### archive\_target
+#### [archive\_target](./examples/artifacts.py#L36)
 
 ```python
 def archive_target(name: str) -> str | None
@@ -8451,7 +8451,7 @@ Return the raw artifact name for a recognized gzip part, or None.
 
 <a id="fim.examples.artifacts.output_files"></a>
 
-#### output\_files
+#### [output\_files](./examples/artifacts.py#L53)
 
 ```python
 def output_files(directory: Path, *, batch: bool = True) -> list[Path]
@@ -8461,7 +8461,7 @@ List recognized raw artifacts and archive parts, including replicates.
 
 <a id="fim.examples.artifacts._PartWriter"></a>
 
-## \_PartWriter Objects
+## [\_PartWriter Objects](./examples/artifacts.py#L68)
 
 ```python
 class _PartWriter(io.RawIOBase)
@@ -8471,7 +8471,7 @@ Split one gzip stream into files no larger than the requested limit.
 
 <a id="fim.examples.artifacts._PartWriter.write"></a>
 
-#### write
+#### [write](./examples/artifacts.py#L79)
 
 ```python
 def write(data: Buffer) -> int
@@ -8481,7 +8481,7 @@ Write compressed bytes, rotating files at the exact size limit.
 
 <a id="fim.examples.artifacts._PartWriter.close"></a>
 
-#### close
+#### [close](./examples/artifacts.py#L100)
 
 ```python
 def close() -> None
@@ -8491,7 +8491,7 @@ Close the current part, including when compression fails.
 
 <a id="fim.examples.artifacts._PartReader"></a>
 
-## \_PartReader Objects
+## [\_PartReader Objects](./examples/artifacts.py#L112)
 
 ```python
 class _PartReader(io.RawIOBase)
@@ -8501,7 +8501,7 @@ Read ordered parts as one stream without joining them in memory.
 
 <a id="fim.examples.artifacts._PartReader.readable"></a>
 
-#### readable
+#### [readable](./examples/artifacts.py#L120)
 
 ```python
 def readable() -> bool
@@ -8511,7 +8511,7 @@ Tell BufferedReader that this stream supports reads.
 
 <a id="fim.examples.artifacts._PartReader.readinto"></a>
 
-#### readinto
+#### [readinto](./examples/artifacts.py#L124)
 
 ```python
 def readinto(buffer: Buffer) -> int
@@ -8521,7 +8521,7 @@ Read from the current part, advancing only at its end.
 
 <a id="fim.examples.artifacts._PartReader.close"></a>
 
-#### close
+#### [close](./examples/artifacts.py#L138)
 
 ```python
 def close() -> None
@@ -8531,7 +8531,7 @@ Close the current part if decoding stops before the end.
 
 <a id="fim.examples.artifacts.copy_outputs"></a>
 
-#### copy\_outputs
+#### [copy\_outputs](./examples/artifacts.py#L145)
 
 ```python
 def copy_outputs(source: Path,
@@ -8544,7 +8544,7 @@ Copy all results, compressing JSONL losslessly into Git-sized parts.
 
 <a id="fim.examples.artifacts.materialize_outputs"></a>
 
-#### materialize\_outputs
+#### [materialize\_outputs](./examples/artifacts.py#L175)
 
 ```python
 def materialize_outputs(directory: Path) -> list[Path]
@@ -8558,7 +8558,7 @@ Missing, reordered, corrupt, or truncated parts fail explicitly.
 
 <a id="fim.examples.classes"></a>
 
-# fim.examples.classes
+# [fim.examples.classes](./examples/classes.py#L1)
 
 Read and validate the run-class tree, `doc/examples/classes.yaml`.
 
@@ -8600,7 +8600,7 @@ build carries no `doc/` directory, so `load_default_class_tree` returns
 
 <a id="fim.examples.classes.RunClass"></a>
 
-## RunClass Objects
+## [RunClass Objects](./examples/classes.py#L66)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8619,7 +8619,7 @@ One class in the tree: its ID, display text, and child classes.
 
 <a id="fim.examples.classes.RunClass.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./examples/classes.py#L82)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -8629,7 +8629,7 @@ Return a JSON-serializable mapping in the file's own key names.
 
 <a id="fim.examples.classes.ClassTree"></a>
 
-## ClassTree Objects
+## [ClassTree Objects](./examples/classes.py#L93)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8644,7 +8644,7 @@ The whole validated class tree, top-level classes in display order.
 
 <a id="fim.examples.classes.ClassTree.__contains__"></a>
 
-#### \_\_contains\_\_
+#### [\_\_contains\_\_](./examples/classes.py#L102)
 
 ```python
 def __contains__(class_id: object) -> bool
@@ -8654,7 +8654,7 @@ Return whether `class_id` names a class anywhere in the tree.
 
 <a id="fim.examples.classes.ClassTree.__iter__"></a>
 
-#### \_\_iter\_\_
+#### [\_\_iter\_\_](./examples/classes.py#L106)
 
 ```python
 def __iter__() -> Iterator[RunClass]
@@ -8664,7 +8664,7 @@ Yield every class, depth first: each parent, then its children.
 
 <a id="fim.examples.classes.ClassTree.get"></a>
 
-#### get
+#### [get](./examples/classes.py#L112)
 
 ```python
 def get(class_id: str) -> RunClass | None
@@ -8683,7 +8683,7 @@ Return the class with this ID, or `None` when there is none.
 
 <a id="fim.examples.classes.ClassTree.ids"></a>
 
-#### ids
+#### [ids](./examples/classes.py#L123)
 
 ```python
 def ids() -> tuple[str, ...]
@@ -8693,7 +8693,7 @@ Return every class ID in display order (see `__iter__`).
 
 <a id="fim.examples.classes.ClassTree.parent_of"></a>
 
-#### parent\_of
+#### [parent\_of](./examples/classes.py#L127)
 
 ```python
 def parent_of(class_id: str) -> RunClass | None
@@ -8713,7 +8713,7 @@ Return the parent of a child class, or `None` for a top-level one.
 
 <a id="fim.examples.classes.ClassTree.to_list"></a>
 
-#### to\_list
+#### [to\_list](./examples/classes.py#L146)
 
 ```python
 def to_list() -> list[dict[str, object]]
@@ -8723,7 +8723,7 @@ Return the tree as JSON-serializable data, in the file's own shape.
 
 <a id="fim.examples.classes.default_classes_path"></a>
 
-#### default\_classes\_path
+#### [default\_classes\_path](./examples/classes.py#L151)
 
 ```python
 def default_classes_path() -> Path
@@ -8742,7 +8742,7 @@ checkout root, then down to `doc/examples/classes.yaml`.
 
 <a id="fim.examples.classes.is_valid_class_id"></a>
 
-#### is\_valid\_class\_id
+#### [is\_valid\_class\_id](./examples/classes.py#L166)
 
 ```python
 def is_valid_class_id(text: object) -> TypeGuard[str]
@@ -8763,7 +8763,7 @@ Return whether `text` is a lowercase kebab-case class ID.
 
 <a id="fim.examples.classes.load_default_class_tree"></a>
 
-#### load\_default\_class\_tree
+#### [load\_default\_class\_tree](./examples/classes.py#L180)
 
 ```python
 def load_default_class_tree() -> ClassTree | None
@@ -8784,7 +8784,7 @@ Read the checkout's class file, or return `None` when it is absent.
 
 <a id="fim.examples.classes.parse_class_tree"></a>
 
-#### parse\_class\_tree
+#### [parse\_class\_tree](./examples/classes.py#L198)
 
 ```python
 def parse_class_tree(payload: object) -> ClassTree
@@ -8809,7 +8809,7 @@ Validate a parsed class file and build its tree.
 
 <a id="fim.examples.classes.read_class_tree"></a>
 
-#### read\_class\_tree
+#### [read\_class\_tree](./examples/classes.py#L231)
 
 ```python
 def read_class_tree(path: Path | str) -> ClassTree
@@ -8834,7 +8834,7 @@ Read and validate one class file.
 
 <a id="fim.examples.classes.validate_run_class"></a>
 
-#### validate\_run\_class
+#### [validate\_run\_class](./examples/classes.py#L256)
 
 ```python
 def validate_run_class(class_id: object,
@@ -8874,7 +8874,7 @@ both cases.
 
 <a id="fim.examples.seed"></a>
 
-# fim.examples.seed
+# [fim.examples.seed](./examples/seed.py#L1)
 
 Seed the bundled worked examples into the results folder as read-only runs.
 
@@ -8918,7 +8918,7 @@ one write path that may create read-only groupings.
 
 <a id="fim.examples.seed.BundledClass"></a>
 
-## BundledClass Objects
+## [BundledClass Objects](./examples/seed.py#L115)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8936,7 +8936,7 @@ One class in the bundle's tree.
 
 <a id="fim.examples.seed.BundledExample"></a>
 
-## BundledExample Objects
+## [BundledExample Objects](./examples/seed.py#L132)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8958,7 +8958,7 @@ One example in the bundle.
 
 <a id="fim.examples.seed.BundledExample.has_saved_result"></a>
 
-#### has\_saved\_result
+#### [has\_saved\_result](./examples/seed.py#L154)
 
 ```python
 @property
@@ -8969,7 +8969,7 @@ Return whether the bundle carries this example's saved run.
 
 <a id="fim.examples.seed.ExamplesBundle"></a>
 
-## ExamplesBundle Objects
+## [ExamplesBundle Objects](./examples/seed.py#L160)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8986,7 +8986,7 @@ A parsed examples bundle.
 
 <a id="fim.examples.seed.SeedReport"></a>
 
-## SeedReport Objects
+## [SeedReport Objects](./examples/seed.py#L175)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -9006,7 +9006,7 @@ What one `seed_examples` call found and did.
 
 <a id="fim.examples.seed.SeedReport.changed"></a>
 
-#### changed
+#### [changed](./examples/seed.py#L193)
 
 ```python
 @property
@@ -9017,7 +9017,7 @@ Return whether anything on disk changed.
 
 <a id="fim.examples.seed.example_run_directory"></a>
 
-#### example\_run\_directory
+#### [example\_run\_directory](./examples/seed.py#L198)
 
 ```python
 def example_run_directory(example_id: str,
@@ -9039,7 +9039,7 @@ Return where a seeded example's run lives.
 
 <a id="fim.examples.seed.example_study_id"></a>
 
-#### example\_study\_id
+#### [example\_study\_id](./examples/seed.py#L212)
 
 ```python
 def example_study_id(class_id: str) -> str
@@ -9049,7 +9049,7 @@ Return the fixed id of the read-only Study for one class.
 
 <a id="fim.examples.seed.read_bundle"></a>
 
-#### read\_bundle
+#### [read\_bundle](./examples/seed.py#L217)
 
 ```python
 def read_bundle(bundle: Path) -> ExamplesBundle | None
@@ -9075,7 +9075,7 @@ Read an examples bundle's `catalog.json`.
 
 <a id="fim.examples.seed.seed_examples"></a>
 
-#### seed\_examples
+#### [seed\_examples](./examples/seed.py#L246)
 
 ```python
 def seed_examples(results: Path | None = None,
@@ -9109,7 +9109,7 @@ and confined to its own items.
 
 <a id="fim.execution"></a>
 
-# fim.execution
+# [fim.execution](./execution.py#L1)
 
 Resumable execution sessions for one scalar replicate.
 
@@ -9141,7 +9141,7 @@ publishes a capture under an execution lease.
 
 <a id="fim.execution.SESSION_CHECKPOINT_KIND"></a>
 
-#### SESSION\_CHECKPOINT\_KIND
+#### [SESSION\_CHECKPOINT\_KIND](./execution.py#L100)
 
 The `kind` a session's checkpoint payload carries.
 
@@ -9150,7 +9150,7 @@ covers every backend a session runs, the vector backend included.
 
 <a id="fim.execution.SESSION_CHECKPOINT_VERSION"></a>
 
-#### SESSION\_CHECKPOINT\_VERSION
+#### [SESSION\_CHECKPOINT\_VERSION](./execution.py#L107)
 
 Version of the session payload layout this build writes.
 
@@ -9160,25 +9160,25 @@ Version 1 payloads never have a block.
 
 <a id="fim.execution.READABLE_SESSION_CHECKPOINT_VERSIONS"></a>
 
-#### READABLE\_SESSION\_CHECKPOINT\_VERSIONS
+#### [READABLE\_SESSION\_CHECKPOINT\_VERSIONS](./execution.py#L115)
 
 Payload versions this build restores.
 
 <a id="fim.execution.EQUILIBRATION_HISTORY"></a>
 
-#### EQUILIBRATION\_HISTORY
+#### [EQUILIBRATION\_HISTORY](./execution.py#L118)
 
 Array holding the ancestral phase's `H_S` history, when there was one.
 
 <a id="fim.execution.VECTOR_PREFIX"></a>
 
-#### VECTOR\_PREFIX
+#### [VECTOR\_PREFIX](./execution.py#L121)
 
 Prefix of the vector block's arrays inside a checkpoint.
 
 <a id="fim.execution.UnsupportedSessionError"></a>
 
-## UnsupportedSessionError Objects
+## [UnsupportedSessionError Objects](./execution.py#L125)
 
 ```python
 class UnsupportedSessionError(UnsupportedError)
@@ -9188,7 +9188,7 @@ Raised when a configuration cannot run as a resumable scalar session.
 
 <a id="fim.execution.SessionRestoreError"></a>
 
-## SessionRestoreError Objects
+## [SessionRestoreError Objects](./execution.py#L129)
 
 ```python
 class SessionRestoreError(StoreError, ValueError)
@@ -9198,7 +9198,7 @@ Raised when a checkpoint cannot continue the given configuration.
 
 <a id="fim.execution.SessionCapture"></a>
 
-## SessionCapture Objects
+## [SessionCapture Objects](./execution.py#L134)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -9218,7 +9218,7 @@ Everything a checkpoint of a scalar session holds.
 
 <a id="fim.execution.ScalarSession"></a>
 
-## ScalarSession Objects
+## [ScalarSession Objects](./execution.py#L152)
 
 ```python
 class ScalarSession()
@@ -9232,7 +9232,7 @@ that closes it on exit.
 
 <a id="fim.execution.ScalarSession.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./execution.py#L160)
 
 ```python
 def __init__(lane: ReplicaLane, store: TrajectoryStore, clock: Clock,
@@ -9251,7 +9251,7 @@ Wrap an already-built lane; use `create` instead of calling this.
 
 <a id="fim.execution.ScalarSession.__enter__"></a>
 
-#### \_\_enter\_\_
+#### [\_\_enter\_\_](./execution.py#L190)
 
 ```python
 def __enter__() -> ScalarSession
@@ -9261,7 +9261,7 @@ Return this session for a `with` block.
 
 <a id="fim.execution.ScalarSession.__exit__"></a>
 
-#### \_\_exit\_\_
+#### [\_\_exit\_\_](./execution.py#L194)
 
 ```python
 def __exit__(*_: object) -> None
@@ -9271,7 +9271,7 @@ Close the session's store, whether or not it finished.
 
 <a id="fim.execution.ScalarSession.create"></a>
 
-#### create
+#### [create](./execution.py#L199)
 
 ```python
 @classmethod
@@ -9307,7 +9307,7 @@ Build generation zero of a single replicate and persist it.
 
 <a id="fim.execution.ScalarSession.restore"></a>
 
-#### restore
+#### [restore](./execution.py#L235)
 
 ```python
 @classmethod
@@ -9349,7 +9349,7 @@ they are: ``auto`` is never resolved again on resume.
 
 <a id="fim.execution.ScalarSession.generation"></a>
 
-#### generation
+#### [generation](./execution.py#L290)
 
 ```python
 @property
@@ -9360,7 +9360,7 @@ The last generation computed, persisted and recorded.
 
 <a id="fim.execution.ScalarSession.lane"></a>
 
-#### lane
+#### [lane](./execution.py#L295)
 
 ```python
 @property
@@ -9371,7 +9371,7 @@ The working state; read-only use only (snapshots, diagnostics).
 
 <a id="fim.execution.ScalarSession.run_id"></a>
 
-#### run\_id
+#### [run\_id](./execution.py#L300)
 
 ```python
 @property
@@ -9382,7 +9382,7 @@ The scientific run identifier.
 
 <a id="fim.execution.ScalarSession.stopped"></a>
 
-#### stopped
+#### [stopped](./execution.py#L305)
 
 ```python
 @property
@@ -9393,7 +9393,7 @@ Whether the convergence monitor has stopped the run.
 
 <a id="fim.execution.ScalarSession.store"></a>
 
-#### store
+#### [store](./execution.py#L310)
 
 ```python
 @property
@@ -9404,7 +9404,7 @@ The trajectory store generations are persisted to.
 
 <a id="fim.execution.ScalarSession.advance"></a>
 
-#### advance
+#### [advance](./execution.py#L314)
 
 ```python
 def advance(generations: int | None = None) -> bool
@@ -9434,7 +9434,7 @@ session is again at a safe point.
 
 <a id="fim.execution.ScalarSession.capture"></a>
 
-#### capture
+#### [capture](./execution.py#L342)
 
 ```python
 def capture() -> SessionCapture
@@ -9458,7 +9458,7 @@ first, so the positions recorded name data already on disk.
 
 <a id="fim.execution.ScalarSession.checkpoint"></a>
 
-#### checkpoint
+#### [checkpoint](./execution.py#L373)
 
 ```python
 def checkpoint(lease: ExecutionLease,
@@ -9486,7 +9486,7 @@ Capture the session and publish it as the object's latest checkpoint.
 
 <a id="fim.execution.ScalarSession.close"></a>
 
-#### close
+#### [close](./execution.py#L399)
 
 ```python
 def close() -> None
@@ -9496,7 +9496,7 @@ Release the store's open files; idempotent.
 
 <a id="fim.execution.ScalarSession.finalize"></a>
 
-#### finalize
+#### [finalize](./execution.py#L405)
 
 ```python
 def finalize() -> RunResult
@@ -9517,7 +9517,7 @@ Build the run's result once it has stopped, and close the store.
 
 <a id="fim.execution.check_session_support"></a>
 
-#### check\_session\_support
+#### [check\_session\_support](./execution.py#L443)
 
 ```python
 def check_session_support(params: SimulationParams) -> SessionBackend
@@ -9547,7 +9547,7 @@ configuration is reported without recording a failed attempt.
 
 <a id="fim.execution.check_backend_buildable"></a>
 
-#### check\_backend\_buildable
+#### [check\_backend\_buildable](./execution.py#L471)
 
 ```python
 def check_backend_buildable(params: SimulationParams,
@@ -9568,7 +9568,7 @@ Refuse a backend the blocking call itself would refuse for `params`.
 
 <a id="fim.execution.export_lane"></a>
 
-#### export\_lane
+#### [export\_lane](./execution.py#L498)
 
 ```python
 def export_lane(
@@ -9601,7 +9601,7 @@ log) first, so the positions recorded name data already on disk.
 
 <a id="fim.execution.resolve_session_backend"></a>
 
-#### resolve\_session\_backend
+#### [resolve\_session\_backend](./execution.py#L572)
 
 ```python
 def resolve_session_backend(params: SimulationParams) -> SessionBackend
@@ -9629,7 +9629,7 @@ blocking call would.
 
 <a id="fim.execution.check_payload_identity"></a>
 
-#### check\_payload\_identity
+#### [check\_payload\_identity](./execution.py#L604)
 
 ```python
 def check_payload_identity(
@@ -9663,7 +9663,7 @@ Check a payload is a session's of `kind`, taken under `params`.
 
 <a id="fim.execution.restore_lane"></a>
 
-#### restore\_lane
+#### [restore\_lane](./execution.py#L742)
 
 ```python
 def restore_lane(params: SimulationParams,
@@ -9710,7 +9710,7 @@ the recorded positions.
 
 <a id="fim.group_lifecycle"></a>
 
-# fim.group\_lifecycle
+# [fim.group\_lifecycle](./group_lifecycle.py#L1)
 
 Close and reopen Studies and Experiments, and summarize their Runs.
 
@@ -9728,13 +9728,13 @@ it never stops, pauses, or freezes a Run.
 
 <a id="fim.group_lifecycle.LEGACY_STATE"></a>
 
-#### LEGACY\_STATE
+#### [LEGACY\_STATE](./group_lifecycle.py#L45)
 
 The state a legacy run directory (one with no lifecycle record) reads.
 
 <a id="fim.group_lifecycle.GroupBusyError"></a>
 
-## GroupBusyError Objects
+## [GroupBusyError Objects](./group_lifecycle.py#L52)
 
 ```python
 class GroupBusyError(FimError, ValueError)
@@ -9747,7 +9747,7 @@ refused group edit.
 
 <a id="fim.group_lifecycle.GroupSummary"></a>
 
-## GroupSummary Objects
+## [GroupSummary Objects](./group_lifecycle.py#L61)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -9769,7 +9769,7 @@ A group's execution summary, derived from its distinct Runs.
 
 <a id="fim.group_lifecycle.GroupSummary.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./group_lifecycle.py#L80)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -9779,7 +9779,7 @@ Return the JSON-ready summary, states in lifecycle order.
 
 <a id="fim.group_lifecycle.close_experiment"></a>
 
-#### close\_experiment
+#### [close\_experiment](./group_lifecycle.py#L93)
 
 ```python
 def close_experiment(experiment_id: str,
@@ -9799,7 +9799,7 @@ Its Studies stay open or closed exactly as they were.
 
 <a id="fim.group_lifecycle.close_study"></a>
 
-#### close\_study
+#### [close\_study](./group_lifecycle.py#L112)
 
 ```python
 def close_study(study_id: str,
@@ -9817,7 +9817,7 @@ Close a Study once none of its Runs is active.
 
 <a id="fim.group_lifecycle.effective_state"></a>
 
-#### effective\_state
+#### [effective\_state](./group_lifecycle.py#L125)
 
 ```python
 def effective_state(run_object: RunObject,
@@ -9831,7 +9831,7 @@ and reads `interrupted` without being reconciled here.
 
 <a id="fim.group_lifecycle.experiment_summary"></a>
 
-#### experiment\_summary
+#### [experiment\_summary](./group_lifecycle.py#L139)
 
 ```python
 def experiment_summary(experiment: ExperimentManifest,
@@ -9845,7 +9845,7 @@ A Study listed by the Experiment that no longer exists is skipped.
 
 <a id="fim.group_lifecycle.reopen_experiment"></a>
 
-#### reopen\_experiment
+#### [reopen\_experiment](./group_lifecycle.py#L155)
 
 ```python
 def reopen_experiment(experiment_id: str,
@@ -9862,7 +9862,7 @@ Reopen an Experiment so its organization can change again.
 
 <a id="fim.group_lifecycle.reopen_study"></a>
 
-#### reopen\_study
+#### [reopen\_study](./group_lifecycle.py#L167)
 
 ```python
 def reopen_study(study_id: str,
@@ -9879,7 +9879,7 @@ Reopen a Study so its membership can change again.
 
 <a id="fim.group_lifecycle.study_summary"></a>
 
-#### study\_summary
+#### [study\_summary](./group_lifecycle.py#L177)
 
 ```python
 def study_summary(study: StudyManifest,
@@ -9895,7 +9895,7 @@ cannot be read is left out rather than guessed at.
 
 <a id="fim.gui"></a>
 
-# fim.gui
+# [fim.gui](./gui/__init__.py#L1)
 
 Desktop GUI front end: a pywebview consumer of the existing simulator engine.
 
@@ -9912,7 +9912,7 @@ this package sits relative to the rest of the project.
 
 <a id="fim.gui.animation"></a>
 
-# fim.gui.animation
+# [fim.gui.animation](./gui/animation.py#L1)
 
 Sample animation frames from a persisted trajectory as raw scatter
 coordinates, not rendered images (`doc/fim-gui-design.md` §8).
@@ -9943,7 +9943,7 @@ the caller, rather than re-verifying it a second time.
 
 <a id="fim.gui.animation.AnimationFrame"></a>
 
-## AnimationFrame Objects
+## [AnimationFrame Objects](./gui/animation.py#L55)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -9978,7 +9978,7 @@ One sampled animation frame's raw scatter coordinates and supplemental payloads.
 
 <a id="fim.gui.animation.pre_render_frames"></a>
 
-#### pre\_render\_frames
+#### [pre\_render\_frames](./gui/animation.py#L89)
 
 ```python
 def pre_render_frames(
@@ -10009,7 +10009,7 @@ Sample up to `max_frames` frames' worth of coordinates from a trajectory.
 
 <a id="fim.gui.animation.pre_render_batch_frames"></a>
 
-#### pre\_render\_batch\_frames
+#### [pre\_render\_batch\_frames](./gui/animation.py#L136)
 
 ```python
 def pre_render_batch_frames(
@@ -10062,7 +10062,7 @@ was a real, reported defect for the band.
 
 <a id="fim.gui.animation.select_sample_generations"></a>
 
-#### select\_sample\_generations
+#### [select\_sample\_generations](./gui/animation.py#L236)
 
 ```python
 def select_sample_generations(
@@ -10095,7 +10095,7 @@ Return at most `max_frames` generation numbers, evenly spaced.
 
 <a id="fim.gui.app"></a>
 
-# fim.gui.app
+# [fim.gui.app](./gui/app.py#L1)
 
 pywebview bootstrap and `Api` bridge — the GUI's own entry point
 (`doc/fim-gui-design.md` §4).
@@ -10129,7 +10129,7 @@ after the `await` resolves.
 
 <a id="fim.gui.app.format_statistic"></a>
 
-#### format\_statistic
+#### [format\_statistic](./gui/app.py#L486)
 
 ```python
 def format_statistic(value: float | None,
@@ -10153,7 +10153,7 @@ six regardless of that configurable value's own default.
 
 <a id="fim.gui.app.INFINITE_DISTANCE_TEXT"></a>
 
-#### INFINITE\_DISTANCE\_TEXT
+#### [INFINITE\_DISTANCE\_TEXT](./gui/app.py#L507)
 
 How an infinite Nei distance (no allele shared) reaches the page.
 
@@ -10163,7 +10163,7 @@ spells "undefined".
 
 <a id="fim.gui.app.format_report_statistic"></a>
 
-#### format\_report\_statistic
+#### [format\_report\_statistic](./gui/app.py#L515)
 
 ```python
 def format_report_statistic(values: Mapping[str, object], name: str,
@@ -10190,7 +10190,7 @@ is present but `None` is infinite and shows as `INFINITE_DISTANCE_TEXT`.
 
 <a id="fim.gui.app.FULL_PRECISION_DIGITS"></a>
 
-#### FULL\_PRECISION\_DIGITS
+#### [FULL\_PRECISION\_DIGITS](./gui/app.py#L918)
 
 Significant digits that round-trip any float exactly through text.
 
@@ -10201,7 +10201,7 @@ would shift that difference by up to half a display digit.
 
 <a id="fim.gui.app.Api"></a>
 
-## Api Objects
+## [Api Objects](./gui/app.py#L1940)
 
 ```python
 class Api()
@@ -10223,7 +10223,7 @@ reimplemented here.
 
 <a id="fim.gui.app.Api.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./gui/app.py#L1956)
 
 ```python
 def __init__(*,
@@ -10293,7 +10293,7 @@ Start with no run in flight.
 
 <a id="fim.gui.app.Api.start_run"></a>
 
-#### start\_run
+#### [start\_run](./gui/app.py#L2105)
 
 ```python
 @_log_bridge_call
@@ -10381,7 +10381,7 @@ driver thread, before this method was written; see
 
 <a id="fim.gui.app.Api.can_start_run"></a>
 
-#### can\_start\_run
+#### [can\_start\_run](./gui/app.py#L2325)
 
 ```python
 @_log_bridge_call
@@ -10401,7 +10401,7 @@ then refused would wipe the view of the run still in flight.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
-#### cancel\_run
+#### [cancel\_run](./gui/app.py#L2512)
 
 ```python
 @_log_bridge_call
@@ -10417,7 +10417,7 @@ that arrives a moment after the run already finished on its own.
 
 <a id="fim.gui.app.Api.pause_run"></a>
 
-#### pause\_run
+#### [pause\_run](./gui/app.py#L2527)
 
 ```python
 @_log_bridge_call
@@ -10436,7 +10436,7 @@ pushed `fim.onRunPaused(generation)`.
 
 <a id="fim.gui.app.Api.save_run_object"></a>
 
-#### save\_run\_object
+#### [save\_run\_object](./gui/app.py#L2547)
 
 ```python
 @_log_bridge_call
@@ -10467,7 +10467,7 @@ reopened and fixed later; a valid one is saved as Planned.
 
 <a id="fim.gui.app.Api.list_run_objects"></a>
 
-#### list\_run\_objects
+#### [list\_run\_objects](./gui/app.py#L2588)
 
 ```python
 @_log_bridge_call
@@ -10483,7 +10483,7 @@ Return the Saved runs panel's rows (`object_bridge.list_rows`).
 
 <a id="fim.gui.app.Api.open_run_object"></a>
 
-#### open\_run\_object
+#### [open\_run\_object](./gui/app.py#L2602)
 
 ```python
 @_log_bridge_call
@@ -10506,7 +10506,7 @@ Return a saved run's form values, to edit it in Configure.
 
 <a id="fim.gui.app.Api.start_run_object"></a>
 
-#### start\_run\_object
+#### [start\_run\_object](./gui/app.py#L2634)
 
 ```python
 @_log_bridge_call
@@ -10532,7 +10532,7 @@ its own object directory.
 
 <a id="fim.gui.app.Api.cancel_run_object"></a>
 
-#### cancel\_run\_object
+#### [cancel\_run\_object](./gui/app.py#L2762)
 
 ```python
 @_log_bridge_call
@@ -10552,7 +10552,7 @@ Cancel a saved run that is not executing in this window, keeping its data.
 
 <a id="fim.gui.app.Api.clone_run_object"></a>
 
-#### clone\_run\_object
+#### [clone\_run\_object](./gui/app.py#L2778)
 
 ```python
 @_log_bridge_call
@@ -10572,7 +10572,7 @@ Clone a saved run into a new object with the same configuration.
 
 <a id="fim.gui.app.Api.delete_run_object"></a>
 
-#### delete\_run\_object
+#### [delete\_run\_object](./gui/app.py#L2798)
 
 ```python
 @_log_bridge_call
@@ -10592,7 +10592,7 @@ Delete a saved run that is not executing, and all of its data.
 
 <a id="fim.gui.app.Api.stop_active_work"></a>
 
-#### stop\_active\_work
+#### [stop\_active\_work](./gui/app.py#L2813)
 
 ```python
 def stop_active_work(timeout: float) -> None
@@ -10612,7 +10612,7 @@ the deadman still ends the process.
 
 <a id="fim.gui.app.Api.on_window_closing"></a>
 
-#### on\_window\_closing
+#### [on\_window\_closing](./gui/app.py#L2838)
 
 ```python
 def on_window_closing(window: _EvaluatesJs) -> bool
@@ -10637,7 +10637,7 @@ arrives through `finish_close`.
 
 <a id="fim.gui.app.Api.request_close"></a>
 
-#### request\_close
+#### [request\_close](./gui/app.py#L2861)
 
 ```python
 def request_close() -> None
@@ -10647,7 +10647,7 @@ Close the window the way its close button does (the Quit menu item).
 
 <a id="fim.gui.app.Api.close_needs_confirmation"></a>
 
-#### close\_needs\_confirmation
+#### [close\_needs\_confirmation](./gui/app.py#L2871)
 
 ```python
 def close_needs_confirmation() -> bool
@@ -10657,7 +10657,7 @@ Return whether closing now would lose edits or interrupt work.
 
 <a id="fim.gui.app.Api.close_requirements"></a>
 
-#### close\_requirements
+#### [close\_requirements](./gui/app.py#L2928)
 
 ```python
 @_log_bridge_call
@@ -10675,7 +10675,7 @@ Return what closing the window now would affect, for its dialog.
 
 <a id="fim.gui.app.Api.finish_close"></a>
 
-#### finish\_close
+#### [finish\_close](./gui/app.py#L2940)
 
 ```python
 @_log_bridge_call
@@ -10694,7 +10694,7 @@ the window from a helper thread so this call can return first.
 
 <a id="fim.gui.app.Api.report_unsaved_edits"></a>
 
-#### report\_unsaved\_edits
+#### [report\_unsaved\_edits](./gui/app.py#L2960)
 
 ```python
 @_log_bridge_call
@@ -10713,7 +10713,7 @@ consults it (`on_window_closing`).
 
 <a id="fim.gui.app.Api.open_output_folder"></a>
 
-#### open\_output\_folder
+#### [open\_output\_folder](./gui/app.py#L2973)
 
 ```python
 @_log_bridge_call
@@ -10732,7 +10732,7 @@ Reveal a completed run's output directory in the OS file browser.
 
 <a id="fim.gui.app.Api.get_run_setting_differences"></a>
 
-#### get\_run\_setting\_differences
+#### [get\_run\_setting\_differences](./gui/app.py#L3118)
 
 ```python
 @_log_bridge_call
@@ -10759,7 +10759,7 @@ configuration's run settings are in use (Settings saved, or
 
 <a id="fim.gui.app.Api.get_starter_form"></a>
 
-#### get\_starter\_form
+#### [get\_starter\_form](./gui/app.py#L3138)
 
 ```python
 @_log_bridge_call
@@ -10781,7 +10781,7 @@ calls instead.
 
 <a id="fim.gui.app.Api.get_starter_form_with_overrides"></a>
 
-#### get\_starter\_form\_with\_overrides
+#### [get\_starter\_form\_with\_overrides](./gui/app.py#L3155)
 
 ```python
 @_log_bridge_call
@@ -10823,7 +10823,7 @@ caller, never hidden behind values the botanist did not ask for.
 
 <a id="fim.gui.app.Api.get_initial_form"></a>
 
-#### get\_initial\_form
+#### [get\_initial\_form](./gui/app.py#L3199)
 
 ```python
 @_log_bridge_call
@@ -10849,7 +10849,7 @@ competing precedence rule against this restore path.
 
 <a id="fim.gui.app.Api.get_startup_behavior"></a>
 
-#### get\_startup\_behavior
+#### [get\_startup\_behavior](./gui/app.py#L3229)
 
 ```python
 @_log_bridge_call
@@ -10860,7 +10860,7 @@ Return how a fresh launch chooses its initial form values.
 
 <a id="fim.gui.app.Api.set_startup_behavior"></a>
 
-#### set\_startup\_behavior
+#### [set\_startup\_behavior](./gui/app.py#L3234)
 
 ```python
 @_log_bridge_call
@@ -10882,7 +10882,7 @@ Set how a fresh launch chooses its initial form values.
 
 <a id="fim.gui.app.Api.get_run_card_layout"></a>
 
-#### get\_run\_card\_layout
+#### [get\_run\_card\_layout](./gui/app.py#L3257)
 
 ```python
 @_log_bridge_call
@@ -10901,7 +10901,7 @@ Return how the Run card shows its graphs.
 
 <a id="fim.gui.app.Api.set_run_graphs"></a>
 
-#### set\_run\_graphs
+#### [set\_run\_graphs](./gui/app.py#L3277)
 
 ```python
 @_log_bridge_call
@@ -10923,7 +10923,7 @@ Remember which graphs the Run card shows together.
 
 <a id="fim.gui.app.Api.set_run_graph_columns"></a>
 
-#### set\_run\_graph\_columns
+#### [set\_run\_graph\_columns](./gui/app.py#L3296)
 
 ```python
 @_log_bridge_call
@@ -10944,7 +10944,7 @@ Set how many columns the Run card lays its graphs out in.
 
 <a id="fim.gui.app.Api.set_scatter_style"></a>
 
-#### set\_scatter\_style
+#### [set\_scatter\_style](./gui/app.py#L3322)
 
 ```python
 @_log_bridge_call
@@ -10965,7 +10965,7 @@ Choose how the scatter plot draws its points.
 
 <a id="fim.gui.app.Api.set_trajectory_display"></a>
 
-#### set\_trajectory\_display
+#### [set\_trajectory\_display](./gui/app.py#L3339)
 
 ```python
 @_log_bridge_call
@@ -10993,7 +10993,7 @@ either way.
 
 <a id="fim.gui.app.Api.set_trajectory_band_width"></a>
 
-#### set\_trajectory\_band\_width
+#### [set\_trajectory\_band\_width](./gui/app.py#L3365)
 
 ```python
 @_log_bridge_call
@@ -11018,7 +11018,7 @@ window) and the standard-error band of the averaged displays.
 
 <a id="fim.gui.app.Api.get_default_ploidy"></a>
 
-#### get\_default\_ploidy
+#### [get\_default\_ploidy](./gui/app.py#L3388)
 
 ```python
 @_log_bridge_call
@@ -11029,7 +11029,7 @@ Return the default ploidy: `"2"` unless changed; `""` asks each time.
 
 <a id="fim.gui.app.Api.set_default_ploidy"></a>
 
-#### set\_default\_ploidy
+#### [set\_default\_ploidy](./gui/app.py#L3393)
 
 ```python
 @_log_bridge_call
@@ -11051,7 +11051,7 @@ Set the ploidy a fresh configuration's form starts on.
 
 <a id="fim.gui.app.Api.validate_form"></a>
 
-#### validate\_form
+#### [validate\_form](./gui/app.py#L3414)
 
 ```python
 @_log_bridge_call
@@ -11084,7 +11084,7 @@ Validate the form exactly as "Run simulation" would.
 
 <a id="fim.gui.app.Api.get_initial_state_panels"></a>
 
-#### get\_initial\_state\_panels
+#### [get\_initial\_state\_panels](./gui/app.py#L3451)
 
 ```python
 @_log_bridge_call
@@ -11116,7 +11116,7 @@ state would show at generation 0.
 
 <a id="fim.gui.app.Api.get_initial_state_deme_pair_panel"></a>
 
-#### get\_initial\_state\_deme\_pair\_panel
+#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L3503)
 
 ```python
 @_log_bridge_call
@@ -11144,7 +11144,7 @@ pair as separate panels (`d > 6`).
 
 <a id="fim.gui.app.Api.get_equilibrium_predictions"></a>
 
-#### get\_equilibrium\_predictions
+#### [get\_equilibrium\_predictions](./gui/app.py#L3540)
 
 ```python
 @_log_bridge_call
@@ -11189,7 +11189,7 @@ of how large `N`/`d` are.
 
 <a id="fim.gui.app.Api.get_equilibrium_grid"></a>
 
-#### get\_equilibrium\_grid
+#### [get\_equilibrium\_grid](./gui/app.py#L3590)
 
 ```python
 @_log_bridge_call
@@ -11237,7 +11237,7 @@ integer value, not an interpolated blur (`_grid_axis_values`).
 
 <a id="fim.gui.app.Api.get_equilibrium_curve"></a>
 
-#### get\_equilibrium\_curve
+#### [get\_equilibrium\_curve](./gui/app.py#L3677)
 
 ```python
 @_log_bridge_call
@@ -11266,7 +11266,7 @@ samples an interval densely and spaces its points by the response.
 
 <a id="fim.gui.app.Api.get_equilibrium_sweep"></a>
 
-#### get\_equilibrium\_sweep
+#### [get\_equilibrium\_sweep](./gui/app.py#L3722)
 
 ```python
 @_log_bridge_call
@@ -11326,7 +11326,7 @@ the marker moves, with no extra bridge round trip per tick.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 
-#### load\_yaml
+#### [load\_yaml](./gui/app.py#L3846)
 
 ```python
 @_log_bridge_call
@@ -11352,7 +11352,7 @@ changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.list_examples"></a>
 
-#### list\_examples
+#### [list\_examples](./gui/app.py#L3879)
 
 ```python
 @_log_bridge_call
@@ -11386,7 +11386,7 @@ example's form values once the user loads it.
 
 <a id="fim.gui.app.Api.load_example"></a>
 
-#### load\_example
+#### [load\_example](./gui/app.py#L3928)
 
 ```python
 @_log_bridge_call
@@ -11419,7 +11419,7 @@ saved Settings are not changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.open_saved_example"></a>
 
-#### open\_saved\_example
+#### [open\_saved\_example](./gui/app.py#L3966)
 
 ```python
 @_log_bridge_call
@@ -11448,7 +11448,7 @@ again first. The page then opens it like any run, which takes
 
 <a id="fim.gui.app.Api.load_run_configuration"></a>
 
-#### load\_run\_configuration
+#### [load\_run\_configuration](./gui/app.py#L4010)
 
 ```python
 @_log_bridge_call
@@ -11487,7 +11487,7 @@ cleared, and the name and description come from the run's
 
 <a id="fim.gui.app.Api.list_presets"></a>
 
-#### list\_presets
+#### [list\_presets](./gui/app.py#L4074)
 
 ```python
 @_log_bridge_call
@@ -11536,7 +11536,7 @@ only once the user actually picks it.
 
 <a id="fim.gui.app.Api.get_preset_form_values"></a>
 
-#### get\_preset\_form\_values
+#### [get\_preset\_form\_values](./gui/app.py#L4139)
 
 ```python
 @_log_bridge_call
@@ -11572,7 +11572,7 @@ Return one preset's own form values, ready for `applyFormValues`.
 
 <a id="fim.gui.app.Api.load_preset"></a>
 
-#### load\_preset
+#### [load\_preset](./gui/app.py#L4181)
 
 ```python
 @_log_bridge_call
@@ -11602,7 +11602,7 @@ user's Settings (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.get_preset_yaml"></a>
 
-#### get\_preset\_yaml
+#### [get\_preset\_yaml](./gui/app.py#L4206)
 
 ```python
 @_log_bridge_call
@@ -11648,7 +11648,7 @@ saved preset).
 
 <a id="fim.gui.app.Api.save_current_as_preset"></a>
 
-#### save\_current\_as\_preset
+#### [save\_current\_as\_preset](./gui/app.py#L4270)
 
 ```python
 @_log_bridge_call
@@ -11680,7 +11680,7 @@ Save `values` as a user preset named `name`, persisted immediately.
 
 <a id="fim.gui.app.Api.delete_user_preset"></a>
 
-#### delete\_user\_preset
+#### [delete\_user\_preset](./gui/app.py#L4305)
 
 ```python
 @_log_bridge_call
@@ -11695,7 +11695,7 @@ affordance only ever offers a name it just listed.
 
 <a id="fim.gui.app.Api.save_yaml"></a>
 
-#### save\_yaml
+#### [save\_yaml](./gui/app.py#L4317)
 
 ```python
 @_log_bridge_call
@@ -11719,7 +11719,7 @@ Validate the form, then save it as a `fim run`-compatible YAML file.
 
 <a id="fim.gui.app.Api.export_graph_image"></a>
 
-#### export\_graph\_image
+#### [export\_graph\_image](./gui/app.py#L4354)
 
 ```python
 @_log_bridge_call
@@ -11756,7 +11756,7 @@ gap `save_yaml`'s own config export, just above, does not cover.
 
 <a id="fim.gui.app.Api.get_default_max_workers"></a>
 
-#### get\_default\_max\_workers
+#### [get\_default\_max\_workers](./gui/app.py#L4407)
 
 ```python
 @_log_bridge_call
@@ -11772,7 +11772,7 @@ workers` directly rather than inventing a second default.
 
 <a id="fim.gui.app.Api.get_engine_backend_availability"></a>
 
-#### get\_engine\_backend\_availability
+#### [get\_engine\_backend\_availability](./gui/app.py#L4418)
 
 ```python
 @_log_bridge_call
@@ -11814,7 +11814,7 @@ bind a copy at import time and quietly defeat exactly that hook.
 
 <a id="fim.gui.app.Api.get_significant_digits"></a>
 
-#### get\_significant\_digits
+#### [get\_significant\_digits](./gui/app.py#L4454)
 
 ```python
 @_log_bridge_call
@@ -11833,7 +11833,7 @@ back).
 
 <a id="fim.gui.app.Api.set_significant_digits"></a>
 
-#### set\_significant\_digits
+#### [set\_significant\_digits](./gui/app.py#L4468)
 
 ```python
 @_log_bridge_call
@@ -11865,7 +11865,7 @@ ever about a *run's own* output, never this GUI-local setting.
 
 <a id="fim.gui.app.Api.get_dark_mode_override"></a>
 
-#### get\_dark\_mode\_override
+#### [get\_dark\_mode\_override](./gui/app.py#L4505)
 
 ```python
 @_log_bridge_call
@@ -11883,7 +11883,7 @@ dark_mode_override` is already the one place this value lives.
 
 <a id="fim.gui.app.Api.set_dark_mode_override"></a>
 
-#### set\_dark\_mode\_override
+#### [set\_dark\_mode\_override](./gui/app.py#L4518)
 
 ```python
 @_log_bridge_call
@@ -11908,7 +11908,7 @@ Change the saved dark-mode override (Configure's own field).
 
 <a id="fim.gui.app.Api.get_default_run_settings"></a>
 
-#### get\_default\_run\_settings
+#### [get\_default\_run\_settings](./gui/app.py#L4544)
 
 ```python
 @_log_bridge_call
@@ -11942,7 +11942,7 @@ value for that one field and reported at launch
 
 <a id="fim.gui.app.Api.get_expert_settings_info"></a>
 
-#### get\_expert\_settings\_info
+#### [get\_expert\_settings\_info](./gui/app.py#L4612)
 
 ```python
 @_log_bridge_call
@@ -11962,7 +11962,7 @@ Return how Settings lists the Expert Settings.
 
 <a id="fim.gui.app.Api.set_default_run_settings"></a>
 
-#### set\_default\_run\_settings
+#### [set\_default\_run\_settings](./gui/app.py#L4626)
 
 ```python
 @_log_bridge_call
@@ -12007,7 +12007,7 @@ form no longer submits at all.
 
 <a id="fim.gui.app.Api.get_results_location"></a>
 
-#### get\_results\_location
+#### [get\_results\_location](./gui/app.py#L4675)
 
 ```python
 @_log_bridge_call
@@ -12037,7 +12037,7 @@ identical field (§5, Option D4).
 
 <a id="fim.gui.app.Api.set_results_location"></a>
 
-#### set\_results\_location
+#### [set\_results\_location](./gui/app.py#L4708)
 
 ```python
 @_log_bridge_call
@@ -12070,7 +12070,7 @@ location_override` is what applies a saved value, once, the
 
 <a id="fim.gui.app.Api.browse_for_results_location"></a>
 
-#### browse\_for\_results\_location
+#### [browse\_for\_results\_location](./gui/app.py#L4744)
 
 ```python
 @_log_bridge_call
@@ -12090,7 +12090,7 @@ Browse for a results/logs directory via the OS's own native folder picker.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 
-#### get\_welcome\_dismissed
+#### [get\_welcome\_dismissed](./gui/app.py#L4764)
 
 ```python
 @_log_bridge_call
@@ -12106,7 +12106,7 @@ at all.
 
 <a id="fim.gui.app.Api.dismiss_welcome"></a>
 
-#### dismiss\_welcome
+#### [dismiss\_welcome](./gui/app.py#L4775)
 
 ```python
 @_log_bridge_call
@@ -12121,7 +12121,7 @@ actions the user picks, never un-called.
 
 <a id="fim.gui.app.Api.get_statistics_catalog"></a>
 
-#### get\_statistics\_catalog
+#### [get\_statistics\_catalog](./gui/app.py#L4786)
 
 ```python
 @_log_bridge_call
@@ -12143,7 +12143,7 @@ statistic is defined.
 
 <a id="fim.gui.app.Api.set_shown_statistics"></a>
 
-#### set\_shown\_statistics
+#### [set\_shown\_statistics](./gui/app.py#L4807)
 
 ```python
 @_log_bridge_call
@@ -12171,7 +12171,7 @@ text`). A saved run's results never change.
 
 <a id="fim.gui.app.Api.get_pairwise_max_demes"></a>
 
-#### get\_pairwise\_max\_demes
+#### [get\_pairwise\_max\_demes](./gui/app.py#L4838)
 
 ```python
 @_log_bridge_call
@@ -12182,7 +12182,7 @@ Return the largest deme count whose runs save `pairwise.json` in full.
 
 <a id="fim.gui.app.Api.set_pairwise_max_demes"></a>
 
-#### set\_pairwise\_max\_demes
+#### [set\_pairwise\_max\_demes](./gui/app.py#L4843)
 
 ```python
 @_log_bridge_call
@@ -12206,7 +12206,7 @@ Set the largest deme count whose runs save every pair's statistics.
 
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
-#### get\_startup\_warnings
+#### [get\_startup\_warnings](./gui/app.py#L4867)
 
 ```python
 @_log_bridge_call
@@ -12226,7 +12226,7 @@ own docstring on why this exists instead of one).
 
 <a id="fim.gui.app.Api.get_live_deme_pair"></a>
 
-#### get\_live\_deme\_pair
+#### [get\_live\_deme\_pair](./gui/app.py#L4883)
 
 ```python
 @_log_bridge_call
@@ -12244,7 +12244,7 @@ unlike `_significant_digits`'s own thread-start snapshot.
 
 <a id="fim.gui.app.Api.set_live_deme_pair"></a>
 
-#### set\_live\_deme\_pair
+#### [set\_live\_deme\_pair](./gui/app.py#L4896)
 
 ```python
 @_log_bridge_call
@@ -12294,7 +12294,7 @@ than crash the whole push).
 
 <a id="fim.gui.app.Api.list_recent_runs"></a>
 
-#### list\_recent\_runs
+#### [list\_recent\_runs](./gui/app.py#L4943)
 
 ```python
 @_log_bridge_call
@@ -12316,7 +12316,7 @@ no single trajectory of its own to open.
 
 <a id="fim.gui.app.Api.list_home_runs"></a>
 
-#### list\_home\_runs
+#### [list\_home\_runs](./gui/app.py#L4977)
 
 ```python
 @_log_bridge_call
@@ -12350,7 +12350,7 @@ asked for this heavier per-row read, so neither pays for it.
 
 <a id="fim.gui.app.Api.list_studies"></a>
 
-#### list\_studies
+#### [list\_studies](./gui/app.py#L5008)
 
 ```python
 @_log_bridge_call
@@ -12382,7 +12382,7 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 
 <a id="fim.gui.app.Api.list_experiments"></a>
 
-#### list\_experiments
+#### [list\_experiments](./gui/app.py#L5063)
 
 ```python
 @_log_bridge_call
@@ -12407,7 +12407,7 @@ List every Experiment, oldest first.
 
 <a id="fim.gui.app.Api.get_study_run_summary"></a>
 
-#### get\_study\_run\_summary
+#### [get\_study\_run\_summary](./gui/app.py#L5102)
 
 ```python
 @_log_bridge_call
@@ -12435,7 +12435,7 @@ its own runs' config summaries and statistics.
 
 <a id="fim.gui.app.Api.create_study"></a>
 
-#### create\_study
+#### [create\_study](./gui/app.py#L5134)
 
 ```python
 @_log_bridge_call
@@ -12457,7 +12457,7 @@ Blank `description`/`documentation` are stored as unset.
 
 <a id="fim.gui.app.Api.create_experiment"></a>
 
-#### create\_experiment
+#### [create\_experiment](./gui/app.py#L5167)
 
 ```python
 @_log_bridge_call
@@ -12470,7 +12470,7 @@ Create a new, empty Experiment. See `create_study`.
 
 <a id="fim.gui.app.Api.get_details"></a>
 
-#### get\_details
+#### [get\_details](./gui/app.py#L5182)
 
 ```python
 @_log_bridge_call
@@ -12497,7 +12497,7 @@ read fresh from disk each time.
 
 <a id="fim.gui.app.Api.update_study_details"></a>
 
-#### update\_study\_details
+#### [update\_study\_details](./gui/app.py#L5221)
 
 ```python
 @_log_bridge_call
@@ -12518,7 +12518,7 @@ The details dialog's Save (`webui/screens/details.js`). Blank
 
 <a id="fim.gui.app.Api.update_experiment_details"></a>
 
-#### update\_experiment\_details
+#### [update\_experiment\_details](./gui/app.py#L5246)
 
 ```python
 @_log_bridge_call
@@ -12532,7 +12532,7 @@ See `update_study_details`.
 
 <a id="fim.gui.app.Api.update_run_details"></a>
 
-#### update\_run\_details
+#### [update\_run\_details](./gui/app.py#L5265)
 
 ```python
 @_log_bridge_call
@@ -12553,7 +12553,7 @@ Blank text clears a field; a run may have neither. The run's own
 
 <a id="fim.gui.app.Api.get_run_context"></a>
 
-#### get\_run\_context
+#### [get\_run\_context](./gui/app.py#L5293)
 
 ```python
 @_log_bridge_call
@@ -12587,7 +12587,7 @@ description (`webui/screens/details.js`).
 
 <a id="fim.gui.app.Api.ensure_default_study"></a>
 
-#### ensure\_default\_study
+#### [ensure\_default\_study](./gui/app.py#L5353)
 
 ```python
 @_log_bridge_call
@@ -12610,7 +12610,7 @@ never gains this call at all.
 
 <a id="fim.gui.app.Api.ensure_examples"></a>
 
-#### ensure\_examples
+#### [ensure\_examples](./gui/app.py#L5372)
 
 ```python
 @_log_bridge_call
@@ -12634,7 +12634,7 @@ brought it up to date.
 
 <a id="fim.gui.app.Api.add_run_to_study"></a>
 
-#### add\_run\_to\_study
+#### [add\_run\_to\_study](./gui/app.py#L5396)
 
 ```python
 @_log_bridge_call
@@ -12650,7 +12650,7 @@ Add one existing Run directory to a Study; idempotent.
 
 <a id="fim.gui.app.Api.add_study_to_experiment"></a>
 
-#### add\_study\_to\_experiment
+#### [add\_study\_to\_experiment](./gui/app.py#L5410)
 
 ```python
 @_log_bridge_call
@@ -12667,7 +12667,7 @@ Add one existing Study to an Experiment; idempotent.
 
 <a id="fim.gui.app.Api.set_experiment_closed"></a>
 
-#### set\_experiment\_closed
+#### [set\_experiment\_closed](./gui/app.py#L5426)
 
 ```python
 @_log_bridge_call
@@ -12687,7 +12687,7 @@ Closing is refused while a Run of one of its Studies is running
 
 <a id="fim.gui.app.Api.set_study_closed"></a>
 
-#### set\_study\_closed
+#### [set\_study\_closed](./gui/app.py#L5449)
 
 ```python
 @_log_bridge_call
@@ -12709,7 +12709,7 @@ a Run.
 
 <a id="fim.gui.app.Api.delete_study"></a>
 
-#### delete\_study
+#### [delete\_study](./gui/app.py#L5470)
 
 ```python
 @_log_bridge_call
@@ -12736,7 +12736,7 @@ A read-only example Run the Study holds is kept too
 
 <a id="fim.gui.app.Api.delete_study_runs"></a>
 
-#### delete\_study\_runs
+#### [delete\_study\_runs](./gui/app.py#L5507)
 
 ```python
 @_log_bridge_call
@@ -12761,7 +12761,7 @@ A read-only example Run stays in the Study and counts as kept.
 
 <a id="fim.gui.app.Api.delete_experiment"></a>
 
-#### delete\_experiment
+#### [delete\_experiment](./gui/app.py#L5536)
 
 ```python
 @_log_bridge_call
@@ -12781,7 +12781,7 @@ A read-only Study the Experiment holds is kept
 
 <a id="fim.gui.app.Api.copy_study"></a>
 
-#### copy\_study
+#### [copy\_study](./gui/app.py#L5567)
 
 ```python
 @_log_bridge_call
@@ -12798,7 +12798,7 @@ Copy a Study's own run list into a new, independent Study.
 
 <a id="fim.gui.app.Api.get_sweepable_keys"></a>
 
-#### get\_sweepable\_keys
+#### [get\_sweepable\_keys](./gui/app.py#L5582)
 
 ```python
 @_log_bridge_call
@@ -12809,7 +12809,7 @@ Return every parameter a sweep may vary, with its axis metadata.
 
 <a id="fim.gui.app.Api.plan_sweep"></a>
 
-#### plan\_sweep
+#### [plan\_sweep](./gui/app.py#L5587)
 
 ```python
 @_log_bridge_call
@@ -12834,7 +12834,7 @@ Enumerate and validate a sweep without running anything.
 
 <a id="fim.gui.app.Api.start_sweep"></a>
 
-#### start\_sweep
+#### [start\_sweep](./gui/app.py#L5648)
 
 ```python
 @_log_bridge_call
@@ -12864,7 +12864,7 @@ at or over the size threshold, until `confirmed` is true.
 
 <a id="fim.gui.app.Api.resume_sweep"></a>
 
-#### resume\_sweep
+#### [resume\_sweep](./gui/app.py#L5708)
 
 ```python
 @_log_bridge_call
@@ -12896,7 +12896,7 @@ Run the points of an existing sweep Study that are still missing.
 
 <a id="fim.gui.app.Api.cancel_sweep"></a>
 
-#### cancel\_sweep
+#### [cancel\_sweep](./gui/app.py#L5755)
 
 ```python
 @_log_bridge_call
@@ -12907,7 +12907,7 @@ Stop the running sweep: the current point is cancelled, the rest skipped.
 
 <a id="fim.gui.app.Api.get_sweep_status"></a>
 
-#### get\_sweep\_status
+#### [get\_sweep\_status](./gui/app.py#L5761)
 
 ```python
 @_log_bridge_call
@@ -12918,7 +12918,7 @@ Return a sweep Study's planned points with their derived states.
 
 <a id="fim.gui.app.Api.get_sweep_results"></a>
 
-#### get\_sweep\_results
+#### [get\_sweep\_results](./gui/app.py#L5773)
 
 ```python
 @_log_bridge_call
@@ -12929,7 +12929,7 @@ Return a sweep Study's finished points and their statistics.
 
 <a id="fim.gui.app.Api.estimate_sweep_cost"></a>
 
-#### estimate\_sweep\_cost
+#### [estimate\_sweep\_cost](./gui/app.py#L5781)
 
 ```python
 @_log_bridge_call
@@ -12959,7 +12959,7 @@ run already exists cost nothing and are left out.
 
 <a id="fim.gui.app.Api.get_sweep_eta"></a>
 
-#### get\_sweep\_eta
+#### [get\_sweep\_eta](./gui/app.py#L5848)
 
 ```python
 @_log_bridge_call
@@ -12979,7 +12979,7 @@ goes, and read from files, so it works while the sweep runs.
 
 <a id="fim.gui.app.Api.get_sweep_series"></a>
 
-#### get\_sweep\_series
+#### [get\_sweep\_series](./gui/app.py#L5873)
 
 ```python
 @_log_bridge_call
@@ -13006,7 +13006,7 @@ Return a statistic as response curves across a sweep's axes.
 
 <a id="fim.gui.app.Api.get_sweep_trajectories"></a>
 
-#### get\_sweep\_trajectories
+#### [get\_sweep\_trajectories](./gui/app.py#L5900)
 
 ```python
 @_log_bridge_call
@@ -13033,7 +13033,7 @@ Return how each point approached equilibrium, for the overlay chart.
 
 <a id="fim.gui.app.Api.compare_sweeps"></a>
 
-#### compare\_sweeps
+#### [compare\_sweeps](./gui/app.py#L5926)
 
 ```python
 @_log_bridge_call
@@ -13063,7 +13063,7 @@ Nothing is stored; the comparison is worked out on each call.
 
 <a id="fim.gui.app.Api.get_sweep_theory"></a>
 
-#### get\_sweep\_theory
+#### [get\_sweep\_theory](./gui/app.py#L5955)
 
 ```python
 @_log_bridge_call
@@ -13090,7 +13090,7 @@ every statistic, never an error.
 
 <a id="fim.gui.app.Api.export_sweep_table"></a>
 
-#### export\_sweep\_table
+#### [export\_sweep\_table](./gui/app.py#L5981)
 
 ```python
 @_log_bridge_call
@@ -13123,7 +13123,7 @@ overwritten once the researcher has chosen it.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
-#### copy\_experiment
+#### [copy\_experiment](./gui/app.py#L6113)
 
 ```python
 @_log_bridge_call
@@ -13140,7 +13140,7 @@ Copy an Experiment's own study list into a new, independent Experiment.
 
 <a id="fim.gui.app.Api.delete_runs"></a>
 
-#### delete\_runs
+#### [delete\_runs](./gui/app.py#L6128)
 
 ```python
 @_log_bridge_call
@@ -13171,7 +13171,7 @@ nothing at all is deleted and the refusal is reported.
 
 <a id="fim.gui.app.Api.delete_selected"></a>
 
-#### delete\_selected
+#### [delete\_selected](./gui/app.py#L6157)
 
 ```python
 @_log_bridge_call
@@ -13225,7 +13225,7 @@ policy) rather than double-counted or treated as a failure.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 
-#### get\_batch\_replicate\_summary
+#### [get\_batch\_replicate\_summary](./gui/app.py#L6245)
 
 ```python
 @_log_bridge_call
@@ -13267,7 +13267,7 @@ already uses — no second naming scheme.
 
 <a id="fim.gui.app.Api.get_batch_pair_statistics"></a>
 
-#### get\_batch\_pair\_statistics
+#### [get\_batch\_pair\_statistics](./gui/app.py#L6308)
 
 ```python
 @_log_bridge_call
@@ -13301,7 +13301,7 @@ existed, or above its deme-count limit).
 
 <a id="fim.gui.app.Api.open_run"></a>
 
-#### open\_run
+#### [open\_run](./gui/app.py#L6358)
 
 ```python
 @_log_bridge_call
@@ -13374,7 +13374,7 @@ reuse, not a second rendering path.
 
 <a id="fim.gui.app.Api.open_batch"></a>
 
-#### open\_batch
+#### [open\_batch](./gui/app.py#L6542)
 
 ```python
 @_log_bridge_call
@@ -13434,7 +13434,7 @@ Home screen's own reopen spinner (`open-run.js`'s own
 
 <a id="fim.gui.app.Api.open_study"></a>
 
-#### open\_study
+#### [open\_study](./gui/app.py#L6666)
 
 ```python
 @_log_bridge_call
@@ -13501,7 +13501,7 @@ refuse," not a bug).
 
 <a id="fim.gui.app.Api.compare_runs"></a>
 
-#### compare\_runs
+#### [compare\_runs](./gui/app.py#L6809)
 
 ```python
 @_log_bridge_call
@@ -13554,7 +13554,7 @@ animation screen's own frame sampler already computes.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 
-#### get\_animation\_frames
+#### [get\_animation\_frames](./gui/app.py#L6895)
 
 ```python
 @_log_bridge_call
@@ -13594,7 +13594,7 @@ any kind during playback.
 
 <a id="fim.gui.app.Api.get_animation_deme_pair_frames"></a>
 
-#### get\_animation\_deme\_pair\_frames
+#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L6962)
 
 ```python
 @_log_bridge_call
@@ -13638,7 +13638,7 @@ shape the default view's own frames already arrived in.
 
 <a id="fim.gui.app.Api.get_deme_pair_panel"></a>
 
-#### get\_deme\_pair\_panel
+#### [get\_deme\_pair\_panel](./gui/app.py#L7027)
 
 ```python
 @_log_bridge_call
@@ -13680,7 +13680,7 @@ small `d`).
 
 <a id="fim.gui.app.Api.get_batch_deme_pair_panel"></a>
 
-#### get\_batch\_deme\_pair\_panel
+#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L7073)
 
 ```python
 @_log_bridge_call
@@ -13719,7 +13719,7 @@ itself.
 
 <a id="fim.gui.app.Api.get_batch_animation_frames"></a>
 
-#### get\_batch\_animation\_frames
+#### [get\_batch\_animation\_frames](./gui/app.py#L7116)
 
 ```python
 @_log_bridge_call
@@ -13766,7 +13766,7 @@ recent_runs`/`open_run` already use.
 
 <a id="fim.gui.app.Api.ping"></a>
 
-#### ping
+#### [ping](./gui/app.py#L7188)
 
 ```python
 @_log_bridge_call
@@ -13781,7 +13781,7 @@ context, before any real screen is built on top of it.
 
 <a id="fim.gui.app.Api.ping_from_worker"></a>
 
-#### ping\_from\_worker
+#### [ping\_from\_worker](./gui/app.py#L7198)
 
 ```python
 @_log_bridge_call
@@ -13801,7 +13801,7 @@ inside a real batch run.
 
 <a id="fim.gui.app.Api.open_external_link"></a>
 
-#### open\_external\_link
+#### [open\_external\_link](./gui/app.py#L7217)
 
 ```python
 @_log_bridge_call
@@ -13820,7 +13820,7 @@ module already follows for another OS-dispatched action.
 
 <a id="fim.gui.app.Api.check_for_updates"></a>
 
-#### check\_for\_updates
+#### [check\_for\_updates](./gui/app.py#L7231)
 
 ```python
 @_log_bridge_call
@@ -13850,7 +13850,7 @@ own equivalent action called the same module the same way.
 
 <a id="fim.gui.app.Api.get_about_info"></a>
 
-#### get\_about\_info
+#### [get\_about\_info](./gui/app.py#L7267)
 
 ```python
 @_log_bridge_call
@@ -13897,7 +13897,7 @@ three-part parsing).
 
 <a id="fim.gui.app.RunDetails"></a>
 
-## RunDetails Objects
+## [RunDetails Objects](./gui/app.py#L7414)
 
 ```python
 class RunDetails(NamedTuple)
@@ -13907,7 +13907,7 @@ The optional name and description Configure gives a run before it starts.
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 
-#### in\_flight\_bridge\_threads
+#### [in\_flight\_bridge\_threads](./gui/app.py#L8625)
 
 ```python
 def in_flight_bridge_threads(
@@ -13935,7 +13935,7 @@ flakiness.
 
 <a id="fim.gui.app.await_bridge_threads"></a>
 
-#### await\_bridge\_threads
+#### [await\_bridge\_threads](./gui/app.py#L8660)
 
 ```python
 def await_bridge_threads(
@@ -13988,7 +13988,7 @@ seconds later.
 
 <a id="fim.gui.app.initial_window_size"></a>
 
-#### initial\_window\_size
+#### [initial\_window\_size](./gui/app.py#L8894)
 
 ```python
 def initial_window_size(screen_width: int,
@@ -14015,7 +14015,7 @@ edges), between `_MIN_WINDOW_SIZE` and `_MAX_WINDOW_SIZE`.
 
 <a id="fim.gui.app.create_window"></a>
 
-#### create\_window
+#### [create\_window](./gui/app.py#L8935)
 
 ```python
 def create_window(*,
@@ -14066,7 +14066,7 @@ pywebview's own API instead of Tk's.
 
 <a id="fim.gui.app.shutdown_timeout"></a>
 
-#### shutdown\_timeout
+#### [shutdown\_timeout](./gui/app.py#L9149)
 
 ```python
 def shutdown_timeout() -> float
@@ -14091,7 +14091,7 @@ outcome than the hang it guards against.
 
 <a id="fim.gui.app.main"></a>
 
-#### main
+#### [main](./gui/app.py#L9461)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -14138,7 +14138,7 @@ at all.
 
 <a id="fim.gui.batch_runner"></a>
 
-# fim.gui.batch\_runner
+# [fim.gui.batch\_runner](./gui/batch_runner.py#L1)
 
 Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
 
@@ -14182,7 +14182,7 @@ here now that real parallelism reopens it for the GUI too.
 
 <a id="fim.gui.batch_runner.default_max_workers"></a>
 
-#### default\_max\_workers
+#### [default\_max\_workers](./gui/batch_runner.py#L113)
 
 ```python
 def default_max_workers() -> int
@@ -14197,7 +14197,7 @@ overridable per call via `start_batch_run`'s `max_workers` argument.
 
 <a id="fim.gui.batch_runner.start_batch_run"></a>
 
-#### start\_batch\_run
+#### [start\_batch\_run](./gui/batch_runner.py#L124)
 
 ```python
 def start_batch_run(
@@ -14260,7 +14260,7 @@ Resolve targets, guard the existing target, and start the worker thread.
 
 <a id="fim.gui.config_form"></a>
 
-# fim.gui.config\_form
+# [fim.gui.config\_form](./gui/config_form.py#L1)
 
 Marshal `SimulationParams` to and from the tabbed model-input screen.
 
@@ -14295,20 +14295,20 @@ this form has always used for a construct it cannot represent at all)
 
 <a id="fim.gui.config_form.PLOIDY_REQUIRED_MESSAGE"></a>
 
-#### PLOIDY\_REQUIRED\_MESSAGE
+#### [PLOIDY\_REQUIRED\_MESSAGE](./gui/config_form.py#L69)
 
 The refusal when the form's ploidy is blank (see `POPULATION_FIELDS`).
 
 <a id="fim.gui.config_form.PLOIDY_NAMES"></a>
 
-#### PLOIDY\_NAMES
+#### [PLOIDY\_NAMES](./gui/config_form.py#L72)
 
 Display names for `SimulationParams.ploidy`'s allowed values (the same words
 a configuration spells them with).
 
 <a id="fim.gui.config_form.FormField"></a>
 
-## FormField Objects
+## [FormField Objects](./gui/config_form.py#L80)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -14349,7 +14349,7 @@ One model-input screen field's config key, label, and value kind.
 
 <a id="fim.gui.config_form.TabSpec"></a>
 
-## TabSpec Objects
+## [TabSpec Objects](./gui/config_form.py#L120)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -14365,13 +14365,13 @@ instead of appearing in any `TabSpec.fields` tuple.
 
 <a id="fim.gui.config_form.EXPERT_PREFIX"></a>
 
-#### EXPERT\_PREFIX
+#### [EXPERT\_PREFIX](./gui/config_form.py#L301)
 
 Prefix of the form-value key of each Expert Setting (`expert_batch_width`).
 
 <a id="fim.gui.config_form.EXPERT_FIELDS"></a>
 
-#### EXPERT\_FIELDS
+#### [EXPERT\_FIELDS](./gui/config_form.py#L304)
 
 One field per Expert Setting, for the Settings dialog's Expert section.
 
@@ -14384,7 +14384,7 @@ to the manifest.
 
 <a id="fim.gui.config_form.CONVERGENCE_STATISTIC_NAMES"></a>
 
-#### CONVERGENCE\_STATISTIC\_NAMES
+#### [CONVERGENCE\_STATISTIC\_NAMES](./gui/config_form.py#L321)
 
 Every checkbox the Structure panel's "convergence statistic(s)" group
 offers: every convergence-eligible statistic in `fim.statistics.catalog`,
@@ -14394,7 +14394,7 @@ checkbox.
 
 <a id="fim.gui.config_form.all_fields"></a>
 
-#### all\_fields
+#### [all\_fields](./gui/config_form.py#L338)
 
 ```python
 def all_fields() -> tuple[FormField, ...]
@@ -14404,7 +14404,7 @@ Return every plain `FormField` across every tab, in tab order.
 
 <a id="fim.gui.config_form.tab_for_field"></a>
 
-#### tab\_for\_field
+#### [tab\_for\_field](./gui/config_form.py#L367)
 
 ```python
 def tab_for_field(name: str) -> str | None
@@ -14426,7 +14426,7 @@ Return the `TabSpec.name` holding the given config-key field, if any.
 
 <a id="fim.gui.config_form.tab_for_error"></a>
 
-#### tab\_for\_error
+#### [tab\_for\_error](./gui/config_form.py#L387)
 
 ```python
 def tab_for_error(message: str) -> str | None
@@ -14453,7 +14453,7 @@ Return the tab holding the field a validation error message names.
 
 <a id="fim.gui.config_form.field_for_error"></a>
 
-#### field\_for\_error
+#### [field\_for\_error](./gui/config_form.py#L430)
 
 ```python
 def field_for_error(message: str) -> str | None
@@ -14477,7 +14477,7 @@ Return the form field name a validation error message names, if any.
 
 <a id="fim.gui.config_form.form_values_to_payload"></a>
 
-#### form\_values\_to\_payload
+#### [form\_values\_to\_payload](./gui/config_form.py#L485)
 
 ```python
 def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14523,7 +14523,7 @@ Coerce the form's string values into a `from_mapping`-ready payload.
 
 <a id="fim.gui.config_form.form_values_to_draft_payload"></a>
 
-#### form\_values\_to\_draft\_payload
+#### [form\_values\_to\_draft\_payload](./gui/config_form.py#L536)
 
 ```python
 def form_values_to_draft_payload(
@@ -14549,7 +14549,7 @@ field is left out.
 
 <a id="fim.gui.config_form.expert_to_payload"></a>
 
-#### expert\_to\_payload
+#### [expert\_to\_payload](./gui/config_form.py#L587)
 
 ```python
 def expert_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14577,7 +14577,7 @@ existed) is left out, so the setting keeps its default.
 
 <a id="fim.gui.config_form.run_setting_error"></a>
 
-#### run\_setting\_error
+#### [run\_setting\_error](./gui/config_form.py#L642)
 
 ```python
 def run_setting_error(name: str, text: str) -> str | None
@@ -14602,7 +14602,7 @@ valid saved default and name exactly the one that is not.
 
 <a id="fim.gui.config_form.validate_run_settings"></a>
 
-#### validate\_run\_settings
+#### [validate\_run\_settings](./gui/config_form.py#L668)
 
 ```python
 def validate_run_settings(values: Mapping[str, str]) -> None
@@ -14636,7 +14636,7 @@ default the starter model itself cannot use.
 
 <a id="fim.gui.config_form.m_to_payload"></a>
 
-#### m\_to\_payload
+#### [m\_to\_payload](./gui/config_form.py#L727)
 
 ```python
 def m_to_payload(
@@ -14677,7 +14677,7 @@ Build `m`'s payload from the selector's mode and its own sub-fields.
 
 <a id="fim.gui.config_form.m_from_params"></a>
 
-#### m\_from\_params
+#### [m\_from\_params](./gui/config_form.py#L815)
 
 ```python
 def m_from_params(params: SimulationParams) -> dict[str, str]
@@ -14709,7 +14709,7 @@ Render `params.m` back into the selector's form-value keys.
 
 <a id="fim.gui.config_form.mu_to_payload"></a>
 
-#### mu\_to\_payload
+#### [mu\_to\_payload](./gui/config_form.py#L858)
 
 ```python
 def mu_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14739,7 +14739,7 @@ Build `mu`'s or `mu_b`'s payload key from the selector's mode.
 
 <a id="fim.gui.config_form.mu_from_params"></a>
 
-#### mu\_from\_params
+#### [mu\_from\_params](./gui/config_form.py#L884)
 
 ```python
 def mu_from_params(params: SimulationParams) -> dict[str, str]
@@ -14779,7 +14779,7 @@ Render `params.mu` back into the mu/mu_b selector's form-value keys.
 
 <a id="fim.gui.config_form.per_base_mutation_rate"></a>
 
-#### per\_base\_mutation\_rate
+#### [per\_base\_mutation\_rate](./gui/config_form.py#L930)
 
 ```python
 def per_base_mutation_rate(rates: Sequence[float],
@@ -14813,7 +14813,7 @@ if it reproduces every rate within `_PER_BASE_RATE_RELATIVE_TOLERANCE`.
 
 <a id="fim.gui.config_form.initial_conditions_to_payload"></a>
 
-#### initial\_conditions\_to\_payload
+#### [initial\_conditions\_to\_payload](./gui/config_form.py#L1024)
 
 ```python
 def initial_conditions_to_payload(
@@ -14860,7 +14860,7 @@ Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
 
 <a id="fim.gui.config_form.initial_conditions_from_params"></a>
 
-#### initial\_conditions\_from\_params
+#### [initial\_conditions\_from\_params](./gui/config_form.py#L1184)
 
 ```python
 def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]
@@ -14897,7 +14897,7 @@ Render `params`'s starting-frequency fields into the selector's form-value keys.
 
 <a id="fim.gui.config_form.loci_to_payload"></a>
 
-#### loci\_to\_payload
+#### [loci\_to\_payload](./gui/config_form.py#L1256)
 
 ```python
 def loci_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14931,7 +14931,7 @@ Build `loci`'s (or `n_loci`/`locus_lengths`'s) payload from the selector's mode.
 
 <a id="fim.gui.config_form.loci_from_params"></a>
 
-#### loci\_from\_params
+#### [loci\_from\_params](./gui/config_form.py#L1327)
 
 ```python
 def loci_from_params(params: SimulationParams) -> dict[str, str]
@@ -14955,7 +14955,7 @@ Render `params.loci` back into the selector's form-value keys.
 
 <a id="fim.gui.config_form.convergence_statistic_to_payload"></a>
 
-#### convergence\_statistic\_to\_payload
+#### [convergence\_statistic\_to\_payload](./gui/config_form.py#L1359)
 
 ```python
 def convergence_statistic_to_payload(
@@ -14980,7 +14980,7 @@ Build `convergence_statistic`'s payload from the multi-select checkboxes.
 
 <a id="fim.gui.config_form.convergence_statistic_from_params"></a>
 
-#### convergence\_statistic\_from\_params
+#### [convergence\_statistic\_from\_params](./gui/config_form.py#L1379)
 
 ```python
 def convergence_statistic_from_params(
@@ -14991,7 +14991,7 @@ Render `params.convergence_statistic` back into the checkbox keys.
 
 <a id="fim.gui.config_form.params_to_form_values"></a>
 
-#### params\_to\_form\_values
+#### [params\_to\_form\_values](./gui/config_form.py#L1402)
 
 ```python
 def params_to_form_values(params: SimulationParams) -> dict[str, str]
@@ -15022,7 +15022,7 @@ Render a validated `SimulationParams` back into the form's fields.
 
 <a id="fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES"></a>
 
-#### DEFAULT\_RUN\_SETTING\_FIELD\_NAMES
+#### [DEFAULT\_RUN\_SETTING\_FIELD\_NAMES](./gui/config_form.py#L1499)
 
 Every `SimulationParams`-backed form-value key the Settings dialog's
 own execution defaults cover (`fim.gui.preferences.GuiPreferences.
@@ -15063,7 +15063,7 @@ derived from Settings' "Statistics shown", not saved as a run default
 
 <a id="fim.gui.config_form.RUN_SETTING_LABELS"></a>
 
-#### RUN\_SETTING\_LABELS
+#### [RUN\_SETTING\_LABELS](./gui/config_form.py#L1563)
 
 Plain-language names for `DEFAULT_RUN_SETTING_FIELD_NAMES`, used when
 the GUI tells a user how a loaded configuration's run settings differ
@@ -15073,7 +15073,7 @@ from the other.
 
 <a id="fim.gui.config_form.run_setting_display"></a>
 
-#### run\_setting\_display
+#### [run\_setting\_display](./gui/config_form.py#L1589)
 
 ```python
 def run_setting_display(name: str, text: str) -> str
@@ -15098,7 +15098,7 @@ an empty cell.
 
 <a id="fim.gui.config_form.run_setting_differences"></a>
 
-#### run\_setting\_differences
+#### [run\_setting\_differences](./gui/config_form.py#L1628)
 
 ```python
 def run_setting_differences(
@@ -15131,7 +15131,7 @@ adopt them. This is that comparison.
 
 <a id="fim.gui.config_form.starter_form_values"></a>
 
-#### starter\_form\_values
+#### [starter\_form\_values](./gui/config_form.py#L1672)
 
 ```python
 def starter_form_values(
@@ -15171,7 +15171,7 @@ Return the form's default values, from the CLI's own starter config.
 
 <a id="fim.gui.config_form.payload_to_yaml_text"></a>
 
-#### payload\_to\_yaml\_text
+#### [payload\_to\_yaml\_text](./gui/config_form.py#L1778)
 
 ```python
 def payload_to_yaml_text(payload: Mapping[str, object]) -> str
@@ -15195,13 +15195,13 @@ Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
 
 <a id="fim.gui.literature_visuals"></a>
 
-# fim.gui.literature\_visuals
+# [fim.gui.literature\_visuals](./gui/literature_visuals.py#L1)
 
 Literature-derived completed-run visualization payloads for fim-gui.
 
 <a id="fim.gui.literature_visuals.LiteratureVisualPayload"></a>
 
-## LiteratureVisualPayload Objects
+## [LiteratureVisualPayload Objects](./gui/literature_visuals.py#L37)
 
 ```python
 class LiteratureVisualPayload(TypedDict)
@@ -15211,7 +15211,7 @@ Client-ready payload for the run view's own supplemental panels.
 
 <a id="fim.gui.literature_visuals.literature_visual_payload"></a>
 
-#### literature\_visual\_payload
+#### [literature\_visual\_payload](./gui/literature_visuals.py#L45)
 
 ```python
 def literature_visual_payload(
@@ -15261,7 +15261,7 @@ Return the run view's three supplemental visualization payloads for one state.
 
 <a id="fim.gui.literature_visuals.pooled_literature_visual_payload"></a>
 
-#### pooled\_literature\_visual\_payload
+#### [pooled\_literature\_visual\_payload](./gui/literature_visuals.py#L88)
 
 ```python
 def pooled_literature_visual_payload(
@@ -15289,7 +15289,7 @@ Return the run view's three supplemental visualization payloads, pooled.
 
 <a id="fim.gui.literature_visuals.allele_composition_payload"></a>
 
-#### allele\_composition\_payload
+#### [allele\_composition\_payload](./gui/literature_visuals.py#L113)
 
 ```python
 def allele_composition_payload(
@@ -15323,7 +15323,7 @@ Return a per-deme stacked allele-composition barplot payload.
 
 <a id="fim.gui.literature_visuals.pooled_allele_composition_payload"></a>
 
-#### pooled\_allele\_composition\_payload
+#### [pooled\_allele\_composition\_payload](./gui/literature_visuals.py#L140)
 
 ```python
 def pooled_allele_composition_payload(
@@ -15352,7 +15352,7 @@ Return a per-deme stacked allele-composition barplot, pooled across states.
 
 <a id="fim.gui.literature_visuals.frequency_spectrum_payload"></a>
 
-#### frequency\_spectrum\_payload
+#### [frequency\_spectrum\_payload](./gui/literature_visuals.py#L215)
 
 ```python
 def frequency_spectrum_payload(
@@ -15381,7 +15381,7 @@ Return an empirical frequency spectrum and optional Wright beta overlay.
 
 <a id="fim.gui.literature_visuals.pooled_frequency_spectrum_payload"></a>
 
-#### pooled\_frequency\_spectrum\_payload
+#### [pooled\_frequency\_spectrum\_payload](./gui/literature_visuals.py#L236)
 
 ```python
 def pooled_frequency_spectrum_payload(
@@ -15414,7 +15414,7 @@ Return an empirical frequency spectrum, pooled across states.
 
 <a id="fim.gui.literature_visuals.isolation_by_distance_payload"></a>
 
-#### isolation\_by\_distance\_payload
+#### [isolation\_by\_distance\_payload](./gui/literature_visuals.py#L285)
 
 ```python
 def isolation_by_distance_payload(
@@ -15440,7 +15440,7 @@ Return pairwise identity decay by migration-graph distance.
 
 <a id="fim.gui.literature_visuals.pooled_isolation_by_distance_payload"></a>
 
-#### pooled\_isolation\_by\_distance\_payload
+#### [pooled\_isolation\_by\_distance\_payload](./gui/literature_visuals.py#L305)
 
 ```python
 def pooled_isolation_by_distance_payload(
@@ -15471,7 +15471,7 @@ Return pairwise identity decay by migration-graph distance, pooled.
 
 <a id="fim.gui.object_bridge"></a>
 
-# fim.gui.object\_bridge
+# [fim.gui.object\_bridge](./gui/object_bridge.py#L1)
 
 Saved runs ("Save for later") for the GUI: the logic behind `Api`'s methods.
 
@@ -15490,7 +15490,7 @@ made elsewhere (`fim object edit`), the configuration itself is converted.
 
 <a id="fim.gui.object_bridge.cancel"></a>
 
-#### cancel
+#### [cancel](./gui/object_bridge.py#L71)
 
 ```python
 def cancel(object_id: str, *, results: Path | None = None) -> str
@@ -15510,7 +15510,7 @@ Cancel a saved run, or ask its running worker to stop.
 
 <a id="fim.gui.object_bridge.configuration_text"></a>
 
-#### configuration\_text
+#### [configuration\_text](./gui/object_bridge.py#L88)
 
 ```python
 def configuration_text(values: Mapping[str, str],
@@ -15535,7 +15535,7 @@ Turn form values into configuration text, whether or not they are valid.
 
 <a id="fim.gui.object_bridge.clone"></a>
 
-#### clone
+#### [clone](./gui/object_bridge.py#L121)
 
 ```python
 def clone(object_id: str, *, results: Path | None = None) -> RunObject
@@ -15555,7 +15555,7 @@ Create a new saved run from another one's configuration.
 
 <a id="fim.gui.object_bridge.delete"></a>
 
-#### delete
+#### [delete](./gui/object_bridge.py#L146)
 
 ```python
 def delete(object_id: str, *, results: Path | None = None) -> None
@@ -15570,7 +15570,7 @@ Delete a saved run that is not executing.
 
 <a id="fim.gui.object_bridge.form_values"></a>
 
-#### form\_values
+#### [form\_values](./gui/object_bridge.py#L159)
 
 ```python
 def form_values(
@@ -15590,7 +15590,7 @@ Return a saved run's configuration as form values.
 
 <a id="fim.gui.object_bridge.list_rows"></a>
 
-#### list\_rows
+#### [list\_rows](./gui/object_bridge.py#L186)
 
 ```python
 def list_rows(results: Path | None = None) -> dict[str, Any]
@@ -15610,7 +15610,7 @@ Return one row per saved run, after recording any lost worker.
 
 <a id="fim.gui.object_bridge.pause"></a>
 
-#### pause
+#### [pause](./gui/object_bridge.py#L207)
 
 ```python
 def pause(object_id: str, *, results: Path | None = None) -> None
@@ -15625,7 +15625,7 @@ Ask a running saved run to checkpoint and pause.
 
 <a id="fim.gui.object_bridge.prepare_start"></a>
 
-#### prepare\_start
+#### [prepare\_start](./gui/object_bridge.py#L218)
 
 ```python
 def prepare_start(
@@ -15655,7 +15655,7 @@ Check that a saved run can start or resume now, before any side effect.
 
 <a id="fim.gui.object_bridge.row"></a>
 
-#### row
+#### [row](./gui/object_bridge.py#L250)
 
 ```python
 def row(run_object: RunObject) -> dict[str, Any]
@@ -15674,7 +15674,7 @@ Return the Saved runs panel's row for one saved run.
 
 <a id="fim.gui.object_bridge.save"></a>
 
-#### save
+#### [save](./gui/object_bridge.py#L290)
 
 ```python
 def save(
@@ -15712,7 +15712,7 @@ Save the form as a new saved run, or over an existing Draft or Planned one.
 
 <a id="fim.gui.object_runner"></a>
 
-# fim.gui.object\_runner
+# [fim.gui.object\_runner](./gui/object_runner.py#L1)
 
 Background-thread execution of a saved Run object for the GUI.
 
@@ -15732,7 +15732,7 @@ never reach a later attempt's view.
 
 <a id="fim.gui.object_runner.start_object_run"></a>
 
-#### start\_object\_run
+#### [start\_object\_run](./gui/object_runner.py#L86)
 
 ```python
 def start_object_run(
@@ -15772,7 +15772,7 @@ exits.
 
 <a id="fim.gui.preferences"></a>
 
-# fim.gui.preferences
+# [fim.gui.preferences](./gui/preferences.py#L1)
 
 Versioned, atomic GUI-preferences store (P1 item 4, design doc
 `20260907-claude-sonnet-5-gui-preferences-persistence-design.md`).
@@ -15867,27 +15867,27 @@ caller is expected to actually show, not just log
 
 <a id="fim.gui.preferences.RUN_GRAPH_KEYS"></a>
 
-#### RUN\_GRAPH\_KEYS
+#### [RUN\_GRAPH\_KEYS](./gui/preferences.py#L140)
 
 Every graph the Run card can show, in on-screen order (`run-graph-stage.js`'s
 own `RUN_GRAPHS`, which this must stay in step with).
 
 <a id="fim.gui.preferences.DEFAULT_RUN_GRAPHS"></a>
 
-#### DEFAULT\_RUN\_GRAPHS
+#### [DEFAULT\_RUN\_GRAPHS](./gui/preferences.py#L150)
 
 What a fresh install shows together: the scatter and the trajectories.
 
 <a id="fim.gui.preferences.SCATTER_STYLES"></a>
 
-#### SCATTER\_STYLES
+#### [SCATTER\_STYLES](./gui/preferences.py#L156)
 
 How the scatter plot draws its points (`scatter.js`'s own `SCATTER_STYLES`).
 `circles` is the original encoding (radius grows with count).
 
 <a id="fim.gui.preferences.TRAJECTORY_DISPLAYS"></a>
 
-#### TRAJECTORY\_DISPLAYS
+#### [TRAJECTORY\_DISPLAYS](./gui/preferences.py#L170)
 
 How the trajectory graph draws each statistic: its value at every
 recorded generation (the noise drift leaves in it), its trailing mean over
@@ -15898,7 +15898,7 @@ and `cumulativeMeanSeries`).
 
 <a id="fim.gui.preferences.TRAJECTORY_BAND_WIDTHS"></a>
 
-#### TRAJECTORY\_BAND\_WIDTHS
+#### [TRAJECTORY\_BAND\_WIDTHS](./gui/preferences.py#L184)
 
 How wide the trajectory graph's bands are, in sigmas or standard errors.
 
@@ -15908,7 +15908,7 @@ band of the two averaged displays (design 6.8).
 
 <a id="fim.gui.preferences.GuiPreferences"></a>
 
-## GuiPreferences Objects
+## [GuiPreferences Objects](./gui/preferences.py#L270)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -15989,7 +15989,7 @@ One loaded (or default) snapshot of the GUI's own preferences.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./gui/preferences.py#L379)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -15999,7 +15999,7 @@ Return the on-disk JSON shape this preference set writes as.
 
 <a id="fim.gui.preferences.GuiPreferences.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./gui/preferences.py#L410)
 
 ```python
 @staticmethod
@@ -16019,7 +16019,7 @@ Parse the on-disk JSON shape `to_dict` writes.
 
 <a id="fim.gui.preferences.GuiPreferences.with_form_values"></a>
 
-#### with\_form\_values
+#### [with\_form\_values](./gui/preferences.py#L516)
 
 ```python
 def with_form_values(form_values: Mapping[str, str]) -> GuiPreferences
@@ -16029,7 +16029,7 @@ Return a copy with `form_values` replaced — the common `start_run` update.
 
 <a id="fim.gui.preferences.GuiPreferences.with_named_preset"></a>
 
-#### with\_named\_preset
+#### [with\_named\_preset](./gui/preferences.py#L520)
 
 ```python
 def with_named_preset(name: str, form_values: Mapping[str,
@@ -16050,7 +16050,7 @@ Return a copy with one named preset added, or overwritten by the same name.
 
 <a id="fim.gui.preferences.GuiPreferences.without_named_preset"></a>
 
-#### without\_named\_preset
+#### [without\_named\_preset](./gui/preferences.py#L538)
 
 ```python
 def without_named_preset(name: str) -> GuiPreferences
@@ -16066,7 +16066,7 @@ surfacing.
 
 <a id="fim.gui.preferences.GuiPreferences.with_significant_digits"></a>
 
-#### with\_significant\_digits
+#### [with\_significant\_digits](./gui/preferences.py#L553)
 
 ```python
 def with_significant_digits(significant_digits: int) -> GuiPreferences
@@ -16078,7 +16078,7 @@ The `set_significant_digits` bridge method's own update.
 
 <a id="fim.gui.preferences.GuiPreferences.with_dark_mode_override"></a>
 
-#### with\_dark\_mode\_override
+#### [with\_dark\_mode\_override](./gui/preferences.py#L560)
 
 ```python
 def with_dark_mode_override(dark_mode_override: str | None) -> GuiPreferences
@@ -16093,7 +16093,7 @@ stay set forever), not merely "clear an error."
 
 <a id="fim.gui.preferences.GuiPreferences.with_welcome_dismissed"></a>
 
-#### with\_welcome\_dismissed
+#### [with\_welcome\_dismissed](./gui/preferences.py#L570)
 
 ```python
 def with_welcome_dismissed() -> GuiPreferences
@@ -16109,7 +16109,7 @@ the OS."
 
 <a id="fim.gui.preferences.GuiPreferences.with_startup_behavior"></a>
 
-#### with\_startup\_behavior
+#### [with\_startup\_behavior](./gui/preferences.py#L581)
 
 ```python
 def with_startup_behavior(startup_behavior: str) -> GuiPreferences
@@ -16124,7 +16124,7 @@ Return a copy with `startup_behavior` replaced.
 
 <a id="fim.gui.preferences.GuiPreferences.with_default_run_settings"></a>
 
-#### with\_default\_run\_settings
+#### [with\_default\_run\_settings](./gui/preferences.py#L590)
 
 ```python
 def with_default_run_settings(values: Mapping[str, str]) -> GuiPreferences
@@ -16140,7 +16140,7 @@ reaches here (the same division of labor `with_form_values` and
 
 <a id="fim.gui.preferences.GuiPreferences.with_results_location_override"></a>
 
-#### with\_results\_location\_override
+#### [with\_results\_location\_override](./gui/preferences.py#L601)
 
 ```python
 def with_results_location_override(path: str | None) -> GuiPreferences
@@ -16159,7 +16159,7 @@ rather than silently only ever growing.
 
 <a id="fim.gui.preferences.GuiPreferences.with_run_card_layout"></a>
 
-#### with\_run\_card\_layout
+#### [with\_run\_card\_layout](./gui/preferences.py#L615)
 
 ```python
 def with_run_card_layout(
@@ -16179,7 +16179,7 @@ each argument left `None` keeps the current value.
 
 <a id="fim.gui.preferences.GuiPreferences.with_shown_statistics"></a>
 
-#### with\_shown\_statistics
+#### [with\_shown\_statistics](./gui/preferences.py#L653)
 
 ```python
 def with_shown_statistics(keys: tuple[str, ...] | None) -> GuiPreferences
@@ -16189,7 +16189,7 @@ Return a copy with the shown statistics replaced (`None`: defaults).
 
 <a id="fim.gui.preferences.GuiPreferences.with_pairwise_max_demes"></a>
 
-#### with\_pairwise\_max\_demes
+#### [with\_pairwise\_max\_demes](./gui/preferences.py#L657)
 
 ```python
 def with_pairwise_max_demes(max_demes: int) -> GuiPreferences
@@ -16199,7 +16199,7 @@ Return a copy with the `pairwise.json` deme-count limit replaced.
 
 <a id="fim.gui.preferences.GuiPreferences.with_default_ploidy"></a>
 
-#### with\_default\_ploidy
+#### [with\_default\_ploidy](./gui/preferences.py#L661)
 
 ```python
 def with_default_ploidy(default_ploidy: str) -> GuiPreferences
@@ -16216,7 +16216,7 @@ The `Api.set_default_ploidy` bridge method's own update.
 
 <a id="fim.gui.preferences.load_preferences"></a>
 
-#### load\_preferences
+#### [load\_preferences](./gui/preferences.py#L708)
 
 ```python
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]
@@ -16241,7 +16241,7 @@ Load `path`, quarantining and defaulting on any unreadable content.
 
 <a id="fim.gui.preferences.set_preferences_file_override"></a>
 
-#### set\_preferences\_file\_override
+#### [set\_preferences\_file\_override](./gui/preferences.py#L742)
 
 ```python
 def set_preferences_file_override(path: Path | None) -> None
@@ -16267,7 +16267,7 @@ the identical "never pay for it unless actually used" reason.
 
 <a id="fim.gui.preferences.preferences_file_override"></a>
 
-#### preferences\_file\_override
+#### [preferences\_file\_override](./gui/preferences.py#L764)
 
 ```python
 def preferences_file_override() -> Path | None
@@ -16277,7 +16277,7 @@ The current `preferences_file_path()` override, if any.
 
 <a id="fim.gui.preferences.preferences_file_path"></a>
 
-#### preferences\_file\_path
+#### [preferences\_file\_path](./gui/preferences.py#L769)
 
 ```python
 def preferences_file_path(*,
@@ -16322,7 +16322,7 @@ configurable-storage-root-design.md` (`selby/restricted`).
 
 <a id="fim.gui.preferences.save_preferences"></a>
 
-#### save\_preferences
+#### [save\_preferences](./gui/preferences.py#L824)
 
 ```python
 def save_preferences(path: Path, preferences: GuiPreferences) -> None
@@ -16336,7 +16336,7 @@ previous complete file or the new one, never a torn write.
 
 <a id="fim.gui.presets"></a>
 
-# fim.gui.presets
+# [fim.gui.presets](./gui/presets.py#L1)
 
 Read the bundled examples catalog for the Examples dialog and presets.
 
@@ -16362,7 +16362,7 @@ catalog, kept as thin aliases until their callers (the File menu's
 
 <a id="fim.gui.presets.ExampleClass"></a>
 
-## ExampleClass Objects
+## [ExampleClass Objects](./gui/presets.py#L50)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16380,7 +16380,7 @@ One class in the examples tree (design §2).
 
 <a id="fim.gui.presets.ExampleClass.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./gui/presets.py#L65)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -16390,7 +16390,7 @@ Return the class as the JSON shape the bridge sends the page.
 
 <a id="fim.gui.presets.Example"></a>
 
-## Example Objects
+## [Example Objects](./gui/presets.py#L76)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16415,7 +16415,7 @@ One bundled example.
 
 <a id="fim.gui.presets.Catalog"></a>
 
-## Catalog Objects
+## [Catalog Objects](./gui/presets.py#L104)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16426,7 +16426,7 @@ The bundled class tree and examples, in display order.
 
 <a id="fim.gui.presets.Preset"></a>
 
-## Preset Objects
+## [Preset Objects](./gui/presets.py#L112)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16444,7 +16444,7 @@ One example with a configuration, in the older flat preset view.
 
 <a id="fim.gui.presets.get_example"></a>
 
-#### get\_example
+#### [get\_example](./gui/presets.py#L152)
 
 ```python
 def get_example(webui_directory: Path, example_id: str) -> Example | None
@@ -16459,7 +16459,7 @@ Return one example by ID, or `None` if the catalog has no such example.
 
 <a id="fim.gui.presets.get_preset"></a>
 
-#### get\_preset
+#### [get\_preset](./gui/presets.py#L165)
 
 ```python
 def get_preset(webui_directory: Path, preset_id: str) -> Preset | None
@@ -16474,7 +16474,7 @@ Return one preset by ID, or `None` if no such preset exists.
 
 <a id="fim.gui.presets.list_presets"></a>
 
-#### list\_presets
+#### [list\_presets](./gui/presets.py#L178)
 
 ```python
 def list_presets(webui_directory: Path) -> list[Preset]
@@ -16495,7 +16495,7 @@ Return every example that has a configuration, as a flat preset list.
 
 <a id="fim.gui.presets.load_catalog"></a>
 
-#### load\_catalog
+#### [load\_catalog](./gui/presets.py#L200)
 
 ```python
 def load_catalog(webui_directory: Path) -> Catalog
@@ -16519,7 +16519,7 @@ Return the bundled examples catalog.
 
 <a id="fim.gui.presets.find_example"></a>
 
-#### find\_example
+#### [find\_example](./gui/presets.py#L217)
 
 ```python
 def find_example(catalog: Catalog, example_id: str) -> Example | None
@@ -16534,7 +16534,7 @@ Return one example of an already-loaded catalog, or `None`.
 
 <a id="fim.gui.presets.catalog_presets"></a>
 
-#### catalog\_presets
+#### [catalog\_presets](./gui/presets.py#L230)
 
 ```python
 def catalog_presets(catalog: Catalog) -> list[Preset]
@@ -16547,7 +16547,7 @@ configuration, in catalog order.
 
 <a id="fim.gui.presets.load_bundle_catalog"></a>
 
-#### load\_bundle\_catalog
+#### [load\_bundle\_catalog](./gui/presets.py#L247)
 
 ```python
 def load_bundle_catalog(bundle_directory: Path) -> Catalog
@@ -16572,7 +16572,7 @@ bundle.
 
 <a id="fim.gui.presets.split_configuration"></a>
 
-#### split\_configuration
+#### [split\_configuration](./gui/presets.py#L274)
 
 ```python
 def split_configuration(
@@ -16599,7 +16599,7 @@ editable run (design §1).
 
 <a id="fim.gui.presets.strip_internal_yaml_keys"></a>
 
-#### strip\_internal\_yaml\_keys
+#### [strip\_internal\_yaml\_keys](./gui/presets.py#L301)
 
 ```python
 def strip_internal_yaml_keys(yaml_text: str) -> str
@@ -16624,7 +16624,7 @@ stay, since `fim run` records them as the new run's name.
 
 <a id="fim.gui.recent_runs"></a>
 
-# fim.gui.recent\_runs
+# [fim.gui.recent\_runs](./gui/recent_runs.py#L1)
 
 Scan `results/` for recently completed runs, scalar and batch
 (`doc/fim-gui-design.md` §9).
@@ -16642,7 +16642,7 @@ trajectory of its own to verify or re-analyze.
 
 <a id="fim.gui.recent_runs.RecentRun"></a>
 
-## RecentRun Objects
+## [RecentRun Objects](./gui/recent_runs.py#L34)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16677,7 +16677,7 @@ One run — scalar or batch — found under `results/`, ready to list.
 
 <a id="fim.gui.recent_runs.list_recent_runs"></a>
 
-#### list\_recent\_runs
+#### [list\_recent\_runs](./gui/recent_runs.py#L69)
 
 ```python
 def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]
@@ -16703,7 +16703,7 @@ Return every run under `results_directory`, newest first.
 
 <a id="fim.gui.runner"></a>
 
-# fim.gui.runner
+# [fim.gui.runner](./gui/runner.py#L1)
 
 Background-thread scalar-run orchestration (`doc/fim-gui-design.md` §7.1).
 
@@ -16736,7 +16736,7 @@ against.
 
 <a id="fim.gui.runner.ProgressThrottle"></a>
 
-## ProgressThrottle Objects
+## [ProgressThrottle Objects](./gui/runner.py#L121)
 
 ```python
 class ProgressThrottle()
@@ -16758,7 +16758,7 @@ throttle.
 
 <a id="fim.gui.runner.ProgressThrottle.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./gui/runner.py#L137)
 
 ```python
 def __init__(*,
@@ -16770,7 +16770,7 @@ Start with no prior report, so the very first call always reports.
 
 <a id="fim.gui.runner.ProgressThrottle.should_report"></a>
 
-#### should\_report
+#### [should\_report](./gui/runner.py#L148)
 
 ```python
 def should_report(generation: int, max_generations: int) -> bool
@@ -16780,7 +16780,7 @@ Return whether `generation` should be posted to the UI now.
 
 <a id="fim.gui.runner.pairwise_status_text"></a>
 
-#### pairwise\_status\_text
+#### [pairwise\_status\_text](./gui/runner.py#L163)
 
 ```python
 def pairwise_status_text(deme_count: int, run_count: int) -> str
@@ -16800,7 +16800,7 @@ Return the status line shown while large `pairwise.json` files are saved.
 
 <a id="fim.gui.runner.progress_message"></a>
 
-#### progress\_message
+#### [progress\_message](./gui/runner.py#L181)
 
 ```python
 def progress_message(state: ModelState, generation: int,
@@ -16826,7 +16826,7 @@ saved Run and an ordinary one draw identical ticks.
 
 <a id="fim.gui.runner.start_run"></a>
 
-#### start\_run
+#### [start\_run](./gui/runner.py#L218)
 
 ```python
 def start_run(
@@ -16871,7 +16871,7 @@ Resolve targets, guard the existing target, and start the worker thread.
 
 <a id="fim.gui.store"></a>
 
-# fim.gui.store
+# [fim.gui.store](./gui/store.py#L1)
 
 Progress reporting and cancellation for a background run (§7 of the GUI design doc).
 
@@ -16907,7 +16907,7 @@ fim-gui-design.md` §7.1, §7.2):
 
 <a id="fim.gui.store.LIVE_BLOCK_SECONDS"></a>
 
-#### LIVE\_BLOCK\_SECONDS
+#### [LIVE\_BLOCK\_SECONDS](./gui/store.py#L63)
 
 Seconds a run's open log block may wait before it is written.
 
@@ -16919,7 +16919,7 @@ finished file is byte-for-byte the one a command-line run writes.)
 
 <a id="fim.gui.store.RunCancelledError"></a>
 
-## RunCancelledError Objects
+## [RunCancelledError Objects](./gui/store.py#L73)
 
 ```python
 class RunCancelledError(FimError)
@@ -16936,7 +16936,7 @@ Raised from `write_generation` to unwind an in-progress run.
 
 <a id="fim.gui.store.GuiProgressStore"></a>
 
-## GuiProgressStore Objects
+## [GuiProgressStore Objects](./gui/store.py#L89)
 
 ```python
 class GuiProgressStore()
@@ -16951,7 +16951,7 @@ difference.
 
 <a id="fim.gui.store.GuiProgressStore.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./gui/store.py#L98)
 
 ```python
 def __init__(inner: TrajectoryStore, *,
@@ -16977,7 +16977,7 @@ Wrap `inner`, reporting each write and honoring `cancel_event`.
 
 <a id="fim.gui.store.GuiProgressStore.write_generation"></a>
 
-#### write\_generation
+#### [write\_generation](./gui/store.py#L124)
 
 ```python
 def write_generation(run_id: str,
@@ -17012,7 +17012,7 @@ store`'s own top docstring for who does.
 
 <a id="fim.gui.store.GuiProgressStore.begin_run"></a>
 
-#### begin\_run
+#### [begin\_run](./gui/store.py#L163)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -17025,7 +17025,7 @@ though this decorator hands it rows.
 
 <a id="fim.gui.store.GuiProgressStore.wants_frames"></a>
 
-#### wants\_frames
+#### [wants\_frames](./gui/store.py#L171)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -17035,7 +17035,7 @@ Return `False`: the live scatter's callback needs the rows.
 
 <a id="fim.gui.store.GuiProgressStore.write_frame"></a>
 
-#### write\_frame
+#### [write\_frame](./gui/store.py#L176)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -17045,7 +17045,7 @@ Refuse frames; this decorator is fed rows (`wants_frames` is false).
 
 <a id="fim.gui.store.GuiProgressStore.read"></a>
 
-#### read
+#### [read](./gui/store.py#L181)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -17055,7 +17055,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.gui.store.GuiProgressStore.discard"></a>
 
-#### discard
+#### [discard](./gui/store.py#L185)
 
 ```python
 def discard(run_id: str) -> None
@@ -17065,7 +17065,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.gui.store.GuiProgressStore.close"></a>
 
-#### close
+#### [close](./gui/store.py#L189)
 
 ```python
 def close() -> None
@@ -17075,7 +17075,7 @@ Close the wrapped store's own resources (`ClosableStore`).
 
 <a id="fim.gui.store.GuiProgressStore.equilibrium_store"></a>
 
-#### equilibrium\_store
+#### [equilibrium\_store](./gui/store.py#L193)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -17090,7 +17090,7 @@ zero (`fim.persistence.store.EquilibriumStoreProvider`).
 
 <a id="fim.gui.store.LiveProgressStore"></a>
 
-## LiveProgressStore Objects
+## [LiveProgressStore Objects](./gui/store.py#L204)
 
 ```python
 class LiveProgressStore()
@@ -17106,7 +17106,7 @@ or a callback. Structurally satisfies `TrajectoryStore`, exactly like
 
 <a id="fim.gui.store.LiveProgressStore.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./gui/store.py#L214)
 
 ```python
 def __init__(inner: TrajectoryStore, *, progress_path: Path,
@@ -17132,7 +17132,7 @@ Wrap `inner`, recording progress in and honoring cancellation from disk.
 
 <a id="fim.gui.store.LiveProgressStore.begin_run"></a>
 
-#### begin\_run
+#### [begin\_run](./gui/store.py#L246)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -17142,7 +17142,7 @@ Tell the wrapped store the run's layout (`FrameStore`).
 
 <a id="fim.gui.store.LiveProgressStore.wants_frames"></a>
 
-#### wants\_frames
+#### [wants\_frames](./gui/store.py#L250)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -17152,7 +17152,7 @@ Whether the wrapped store prefers frames; nothing here needs rows.
 
 <a id="fim.gui.store.LiveProgressStore.write_frame"></a>
 
-#### write\_frame
+#### [write\_frame](./gui/store.py#L254)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -17169,7 +17169,7 @@ first, and the sidecar follows the committed generation.
 
 <a id="fim.gui.store.LiveProgressStore.write_generation"></a>
 
-#### write\_generation
+#### [write\_generation](./gui/store.py#L287)
 
 ```python
 def write_generation(run_id: str,
@@ -17189,7 +17189,7 @@ method's own docstring explains.
 
 <a id="fim.gui.store.LiveProgressStore.read"></a>
 
-#### read
+#### [read](./gui/store.py#L309)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -17199,7 +17199,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.gui.store.LiveProgressStore.discard"></a>
 
-#### discard
+#### [discard](./gui/store.py#L313)
 
 ```python
 def discard(run_id: str) -> None
@@ -17209,7 +17209,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.gui.store.LiveProgressStore.close"></a>
 
-#### close
+#### [close](./gui/store.py#L317)
 
 ```python
 def close() -> None
@@ -17223,7 +17223,7 @@ while the run was going.
 
 <a id="fim.gui.store.LiveProgressStore.equilibrium_store"></a>
 
-#### equilibrium\_store
+#### [equilibrium\_store](./gui/store.py#L329)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -17237,7 +17237,7 @@ equilibrium_store`).
 
 <a id="fim.gui.store.write_progress_sidecar"></a>
 
-#### write\_progress\_sidecar
+#### [write\_progress\_sidecar](./gui/store.py#L339)
 
 ```python
 def write_progress_sidecar(progress_path: Path, generation: int) -> None
@@ -17262,7 +17262,7 @@ Atomically write one replicate's `.progress` sidecar.
 
 <a id="fim.gui.store.read_progress_sidecar"></a>
 
-#### read\_progress\_sidecar
+#### [read\_progress\_sidecar](./gui/store.py#L372)
 
 ```python
 def read_progress_sidecar(progress_path: Path) -> dict[str, Any] | None
@@ -17278,7 +17278,7 @@ a complete, valid write; no partial-read handling is needed here.
 
 <a id="fim.gui.store.read_live_state"></a>
 
-#### read\_live\_state
+#### [read\_live\_state](./gui/store.py#L395)
 
 ```python
 def read_live_state(trajectory_path: Path, run_id: str, generation: int,
@@ -17320,7 +17320,7 @@ generation still being written.
 
 <a id="fim.gui.sweep_bridge"></a>
 
-# fim.gui.sweep\_bridge
+# [fim.gui.sweep\_bridge](./gui/sweep_bridge.py#L1)
 
 JSON-shaped payloads for the sweep bridge calls (`fim.gui.app.Api`).
 
@@ -17330,7 +17330,7 @@ draw. Nothing here touches a window or starts a run; `Api` owns that.
 
 <a id="fim.gui.sweep_bridge.sweepable_keys_payload"></a>
 
-#### sweepable\_keys\_payload
+#### [sweepable\_keys\_payload](./gui/sweep_bridge.py#L40)
 
 ```python
 def sweepable_keys_payload() -> list[dict[str, Any]]
@@ -17340,7 +17340,7 @@ Describe every sweepable key for the page's axis controls.
 
 <a id="fim.gui.sweep_bridge.spec_from_request"></a>
 
-#### spec\_from\_request
+#### [spec\_from\_request](./gui/sweep_bridge.py#L60)
 
 ```python
 def spec_from_request(base: Mapping[str, Any],
@@ -17360,7 +17360,7 @@ optional.
 
 <a id="fim.gui.sweep_bridge.recording_from_request"></a>
 
-#### recording\_from\_request
+#### [recording\_from\_request](./gui/sweep_bridge.py#L95)
 
 ```python
 def recording_from_request(value: object) -> dict[str, Any]
@@ -17384,7 +17384,7 @@ file have one fingerprint.
 
 <a id="fim.gui.sweep_bridge.trajectories_payload"></a>
 
-#### trajectories\_payload
+#### [trajectories\_payload](./gui/sweep_bridge.py#L128)
 
 ```python
 def trajectories_payload(study_id: str,
@@ -17402,7 +17402,7 @@ page cannot read `NaN` from JSON.
 
 <a id="fim.gui.sweep_bridge.existing_run_ids"></a>
 
-#### existing\_run\_ids
+#### [existing\_run\_ids](./gui/sweep_bridge.py#L199)
 
 ```python
 def existing_run_ids(results: Path | None = None) -> set[str]
@@ -17415,7 +17415,7 @@ software version, as `run_sweep` does.
 
 <a id="fim.gui.sweep_bridge.reusable_run_ids"></a>
 
-#### reusable\_run\_ids
+#### [reusable\_run\_ids](./gui/sweep_bridge.py#L208)
 
 ```python
 def reusable_run_ids(plan: SweepPlan, results: Path | None = None) -> set[str]
@@ -17429,7 +17429,7 @@ frames), the rule `run_sweep` applies.
 
 <a id="fim.gui.sweep_bridge.plan_payload"></a>
 
-#### plan\_payload
+#### [plan\_payload](./gui/sweep_bridge.py#L223)
 
 ```python
 def plan_payload(spec: SweepSpec,
@@ -17442,7 +17442,7 @@ Describe a plan for the page, marking points whose run already exists.
 
 <a id="fim.gui.sweep_bridge.status_payload"></a>
 
-#### status\_payload
+#### [status\_payload](./gui/sweep_bridge.py#L261)
 
 ```python
 def status_payload(study: StudyManifest,
@@ -17457,7 +17457,7 @@ screen's name tooltip (`webui/screens/details.js`).
 
 <a id="fim.gui.sweep_bridge.series_payload"></a>
 
-#### series\_payload
+#### [series\_payload](./gui/sweep_bridge.py#L309)
 
 ```python
 def series_payload(study_id: str,
@@ -17476,7 +17476,7 @@ page's own style. A request the table refuses comes back as a message.
 
 <a id="fim.gui.sweep_bridge.comparison_payload"></a>
 
-#### comparison\_payload
+#### [comparison\_payload](./gui/sweep_bridge.py#L360)
 
 ```python
 def comparison_payload(study_ids: Sequence[str],
@@ -17507,7 +17507,7 @@ Compare sweeps for the page: the join, each sweep's cells, the difference.
 
 <a id="fim.gui.sweep_bridge.results_payload"></a>
 
-#### results\_payload
+#### [results\_payload](./gui/sweep_bridge.py#L477)
 
 ```python
 def results_payload(study: StudyManifest,
@@ -17519,7 +17519,7 @@ Describe a sweep Study's finished points and their statistics.
 
 <a id="fim.gui.trajectory_history"></a>
 
-# fim.gui.trajectory\_history
+# [fim.gui.trajectory\_history](./gui/trajectory_history.py#L1)
 
 Sample a full statistic-vs-generation history from a persisted
 trajectory, for the Compare workspace's own trajectory-overlay panel
@@ -17544,7 +17544,7 @@ for the identical reason (`fim.gui.animation`'s own module docstring).
 
 <a id="fim.gui.trajectory_history.TrajectoryHistory"></a>
 
-## TrajectoryHistory Objects
+## [TrajectoryHistory Objects](./gui/trajectory_history.py#L54)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -17573,7 +17573,7 @@ One run's own sampled statistic-vs-generation history.
 
 <a id="fim.gui.trajectory_history.sampled_statistic_history"></a>
 
-#### sampled\_statistic\_history
+#### [sampled\_statistic\_history](./gui/trajectory_history.py#L81)
 
 ```python
 def sampled_statistic_history(
@@ -17609,7 +17609,7 @@ Sample up to `max_samples` generations' worth of `STATISTIC_NAMES`.
 
 <a id="fim.launcher"></a>
 
-# fim.launcher
+# [fim.launcher](./launcher.py#L1)
 
 Dispatcher for the single packaged executable's three ways into the GUI.
 
@@ -17641,7 +17641,7 @@ command still reaches the unmodified CLI parser.
 
 <a id="fim.launcher.main"></a>
 
-#### main
+#### [main](./launcher.py#L46)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -17671,7 +17671,7 @@ through to the unmodified CLI parser.
 
 <a id="fim.launcher.launch_gui"></a>
 
-#### launch\_gui
+#### [launch\_gui](./launcher.py#L114)
 
 ```python
 def launch_gui(*, detach: bool) -> int
@@ -17709,7 +17709,7 @@ launched it, rather than blocking until the app window is closed.
 
 <a id="fim.logging_setup"></a>
 
-# fim.logging\_setup
+# [fim.logging\_setup](./logging_setup.py#L1)
 
 Central logging configuration for both front ends (`doc/fim-logging-
 design.md` §3.2).
@@ -17734,7 +17734,7 @@ root-design.md`, `selby/restricted`, §9).
 
 <a id="fim.logging_setup.resolve_level"></a>
 
-#### resolve\_level
+#### [resolve\_level](./logging_setup.py#L63)
 
 ```python
 def resolve_level(level: str | int) -> int
@@ -17761,7 +17761,7 @@ Resolve a `-l`-style level name (or an already-numeric level).
 
 <a id="fim.logging_setup.log_file_streams"></a>
 
-#### log\_file\_streams
+#### [log\_file\_streams](./logging_setup.py#L91)
 
 ```python
 def log_file_streams() -> list[TextIO]
@@ -17796,7 +17796,7 @@ be worse than not dumping.
 
 <a id="fim.logging_setup.parse_log_options"></a>
 
-#### parse\_log\_options
+#### [parse\_log\_options](./logging_setup.py#L128)
 
 ```python
 def parse_log_options(text: str | None) -> dict[str, str]
@@ -17830,7 +17830,7 @@ silently wrong log destination" contract `doc/fim-logging-design.md`
 
 <a id="fim.logging_setup.apply_logging_config_file"></a>
 
-#### apply\_logging\_config\_file
+#### [apply\_logging\_config\_file](./logging_setup.py#L172)
 
 ```python
 def apply_logging_config_file(path: Path) -> None
@@ -17877,7 +17877,7 @@ CONFIG` is given, never both.
 
 <a id="fim.logging_setup.configure"></a>
 
-#### configure
+#### [configure](./logging_setup.py#L216)
 
 ```python
 def configure(level: str | int = "warning",
@@ -17914,7 +17914,7 @@ captureWarnings` so `warnings.warn` obeys the same configuration
 
 <a id="fim.model"></a>
 
-# fim.model
+# [fim.model](./model/__init__.py#L1)
 
 Value objects and update operators for the finite island model.
 
@@ -17929,7 +17929,7 @@ from `fim.engine`'s own run loop, never directly by outside code.
 
 <a id="fim.model.allele"></a>
 
-# fim.model.allele
+# [fim.model.allele](./model/allele.py#L1)
 
 Opaque allele identities and mutant-allele allocation.
 
@@ -17957,7 +17957,7 @@ gets assigned when a mutation happens:
 
 <a id="fim.model.allele.founding_allele_ids"></a>
 
-#### founding\_allele\_ids
+#### [founding\_allele\_ids](./model/allele.py#L85)
 
 ```python
 def founding_allele_ids(count: int) -> tuple[AlleleId, ...]
@@ -17986,7 +17986,7 @@ table is one of these `count` identifiers, never a mutant one.
 
 <a id="fim.model.allele.AlleleRegistry"></a>
 
-## AlleleRegistry Objects
+## [AlleleRegistry Objects](./model/allele.py#L109)
 
 ```python
 class AlleleRegistry()
@@ -18004,7 +18004,7 @@ ever colliding on the same identifier.
 
 <a id="fim.model.allele.AlleleRegistry.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./model/allele.py#L121)
 
 ```python
 def __init__(start: int = MINTED_ID_START) -> None
@@ -18023,7 +18023,7 @@ Initialize a registry at the first mutant-only identifier.
 
 <a id="fim.model.allele.AlleleRegistry.next_value"></a>
 
-#### next\_value
+#### [next\_value](./model/allele.py#L137)
 
 ```python
 @property
@@ -18038,7 +18038,7 @@ exactly the counter this registry holds.
 
 <a id="fim.model.allele.AlleleRegistry.advance_to"></a>
 
-#### advance\_to
+#### [advance\_to](./model/allele.py#L146)
 
 ```python
 def advance_to(value: int) -> None
@@ -18062,7 +18062,7 @@ afterwards still never returns an identity V already handed out.
 
 <a id="fim.model.allele.AlleleRegistry.next_id"></a>
 
-#### next\_id
+#### [next\_id](./model/allele.py#L166)
 
 ```python
 def next_id() -> AlleleId
@@ -18072,7 +18072,7 @@ Return a new allele identity that has never been returned before.
 
 <a id="fim.model.allele.AlleleRegistry.next_k_ids"></a>
 
-#### next\_k\_ids
+#### [next\_k\_ids](./model/allele.py#L172)
 
 ```python
 def next_k_ids(k: int) -> np.ndarray
@@ -18129,7 +18129,7 @@ not `k` times.
 
 <a id="fim.model.allele.FiniteAlleleSpace"></a>
 
-## FiniteAlleleSpace Objects
+## [FiniteAlleleSpace Objects](./model/allele.py#L224)
 
 ```python
 class FiniteAlleleSpace()
@@ -18160,7 +18160,7 @@ probability.
 
 <a id="fim.model.allele.FiniteAlleleSpace.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./model/allele.py#L249)
 
 ```python
 def __init__(capacity: int, initial_ids: Iterable[AlleleId]) -> None
@@ -18184,7 +18184,7 @@ Seed one locus's finite state space from its generation-zero alleles.
 
 <a id="fim.model.allele.FiniteAlleleSpace.capacity"></a>
 
-#### capacity
+#### [capacity](./model/allele.py#L282)
 
 ```python
 @property
@@ -18195,7 +18195,7 @@ This locus's own fixed state-space size, ``K``.
 
 <a id="fim.model.allele.FiniteAlleleSpace.minted_states"></a>
 
-#### minted\_states
+#### [minted\_states](./model/allele.py#L287)
 
 ```python
 @property
@@ -18208,7 +18208,7 @@ Every state minted so far, in minting order, including lost ones.
 
 <a id="fim.model.allele.FiniteAlleleSpace.next_unminted"></a>
 
-#### next\_unminted
+#### [next\_unminted](./model/allele.py#L295)
 
 ```python
 @property
@@ -18219,7 +18219,7 @@ The inert counter `to_arrays` carries; stored so a restore is exact.
 
 <a id="fim.model.allele.FiniteAlleleSpace.restore_minted"></a>
 
-#### restore\_minted
+#### [restore\_minted](./model/allele.py#L299)
 
 ```python
 def restore_minted(minted: list[AlleleId], next_unminted: int) -> None
@@ -18242,7 +18242,7 @@ a checkpoint without building a `capacity`-sized array.
 
 <a id="fim.model.allele.FiniteAlleleSpace.to_arrays"></a>
 
-#### to\_arrays
+#### [to\_arrays](./model/allele.py#L321)
 
 ```python
 def to_arrays() -> tuple[np.ndarray, np.ndarray, int, int]
@@ -18287,7 +18287,7 @@ that eligibility decision; this method does not gate it.
 
 <a id="fim.model.allele.FiniteAlleleSpace.restore_from_arrays"></a>
 
-#### restore\_from\_arrays
+#### [restore\_from\_arrays](./model/allele.py#L364)
 
 ```python
 def restore_from_arrays(minted_mask: np.ndarray, minted_list: np.ndarray,
@@ -18322,7 +18322,7 @@ mutates this space's own internal state as a side effect.
 
 <a id="fim.model.allele.FiniteAlleleSpace.mutate_target"></a>
 
-#### mutate\_target
+#### [mutate\_target](./model/allele.py#L403)
 
 ```python
 def mutate_target(current: AlleleId, rng: np.random.Generator) -> AlleleId
@@ -18389,7 +18389,7 @@ Return one state other than ``current``, uniformly at random.
 
 <a id="fim.model.allele.FiniteAlleleRegistry"></a>
 
-## FiniteAlleleRegistry Objects
+## [FiniteAlleleRegistry Objects](./model/allele.py#L481)
 
 ```python
 class FiniteAlleleRegistry()
@@ -18402,7 +18402,7 @@ the right space without knowing how many loci a run tracks.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./model/allele.py#L488)
 
 ```python
 def __init__(spaces: Mapping[int, FiniteAlleleSpace]) -> None
@@ -18416,7 +18416,7 @@ Store one finite-allele space per locus, keyed by `LocusSpec.locus_id`.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.mutate_target"></a>
 
-#### mutate\_target
+#### [mutate\_target](./model/allele.py#L496)
 
 ```python
 def mutate_target(locus_id: int, current: AlleleId,
@@ -18438,7 +18438,7 @@ Return a mutation target for ``locus_id`` under the K-allele model.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.locus_ids"></a>
 
-#### locus\_ids
+#### [locus\_ids](./model/allele.py#L515)
 
 ```python
 @property
@@ -18449,7 +18449,7 @@ The locus identifiers this registry holds a space for.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.space_for"></a>
 
-#### space\_for
+#### [space\_for](./model/allele.py#L519)
 
 ```python
 def space_for(locus_id: int) -> FiniteAlleleSpace
@@ -18477,7 +18477,7 @@ decide eligibility) and `to_arrays`/`restore_from_arrays`
 
 <a id="fim.model.identifiers"></a>
 
-# fim.model.identifiers
+# [fim.model.identifiers](./model/identifiers.py#L1)
 
 Shared identifier and frequency parsing for config, state, and row layers.
 
@@ -18504,7 +18504,7 @@ drift piecemeal the way three separately maintained copies did.
 
 <a id="fim.model.identifiers.parse_bounded_frequency"></a>
 
-#### parse\_bounded\_frequency
+#### [parse\_bounded\_frequency](./model/identifiers.py#L31)
 
 ```python
 def parse_bounded_frequency(message: str, raw_value: Any) -> float
@@ -18540,7 +18540,7 @@ accept in the first place.
 
 <a id="fim.model.identifiers.parse_integer_identifier"></a>
 
-#### parse\_integer\_identifier
+#### [parse\_integer\_identifier](./model/identifiers.py#L63)
 
 ```python
 def parse_integer_identifier(message: str, raw_value: Any) -> int
@@ -18578,7 +18578,7 @@ ID from a deme ID from the message text.
 
 <a id="fim.model.initial"></a>
 
-# fim.model.initial
+# [fim.model.initial](./model/initial.py#L1)
 
 Seeded initial-condition strategies.
 
@@ -18608,7 +18608,7 @@ returned.
 
 <a id="fim.model.initial.InitialConditionGenerator"></a>
 
-## InitialConditionGenerator Objects
+## [InitialConditionGenerator Objects](./model/initial.py#L72)
 
 ```python
 class InitialConditionGenerator(Protocol)
@@ -18624,7 +18624,7 @@ interchangeably, without needing to know which one it actually has.
 
 <a id="fim.model.initial.InitialConditionGenerator.generate"></a>
 
-#### generate
+#### [generate](./model/initial.py#L82)
 
 ```python
 def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
@@ -18634,7 +18634,7 @@ Return a validated generation-zero state.
 
 <a id="fim.model.initial.DirichletInitialCondition"></a>
 
-## DirichletInitialCondition Objects
+## [DirichletInitialCondition Objects](./model/initial.py#L91)
 
 ```python
 class DirichletInitialCondition()
@@ -18655,7 +18655,7 @@ than resolves in code.
 
 <a id="fim.model.initial.DirichletInitialCondition.generate"></a>
 
-#### generate
+#### [generate](./model/initial.py#L106)
 
 ```python
 def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
@@ -18675,7 +18675,7 @@ Draw a reproducible random initial state.
 
 <a id="fim.model.initial.ExplicitInitialCondition"></a>
 
-## ExplicitInitialCondition Objects
+## [ExplicitInitialCondition Objects](./model/initial.py#L166)
 
 ```python
 class ExplicitInitialCondition()
@@ -18692,7 +18692,7 @@ generated one.
 
 <a id="fim.model.initial.ExplicitInitialCondition.generate"></a>
 
-#### generate
+#### [generate](./model/initial.py#L177)
 
 ```python
 def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
@@ -18717,7 +18717,7 @@ Return the configured explicit state.
 
 <a id="fim.model.initial.EquilibrationOutcome"></a>
 
-## EquilibrationOutcome Objects
+## [EquilibrationOutcome Objects](./model/initial.py#L207)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -18754,7 +18754,7 @@ allele frequencies, not only this `H_S` summary — is not held here:
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition"></a>
 
-## EquilibriumSplitInitialCondition Objects
+## [EquilibriumSplitInitialCondition Objects](./model/initial.py#L241)
 
 ```python
 class EquilibriumSplitInitialCondition()
@@ -18841,7 +18841,7 @@ moving that function to a shared module both sides can import.
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./model/initial.py#L322)
 
 ```python
 def __init__(*, convergence_window: int, convergence_tolerance: float,
@@ -18874,7 +18874,7 @@ Configure one ancestral-equilibration phase.
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition.generate"></a>
 
-#### generate
+#### [generate](./model/initial.py#L362)
 
 ```python
 def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
@@ -18891,7 +18891,7 @@ this method throws away.
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition.generate_with_outcome"></a>
 
-#### generate\_with\_outcome
+#### [generate\_with\_outcome](./model/initial.py#L379)
 
 ```python
 def generate_with_outcome(
@@ -18949,7 +18949,7 @@ Equilibrate one ancestral population, then split it into `params.d` demes.
 
 <a id="fim.model.initial.generate_initial_state"></a>
 
-#### generate\_initial\_state
+#### [generate\_initial\_state](./model/initial.py#L582)
 
 ```python
 def generate_initial_state(
@@ -18989,7 +18989,7 @@ always returns a bare `ModelState`, discarding it, exactly like
 
 <a id="fim.model.initial.founding_condition_for_heterozygosity"></a>
 
-#### founding\_condition\_for\_heterozygosity
+#### [founding\_condition\_for\_heterozygosity](./model/initial.py#L634)
 
 ```python
 def founding_condition_for_heterozygosity(
@@ -19065,7 +19065,7 @@ common alleles, by definition.
 
 <a id="fim.model.locus"></a>
 
-# fim.model.locus
+# [fim.model.locus](./model/locus.py#L1)
 
 Locus metadata used by a simulation.
 
@@ -19078,7 +19078,7 @@ one it is (`locus_id`) and how long a DNA sequence it covers
 
 <a id="fim.model.locus.LocusSpec"></a>
 
-## LocusSpec Objects
+## [LocusSpec Objects](./model/locus.py#L17)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -19094,7 +19094,7 @@ Describe one tracked locus.
 
 <a id="fim.model.locus.LocusSpec.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./model/locus.py#L28)
 
 ```python
 def __post_init__() -> None
@@ -19104,7 +19104,7 @@ Validate the immutable locus description.
 
 <a id="fim.model.locus.finite_allele_capacity"></a>
 
-#### finite\_allele\_capacity
+#### [finite\_allele\_capacity](./model/locus.py#L36)
 
 ```python
 def finite_allele_capacity(length: int) -> int
@@ -19129,7 +19129,7 @@ Return the finite-alleles model's state-space size at a locus.
 
 <a id="fim.model.operators"></a>
 
-# fim.model.operators
+# [fim.model.operators](./model/operators.py#L1)
 
 Pure migration, mutation, drift, and generation-pipeline operators.
 
@@ -19163,7 +19163,7 @@ parental pool and each copy then mutates on its own.
 
 <a id="fim.model.operators.drift"></a>
 
-#### drift
+#### [drift](./model/operators.py#L754)
 
 ```python
 def drift(state: ModelState,
@@ -19243,7 +19243,7 @@ just no longer what this function calls).
 
 <a id="fim.model.operators.migrate"></a>
 
-#### migrate
+#### [migrate](./model/operators.py#L883)
 
 ```python
 def migrate(state: ModelState,
@@ -19319,7 +19319,7 @@ are designed to quantify.
 
 <a id="fim.model.operators.jit_mutate_event_counts_batched"></a>
 
-#### jit\_mutate\_event\_counts\_batched
+#### [jit\_mutate\_event\_counts\_batched](./model/operators.py#L1094)
 
 ```python
 def jit_mutate_event_counts_batched(rng: np.random.Generator, ns: np.ndarray,
@@ -19343,7 +19343,7 @@ needs it installed at all.
 
 <a id="fim.model.operators.mutate"></a>
 
-#### mutate
+#### [mutate](./model/operators.py#L1319)
 
 ```python
 def mutate(state: ModelState,
@@ -19452,7 +19452,7 @@ of uniforms per draw, the primitive every backend shares.
 
 <a id="fim.model.operators.step"></a>
 
-#### step
+#### [step](./model/operators.py#L1519)
 
 ```python
 def step(state: ModelState,
@@ -19517,7 +19517,7 @@ docstring for why that was not the textbook model.
 
 <a id="fim.model.operators.expand_population_sizes"></a>
 
-#### expand\_population\_sizes
+#### [expand\_population\_sizes](./model/operators.py#L2150)
 
 ```python
 def expand_population_sizes(value: PopulationSize,
@@ -19528,7 +19528,7 @@ Expand and validate a population-size argument.
 
 <a id="fim.model.params"></a>
 
-# fim.model.params
+# [fim.model.params](./model/params.py#L1)
 
 Validated, replayable simulation configuration.
 
@@ -19553,7 +19553,7 @@ independent of this file's own more code-oriented documentation.
 
 <a id="fim.model.params.PLOIDY_WORDS"></a>
 
-#### PLOIDY\_WORDS
+#### [PLOIDY\_WORDS](./model/params.py#L59)
 
 How a configuration and a manifest spell each ploidy.
 
@@ -19564,7 +19564,7 @@ is refused so such a file fails with an instruction instead of being read as
 
 <a id="fim.model.params.AUTO_CONVERGENCE"></a>
 
-#### AUTO\_CONVERGENCE
+#### [AUTO\_CONVERGENCE](./model/params.py#L91)
 
 `convergence_burn_in`/`max_generations` value meaning "derive it".
 
@@ -19575,7 +19575,7 @@ be positive (config parsing rejects an explicit `0`).
 
 <a id="fim.model.params.IDENTITY_EXCLUDED_KEYS"></a>
 
-#### IDENTITY\_EXCLUDED\_KEYS
+#### [IDENTITY\_EXCLUDED\_KEYS](./model/params.py#L197)
 
 Serialized keys that do not change a run's numbers.
 
@@ -19584,7 +19584,7 @@ ID. See that method for why `max_concurrent_replicates` is not on the list.
 
 <a id="fim.model.params.SimulationParams"></a>
 
-## SimulationParams Objects
+## [SimulationParams Objects](./model/params.py#L270)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -19933,7 +19933,7 @@ functions that actually use each one.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./model/params.py#L664)
 
 ```python
 def __post_init__() -> None
@@ -19952,7 +19952,7 @@ without re-checking any of this.
 
 <a id="fim.model.params.SimulationParams.convergence_statistics"></a>
 
-#### convergence\_statistics
+#### [convergence\_statistics](./model/params.py#L820)
 
 ```python
 @property
@@ -19969,7 +19969,7 @@ actually uses, instead of handling both shapes itself.
 
 <a id="fim.model.params.SimulationParams.derived_thinning_start"></a>
 
-#### derived\_thinning\_start
+#### [derived\_thinning\_start](./model/params.py#L854)
 
 ```python
 def derived_thinning_start() -> int
@@ -19989,7 +19989,7 @@ the user typed.
 
 <a id="fim.model.params.SimulationParams.batch_precision"></a>
 
-#### batch\_precision
+#### [batch\_precision](./model/params.py#L939)
 
 ```python
 @property
@@ -20005,7 +20005,7 @@ value the batch's stopping rule reads.
 
 <a id="fim.model.params.SimulationParams.population_sizes"></a>
 
-#### population\_sizes
+#### [population\_sizes](./model/params.py#L952)
 
 ```python
 @property
@@ -20023,7 +20023,7 @@ actually iterates over, so it never needs to special-case the
 
 <a id="fim.model.params.SimulationParams.individuals"></a>
 
-#### individuals
+#### [individuals](./model/params.py#L967)
 
 ```python
 @property
@@ -20037,7 +20037,7 @@ configuration key `N` names.
 
 <a id="fim.model.params.SimulationParams.mutation_rates"></a>
 
-#### mutation\_rates
+#### [mutation\_rates](./model/params.py#L978)
 
 ```python
 @property
@@ -20051,7 +20051,7 @@ but for `mu` instead of `N`, and per-locus instead of per-deme.
 
 <a id="fim.model.params.SimulationParams.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./model/params.py#L1074)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -20071,7 +20071,7 @@ without needing the original config file at all.
 
 <a id="fim.model.params.SimulationParams.identity_dict"></a>
 
-#### identity\_dict
+#### [identity\_dict](./model/params.py#L1207)
 
 ```python
 def identity_dict() -> dict[str, object]
@@ -20101,7 +20101,7 @@ so existing configurations keep their IDs.
 
 <a id="fim.model.params.SimulationParams.from_mapping"></a>
 
-#### from\_mapping
+#### [from\_mapping](./model/params.py#L1246)
 
 ```python
 @classmethod
@@ -20148,7 +20148,7 @@ before construction, rather than inside `__post_init__`.
 
 <a id="fim.model.params.describe_population"></a>
 
-#### describe\_population
+#### [describe\_population](./model/params.py#L2199)
 
 ```python
 def describe_population(params: SimulationParams) -> str
@@ -20168,7 +20168,7 @@ Return the population size the way a botanist reads it.
 
 <a id="fim.model.params.EXECUTION_SETTING_NAMES"></a>
 
-#### EXECUTION\_SETTING\_NAMES
+#### [EXECUTION\_SETTING\_NAMES](./model/params.py#L2370)
 
 The configuration keys `validate_execution_settings` checks on their own.
 
@@ -20179,7 +20179,7 @@ set).
 
 <a id="fim.model.params.validate_execution_settings"></a>
 
-#### validate\_execution\_settings
+#### [validate\_execution\_settings](./model/params.py#L2399)
 
 ```python
 def validate_execution_settings(settings: Mapping[str, object]) -> None
@@ -20217,7 +20217,7 @@ cap's derivation) are left to validating the complete configuration.
 
 <a id="fim.model.state"></a>
 
-# fim.model.state
+# [fim.model.state](./model/state.py#L1)
 
 Sparse, validated state representation for every deme and locus.
 
@@ -20236,7 +20236,7 @@ over alleles, never an incomplete or over-complete one.
 
 <a id="fim.model.state.ModelState"></a>
 
-## ModelState Objects
+## [ModelState Objects](./model/state.py#L72)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -20269,7 +20269,7 @@ still holding a reference to it.
 
 <a id="fim.model.state.ModelState.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./model/state.py#L102)
 
 ```python
 def __post_init__(validate: bool) -> None
@@ -20297,7 +20297,7 @@ explicitly opt out.
 
 <a id="fim.model.state.ModelState.deme_count"></a>
 
-#### deme\_count
+#### [deme\_count](./model/state.py#L156)
 
 ```python
 @property
@@ -20308,7 +20308,7 @@ Return the number of demes represented by this state.
 
 <a id="fim.model.state.ModelState.locus_count"></a>
 
-#### locus\_count
+#### [locus\_count](./model/state.py#L161)
 
 ```python
 @property
@@ -20319,7 +20319,7 @@ Return the number of tracked loci.
 
 <a id="fim.model.state.ModelState.frequency_map"></a>
 
-#### frequency\_map
+#### [frequency\_map](./model/state.py#L165)
 
 ```python
 def frequency_map(deme: int, locus_index: int) -> FrequencyMap
@@ -20341,7 +20341,7 @@ Return one read-only sparse frequency map.
 
 <a id="fim.model.state.ModelState.support_sizes"></a>
 
-#### support\_sizes
+#### [support\_sizes](./model/state.py#L179)
 
 ```python
 def support_sizes() -> tuple[tuple[int, ...], ...]
@@ -20357,7 +20357,7 @@ the number of gene copies actually available to carry them.
 
 <a id="fim.model.state.ModelState.to_rows"></a>
 
-#### to\_rows
+#### [to\_rows](./model/state.py#L193)
 
 ```python
 def to_rows(run_id: str) -> list[dict[str, int | float | str]]
@@ -20386,7 +20386,7 @@ unpack a nested structure.
 
 <a id="fim.model.state.ModelState.total_frequency"></a>
 
-#### total\_frequency
+#### [total\_frequency](./model/state.py#L230)
 
 ```python
 def total_frequency() -> dict[tuple[int, int], float]
@@ -20402,7 +20402,7 @@ recompute the sum by hand.
 
 <a id="fim.model.state.ModelState.validate_support"></a>
 
-#### validate\_support
+#### [validate\_support](./model/state.py#L245)
 
 ```python
 def validate_support(population_sizes: Sequence[int]) -> None
@@ -20430,7 +20430,7 @@ because `ModelState`'s own constructor has no access to
 
 <a id="fim.model.state.ModelState.from_rows"></a>
 
-#### from\_rows
+#### [from\_rows](./model/state.py#L277)
 
 ```python
 @classmethod
@@ -20467,7 +20467,7 @@ keeping only one of the two.
 
 <a id="fim.model.topology"></a>
 
-# fim.model.topology
+# [fim.model.topology](./model/topology.py#L1)
 
 Sparse migration-topology construction and densification.
 
@@ -20486,7 +20486,7 @@ the simulator never needs to know a sparse map was ever involved.
 
 <a id="fim.model.topology.stepping_stone_neighbors"></a>
 
-#### stepping\_stone\_neighbors
+#### [stepping\_stone\_neighbors](./model/topology.py#L33)
 
 ```python
 def stepping_stone_neighbors(
@@ -20545,7 +20545,7 @@ expands into the full matrix the rest of the simulator actually uses.
 
 <a id="fim.model.topology.dense_matrix_from_neighbors"></a>
 
-#### dense\_matrix\_from\_neighbors
+#### [dense\_matrix\_from\_neighbors](./model/topology.py#L100)
 
 ```python
 def dense_matrix_from_neighbors(neighbors: Mapping[int, Mapping[int, float]],
@@ -20591,7 +20591,7 @@ migrates with nobody — its row is the identity row.
 
 <a id="fim.model.vector_block"></a>
 
-# fim.model.vector\_block
+# [fim.model.vector\_block](./model/vector_block.py#L1)
 
 The dense per-replicate state of Backend V, and its two boundaries.
 
@@ -20631,73 +20631,73 @@ on first use, so importing `fim` never requires Numba.
 
 <a id="fim.model.vector_block.MIGRATION_NONE"></a>
 
-#### MIGRATION\_NONE
+#### [MIGRATION\_NONE](./model/vector_block.py#L54)
 
 Migration kind: no blending (a zero rate, or a single deme).
 
 <a id="fim.model.vector_block.MIGRATION_SCALAR"></a>
 
-#### MIGRATION\_SCALAR
+#### [MIGRATION\_SCALAR](./model/vector_block.py#L57)
 
 Migration kind: one rate, every other deme in the pool (continuous).
 
 <a id="fim.model.vector_block.MIGRATION_MATRIX"></a>
 
-#### MIGRATION\_MATRIX
+#### [MIGRATION\_MATRIX](./model/vector_block.py#L60)
 
 Migration kind: a full row-stochastic source-weight matrix (continuous).
 
 <a id="fim.model.vector_block.MIGRATION_SCALAR_STOCHASTIC"></a>
 
-#### MIGRATION\_SCALAR\_STOCHASTIC
+#### [MIGRATION\_SCALAR\_STOCHASTIC](./model/vector_block.py#L63)
 
 Migration kind: `MIGRATION_SCALAR` with a drawn migrant count per deme.
 
 <a id="fim.model.vector_block.MIGRATION_MATRIX_STOCHASTIC"></a>
 
-#### MIGRATION\_MATRIX\_STOCHASTIC
+#### [MIGRATION\_MATRIX\_STOCHASTIC](./model/vector_block.py#L66)
 
 Migration kind: `MIGRATION_MATRIX` with a drawn migrant count per deme.
 
 <a id="fim.model.vector_block.MINIMUM_WIDTH"></a>
 
-#### MINIMUM\_WIDTH
+#### [MINIMUM\_WIDTH](./model/vector_block.py#L69)
 
 The fewest columns an infinite-alleles block is ever given.
 
 <a id="fim.model.vector_block.SHRINK_CHECK_INTERVAL"></a>
 
-#### SHRINK\_CHECK\_INTERVAL
+#### [SHRINK\_CHECK\_INTERVAL](./model/vector_block.py#L72)
 
 Generations between looks at whether the block is far wider than needed.
 
 <a id="fim.model.vector_block.SHRINK_FACTOR"></a>
 
-#### SHRINK\_FACTOR
+#### [SHRINK\_FACTOR](./model/vector_block.py#L75)
 
 The block shrinks when its width is at least this many times the need.
 
 <a id="fim.model.vector_block.DEFAULT_MEMORY_CEILING_BYTES"></a>
 
-#### DEFAULT\_MEMORY\_CEILING\_BYTES
+#### [DEFAULT\_MEMORY\_CEILING\_BYTES](./model/vector_block.py#L78)
 
 Default per-replicate ceiling on the block, in bytes (2 GiB).
 
 <a id="fim.model.vector_block.MEMORY_CEILING_ENVIRONMENT_VARIABLE"></a>
 
-#### MEMORY\_CEILING\_ENVIRONMENT\_VARIABLE
+#### [MEMORY\_CEILING\_ENVIRONMENT\_VARIABLE](./model/vector_block.py#L81)
 
 Environment variable that overrides `DEFAULT_MEMORY_CEILING_BYTES`.
 
 <a id="fim.model.vector_block.MODE_CACHE_LIMIT_ENTRIES"></a>
 
-#### MODE\_CACHE\_LIMIT\_ENTRIES
+#### [MODE\_CACHE\_LIMIT\_ENTRIES](./model/vector_block.py#L84)
 
 Most entries (8 bytes each) the mode-PMF cache may hold; above it, uncached.
 
 <a id="fim.model.vector_block.VectorMemoryCeilingError"></a>
 
-## VectorMemoryCeilingError Objects
+## [VectorMemoryCeilingError Objects](./model/vector_block.py#L95)
 
 ```python
 class VectorMemoryCeilingError(UnsupportedError, RuntimeError)
@@ -20710,7 +20710,7 @@ that was needed, the ceiling, and what to change.
 
 <a id="fim.model.vector_block.VectorMigration"></a>
 
-## VectorMigration Objects
+## [VectorMigration Objects](./model/vector_block.py#L104)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -20735,7 +20735,7 @@ How one generation's migration step runs inside the kernel.
 
 <a id="fim.model.vector_block.VectorMigration.from_parameter"></a>
 
-#### from\_parameter
+#### [from\_parameter](./model/vector_block.py#L126)
 
 ```python
 @classmethod
@@ -20765,7 +20765,7 @@ Build the plan for a `SimulationParams.m` value.
 
 <a id="fim.model.vector_block.kernels"></a>
 
-#### kernels
+#### [kernels](./model/vector_block.py#L158)
 
 ```python
 def kernels() -> ModuleType
@@ -20782,7 +20782,7 @@ everything that does not run Backend V.
 
 <a id="fim.model.vector_block.estimated_block_bytes"></a>
 
-#### estimated\_block\_bytes
+#### [estimated\_block\_bytes](./model/vector_block.py#L172)
 
 ```python
 def estimated_block_bytes(loci: int,
@@ -20813,7 +20813,7 @@ scratch is a few vectors of `width` entries and is not counted.
 
 <a id="fim.model.vector_block.resolve_memory_ceiling"></a>
 
-#### resolve\_memory\_ceiling
+#### [resolve\_memory\_ceiling](./model/vector_block.py#L197)
 
 ```python
 def resolve_memory_ceiling(explicit: int | None = None) -> int
@@ -20839,7 +20839,7 @@ Return the per-replicate memory ceiling in bytes.
 
 <a id="fim.model.vector_block.VectorBlock"></a>
 
-## VectorBlock Objects
+## [VectorBlock Objects](./model/vector_block.py#L359)
 
 ```python
 class VectorBlock()
@@ -20869,7 +20869,7 @@ tests read them), but only this class changes them.
 
 <a id="fim.model.vector_block.VectorBlock.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./model/vector_block.py#L382)
 
 ```python
 def __init__(*,
@@ -20914,7 +20914,7 @@ Wrap already-built arrays; use `from_model_state` to build them.
 
 <a id="fim.model.vector_block.VectorBlock.from_model_state"></a>
 
-#### from\_model\_state
+#### [from\_model\_state](./model/vector_block.py#L455)
 
 ```python
 @classmethod
@@ -20962,7 +20962,7 @@ now, as `FiniteAlleleSpace` does.
 
 <a id="fim.model.vector_block.VectorBlock.from_state"></a>
 
-#### from\_state
+#### [from\_state](./model/vector_block.py#L584)
 
 ```python
 @classmethod
@@ -21015,7 +21015,7 @@ identically either way.
 
 <a id="fim.model.vector_block.VectorBlock.export_state"></a>
 
-#### export\_state
+#### [export\_state](./model/vector_block.py#L712)
 
 ```python
 def export_state() -> tuple[dict[str, Any], dict[str, np.ndarray]]
@@ -21035,7 +21035,7 @@ overwrites first. The mode-PMF cache is left out (see `from_state`).
 
 <a id="fim.model.vector_block.VectorBlock.width"></a>
 
-#### width
+#### [width](./model/vector_block.py#L749)
 
 ```python
 @property
@@ -21046,7 +21046,7 @@ Columns allocated per locus.
 
 <a id="fim.model.vector_block.VectorBlock.deme_count"></a>
 
-#### deme\_count
+#### [deme\_count](./model/vector_block.py#L754)
 
 ```python
 @property
@@ -21057,7 +21057,7 @@ Number of demes.
 
 <a id="fim.model.vector_block.VectorBlock.next_id"></a>
 
-#### next\_id
+#### [next\_id](./model/vector_block.py#L759)
 
 ```python
 @property
@@ -21068,7 +21068,7 @@ The next allele id the block would hand out (infinite alleles).
 
 <a id="fim.model.vector_block.VectorBlock.nbytes"></a>
 
-#### nbytes
+#### [nbytes](./model/vector_block.py#L764)
 
 ```python
 @property
@@ -21079,7 +21079,7 @@ Memory held by the block's own arrays, in bytes.
 
 <a id="fim.model.vector_block.VectorBlock.advance"></a>
 
-#### advance
+#### [advance](./model/vector_block.py#L774)
 
 ```python
 def advance(rng: np.random.Generator) -> None
@@ -21102,7 +21102,7 @@ Advance one generation: migrate, drift, then mutate, all loci.
 
 <a id="fim.model.vector_block.VectorBlock.minted_states"></a>
 
-#### minted\_states
+#### [minted\_states](./model/vector_block.py#L866)
 
 ```python
 def minted_states(locus_index: int) -> tuple[int, ...]
@@ -21127,7 +21127,7 @@ recurrence probability depend on history, not on the state alone.
 
 <a id="fim.model.vector_block.VectorBlock.present_entries"></a>
 
-#### present\_entries
+#### [present\_entries](./model/vector_block.py#L886)
 
 ```python
 def present_entries() -> tuple[np.ndarray, ...]
@@ -21140,7 +21140,7 @@ ascending allele id. Demes are one-based.
 
 <a id="fim.model.vector_block.VectorBlock.frame"></a>
 
-#### frame
+#### [frame](./model/vector_block.py#L896)
 
 ```python
 def frame() -> TrajectoryFrame
@@ -21154,7 +21154,7 @@ of `rows`.
 
 <a id="fim.model.vector_block.VectorBlock.frame_layout"></a>
 
-#### frame\_layout
+#### [frame\_layout](./model/vector_block.py#L913)
 
 ```python
 def frame_layout() -> FrameLayout
@@ -21164,7 +21164,7 @@ Return the layout `frame` uses: locus identifiers and deme sizes.
 
 <a id="fim.model.vector_block.VectorBlock.rows"></a>
 
-#### rows
+#### [rows](./model/vector_block.py#L920)
 
 ```python
 def rows(run_id: str) -> list[dict[str, int | float | str]]
@@ -21186,7 +21186,7 @@ tell which produced them.
 
 <a id="fim.model.vector_block.VectorBlock.frequency_maps"></a>
 
-#### frequency\_maps
+#### [frequency\_maps](./model/vector_block.py#L954)
 
 ```python
 def frequency_maps(locus_index: int) -> list[dict[int, float]]
@@ -21203,7 +21203,7 @@ Present alleles only, in ascending id order: the input
 
 <a id="fim.model.vector_block.VectorBlock.locus_statistics"></a>
 
-#### locus\_statistics
+#### [locus\_statistics](./model/vector_block.py#L974)
 
 ```python
 def locus_statistics() -> tuple[np.ndarray, np.ndarray]
@@ -21220,7 +21220,7 @@ Compute `H_S`, `H_T`, `H_ST`, `G_ST` and `D` for every locus.
 
 <a id="fim.model.vector_block.VectorBlock.to_model_state"></a>
 
-#### to\_model\_state
+#### [to\_model\_state](./model/vector_block.py#L989)
 
 ```python
 def to_model_state() -> ModelState
@@ -21230,7 +21230,7 @@ Return the table as a `ModelState`, ascending ids in every map.
 
 <a id="fim.model.vector_block.VectorBlock.sync_registry"></a>
 
-#### sync\_registry
+#### [sync\_registry](./model/vector_block.py#L1013)
 
 ```python
 def sync_registry(registry: AlleleRegistry) -> None
@@ -21243,7 +21243,7 @@ alleles, which never mints identities.
 
 <a id="fim.model.vector_kernels"></a>
 
-# fim.model.vector\_kernels
+# [fim.model.vector\_kernels](./model/vector_kernels.py#L1)
 
 Compiled kernels for Backend V: one generation, all loci, bit-exact.
 
@@ -21292,19 +21292,19 @@ them sorted too. Under finite alleles the column is the allele id and
 
 <a id="fim.model.vector_kernels.STATISTIC_COLUMNS"></a>
 
-#### STATISTIC\_COLUMNS
+#### [STATISTIC\_COLUMNS](./model/vector_kernels.py#L76)
 
 Columns of the per-locus statistics table: H_S, H_T, H_ST, G_ST, D.
 
 <a id="fim.model.vector_kernels.STATISTICS_TOLERANCE"></a>
 
-#### STATISTICS\_TOLERANCE
+#### [STATISTICS\_TOLERANCE](./model/vector_kernels.py#L79)
 
 Mirror of `fim.config.numerics.DIFFERENTIATION_TOLERANCE` (checked by a test).
 
 <a id="fim.model.vector_kernels.inversion_binomial"></a>
 
-#### inversion\_binomial
+#### [inversion\_binomial](./model/vector_kernels.py#L148)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21335,7 +21335,7 @@ short-circuits).
 
 <a id="fim.model.vector_kernels.cached_binomial"></a>
 
-#### cached\_binomial
+#### [cached\_binomial](./model/vector_kernels.py#L179)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21365,7 +21365,7 @@ bit `inversion_binomial`'s.
 
 <a id="fim.model.vector_kernels.pairwise_sum"></a>
 
-#### pairwise\_sum
+#### [pairwise\_sum](./model/vector_kernels.py#L253)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21393,7 +21393,7 @@ mishandles).
 
 <a id="fim.model.vector_kernels.exact_sum"></a>
 
-#### exact\_sum
+#### [exact\_sum](./model/vector_kernels.py#L312)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21418,7 +21418,7 @@ half-even correction) for finite inputs.
 
 <a id="fim.model.vector_kernels.compact_columns"></a>
 
-#### compact\_columns
+#### [compact\_columns](./model/vector_kernels.py#L736)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21446,7 +21446,7 @@ locus's columns in ascending allele-id order.
 
 <a id="fim.model.vector_kernels.mint_columns"></a>
 
-#### mint\_columns
+#### [mint\_columns](./model/vector_kernels.py#L781)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21474,7 +21474,7 @@ appended columns keep the locus in ascending id order.
 
 <a id="fim.model.vector_kernels.run_generation"></a>
 
-#### run\_generation
+#### [run\_generation](./model/vector_kernels.py#L826)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21524,7 +21524,7 @@ call `mint_columns`.
 
 <a id="fim.model.vector_kernels.locus_statistics"></a>
 
-#### locus\_statistics
+#### [locus\_statistics](./model/vector_kernels.py#L949)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21551,7 +21551,7 @@ clamp to `[0, 1]` within a tolerance, the same formulas.
 
 <a id="fim.model.vector_kernels.present_entries"></a>
 
-#### present\_entries
+#### [present\_entries](./model/vector_kernels.py#L1003)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21578,7 +21578,7 @@ order `ModelState.to_rows` writes.
 
 <a id="fim.model.vector_kernels.extract_csr"></a>
 
-#### extract\_csr
+#### [extract\_csr](./model/vector_kernels.py#L1045)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21607,7 +21607,7 @@ object is created per row.
 
 <a id="fim.model.vectorized"></a>
 
-# fim.model.vectorized
+# [fim.model.vectorized](./model/vectorized.py#L1)
 
 Bounded-K (finite-alleles), array-native migrate/mutate/drift.
 
@@ -21771,7 +21771,7 @@ looks like and a real bias would not.
 
 <a id="fim.model.vectorized.VectorizedLocusState"></a>
 
-## VectorizedLocusState Objects
+## [VectorizedLocusState Objects](./model/vectorized.py#L198)
 
 ```python
 @dataclass(slots=True)
@@ -21791,25 +21791,25 @@ entirely independent of any real `FiniteAlleleSpace` instance;
 
 <a id="fim.model.vectorized.VectorizedLocusState.frequencies"></a>
 
-#### frequencies
+#### [frequencies](./model/vectorized.py#L211)
 
 (d, capacity) float64, each row sums to 1.0
 
 <a id="fim.model.vectorized.VectorizedLocusState.minted_mask"></a>
 
-#### minted\_mask
+#### [minted\_mask](./model/vectorized.py#L213)
 
 (capacity,) bool — has this state ever appeared
 
 <a id="fim.model.vectorized.VectorizedLocusState.minted_list"></a>
 
-#### minted\_list
+#### [minted\_list](./model/vectorized.py#L214)
 
 (capacity,) int64 — minted ids, mint order
 
 <a id="fim.model.vectorized.VectorizedState"></a>
 
-## VectorizedState Objects
+## [VectorizedState Objects](./model/vectorized.py#L220)
 
 ```python
 @dataclass(slots=True)
@@ -21820,7 +21820,7 @@ A whole state's own dense working representation, one locus at a time.
 
 <a id="fim.model.vectorized.build_vectorized_state"></a>
 
-#### build\_vectorized\_state
+#### [build\_vectorized\_state](./model/vectorized.py#L228)
 
 ```python
 def build_vectorized_state(
@@ -21898,7 +21898,7 @@ spaces`'s own construction.
 
 <a id="fim.model.vectorized.vectorized_state_to_model_state"></a>
 
-#### vectorized\_state\_to\_model\_state
+#### [vectorized\_state\_to\_model\_state](./model/vectorized.py#L367)
 
 ```python
 def vectorized_state_to_model_state(state: VectorizedState) -> ModelState
@@ -21932,7 +21932,7 @@ multiplier, not a different problem.
 
 <a id="fim.model.vectorized.vectorized_state_to_rows"></a>
 
-#### vectorized\_state\_to\_rows
+#### [vectorized\_state\_to\_rows](./model/vectorized.py#L414)
 
 ```python
 def vectorized_state_to_rows(
@@ -21953,7 +21953,7 @@ produced a given row.
 
 <a id="fim.model.vectorized.migrate_vectorized"></a>
 
-#### migrate\_vectorized
+#### [migrate\_vectorized](./model/vectorized.py#L773)
 
 ```python
 def migrate_vectorized(locus_state: VectorizedLocusState,
@@ -21973,7 +21973,7 @@ own §5.1 names as the natural generalization. Deterministic
 
 <a id="fim.model.vectorized.migrate_vectorized_symmetric"></a>
 
-#### migrate\_vectorized\_symmetric
+#### [migrate\_vectorized\_symmetric](./model/vectorized.py#L790)
 
 ```python
 def migrate_vectorized_symmetric(locus_state: VectorizedLocusState,
@@ -22027,7 +22027,7 @@ blended[i, a] = (1 - rate) * frequencies[i, a] + rate * pool[i, a]
 
 <a id="fim.model.vectorized.symmetric_migration_weights"></a>
 
-#### symmetric\_migration\_weights
+#### [symmetric\_migration\_weights](./model/vectorized.py#L901)
 
 ```python
 def symmetric_migration_weights(rate: float, sizes: np.ndarray) -> np.ndarray
@@ -22073,7 +22073,7 @@ correctly, only to have `1.0 - rate` win instead.
 
 <a id="fim.model.vectorized.mutate_vectorized"></a>
 
-#### mutate\_vectorized
+#### [mutate\_vectorized](./model/vectorized.py#L948)
 
 ```python
 def mutate_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
@@ -22115,7 +22115,7 @@ division `drift_vectorized` uses), so no renormalization is needed.
 
 <a id="fim.model.vectorized.drift_vectorized"></a>
 
-#### drift\_vectorized
+#### [drift\_vectorized](./model/vectorized.py#L1197)
 
 ```python
 def drift_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
@@ -22147,7 +22147,7 @@ exactly what property that gives this function relative to
 
 <a id="fim.model.vectorized.step_vectorized"></a>
 
-#### step\_vectorized
+#### [step\_vectorized](./model/vectorized.py#L1233)
 
 ```python
 def step_vectorized(state: VectorizedState,
@@ -22205,7 +22205,7 @@ matrix ever built, the common case
 
 <a id="fim.paths"></a>
 
-# fim.paths
+# [fim.paths](./paths.py#L1)
 
 Project-root, results-directory, and atomic-publish logic, shared by
 every front end.
@@ -22258,7 +22258,7 @@ design.
 
 <a id="fim.paths.set_root_override"></a>
 
-#### set\_root\_override
+#### [set\_root\_override](./paths.py#L90)
 
 ```python
 def set_root_override(root: Path | None) -> None
@@ -22281,7 +22281,7 @@ over this one — see each function's own docstring.
 
 <a id="fim.paths.root_override"></a>
 
-#### root\_override
+#### [root\_override](./paths.py#L109)
 
 ```python
 def root_override() -> Path | None
@@ -22291,7 +22291,7 @@ The current `project_root()` override, if any set via `set_root_override`.
 
 <a id="fim.paths.set_results_directory_override"></a>
 
-#### set\_results\_directory\_override
+#### [set\_results\_directory\_override](./paths.py#L114)
 
 ```python
 def set_results_directory_override(path: Path | None) -> None
@@ -22310,7 +22310,7 @@ Override `results_directory()`'s own resolution, or clear a previous one.
 
 <a id="fim.paths.results_directory_override"></a>
 
-#### results\_directory\_override
+#### [results\_directory\_override](./paths.py#L129)
 
 ```python
 def results_directory_override() -> Path | None
@@ -22320,7 +22320,7 @@ The current `results_directory()` override, if any.
 
 <a id="fim.paths.set_log_directory_override"></a>
 
-#### set\_log\_directory\_override
+#### [set\_log\_directory\_override](./paths.py#L134)
 
 ```python
 def set_log_directory_override(path: Path | None) -> None
@@ -22337,7 +22337,7 @@ Override `log_directory()`'s own resolution, or clear a previous one.
 
 <a id="fim.paths.log_directory_override"></a>
 
-#### log\_directory\_override
+#### [log\_directory\_override](./paths.py#L147)
 
 ```python
 def log_directory_override() -> Path | None
@@ -22347,7 +22347,7 @@ The current `log_directory()` override, if any.
 
 <a id="fim.paths.default_file_mode"></a>
 
-#### default\_file\_mode
+#### [default\_file\_mode](./paths.py#L193)
 
 ```python
 def default_file_mode() -> int
@@ -22361,7 +22361,7 @@ and index files a botanist's other tools, backups and colleagues read.
 
 <a id="fim.paths.default_directory_mode"></a>
 
-#### default\_directory\_mode
+#### [default\_directory\_mode](./paths.py#L203)
 
 ```python
 def default_directory_mode() -> int
@@ -22371,7 +22371,7 @@ Return the permission bits an ordinary new directory gets (usually `0o755`).
 
 <a id="fim.paths.write_text_atomically"></a>
 
-#### write\_text\_atomically
+#### [write\_text\_atomically](./paths.py#L208)
 
 ```python
 def write_text_atomically(path: Path, text: str, *, prefix: str) -> None
@@ -22395,7 +22395,7 @@ unreadable to anyone but the owner.
 
 <a id="fim.paths.replace_with_retry"></a>
 
-#### replace\_with\_retry
+#### [replace\_with\_retry](./paths.py#L243)
 
 ```python
 def replace_with_retry(source: Path, target: Path) -> None
@@ -22427,13 +22427,13 @@ for the whole window still raises the original error.
 
 <a id="fim.paths.STAGING_LOCK_FILENAME"></a>
 
-#### STAGING\_LOCK\_FILENAME
+#### [STAGING\_LOCK\_FILENAME](./paths.py#L276)
 
 The owner lock `atomic_directory` holds inside its staging directory.
 
 <a id="fim.paths.atomic_directory"></a>
 
-#### atomic\_directory
+#### [atomic\_directory](./paths.py#L281)
 
 ```python
 @contextlib.contextmanager
@@ -22520,7 +22520,7 @@ power failure with perfect data integrity."
 
 <a id="fim.paths.default_output_directory"></a>
 
-#### default\_output\_directory
+#### [default\_output\_directory](./paths.py#L412)
 
 ```python
 def default_output_directory(results: Path | None = None,
@@ -22560,7 +22560,7 @@ existing name without replacing any run data.
 
 <a id="fim.paths.project_root"></a>
 
-#### project\_root
+#### [project\_root](./paths.py#L451)
 
 ```python
 def project_root() -> Path
@@ -22629,7 +22629,7 @@ more specific overrides — see each one's own docstring.
 
 <a id="fim.paths.results_directory"></a>
 
-#### results\_directory
+#### [results\_directory](./paths.py#L531)
 
 ```python
 def results_directory(root: Path | None = None) -> Path
@@ -22663,7 +22663,7 @@ out the full precedence across all three location-specific chains.
 
 <a id="fim.paths.log_directory"></a>
 
-#### log\_directory
+#### [log\_directory](./paths.py#L565)
 
 ```python
 def log_directory(root: Path | None = None) -> Path
@@ -22692,7 +22692,7 @@ override`, and `FIM_LOG_DIRECTORY` compose in the identical order
 
 <a id="fim.paths.default_log_file"></a>
 
-#### default\_log\_file
+#### [default\_log\_file](./paths.py#L594)
 
 ```python
 def default_log_file(root: Path | None = None) -> Path
@@ -22713,7 +22713,7 @@ Return the default operational log file path.
 
 <a id="fim.paths.fim_index_directory"></a>
 
-#### fim\_index\_directory
+#### [fim\_index\_directory](./paths.py#L608)
 
 ```python
 def fim_index_directory(results: Path | None = None) -> Path
@@ -22739,7 +22739,7 @@ where any individual run's own output lives.
 
 <a id="fim.paths.studies_directory"></a>
 
-#### studies\_directory
+#### [studies\_directory](./paths.py#L628)
 
 ```python
 def studies_directory(results: Path | None = None) -> Path
@@ -22759,7 +22759,7 @@ Return the directory holding every `StudyManifest` JSON file.
 
 <a id="fim.paths.experiments_directory"></a>
 
-#### experiments\_directory
+#### [experiments\_directory](./paths.py#L641)
 
 ```python
 def experiments_directory(results: Path | None = None) -> Path
@@ -22779,7 +22779,7 @@ Return the directory holding every `ExperimentManifest` JSON file.
 
 <a id="fim.persistence"></a>
 
-# fim.persistence
+# [fim.persistence](./persistence/__init__.py#L1)
 
 Incremental trajectory and manifest persistence.
 
@@ -22808,7 +22808,7 @@ top-level API.
 
 <a id="fim.persistence.artifacts"></a>
 
-# fim.persistence.artifacts
+# [fim.persistence.artifacts](./persistence/artifacts.py#L1)
 
 Write the files that make up a saved run.
 
@@ -22820,7 +22820,7 @@ command line, the desktop app, saved runs, and sweeps alike.
 
 <a id="fim.persistence.artifacts.run_artifact_targets"></a>
 
-#### run\_artifact\_targets
+#### [run\_artifact\_targets](./persistence/artifacts.py#L50)
 
 ```python
 def run_artifact_targets(
@@ -22851,7 +22851,7 @@ streamed by the engine beside `trajectory.tlog`.
 
 <a id="fim.persistence.artifacts.convergence_history_rows"></a>
 
-#### convergence\_history\_rows
+#### [convergence\_history\_rows](./persistence/artifacts.py#L82)
 
 ```python
 def convergence_history_rows(result: RunResult) -> list[dict[str, object]]
@@ -22875,7 +22875,7 @@ generations it is missing is not recoverable from the monitor's record.
 
 <a id="fim.persistence.artifacts.taper_finished_trajectory"></a>
 
-#### taper\_finished\_trajectory
+#### [taper\_finished\_trajectory](./persistence/artifacts.py#L107)
 
 ```python
 def taper_finished_trajectory(result: RunResult, trajectory: Path) -> None
@@ -22894,7 +22894,7 @@ digests are taken. A run that does not taper is left alone.
 
 <a id="fim.persistence.artifacts.write_history"></a>
 
-#### write\_history
+#### [write\_history](./persistence/artifacts.py#L135)
 
 ```python
 def write_history(result: RunResult, path: Path) -> None
@@ -22917,7 +22917,7 @@ smallest of `precision` and any per-statistic precision).
 
 <a id="fim.persistence.artifacts.write_decimated"></a>
 
-#### write\_decimated
+#### [write\_decimated](./persistence/artifacts.py#L163)
 
 ```python
 def write_decimated(result: RunResult, path: Path) -> None
@@ -22935,7 +22935,7 @@ At most 2,048 generations of every statistic, at full precision.
 
 <a id="fim.persistence.artifacts.write_run_artifacts"></a>
 
-#### write\_run\_artifacts
+#### [write\_run\_artifacts](./persistence/artifacts.py#L197)
 
 ```python
 def write_run_artifacts(
@@ -22971,7 +22971,7 @@ not against power loss; see `fim.paths.atomic_directory`.
 
 <a id="fim.persistence.binary_store"></a>
 
-# fim.persistence.binary\_store
+# [fim.persistence.binary\_store](./persistence/binary_store.py#L1)
 
 The trajectory store backed by the binary log.
 
@@ -22992,19 +22992,19 @@ canonical `trajectory.jsonl` text is something to *export*
 
 <a id="fim.persistence.binary_store.TRAJECTORY_LOG_FILENAME"></a>
 
-#### TRAJECTORY\_LOG\_FILENAME
+#### [TRAJECTORY\_LOG\_FILENAME](./persistence/binary_store.py#L44)
 
 The log of a run's own trajectory, in the run's directory.
 
 <a id="fim.persistence.binary_store.EQUILIBRIUM_LOG_FILENAME"></a>
 
-#### EQUILIBRIUM\_LOG\_FILENAME
+#### [EQUILIBRIUM\_LOG\_FILENAME](./persistence/binary_store.py#L47)
 
 The log of an equilibrium-split run's ancestral phase, beside the main one.
 
 <a id="fim.persistence.binary_store.log_options"></a>
 
-#### log\_options
+#### [log\_options](./persistence/binary_store.py#L51)
 
 ```python
 def log_options(expert: ExpertSettings) -> dict[str, Any]
@@ -23024,7 +23024,7 @@ Return the `BinaryLogStore` options a run's Expert Settings choose.
 
 <a id="fim.persistence.binary_store.BinaryLogStore"></a>
 
-## BinaryLogStore Objects
+## [BinaryLogStore Objects](./persistence/binary_store.py#L68)
 
 ```python
 class BinaryLogStore()
@@ -23061,7 +23061,7 @@ Append and read one run's trajectory through a binary log file.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/binary_store.py#L98)
 
 ```python
 def __init__(path: Path | str,
@@ -23084,7 +23084,7 @@ Bind the store to one log file; nothing is created until a write.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.__enter__"></a>
 
-#### \_\_enter\_\_
+#### [\_\_enter\_\_](./persistence/binary_store.py#L138)
 
 ```python
 def __enter__() -> BinaryLogStore
@@ -23094,7 +23094,7 @@ Return this store, for use as a context manager.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.__exit__"></a>
 
-#### \_\_exit\_\_
+#### [\_\_exit\_\_](./persistence/binary_store.py#L142)
 
 ```python
 def __exit__(exc_type: type[BaseException] | None,
@@ -23106,7 +23106,7 @@ Close the store when the `with` block ends.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.__del__"></a>
 
-#### \_\_del\_\_
+#### [\_\_del\_\_](./persistence/binary_store.py#L151)
 
 ```python
 def __del__() -> None
@@ -23120,7 +23120,7 @@ committed either way.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.__getstate__"></a>
 
-#### \_\_getstate\_\_
+#### [\_\_getstate\_\_](./persistence/binary_store.py#L163)
 
 ```python
 def __getstate__() -> dict[str, Any]
@@ -23136,7 +23136,7 @@ path and the options; it reads the finished file.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.__setstate__"></a>
 
-#### \_\_setstate\_\_
+#### [\_\_setstate\_\_](./persistence/binary_store.py#L183)
 
 ```python
 def __setstate__(state: dict[str, Any]) -> None
@@ -23146,7 +23146,7 @@ Restore the plain attributes and rebuild a lock; no writer is open.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.begin_run"></a>
 
-#### begin\_run
+#### [begin\_run](./persistence/binary_store.py#L189)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -23160,7 +23160,7 @@ Fix the run this log holds and its layout; repeating it is harmless.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.wants_frames"></a>
 
-#### wants\_frames
+#### [wants\_frames](./persistence/binary_store.py#L203)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -23170,7 +23170,7 @@ Return `True`: frames are what this store is fastest with.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.write_frame"></a>
 
-#### write\_frame
+#### [write\_frame](./persistence/binary_store.py#L208)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -23186,7 +23186,7 @@ Encode one generation into the log.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.write_generation"></a>
 
-#### write\_generation
+#### [write\_generation](./persistence/binary_store.py#L220)
 
 ```python
 def write_generation(run_id: str,
@@ -23210,7 +23210,7 @@ sizes (the engine does) is what makes the log compact.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.read"></a>
 
-#### read
+#### [read](./persistence/binary_store.py#L253)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -23228,7 +23228,7 @@ one in the log has no rows here.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.frames"></a>
 
-#### frames
+#### [frames](./persistence/binary_store.py#L279)
 
 ```python
 def frames() -> Iterator[TrajectoryFrame]
@@ -23242,7 +23242,7 @@ Yield every committed generation as a frame, oldest first.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.checkpoint"></a>
 
-#### checkpoint
+#### [checkpoint](./persistence/binary_store.py#L290)
 
 ```python
 def checkpoint() -> tlog.LogPosition
@@ -23261,7 +23261,7 @@ cuts the file back to it.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.resume"></a>
 
-#### resume
+#### [resume](./persistence/binary_store.py#L306)
 
 ```python
 def resume(run_id: str,
@@ -23300,7 +23300,7 @@ generation and is stored as a keyframe.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.resume_after_taper"></a>
 
-#### resume\_after\_taper
+#### [resume\_after\_taper](./persistence/binary_store.py#L354)
 
 ```python
 def resume_after_taper(run_id: str, layout: FrameLayout,
@@ -23335,7 +23335,7 @@ checkpoint's), and then resumed at its last block.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.frame_at"></a>
 
-#### frame\_at
+#### [frame\_at](./persistence/binary_store.py#L394)
 
 ```python
 def frame_at(generation: int) -> TrajectoryFrame
@@ -23352,7 +23352,7 @@ Everything written so far is committed first (a flush barrier).
 
 <a id="fim.persistence.binary_store.BinaryLogStore.discard"></a>
 
-#### discard
+#### [discard](./persistence/binary_store.py#L407)
 
 ```python
 def discard(run_id: str) -> None
@@ -23364,7 +23364,7 @@ Closes the writer first (an open file blocks removal on Windows).
 
 <a id="fim.persistence.binary_store.BinaryLogStore.flush"></a>
 
-#### flush
+#### [flush](./persistence/binary_store.py#L431)
 
 ```python
 def flush(*, sync: bool = False) -> None
@@ -23378,7 +23378,7 @@ Commit everything written so far (a barrier); optionally make it durable.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.snapshot"></a>
 
-#### snapshot
+#### [snapshot](./persistence/binary_store.py#L442)
 
 ```python
 def snapshot() -> tuple[int, int, int]
@@ -23390,7 +23390,7 @@ Return `(committed generation, committed bytes, chain checksum)`.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.is_open"></a>
 
-#### is\_open
+#### [is\_open](./persistence/binary_store.py#L451)
 
 ```python
 def is_open() -> bool
@@ -23400,7 +23400,7 @@ Whether this log's writer is currently open (for tests and diagnostics).
 
 <a id="fim.persistence.binary_store.BinaryLogStore.close"></a>
 
-#### close
+#### [close](./persistence/binary_store.py#L455)
 
 ```python
 def close() -> None
@@ -23412,7 +23412,7 @@ Idempotent. A closed store is finished: writing again raises.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.equilibrium_store"></a>
 
-#### equilibrium\_store
+#### [equilibrium\_store](./persistence/binary_store.py#L466)
 
 ```python
 def equilibrium_store(run_id: str) -> BinaryLogStore
@@ -23426,7 +23426,7 @@ artifacts. One instance per store.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.exists"></a>
 
-#### exists
+#### [exists](./persistence/binary_store.py#L523)
 
 ```python
 def exists() -> bool
@@ -23436,7 +23436,7 @@ Whether the log file exists on disk.
 
 <a id="fim.persistence.frame"></a>
 
-# fim.persistence.frame
+# [fim.persistence.frame](./persistence/frame.py#L1)
 
 Compact per-generation frames: the form a trajectory takes between engine and disk.
 
@@ -23466,13 +23466,13 @@ raw float, which is larger but still exact.
 
 <a id="fim.persistence.frame.UNKNOWN_DEME_SIZE"></a>
 
-#### UNKNOWN\_DEME\_SIZE
+#### [UNKNOWN\_DEME\_SIZE](./persistence/frame.py#L39)
 
 A deme size of `0` means the gene-copy count is not known.
 
 <a id="fim.persistence.frame.FrameLayout"></a>
 
-## FrameLayout Objects
+## [FrameLayout Objects](./persistence/frame.py#L44)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -23490,7 +23490,7 @@ Which (deme, locus) pair each position of a frame means.
 
 <a id="fim.persistence.frame.FrameLayout.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./persistence/frame.py#L60)
 
 ```python
 def __post_init__() -> None
@@ -23505,7 +23505,7 @@ Check the layout and build the locus lookup.
 
 <a id="fim.persistence.frame.FrameLayout.demes"></a>
 
-#### demes
+#### [demes](./persistence/frame.py#L82)
 
 ```python
 @property
@@ -23516,7 +23516,7 @@ The number of demes.
 
 <a id="fim.persistence.frame.FrameLayout.loci"></a>
 
-#### loci
+#### [loci](./persistence/frame.py#L87)
 
 ```python
 @property
@@ -23527,7 +23527,7 @@ The number of loci.
 
 <a id="fim.persistence.frame.FrameLayout.pairs"></a>
 
-#### pairs
+#### [pairs](./persistence/frame.py#L92)
 
 ```python
 @property
@@ -23538,7 +23538,7 @@ The number of (deme, locus) pairs, the length of `counts`.
 
 <a id="fim.persistence.frame.FrameLayout.pair_index"></a>
 
-#### pair\_index
+#### [pair\_index](./persistence/frame.py#L96)
 
 ```python
 def pair_index(deme: int, locus_id: int) -> int
@@ -23563,7 +23563,7 @@ Return the pair number of a one-based deme and a locus identifier.
 
 <a id="fim.persistence.frame.FrameLayout.infer"></a>
 
-#### infer
+#### [infer](./persistence/frame.py#L118)
 
 ```python
 @classmethod
@@ -23592,7 +23592,7 @@ identifiers seen, in order of first appearance.
 
 <a id="fim.persistence.frame.TrajectoryFrame"></a>
 
-## TrajectoryFrame Objects
+## [TrajectoryFrame Objects](./persistence/frame.py#L148)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -23615,7 +23615,7 @@ One generation of a trajectory as flat arrays.
 
 <a id="fim.persistence.frame.TrajectoryFrame.rows"></a>
 
-#### rows
+#### [rows](./persistence/frame.py#L169)
 
 ```python
 @property
@@ -23626,7 +23626,7 @@ The number of rows this frame stands for.
 
 <a id="fim.persistence.frame.frame_to_rows"></a>
 
-#### frame\_to\_rows
+#### [frame\_to\_rows](./persistence/frame.py#L174)
 
 ```python
 def frame_to_rows(frame: TrajectoryFrame,
@@ -23660,7 +23660,7 @@ Return the trajectory rows a frame stands for, in pair order.
 
 <a id="fim.persistence.frame.rows_to_frame"></a>
 
-#### rows\_to\_frame
+#### [rows\_to\_frame](./persistence/frame.py#L230)
 
 ```python
 def rows_to_frame(rows: Iterable[Mapping[str, Any]],
@@ -23703,7 +23703,7 @@ canonical.
 
 <a id="fim.persistence.frame.validate_frame"></a>
 
-#### validate\_frame
+#### [validate\_frame](./persistence/frame.py#L310)
 
 ```python
 def validate_frame(frame: TrajectoryFrame, layout: FrameLayout) -> None
@@ -23725,7 +23725,7 @@ Check that a frame is consistent and fits a layout.
 
 <a id="fim.persistence.frame.layout_for_sizes"></a>
 
-#### layout\_for\_sizes
+#### [layout\_for\_sizes](./persistence/frame.py#L341)
 
 ```python
 def layout_for_sizes(locus_ids: Sequence[int],
@@ -23746,7 +23746,7 @@ Build a layout from plain sequences.
 
 <a id="fim.persistence.frame.layout_for_state"></a>
 
-#### layout\_for\_state
+#### [layout\_for\_state](./persistence/frame.py#L359)
 
 ```python
 def layout_for_state(state: ModelState,
@@ -23773,7 +23773,7 @@ Return the layout of a `ModelState`'s frames.
 
 <a id="fim.persistence.frame.state_to_frame"></a>
 
-#### state\_to\_frame
+#### [state\_to\_frame](./persistence/frame.py#L382)
 
 ```python
 def state_to_frame(state: ModelState) -> TrajectoryFrame
@@ -23803,7 +23803,7 @@ once in Python; Backend V builds its frame with a compiled call
 
 <a id="fim.persistence.groups"></a>
 
-# fim.persistence.groups
+# [fim.persistence.groups](./persistence/groups.py#L1)
 
 Study and Experiment: named groupings of Runs, and of Studies.
 
@@ -23877,7 +23877,7 @@ execution summary.
 
 <a id="fim.persistence.groups.ClosedGroupError"></a>
 
-## ClosedGroupError Objects
+## [ClosedGroupError Objects](./persistence/groups.py#L118)
 
 ```python
 class ClosedGroupError(StoreError, ValueError)
@@ -23889,7 +23889,7 @@ A `ValueError` subclass for the same reason as `ReadOnlyError`.
 
 <a id="fim.persistence.groups.ReadOnlyError"></a>
 
-## ReadOnlyError Objects
+## [ReadOnlyError Objects](./persistence/groups.py#L125)
 
 ```python
 class ReadOnlyError(StoreError, ValueError)
@@ -23905,7 +23905,7 @@ can catch it first.
 
 <a id="fim.persistence.groups.is_run_read_only"></a>
 
-#### is\_run\_read\_only
+#### [is\_run\_read\_only](./persistence/groups.py#L136)
 
 ```python
 def is_run_read_only(run_directory: Path | str) -> bool
@@ -23929,7 +23929,7 @@ readable manifest is not read-only: nothing here is protecting it.
 
 <a id="fim.persistence.groups.refuse_read_only_run"></a>
 
-#### refuse\_read\_only\_run
+#### [refuse\_read\_only\_run](./persistence/groups.py#L159)
 
 ```python
 def refuse_read_only_run(run_directory: Path | str, action: str) -> None
@@ -23953,7 +23953,7 @@ Shared by every function that edits a Run, here and in
 
 <a id="fim.persistence.groups.generate_study_id"></a>
 
-#### generate\_study\_id
+#### [generate\_study\_id](./persistence/groups.py#L195)
 
 ```python
 def generate_study_id() -> str
@@ -23968,7 +23968,7 @@ membership list expected to grow over its own lifetime
 
 <a id="fim.persistence.groups.generate_experiment_id"></a>
 
-#### generate\_experiment\_id
+#### [generate\_experiment\_id](./persistence/groups.py#L206)
 
 ```python
 def generate_experiment_id() -> str
@@ -23978,7 +23978,7 @@ Return a short, opaque, randomly generated Experiment id.
 
 <a id="fim.persistence.groups.StudyManifest"></a>
 
-## StudyManifest Objects
+## [StudyManifest Objects](./persistence/groups.py#L230)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -24016,7 +24016,7 @@ written the same way.
 
 <a id="fim.persistence.groups.StudyManifest.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./persistence/groups.py#L273)
 
 ```python
 def __post_init__() -> None
@@ -24026,7 +24026,7 @@ Validate schema version, identity, name, and timestamps.
 
 <a id="fim.persistence.groups.StudyManifest.run_count"></a>
 
-#### run\_count
+#### [run\_count](./persistence/groups.py#L289)
 
 ```python
 @property
@@ -24037,7 +24037,7 @@ Return how many run directories this Study currently references.
 
 <a id="fim.persistence.groups.StudyManifest.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/groups.py#L293)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -24049,7 +24049,7 @@ Return a JSON-serializable study manifest mapping.
 
 <a id="fim.persistence.groups.StudyManifest.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/groups.py#L319)
 
 ```python
 @classmethod
@@ -24060,7 +24060,7 @@ Validate and reconstruct a study manifest from a parsed JSON mapping.
 
 <a id="fim.persistence.groups.ExperimentManifest"></a>
 
-## ExperimentManifest Objects
+## [ExperimentManifest Objects](./persistence/groups.py#L360)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -24078,7 +24078,7 @@ mean on a Study.
 
 <a id="fim.persistence.groups.ExperimentManifest.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./persistence/groups.py#L382)
 
 ```python
 def __post_init__() -> None
@@ -24088,7 +24088,7 @@ Validate schema version, identity, name, and timestamps.
 
 <a id="fim.persistence.groups.ExperimentManifest.study_count"></a>
 
-#### study\_count
+#### [study\_count](./persistence/groups.py#L398)
 
 ```python
 @property
@@ -24099,7 +24099,7 @@ Return how many studies this Experiment currently references.
 
 <a id="fim.persistence.groups.ExperimentManifest.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/groups.py#L402)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -24111,7 +24111,7 @@ Return a JSON-serializable experiment manifest mapping.
 
 <a id="fim.persistence.groups.ExperimentManifest.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/groups.py#L425)
 
 ```python
 @classmethod
@@ -24122,7 +24122,7 @@ Validate and reconstruct an experiment manifest from a parsed mapping.
 
 <a id="fim.persistence.groups.refuse_closed"></a>
 
-#### refuse\_closed
+#### [refuse\_closed](./persistence/groups.py#L489)
 
 ```python
 def refuse_closed(manifest: StudyManifest | ExperimentManifest,
@@ -24143,7 +24143,7 @@ Raise `ClosedGroupError` when `manifest` is a closed Study or Experiment.
 
 <a id="fim.persistence.groups.set_experiment_closed"></a>
 
-#### set\_experiment\_closed
+#### [set\_experiment\_closed](./persistence/groups.py#L511)
 
 ```python
 def set_experiment_closed(experiment_id: str,
@@ -24166,7 +24166,7 @@ validates active work first and is what callers should use.
 
 <a id="fim.persistence.groups.set_study_closed"></a>
 
-#### set\_study\_closed
+#### [set\_study\_closed](./persistence/groups.py#L545)
 
 ```python
 def set_study_closed(study_id: str,
@@ -24189,7 +24189,7 @@ validates active work first and is what callers should use.
 
 <a id="fim.persistence.groups.study_manifest_path"></a>
 
-#### study\_manifest\_path
+#### [study\_manifest\_path](./persistence/groups.py#L576)
 
 ```python
 def study_manifest_path(study_id: str, *, results: Path | None = None) -> Path
@@ -24210,7 +24210,7 @@ Return where one Study's own manifest file lives.
 
 <a id="fim.persistence.groups.experiment_manifest_path"></a>
 
-#### experiment\_manifest\_path
+#### [experiment\_manifest\_path](./persistence/groups.py#L591)
 
 ```python
 def experiment_manifest_path(experiment_id: str,
@@ -24222,7 +24222,7 @@ Return where one Experiment's own manifest file lives.
 
 <a id="fim.persistence.groups.read_study_manifest"></a>
 
-#### read\_study\_manifest
+#### [read\_study\_manifest](./persistence/groups.py#L599)
 
 ```python
 def read_study_manifest(path: Path | str) -> StudyManifest
@@ -24232,7 +24232,7 @@ Read and validate one Study manifest JSON file.
 
 <a id="fim.persistence.groups.write_study_manifest"></a>
 
-#### write\_study\_manifest
+#### [write\_study\_manifest](./persistence/groups.py#L609)
 
 ```python
 def write_study_manifest(path: Path | str, manifest: StudyManifest) -> None
@@ -24249,7 +24249,7 @@ needs its own atomicity here.
 
 <a id="fim.persistence.groups.read_experiment_manifest"></a>
 
-#### read\_experiment\_manifest
+#### [read\_experiment\_manifest](./persistence/groups.py#L623)
 
 ```python
 def read_experiment_manifest(path: Path | str) -> ExperimentManifest
@@ -24259,7 +24259,7 @@ Read and validate one Experiment manifest JSON file.
 
 <a id="fim.persistence.groups.write_experiment_manifest"></a>
 
-#### write\_experiment\_manifest
+#### [write\_experiment\_manifest](./persistence/groups.py#L633)
 
 ```python
 def write_experiment_manifest(path: Path | str,
@@ -24270,7 +24270,7 @@ Atomically write `manifest` to `path`, creating parent directories as needed.
 
 <a id="fim.persistence.groups.create_study"></a>
 
-#### create\_study
+#### [create\_study](./persistence/groups.py#L646)
 
 ```python
 def create_study(name: str,
@@ -24302,7 +24302,7 @@ Create a new, empty Study and write its manifest.
 
 <a id="fim.persistence.groups.get_study"></a>
 
-#### get\_study
+#### [get\_study](./persistence/groups.py#L694)
 
 ```python
 def get_study(study_id: str, *, results: Path | None = None) -> StudyManifest
@@ -24316,7 +24316,7 @@ Read one existing Study by id.
 
 <a id="fim.persistence.groups.study_run_directories"></a>
 
-#### study\_run\_directories
+#### [study\_run\_directories](./persistence/groups.py#L707)
 
 ```python
 def study_run_directories(study: StudyManifest,
@@ -24335,7 +24335,7 @@ are this function's own two callers.
 
 <a id="fim.persistence.groups.list_studies"></a>
 
-#### list\_studies
+#### [list\_studies](./persistence/groups.py#L727)
 
 ```python
 def list_studies(*, results: Path | None = None) -> list[StudyManifest]
@@ -24353,7 +24353,7 @@ to the rest of the listing.
 
 <a id="fim.persistence.groups.add_run_to_study"></a>
 
-#### add\_run\_to\_study
+#### [add\_run\_to\_study](./persistence/groups.py#L754)
 
 ```python
 def add_run_to_study(study_id: str,
@@ -24380,7 +24380,7 @@ Run, it does not change it.
 
 <a id="fim.persistence.groups.delete_study"></a>
 
-#### delete\_study
+#### [delete\_study](./persistence/groups.py#L791)
 
 ```python
 def delete_study(study_id: str,
@@ -24418,7 +24418,7 @@ Delete a Study's own manifest and, by default, every Run it references.
 
 <a id="fim.persistence.groups.clear_study_runs"></a>
 
-#### clear\_study\_runs
+#### [clear\_study\_runs](./persistence/groups.py#L833)
 
 ```python
 def clear_study_runs(study_id: str,
@@ -24452,7 +24452,7 @@ docstring).
 
 <a id="fim.persistence.groups.shared_run_directories"></a>
 
-#### shared\_run\_directories
+#### [shared\_run\_directories](./persistence/groups.py#L876)
 
 ```python
 def shared_run_directories(study_id: str,
@@ -24469,7 +24469,7 @@ links to, so it can never delete a Run out from under another Study.
 
 <a id="fim.persistence.groups.remove_run_from_study"></a>
 
-#### remove\_run\_from\_study
+#### [remove\_run\_from\_study](./persistence/groups.py#L895)
 
 ```python
 def remove_run_from_study(study_id: str,
@@ -24497,7 +24497,7 @@ Studies remain protected. An already-absent link is an idempotent no-op.
 
 <a id="fim.persistence.groups.remove_run_references"></a>
 
-#### remove\_run\_references
+#### [remove\_run\_references](./persistence/groups.py#L934)
 
 ```python
 def remove_run_references(directories: Sequence[Path | str],
@@ -24515,7 +24515,7 @@ it (readers already skip a missing directory).
 
 <a id="fim.persistence.groups.delete_runs"></a>
 
-#### delete\_runs
+#### [delete\_runs](./persistence/groups.py#L962)
 
 ```python
 def delete_runs(directories: Sequence[Path | str],
@@ -24552,7 +24552,7 @@ rather than half carried out.
 
 <a id="fim.persistence.groups.prune_missing_studies"></a>
 
-#### prune\_missing\_studies
+#### [prune\_missing\_studies](./persistence/groups.py#L1033)
 
 ```python
 def prune_missing_studies(*, results: Path | None = None) -> int
@@ -24572,7 +24572,7 @@ A read-only Experiment is left as it is; re-seeding repairs it.
 
 <a id="fim.persistence.groups.update_study_details"></a>
 
-#### update\_study\_details
+#### [update\_study\_details](./persistence/groups.py#L1086)
 
 ```python
 def update_study_details(study_id: str,
@@ -24612,7 +24612,7 @@ sweep specification are untouched.
 
 <a id="fim.persistence.groups.copy_study"></a>
 
-#### copy\_study
+#### [copy\_study](./persistence/groups.py#L1133)
 
 ```python
 def copy_study(study_id: str,
@@ -24638,7 +24638,7 @@ either affecting the other or the underlying Run data at all.
 
 <a id="fim.persistence.groups.create_experiment"></a>
 
-#### create\_experiment
+#### [create\_experiment](./persistence/groups.py#L1178)
 
 ```python
 def create_experiment(name: str,
@@ -24653,7 +24653,7 @@ Create a new, empty Experiment and write its manifest.
 
 <a id="fim.persistence.groups.get_experiment"></a>
 
-#### get\_experiment
+#### [get\_experiment](./persistence/groups.py#L1212)
 
 ```python
 def get_experiment(experiment_id: str,
@@ -24669,7 +24669,7 @@ Read one existing Experiment by id.
 
 <a id="fim.persistence.groups.list_experiments"></a>
 
-#### list\_experiments
+#### [list\_experiments](./persistence/groups.py#L1227)
 
 ```python
 def list_experiments(*,
@@ -24680,7 +24680,7 @@ Return every Experiment under `results`, oldest first (see `list_studies`).
 
 <a id="fim.persistence.groups.add_study_to_experiment"></a>
 
-#### add\_study\_to\_experiment
+#### [add\_study\_to\_experiment](./persistence/groups.py#L1245)
 
 ```python
 def add_study_to_experiment(experiment_id: str,
@@ -24703,7 +24703,7 @@ links the Study, it does not change it.
 
 <a id="fim.persistence.groups.ensure_default_experiment"></a>
 
-#### ensure\_default\_experiment
+#### [ensure\_default\_experiment](./persistence/groups.py#L1280)
 
 ```python
 def ensure_default_experiment(*,
@@ -24728,7 +24728,7 @@ file it did not ask for.
 
 <a id="fim.persistence.groups.ensure_default_study"></a>
 
-#### ensure\_default\_study
+#### [ensure\_default\_study](./persistence/groups.py#L1318)
 
 ```python
 def ensure_default_study(*,
@@ -24758,7 +24758,7 @@ anything asks for it, rather than staying silently orphaned.
 
 <a id="fim.persistence.groups.write_read_only_study"></a>
 
-#### write\_read\_only\_study
+#### [write\_read\_only\_study](./persistence/groups.py#L1365)
 
 ```python
 def write_read_only_study(study_id: str,
@@ -24811,7 +24811,7 @@ an app-owned item.
 
 <a id="fim.persistence.groups.write_read_only_experiment"></a>
 
-#### write\_read\_only\_experiment
+#### [write\_read\_only\_experiment](./persistence/groups.py#L1443)
 
 ```python
 def write_read_only_experiment(experiment_id: str,
@@ -24854,7 +24854,7 @@ since it bypasses the read-only checks. Idempotent in the same way.
 
 <a id="fim.persistence.groups.delete_experiment"></a>
 
-#### delete\_experiment
+#### [delete\_experiment](./persistence/groups.py#L1526)
 
 ```python
 def delete_experiment(experiment_id: str,
@@ -24896,7 +24896,7 @@ describes, one level up.
 
 <a id="fim.persistence.groups.update_experiment_details"></a>
 
-#### update\_experiment\_details
+#### [update\_experiment\_details](./persistence/groups.py#L1581)
 
 ```python
 def update_experiment_details(experiment_id: str,
@@ -24919,7 +24919,7 @@ The Experiment-level counterpart to `update_study_details`.
 
 <a id="fim.persistence.groups.experiments_containing_study"></a>
 
-#### experiments\_containing\_study
+#### [experiments\_containing\_study](./persistence/groups.py#L1617)
 
 ```python
 def experiments_containing_study(
@@ -24935,7 +24935,7 @@ a Study normally belongs to one Experiment, but nothing forbids more.
 
 <a id="fim.persistence.groups.studies_containing_run"></a>
 
-#### studies\_containing\_run
+#### [studies\_containing\_run](./persistence/groups.py#L1632)
 
 ```python
 def studies_containing_run(run_directory: Path | str,
@@ -24952,7 +24952,7 @@ relative entry: a Study can hold thousands of runs.
 
 <a id="fim.persistence.groups.copy_experiment"></a>
 
-#### copy\_experiment
+#### [copy\_experiment](./persistence/groups.py#L1658)
 
 ```python
 def copy_experiment(experiment_id: str,
@@ -24973,7 +24973,7 @@ only the `study_ids` reference list, never the Studies themselves.
 
 <a id="fim.persistence.groups.resolve_run_directory"></a>
 
-#### resolve\_run\_directory
+#### [resolve\_run\_directory](./persistence/groups.py#L1697)
 
 ```python
 def resolve_run_directory(reference: str,
@@ -25013,7 +25013,7 @@ always unambiguous when it resolves at all.
 
 <a id="fim.persistence.groups.find_run_directories"></a>
 
-#### find\_run\_directories
+#### [find\_run\_directories](./persistence/groups.py#L1748)
 
 ```python
 def find_run_directories(run_id: str,
@@ -25034,7 +25034,7 @@ manifests, so it is linear in the number of runs.
 
 <a id="fim.persistence.groups.find_stale_run_directories"></a>
 
-#### find\_stale\_run\_directories
+#### [find\_stale\_run\_directories](./persistence/groups.py#L1773)
 
 ```python
 def find_stale_run_directories(run_id: str,
@@ -25047,7 +25047,7 @@ Return runs with this `run_id` that another software version made.
 
 <a id="fim.persistence.groups.run_id_of"></a>
 
-#### run\_id\_of
+#### [run\_id\_of](./persistence/groups.py#L1785)
 
 ```python
 def run_id_of(run_directory: Path) -> str | None
@@ -25057,7 +25057,7 @@ Return the `run_id` recorded in `run_directory`'s manifest, if readable.
 
 <a id="fim.persistence.groups.run_identity_of"></a>
 
-#### run\_identity\_of
+#### [run\_identity\_of](./persistence/groups.py#L1791)
 
 ```python
 def run_identity_of(run_directory: Path) -> tuple[str, str] | None
@@ -25067,7 +25067,7 @@ Return `(run_id, software_version)` from a run's manifest, if readable.
 
 <a id="fim.persistence.groups.supersede_run"></a>
 
-#### supersede\_run
+#### [supersede\_run](./persistence/groups.py#L1796)
 
 ```python
 def supersede_run(old: Path | str,
@@ -25089,7 +25089,7 @@ every Study that held it now holds the new one.
 
 <a id="fim.persistence.history"></a>
 
-# fim.persistence.history
+# [fim.persistence.history](./persistence/history.py#L1)
 
 A run's per-generation statistic history, in either of its two formats.
 
@@ -25114,37 +25114,37 @@ does not need to know how it was stored.
 
 <a id="fim.persistence.history.HISTORY_FILENAME"></a>
 
-#### HISTORY\_FILENAME
+#### [HISTORY\_FILENAME](./persistence/history.py#L35)
 
 The exact statistic history of one replicate or one scalar run.
 
 <a id="fim.persistence.history.COMPACT_FILENAME"></a>
 
-#### COMPACT\_FILENAME
+#### [COMPACT\_FILENAME](./persistence/history.py#L38)
 
 The compact statistic history of one replicate or one scalar run.
 
 <a id="fim.persistence.history.DECIMATED_FILENAME"></a>
 
-#### DECIMATED\_FILENAME
+#### [DECIMATED\_FILENAME](./persistence/history.py#L41)
 
 The decimated history a statistics-only run keeps in place of the full one.
 
 <a id="fim.persistence.history.DECIMATED_SAMPLES"></a>
 
-#### DECIMATED\_SAMPLES
+#### [DECIMATED\_SAMPLES](./persistence/history.py#L44)
 
 Most generations in a decimated history.
 
 <a id="fim.persistence.history.HISTORY_FILENAMES"></a>
 
-#### HISTORY\_FILENAMES
+#### [HISTORY\_FILENAMES](./persistence/history.py#L47)
 
 Every name a history file may have, exact first.
 
 <a id="fim.persistence.history.HistoryError"></a>
 
-## HistoryError Objects
+## [HistoryError Objects](./persistence/history.py#L64)
 
 ```python
 class HistoryError(ValueError)
@@ -25154,7 +25154,7 @@ A compact history file is damaged, or a history cannot be compacted.
 
 <a id="fim.persistence.history.replicate_directories"></a>
 
-#### replicate\_directories
+#### [replicate\_directories](./persistence/history.py#L68)
 
 ```python
 def replicate_directories(run_directory: Path) -> list[Path]
@@ -25176,7 +25176,7 @@ Return the directories that each hold one replicate's files.
 
 <a id="fim.persistence.history.history_path"></a>
 
-#### history\_path
+#### [history\_path](./persistence/history.py#L88)
 
 ```python
 def history_path(replicate_directory: Path) -> Path
@@ -25190,7 +25190,7 @@ without a history, or one that predates it).
 
 <a id="fim.persistence.history.fractional_bits"></a>
 
-#### fractional\_bits
+#### [fractional\_bits](./persistence/history.py#L101)
 
 ```python
 def fractional_bits(precision: float) -> int
@@ -25212,7 +25212,7 @@ stored value is within about 0.5% of the precision of the value computed.
 
 <a id="fim.persistence.history.iter_history_rows"></a>
 
-#### iter\_history\_rows
+#### [iter\_history\_rows](./persistence/history.py#L119)
 
 ```python
 def iter_history_rows(path: Path) -> Iterator[HistoryRow]
@@ -25238,7 +25238,7 @@ Stream a history file's rows in generation order.
 
 <a id="fim.persistence.history.read_history_columns"></a>
 
-#### read\_history\_columns
+#### [read\_history\_columns](./persistence/history.py#L162)
 
 ```python
 def read_history_columns(path: Path) -> HistoryColumns
@@ -25264,7 +25264,7 @@ Read a whole history as a generation list and one value list per statistic.
 
 <a id="fim.persistence.history.sample_history"></a>
 
-#### sample\_history
+#### [sample\_history](./persistence/history.py#L189)
 
 ```python
 def sample_history(path: Path,
@@ -25284,7 +25284,7 @@ lacks, or a statistic undefined there, is `None`.
 
 <a id="fim.persistence.history.decimated_generations"></a>
 
-#### decimated\_generations
+#### [decimated\_generations](./persistence/history.py#L219)
 
 ```python
 def decimated_generations(final: int,
@@ -25309,7 +25309,7 @@ Generation 0, then a union of logarithmic and linear spacing up to `final`
 
 <a id="fim.persistence.history.write_decimated_history"></a>
 
-#### write\_decimated\_history
+#### [write\_decimated\_history](./persistence/history.py#L249)
 
 ```python
 def write_decimated_history(path: Path,
@@ -25333,7 +25333,7 @@ Values are kept at full precision; only generations are left out.
 
 <a id="fim.persistence.history.read_decimated_columns"></a>
 
-#### read\_decimated\_columns
+#### [read\_decimated\_columns](./persistence/history.py#L285)
 
 ```python
 def read_decimated_columns(path: Path) -> HistoryColumns
@@ -25348,7 +25348,7 @@ Read a decimated history as generations and one value list per statistic.
 
 <a id="fim.persistence.history.write_compact_history"></a>
 
-#### write\_compact\_history
+#### [write\_compact\_history](./persistence/history.py#L334)
 
 ```python
 def write_compact_history(path: Path, generations: Sequence[int],
@@ -25380,7 +25380,7 @@ finite number is recorded as missing.
 
 <a id="fim.persistence.history.read_compact_columns"></a>
 
-#### read\_compact\_columns
+#### [read\_compact\_columns](./persistence/history.py#L410)
 
 ```python
 def read_compact_columns(path: Path) -> HistoryColumns
@@ -25395,7 +25395,7 @@ Read a compact history as generations and one float list per statistic.
 
 <a id="fim.persistence.manifest"></a>
 
-# fim.persistence.manifest
+# [fim.persistence.manifest](./persistence/manifest.py#L1)
 
 Replayable, verifiable run-manifest representation and JSON I/O.
 
@@ -25416,7 +25416,7 @@ class's own docstring for the details specific to it.
 
 <a id="fim.persistence.manifest.ArtifactDigest"></a>
 
-## ArtifactDigest Objects
+## [ArtifactDigest Objects](./persistence/manifest.py#L56)
 
 ```python
 class ArtifactDigest(TypedDict)
@@ -25433,7 +25433,7 @@ previously recorded one has definitely been altered since.
 
 <a id="fim.persistence.manifest.hash_file"></a>
 
-#### hash\_file
+#### [hash\_file](./persistence/manifest.py#L71)
 
 ```python
 def hash_file(path: Path | str) -> ArtifactDigest
@@ -25461,7 +25461,7 @@ file never requires holding the whole thing in memory simultaneously.
 
 <a id="fim.persistence.manifest.RunManifest"></a>
 
-## RunManifest Objects
+## [RunManifest Objects](./persistence/manifest.py#L100)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -25534,7 +25534,7 @@ either field only means a manifest written before they existed.
 
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./persistence/manifest.py#L186)
 
 ```python
 def __post_init__() -> None
@@ -25544,7 +25544,7 @@ Validate required manifest identity, terminal, and digest fields.
 
 <a id="fim.persistence.manifest.RunManifest.params"></a>
 
-#### params
+#### [params](./persistence/manifest.py#L205)
 
 ```python
 def params() -> SimulationParams
@@ -25563,7 +25563,7 @@ config file to still exist.
 
 <a id="fim.persistence.manifest.RunManifest.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/manifest.py#L219)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -25577,7 +25577,7 @@ writes to `manifest.json`, and that `from_dict` reads back.
 
 <a id="fim.persistence.manifest.RunManifest.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/manifest.py#L261)
 
 ```python
 @classmethod
@@ -25594,7 +25594,7 @@ and well-formed and reconstructs the equivalent `RunManifest`.
 
 <a id="fim.persistence.manifest.read_manifest"></a>
 
-#### read\_manifest
+#### [read\_manifest](./persistence/manifest.py#L315)
 
 ```python
 def read_manifest(path: Path | str) -> RunManifest
@@ -25609,7 +25609,7 @@ from_dict`, above, which does the actual field-by-field validation
 
 <a id="fim.persistence.manifest.write_manifest"></a>
 
-#### write\_manifest
+#### [write\_manifest](./persistence/manifest.py#L332)
 
 ```python
 def write_manifest(path: Path | str, manifest: RunManifest) -> None
@@ -25626,7 +25626,7 @@ else in the project works with the in-memory `RunManifest` object.
 
 <a id="fim.persistence.manifest.verify_trajectory_integrity"></a>
 
-#### verify\_trajectory\_integrity
+#### [verify\_trajectory\_integrity](./persistence/manifest.py#L356)
 
 ```python
 def verify_trajectory_integrity(trajectory_path: Path,
@@ -25672,7 +25672,7 @@ truncation, or replacement since.
 
 <a id="fim.persistence.manifest.BatchManifest"></a>
 
-## BatchManifest Objects
+## [BatchManifest Objects](./persistence/manifest.py#L420)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -25691,7 +25691,7 @@ artifact is detectable the same way a scalar run's is.
 
 <a id="fim.persistence.manifest.BatchManifest.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./persistence/manifest.py#L441)
 
 ```python
 def __post_init__() -> None
@@ -25701,7 +25701,7 @@ Validate required batch-manifest identity and digest fields.
 
 <a id="fim.persistence.manifest.BatchManifest.replicate_count"></a>
 
-#### replicate\_count
+#### [replicate\_count](./persistence/manifest.py#L458)
 
 ```python
 @property
@@ -25717,7 +25717,7 @@ how many of them actually completed and were published.
 
 <a id="fim.persistence.manifest.BatchManifest.params"></a>
 
-#### params
+#### [params](./persistence/manifest.py#L468)
 
 ```python
 def params() -> SimulationParams
@@ -25730,7 +25730,7 @@ that method's own docstring for what this reconstructs and why.
 
 <a id="fim.persistence.manifest.BatchManifest.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/manifest.py#L476)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -25742,7 +25742,7 @@ The batch-level counterpart to `RunManifest.to_dict`, above.
 
 <a id="fim.persistence.manifest.BatchManifest.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/manifest.py#L498)
 
 ```python
 @classmethod
@@ -25755,7 +25755,7 @@ The batch-level counterpart to `RunManifest.from_dict`, above.
 
 <a id="fim.persistence.manifest.read_batch_manifest"></a>
 
-#### read\_batch\_manifest
+#### [read\_batch\_manifest](./persistence/manifest.py#L537)
 
 ```python
 def read_batch_manifest(path: Path | str) -> BatchManifest
@@ -25767,7 +25767,7 @@ The batch-level counterpart to `read_manifest`, above.
 
 <a id="fim.persistence.manifest.write_batch_manifest"></a>
 
-#### write\_batch\_manifest
+#### [write\_batch\_manifest](./persistence/manifest.py#L551)
 
 ```python
 def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None
@@ -25779,7 +25779,7 @@ The batch-level counterpart to `write_manifest`, above.
 
 <a id="fim.persistence.object_lock"></a>
 
-# fim.persistence.object\_lock
+# [fim.persistence.object\_lock](./persistence/object_lock.py#L1)
 
 Cross-process exclusive file locks for Run object bookkeeping.
 
@@ -25793,7 +25793,7 @@ be renamed or deleted while its lock is held on every platform.
 
 <a id="fim.persistence.object_lock.LockUnavailableError"></a>
 
-## LockUnavailableError Objects
+## [LockUnavailableError Objects](./persistence/object_lock.py#L60)
 
 ```python
 class LockUnavailableError(FimError)
@@ -25803,7 +25803,7 @@ A non-blocking lock request found the lock already held.
 
 <a id="fim.persistence.object_lock.exclusive_lock"></a>
 
-#### exclusive\_lock
+#### [exclusive\_lock](./persistence/object_lock.py#L65)
 
 ```python
 @contextmanager
@@ -25836,7 +25836,7 @@ Hold an exclusive cross-process lock on `path` for the block.
 
 <a id="fim.persistence.object_lock.is_lock_held"></a>
 
-#### is\_lock\_held
+#### [is\_lock\_held](./persistence/object_lock.py#L98)
 
 ```python
 def is_lock_held(path: Path) -> bool
@@ -25849,7 +25849,7 @@ releases the lock, so it never blocks.
 
 <a id="fim.persistence.pairwise"></a>
 
-# fim.persistence.pairwise
+# [fim.persistence.pairwise](./persistence/pairwise.py#L1)
 
 `pairwise.json`: every deme pair's Nei identities at a run's last generation.
 
@@ -25894,7 +25894,7 @@ of a batch writes its own); at ``d = 100``, about 0.5 MB.
 
 <a id="fim.persistence.pairwise.SLOW_PAIRWISE_DEMES"></a>
 
-#### SLOW\_PAIRWISE\_DEMES
+#### [SLOW\_PAIRWISE\_DEMES](./persistence/pairwise.py#L70)
 
 Deme count from which saving `pairwise.json` is slow enough to announce.
 
@@ -25904,7 +25904,7 @@ replicate. The GUI shows a status line with a spinner while it saves.
 
 <a id="fim.persistence.pairwise.upper_triangle_index"></a>
 
-#### upper\_triangle\_index
+#### [upper\_triangle\_index](./persistence/pairwise.py#L79)
 
 ```python
 def upper_triangle_index(deme_count: int, first: int, second: int) -> int
@@ -25931,7 +25931,7 @@ Return the position of pair ``(first, second)`` in an upper-triangle list.
 
 <a id="fim.persistence.pairwise.pairwise_payload"></a>
 
-#### pairwise\_payload
+#### [pairwise\_payload](./persistence/pairwise.py#L102)
 
 ```python
 def pairwise_payload(state: ModelState, *, max_demes: int) -> dict[str, Any]
@@ -25951,7 +25951,7 @@ Return the `pairwise.json` content for `state`.
 
 <a id="fim.persistence.pairwise.write_pairwise"></a>
 
-#### write\_pairwise
+#### [write\_pairwise](./persistence/pairwise.py#L146)
 
 ```python
 def write_pairwise(path: Path | str, payload: Mapping[str, Any]) -> None
@@ -25971,7 +25971,7 @@ trailing newline, so identical results give identical bytes.
 
 <a id="fim.persistence.pairwise.read_pairwise"></a>
 
-#### read\_pairwise
+#### [read\_pairwise](./persistence/pairwise.py#L164)
 
 ```python
 def read_pairwise(path: Path | str) -> dict[str, Any]
@@ -25986,7 +25986,7 @@ Read a `pairwise.json`.
 
 <a id="fim.persistence.pairwise.pair_value"></a>
 
-#### pair\_value
+#### [pair\_value](./persistence/pairwise.py#L180)
 
 ```python
 def pair_value(payload: Mapping[str, Any], key: str, first: int,
@@ -26011,7 +26011,7 @@ Return one pair's saved value, or `None` if the file has none.
 
 <a id="fim.persistence.recording"></a>
 
-# fim.persistence.recording
+# [fim.persistence.recording](./persistence/recording.py#L1)
 
 What a run kept, and whether it kept enough for what is asked of it.
 
@@ -26033,13 +26033,13 @@ The ladder, from most to least kept: `full`, then `thinned` and `tapered`
 
 <a id="fim.persistence.recording.LEVELS"></a>
 
-#### LEVELS
+#### [LEVELS](./persistence/recording.py#L30)
 
 The trajectory retention levels, most kept first.
 
 <a id="fim.persistence.recording.Recording"></a>
 
-## Recording Objects
+## [Recording Objects](./persistence/recording.py#L35)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26060,7 +26060,7 @@ What a run keeps of itself.
 
 <a id="fim.persistence.recording.Recording.from_parameters"></a>
 
-#### from\_parameters
+#### [from\_parameters](./persistence/recording.py#L56)
 
 ```python
 @classmethod
@@ -26078,7 +26078,7 @@ that it kept everything.
 
 <a id="fim.persistence.recording.Recording.keeps_trajectory"></a>
 
-#### keeps\_trajectory
+#### [keeps\_trajectory](./persistence/recording.py#L76)
 
 ```python
 @property
@@ -26089,7 +26089,7 @@ Whether the run has a trajectory log at all.
 
 <a id="fim.persistence.recording.Recording.absent_artifacts"></a>
 
-#### absent\_artifacts
+#### [absent\_artifacts](./persistence/recording.py#L81)
 
 ```python
 @property
@@ -26100,7 +26100,7 @@ The artifact keys this run deliberately does not have.
 
 <a id="fim.persistence.recording.Recording.satisfies"></a>
 
-#### satisfies
+#### [satisfies](./persistence/recording.py#L87)
 
 ```python
 def satisfies(wanted: Recording) -> bool
@@ -26121,7 +26121,7 @@ Return whether a run with this recording serves a request for `wanted`.
 
 <a id="fim.persistence.recording.Recording.same_frames_as"></a>
 
-#### same\_frames\_as
+#### [same\_frames\_as](./persistence/recording.py#L113)
 
 ```python
 def same_frames_as(other: Recording) -> bool
@@ -26131,7 +26131,7 @@ Return whether two runs keep exactly the same trajectory frames.
 
 <a id="fim.persistence.recording.comparable_artifacts"></a>
 
-#### comparable\_artifacts
+#### [comparable\_artifacts](./persistence/recording.py#L130)
 
 ```python
 def comparable_artifacts(older: Recording, newer: Recording) -> frozenset[str]
@@ -26151,7 +26151,7 @@ wrote it in the same format.
 
 <a id="fim.persistence.recording.recording_of_run"></a>
 
-#### recording\_of\_run
+#### [recording\_of\_run](./persistence/recording.py#L153)
 
 ```python
 def recording_of_run(directory: Path) -> Recording
@@ -26169,7 +26169,7 @@ kept everything, which is what a run that predates these settings did.
 
 <a id="fim.persistence.recording.run_satisfies"></a>
 
-#### run\_satisfies
+#### [run\_satisfies](./persistence/recording.py#L171)
 
 ```python
 def run_satisfies(directory: Path, wanted: Mapping[str, Any]) -> bool
@@ -26184,7 +26184,7 @@ Return whether a finished run holds what a configuration asks it to keep.
 
 <a id="fim.persistence.report"></a>
 
-# fim.persistence.report
+# [fim.persistence.report](./persistence/report.py#L1)
 
 Deterministic JSON writing for run-level report and summary artifacts.
 
@@ -26213,7 +26213,7 @@ loop.
 
 <a id="fim.persistence.report.write_report"></a>
 
-#### write\_report
+#### [write\_report](./persistence/report.py#L37)
 
 ```python
 def write_report(path: Path | str, value: Mapping[str, object]) -> None
@@ -26243,7 +26243,7 @@ somewhere else.
 
 <a id="fim.persistence.report.write_jsonl_rows"></a>
 
-#### write\_jsonl\_rows
+#### [write\_jsonl\_rows](./persistence/report.py#L67)
 
 ```python
 def write_jsonl_rows(path: Path | str,
@@ -26266,7 +26266,7 @@ formatting difference" reason `write_report` documents.
 
 <a id="fim.persistence.retention"></a>
 
-# fim.persistence.retention
+# [fim.persistence.retention](./persistence/retention.py#L1)
 
 Which generations of a trajectory are written to disk.
 
@@ -26297,7 +26297,7 @@ written; `fim.persistence.taper` applies it when the replicate finishes.
 
 <a id="fim.persistence.retention.TrajectoryRetention"></a>
 
-## TrajectoryRetention Objects
+## [TrajectoryRetention Objects](./persistence/retention.py#L39)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26322,7 +26322,7 @@ The rule for which generations a run writes.
 
 <a id="fim.persistence.retention.TrajectoryRetention.from_params"></a>
 
-#### from\_params
+#### [from\_params](./persistence/retention.py#L66)
 
 ```python
 @classmethod
@@ -26344,7 +26344,7 @@ Build the rule a configuration asks for.
 
 <a id="fim.persistence.retention.TrajectoryRetention.skips_generations"></a>
 
-#### skips\_generations
+#### [skips\_generations](./persistence/retention.py#L96)
 
 ```python
 @property
@@ -26355,7 +26355,7 @@ Return whether the finished log leaves out any generation.
 
 <a id="fim.persistence.retention.TrajectoryRetention.cuts_at_stop"></a>
 
-#### cuts\_at\_stop
+#### [cuts\_at\_stop](./persistence/retention.py#L101)
 
 ```python
 @property
@@ -26366,7 +26366,7 @@ Return whether a stopped replicate's log is cut down at once.
 
 <a id="fim.persistence.retention.TrajectoryRetention.kept_generations"></a>
 
-#### kept\_generations
+#### [kept\_generations](./persistence/retention.py#L105)
 
 ```python
 def kept_generations(final: int) -> list[int]
@@ -26386,7 +26386,7 @@ Return the generations a finished tapered log holds, in order.
 
 <a id="fim.persistence.retention.TrajectoryRetention.keeps"></a>
 
-#### keeps
+#### [keeps](./persistence/retention.py#L123)
 
 ```python
 def keeps(generation: int) -> bool
@@ -26406,7 +26406,7 @@ Return whether `generation` is written (the final one always is, too).
 
 <a id="fim.persistence.retention.TrajectoryRetention.count_through"></a>
 
-#### count\_through
+#### [count\_through](./persistence/retention.py#L143)
 
 ```python
 def count_through(final: int) -> int
@@ -26425,7 +26425,7 @@ Return how many generations a run that ended at `final` wrote.
 
 <a id="fim.persistence.retention.tapered_generations"></a>
 
-#### tapered\_generations
+#### [tapered\_generations](./persistence/retention.py#L167)
 
 ```python
 def tapered_generations(final: int,
@@ -26465,7 +26465,7 @@ not the length of the run.
 
 <a id="fim.persistence.run_checkpoint"></a>
 
-# fim.persistence.run\_checkpoint
+# [fim.persistence.run\_checkpoint](./persistence/run_checkpoint.py#L1)
 
 Durable, atomically published Run checkpoints.
 
@@ -26488,7 +26488,7 @@ plan.md` (`selby/restricted`), "Checkpoint contents and commit protocol".
 
 <a id="fim.persistence.run_checkpoint.CheckpointError"></a>
 
-## CheckpointError Objects
+## [CheckpointError Objects](./persistence/run_checkpoint.py#L60)
 
 ```python
 class CheckpointError(LifecycleError)
@@ -26498,7 +26498,7 @@ A checkpoint is missing, corrupt, or does not match its reference.
 
 <a id="fim.persistence.run_checkpoint.UnsupportedCheckpointError"></a>
 
-## UnsupportedCheckpointError Objects
+## [UnsupportedCheckpointError Objects](./persistence/run_checkpoint.py#L64)
 
 ```python
 class UnsupportedCheckpointError(CheckpointError)
@@ -26508,7 +26508,7 @@ A checkpoint uses a schema version this program cannot execute.
 
 <a id="fim.persistence.run_checkpoint.LoadedCheckpoint"></a>
 
-## LoadedCheckpoint Objects
+## [LoadedCheckpoint Objects](./persistence/run_checkpoint.py#L69)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26525,7 +26525,7 @@ A verified checkpoint read back from disk.
 
 <a id="fim.persistence.run_checkpoint.checkpoints_directory"></a>
 
-#### checkpoints\_directory
+#### [checkpoints\_directory](./persistence/run_checkpoint.py#L83)
 
 ```python
 def checkpoints_directory(object_directory: Path) -> Path
@@ -26544,7 +26544,7 @@ Return the directory holding an object's checkpoints.
 
 <a id="fim.persistence.run_checkpoint.collect_checkpoint_garbage"></a>
 
-#### collect\_checkpoint\_garbage
+#### [collect\_checkpoint\_garbage](./persistence/run_checkpoint.py#L95)
 
 ```python
 def collect_checkpoint_garbage(
@@ -26569,7 +26569,7 @@ no concurrent publication can be mid-flight.
 
 <a id="fim.persistence.run_checkpoint.commit_checkpoint"></a>
 
-#### commit\_checkpoint
+#### [commit\_checkpoint](./persistence/run_checkpoint.py#L124)
 
 ```python
 def commit_checkpoint(lease: ExecutionLease,
@@ -26609,7 +26609,7 @@ Publish a checkpoint and make it the object's latest, then prune.
 
 <a id="fim.persistence.run_checkpoint.load_checkpoint"></a>
 
-#### load\_checkpoint
+#### [load\_checkpoint](./persistence/run_checkpoint.py#L177)
 
 ```python
 def load_checkpoint(object_directory: Path,
@@ -26636,7 +26636,7 @@ Read and verify the checkpoint a lifecycle record points at.
 
 <a id="fim.persistence.run_checkpoint.new_checkpoint_id"></a>
 
-#### new\_checkpoint\_id
+#### [new\_checkpoint\_id](./persistence/run_checkpoint.py#L220)
 
 ```python
 def new_checkpoint_id(committed_generation: int) -> str
@@ -26655,7 +26655,7 @@ Return a fresh checkpoint directory name that sorts by generation.
 
 <a id="fim.persistence.run_checkpoint.publish_checkpoint"></a>
 
-#### publish\_checkpoint
+#### [publish\_checkpoint](./persistence/run_checkpoint.py#L232)
 
 ```python
 def publish_checkpoint(object_directory: Path,
@@ -26695,7 +26695,7 @@ reference the new directory is unreferenced garbage.
 
 <a id="fim.persistence.run_lifecycle"></a>
 
-# fim.persistence.run\_lifecycle
+# [fim.persistence.run\_lifecycle](./persistence/run_lifecycle.py#L1)
 
 Versioned Run lifecycle records, the transition table, and capabilities.
 
@@ -26729,13 +26729,13 @@ state values.
 
 <a id="fim.persistence.run_lifecycle.CURRENT_RUN_LIFECYCLE_SCHEMA_VERSION"></a>
 
-#### CURRENT\_RUN\_LIFECYCLE\_SCHEMA\_VERSION
+#### [CURRENT\_RUN\_LIFECYCLE\_SCHEMA\_VERSION](./persistence/run_lifecycle.py#L43)
 
 Version of the `run.json` shape; bumped on an incompatible change.
 
 <a id="fim.persistence.run_lifecycle.RunState"></a>
 
-## RunState Objects
+## [RunState Objects](./persistence/run_lifecycle.py#L53)
 
 ```python
 class RunState(StrEnum)
@@ -26745,7 +26745,7 @@ Durable lifecycle state of one Run object.
 
 <a id="fim.persistence.run_lifecycle.RunEvent"></a>
 
-## RunEvent Objects
+## [RunEvent Objects](./persistence/run_lifecycle.py#L68)
 
 ```python
 class RunEvent(StrEnum)
@@ -26755,7 +26755,7 @@ An event that may move a Run object to another lifecycle state.
 
 <a id="fim.persistence.run_lifecycle.RunKind"></a>
 
-## RunKind Objects
+## [RunKind Objects](./persistence/run_lifecycle.py#L86)
 
 ```python
 class RunKind(StrEnum)
@@ -26765,7 +26765,7 @@ Whether a Run object executes one replicate or a replicate batch.
 
 <a id="fim.persistence.run_lifecycle.RunPhase"></a>
 
-## RunPhase Objects
+## [RunPhase Objects](./persistence/run_lifecycle.py#L93)
 
 ```python
 class RunPhase(StrEnum)
@@ -26775,37 +26775,37 @@ Execution phase within `running`; never a lifecycle state.
 
 <a id="fim.persistence.run_lifecycle.PRE_EXECUTION_STATES"></a>
 
-#### PRE\_EXECUTION\_STATES
+#### [PRE\_EXECUTION\_STATES](./persistence/run_lifecycle.py#L102)
 
 States whose configuration is still editable; nothing has executed.
 
 <a id="fim.persistence.run_lifecycle.ACTIVE_STATES"></a>
 
-#### ACTIVE\_STATES
+#### [ACTIVE\_STATES](./persistence/run_lifecycle.py#L105)
 
 States in which one attempt owns execution.
 
 <a id="fim.persistence.run_lifecycle.TERMINAL_STATES"></a>
 
-#### TERMINAL\_STATES
+#### [TERMINAL\_STATES](./persistence/run_lifecycle.py#L110)
 
 States no event may leave.
 
 <a id="fim.persistence.run_lifecycle.RESUMABLE_STATES"></a>
 
-#### RESUMABLE\_STATES
+#### [RESUMABLE\_STATES](./persistence/run_lifecycle.py#L113)
 
 States from which a verified checkpoint may continue execution.
 
 <a id="fim.persistence.run_lifecycle.TRANSITIONS"></a>
 
-#### TRANSITIONS
+#### [TRANSITIONS](./persistence/run_lifecycle.py#L121)
 
 Every legal `(state, event)` pair and the state it leads to.
 
 <a id="fim.persistence.run_lifecycle.LifecycleError"></a>
 
-## LifecycleError Objects
+## [LifecycleError Objects](./persistence/run_lifecycle.py#L174)
 
 ```python
 class LifecycleError(FimError)
@@ -26815,7 +26815,7 @@ Base class for every lifecycle rule or record violation.
 
 <a id="fim.persistence.run_lifecycle.IllegalTransitionError"></a>
 
-## IllegalTransitionError Objects
+## [IllegalTransitionError Objects](./persistence/run_lifecycle.py#L178)
 
 ```python
 class IllegalTransitionError(LifecycleError)
@@ -26831,7 +26831,7 @@ An event is not legal in the object's current state.
 
 <a id="fim.persistence.run_lifecycle.IllegalTransitionError.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L187)
 
 ```python
 def __init__(state: RunState, event: RunEvent, revision: int) -> None
@@ -26841,7 +26841,7 @@ Record the rejected request and describe it.
 
 <a id="fim.persistence.run_lifecycle.RevisionConflictError"></a>
 
-## RevisionConflictError Objects
+## [RevisionConflictError Objects](./persistence/run_lifecycle.py#L198)
 
 ```python
 class RevisionConflictError(LifecycleError)
@@ -26856,7 +26856,7 @@ A request named a lifecycle revision other than the current one.
 
 <a id="fim.persistence.run_lifecycle.RevisionConflictError.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L206)
 
 ```python
 def __init__(expected: int, actual: int) -> None
@@ -26866,7 +26866,7 @@ Record both revisions and describe the conflict.
 
 <a id="fim.persistence.run_lifecycle.AttemptMismatchError"></a>
 
-## AttemptMismatchError Objects
+## [AttemptMismatchError Objects](./persistence/run_lifecycle.py#L216)
 
 ```python
 class AttemptMismatchError(LifecycleError)
@@ -26876,7 +26876,7 @@ An event came from an attempt that no longer owns execution.
 
 <a id="fim.persistence.run_lifecycle.LifecycleRecordError"></a>
 
-## LifecycleRecordError Objects
+## [LifecycleRecordError Objects](./persistence/run_lifecycle.py#L220)
 
 ```python
 class LifecycleRecordError(LifecycleError)
@@ -26886,7 +26886,7 @@ A stored lifecycle record is malformed or has an unknown schema.
 
 <a id="fim.persistence.run_lifecycle.CommandKeyReuseError"></a>
 
-## CommandKeyReuseError Objects
+## [CommandKeyReuseError Objects](./persistence/run_lifecycle.py#L224)
 
 ```python
 class CommandKeyReuseError(LifecycleError)
@@ -26901,7 +26901,7 @@ An idempotency key was reused for a different command.
 
 <a id="fim.persistence.run_lifecycle.CommandKeyReuseError.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L232)
 
 ```python
 def __init__(command_key: str, original: TransitionRecord) -> None
@@ -26911,7 +26911,7 @@ Record the key and its original transition, and describe them.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue"></a>
 
-## ValidationIssue Objects
+## [ValidationIssue Objects](./persistence/run_lifecycle.py#L243)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26928,7 +26928,7 @@ One reason a saved configuration cannot run.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/run_lifecycle.py#L255)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -26938,7 +26938,7 @@ Return the JSON form of this issue.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/run_lifecycle.py#L260)
 
 ```python
 @classmethod
@@ -26949,7 +26949,7 @@ Parse one stored issue, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo"></a>
 
-## ErrorInfo Objects
+## [ErrorInfo Objects](./persistence/run_lifecycle.py#L272)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26968,7 +26968,7 @@ The most recent execution error recorded for a Run object.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/run_lifecycle.py#L288)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -26978,7 +26978,7 @@ Return the JSON form of this error.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/run_lifecycle.py#L298)
 
 ```python
 @classmethod
@@ -26989,7 +26989,7 @@ Parse one stored error, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference"></a>
 
-## CheckpointReference Objects
+## [CheckpointReference Objects](./persistence/run_lifecycle.py#L313)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27006,7 +27006,7 @@ Pointer from a lifecycle record to its latest committed checkpoint.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/run_lifecycle.py#L326)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27016,7 +27016,7 @@ Return the JSON form of this reference.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/run_lifecycle.py#L335)
 
 ```python
 @classmethod
@@ -27027,7 +27027,7 @@ Parse one stored reference, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord"></a>
 
-## TransitionRecord Objects
+## [TransitionRecord Objects](./persistence/run_lifecycle.py#L348)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27049,7 +27049,7 @@ One lifecycle transition retained in the object's history.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/run_lifecycle.py#L370)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27059,7 +27059,7 @@ Return the JSON form of this transition.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/run_lifecycle.py#L383)
 
 ```python
 @classmethod
@@ -27070,7 +27070,7 @@ Parse one stored transition, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord"></a>
 
-## RunLifecycleRecord Objects
+## [RunLifecycleRecord Objects](./persistence/run_lifecycle.py#L402)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27111,7 +27111,7 @@ record that exists is always internally consistent.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L456)
 
 ```python
 def __post_init__() -> None
@@ -27121,7 +27121,7 @@ Reject a record whose fields contradict each other.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.is_draft"></a>
 
-#### is\_draft
+#### [is\_draft](./persistence/run_lifecycle.py#L500)
 
 ```python
 @property
@@ -27132,7 +27132,7 @@ Return whether the saved configuration cannot run yet.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.is_terminal"></a>
 
-#### is\_terminal
+#### [is\_terminal](./persistence/run_lifecycle.py#L505)
 
 ```python
 @property
@@ -27143,7 +27143,7 @@ Return whether no event may leave the current state.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/run_lifecycle.py#L509)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27153,7 +27153,7 @@ Return the JSON form stored as `run.json`.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/run_lifecycle.py#L543)
 
 ```python
 @classmethod
@@ -27169,7 +27169,7 @@ Parse a stored `run.json` document.
 
 <a id="fim.persistence.run_lifecycle.Configuration"></a>
 
-## Configuration Objects
+## [Configuration Objects](./persistence/run_lifecycle.py#L612)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27189,7 +27189,7 @@ and scientific run ID; an invalid one has at least one issue.
 
 <a id="fim.persistence.run_lifecycle.Configuration.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L628)
 
 ```python
 def __post_init__() -> None
@@ -27199,7 +27199,7 @@ Reject a configuration that is both or neither valid and invalid.
 
 <a id="fim.persistence.run_lifecycle.Configuration.is_valid"></a>
 
-#### is\_valid
+#### [is\_valid](./persistence/run_lifecycle.py#L639)
 
 ```python
 @property
@@ -27210,7 +27210,7 @@ Return whether the configuration may run.
 
 <a id="fim.persistence.run_lifecycle.Configuration.valid"></a>
 
-#### valid
+#### [valid](./persistence/run_lifecycle.py#L644)
 
 ```python
 @classmethod
@@ -27221,7 +27221,7 @@ Return a valid configuration outcome.
 
 <a id="fim.persistence.run_lifecycle.Configuration.invalid"></a>
 
-#### invalid
+#### [invalid](./persistence/run_lifecycle.py#L649)
 
 ```python
 @classmethod
@@ -27232,7 +27232,7 @@ Return an invalid configuration outcome.
 
 <a id="fim.persistence.run_lifecycle.Capabilities"></a>
 
-## Capabilities Objects
+## [Capabilities Objects](./persistence/run_lifecycle.py#L655)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27246,7 +27246,7 @@ has an entry in `reasons` explaining why.
 
 <a id="fim.persistence.run_lifecycle.Capabilities.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/run_lifecycle.py#L671)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27256,7 +27256,7 @@ Return the JSON form sent to frontends.
 
 <a id="fim.persistence.run_lifecycle.apply_event"></a>
 
-#### apply\_event
+#### [apply\_event](./persistence/run_lifecycle.py#L685)
 
 ```python
 def apply_event(record: RunLifecycleRecord,
@@ -27308,7 +27308,7 @@ Return the record that results from applying one event.
 
 <a id="fim.persistence.run_lifecycle.capabilities"></a>
 
-#### capabilities
+#### [capabilities](./persistence/run_lifecycle.py#L770)
 
 ```python
 def capabilities(record: RunLifecycleRecord,
@@ -27334,7 +27334,7 @@ Return the actions allowed for one Run object, with reasons.
 
 <a id="fim.persistence.run_lifecycle.find_command"></a>
 
-#### find\_command
+#### [find\_command](./persistence/run_lifecycle.py#L961)
 
 ```python
 def find_command(record: RunLifecycleRecord,
@@ -27355,7 +27355,7 @@ Return the transition an idempotency key produced, if any.
 
 <a id="fim.persistence.run_lifecycle.format_timestamp"></a>
 
-#### format\_timestamp
+#### [format\_timestamp](./persistence/run_lifecycle.py#L979)
 
 ```python
 def format_timestamp(value: datetime) -> str
@@ -27369,7 +27369,7 @@ Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`.
 
 <a id="fim.persistence.run_lifecycle.is_attempt_id"></a>
 
-#### is\_attempt\_id
+#### [is\_attempt\_id](./persistence/run_lifecycle.py#L990)
 
 ```python
 def is_attempt_id(value: str) -> bool
@@ -27379,7 +27379,7 @@ Return whether `value` is a well-formed attempt ID.
 
 <a id="fim.persistence.run_lifecycle.is_object_id"></a>
 
-#### is\_object\_id
+#### [is\_object\_id](./persistence/run_lifecycle.py#L995)
 
 ```python
 def is_object_id(value: str) -> bool
@@ -27391,7 +27391,7 @@ The fixed form also guarantees an object ID is a safe directory name.
 
 <a id="fim.persistence.run_lifecycle.new_record"></a>
 
-#### new\_record
+#### [new\_record](./persistence/run_lifecycle.py#L1003)
 
 ```python
 def new_record(object_id: str,
@@ -27414,7 +27414,7 @@ Return the record for a newly saved object: `planned` or `draft`.
 
 <a id="fim.persistence.run_lifecycle.record_progress"></a>
 
-#### record\_progress
+#### [record\_progress](./persistence/run_lifecycle.py#L1036)
 
 ```python
 def record_progress(
@@ -27457,7 +27457,7 @@ entry is added, but the revision advances so readers see the change.
 
 <a id="fim.persistence.run_metadata"></a>
 
-# fim.persistence.run\_metadata
+# [fim.persistence.run\_metadata](./persistence/run_metadata.py#L1)
 
 Optional name/description sidecar for a run, attachable at any time.
 
@@ -27492,7 +27492,7 @@ renamed, described, or re-classed: `replace_run_metadata` raises
 
 <a id="fim.persistence.run_metadata._KeepClass"></a>
 
-## \_KeepClass Objects
+## [\_KeepClass Objects](./persistence/run_metadata.py#L50)
 
 ```python
 class _KeepClass()
@@ -27502,7 +27502,7 @@ Type of `KEEP_CLASS`, the "leave the class as it is" default.
 
 <a id="fim.persistence.run_metadata._KeepClass.__repr__"></a>
 
-#### \_\_repr\_\_
+#### [\_\_repr\_\_](./persistence/run_metadata.py#L53)
 
 ```python
 def __repr__() -> str
@@ -27512,13 +27512,13 @@ Return the constant's own name, for readable signatures.
 
 <a id="fim.persistence.run_metadata.KEEP_CLASS"></a>
 
-#### KEEP\_CLASS
+#### [KEEP\_CLASS](./persistence/run_metadata.py#L58)
 
 `replace_run_metadata`'s default: keep the existing sidecar's class.
 
 <a id="fim.persistence.run_metadata.RunLabels"></a>
 
-## RunLabels Objects
+## [RunLabels Objects](./persistence/run_metadata.py#L87)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27542,7 +27542,7 @@ _LABEL_KEYS`). All three are independently optional.
 
 <a id="fim.persistence.run_metadata.RunLabels.is_empty"></a>
 
-#### is\_empty
+#### [is\_empty](./persistence/run_metadata.py#L108)
 
 ```python
 @property
@@ -27553,7 +27553,7 @@ Return whether no label is set at all.
 
 <a id="fim.persistence.run_metadata.RunLabels.from_config"></a>
 
-#### from\_config
+#### [from\_config](./persistence/run_metadata.py#L113)
 
 ```python
 @classmethod
@@ -27591,7 +27591,7 @@ absent key both mean "no label".
 
 <a id="fim.persistence.run_metadata.RunMetadata"></a>
 
-## RunMetadata Objects
+## [RunMetadata Objects](./persistence/run_metadata.py#L146)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27609,7 +27609,7 @@ changes once written; `updated_at` moves forward every time
 
 <a id="fim.persistence.run_metadata.RunMetadata.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./persistence/run_metadata.py#L164)
 
 ```python
 def __post_init__() -> None
@@ -27619,7 +27619,7 @@ Validate schema version, timestamps, and non-blank text fields.
 
 <a id="fim.persistence.run_metadata.RunMetadata.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./persistence/run_metadata.py#L177)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -27632,7 +27632,7 @@ sidecar shape every earlier version wrote.
 
 <a id="fim.persistence.run_metadata.RunMetadata.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./persistence/run_metadata.py#L195)
 
 ```python
 @classmethod
@@ -27647,7 +27647,7 @@ removed from the tree must not make the run's name unreadable.
 
 <a id="fim.persistence.run_metadata.run_metadata_path"></a>
 
-#### run\_metadata\_path
+#### [run\_metadata\_path](./persistence/run_metadata.py#L217)
 
 ```python
 def run_metadata_path(run_directory: Path | str) -> Path
@@ -27666,7 +27666,7 @@ Return where a run's own metadata sidecar lives.
 
 <a id="fim.persistence.run_metadata.read_run_metadata"></a>
 
-#### read\_run\_metadata
+#### [read\_run\_metadata](./persistence/run_metadata.py#L229)
 
 ```python
 def read_run_metadata(path: Path | str) -> RunMetadata
@@ -27691,7 +27691,7 @@ Read and validate one run metadata JSON file.
 
 <a id="fim.persistence.run_metadata.write_run_metadata"></a>
 
-#### write\_run\_metadata
+#### [write\_run\_metadata](./persistence/run_metadata.py#L251)
 
 ```python
 def write_run_metadata(path: Path | str, metadata: RunMetadata) -> None
@@ -27709,7 +27709,7 @@ its own atomicity here rather than inheriting a caller's.
 
 <a id="fim.persistence.run_metadata.replace_run_metadata"></a>
 
-#### replace\_run\_metadata
+#### [replace\_run\_metadata](./persistence/run_metadata.py#L271)
 
 ```python
 def replace_run_metadata(run_directory: Path | str,
@@ -27759,7 +27759,7 @@ dialog) never clears its class by accident.
 
 <a id="fim.persistence.run_metadata.write_run_labels"></a>
 
-#### write\_run\_labels
+#### [write\_run\_labels](./persistence/run_metadata.py#L333)
 
 ```python
 def write_run_labels(run_directory: Path | str,
@@ -27795,7 +27795,7 @@ gets its labels the same way an ordinary run does.
 
 <a id="fim.persistence.run_objects"></a>
 
-# fim.persistence.run\_objects
+# [fim.persistence.run\_objects](./persistence/run_objects.py#L1)
 
 Durable draft and planned Run objects under `results/objects/`.
 
@@ -27823,7 +27823,7 @@ editors cannot silently overwrite each other.
 
 <a id="fim.persistence.run_objects.RunObjectNotFoundError"></a>
 
-## RunObjectNotFoundError Objects
+## [RunObjectNotFoundError Objects](./persistence/run_objects.py#L76)
 
 ```python
 class RunObjectNotFoundError(LifecycleError)
@@ -27833,7 +27833,7 @@ No Run object exists with the requested ID.
 
 <a id="fim.persistence.run_objects.RunObject"></a>
 
-## RunObject Objects
+## [RunObject Objects](./persistence/run_objects.py#L81)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27851,7 +27851,7 @@ One Run object as read from disk.
 
 <a id="fim.persistence.run_objects.RunObject.object_id"></a>
 
-#### object\_id
+#### [object\_id](./persistence/run_objects.py#L97)
 
 ```python
 @property
@@ -27862,7 +27862,7 @@ Return the object's stable identity.
 
 <a id="fim.persistence.run_objects.RunObject.capabilities"></a>
 
-#### capabilities
+#### [capabilities](./persistence/run_objects.py#L101)
 
 ```python
 def capabilities(**kwargs: bool) -> Capabilities
@@ -27876,7 +27876,7 @@ Return the lifecycle's allowed actions for this object.
 
 <a id="fim.persistence.run_objects.ObjectDiagnostic"></a>
 
-## ObjectDiagnostic Objects
+## [ObjectDiagnostic Objects](./persistence/run_objects.py#L111)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27892,7 +27892,7 @@ A directory under `objects/` that is not a readable Run object.
 
 <a id="fim.persistence.run_objects.ObjectListing"></a>
 
-## ObjectListing Objects
+## [ObjectListing Objects](./persistence/run_objects.py#L124)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27903,7 +27903,7 @@ Result of scanning `objects/`: readable objects and diagnostics.
 
 <a id="fim.persistence.run_objects.clone_run_object"></a>
 
-#### clone\_run\_object
+#### [clone\_run\_object](./persistence/run_objects.py#L131)
 
 ```python
 def clone_run_object(source_object_id: str,
@@ -27934,7 +27934,7 @@ ownership.
 
 <a id="fim.persistence.run_objects.configuration_digest"></a>
 
-#### configuration\_digest
+#### [configuration\_digest](./persistence/run_objects.py#L164)
 
 ```python
 def configuration_digest(params: SimulationParams) -> str
@@ -27944,7 +27944,7 @@ Return the SHA-256 of the canonical effective configuration.
 
 <a id="fim.persistence.run_objects.create_run_object"></a>
 
-#### create\_run\_object
+#### [create\_run\_object](./persistence/run_objects.py#L172)
 
 ```python
 def create_run_object(config_text: str,
@@ -27975,7 +27975,7 @@ rename, so a crash never leaves a half-created object.
 
 <a id="fim.persistence.run_objects.delete_run_object"></a>
 
-#### delete\_run\_object
+#### [delete\_run\_object](./persistence/run_objects.py#L214)
 
 ```python
 def delete_run_object(object_id: str,
@@ -28003,7 +28003,7 @@ discovery in one step even if removing its files is interrupted.
 
 <a id="fim.persistence.run_objects.list_run_objects"></a>
 
-#### list\_run\_objects
+#### [list\_run\_objects](./persistence/run_objects.py#L246)
 
 ```python
 def list_run_objects(results: Path | None = None) -> ObjectListing
@@ -28026,7 +28026,7 @@ yields a diagnostic, never a fabricated object.
 
 <a id="fim.persistence.run_objects.new_object_id"></a>
 
-#### new\_object\_id
+#### [new\_object\_id](./persistence/run_objects.py#L279)
 
 ```python
 def new_object_id() -> str
@@ -28036,7 +28036,7 @@ Return a new random object ID.
 
 <a id="fim.persistence.run_objects.object_directory"></a>
 
-#### object\_directory
+#### [object\_directory](./persistence/run_objects.py#L284)
 
 ```python
 def object_directory(object_id: str, results: Path | None = None) -> Path
@@ -28051,7 +28051,7 @@ Return the directory of the object `object_id`.
 
 <a id="fim.persistence.run_objects.object_locked"></a>
 
-#### object\_locked
+#### [object\_locked](./persistence/run_objects.py#L297)
 
 ```python
 @contextmanager
@@ -28075,7 +28075,7 @@ held only for the bookkeeping step, never for execution.
 
 <a id="fim.persistence.run_objects.objects_directory"></a>
 
-#### objects\_directory
+#### [objects\_directory](./persistence/run_objects.py#L314)
 
 ```python
 def objects_directory(results: Path | None = None) -> Path
@@ -28085,7 +28085,7 @@ Return the `objects/` namespace inside the results directory.
 
 <a id="fim.persistence.run_objects.read_run_object"></a>
 
-#### read\_run\_object
+#### [read\_run\_object](./persistence/run_objects.py#L320)
 
 ```python
 def read_run_object(object_id: str,
@@ -28102,7 +28102,7 @@ Read one Run object.
 
 <a id="fim.persistence.run_objects.read_run_object_unlocked"></a>
 
-#### read\_run\_object\_unlocked
+#### [read\_run\_object\_unlocked](./persistence/run_objects.py#L331)
 
 ```python
 def read_run_object_unlocked(object_id: str,
@@ -28130,7 +28130,7 @@ Read one object without taking its lock.
 
 <a id="fim.persistence.run_objects.save_run_object"></a>
 
-#### save\_run\_object
+#### [save\_run\_object](./persistence/run_objects.py#L376)
 
 ```python
 def save_run_object(object_id: str,
@@ -28165,7 +28165,7 @@ Save an edited configuration; reclassify the object by its validity.
 
 <a id="fim.persistence.run_objects.validate_configuration_text"></a>
 
-#### validate\_configuration\_text
+#### [validate\_configuration\_text](./persistence/run_objects.py#L421)
 
 ```python
 def validate_configuration_text(
@@ -28189,7 +28189,7 @@ it. Every failure becomes a `ValidationIssue`.
 
 <a id="fim.persistence.run_objects.write_run_record"></a>
 
-#### write\_run\_record
+#### [write\_run\_record](./persistence/run_objects.py#L464)
 
 ```python
 def write_run_record(directory: Path, record: RunLifecycleRecord) -> None
@@ -28199,7 +28199,7 @@ Write `run.json` deterministically and atomically.
 
 <a id="fim.persistence.run_ownership"></a>
 
-# fim.persistence.run\_ownership
+# [fim.persistence.run\_ownership](./persistence/run_ownership.py#L1)
 
 Execution ownership, fenced lifecycle commits, and idempotent commands.
 
@@ -28225,7 +28225,7 @@ lock while probing or taking it cannot deadlock.
 
 <a id="fim.persistence.run_ownership.ConfigurationDriftError"></a>
 
-## ConfigurationDriftError Objects
+## [ConfigurationDriftError Objects](./persistence/run_ownership.py#L86)
 
 ```python
 class ConfigurationDriftError(LifecycleError)
@@ -28235,7 +28235,7 @@ The stored configuration no longer matches the recorded digest.
 
 <a id="fim.persistence.run_ownership.OwnershipConflictError"></a>
 
-## OwnershipConflictError Objects
+## [OwnershipConflictError Objects](./persistence/run_ownership.py#L90)
 
 ```python
 class OwnershipConflictError(LifecycleError)
@@ -28245,7 +28245,7 @@ Another live attempt already owns the object's execution.
 
 <a id="fim.persistence.run_ownership.ResumeUnavailableError"></a>
 
-## ResumeUnavailableError Objects
+## [ResumeUnavailableError Objects](./persistence/run_ownership.py#L94)
 
 ```python
 class ResumeUnavailableError(LifecycleError)
@@ -28255,7 +28255,7 @@ The object has no committed checkpoint to resume from.
 
 <a id="fim.persistence.run_ownership.CommandResult"></a>
 
-## CommandResult Objects
+## [CommandResult Objects](./persistence/run_ownership.py#L99)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -28272,7 +28272,7 @@ The outcome of a controller command.
 
 <a id="fim.persistence.run_ownership.StartResult"></a>
 
-## StartResult Objects
+## [StartResult Objects](./persistence/run_ownership.py#L113)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -28291,7 +28291,7 @@ The outcome of a start or resume command.
 
 <a id="fim.persistence.run_ownership.ExecutionLease"></a>
 
-## ExecutionLease Objects
+## [ExecutionLease Objects](./persistence/run_ownership.py#L129)
 
 ```python
 class ExecutionLease()
@@ -28310,7 +28310,7 @@ an exception while still owning execution records the run as `failed`.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/run_ownership.py#L141)
 
 ```python
 def __init__(object_id: str, attempt_id: str, *, lock: contextlib.ExitStack,
@@ -28321,7 +28321,7 @@ Wrap an already-acquired attempt lock; use `start_run_object`.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.__enter__"></a>
 
-#### \_\_enter\_\_
+#### [\_\_enter\_\_](./persistence/run_ownership.py#L157)
 
 ```python
 def __enter__() -> Self
@@ -28331,7 +28331,7 @@ Return the lease for use in a `with` block.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.__exit__"></a>
 
-#### \_\_exit\_\_
+#### [\_\_exit\_\_](./persistence/run_ownership.py#L161)
 
 ```python
 def __exit__(exc_type: type[BaseException] | None, exc: BaseException | None,
@@ -28342,7 +28342,7 @@ Record an escaping exception as a failure, then release.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.is_held"></a>
 
-#### is\_held
+#### [is\_held](./persistence/run_ownership.py#L181)
 
 ```python
 @property
@@ -28353,7 +28353,7 @@ Return whether this lease still holds its attempt lock.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.commit_progress"></a>
 
-#### commit\_progress
+#### [commit\_progress](./persistence/run_ownership.py#L185)
 
 ```python
 def commit_progress(
@@ -28383,7 +28383,7 @@ Durably record progress or a published checkpoint.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.current"></a>
 
-#### current
+#### [current](./persistence/run_ownership.py#L219)
 
 ```python
 def current() -> RunObject
@@ -28398,7 +28398,7 @@ Return the stored object, for example to observe a requested pause.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.finish"></a>
 
-#### finish
+#### [finish](./persistence/run_ownership.py#L229)
 
 ```python
 def finish(event: RunEvent,
@@ -28429,7 +28429,7 @@ Commit a finishing event and release the attempt.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.request_pause"></a>
 
-#### request\_pause
+#### [request\_pause](./persistence/run_ownership.py#L275)
 
 ```python
 def request_pause() -> RunObject
@@ -28452,7 +28452,7 @@ already pausing or cancelling is left as it is.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.release"></a>
 
-#### release
+#### [release](./persistence/run_ownership.py#L303)
 
 ```python
 def release() -> None
@@ -28465,7 +28465,7 @@ A run still recorded as active afterward has lost its owner, and
 
 <a id="fim.persistence.run_ownership.abandon_run_object"></a>
 
-#### abandon\_run\_object
+#### [abandon\_run\_object](./persistence/run_ownership.py#L321)
 
 ```python
 def abandon_run_object(object_id: str,
@@ -28493,7 +28493,7 @@ Abandon a planned or stopped run, making it `cancelled`.
 
 <a id="fim.persistence.run_ownership.attempt_lock_path"></a>
 
-#### attempt\_lock\_path
+#### [attempt\_lock\_path](./persistence/run_ownership.py#L351)
 
 ```python
 def attempt_lock_path(object_id: str, results: Path | None = None) -> Path
@@ -28506,7 +28506,7 @@ every platform.
 
 <a id="fim.persistence.run_ownership.new_attempt_id"></a>
 
-#### new\_attempt\_id
+#### [new\_attempt\_id](./persistence/run_ownership.py#L361)
 
 ```python
 def new_attempt_id() -> str
@@ -28516,7 +28516,7 @@ Return a fresh random attempt ID.
 
 <a id="fim.persistence.run_ownership.reconcile_run_object"></a>
 
-#### reconcile\_run\_object
+#### [reconcile\_run\_object](./persistence/run_ownership.py#L366)
 
 ```python
 def reconcile_run_object(object_id: str,
@@ -28549,7 +28549,7 @@ verifies. Every other run is returned unchanged.
 
 <a id="fim.persistence.run_ownership.reconcile_run_objects"></a>
 
-#### reconcile\_run\_objects
+#### [reconcile\_run\_objects](./persistence/run_ownership.py#L413)
 
 ```python
 def reconcile_run_objects(results: Path | None = None,
@@ -28572,7 +28572,7 @@ Reconcile every readable object; return those that changed state.
 
 <a id="fim.persistence.run_ownership.request_cancel"></a>
 
-#### request\_cancel
+#### [request\_cancel](./persistence/run_ownership.py#L438)
 
 ```python
 def request_cancel(object_id: str,
@@ -28601,7 +28601,7 @@ Ask the owning worker to cancel at its next safe point.
 
 <a id="fim.persistence.run_ownership.request_pause"></a>
 
-#### request\_pause
+#### [request\_pause](./persistence/run_ownership.py#L469)
 
 ```python
 def request_pause(object_id: str,
@@ -28630,7 +28630,7 @@ Ask the owning worker to checkpoint and pause at its next safe point.
 
 <a id="fim.persistence.run_ownership.resume_run_object"></a>
 
-#### resume\_run\_object
+#### [resume\_run\_object](./persistence/run_ownership.py#L500)
 
 ```python
 def resume_run_object(object_id: str,
@@ -28667,7 +28667,7 @@ Open a new attempt that continues from the latest checkpoint.
 
 <a id="fim.persistence.run_ownership.start_run_object"></a>
 
-#### start\_run\_object
+#### [start\_run\_object](./persistence/run_ownership.py#L538)
 
 ```python
 def start_run_object(object_id: str,
@@ -28707,7 +28707,7 @@ must match the digest recorded when it was saved.
 
 <a id="fim.persistence.run_receipt"></a>
 
-# fim.persistence.run\_receipt
+# [fim.persistence.run\_receipt](./persistence/run_receipt.py#L1)
 
 Verify a Run object's completion receipt before recovering completion.
 
@@ -28727,25 +28727,25 @@ is hashed, so a truncated or missing artifact is rejected cheaply.
 
 <a id="fim.persistence.run_receipt.RECEIPT_FILENAME"></a>
 
-#### RECEIPT\_FILENAME
+#### [RECEIPT\_FILENAME](./persistence/run_receipt.py#L41)
 
 The completion receipt, written after every artifact it lists.
 
 <a id="fim.persistence.run_receipt.BATCH_SUMMARY_KEY"></a>
 
-#### BATCH\_SUMMARY\_KEY
+#### [BATCH\_SUMMARY\_KEY](./persistence/run_receipt.py#L44)
 
 The batch receipt's digest key for `summary.json`.
 
 <a id="fim.persistence.run_receipt.BATCH_SUMMARY_FILENAME"></a>
 
-#### BATCH\_SUMMARY\_FILENAME
+#### [BATCH\_SUMMARY\_FILENAME](./persistence/run_receipt.py#L47)
 
 A completed batch's cross-replicate summary.
 
 <a id="fim.persistence.run_receipt.ARTIFACT_FILENAMES"></a>
 
-#### ARTIFACT\_FILENAMES
+#### [ARTIFACT\_FILENAMES](./persistence/run_receipt.py#L50)
 
 Each scalar artifact key a receipt may list, and the file it names.
 
@@ -28759,7 +28759,7 @@ keeps the three in agreement.
 
 <a id="fim.persistence.run_receipt.receipt_problem"></a>
 
-#### receipt\_problem
+#### [receipt\_problem](./persistence/run_receipt.py#L70)
 
 ```python
 def receipt_problem(directory: Path, *, kind: RunKind,
@@ -28782,7 +28782,7 @@ Return why a run's completion receipt does not verify, or `None`.
 
 <a id="fim.persistence.run_receipt.artifact_path"></a>
 
-#### artifact\_path
+#### [artifact\_path](./persistence/run_receipt.py#L202)
 
 ```python
 def artifact_path(directory: Path, key: str) -> Path
@@ -28797,7 +28797,7 @@ Return the file a receipt's artifact key names in `directory`.
 
 <a id="fim.persistence.saved_run"></a>
 
-# fim.persistence.saved\_run
+# [fim.persistence.saved\_run](./persistence/saved_run.py#L1)
 
 Run a configuration and save the result as a directory.
 
@@ -28814,7 +28814,7 @@ this module.
 
 <a id="fim.persistence.saved_run.replicate_index"></a>
 
-#### replicate\_index
+#### [replicate\_index](./persistence/saved_run.py#L57)
 
 ```python
 def replicate_index(batch_run_id: str, replicate_run_id: str) -> int
@@ -28837,7 +28837,7 @@ index is recovered from it directly.
 
 <a id="fim.persistence.saved_run.replicate_output_directory"></a>
 
-#### replicate\_output\_directory
+#### [replicate\_output\_directory](./persistence/saved_run.py#L73)
 
 ```python
 def replicate_output_directory(base: Path, batch_run_id: str,
@@ -28859,7 +28859,7 @@ Return one replicate's own artifact subdirectory.
 
 <a id="fim.persistence.saved_run.prune_orphan_replicate_directories"></a>
 
-#### prune\_orphan\_replicate\_directories
+#### [prune\_orphan\_replicate\_directories](./persistence/saved_run.py#L89)
 
 ```python
 def prune_orphan_replicate_directories(
@@ -28884,7 +28884,7 @@ and manifest.
 
 <a id="fim.persistence.saved_run.replicate_store_factory"></a>
 
-#### replicate\_store\_factory
+#### [replicate\_store\_factory](./persistence/saved_run.py#L116)
 
 ```python
 def replicate_store_factory(output_directory: Path, batch_run_id: str,
@@ -28911,7 +28911,7 @@ leading arguments with `functools.partial`, never a closure).
 
 <a id="fim.persistence.saved_run.write_batch_artifacts"></a>
 
-#### write\_batch\_artifacts
+#### [write\_batch\_artifacts](./persistence/saved_run.py#L143)
 
 ```python
 def write_batch_artifacts(
@@ -28947,7 +28947,7 @@ summary.
 
 <a id="fim.persistence.saved_run.save_run"></a>
 
-#### save\_run
+#### [save\_run](./persistence/saved_run.py#L200)
 
 ```python
 def save_run(params: SimulationParams,
@@ -28982,7 +28982,7 @@ Run `params` and publish the result at `directory`.
 
 <a id="fim.persistence.scalar_snapshot"></a>
 
-# fim.persistence.scalar\_snapshot
+# [fim.persistence.scalar\_snapshot](./persistence/scalar_snapshot.py#L1)
 
 Exact export and import of a scalar replicate's population and random state.
 
@@ -29008,7 +29008,7 @@ anything, and raises `SnapshotError` naming the first problem.
 
 <a id="fim.persistence.scalar_snapshot.SnapshotError"></a>
 
-## SnapshotError Objects
+## [SnapshotError Objects](./persistence/scalar_snapshot.py#L53)
 
 ```python
 class SnapshotError(StoreError, ValueError)
@@ -29018,7 +29018,7 @@ Raised when snapshot data is malformed or inconsistent.
 
 <a id="fim.persistence.scalar_snapshot.export_population"></a>
 
-#### export\_population
+#### [export\_population](./persistence/scalar_snapshot.py#L57)
 
 ```python
 def export_population(state: ModelState) -> tuple[dict[str, Any], Arrays]
@@ -29039,7 +29039,7 @@ Export a population to metadata and arrays.
 
 <a id="fim.persistence.scalar_snapshot.export_registries"></a>
 
-#### export\_registries
+#### [export\_registries](./persistence/scalar_snapshot.py#L92)
 
 ```python
 def export_registries(
@@ -29064,7 +29064,7 @@ Export the allele-identity registries to metadata and arrays.
 
 <a id="fim.persistence.scalar_snapshot.export_rng"></a>
 
-#### export\_rng
+#### [export\_rng](./persistence/scalar_snapshot.py#L137)
 
 ```python
 def export_rng(rng: np.random.Generator) -> dict[str, Any]
@@ -29089,7 +29089,7 @@ Export a PCG64 generator's exact state as JSON-safe metadata.
 
 <a id="fim.persistence.scalar_snapshot.import_population"></a>
 
-#### import\_population
+#### [import\_population](./persistence/scalar_snapshot.py#L165)
 
 ```python
 def import_population(metadata: Mapping[str, Any],
@@ -29115,7 +29115,7 @@ Rebuild a population exported by `export_population`.
 
 <a id="fim.persistence.scalar_snapshot.import_registries"></a>
 
-#### import\_registries
+#### [import\_registries](./persistence/scalar_snapshot.py#L226)
 
 ```python
 def import_registries(
@@ -29145,7 +29145,7 @@ Rebuild the registries exported by `export_registries`.
 
 <a id="fim.persistence.scalar_snapshot.import_rng"></a>
 
-#### import\_rng
+#### [import\_rng](./persistence/scalar_snapshot.py#L263)
 
 ```python
 def import_rng(metadata: Mapping[str, Any]) -> np.random.Generator
@@ -29169,7 +29169,7 @@ Rebuild a generator exported by `export_rng`.
 
 <a id="fim.persistence.staging"></a>
 
-# fim.persistence.staging
+# [fim.persistence.staging](./persistence/staging.py#L1)
 
 Find and reclaim staging directories that a killed process left behind.
 
@@ -29204,19 +29204,19 @@ not.
 
 <a id="fim.persistence.staging.STAGING_GRACE_SECONDS"></a>
 
-#### STAGING\_GRACE\_SECONDS
+#### [STAGING\_GRACE\_SECONDS](./persistence/staging.py#L58)
 
 Minimum age of an unheld owner lock before its staging is reclaimed.
 
 <a id="fim.persistence.staging.CHECKPOINT_STAGING_PREFIX"></a>
 
-#### CHECKPOINT\_STAGING\_PREFIX
+#### [CHECKPOINT\_STAGING\_PREFIX](./persistence/staging.py#L61)
 
 Prefix of a checkpoint's staging directory (`run_checkpoint`).
 
 <a id="fim.persistence.staging.StagingKind"></a>
 
-## StagingKind Objects
+## [StagingKind Objects](./persistence/staging.py#L68)
 
 ```python
 class StagingKind(StrEnum)
@@ -29226,7 +29226,7 @@ Which writer created a staging directory.
 
 <a id="fim.persistence.staging.OrphanStaging"></a>
 
-## OrphanStaging Objects
+## [OrphanStaging Objects](./persistence/staging.py#L76)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -29244,7 +29244,7 @@ A staging directory no live writer is building.
 
 <a id="fim.persistence.staging.find_orphan_staging"></a>
 
-#### find\_orphan\_staging
+#### [find\_orphan\_staging](./persistence/staging.py#L92)
 
 ```python
 def find_orphan_staging(
@@ -29270,7 +29270,7 @@ Return every staging directory no live writer is building.
 
 <a id="fim.persistence.staging.reclaim_orphan_staging"></a>
 
-#### reclaim\_orphan\_staging
+#### [reclaim\_orphan\_staging](./persistence/staging.py#L117)
 
 ```python
 def reclaim_orphan_staging(
@@ -29299,7 +29299,7 @@ Remove every reclaimable orphan staging directory.
 
 <a id="fim.persistence.store"></a>
 
-# fim.persistence.store
+# [fim.persistence.store](./persistence/store.py#L1)
 
 Backend-independent trajectory row schema and store protocol.
 
@@ -29341,7 +29341,7 @@ the same proof.
 
 <a id="fim.persistence.store.TrajectoryRow"></a>
 
-## TrajectoryRow Objects
+## [TrajectoryRow Objects](./persistence/store.py#L52)
 
 ```python
 class TrajectoryRow(TypedDict)
@@ -29360,7 +29360,7 @@ are the observation itself.
 
 <a id="fim.persistence.store.TrajectoryStore"></a>
 
-## TrajectoryStore Objects
+## [TrajectoryStore Objects](./persistence/store.py#L73)
 
 ```python
 class TrajectoryStore(Protocol)
@@ -29376,7 +29376,7 @@ interface regardless of which concrete store it is actually given.
 
 <a id="fim.persistence.store.TrajectoryStore.write_generation"></a>
 
-#### write\_generation
+#### [write\_generation](./persistence/store.py#L83)
 
 ```python
 def write_generation(run_id: str,
@@ -29405,7 +29405,7 @@ Persist all rows for one generation.
 
 <a id="fim.persistence.store.TrajectoryStore.read"></a>
 
-#### read
+#### [read](./persistence/store.py#L109)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -29415,7 +29415,7 @@ Yield rows for one run in stored order.
 
 <a id="fim.persistence.store.TrajectoryStore.discard"></a>
 
-#### discard
+#### [discard](./persistence/store.py#L113)
 
 ```python
 def discard(run_id: str) -> None
@@ -29442,7 +29442,7 @@ explain it.
 
 <a id="fim.persistence.store.EquilibriumStoreProvider"></a>
 
-## EquilibriumStoreProvider Objects
+## [EquilibriumStoreProvider Objects](./persistence/store.py#L136)
 
 ```python
 @runtime_checkable
@@ -29467,7 +29467,7 @@ without it (`equilibrium_store_for`).
 
 <a id="fim.persistence.store.EquilibriumStoreProvider.equilibrium_store"></a>
 
-#### equilibrium\_store
+#### [equilibrium\_store](./persistence/store.py#L154)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -29477,7 +29477,7 @@ Return the store `run_id`'s ancestral-phase rows are written to.
 
 <a id="fim.persistence.store.equilibrium_store_for"></a>
 
-#### equilibrium\_store\_for
+#### [equilibrium\_store\_for](./persistence/store.py#L159)
 
 ```python
 def equilibrium_store_for(store: TrajectoryStore,
@@ -29502,7 +29502,7 @@ Return the ancestral-phase companion of `store` for one run.
 
 <a id="fim.persistence.store.FrameStore"></a>
 
-## FrameStore Objects
+## [FrameStore Objects](./persistence/store.py#L179)
 
 ```python
 @runtime_checkable
@@ -29525,7 +29525,7 @@ over rows, which is cheaper than converting to a frame and back.
 
 <a id="fim.persistence.store.FrameStore.begin_run"></a>
 
-#### begin\_run
+#### [begin\_run](./persistence/store.py#L195)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -29539,7 +29539,7 @@ Record the shape of `run_id`'s frames; repeating it is harmless.
 
 <a id="fim.persistence.store.FrameStore.write_frame"></a>
 
-#### write\_frame
+#### [write\_frame](./persistence/store.py#L203)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -29549,7 +29549,7 @@ Persist one generation given as a frame, after `begin_run`.
 
 <a id="fim.persistence.store.FrameStore.wants_frames"></a>
 
-#### wants\_frames
+#### [wants\_frames](./persistence/store.py#L207)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -29559,7 +29559,7 @@ Whether the engine should hand `run_id`'s generations over as frames.
 
 <a id="fim.persistence.store.begin_store_run"></a>
 
-#### begin\_store\_run
+#### [begin\_store\_run](./persistence/store.py#L212)
 
 ```python
 def begin_store_run(store: TrajectoryStore, run_id: str,
@@ -29577,7 +29577,7 @@ Tell `store` the shape of `run_id`'s frames, when it is a `FrameStore`.
 
 <a id="fim.persistence.store.store_wants_frames"></a>
 
-#### store\_wants\_frames
+#### [store\_wants\_frames](./persistence/store.py#L225)
 
 ```python
 def store_wants_frames(store: TrajectoryStore, run_id: str) -> bool
@@ -29597,7 +29597,7 @@ Whether the engine should hand `run_id`'s generations to `store` as frames.
 
 <a id="fim.persistence.store.ClosableStore"></a>
 
-## ClosableStore Objects
+## [ClosableStore Objects](./persistence/store.py#L240)
 
 ```python
 @runtime_checkable
@@ -29614,7 +29614,7 @@ closed store re-opens itself if written to again.
 
 <a id="fim.persistence.store.ClosableStore.close"></a>
 
-#### close
+#### [close](./persistence/store.py#L250)
 
 ```python
 def close() -> None
@@ -29624,7 +29624,7 @@ Release whatever the store holds open; safe to call repeatedly.
 
 <a id="fim.persistence.store.close_run_store"></a>
 
-#### close\_run\_store
+#### [close\_run\_store](./persistence/store.py#L255)
 
 ```python
 def close_run_store(store: TrajectoryStore, run_id: str) -> None
@@ -29640,7 +29640,7 @@ Close the resources one run of a multi-run store holds, if it can.
 
 <a id="fim.persistence.store.close_store"></a>
 
-#### close\_store
+#### [close\_store](./persistence/store.py#L268)
 
 ```python
 def close_store(store: TrajectoryStore) -> None
@@ -29654,7 +29654,7 @@ Close `store`'s open resources when it has any; otherwise do nothing.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore"></a>
 
-## InMemoryTrajectoryStore Objects
+## [InMemoryTrajectoryStore Objects](./persistence/store.py#L278)
 
 ```python
 class InMemoryTrajectoryStore()
@@ -29682,7 +29682,7 @@ running this.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/store.py#L300)
 
 ```python
 def __init__() -> None
@@ -29692,7 +29692,7 @@ Initialize an empty store.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__getstate__"></a>
 
-#### \_\_getstate\_\_
+#### [\_\_getstate\_\_](./persistence/store.py#L307)
 
 ```python
 def __getstate__() -> dict[str, Any]
@@ -29710,7 +29710,7 @@ lock on the other side instead.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__setstate__"></a>
 
-#### \_\_setstate\_\_
+#### [\_\_setstate\_\_](./persistence/store.py#L322)
 
 ```python
 def __setstate__(state: dict[str, Any]) -> None
@@ -29720,7 +29720,7 @@ Restore everything but `_lock`, then rebuild a fresh one.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.write_generation"></a>
 
-#### write\_generation
+#### [write\_generation](./persistence/store.py#L327)
 
 ```python
 def write_generation(run_id: str,
@@ -29738,7 +29738,7 @@ internal row producers named there.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.begin_run"></a>
 
-#### begin\_run
+#### [begin\_run](./persistence/store.py#L352)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -29752,7 +29752,7 @@ Record `run_id`'s layout so `write_frame` can turn frames into rows.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.wants_frames"></a>
 
-#### wants\_frames
+#### [wants\_frames](./persistence/store.py#L363)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -29762,7 +29762,7 @@ Return `False`: rows are what this store keeps, so rows are cheaper.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.write_frame"></a>
 
-#### write\_frame
+#### [write\_frame](./persistence/store.py#L368)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -29777,7 +29777,7 @@ Append one generation given as a frame, as the rows it stands for.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.read"></a>
 
-#### read
+#### [read](./persistence/store.py#L384)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -29792,7 +29792,7 @@ torn read.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.discard"></a>
 
-#### discard
+#### [discard](./persistence/store.py#L396)
 
 ```python
 def discard(run_id: str) -> None
@@ -29807,7 +29807,7 @@ another thread can never interleave with this rebuild of `_rows`.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.close"></a>
 
-#### close
+#### [close](./persistence/store.py#L407)
 
 ```python
 def close() -> None
@@ -29820,7 +29820,7 @@ kind it has (`ClosableStore`).
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.equilibrium_store"></a>
 
-#### equilibrium\_store
+#### [equilibrium\_store](./persistence/store.py#L414)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -29835,7 +29835,7 @@ rows are told apart by `run_id`, exactly like its main rows
 
 <a id="fim.persistence.store.ReplicateFanoutStore"></a>
 
-## ReplicateFanoutStore Objects
+## [ReplicateFanoutStore Objects](./persistence/store.py#L429)
 
 ```python
 class ReplicateFanoutStore()
@@ -29870,7 +29870,7 @@ child stores' methods at once.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/store.py#L458)
 
 ```python
 def __init__(store_factory: Callable[[str], TrajectoryStore]) -> None
@@ -29886,7 +29886,7 @@ Wrap a per-replicate store factory as one shared `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__getstate__"></a>
 
-#### \_\_getstate\_\_
+#### [\_\_getstate\_\_](./persistence/store.py#L470)
 
 ```python
 def __getstate__() -> dict[str, Any]
@@ -29897,7 +29897,7 @@ own identical method for why.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__setstate__"></a>
 
-#### \_\_setstate\_\_
+#### [\_\_setstate\_\_](./persistence/store.py#L477)
 
 ```python
 def __setstate__(state: dict[str, Any]) -> None
@@ -29907,7 +29907,7 @@ Restore everything but `_lock`, then rebuild a fresh one.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.store_for"></a>
 
-#### store\_for
+#### [store\_for](./persistence/store.py#L482)
 
 ```python
 def store_for(run_id: str) -> TrajectoryStore
@@ -29917,7 +29917,7 @@ Return `run_id`'s own child store, building it on first use.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.write_generation"></a>
 
-#### write\_generation
+#### [write\_generation](./persistence/store.py#L491)
 
 ```python
 def write_generation(run_id: str,
@@ -29931,7 +29931,7 @@ Delegate to `run_id`'s own child store; see `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.begin_run"></a>
 
-#### begin\_run
+#### [begin\_run](./persistence/store.py#L504)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -29941,7 +29941,7 @@ Tell `run_id`'s own child store its layout (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.wants_frames"></a>
 
-#### wants\_frames
+#### [wants\_frames](./persistence/store.py#L508)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -29951,7 +29951,7 @@ Whether `run_id`'s own child store prefers frames (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.write_frame"></a>
 
-#### write\_frame
+#### [write\_frame](./persistence/store.py#L512)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -29965,7 +29965,7 @@ Delegate a frame to `run_id`'s own child store (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.read"></a>
 
-#### read
+#### [read](./persistence/store.py#L523)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -29975,7 +29975,7 @@ Delegate to `run_id`'s own child store; see `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.discard"></a>
 
-#### discard
+#### [discard](./persistence/store.py#L527)
 
 ```python
 def discard(run_id: str) -> None
@@ -29990,7 +29990,7 @@ child store to create just to immediately discard from.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.close"></a>
 
-#### close
+#### [close](./persistence/store.py#L539)
 
 ```python
 def close() -> None
@@ -30000,7 +30000,7 @@ Close every child store built so far (`ClosableStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.close_run"></a>
 
-#### close\_run
+#### [close\_run](./persistence/store.py#L546)
 
 ```python
 def close_run(run_id: str) -> None
@@ -30015,7 +30015,7 @@ run this store never saw; the child re-opens if written again.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.equilibrium_store"></a>
 
-#### equilibrium\_store
+#### [equilibrium\_store](./persistence/store.py#L558)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -30029,7 +30029,7 @@ own `trajectory.tlog`, in its own directory
 
 <a id="fim.persistence.store.normalize_row"></a>
 
-#### normalize\_row
+#### [normalize\_row](./persistence/store.py#L568)
 
 ```python
 def normalize_row(row: Mapping[str, Any],
@@ -30065,7 +30065,7 @@ than the batch it was handed in).
 
 <a id="fim.persistence.taper"></a>
 
-# fim.persistence.taper
+# [fim.persistence.taper](./persistence/taper.py#L1)
 
 Rewrite a finished trajectory log so it holds only chosen generations.
 
@@ -30079,7 +30079,7 @@ run got there, and tapering a log that is already tapered changes nothing.
 
 <a id="fim.persistence.taper.TaperResult"></a>
 
-## TaperResult Objects
+## [TaperResult Objects](./persistence/taper.py#L24)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -30097,7 +30097,7 @@ What a taper changed.
 
 <a id="fim.persistence.taper.taper_log"></a>
 
-#### taper\_log
+#### [taper\_log](./persistence/taper.py#L40)
 
 ```python
 def taper_log(path: Path | str,
@@ -30136,7 +30136,7 @@ failure leaves the original untouched.
 
 <a id="fim.persistence.tlog"></a>
 
-# fim.persistence.tlog
+# [fim.persistence.tlog](./persistence/tlog.py#L1)
 
 The binary trajectory log: file format, block writer, scanning and recovery.
 
@@ -30172,25 +30172,25 @@ when Numba is installed and runs as plain Python otherwise.
 
 <a id="fim.persistence.tlog.FLAG_SPARSE"></a>
 
-#### FLAG\_SPARSE
+#### [FLAG\_SPARSE](./persistence/tlog.py#L71)
 
 Header flag: delta records may follow keyframes (the log is "sparse").
 
 <a id="fim.persistence.tlog.BLOCK_HEADER_SIZE"></a>
 
-#### BLOCK\_HEADER\_SIZE
+#### [BLOCK\_HEADER\_SIZE](./persistence/tlog.py#L76)
 
 Bytes of a block's header (32).
 
 <a id="fim.persistence.tlog.DEFAULT_BLOCK_GENERATIONS"></a>
 
-#### DEFAULT\_BLOCK\_GENERATIONS
+#### [DEFAULT\_BLOCK\_GENERATIONS](./persistence/tlog.py#L81)
 
 Generations after which the open block is sealed and written.
 
 <a id="fim.persistence.tlog.DEFAULT_BLOCK_SECONDS"></a>
 
-#### DEFAULT\_BLOCK\_SECONDS
+#### [DEFAULT\_BLOCK\_SECONDS](./persistence/tlog.py#L84)
 
 Seconds after which the open block is sealed and written; `None` for never.
 
@@ -30205,37 +30205,37 @@ rewrites the log with the canonical block boundaries (see
 
 <a id="fim.persistence.tlog.DEFAULT_KEY_EVERY"></a>
 
-#### DEFAULT\_KEY\_EVERY
+#### [DEFAULT\_KEY\_EVERY](./persistence/tlog.py#L96)
 
 Generations between keyframes in sparse mode.
 
 <a id="fim.persistence.tlog.DEFAULT_BUFFER_BYTES"></a>
 
-#### DEFAULT\_BUFFER\_BYTES
+#### [DEFAULT\_BUFFER\_BYTES](./persistence/tlog.py#L99)
 
 Bytes of one block buffer.
 
 <a id="fim.persistence.tlog.DEFAULT_QUEUE_DEPTH"></a>
 
-#### DEFAULT\_QUEUE\_DEPTH
+#### [DEFAULT\_QUEUE\_DEPTH](./persistence/tlog.py#L102)
 
 Sealed blocks that may wait for the writer thread.
 
 <a id="fim.persistence.tlog.DEFAULT_SYNC_SECONDS"></a>
 
-#### DEFAULT\_SYNC\_SECONDS
+#### [DEFAULT\_SYNC\_SECONDS](./persistence/tlog.py#L105)
 
 Seconds between group-commit syncs.
 
 <a id="fim.persistence.tlog.MIN_BUFFER_BYTES"></a>
 
-#### MIN\_BUFFER\_BYTES
+#### [MIN\_BUFFER\_BYTES](./persistence/tlog.py#L114)
 
 The smallest block buffer a writer accepts.
 
 <a id="fim.persistence.tlog.TlogError"></a>
 
-## TlogError Objects
+## [TlogError Objects](./persistence/tlog.py#L123)
 
 ```python
 class TlogError(StoreError, ValueError)
@@ -30245,7 +30245,7 @@ The file is not a usable trajectory log (bad magic, header or version).
 
 <a id="fim.persistence.tlog.LogHeader"></a>
 
-## LogHeader Objects
+## [LogHeader Objects](./persistence/tlog.py#L128)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -30266,7 +30266,7 @@ The parsed file header of a log.
 
 <a id="fim.persistence.tlog.BlockInfo"></a>
 
-## BlockInfo Objects
+## [BlockInfo Objects](./persistence/tlog.py#L151)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -30289,7 +30289,7 @@ One committed block, as found by `scan_blocks`.
 
 <a id="fim.persistence.tlog.ScanResult"></a>
 
-## ScanResult Objects
+## [ScanResult Objects](./persistence/tlog.py#L178)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -30309,7 +30309,7 @@ What `scan_blocks` and `recover` found.
 
 <a id="fim.persistence.tlog.ScanResult.generations"></a>
 
-#### generations
+#### [generations](./persistence/tlog.py#L198)
 
 ```python
 @property
@@ -30320,7 +30320,7 @@ Records (generations) in the committed blocks.
 
 <a id="fim.persistence.tlog.ScanResult.rows"></a>
 
-#### rows
+#### [rows](./persistence/tlog.py#L203)
 
 ```python
 @property
@@ -30331,7 +30331,7 @@ Trajectory rows in the committed blocks.
 
 <a id="fim.persistence.tlog.ScanResult.last_generation"></a>
 
-#### last\_generation
+#### [last\_generation](./persistence/tlog.py#L208)
 
 ```python
 @property
@@ -30342,7 +30342,7 @@ The last committed generation, or `-1` when none is committed.
 
 <a id="fim.persistence.tlog.LogPosition"></a>
 
-## LogPosition Objects
+## [LogPosition Objects](./persistence/tlog.py#L214)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -30368,7 +30368,7 @@ a damaged header makes a log unusable, so resuming can restore it.
 
 <a id="fim.persistence.tlog.build_header"></a>
 
-#### build\_header
+#### [build\_header](./persistence/tlog.py#L252)
 
 ```python
 def build_header(run_id: str,
@@ -30393,7 +30393,7 @@ Return the file header of a log.
 
 <a id="fim.persistence.tlog.parse_header"></a>
 
-#### parse\_header
+#### [parse\_header](./persistence/tlog.py#L279)
 
 ```python
 def parse_header(data: bytes | mmap.mmap | memoryview) -> LogHeader
@@ -30417,7 +30417,7 @@ Parse and verify a log's file header.
 
 <a id="fim.persistence.tlog.scan_blocks"></a>
 
-#### scan\_blocks
+#### [scan\_blocks](./persistence/tlog.py#L343)
 
 ```python
 def scan_blocks(data: bytes | mmap.mmap | memoryview,
@@ -30448,7 +30448,7 @@ corrupt; everything before it is committed, everything from it on is not.
 
 <a id="fim.persistence.tlog.prefix_still_holds"></a>
 
-#### prefix\_still\_holds
+#### [prefix\_still\_holds](./persistence/tlog.py#L423)
 
 ```python
 def prefix_still_holds(data: bytes | mmap.mmap | memoryview,
@@ -30476,7 +30476,7 @@ is the manifest digest's job.
 
 <a id="fim.persistence.tlog.recover"></a>
 
-#### recover
+#### [recover](./persistence/tlog.py#L453)
 
 ```python
 def recover(path: Path | str, *, truncate: bool = True) -> ScanResult
@@ -30502,7 +30502,7 @@ Scan a log file and, by default, cut off everything after the committed prefix.
 
 <a id="fim.persistence.tlog.InjectedFaultError"></a>
 
-## InjectedFaultError Objects
+## [InjectedFaultError Objects](./persistence/tlog.py#L491)
 
 ```python
 class InjectedFaultError(OSError)
@@ -30512,7 +30512,7 @@ A failure a `FaultHook` asked for; it stands in for a crash or a full disk.
 
 <a id="fim.persistence.tlog.FaultHook"></a>
 
-## FaultHook Objects
+## [FaultHook Objects](./persistence/tlog.py#L495)
 
 ```python
 class FaultHook(Protocol)
@@ -30530,7 +30530,7 @@ block exactly as a crash in the middle of `write(2)` would.
 
 <a id="fim.persistence.tlog.FaultHook.__call__"></a>
 
-#### \_\_call\_\_
+#### [\_\_call\_\_](./persistence/tlog.py#L507)
 
 ```python
 def __call__(point: str, size: int = 0) -> int | None
@@ -30540,7 +30540,7 @@ Observe `point`; optionally shorten a write or raise.
 
 <a id="fim.persistence.tlog.LogMode"></a>
 
-#### LogMode
+#### [LogMode](./persistence/tlog.py#L512)
 
 `"dense"` writes every generation in full; `"sparse"` writes a full
 keyframe every `key_every` generations and, between them, only the (deme,
@@ -30548,14 +30548,14 @@ locus) pairs that changed.
 
 <a id="fim.persistence.tlog.SyncMode"></a>
 
-#### SyncMode
+#### [SyncMode](./persistence/tlog.py#L517)
 
 How the file is made durable: not at all, `fsync`, `F_FULLFSYNC`, or the
 strongest call the platform has (`"full"` on macOS, `fsync` elsewhere).
 
 <a id="fim.persistence.tlog.sync_file"></a>
 
-#### sync\_file
+#### [sync\_file](./persistence/tlog.py#L522)
 
 ```python
 def sync_file(fd: int, mode: SyncMode) -> None
@@ -30582,7 +30582,7 @@ Elsewhere `fsync` is durable.
 
 <a id="fim.persistence.tlog.WriterStats"></a>
 
-## WriterStats Objects
+## [WriterStats Objects](./persistence/tlog.py#L553)
 
 ```python
 @dataclass(slots=True)
@@ -30604,7 +30604,7 @@ Counters a writer keeps, for tests and for tuning.
 
 <a id="fim.persistence.tlog.LogWriter"></a>
 
-## LogWriter Objects
+## [LogWriter Objects](./persistence/tlog.py#L592)
 
 ```python
 class LogWriter()
@@ -30686,7 +30686,7 @@ when the writer closes.
 
 <a id="fim.persistence.tlog.LogWriter.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/tlog.py#L665)
 
 ```python
 def __init__(path: Path | str,
@@ -30713,7 +30713,7 @@ Create the file (or reopen it to continue) and start the thread if asked.
 
 <a id="fim.persistence.tlog.LogWriter.synced_generation"></a>
 
-#### synced\_generation
+#### [synced\_generation](./persistence/tlog.py#L929)
 
 ```python
 @property
@@ -30724,7 +30724,7 @@ The last generation known to have been made durable (`-1` for none).
 
 <a id="fim.persistence.tlog.LogWriter.submit"></a>
 
-#### submit
+#### [submit](./persistence/tlog.py#L933)
 
 ```python
 def submit(frame: TrajectoryFrame) -> None
@@ -30746,7 +30746,7 @@ Encode one generation into the open block, sealing it when due.
 
 <a id="fim.persistence.tlog.LogWriter.flush"></a>
 
-#### flush
+#### [flush](./persistence/tlog.py#L1029)
 
 ```python
 def flush(*, sync: bool = False) -> None
@@ -30769,7 +30769,7 @@ committed (and durable when `sync` is true and the sync mode is not
 
 <a id="fim.persistence.tlog.LogWriter.close"></a>
 
-#### close
+#### [close](./persistence/tlog.py#L1053)
 
 ```python
 def close() -> None
@@ -30786,7 +30786,7 @@ earlier write failed; the failure is then raised from here.
 
 <a id="fim.persistence.tlog.LogWriter.snapshot"></a>
 
-#### snapshot
+#### [snapshot](./persistence/tlog.py#L1119)
 
 ```python
 def snapshot() -> tuple[int, int, int]
@@ -30799,7 +30799,7 @@ so the three always describe the same block.
 
 <a id="fim.persistence.tlog.LogWriter.checkpoint"></a>
 
-#### checkpoint
+#### [checkpoint](./persistence/tlog.py#L1140)
 
 ```python
 def checkpoint() -> LogPosition
@@ -30823,7 +30823,7 @@ that. Resuming from it later cuts the file back to this point.
 
 <a id="fim.persistence.tlog.LogWriter.position"></a>
 
-#### position
+#### [position](./persistence/tlog.py#L1157)
 
 ```python
 def position() -> LogPosition
@@ -30836,7 +30836,7 @@ barrier that makes it everything submitted.
 
 <a id="fim.persistence.tlog.iter_frames"></a>
 
-#### iter\_frames
+#### [iter\_frames](./persistence/tlog.py#L1340)
 
 ```python
 def iter_frames(path: Path | str,
@@ -30867,7 +30867,7 @@ independent copies.
 
 <a id="fim.persistence.tlog_codec"></a>
 
-# fim.persistence.tlog\_codec
+# [fim.persistence.tlog\_codec](./persistence/tlog_codec.py#L1)
 
 Record codec of the binary trajectory log.
 
@@ -30910,13 +30910,13 @@ that pair as the raw float64. No frequency is ever rounded.
 
 <a id="fim.persistence.tlog_codec.PAD4"></a>
 
-#### PAD4
+#### [PAD4](./persistence/tlog_codec.py#L56)
 
 Bytes of a padded varint: a length written before it is known.
 
 <a id="fim.persistence.tlog_codec.kernel"></a>
 
-#### kernel
+#### [kernel](./persistence/tlog_codec.py#L66)
 
 ```python
 def kernel(function: Callable[..., Any]) -> Callable[..., Any]
@@ -30935,7 +30935,7 @@ Compile `function` with Numba (`nogil`, cached) when it is available.
 
 <a id="fim.persistence.tlog_codec.put_varint"></a>
 
-#### put\_varint
+#### [put\_varint](./persistence/tlog_codec.py#L81)
 
 ```python
 @kernel
@@ -30946,7 +30946,7 @@ Write `v` as a little-endian base-128 varint; return the new position.
 
 <a id="fim.persistence.tlog_codec.put_padded4"></a>
 
-#### put\_padded4
+#### [put\_padded4](./persistence/tlog_codec.py#L92)
 
 ```python
 @kernel
@@ -30957,7 +30957,7 @@ Write `v` (below 2**28) as a four-byte padded varint; return the end.
 
 <a id="fim.persistence.tlog_codec.get_varint"></a>
 
-#### get\_varint
+#### [get\_varint](./persistence/tlog_codec.py#L102)
 
 ```python
 @kernel
@@ -30968,7 +30968,7 @@ Read a varint at `pos`; return `(value, position after it)`.
 
 <a id="fim.persistence.tlog_codec.put_pair"></a>
 
-#### put\_pair
+#### [put\_pair](./persistence/tlog_codec.py#L117)
 
 ```python
 @kernel
@@ -30995,7 +30995,7 @@ Write one pair body from the entries `ids/fr[base:base + n]`.
 
 <a id="fim.persistence.tlog_codec.enc_full"></a>
 
-#### enc\_full
+#### [enc\_full](./persistence/tlog_codec.py#L162)
 
 ```python
 @kernel
@@ -31025,7 +31025,7 @@ Append one full-frame record built from a CSR frame.
 
 <a id="fim.persistence.tlog_codec.enc_delta"></a>
 
-#### enc\_delta
+#### [enc\_delta](./persistence/tlog_codec.py#L203)
 
 ```python
 @kernel
@@ -31062,7 +31062,7 @@ frame are written. Every `nal[p]` must be at most `pid.shape[1]`
 
 <a id="fim.persistence.tlog_codec.load_state_from_csr"></a>
 
-#### load\_state\_from\_csr
+#### [load\_state\_from\_csr](./persistence/tlog_codec.py#L271)
 
 ```python
 @kernel
@@ -31073,7 +31073,7 @@ Set an encoder's previous-frame state from a CSR frame.
 
 <a id="fim.persistence.tlog_codec.get_pair"></a>
 
-#### get\_pair
+#### [get\_pair](./persistence/tlog_codec.py#L284)
 
 ```python
 @kernel
@@ -31089,7 +31089,7 @@ Decode one pair body into the state arrays.
 
 <a id="fim.persistence.tlog_codec.apply_record"></a>
 
-#### apply\_record
+#### [apply\_record](./persistence/tlog_codec.py#L324)
 
 ```python
 @kernel
@@ -31105,7 +31105,7 @@ Apply the record at `pos` to the decoded state.
 
 <a id="fim.persistence.tlog_codec.state_to_csr"></a>
 
-#### state\_to\_csr
+#### [state\_to\_csr](./persistence/tlog_codec.py#L359)
 
 ```python
 @kernel
@@ -31120,7 +31120,7 @@ Flatten the decoded per-pair state into a CSR frame.
 
 <a id="fim.persistence.tlog_codec.record_deltas"></a>
 
-#### record\_deltas
+#### [record\_deltas](./persistence/tlog_codec.py#L377)
 
 ```python
 @kernel
@@ -31146,7 +31146,7 @@ operations per record however large a record is.
 
 <a id="fim.persistence.tlog_codec.DecodedState"></a>
 
-## DecodedState Objects
+## [DecodedState Objects](./persistence/tlog_codec.py#L402)
 
 ```python
 class DecodedState()
@@ -31162,7 +31162,7 @@ The per-pair state a decoder keeps, and what a delta applies to.
 
 <a id="fim.persistence.tlog_codec.DecodedState.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/tlog_codec.py#L411)
 
 ```python
 def __init__(pairs: int, width: int = 16) -> None
@@ -31172,7 +31172,7 @@ Allocate the arrays.
 
 <a id="fim.persistence.tlog_codec.DecodedState.grow"></a>
 
-#### grow
+#### [grow](./persistence/tlog_codec.py#L420)
 
 ```python
 def grow() -> None
@@ -31182,7 +31182,7 @@ Double the width, keeping every value.
 
 <a id="fim.persistence.tlog_codec.DecodedState.frame_arrays"></a>
 
-#### frame\_arrays
+#### [frame\_arrays](./persistence/tlog_codec.py#L430)
 
 ```python
 def frame_arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]
@@ -31192,7 +31192,7 @@ Return the state as CSR arrays `(counts, allele_ids, frequencies)`.
 
 <a id="fim.persistence.tlog_codec.decode_record"></a>
 
-#### decode\_record
+#### [decode\_record](./persistence/tlog_codec.py#L440)
 
 ```python
 def decode_record(buffer: np.ndarray, position: int, demes: int, loci: int,
@@ -31218,7 +31218,7 @@ Apply the record at `position` to `state`, widening the state as needed.
 
 <a id="fim.persistence.tlog_export"></a>
 
-# fim.persistence.tlog\_export
+# [fim.persistence.tlog\_export](./persistence/tlog_export.py#L1)
 
 Derive the canonical `trajectory.jsonl` from a binary trajectory log.
 
@@ -31261,19 +31261,19 @@ more slowly.
 
 <a id="fim.persistence.tlog_export.LUT_MAX_SIZE"></a>
 
-#### LUT\_MAX\_SIZE
+#### [LUT\_MAX\_SIZE](./persistence/tlog_export.py#L72)
 
 Largest deme size whose float text is tabulated (others use Python).
 
 <a id="fim.persistence.tlog_export.DEFAULT_EXPORT_WORKERS"></a>
 
-#### DEFAULT\_EXPORT\_WORKERS
+#### [DEFAULT\_EXPORT\_WORKERS](./persistence/tlog_export.py#L79)
 
 Processes an export formats with unless told otherwise.
 
 <a id="fim.persistence.tlog_export.format_pairs"></a>
 
-#### format\_pairs
+#### [format\_pairs](./persistence/tlog_export.py#L114)
 
 ```python
 @codec.kernel
@@ -31292,7 +31292,7 @@ Format pairs `p_start..` into `out`, stopping at the first one needing Python.
 
 <a id="fim.persistence.tlog_export.size_pairs"></a>
 
-#### size\_pairs
+#### [size\_pairs](./persistence/tlog_export.py#L167)
 
 ```python
 @codec.kernel
@@ -31308,7 +31308,7 @@ Byte count of pairs `p_start..` (same walk as `format_pairs`, no copying).
 
 <a id="fim.persistence.tlog_export.JsonlFormatter"></a>
 
-## JsonlFormatter Objects
+## [JsonlFormatter Objects](./persistence/tlog_export.py#L216)
 
 ```python
 class JsonlFormatter()
@@ -31327,7 +31327,7 @@ the deme sizes only).
 
 <a id="fim.persistence.tlog_export.JsonlFormatter.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/tlog_export.py#L228)
 
 ```python
 def __init__(run_id: str, locus_ids: tuple[int, ...],
@@ -31338,7 +31338,7 @@ Build the constant fragments and the float text tables.
 
 <a id="fim.persistence.tlog_export.JsonlFormatter.generation_bytes"></a>
 
-#### generation\_bytes
+#### [generation\_bytes](./persistence/tlog_export.py#L308)
 
 ```python
 @staticmethod
@@ -31349,7 +31349,7 @@ Return the per-generation constant text `,"generation":G`.
 
 <a id="fim.persistence.tlog_export.JsonlFormatter.row_bound"></a>
 
-#### row\_bound
+#### [row\_bound](./persistence/tlog_export.py#L314)
 
 ```python
 def row_bound(rows: int) -> int
@@ -31359,7 +31359,7 @@ Return an upper bound on the bytes of a generation of `rows` rows.
 
 <a id="fim.persistence.tlog_export.JsonlFormatter.format_generation"></a>
 
-#### format\_generation
+#### [format\_generation](./persistence/tlog_export.py#L318)
 
 ```python
 def format_generation(out: np.ndarray, opos: int, generation: int,
@@ -31370,7 +31370,7 @@ Append one generation's lines to `out` and return the new offset.
 
 <a id="fim.persistence.tlog_export.JsonlFormatter.size_generation"></a>
 
-#### size\_generation
+#### [size\_generation](./persistence/tlog_export.py#L352)
 
 ```python
 def size_generation(generation: int, state: codec.DecodedState) -> int
@@ -31380,7 +31380,7 @@ Return the exact bytes `format_generation` would write.
 
 <a id="fim.persistence.tlog_export.plan_shards"></a>
 
-#### plan\_shards
+#### [plan\_shards](./persistence/tlog_export.py#L464)
 
 ```python
 def plan_shards(scan: ScanResult,
@@ -31401,7 +31401,7 @@ Split a log's blocks into shards that each start at a keyframe block.
 
 <a id="fim.persistence.tlog_export._Emitter"></a>
 
-## \_Emitter Objects
+## [\_Emitter Objects](./persistence/tlog_export.py#L516)
 
 ```python
 class _Emitter()
@@ -31411,7 +31411,7 @@ Format generations into a chunk buffer and hand full chunks to a sink.
 
 <a id="fim.persistence.tlog_export._Emitter.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/tlog_export.py#L519)
 
 ```python
 def __init__(formatter: JsonlFormatter, sink: Callable[[memoryview],
@@ -31422,7 +31422,7 @@ Start with an empty chunk.
 
 <a id="fim.persistence.tlog_export._Emitter.visit"></a>
 
-#### visit
+#### [visit](./persistence/tlog_export.py#L531)
 
 ```python
 def visit(generation: int, rows: int, state: codec.DecodedState) -> None
@@ -31432,7 +31432,7 @@ Format one generation, flushing the chunk when it is full.
 
 <a id="fim.persistence.tlog_export._Emitter.flush"></a>
 
-#### flush
+#### [flush](./persistence/tlog_export.py#L546)
 
 ```python
 def flush() -> None
@@ -31442,7 +31442,7 @@ Hand the chunk to the sink and start a new one.
 
 <a id="fim.persistence.tlog_export.DerivedJsonl"></a>
 
-## DerivedJsonl Objects
+## [DerivedJsonl Objects](./persistence/tlog_export.py#L598)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -31462,7 +31462,7 @@ What deriving a trajectory produced.
 
 <a id="fim.persistence.tlog_export.derive_jsonl"></a>
 
-#### derive\_jsonl
+#### [derive\_jsonl](./persistence/tlog_export.py#L618)
 
 ```python
 def derive_jsonl(log_path: Path | str,
@@ -31498,7 +31498,7 @@ Derive the canonical JSON Lines trajectory from a log.
 
 <a id="fim.persistence.tlog_export.free_space_needed"></a>
 
-#### free\_space\_needed
+#### [free\_space\_needed](./persistence/tlog_export.py#L720)
 
 ```python
 def free_space_needed(log_path: Path | str) -> int
@@ -31526,7 +31526,7 @@ formatting), without writing anything.
 
 <a id="fim.persistence.tlog_export.check_free_space"></a>
 
-#### check\_free\_space
+#### [check\_free\_space](./persistence/tlog_export.py#L747)
 
 ```python
 def check_free_space(log_path: Path | str,
@@ -31547,13 +31547,13 @@ Return `(bytes needed, bytes free)` for deriving into `directory`.
 
 <a id="fim.persistence.tlog_export.RECEIPT_SCHEMA"></a>
 
-#### RECEIPT\_SCHEMA
+#### [RECEIPT\_SCHEMA](./persistence/tlog_export.py#L761)
 
 The `schema` field of an export receipt.
 
 <a id="fim.persistence.tlog_export.ExportReceipt"></a>
 
-## ExportReceipt Objects
+## [ExportReceipt Objects](./persistence/tlog_export.py#L769)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -31577,7 +31577,7 @@ What an export produced, as recorded in its receipt file.
 
 <a id="fim.persistence.tlog_export.resolve_log"></a>
 
-#### resolve\_log
+#### [resolve\_log](./persistence/tlog_export.py#L797)
 
 ```python
 def resolve_log(path: Path | str) -> Path
@@ -31601,7 +31601,7 @@ Return the log file a path names: the file itself, or a run directory's.
 
 <a id="fim.persistence.tlog_export.export_trajectory"></a>
 
-#### export\_trajectory
+#### [export\_trajectory](./persistence/tlog_export.py#L837)
 
 ```python
 def export_trajectory(path: Path | str,
@@ -31643,7 +31643,7 @@ leaves a receipt recording both digests next to it.
 
 <a id="fim.persistence.tlog_reader"></a>
 
-# fim.persistence.tlog\_reader
+# [fim.persistence.tlog\_reader](./persistence/tlog_reader.py#L1)
 
 Random access to a binary trajectory log.
 
@@ -31665,7 +31665,7 @@ releases both.
 
 <a id="fim.persistence.tlog_reader.forget_cached_scans"></a>
 
-#### forget\_cached\_scans
+#### [forget\_cached\_scans](./persistence/tlog_reader.py#L69)
 
 ```python
 def forget_cached_scans() -> None
@@ -31675,7 +31675,7 @@ Drop every cached scan (for tests, and after files are replaced).
 
 <a id="fim.persistence.tlog_reader.LogReader"></a>
 
-## LogReader Objects
+## [LogReader Objects](./persistence/tlog_reader.py#L75)
 
 ```python
 class LogReader()
@@ -31696,7 +31696,7 @@ Read-only, memory-mapped access to the committed generations of a log.
 
 <a id="fim.persistence.tlog_reader.LogReader.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./persistence/tlog_reader.py#L87)
 
 ```python
 def __init__(path: Path | str, *, use_cache: bool = True) -> None
@@ -31706,7 +31706,7 @@ Open and map the file and scan its committed blocks.
 
 <a id="fim.persistence.tlog_reader.LogReader.__enter__"></a>
 
-#### \_\_enter\_\_
+#### [\_\_enter\_\_](./persistence/tlog_reader.py#L107)
 
 ```python
 def __enter__() -> LogReader
@@ -31716,7 +31716,7 @@ Return this reader, for use as a context manager.
 
 <a id="fim.persistence.tlog_reader.LogReader.__exit__"></a>
 
-#### \_\_exit\_\_
+#### [\_\_exit\_\_](./persistence/tlog_reader.py#L111)
 
 ```python
 def __exit__(exc_type: type[BaseException] | None,
@@ -31728,7 +31728,7 @@ Release the file and its mapping.
 
 <a id="fim.persistence.tlog_reader.LogReader.scan"></a>
 
-#### scan
+#### [scan](./persistence/tlog_reader.py#L121)
 
 ```python
 @property
@@ -31739,7 +31739,7 @@ The scan of the committed prefix, as of the last refresh.
 
 <a id="fim.persistence.tlog_reader.LogReader.run_id"></a>
 
-#### run\_id
+#### [run\_id](./persistence/tlog_reader.py#L127)
 
 ```python
 @property
@@ -31750,7 +31750,7 @@ The run the log holds.
 
 <a id="fim.persistence.tlog_reader.LogReader.layout"></a>
 
-#### layout
+#### [layout](./persistence/tlog_reader.py#L132)
 
 ```python
 @property
@@ -31761,7 +31761,7 @@ The frame layout of the log.
 
 <a id="fim.persistence.tlog_reader.LogReader.blocks"></a>
 
-#### blocks
+#### [blocks](./persistence/tlog_reader.py#L137)
 
 ```python
 @property
@@ -31772,7 +31772,7 @@ The committed blocks.
 
 <a id="fim.persistence.tlog_reader.LogReader.generation_count"></a>
 
-#### generation\_count
+#### [generation\_count](./persistence/tlog_reader.py#L142)
 
 ```python
 @property
@@ -31783,7 +31783,7 @@ Generations (records) committed.
 
 <a id="fim.persistence.tlog_reader.LogReader.rows"></a>
 
-#### rows
+#### [rows](./persistence/tlog_reader.py#L147)
 
 ```python
 @property
@@ -31794,7 +31794,7 @@ Trajectory rows committed.
 
 <a id="fim.persistence.tlog_reader.LogReader.last_generation"></a>
 
-#### last\_generation
+#### [last\_generation](./persistence/tlog_reader.py#L152)
 
 ```python
 @property
@@ -31805,7 +31805,7 @@ The last committed generation, or `-1` for none.
 
 <a id="fim.persistence.tlog_reader.LogReader.refresh"></a>
 
-#### refresh
+#### [refresh](./persistence/tlog_reader.py#L156)
 
 ```python
 def refresh() -> int
@@ -31819,7 +31819,7 @@ Pick up blocks committed since the last scan.
 
 <a id="fim.persistence.tlog_reader.LogReader.close"></a>
 
-#### close
+#### [close](./persistence/tlog_reader.py#L166)
 
 ```python
 def close() -> None
@@ -31829,7 +31829,7 @@ Release the mapping and the file; safe to call twice.
 
 <a id="fim.persistence.tlog_reader.LogReader.generation_numbers"></a>
 
-#### generation\_numbers
+#### [generation\_numbers](./persistence/tlog_reader.py#L174)
 
 ```python
 def generation_numbers() -> list[int]
@@ -31843,7 +31843,7 @@ record headers read, which costs a few operations per record.
 
 <a id="fim.persistence.tlog_reader.LogReader.frame_at"></a>
 
-#### frame\_at
+#### [frame\_at](./persistence/tlog_reader.py#L199)
 
 ```python
 def frame_at(generation: int) -> TrajectoryFrame
@@ -31871,7 +31871,7 @@ applies the records forward.
 
 <a id="fim.persistence.tlog_reader.LogReader.frames"></a>
 
-#### frames
+#### [frames](./persistence/tlog_reader.py#L219)
 
 ```python
 def frames(generations: Iterable[int] | None = None,
@@ -31906,7 +31906,7 @@ asking for a few spread-out generations costs a few short replays.
 
 <a id="fim.persistence.tlog_reader.LogReader.rows_at"></a>
 
-#### rows\_at
+#### [rows\_at](./persistence/tlog_reader.py#L311)
 
 ```python
 def rows_at(generation: int) -> list[TrajectoryRow]
@@ -31920,7 +31920,7 @@ Return one generation's trajectory rows.
 
 <a id="fim.persistence.tlog_reader.read_rows"></a>
 
-#### read\_rows
+#### [read\_rows](./persistence/tlog_reader.py#L398)
 
 ```python
 def read_rows(path: Path | str,
@@ -31951,7 +31951,7 @@ Return a log's rows grouped by generation.
 
 <a id="fim.reanalyze"></a>
 
-# fim.reanalyze
+# [fim.reanalyze](./reanalyze.py#L1)
 
 Re-analyze a persisted trajectory (`doc/fim-gui-design.md` §12).
 
@@ -31978,7 +31978,7 @@ instead of engine logic.
 
 <a id="fim.reanalyze.ReanalyzedGeneration"></a>
 
-## ReanalyzedGeneration Objects
+## [ReanalyzedGeneration Objects](./reanalyze.py#L55)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32006,7 +32006,7 @@ together so a caller never has to separately go fetch any of it.
 
 <a id="fim.reanalyze.differentiation_q_for_state"></a>
 
-#### differentiation\_q\_for\_state
+#### [differentiation\_q\_for\_state](./reanalyze.py#L81)
 
 ```python
 def differentiation_q_for_state(state: ModelState, params: SimulationParams,
@@ -32040,7 +32040,7 @@ silently disagreeing whenever `deme_weighting` is `"size"`.
 
 <a id="fim.reanalyze.group_rows_by_generation"></a>
 
-#### group\_rows\_by\_generation
+#### [group\_rows\_by\_generation](./reanalyze.py#L132)
 
 ```python
 def group_rows_by_generation(
@@ -32082,7 +32082,7 @@ memory to that selection even for gigabyte-scale example data.
 
 <a id="fim.reanalyze.trajectory_generations"></a>
 
-#### trajectory\_generations
+#### [trajectory\_generations](./reanalyze.py#L167)
 
 ```python
 def trajectory_generations(trajectory_path: Path, run_id: str) -> list[int]
@@ -32092,7 +32092,7 @@ List persisted generations without retaining their population rows.
 
 <a id="fim.reanalyze.read_persisted_convergence_history"></a>
 
-#### read\_persisted\_convergence\_history
+#### [read\_persisted\_convergence\_history](./reanalyze.py#L235)
 
 ```python
 def read_persisted_convergence_history(
@@ -32146,7 +32146,7 @@ run completed, and silently ignoring it would mask that.
 
 <a id="fim.reanalyze.reanalyze_trajectory"></a>
 
-#### reanalyze\_trajectory
+#### [reanalyze\_trajectory](./reanalyze.py#L331)
 
 ```python
 def reanalyze_trajectory(
@@ -32205,7 +32205,7 @@ run's own true final one.
 
 <a id="fim.reanalyze.replicate_convergence_history"></a>
 
-#### replicate\_convergence\_history
+#### [replicate\_convergence\_history](./reanalyze.py#L500)
 
 ```python
 def replicate_convergence_history(
@@ -32250,7 +32250,7 @@ independently plausible ones.
 
 <a id="fim.reproducibility"></a>
 
-# fim.reproducibility
+# [fim.reproducibility](./reproducibility.py#L1)
 
 Compare two runs of one configuration, bit for bit.
 
@@ -32267,7 +32267,7 @@ whose bytes can change with the plotting library without any result changing.
 
 <a id="fim.reproducibility.Difference"></a>
 
-## Difference Objects
+## [Difference Objects](./reproducibility.py#L33)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32285,7 +32285,7 @@ One thing that differs between two runs of the same configuration.
 
 <a id="fim.reproducibility.Comparison"></a>
 
-## Comparison Objects
+## [Comparison Objects](./reproducibility.py#L49)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32309,7 +32309,7 @@ The outcome of comparing an earlier run with its recomputation.
 
 <a id="fim.reproducibility.Comparison.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./reproducibility.py#L72)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -32319,7 +32319,7 @@ Return a JSON-serializable form (for the page and a sidecar file).
 
 <a id="fim.reproducibility.compare_runs"></a>
 
-#### compare\_runs
+#### [compare\_runs](./reproducibility.py#L87)
 
 ```python
 def compare_runs(old: Path, new: Path) -> Comparison
@@ -32345,7 +32345,7 @@ Compare two run directories of the same configuration.
 
 <a id="fim.results"></a>
 
-# fim.results
+# [fim.results](./results.py#L1)
 
 What a run returns: one `Result` holding its replicates and their summary.
 
@@ -32361,14 +32361,14 @@ trajectory is read through a `TrajectoryReader`, which cannot write.
 
 <a id="fim.results.BatchStop"></a>
 
-#### BatchStop
+#### [BatchStop](./results.py#L37)
 
 Why a batch ended: it had one replicate, reached its precision before the
 replicate cap, or ran every replicate it was allowed.
 
 <a id="fim.results.Stop"></a>
 
-## Stop Objects
+## [Stop Objects](./results.py#L45)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32388,7 +32388,7 @@ Why one replicate ended.
 
 <a id="fim.results.Report"></a>
 
-## Report Objects
+## [Report Objects](./results.py#L63)
 
 ```python
 class Report(Mapping[str, float | None])
@@ -32407,7 +32407,7 @@ The four statistics every run tracks are also attributes: `D`, `G_ST`,
 
 <a id="fim.results.Report.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./results.py#L78)
 
 ```python
 def __init__(final: Mapping[str, Any]) -> None
@@ -32421,7 +32421,7 @@ Wrap a final report.
 
 <a id="fim.results.Report.__getitem__"></a>
 
-#### \_\_getitem\_\_
+#### [\_\_getitem\_\_](./results.py#L89)
 
 ```python
 def __getitem__(key: str) -> float | None
@@ -32431,7 +32431,7 @@ Return a statistic's value, or raise `KeyError` naming valid IDs.
 
 <a id="fim.results.Report.__iter__"></a>
 
-#### \_\_iter\_\_
+#### [\_\_iter\_\_](./results.py#L97)
 
 ```python
 def __iter__() -> Iterator[str]
@@ -32441,7 +32441,7 @@ Iterate statistic IDs in catalog order.
 
 <a id="fim.results.Report.__len__"></a>
 
-#### \_\_len\_\_
+#### [\_\_len\_\_](./results.py#L101)
 
 ```python
 def __len__() -> int
@@ -32451,7 +32451,7 @@ Return the number of statistics reported.
 
 <a id="fim.results.Report.__repr__"></a>
 
-#### \_\_repr\_\_
+#### [\_\_repr\_\_](./results.py#L105)
 
 ```python
 def __repr__() -> str
@@ -32461,7 +32461,7 @@ Return a short summary of the headline statistics.
 
 <a id="fim.results.Report.D"></a>
 
-#### D
+#### [D](./results.py#L113)
 
 ```python
 @property
@@ -32472,7 +32472,7 @@ Jost's differentiation `D`.
 
 <a id="fim.results.Report.G_ST"></a>
 
-#### G\_ST
+#### [G\_ST](./results.py#L118)
 
 ```python
 @property
@@ -32483,7 +32483,7 @@ Nei's `G_ST`; `None` where it is undefined.
 
 <a id="fim.results.Report.H_S"></a>
 
-#### H\_S
+#### [H\_S](./results.py#L123)
 
 ```python
 @property
@@ -32494,7 +32494,7 @@ Mean within-deme heterozygosity.
 
 <a id="fim.results.Report.H_T"></a>
 
-#### H\_T
+#### [H\_T](./results.py#L128)
 
 ```python
 @property
@@ -32505,7 +32505,7 @@ Total heterozygosity.
 
 <a id="fim.results.Report.windows"></a>
 
-#### windows
+#### [windows](./results.py#L133)
 
 ```python
 @property
@@ -32516,7 +32516,7 @@ Return the evidence-window statistics, by statistic ID.
 
 <a id="fim.results.Report.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./results.py#L137)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -32526,7 +32526,7 @@ Return the report as the dict written to `report.json`.
 
 <a id="fim.results.Histories"></a>
 
-## Histories Objects
+## [Histories Objects](./results.py#L143)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32544,7 +32544,7 @@ How the tracked statistics moved over one replicate.
 
 <a id="fim.results.Histories.__getitem__"></a>
 
-#### \_\_getitem\_\_
+#### [\_\_getitem\_\_](./results.py#L156)
 
 ```python
 def __getitem__(name: str) -> tuple[float, ...]
@@ -32554,7 +32554,7 @@ Return one statistic's values, aligned with `generations`.
 
 <a id="fim.results.Histories.names"></a>
 
-#### names
+#### [names](./results.py#L161)
 
 ```python
 @property
@@ -32565,7 +32565,7 @@ Return the tracked statistic IDs.
 
 <a id="fim.results.TrajectoryReader"></a>
 
-## TrajectoryReader Objects
+## [TrajectoryReader Objects](./results.py#L166)
 
 ```python
 class TrajectoryReader()
@@ -32580,7 +32580,7 @@ Read-only access to the rows a replicate stored.
 
 <a id="fim.results.TrajectoryReader.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./results.py#L176)
 
 ```python
 def __init__(store: TrajectoryStore, run_id: str) -> None
@@ -32590,7 +32590,7 @@ Remember where the rows are.
 
 <a id="fim.results.TrajectoryReader.run_id"></a>
 
-#### run\_id
+#### [run\_id](./results.py#L182)
 
 ```python
 @property
@@ -32601,7 +32601,7 @@ Return the replicate's run ID.
 
 <a id="fim.results.TrajectoryReader.rows"></a>
 
-#### rows
+#### [rows](./results.py#L186)
 
 ```python
 def rows() -> Iterator[TrajectoryRow]
@@ -32611,7 +32611,7 @@ Yield the stored rows in order.
 
 <a id="fim.results.Replicate"></a>
 
-## Replicate Objects
+## [Replicate Objects](./results.py#L192)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32633,7 +32633,7 @@ One independently seeded replicate.
 
 <a id="fim.results.Summary"></a>
 
-## Summary Objects
+## [Summary Objects](./results.py#L216)
 
 ```python
 class Summary(Mapping[str, ConfidenceInterval])
@@ -32647,7 +32647,7 @@ replicates is absent.
 
 <a id="fim.results.Summary.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./results.py#L226)
 
 ```python
 def __init__(intervals: Mapping[str, ConfidenceInterval]) -> None
@@ -32657,7 +32657,7 @@ Wrap a mapping of intervals.
 
 <a id="fim.results.Summary.__getitem__"></a>
 
-#### \_\_getitem\_\_
+#### [\_\_getitem\_\_](./results.py#L230)
 
 ```python
 def __getitem__(key: str) -> ConfidenceInterval
@@ -32667,7 +32667,7 @@ Return a statistic's interval.
 
 <a id="fim.results.Summary.__iter__"></a>
 
-#### \_\_iter\_\_
+#### [\_\_iter\_\_](./results.py#L234)
 
 ```python
 def __iter__() -> Iterator[str]
@@ -32677,7 +32677,7 @@ Iterate statistic IDs.
 
 <a id="fim.results.Summary.__len__"></a>
 
-#### \_\_len\_\_
+#### [\_\_len\_\_](./results.py#L238)
 
 ```python
 def __len__() -> int
@@ -32687,7 +32687,7 @@ Return the number of statistics with an interval.
 
 <a id="fim.results.Provenance"></a>
 
-## Provenance Objects
+## [Provenance Objects](./results.py#L244)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32711,7 +32711,7 @@ What produced a result's numbers.
 
 <a id="fim.results.Result"></a>
 
-## Result Objects
+## [Result Objects](./results.py#L273)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32731,7 +32731,7 @@ Everything a run produced.
 
 <a id="fim.results.Result.only"></a>
 
-#### only
+#### [only](./results.py#L292)
 
 ```python
 def only() -> Replicate
@@ -32745,7 +32745,7 @@ Return the sole replicate.
 
 <a id="fim.results.stop_from_report"></a>
 
-#### stop\_from\_report
+#### [stop\_from\_report](./results.py#L305)
 
 ```python
 def stop_from_report(report: Mapping[str, Any]) -> Stop
@@ -32764,7 +32764,7 @@ Return the `Stop` recorded in a final report.
 
 <a id="fim.results.result_from_runs"></a>
 
-#### result\_from\_runs
+#### [result\_from\_runs](./results.py#L349)
 
 ```python
 def result_from_runs(output: RunResult | Sequence[RunResult],
@@ -32793,7 +32793,7 @@ Build a `Result` from what the engine returned.
 
 <a id="fim.run_service"></a>
 
-# fim.run\_service
+# [fim.run\_service](./run_service.py#L1)
 
 The lifecycle service: execute and control persisted Run objects.
 
@@ -32832,43 +32832,43 @@ past its checkpoint) are removed before the batch is published.
 
 <a id="fim.run_service.DEFAULT_CHECKPOINT_GENERATIONS"></a>
 
-#### DEFAULT\_CHECKPOINT\_GENERATIONS
+#### [DEFAULT\_CHECKPOINT\_GENERATIONS](./run_service.py#L105)
 
 Committed generations between periodic checkpoints.
 
 <a id="fim.run_service.DEFAULT_CHECKPOINT_SECONDS"></a>
 
-#### DEFAULT\_CHECKPOINT\_SECONDS
+#### [DEFAULT\_CHECKPOINT\_SECONDS](./run_service.py#L108)
 
 Seconds between periodic checkpoints, checked at safe points.
 
 <a id="fim.run_service.DEFAULT_CONTROL_GENERATIONS"></a>
 
-#### DEFAULT\_CONTROL\_GENERATIONS
+#### [DEFAULT\_CONTROL\_GENERATIONS](./run_service.py#L111)
 
 Generations between checks for a pause or cancel request.
 
 <a id="fim.run_service.REPLICATE_DIRECTORY_PREFIX"></a>
 
-#### REPLICATE\_DIRECTORY\_PREFIX
+#### [REPLICATE\_DIRECTORY\_PREFIX](./run_service.py#L114)
 
 Prefix of each replicate's directory inside a batch Run object.
 
 <a id="fim.run_service.BATCH_SUMMARY_FILENAME"></a>
 
-#### BATCH\_SUMMARY\_FILENAME
+#### [BATCH\_SUMMARY\_FILENAME](./run_service.py#L117)
 
 A completed batch's cross-replicate summary, beside its manifest.
 
 <a id="fim.run_service.MANIFEST_FILENAME"></a>
 
-#### MANIFEST\_FILENAME
+#### [MANIFEST\_FILENAME](./run_service.py#L120)
 
 A completed run's manifest, written last.
 
 <a id="fim.run_service.ArtifactWriter"></a>
 
-#### ArtifactWriter
+#### [ArtifactWriter](./run_service.py#L123)
 
 Writes one completed run's artifacts into a directory, manifest last.
 
@@ -32877,25 +32877,25 @@ directory.
 
 <a id="fim.run_service.StoreFactory"></a>
 
-#### StoreFactory
+#### [StoreFactory](./run_service.py#L129)
 
 Opens the trajectory log at a path for a configuration.
 
 <a id="fim.run_service.Session"></a>
 
-#### Session
+#### [Session](./run_service.py#L132)
 
 A resumable session of either shape.
 
 <a id="fim.run_service.ProgressObserver"></a>
 
-#### ProgressObserver
+#### [ProgressObserver](./run_service.py#L135)
 
 Called at each safe point with the session, for progress display.
 
 <a id="fim.run_service.DraftRunError"></a>
 
-## DraftRunError Objects
+## [DraftRunError Objects](./run_service.py#L139)
 
 ```python
 class DraftRunError(LifecycleError)
@@ -32910,7 +32910,7 @@ A draft cannot execute until its configuration is valid.
 
 <a id="fim.run_service.DraftRunError.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./run_service.py#L147)
 
 ```python
 def __init__(object_id: str, issues: tuple[ValidationIssue, ...]) -> None
@@ -32920,7 +32920,7 @@ Record the draft's issues and describe them.
 
 <a id="fim.run_service.CheckpointCadence"></a>
 
-## CheckpointCadence Objects
+## [CheckpointCadence Objects](./run_service.py#L161)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -32939,7 +32939,7 @@ When periodic checkpoints are published.
 
 <a id="fim.run_service.CheckpointCadence.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./run_service.py#L176)
 
 ```python
 def __post_init__() -> None
@@ -32949,7 +32949,7 @@ Reject a cadence that would never make progress.
 
 <a id="fim.run_service.cadence_for_params"></a>
 
-#### cadence\_for\_params
+#### [cadence\_for\_params](./run_service.py#L184)
 
 ```python
 def cadence_for_params(
@@ -32977,7 +32977,7 @@ Return the checkpoint cadence chosen by the run's Expert Settings.
 
 <a id="fim.run_service.cancel_run_object"></a>
 
-#### cancel\_run\_object
+#### [cancel\_run\_object](./run_service.py#L214)
 
 ```python
 def cancel_run_object(object_id: str,
@@ -33009,7 +33009,7 @@ no worker, so it is abandoned at once. Partial data is kept either way.
 
 <a id="fim.run_service.check_run_support"></a>
 
-#### check\_run\_support
+#### [check\_run\_support](./run_service.py#L251)
 
 ```python
 def check_run_support(params: SimulationParams) -> None
@@ -33028,7 +33028,7 @@ Refuse a configuration no resumable session can run.
 
 <a id="fim.run_service.completion_was_recovered"></a>
 
-#### completion\_was\_recovered
+#### [completion\_was\_recovered](./run_service.py#L266)
 
 ```python
 def completion_was_recovered(record: RunLifecycleRecord) -> bool
@@ -33050,7 +33050,7 @@ stopped before committing `completed` (`fim.persistence.run_receipt`).
 
 <a id="fim.run_service.default_store_factory"></a>
 
-#### default\_store\_factory
+#### [default\_store\_factory](./run_service.py#L286)
 
 ```python
 def default_store_factory(path: Path,
@@ -33061,7 +33061,7 @@ Open the trajectory log with the options the run's Expert Settings choose.
 
 <a id="fim.run_service.diagnose_run_object"></a>
 
-#### diagnose\_run\_object
+#### [diagnose\_run\_object](./run_service.py#L291)
 
 ```python
 def diagnose_run_object(run_object: RunObject) -> tuple[str, ...]
@@ -33086,7 +33086,7 @@ a completed run whose published results no longer match their receipt.
 
 <a id="fim.run_service.execute_run_object"></a>
 
-#### execute\_run\_object
+#### [execute\_run\_object](./run_service.py#L326)
 
 ```python
 def execute_run_object(
@@ -33150,13 +33150,13 @@ Start or resume a Run object and execute it until it stops.
 
 <a id="fim.run_service.load_params"></a>
 
-#### load\_params
+#### [load\_params](./run_service.py#L512)
 
 Public alias for loading simulation parameters from a RunObject.
 
 <a id="fim.run_service.replicate_directory"></a>
 
-#### replicate\_directory
+#### [replicate\_directory](./run_service.py#L649)
 
 ```python
 def replicate_directory(directory: Path, run_id: str,
@@ -33178,13 +33178,13 @@ Return one replicate's directory inside a batch Run object.
 
 <a id="fim.simulation"></a>
 
-# fim.simulation
+# [fim.simulation](./simulation.py#L1)
 
 The one function that runs a simulation: `simulate`.
 
 <a id="fim.simulation.simulate"></a>
 
-#### simulate
+#### [simulate](./simulation.py#L19)
 
 ```python
 def simulate(spec: RunSpec | RunConfig,
@@ -33227,7 +33227,7 @@ its replicate cap. A run of one replicate is a `Result` of length one;
 
 <a id="fim.spec"></a>
 
-# fim.spec
+# [fim.spec](./spec/__init__.py#L1)
 
 The grouped, immutable specification of a simulation run.
 
@@ -33237,7 +33237,7 @@ API redesign design for the reasoning behind the grouping.
 
 <a id="fim.spec.codec"></a>
 
-# fim.spec.codec
+# [fim.spec.codec](./spec/codec.py#L1)
 
 Conversion between the grouped specification and the engine's parameters.
 
@@ -33253,7 +33253,7 @@ values between it and the grouped types:
 
 <a id="fim.spec.codec.to_params"></a>
 
-#### to\_params
+#### [to\_params](./spec/codec.py#L58)
 
 ```python
 def to_params(spec: RunSpec,
@@ -33285,7 +33285,7 @@ Compile a specification into the engine's validated parameters.
 
 <a id="fim.spec.codec.from_params"></a>
 
-#### from\_params
+#### [from\_params](./spec/codec.py#L128)
 
 ```python
 def from_params(
@@ -33309,7 +33309,7 @@ number the engine derived rather than as ``"auto"``.
 
 <a id="fim.spec.codec.read_mapping"></a>
 
-#### read\_mapping
+#### [read\_mapping](./spec/codec.py#L212)
 
 ```python
 def read_mapping(path: Path | str) -> Mapping[str, Any]
@@ -33333,7 +33333,7 @@ Read a YAML configuration file into its raw mapping.
 
 <a id="fim.spec.codec.RunConfig"></a>
 
-## RunConfig Objects
+## [RunConfig Objects](./spec/codec.py#L232)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33352,7 +33352,7 @@ The contents of a configuration file, as grouped objects.
 
 <a id="fim.spec.codec.RunConfig.from_mapping"></a>
 
-#### from\_mapping
+#### [from\_mapping](./spec/codec.py#L250)
 
 ```python
 @classmethod
@@ -33378,7 +33378,7 @@ Build a configuration from a parsed configuration mapping.
 
 <a id="fim.spec.codec.RunConfig.from_params"></a>
 
-#### from\_params
+#### [from\_params](./spec/codec.py#L271)
 
 ```python
 @classmethod
@@ -33402,7 +33402,7 @@ Build a configuration from resolved engine parameters.
 
 <a id="fim.spec.codec.RunConfig.to_params"></a>
 
-#### to\_params
+#### [to\_params](./spec/codec.py#L292)
 
 ```python
 def to_params() -> SimulationParams
@@ -33412,7 +33412,7 @@ Compile to the engine's validated parameters.
 
 <a id="fim.spec.codec.RunConfig.to_mapping"></a>
 
-#### to\_mapping
+#### [to\_mapping](./spec/codec.py#L298)
 
 ```python
 def to_mapping() -> dict[str, object]
@@ -33424,7 +33424,7 @@ Labels are included when set, so the file round-trips.
 
 <a id="fim.spec.codec.load_config"></a>
 
-#### load\_config
+#### [load\_config](./spec/codec.py#L313)
 
 ```python
 def load_config(path: Path | str) -> RunConfig
@@ -33448,7 +33448,7 @@ Read and validate a YAML configuration file.
 
 <a id="fim.spec.execution"></a>
 
-# fim.spec.execution
+# [fim.spec.execution](./spec/execution.py#L1)
 
 How a run is carried out and what it keeps, apart from what it computes.
 
@@ -33459,7 +33459,7 @@ it, and take no part in a run's identity.
 
 <a id="fim.spec.execution.Execution"></a>
 
-## Execution Objects
+## [Execution Objects](./spec/execution.py#L30)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33485,7 +33485,7 @@ Which engine runs the simulation, and with how much parallelism.
 
 <a id="fim.spec.execution.Execution.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/execution.py#L54)
 
 ```python
 def __post_init__() -> None
@@ -33495,7 +33495,7 @@ Check every value.
 
 <a id="fim.spec.execution.Recording"></a>
 
-## Recording Objects
+## [Recording Objects](./spec/execution.py#L69)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33523,7 +33523,7 @@ What a run writes down.
 
 <a id="fim.spec.execution.Recording.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/execution.py#L97)
 
 ```python
 def __post_init__() -> None
@@ -33533,7 +33533,7 @@ Normalize the directory and check every value.
 
 <a id="fim.spec.fields"></a>
 
-# fim.spec.fields
+# [fim.spec.fields](./spec/fields.py#L1)
 
 The table that ties configuration keys to the grouped specification.
 
@@ -33549,7 +33549,7 @@ to address a setting by name, such as a parameter sweep.
 
 <a id="fim.spec.fields.FieldMap"></a>
 
-## FieldMap Objects
+## [FieldMap Objects](./spec/fields.py#L20)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -33571,31 +33571,31 @@ One configuration key and where its value lives.
 
 <a id="fim.spec.fields.FIELD_MAP"></a>
 
-#### FIELD\_MAP
+#### [FIELD\_MAP](./spec/fields.py#L40)
 
 Every key that maps one-to-one onto a specification attribute.
 
 <a id="fim.spec.fields.CONVERTED_KEYS"></a>
 
-#### CONVERTED\_KEYS
+#### [CONVERTED\_KEYS](./spec/fields.py#L74)
 
 Keys the codec converts by hand rather than through `FIELD_MAP`.
 
 <a id="fim.spec.fields.PATHS"></a>
 
-#### PATHS
+#### [PATHS](./spec/fields.py#L96)
 
 Configuration key to its dotted attribute path, for the mapped keys.
 
 <a id="fim.spec.identity"></a>
 
-# fim.spec.identity
+# [fim.spec.identity](./spec/identity.py#L1)
 
 A run's identity, from its specification.
 
 <a id="fim.spec.identity.run_identity"></a>
 
-#### run\_identity
+#### [run\_identity](./spec/identity.py#L10)
 
 ```python
 def run_identity(spec: RunSpec) -> str
@@ -33625,7 +33625,7 @@ a new ID, as it should.
 
 <a id="fim.spec.model"></a>
 
-# fim.spec.model
+# [fim.spec.model](./spec/model.py#L1)
 
 The scientific model: population, migration, mutation, loci, and start.
 
@@ -33642,13 +33642,13 @@ class added to the union.
 
 <a id="fim.spec.model.Ploidy"></a>
 
-#### Ploidy
+#### [Ploidy](./spec/model.py#L36)
 
 Gene copies carried by one individual (haploid through tetraploid).
 
 <a id="fim.spec.model.Population"></a>
 
-## Population Objects
+## [Population Objects](./spec/model.py#L41)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33667,7 +33667,7 @@ The size of each deme and the ploidy of its individuals.
 
 <a id="fim.spec.model.Population.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/model.py#L55)
 
 ```python
 def __post_init__() -> None
@@ -33677,7 +33677,7 @@ Normalize a list of sizes to a tuple and check every value.
 
 <a id="fim.spec.model.Population.gene_copies"></a>
 
-#### gene\_copies
+#### [gene\_copies](./spec/model.py#L72)
 
 ```python
 @property
@@ -33688,7 +33688,7 @@ Return the gene copies per deme: individuals times ploidy.
 
 <a id="fim.spec.model.Locus"></a>
 
-## Locus Objects
+## [Locus Objects](./spec/model.py#L80)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33705,7 +33705,7 @@ One tracked locus.
 
 <a id="fim.spec.model.Locus.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/model.py#L92)
 
 ```python
 def __post_init__() -> None
@@ -33715,7 +33715,7 @@ Check the identifier and length.
 
 <a id="fim.spec.model.InfiniteAlleles"></a>
 
-## InfiniteAlleles Objects
+## [InfiniteAlleles Objects](./spec/model.py#L124)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33731,7 +33731,7 @@ Mutation to a brand-new allele each time (the infinite-alleles model).
 
 <a id="fim.spec.model.InfiniteAlleles.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/model.py#L134)
 
 ```python
 def __post_init__() -> None
@@ -33741,7 +33741,7 @@ Check the rate.
 
 <a id="fim.spec.model.FiniteAlleles"></a>
 
-## FiniteAlleles Objects
+## [FiniteAlleles Objects](./spec/model.py#L140)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33759,7 +33759,7 @@ The number of alleles at a locus is `4 ** length` (see `Locus`).
 
 <a id="fim.spec.model.FiniteAlleles.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/model.py#L152)
 
 ```python
 def __post_init__() -> None
@@ -33769,13 +33769,13 @@ Check the rate.
 
 <a id="fim.spec.model.Mutation"></a>
 
-#### Mutation
+#### [Mutation](./spec/model.py#L157)
 
 The mutation model: one of the variants above.
 
 <a id="fim.spec.model.FoundingAlleles"></a>
 
-## FoundingAlleles Objects
+## [FoundingAlleles Objects](./spec/model.py#L162)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33792,7 +33792,7 @@ Start every deme from the same founding alleles (the default).
 
 <a id="fim.spec.model.FoundingAlleles.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/model.py#L174)
 
 ```python
 def __post_init__() -> None
@@ -33802,7 +33802,7 @@ Check the count and concentration.
 
 <a id="fim.spec.model.ExplicitFrequencies"></a>
 
-## ExplicitFrequencies Objects
+## [ExplicitFrequencies Objects](./spec/model.py#L181)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33818,7 +33818,7 @@ Start from stated allele frequencies.
 
 <a id="fim.spec.model.ExplicitFrequencies.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/model.py#L191)
 
 ```python
 def __post_init__() -> None
@@ -33828,7 +33828,7 @@ Require a non-empty table.
 
 <a id="fim.spec.model.EquilibriumSplit"></a>
 
-## EquilibriumSplit Objects
+## [EquilibriumSplit Objects](./spec/model.py#L198)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33849,7 +33849,7 @@ divided into the model's demes.
 
 <a id="fim.spec.model.EquilibriumSplit.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/model.py#L216)
 
 ```python
 def __post_init__() -> None
@@ -33859,13 +33859,13 @@ Check the three stopping values against one another.
 
 <a id="fim.spec.model.InitialCondition"></a>
 
-#### InitialCondition
+#### [InitialCondition](./spec/model.py#L227)
 
 How generation zero is built: one of the variants above.
 
 <a id="fim.spec.model.Model"></a>
 
-## Model Objects
+## [Model Objects](./spec/model.py#L255)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33887,7 +33887,7 @@ The finite island model being simulated.
 
 <a id="fim.spec.model.Model.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/model.py#L277)
 
 ```python
 def __post_init__() -> None
@@ -33897,7 +33897,7 @@ Normalize sequences and check each part and the sizes that must agree.
 
 <a id="fim.spec.policy"></a>
 
-# fim.spec.policy
+# [fim.spec.policy](./spec/policy.py#L1)
 
 How a run decides it is done and how its numbers are summarized.
 
@@ -33908,19 +33908,19 @@ reported statistics are computed. Defaults are the engine's own: every
 
 <a id="fim.spec.policy.CONFIDENCE_LEVELS"></a>
 
-#### CONFIDENCE\_LEVELS
+#### [CONFIDENCE\_LEVELS](./spec/policy.py#L33)
 
 The confidence levels the engine supports for its intervals.
 
 <a id="fim.spec.policy.Auto"></a>
 
-#### Auto
+#### [Auto](./spec/policy.py#L36)
 
 The string that asks the engine to derive a value from the model.
 
 <a id="fim.spec.policy.Stopping"></a>
 
-## Stopping Objects
+## [Stopping Objects](./spec/policy.py#L41)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33945,7 +33945,7 @@ When one replicate counts as converged.
 
 <a id="fim.spec.policy.Stopping.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/policy.py#L67)
 
 ```python
 def __post_init__() -> None
@@ -33955,7 +33955,7 @@ Normalize names and precision overrides, then check every value.
 
 <a id="fim.spec.policy.Replication"></a>
 
-## Replication Objects
+## [Replication Objects](./spec/policy.py#L105)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33981,7 +33981,7 @@ How many independent replicates to run.
 
 <a id="fim.spec.policy.Replication.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/policy.py#L130)
 
 ```python
 def __post_init__() -> None
@@ -33991,7 +33991,7 @@ Check every value.
 
 <a id="fim.spec.policy.Analysis"></a>
 
-## Analysis Objects
+## [Analysis Objects](./spec/policy.py#L144)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -34011,7 +34011,7 @@ How the reported statistics are computed.
 
 <a id="fim.spec.policy.Analysis.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/policy.py#L160)
 
 ```python
 def __post_init__() -> None
@@ -34021,13 +34021,13 @@ Check every value.
 
 <a id="fim.spec.run"></a>
 
-# fim.spec.run
+# [fim.spec.run](./spec/run.py#L1)
 
 The complete scientific specification of one run.
 
 <a id="fim.spec.run.RunSpec"></a>
 
-## RunSpec Objects
+## [RunSpec Objects](./spec/run.py#L15)
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -34056,7 +34056,7 @@ its own.
 
 <a id="fim.spec.run.RunSpec.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./spec/run.py#L43)
 
 ```python
 def __post_init__() -> None
@@ -34066,7 +34066,7 @@ Check the seed and the type of each group.
 
 <a id="fim.spec.validation"></a>
 
-# fim.spec.validation
+# [fim.spec.validation](./spec/validation.py#L1)
 
 Small field checks shared by the specification types.
 
@@ -34078,7 +34078,7 @@ the single place those rules live.
 
 <a id="fim.spec.validation.check_bool"></a>
 
-#### check\_bool
+#### [check\_bool](./spec/validation.py#L19)
 
 ```python
 def check_bool(path: str, value: object) -> None
@@ -34098,7 +34098,7 @@ Require a real `bool` (not `0` or `1`).
 
 <a id="fim.spec.validation.check_choice"></a>
 
-#### check\_choice
+#### [check\_choice](./spec/validation.py#L33)
 
 ```python
 def check_choice(path: str, value: object, alias: Any) -> None
@@ -34119,7 +34119,7 @@ Require `value` to be one of the strings in a `Literal` alias.
 
 <a id="fim.spec.validation.check_finite"></a>
 
-#### check\_finite
+#### [check\_finite](./spec/validation.py#L50)
 
 ```python
 def check_finite(path: str,
@@ -34145,7 +34145,7 @@ Require a finite real number, optionally above or at a floor.
 
 <a id="fim.spec.validation.check_int"></a>
 
-#### check\_int
+#### [check\_int](./spec/validation.py#L80)
 
 ```python
 def check_int(path: str, value: object, *, minimum: int | None = None) -> None
@@ -34166,7 +34166,7 @@ Require a whole number (not a `bool`), optionally at least `minimum`.
 
 <a id="fim.spec.validation.check_int_or_auto"></a>
 
-#### check\_int\_or\_auto
+#### [check\_int\_or\_auto](./spec/validation.py#L97)
 
 ```python
 def check_int_or_auto(path: str, value: object, *, minimum: int) -> None
@@ -34187,7 +34187,7 @@ Require the string ``"auto"`` or a whole number at least `minimum`.
 
 <a id="fim.spec.validation.check_probability"></a>
 
-#### check\_probability
+#### [check\_probability](./spec/validation.py#L116)
 
 ```python
 def check_probability(path: str, value: object) -> None
@@ -34207,7 +34207,7 @@ Require a finite number in the closed interval from 0 to 1.
 
 <a id="fim.spec.validation.check_strings"></a>
 
-#### check\_strings
+#### [check\_strings](./spec/validation.py#L132)
 
 ```python
 def check_strings(path: str, values: Iterable[object]) -> None
@@ -34227,7 +34227,7 @@ Require every item to be a non-empty string.
 
 <a id="fim.statistics"></a>
 
-# fim.statistics
+# [fim.statistics](./statistics/__init__.py#L1)
 
 Pure diversity and differentiation statistics for finite-island models.
 
@@ -34270,7 +34270,7 @@ by its own name directly.
 
 <a id="fim.statistics.catalog"></a>
 
-# fim.statistics.catalog
+# [fim.statistics.catalog](./statistics/catalog.py#L1)
 
 The one list of every statistic fim computes, captures or shows.
 
@@ -34309,7 +34309,7 @@ This module imports nothing from the simulator or the GUI. It sits in
 
 <a id="fim.statistics.catalog.StatisticSpec"></a>
 
-## StatisticSpec Objects
+## [StatisticSpec Objects](./statistics/catalog.py#L84)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -34344,7 +34344,7 @@ One statistic's identity, scope, cost and presentation.
 
 <a id="fim.statistics.catalog.nei_key"></a>
 
-#### nei\_key
+#### [nei\_key](./statistics/catalog.py#L307)
 
 ```python
 def nei_key(measure: Measure, scope: Scope, denominator: NeiDenominator,
@@ -34368,13 +34368,13 @@ Return the catalog key of one Nei family member.
 
 <a id="fim.statistics.catalog.CATALOG"></a>
 
-#### CATALOG
+#### [CATALOG](./statistics/catalog.py#L479)
 
 Every statistic, in display order. Keys are unique.
 
 <a id="fim.statistics.catalog.spec"></a>
 
-#### spec
+#### [spec](./statistics/catalog.py#L489)
 
 ```python
 def spec(key: str) -> StatisticSpec
@@ -34388,7 +34388,7 @@ Return the spec for `key`.
 
 <a id="fim.statistics.catalog.history_keys"></a>
 
-#### history\_keys
+#### [history\_keys](./statistics/catalog.py#L506)
 
 ```python
 def history_keys(history: History) -> tuple[str, ...]
@@ -34398,7 +34398,7 @@ Return the keys tracked per generation under one `history` policy.
 
 <a id="fim.statistics.catalog.report_keys"></a>
 
-#### report\_keys
+#### [report\_keys](./statistics/catalog.py#L511)
 
 ```python
 def report_keys() -> tuple[str, ...]
@@ -34408,7 +34408,7 @@ Return every global statistic a `FinalReport` carries, in catalog order.
 
 <a id="fim.statistics.catalog.pair_keys"></a>
 
-#### pair\_keys
+#### [pair\_keys](./statistics/catalog.py#L516)
 
 ```python
 def pair_keys() -> tuple[str, ...]
@@ -34418,7 +34418,7 @@ Return every pair-scope statistic, in catalog order.
 
 <a id="fim.statistics.catalog.convergence_statistic_keys"></a>
 
-#### convergence\_statistic\_keys
+#### [convergence\_statistic\_keys](./statistics/catalog.py#L521)
 
 ```python
 def convergence_statistic_keys() -> tuple[str, ...]
@@ -34428,7 +34428,7 @@ Return every statistic a run may stop on, in catalog order.
 
 <a id="fim.statistics.catalog.unbounded_keys"></a>
 
-#### unbounded\_keys
+#### [unbounded\_keys](./statistics/catalog.py#L526)
 
 ```python
 def unbounded_keys() -> tuple[str, ...]
@@ -34443,7 +34443,7 @@ overrides it).
 
 <a id="fim.statistics.catalog.default_shown_keys"></a>
 
-#### default\_shown\_keys
+#### [default\_shown\_keys](./statistics/catalog.py#L539)
 
 ```python
 def default_shown_keys() -> tuple[str, ...]
@@ -34453,7 +34453,7 @@ Return what a fresh install shows, in catalog order.
 
 <a id="fim.statistics.catalog.expensive_statistics_requested"></a>
 
-#### expensive\_statistics\_requested
+#### [expensive\_statistics\_requested](./statistics/catalog.py#L544)
 
 ```python
 def expensive_statistics_requested(shown: Iterable[str]) -> bool
@@ -34481,7 +34481,7 @@ engine always computes what it watches).
 
 <a id="fim.statistics.catalog.catalog_payload"></a>
 
-#### catalog\_payload
+#### [catalog\_payload](./statistics/catalog.py#L565)
 
 ```python
 def catalog_payload() -> list[dict[str, object]]
@@ -34494,7 +34494,7 @@ its rows, columns, checkboxes and tooltips from it.
 
 <a id="fim.statistics.differentiation"></a>
 
-# fim.statistics.differentiation
+# [fim.statistics.differentiation](./statistics/differentiation.py#L1)
 
 Allele-frequency diversity and differentiation statistics.
 
@@ -34545,7 +34545,7 @@ annotation does and does not promise about either half.
 
 <a id="fim.statistics.differentiation.DifferentiationReport"></a>
 
-## DifferentiationReport Objects
+## [DifferentiationReport Objects](./statistics/differentiation.py#L85)
 
 ```python
 class DifferentiationReport(TypedDict)
@@ -34587,7 +34587,7 @@ excluded.
 
 <a id="fim.statistics.differentiation.heterozygosity"></a>
 
-#### heterozygosity
+#### [heterozygosity](./statistics/differentiation.py#L386)
 
 ```python
 def heterozygosity(frequencies: Mapping[Any, Any]) -> float
@@ -34609,7 +34609,7 @@ of alleles).
 
 <a id="fim.statistics.differentiation.unbiased_heterozygosity"></a>
 
-#### unbiased\_heterozygosity
+#### [unbiased\_heterozygosity](./statistics/differentiation.py#L405)
 
 ```python
 def unbiased_heterozygosity(frequencies: Mapping[Any, Any],
@@ -34657,7 +34657,7 @@ because of sampling without replacement; multiplying by
 
 <a id="fim.statistics.differentiation.identity"></a>
 
-#### identity
+#### [identity](./statistics/differentiation.py#L461)
 
 ```python
 def identity(frequencies: Mapping[Any, Any]) -> float
@@ -34673,7 +34673,7 @@ simpler to read.
 
 <a id="fim.statistics.differentiation.hill_number"></a>
 
-#### hill\_number
+#### [hill\_number](./statistics/differentiation.py#L474)
 
 ```python
 def hill_number(frequencies: Mapping[Any, Any], order: float | int) -> float
@@ -34697,7 +34697,7 @@ each allele by its own actual frequency.
 
 <a id="fim.statistics.differentiation.effective_allele_count"></a>
 
-#### effective\_allele\_count
+#### [effective\_allele\_count](./statistics/differentiation.py#L495)
 
 ```python
 def effective_allele_count(heterozygosity_value: float) -> float
@@ -34750,7 +34750,7 @@ exists to make cheap and available everywhere an already-aggregated
 
 <a id="fim.statistics.differentiation.h_s"></a>
 
-#### h\_s
+#### [h\_s](./statistics/differentiation.py#L570)
 
 ```python
 def h_s(table: FrequencyTable[AlleleKey],
@@ -34769,7 +34769,7 @@ from.
 
 <a id="fim.statistics.differentiation.h_t"></a>
 
-#### h\_t
+#### [h\_t](./statistics/differentiation.py#L601)
 
 ```python
 def h_t(table: FrequencyTable[AlleleKey],
@@ -34789,7 +34789,7 @@ material every differentiation measure in this module works with.
 
 <a id="fim.statistics.differentiation.gd_from_within_and_total"></a>
 
-#### gd\_from\_within\_and\_total
+#### [gd\_from\_within\_and\_total](./statistics/differentiation.py#L620)
 
 ```python
 def gd_from_within_and_total(within: float, total: float,
@@ -34815,7 +34815,7 @@ first (`_require_multiple_demes`).
 
 <a id="fim.statistics.differentiation.gs"></a>
 
-#### gs
+#### [gs](./statistics/differentiation.py#L641)
 
 ```python
 def gs(table: FrequencyTable[AlleleKey],
@@ -34840,7 +34840,7 @@ need; see `gd`, below, for that.
 
 <a id="fim.statistics.differentiation.gd"></a>
 
-#### gd
+#### [gd](./statistics/differentiation.py#L663)
 
 ```python
 def gd(table: FrequencyTable[AlleleKey],
@@ -34855,7 +34855,7 @@ one), the same requirement `g_st`/`h_st` already carry.
 
 <a id="fim.statistics.differentiation.h_st"></a>
 
-#### h\_st
+#### [h\_st](./statistics/differentiation.py#L719)
 
 ```python
 def h_st(table: FrequencyTable[AlleleKey],
@@ -34880,7 +34880,7 @@ nothing more than this correctly-partitioned quantity, normalized.
 
 <a id="fim.statistics.differentiation.total_hill_number"></a>
 
-#### total\_hill\_number
+#### [total\_hill\_number](./statistics/differentiation.py#L743)
 
 ```python
 def total_hill_number(table: FrequencyTable[AlleleKey],
@@ -34897,7 +34897,7 @@ combined result, at whichever `order` is requested.
 
 <a id="fim.statistics.differentiation.within_hill_number"></a>
 
-#### within\_hill\_number
+#### [within\_hill\_number](./statistics/differentiation.py#L760)
 
 ```python
 def within_hill_number(table: FrequencyTable[AlleleKey],
@@ -34918,7 +34918,7 @@ that shows up in this module).
 
 <a id="fim.statistics.differentiation.g_st_from_demes"></a>
 
-#### g\_st\_from\_demes
+#### [g\_st\_from\_demes](./statistics/differentiation.py#L799)
 
 ```python
 def g_st_from_demes(total: float, within: float) -> float | None
@@ -34937,7 +34937,7 @@ had already validated once).
 
 <a id="fim.statistics.differentiation.g_st"></a>
 
-#### g\_st
+#### [g\_st](./statistics/differentiation.py#L816)
 
 ```python
 def g_st(table: FrequencyTable[AlleleKey],
@@ -34961,7 +34961,7 @@ answer, not a fabricated `0.0` or `1.0`.
 
 <a id="fim.statistics.differentiation.d_m"></a>
 
-#### d\_m
+#### [d\_m](./statistics/differentiation.py#L842)
 
 ```python
 def d_m(table: FrequencyTable[AlleleKey]) -> float
@@ -34995,7 +34995,7 @@ there is no `deme_weights` parameter here for the same reason
 
 <a id="fim.statistics.differentiation.r_st"></a>
 
-#### r\_st
+#### [r\_st](./statistics/differentiation.py#L883)
 
 ```python
 def r_st(table: FrequencyTable[AlleleKey]) -> float | None
@@ -35017,7 +35017,7 @@ structurally identical zero-denominator case.
 
 <a id="fim.statistics.differentiation.g_st_log"></a>
 
-#### g\_st\_log
+#### [g\_st\_log](./statistics/differentiation.py#L906)
 
 ```python
 def g_st_log(table: FrequencyTable[AlleleKey],
@@ -35063,7 +35063,7 @@ are interchangeable because they share a name.
 
 <a id="fim.statistics.differentiation.g_st_max"></a>
 
-#### g\_st\_max
+#### [g\_st\_max](./statistics/differentiation.py#L958)
 
 ```python
 def g_st_max(h_s: float, deme_count: int) -> float
@@ -35101,7 +35101,7 @@ dividing by this ceiling is actually for.
 
 <a id="fim.statistics.differentiation.derived_differentiation"></a>
 
-#### derived\_differentiation
+#### [derived\_differentiation](./statistics/differentiation.py#L995)
 
 ```python
 def derived_differentiation(h_s: float, h_t: float,
@@ -35151,7 +35151,7 @@ the engine's default ``D`` and ``G_ST`` use.
 
 <a id="fim.statistics.differentiation.g_st_prime"></a>
 
-#### g\_st\_prime
+#### [g\_st\_prime](./statistics/differentiation.py#L1070)
 
 ```python
 def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float
@@ -35199,7 +35199,7 @@ interpreting this statistic, not a defect in computing it.
 
 <a id="fim.statistics.differentiation.jost_d_from_within_and_total"></a>
 
-#### jost\_d\_from\_within\_and\_total
+#### [jost\_d\_from\_within\_and\_total](./statistics/differentiation.py#L1113)
 
 ```python
 def jost_d_from_within_and_total(deme_count: int, within: float,
@@ -35221,7 +35221,7 @@ satisfy this signature.
 
 <a id="fim.statistics.differentiation.jost_d"></a>
 
-#### jost\_d
+#### [jost\_d](./statistics/differentiation.py#L1131)
 
 ```python
 def jost_d(table: FrequencyTable[AlleleKey]) -> float
@@ -35243,7 +35243,7 @@ relative to `E_ST`.
 
 <a id="fim.statistics.differentiation.e_st"></a>
 
-#### e\_st
+#### [e\_st](./statistics/differentiation.py#L1171)
 
 ```python
 def e_st(table: FrequencyTable[AlleleKey],
@@ -35268,7 +35268,7 @@ weight of other, already-differentiating alleles.
 
 <a id="fim.statistics.differentiation.k_st"></a>
 
-#### k\_st
+#### [k\_st](./statistics/differentiation.py#L1220)
 
 ```python
 def k_st(table: FrequencyTable[AlleleKey]) -> float
@@ -35289,7 +35289,7 @@ any measure in this module.
 
 <a id="fim.statistics.differentiation.allelic_distance"></a>
 
-#### allelic\_distance
+#### [allelic\_distance](./statistics/differentiation.py#L1239)
 
 ```python
 def allelic_distance(table: FrequencyTable[AlleleKey]) -> float
@@ -35307,7 +35307,7 @@ unordered deme pairs.
 
 <a id="fim.statistics.differentiation.gregorius_delta"></a>
 
-#### gregorius\_delta
+#### [gregorius\_delta](./statistics/differentiation.py#L1308)
 
 ```python
 def gregorius_delta(table: FrequencyTable[AlleleKey],
@@ -35325,7 +35325,7 @@ of the Manhattan distance between their frequency vectors.
 
 <a id="fim.statistics.differentiation.mutual_information"></a>
 
-#### mutual\_information
+#### [mutual\_information](./statistics/differentiation.py#L1345)
 
 ```python
 def mutual_information(table: FrequencyTable[AlleleKey],
@@ -35342,7 +35342,7 @@ allele identity and deme membership were independent.
 
 <a id="fim.statistics.differentiation.f_st_coancestry_matrix"></a>
 
-#### f\_st\_coancestry\_matrix
+#### [f\_st\_coancestry\_matrix](./statistics/differentiation.py#L1363)
 
 ```python
 def f_st_coancestry_matrix(
@@ -35380,7 +35380,7 @@ for demes ``i`` and ``j`` (Eq. 9 / 11).
 
 <a id="fim.statistics.differentiation.population_specific_f_st"></a>
 
-#### population\_specific\_f\_st
+#### [population\_specific\_f\_st](./statistics/differentiation.py#L1422)
 
 ```python
 def population_specific_f_st(
@@ -35409,7 +35409,7 @@ identity of deme ``i``, and ``theta_B`` is the mean between-deme identity.
 
 <a id="fim.statistics.differentiation.population_pair_f_st"></a>
 
-#### population\_pair\_f\_st
+#### [population\_pair\_f\_st](./statistics/differentiation.py#L1446)
 
 ```python
 def population_pair_f_st(table: FrequencyTable[AlleleKey], i: int,
@@ -35442,7 +35442,7 @@ meaning together they harbor greater diversity than the global background.
 
 <a id="fim.statistics.differentiation.pairwise_f_st"></a>
 
-#### pairwise\_f\_st
+#### [pairwise\_f\_st](./statistics/differentiation.py#L1479)
 
 ```python
 def pairwise_f_st(frequencies_x: Mapping[Any, Any],
@@ -35478,7 +35478,7 @@ and reference point ``theta_{XY}``.
 
 <a id="fim.statistics.differentiation.overall_coancestry_f_st"></a>
 
-#### overall\_coancestry\_f\_st
+#### [overall\_coancestry\_f\_st](./statistics/differentiation.py#L1520)
 
 ```python
 def overall_coancestry_f_st(table: FrequencyTable[AlleleKey]) -> float
@@ -35509,7 +35509,7 @@ unweighted F_ST.
 
 <a id="fim.statistics.differentiation.differentiation_q"></a>
 
-#### differentiation\_q
+#### [differentiation\_q](./statistics/differentiation.py#L1547)
 
 ```python
 def differentiation_q(table: FrequencyTable[AlleleKey],
@@ -35542,7 +35542,7 @@ Jost's ``D`` respectively.
 
 <a id="fim.statistics.differentiation.equilibrium_d"></a>
 
-#### equilibrium\_d
+#### [equilibrium\_d](./statistics/differentiation.py#L1598)
 
 ```python
 def equilibrium_d(m: float, mu: float, d: int) -> float
@@ -35582,7 +35582,7 @@ result the guide discusses at length.
 
 <a id="fim.statistics.differentiation.equilibrium_g_st"></a>
 
-#### equilibrium\_g\_st
+#### [equilibrium\_g\_st](./statistics/differentiation.py#L1634)
 
 ```python
 def equilibrium_g_st(population_size: int, m: float, mu: float,
@@ -35635,7 +35635,7 @@ terms use ``2 * N`` instead — the same quantity, `4 * N_individuals
 
 <a id="fim.statistics.differentiation.identity_recovery_rate"></a>
 
-#### identity\_recovery\_rate
+#### [identity\_recovery\_rate](./statistics/differentiation.py#L1730)
 
 ```python
 def identity_recovery_rate(population_size: int, m: float) -> float
@@ -35677,7 +35677,7 @@ comparison against that recursion across six representative
 
 <a id="fim.statistics.differentiation.identity_recovery_equilibrium"></a>
 
-#### identity\_recovery\_equilibrium
+#### [identity\_recovery\_equilibrium](./statistics/differentiation.py#L1766)
 
 ```python
 def identity_recovery_equilibrium(population_size: int, m: float) -> float
@@ -35703,7 +35703,7 @@ from.
 
 <a id="fim.statistics.differentiation.identity_recovery_trajectory"></a>
 
-#### identity\_recovery\_trajectory
+#### [identity\_recovery\_trajectory](./statistics/differentiation.py#L1786)
 
 ```python
 def identity_recovery_trajectory(f0_initial: float, population_size: int,
@@ -35744,7 +35744,7 @@ see that function's own docstring.
 
 <a id="fim.statistics.differentiation.identity_recovery_half_life"></a>
 
-#### identity\_recovery\_half\_life
+#### [identity\_recovery\_half\_life](./statistics/differentiation.py#L1841)
 
 ```python
 def identity_recovery_half_life(population_size: int, m: float) -> float
@@ -35780,7 +35780,7 @@ than evaluating ``log(0.5) / log(0.0)``, which is the correct limit
 
 <a id="fim.statistics.differentiation.mutation_negligible_transition"></a>
 
-#### mutation\_negligible\_transition
+#### [mutation\_negligible\_transition](./statistics/differentiation.py#L1874)
 
 ```python
 def mutation_negligible_transition(h_s_initial: float, mu: float) -> float
@@ -35827,7 +35827,7 @@ limit rather than a division-by-zero to guard against.
 
 <a id="fim.statistics.differentiation.mutation_negligible_equilibrium"></a>
 
-#### mutation\_negligible\_equilibrium
+#### [mutation\_negligible\_equilibrium](./statistics/differentiation.py#L1923)
 
 ```python
 def mutation_negligible_equilibrium(m: float, mu: float,
@@ -35864,7 +35864,7 @@ value.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated"></a>
 
-#### equilibrium\_shannon\_entropy\_isolated
+#### [equilibrium\_shannon\_entropy\_isolated](./statistics/differentiation.py#L2047)
 
 ```python
 def equilibrium_shannon_entropy_isolated(population_size: int,
@@ -35940,7 +35940,7 @@ exactly, since `within_hill_number` itself already returns
 
 <a id="fim.statistics.differentiation.equilibrium_heterozygosity_isolated"></a>
 
-#### equilibrium\_heterozygosity\_isolated
+#### [equilibrium\_heterozygosity\_isolated](./statistics/differentiation.py#L2117)
 
 ```python
 def equilibrium_heterozygosity_isolated(population_size: int,
@@ -35971,7 +35971,7 @@ gene-copy convention. This is the heterozygosity counterpart to
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated_smm"></a>
 
-#### equilibrium\_shannon\_entropy\_isolated\_smm
+#### [equilibrium\_shannon\_entropy\_isolated\_smm](./statistics/differentiation.py#L2142)
 
 ```python
 def equilibrium_shannon_entropy_isolated_smm(population_size: int,
@@ -36025,7 +36025,7 @@ simulator cross-check.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_total"></a>
 
-#### equilibrium\_shannon\_entropy\_total
+#### [equilibrium\_shannon\_entropy\_total](./statistics/differentiation.py#L2191)
 
 ```python
 def equilibrium_shannon_entropy_total(population_size: int, m: float,
@@ -36078,7 +36078,7 @@ Unbounded above, the same as `equilibrium_shannon_entropy_isolated`
 
 <a id="fim.statistics.differentiation.equilibrium_heterozygosity_total"></a>
 
-#### equilibrium\_heterozygosity\_total
+#### [equilibrium\_heterozygosity\_total](./statistics/differentiation.py#L2243)
 
 ```python
 def equilibrium_heterozygosity_total(population_size: int, m: float, mu: float,
@@ -36111,7 +36111,7 @@ heterozygosity.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_subpopulation"></a>
 
-#### equilibrium\_shannon\_entropy\_subpopulation
+#### [equilibrium\_shannon\_entropy\_subpopulation](./statistics/differentiation.py#L2293)
 
 ```python
 def equilibrium_shannon_entropy_subpopulation(population_size: int, m: float,
@@ -36166,7 +36166,7 @@ population-dependent formula in this module already shares.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_differentiation"></a>
 
-#### equilibrium\_shannon\_differentiation
+#### [equilibrium\_shannon\_differentiation](./statistics/differentiation.py#L2355)
 
 ```python
 def equilibrium_shannon_differentiation(population_size: int, m: float,
@@ -36217,7 +36217,7 @@ not a bug to raise on.
 
 <a id="fim.statistics.differentiation.statistics_report"></a>
 
-#### statistics\_report
+#### [statistics\_report](./statistics/differentiation.py#L2403)
 
 ```python
 def statistics_report(
@@ -36313,7 +36313,7 @@ redundant re-validation *through this function* is gone.
 
 <a id="fim.statistics.genetic_distance"></a>
 
-# fim.statistics.genetic\_distance
+# [fim.statistics.genetic\_distance](./statistics/genetic_distance.py#L1)
 
 Pairwise genetic distance and identity statistics between populations.
 
@@ -36375,19 +36375,19 @@ Two facts follow and are relied on by tests and documentation:
 
 <a id="fim.statistics.genetic_distance.NEI_DENOMINATORS"></a>
 
-#### NEI\_DENOMINATORS
+#### [NEI\_DENOMINATORS](./statistics/genetic_distance.py#L101)
 
 Every denominator the Nei distance family accepts, Nei's own first.
 
 <a id="fim.statistics.genetic_distance.NEI_LOCUS_RULES"></a>
 
-#### NEI\_LOCUS\_RULES
+#### [NEI\_LOCUS\_RULES](./statistics/genetic_distance.py#L104)
 
 Every multi-locus rule the Nei distance family accepts, Nei's own first.
 
 <a id="fim.statistics.genetic_distance.cross_identity"></a>
 
-#### cross\_identity
+#### [cross\_identity](./statistics/genetic_distance.py#L139)
 
 ```python
 def cross_identity(frequencies_x: Mapping[Any, Any],
@@ -36413,7 +36413,7 @@ same allele. This is the numerator of Nei (1972) Eq. 1.
 
 <a id="fim.statistics.genetic_distance.nei_d"></a>
 
-#### nei\_d
+#### [nei\_d](./statistics/genetic_distance.py#L164)
 
 ```python
 def nei_d(loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
@@ -36434,7 +36434,7 @@ Return Nei's standard genetic distance ``D`` (alias for `nei_standard_distance`)
 
 <a id="fim.statistics.genetic_distance.nei_d_prime"></a>
 
-#### nei\_d\_prime
+#### [nei\_d\_prime](./statistics/genetic_distance.py#L180)
 
 ```python
 def nei_d_prime(
@@ -36456,7 +36456,7 @@ Return Nei's distance ``D'`` under varying rates (alias for `nei_mean_distance`)
 
 <a id="fim.statistics.genetic_distance.nei_founder_identity"></a>
 
-#### nei\_founder\_identity
+#### [nei\_founder\_identity](./statistics/genetic_distance.py#L196)
 
 ```python
 def nei_founder_identity(j_z: float, n_x: float, n_y: float) -> float
@@ -36496,7 +36496,7 @@ I_0 = \frac{J_Z}{\sqrt{\left[J_Z + \frac{1 - J_Z}{2 N_X}\right]
 
 <a id="fim.statistics.genetic_distance.nei_geometric_distance"></a>
 
-#### nei\_geometric\_distance
+#### [nei\_geometric\_distance](./statistics/genetic_distance.py#L247)
 
 ```python
 def nei_geometric_distance(
@@ -36523,7 +36523,7 @@ Algebraically identical to `nei_mean_distance` (Eq. 4').
 
 <a id="fim.statistics.genetic_distance.nei_geometric_identity"></a>
 
-#### nei\_geometric\_identity
+#### [nei\_geometric\_identity](./statistics/genetic_distance.py#L273)
 
 ```python
 def nei_geometric_identity(
@@ -36549,7 +36549,7 @@ and ``J'_XY`` are the geometric means of per-locus identities across loci.
 
 <a id="fim.statistics.genetic_distance.nei_identity"></a>
 
-#### nei\_identity
+#### [nei\_identity](./statistics/genetic_distance.py#L318)
 
 ```python
 def nei_identity(
@@ -36577,7 +36577,7 @@ loci, ``I = J_XY / sqrt(J_X * J_Y)`` (Eq. 2), where ``J_X``, ``J_Y``, and
 
 <a id="fim.statistics.genetic_distance.nei_mean_distance"></a>
 
-#### nei\_mean\_distance
+#### [nei\_mean\_distance](./statistics/genetic_distance.py#L356)
 
 ```python
 def nei_mean_distance(
@@ -36603,7 +36603,7 @@ Algebraically identical to `nei_geometric_distance` (Eq. 4).
 
 <a id="fim.statistics.genetic_distance.nei_standard_distance"></a>
 
-#### nei\_standard\_distance
+#### [nei\_standard\_distance](./statistics/genetic_distance.py#L394)
 
 ```python
 def nei_standard_distance(
@@ -36629,7 +36629,7 @@ infinite-alleles neutral mutation model.
 
 <a id="fim.statistics.genetic_distance.deme_gene_identities"></a>
 
-#### deme\_gene\_identities
+#### [deme\_gene\_identities](./statistics/genetic_distance.py#L466)
 
 ```python
 def deme_gene_identities(
@@ -36659,7 +36659,7 @@ revalidating them.
 
 <a id="fim.statistics.genetic_distance.nei_distance_from_identity"></a>
 
-#### nei\_distance\_from\_identity
+#### [nei\_distance\_from\_identity](./statistics/genetic_distance.py#L491)
 
 ```python
 def nei_distance_from_identity(identity_value: float) -> float
@@ -36682,7 +36682,7 @@ geometric all-demes form and gives a negative distance.
 
 <a id="fim.statistics.genetic_distance.nei_family_from_identities"></a>
 
-#### nei\_family\_from\_identities
+#### [nei\_family\_from\_identities](./statistics/genetic_distance.py#L511)
 
 ```python
 def nei_family_from_identities(
@@ -36718,7 +36718,7 @@ once per generation) pays for nothing else.
 
 <a id="fim.statistics.genetic_distance.nei_pair_identity"></a>
 
-#### nei\_pair\_identity
+#### [nei\_pair\_identity](./statistics/genetic_distance.py#L579)
 
 ```python
 def nei_pair_identity(loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
@@ -36749,7 +36749,7 @@ the module docstring for the two choices.
 
 <a id="fim.statistics.genetic_distance.nei_pair_distance"></a>
 
-#### nei\_pair\_distance
+#### [nei\_pair\_distance](./statistics/genetic_distance.py#L618)
 
 ```python
 def nei_pair_distance(loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
@@ -36778,7 +36778,7 @@ two agree exactly when the populations are equally diverse.
 
 <a id="fim.statistics.genetic_distance.nei_all_demes_identity"></a>
 
-#### nei\_all\_demes\_identity
+#### [nei\_all\_demes\_identity](./statistics/genetic_distance.py#L646)
 
 ```python
 def nei_all_demes_identity(tables: Sequence[FrequencyTable[AlleleKey]],
@@ -36821,7 +36821,7 @@ diverse than the rest.
 
 <a id="fim.statistics.genetic_distance.nei_all_demes_distance"></a>
 
-#### nei\_all\_demes\_distance
+#### [nei\_all\_demes\_distance](./statistics/genetic_distance.py#L703)
 
 ```python
 def nei_all_demes_distance(tables: Sequence[FrequencyTable[AlleleKey]],
@@ -36848,7 +36848,7 @@ See `nei_all_demes_identity`: the geometric form can be negative.
 
 <a id="fim.statistics.identity_recursion"></a>
 
-# fim.statistics.identity\_recursion
+# [fim.statistics.identity\_recursion](./statistics/identity_recursion.py#L1)
 
 Expected trajectory of the identity-based statistics, in closed form.
 
@@ -36896,7 +36896,7 @@ the ratio-of-means form used here by a small amount.
 
 <a id="fim.statistics.identity_recursion.IdentityRecursion"></a>
 
-## IdentityRecursion Objects
+## [IdentityRecursion Objects](./statistics/identity_recursion.py#L73)
 
 ```python
 @dataclass(frozen=True)
@@ -36916,7 +36916,7 @@ The solved two-variable identity recursion for one configuration.
 
 <a id="fim.statistics.identity_recursion.IdentityRecursion.identities_after"></a>
 
-#### identities\_after
+#### [identities\_after](./statistics/identity_recursion.py#L91)
 
 ```python
 def identities_after(steps: float, within: float,
@@ -36939,7 +36939,7 @@ Return `(within, between)` after `steps` generations.
 
 <a id="fim.statistics.identity_recursion.IdentityRecursion.statistics_after"></a>
 
-#### statistics\_after
+#### [statistics\_after](./statistics/identity_recursion.py#L120)
 
 ```python
 def statistics_after(steps: float, within: float,
@@ -36961,7 +36961,7 @@ Return the identity-based statistics after `steps` generations.
 
 <a id="fim.statistics.identity_recursion.identities_from_heterozygosities"></a>
 
-#### identities\_from\_heterozygosities
+#### [identities\_from\_heterozygosities](./statistics/identity_recursion.py#L139)
 
 ```python
 def identities_from_heterozygosities(h_s: float, h_t: float,
@@ -36988,7 +36988,7 @@ starting state relaxes exactly as its symmetrized average does.
 
 <a id="fim.statistics.identity_recursion.identities_to_statistics"></a>
 
-#### identities\_to\_statistics
+#### [identities\_to\_statistics](./statistics/identity_recursion.py#L162)
 
 ```python
 def identities_to_statistics(within: float, between: float,
@@ -37014,7 +37014,7 @@ of the two identities. A zero denominator (no diversity left) gives
 
 <a id="fim.statistics.identity_recursion.identity_recursion"></a>
 
-#### identity\_recursion
+#### [identity\_recursion](./statistics/identity_recursion.py#L188)
 
 ```python
 def identity_recursion(population_size: int, m: float, mu: float,
@@ -37061,7 +37061,7 @@ Without migration, and for two *distinct* copies
 
 <a id="fim.statistics.identity_recursion.identity_matrix_from_frequencies"></a>
 
-#### identity\_matrix\_from\_frequencies
+#### [identity\_matrix\_from\_frequencies](./statistics/identity_recursion.py#L302)
 
 ```python
 def identity_matrix_from_frequencies(
@@ -37087,7 +37087,7 @@ allele. The diagonal is the with-replacement within-deme identity,
 
 <a id="fim.statistics.identity_recursion.matrix_identity_trajectory"></a>
 
-#### matrix\_identity\_trajectory
+#### [matrix\_identity\_trajectory](./statistics/identity_recursion.py#L333)
 
 ```python
 def matrix_identity_trajectory(
@@ -37132,7 +37132,7 @@ equal deme weights, as the engine's reports do.
 
 <a id="fim.statistics.interval"></a>
 
-# fim.statistics.interval
+# [fim.statistics.interval](./statistics/interval.py#L1)
 
 Confidence intervals for across-replicate sample means.
 
@@ -37180,7 +37180,7 @@ NormalDist`, not another approximate table row.
 
 <a id="fim.statistics.interval.ConfidenceInterval"></a>
 
-## ConfidenceInterval Objects
+## [ConfidenceInterval Objects](./statistics/interval.py#L85)
 
 ```python
 class ConfidenceInterval(TypedDict)
@@ -37231,7 +37231,7 @@ Fields:
 
 <a id="fim.statistics.interval.confidence_interval"></a>
 
-#### confidence\_interval
+#### [confidence\_interval](./statistics/interval.py#L146)
 
 ```python
 def confidence_interval(values: Sequence[float],
@@ -37269,7 +37269,7 @@ a handful of independent replicate draws specifically.
 
 <a id="fim.statistics.interval.student_t_critical_value"></a>
 
-#### student\_t\_critical\_value
+#### [student\_t\_critical\_value](./statistics/interval.py#L222)
 
 ```python
 def student_t_critical_value(degrees_of_freedom: int,
@@ -37311,7 +37311,7 @@ the exact large-sample (normal-distribution) answer once
 
 <a id="fim.statistics.pairwise"></a>
 
-# fim.statistics.pairwise
+# [fim.statistics.pairwise](./statistics/pairwise.py#L1)
 
 Every deme pair's Nei identities at once, vectorized.
 
@@ -37337,7 +37337,7 @@ frequency table per locus.
 
 <a id="fim.statistics.pairwise.locus_frequency_matrix"></a>
 
-#### locus\_frequency\_matrix
+#### [locus\_frequency\_matrix](./statistics/pairwise.py#L45)
 
 ```python
 def locus_frequency_matrix(
@@ -37358,7 +37358,7 @@ Return one locus's ``d x A`` frequency matrix, alleles in first-seen order.
 
 <a id="fim.statistics.pairwise.pairwise_matrices"></a>
 
-#### pairwise\_matrices
+#### [pairwise\_matrices](./statistics/pairwise.py#L78)
 
 ```python
 def pairwise_matrices(
@@ -37396,7 +37396,7 @@ the same allele (``J_kl = 1``).
 
 <a id="fim.statistics.pairwise.pairwise_nei_identities"></a>
 
-#### pairwise\_nei\_identities
+#### [pairwise\_nei\_identities](./statistics/pairwise.py#L160)
 
 ```python
 def pairwise_nei_identities(
@@ -37421,7 +37421,7 @@ The Nei half of `pairwise_matrices`; see it for the details.
 
 <a id="fim.statistics.pairwise.upper_triangle"></a>
 
-#### upper\_triangle
+#### [upper\_triangle](./statistics/pairwise.py#L179)
 
 ```python
 def upper_triangle(matrix: FloatMatrix) -> list[float | None]
@@ -37445,7 +37445,7 @@ diagonal.
 
 <a id="fim.statistics.theory"></a>
 
-# fim.statistics.theory
+# [fim.statistics.theory](./statistics/theory.py#L1)
 
 Closed-form predictions for an island model at equilibrium.
 
@@ -37456,13 +37456,13 @@ quantity added once appears in all of them.
 
 <a id="fim.statistics.theory.THEORY_STATISTICS"></a>
 
-#### THEORY\_STATISTICS
+#### [THEORY\_STATISTICS](./statistics/theory.py#L30)
 
 The predicted quantities that are also reported statistics of a run.
 
 <a id="fim.statistics.theory.equilibrium_numeric_predictions"></a>
 
-#### equilibrium\_numeric\_predictions
+#### [equilibrium\_numeric\_predictions](./statistics/theory.py#L34)
 
 ```python
 def equilibrium_numeric_predictions(n: int, m: float, mu: float,
@@ -37510,7 +37510,7 @@ project's central claim, drawn rather than asserted.
 
 <a id="fim.statistics.theory.theory_for_configuration"></a>
 
-#### theory\_for\_configuration
+#### [theory\_for\_configuration](./statistics/theory.py#L102)
 
 ```python
 def theory_for_configuration(
@@ -37538,7 +37538,7 @@ configuration must carry (`"haploid"` to `"tetraploid"`).
 
 <a id="fim.statistics.theory.theory_at"></a>
 
-#### theory\_at
+#### [theory\_at](./statistics/theory.py#L160)
 
 ```python
 def theory_at(base: Mapping[str, Any],
@@ -37561,7 +37561,7 @@ Return the predictions for a sweep's base configuration at coordinates.
 
 <a id="fim.stored"></a>
 
-# fim.stored
+# [fim.stored](./stored.py#L1)
 
 Open a saved run again: `open_run(directory)`.
 
@@ -37573,7 +37573,7 @@ not asked for: the trajectory log stays on disk until read.
 
 <a id="fim.stored.StoredReplicate"></a>
 
-## StoredReplicate Objects
+## [StoredReplicate Objects](./stored.py#L40)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -37595,7 +37595,7 @@ One saved replicate.
 
 <a id="fim.stored.StoredReplicate.trajectory_path"></a>
 
-#### trajectory\_path
+#### [trajectory\_path](./stored.py#L63)
 
 ```python
 @property
@@ -37606,7 +37606,7 @@ Return the stored trajectory log's path.
 
 <a id="fim.stored.StoredReplicate.rows"></a>
 
-#### rows
+#### [rows](./stored.py#L67)
 
 ```python
 def rows(
@@ -37627,7 +37627,7 @@ Read stored rows grouped by generation.
 
 <a id="fim.stored.StoredReplicate.verify"></a>
 
-#### verify
+#### [verify](./stored.py#L80)
 
 ```python
 def verify() -> None
@@ -37641,7 +37641,7 @@ Check the trajectory still matches its manifest's digest.
 
 <a id="fim.stored.StoredReplicate.reanalyze"></a>
 
-#### reanalyze
+#### [reanalyze](./stored.py#L88)
 
 ```python
 def reanalyze(generation: int | None = None) -> ReanalyzedGeneration
@@ -37660,7 +37660,7 @@ Recompute the statistics of one stored generation.
 
 <a id="fim.stored.StoredRun"></a>
 
-## StoredRun Objects
+## [StoredRun Objects](./stored.py#L105)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -37679,7 +37679,7 @@ A saved run, opened.
 
 <a id="fim.stored.StoredRun.only"></a>
 
-#### only
+#### [only](./stored.py#L122)
 
 ```python
 def only() -> StoredReplicate
@@ -37693,7 +37693,7 @@ Return the sole replicate.
 
 <a id="fim.stored.open_run"></a>
 
-#### open\_run
+#### [open\_run](./stored.py#L163)
 
 ```python
 def open_run(directory: Path | str) -> StoredRun
@@ -37718,7 +37718,7 @@ Open a saved run.
 
 <a id="fim.sweep"></a>
 
-# fim.sweep
+# [fim.sweep](./sweep.py#L1)
 
 Parameter sweeps: what varies, which points result, and which are valid.
 
@@ -37747,7 +37747,7 @@ Three ideas carry the design:
 
 <a id="fim.sweep.SWEEP_SPEC_VERSION"></a>
 
-#### SWEEP\_SPEC\_VERSION
+#### [SWEEP\_SPEC\_VERSION](./sweep.py#L50)
 
 Schema version of the stored `sweep_spec` mapping.
 
@@ -37756,49 +37756,49 @@ spec is a grid and is still read.
 
 <a id="fim.sweep.READABLE_SPEC_VERSIONS"></a>
 
-#### READABLE\_SPEC\_VERSIONS
+#### [READABLE\_SPEC\_VERSIONS](./sweep.py#L56)
 
 Stored spec versions `SweepSpec.from_dict` accepts.
 
 <a id="fim.sweep.SIZE_CONFIRMATION_THRESHOLD"></a>
 
-#### SIZE\_CONFIRMATION\_THRESHOLD
+#### [SIZE\_CONFIRMATION\_THRESHOLD](./sweep.py#L59)
 
 Points at or above which a plan should ask before running.
 
 <a id="fim.sweep.SEED_POLICIES"></a>
 
-#### SEED\_POLICIES
+#### [SEED\_POLICIES](./sweep.py#L62)
 
 `spaced`: independent points; `same`: every point uses the base seed.
 
 <a id="fim.sweep.STRATEGIES"></a>
 
-#### STRATEGIES
+#### [STRATEGIES](./sweep.py#L65)
 
 `grid`: every combination; `zip`: axes advance together; `list`: explicit rows.
 
 <a id="fim.sweep.RECORDING_KEYS"></a>
 
-#### RECORDING\_KEYS
+#### [RECORDING\_KEYS](./sweep.py#L71)
 
 A sweep's `recording:` block keys and the configuration keys they set.
 
 <a id="fim.sweep.SWEEP_DEFAULT_HISTORY"></a>
 
-#### SWEEP\_DEFAULT\_HISTORY
+#### [SWEEP\_DEFAULT\_HISTORY](./sweep.py#L79)
 
 The statistic history format a sweep writes unless it is told otherwise.
 
 <a id="fim.sweep.DISK_CONFIRMATION_BYTES"></a>
 
-#### DISK\_CONFIRMATION\_BYTES
+#### [DISK\_CONFIRMATION\_BYTES](./sweep.py#L82)
 
 Estimated disk (bytes) at or above which a plan should ask before running.
 
 <a id="fim.sweep.AxisDefinition"></a>
 
-## AxisDefinition Objects
+## [AxisDefinition Objects](./sweep.py#L150)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -37835,7 +37835,7 @@ definition survives a process boundary.
 
 <a id="fim.sweep.AxisDefinition.is_boolean"></a>
 
-#### is\_boolean
+#### [is\_boolean](./sweep.py#L196)
 
 ```python
 @property
@@ -37846,7 +37846,7 @@ Return whether this is an on/off switch, written `true` or `false`.
 
 <a id="fim.sweep.AxisDefinition.apply_to"></a>
 
-#### apply\_to
+#### [apply\_to](./sweep.py#L200)
 
 ```python
 def apply_to(mapping: dict[str, Any], value: CoordinateValue) -> None
@@ -37856,7 +37856,7 @@ Write `value` into `mapping`, the configuration of one point.
 
 <a id="fim.sweep.AxisDefinition.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep.py#L209)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -37866,7 +37866,7 @@ Return the description of this key as plain JSON-ready values.
 
 <a id="fim.sweep.AxisDefinition.check_base"></a>
 
-#### check\_base
+#### [check\_base](./sweep.py#L229)
 
 ```python
 def check_base(base: Mapping[str, Any]) -> None
@@ -37876,13 +37876,13 @@ Raise `ValueError` if `base` cannot take this axis.
 
 <a id="fim.sweep.SWEEPABLE_KEYS"></a>
 
-#### SWEEPABLE\_KEYS
+#### [SWEEPABLE\_KEYS](./sweep.py#L235)
 
 The curated parameters a sweep may vary, with labels, ranges and rules.
 
 <a id="fim.sweep.GENERIC_KEYS"></a>
 
-#### GENERIC\_KEYS
+#### [GENERIC\_KEYS](./sweep.py#L408)
 
 Every other scalar configuration key a sweep may vary, by key.
 
@@ -37891,7 +37891,7 @@ generic entry has no label beyond its key and no display domain.
 
 <a id="fim.sweep.axis_definition"></a>
 
-#### axis\_definition
+#### [axis\_definition](./sweep.py#L416)
 
 ```python
 def axis_definition(key: str) -> AxisDefinition
@@ -37906,7 +37906,7 @@ Return the definition of a sweepable key, curated or generic.
 
 <a id="fim.sweep.sweepable_key_names"></a>
 
-#### sweepable\_key\_names
+#### [sweepable\_key\_names](./sweep.py#L436)
 
 ```python
 def sweepable_key_names() -> tuple[str, ...]
@@ -37916,7 +37916,7 @@ Return every sweepable key: the curated ones, then the generic ones.
 
 <a id="fim.sweep.SweepAxis"></a>
 
-## SweepAxis Objects
+## [SweepAxis Objects](./sweep.py#L442)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -37927,7 +37927,7 @@ One varied parameter and the exact values it takes, in order.
 
 <a id="fim.sweep.SweepAxis.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep.py#L448)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -37939,7 +37939,7 @@ A derived axis also records what its numbers count (`convention`).
 
 <a id="fim.sweep.SweepSpec"></a>
 
-## SweepSpec Objects
+## [SweepSpec Objects](./sweep.py#L461)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -37973,7 +37973,7 @@ What is held fixed (`base`) and what varies (`axes`).
 
 <a id="fim.sweep.SweepSpec.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./sweep.py#L494)
 
 ```python
 def __post_init__() -> None
@@ -37983,7 +37983,7 @@ Validate the axes against the base and the sweepable-key table.
 
 <a id="fim.sweep.SweepSpec.recording_config"></a>
 
-#### recording\_config
+#### [recording\_config](./sweep.py#L517)
 
 ```python
 def recording_config() -> dict[str, Any]
@@ -37993,7 +37993,7 @@ Return the recording block as configuration keys (`RECORDING_KEYS`).
 
 <a id="fim.sweep.SweepSpec.from_rows"></a>
 
-#### from\_rows
+#### [from\_rows](./sweep.py#L522)
 
 ```python
 @classmethod
@@ -38017,7 +38017,7 @@ the results views plot against.
 
 <a id="fim.sweep.SweepSpec.grid_size"></a>
 
-#### grid\_size
+#### [grid\_size](./sweep.py#L569)
 
 ```python
 @property
@@ -38028,7 +38028,7 @@ Return the number of positions the strategy enumerates.
 
 <a id="fim.sweep.SweepSpec.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep.py#L577)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -38038,7 +38038,7 @@ Return the JSON-serializable stored form (without the points).
 
 <a id="fim.sweep.SweepSpec.digest"></a>
 
-#### digest
+#### [digest](./sweep.py#L592)
 
 ```python
 def digest(plan: SweepPlan | None = None) -> str
@@ -38063,7 +38063,7 @@ The order of keys in the base does not matter.
 
 <a id="fim.sweep.SweepSpec.to_sweep_file"></a>
 
-#### to\_sweep\_file
+#### [to\_sweep\_file](./sweep.py#L617)
 
 ```python
 def to_sweep_file(name: str | None = None) -> str
@@ -38087,7 +38087,7 @@ it back gives an equal spec.
 
 <a id="fim.sweep.SweepSpec.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./sweep.py#L646)
 
 ```python
 @classmethod
@@ -38102,7 +38102,7 @@ Rebuild a spec from its stored form (`to_dict`).
 
 <a id="fim.sweep.SweepPoint"></a>
 
-## SweepPoint Objects
+## [SweepPoint Objects](./sweep.py#L679)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38122,7 +38122,7 @@ One valid point: a whole configuration and its deterministic id.
 
 <a id="fim.sweep.SweepPoint.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep.py#L696)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -38132,7 +38132,7 @@ Return the stored plan entry (the plan, not the parameters).
 
 <a id="fim.sweep.InvalidPoint"></a>
 
-## InvalidPoint Objects
+## [InvalidPoint Objects](./sweep.py#L706)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38143,7 +38143,7 @@ A grid position whose configuration cannot be built, with the reason.
 
 <a id="fim.sweep.SweepPlan"></a>
 
-## SweepPlan Objects
+## [SweepPlan Objects](./sweep.py#L715)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38162,7 +38162,7 @@ Every point of a sweep, valid and not, before anything runs.
 
 <a id="fim.sweep.SweepPlan.needs_confirmation"></a>
 
-#### needs\_confirmation
+#### [needs\_confirmation](./sweep.py#L732)
 
 ```python
 @property
@@ -38173,7 +38173,7 @@ Return whether the plan is large enough to ask before running.
 
 <a id="fim.sweep.enumerate_points"></a>
 
-#### enumerate\_points
+#### [enumerate\_points](./sweep.py#L737)
 
 ```python
 def enumerate_points(spec: SweepSpec) -> SweepPlan
@@ -38194,7 +38194,7 @@ Enumerate and validate every point of `spec`, without running any.
 
 <a id="fim.sweep.derived_values"></a>
 
-#### derived\_values
+#### [derived\_values](./sweep.py#L794)
 
 ```python
 def derived_values(spec: SweepSpec,
@@ -38212,7 +38212,7 @@ For an `Nm` axis that is the migration rate `m` it worked out.
 
 <a id="fim.sweep.enumerate_values"></a>
 
-#### enumerate\_values
+#### [enumerate\_values](./sweep.py#L810)
 
 ```python
 def enumerate_values(spec: SweepSpec) -> Iterator[dict[str, CoordinateValue]]
@@ -38236,7 +38236,7 @@ tools) shares the axes and the ordering through this, and nothing else.
 
 <a id="fim.sweep.point_run_name"></a>
 
-#### point\_run\_name
+#### [point\_run\_name](./sweep.py#L827)
 
 ```python
 def point_run_name(study_name: str, point: SweepPoint) -> str
@@ -38259,7 +38259,7 @@ what tells one point's run from its siblings in the same Study.
 
 <a id="fim.sweep.point_run_description"></a>
 
-#### point\_run\_description
+#### [point\_run\_description](./sweep.py#L846)
 
 ```python
 def point_run_description(study_name: str, spec: SweepSpec, point: SweepPoint,
@@ -38288,7 +38288,7 @@ Study it was copied into, say) still explains itself.
 
 <a id="fim.sweep.expand_axis"></a>
 
-#### expand\_axis
+#### [expand\_axis](./sweep.py#L874)
 
 ```python
 def expand_axis(key: str, definition: object) -> SweepAxis
@@ -38309,7 +38309,7 @@ integers); an explicit list keeps its values and rejects a repeat.
 
 <a id="fim.sweep.spec_from_config"></a>
 
-#### spec\_from\_config
+#### [spec\_from\_config](./sweep.py#L903)
 
 ```python
 def spec_from_config(
@@ -38330,7 +38330,7 @@ and optionally `name`, `seed_policy` and `strategy`.
 
 <a id="fim.sweep.read_points_csv"></a>
 
-#### read\_points\_csv
+#### [read\_points\_csv](./sweep.py#L957)
 
 ```python
 def read_points_csv(path: Path) -> list[dict[str, object]]
@@ -38348,7 +38348,7 @@ and values are then checked like any other list sweep.
 
 <a id="fim.sweep.resolve_points_file"></a>
 
-#### resolve\_points\_file
+#### [resolve\_points\_file](./sweep.py#L980)
 
 ```python
 def resolve_points_file(config: Mapping[str, Any],
@@ -38370,7 +38370,7 @@ Return `config` with a `sweep.points_file` replaced by its `points`.
 
 <a id="fim.sweep.apply_coordinates"></a>
 
-#### apply\_coordinates
+#### [apply\_coordinates](./sweep.py#L1016)
 
 ```python
 def apply_coordinates(
@@ -38392,7 +38392,7 @@ coordinates, such as the closed-form theory along an axis.
 
 <a id="fim.sweep_compact"></a>
 
-# fim.sweep\_compact
+# [fim.sweep\_compact](./sweep_compact.py#L1)
 
 Make a finished sweep smaller after the fact.
 
@@ -38413,13 +38413,13 @@ The sweep must not be running.
 
 <a id="fim.sweep_compact.TAPERING_KEYS"></a>
 
-#### TAPERING\_KEYS
+#### [TAPERING\_KEYS](./sweep_compact.py#L62)
 
 Configuration keys that mean something only for a tapered run.
 
 <a id="fim.sweep_compact.CompactTarget"></a>
 
-## CompactTarget Objects
+## [CompactTarget Objects](./sweep_compact.py#L67)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38436,7 +38436,7 @@ What compaction reduces a point to.
 
 <a id="fim.sweep_compact.CompactTarget.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./sweep_compact.py#L80)
 
 ```python
 def __post_init__() -> None
@@ -38446,7 +38446,7 @@ Refuse a level compaction cannot produce, or a bad `keep_last`.
 
 <a id="fim.sweep_compact.CompactTarget.recording"></a>
 
-#### recording
+#### [recording](./sweep_compact.py#L87)
 
 ```python
 def recording() -> Recording
@@ -38456,7 +38456,7 @@ Return the recording a run at this target holds.
 
 <a id="fim.sweep_compact.CompactReport"></a>
 
-## CompactReport Objects
+## [CompactReport Objects](./sweep_compact.py#L97)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38478,7 +38478,7 @@ What a compaction did, or would do.
 
 <a id="fim.sweep_compact.parse_keep"></a>
 
-#### parse\_keep
+#### [parse\_keep](./sweep_compact.py#L121)
 
 ```python
 def parse_keep(text: str) -> KeepRule
@@ -38492,7 +38492,7 @@ Check a `--keep` rule: `corners`, `none` or `every=K`.
 
 <a id="fim.sweep_compact.kept_points"></a>
 
-#### kept\_points
+#### [kept\_points](./sweep_compact.py#L136)
 
 ```python
 def kept_points(coordinates: Mapping[str, Mapping[str, Any]],
@@ -38511,7 +38511,7 @@ Return the run ids a `--keep` rule leaves alone.
 
 <a id="fim.sweep_compact.compact_sweep"></a>
 
-#### compact\_sweep
+#### [compact\_sweep](./sweep_compact.py#L164)
 
 ```python
 def compact_sweep(study_id: str,
@@ -38548,7 +38548,7 @@ Reduce the finished points of a sweep Study to a target level.
 
 <a id="fim.sweep_compact.compact_run"></a>
 
-#### compact\_run
+#### [compact\_run](./sweep_compact.py#L260)
 
 ```python
 def compact_run(directory: Path, target: CompactTarget) -> None
@@ -38567,7 +38567,7 @@ compaction again finishes the job.
 
 <a id="fim.sweep_compare"></a>
 
-# fim.sweep\_compare
+# [fim.sweep\_compare](./sweep_compare.py#L1)
 
 Compare sweeps: the same statistic across sweeps, joined by coordinates.
 
@@ -38609,14 +38609,14 @@ with each sweep's seed policy, so a reader can judge the interval.
 
 <a id="fim.sweep_compare.Pairing"></a>
 
-#### Pairing
+#### [Pairing](./sweep_compare.py#L53)
 
 Whether the compared runs used the same seeds: none shared, all shared at
 every shared coordinate, some shared, or too few shared coordinates to say.
 
 <a id="fim.sweep_compare.SweepRef"></a>
 
-## SweepRef Objects
+## [SweepRef Objects](./sweep_compare.py#L65)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38632,7 +38632,7 @@ A sweep to compare.
 
 <a id="fim.sweep_compare.DifferenceCell"></a>
 
-## DifferenceCell Objects
+## [DifferenceCell Objects](./sweep_compare.py#L78)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38653,7 +38653,7 @@ The difference of two sweeps' means at one coordinate.
 
 <a id="fim.sweep_compare.ComparedPoint"></a>
 
-## ComparedPoint Objects
+## [ComparedPoint Objects](./sweep_compare.py#L100)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38677,7 +38677,7 @@ One shared coordinate and what each sweep has there.
 
 <a id="fim.sweep_compare.Comparison"></a>
 
-## Comparison Objects
+## [Comparison Objects](./sweep_compare.py#L124)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38701,7 +38701,7 @@ Sweeps lined up on their shared coordinates.
 
 <a id="fim.sweep_compare.welch_difference"></a>
 
-#### welch\_difference
+#### [welch\_difference](./sweep_compare.py#L149)
 
 ```python
 def welch_difference(first: StatisticCell,
@@ -38724,7 +38724,7 @@ Return the difference of two cells' means with a Welch interval.
 
 <a id="fim.sweep_compare.compare_sweeps"></a>
 
-#### compare\_sweeps
+#### [compare\_sweeps](./sweep_compare.py#L189)
 
 ```python
 def compare_sweeps(refs: Sequence[SweepRef],
@@ -38762,7 +38762,7 @@ Line up sweeps on their shared axes and compare one statistic.
 
 <a id="fim.sweep_cost"></a>
 
-# fim.sweep\_cost
+# [fim.sweep\_cost](./sweep_cost.py#L1)
 
 What a sweep is expected to cost, before it runs.
 
@@ -38786,26 +38786,26 @@ it throws its work away.
 
 <a id="fim.sweep_cost.DEFAULT_PROBE_GENERATIONS"></a>
 
-#### DEFAULT\_PROBE\_GENERATIONS
+#### [DEFAULT\_PROBE\_GENERATIONS](./sweep_cost.py#L49)
 
 Generations in the shorter of the two timed bursts a probe runs (the longer
 is twice this).
 
 <a id="fim.sweep_cost.DEFAULT_PROBED_CLASSES"></a>
 
-#### DEFAULT\_PROBED\_CLASSES
+#### [DEFAULT\_PROBED\_CLASSES](./sweep_cost.py#L53)
 
 Most shape classes one plan measures; the rest take the nearest.
 
 <a id="fim.sweep_cost.RECORDING_LEVELS"></a>
 
-#### RECORDING\_LEVELS
+#### [RECORDING\_LEVELS](./sweep_cost.py#L56)
 
 The trajectory retention levels a plan prices side by side.
 
 <a id="fim.sweep_cost.GAPPED_FRAME_FACTOR"></a>
 
-#### GAPPED\_FRAME\_FACTOR
+#### [GAPPED\_FRAME\_FACTOR](./sweep_cost.py#L59)
 
 Upper bound on how much more a kept frame of a thinned or tapered log costs
 than the average frame of a full log (a frame stored far from its neighbor is
@@ -38813,19 +38813,19 @@ nearly a whole keyframe). A real tapered replicate measured about 2.
 
 <a id="fim.sweep_cost.DECIMATED_VALUE_BYTES"></a>
 
-#### DECIMATED\_VALUE\_BYTES
+#### [DECIMATED\_VALUE\_BYTES](./sweep_cost.py#L64)
 
 Bytes a decimated history (`history.json`) spends on one value.
 
 <a id="fim.sweep_cost.DECIMATED_STATISTICS"></a>
 
-#### DECIMATED\_STATISTICS
+#### [DECIMATED\_STATISTICS](./sweep_cost.py#L67)
 
 Statistics a decimated history is assumed to hold, for the estimate.
 
 <a id="fim.sweep_cost.Band"></a>
 
-## Band Objects
+## [Band Objects](./sweep_cost.py#L72)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38843,7 +38843,7 @@ A range a quantity is expected to fall in.
 
 <a id="fim.sweep_cost.Band.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./sweep_cost.py#L86)
 
 ```python
 def __post_init__() -> None
@@ -38853,7 +38853,7 @@ Refuse a band whose ends are the wrong way round.
 
 <a id="fim.sweep_cost.Band.__add__"></a>
 
-#### \_\_add\_\_
+#### [\_\_add\_\_](./sweep_cost.py#L91)
 
 ```python
 def __add__(other: Band) -> Band
@@ -38863,7 +38863,7 @@ Add two bands end to end (the calibrated estimate is dropped).
 
 <a id="fim.sweep_cost.Band.__mul__"></a>
 
-#### \_\_mul\_\_
+#### [\_\_mul\_\_](./sweep_cost.py#L95)
 
 ```python
 def __mul__(other: Band) -> Band
@@ -38873,7 +38873,7 @@ Multiply two bands of non-negative quantities end to end.
 
 <a id="fim.sweep_cost.Band.scaled"></a>
 
-#### scaled
+#### [scaled](./sweep_cost.py#L99)
 
 ```python
 def scaled(factor: float) -> Band
@@ -38883,7 +38883,7 @@ Return the band with both ends multiplied by `factor >= 0`.
 
 <a id="fim.sweep_cost.Band.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep_cost.py#L103)
 
 ```python
 def to_dict() -> dict[str, float | None]
@@ -38893,7 +38893,7 @@ Return the band as plain values, for JSON.
 
 <a id="fim.sweep_cost.PointCost"></a>
 
-## PointCost Objects
+## [PointCost Objects](./sweep_cost.py#L109)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38923,7 +38923,7 @@ What one point is expected to cost.
 
 <a id="fim.sweep_cost.SweepCost"></a>
 
-## SweepCost Objects
+## [SweepCost Objects](./sweep_cost.py#L143)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38950,7 +38950,7 @@ What a sweep is expected to cost.
 
 <a id="fim.sweep_cost.SweepCost.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep_cost.py#L172)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -38960,7 +38960,7 @@ Return the cost as plain values, for the page and for JSON.
 
 <a id="fim.sweep_cost.SweepCost.generation_band"></a>
 
-#### generation\_band
+#### [generation\_band](./sweep_cost.py#L201)
 
 ```python
 def generation_band() -> Band
@@ -38970,7 +38970,7 @@ Return the narrowest band holding every point's generations.
 
 <a id="fim.sweep_cost.SweepCost.replicate_band"></a>
 
-#### replicate\_band
+#### [replicate\_band](./sweep_cost.py#L208)
 
 ```python
 def replicate_band() -> Band
@@ -38980,7 +38980,7 @@ Return the narrowest band holding every point's replicates.
 
 <a id="fim.sweep_cost.point_cost"></a>
 
-#### point\_cost
+#### [point\_cost](./sweep_cost.py#L216)
 
 ```python
 def point_cost(run_id: str, params: SimulationParams) -> PointCost
@@ -39007,7 +39007,7 @@ Return the static cost band of one resolved point.
 
 <a id="fim.sweep_cost.static_cost"></a>
 
-#### static\_cost
+#### [static\_cost](./sweep_cost.py#L246)
 
 ```python
 def static_cost(spec: SweepSpec,
@@ -39033,7 +39033,7 @@ Return the static cost bands of a plan's points.
 
 <a id="fim.sweep_cost.Throughput"></a>
 
-## Throughput Objects
+## [Throughput Objects](./sweep_cost.py#L278)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39057,7 +39057,7 @@ What running one shape class costs, per unit of work.
 
 <a id="fim.sweep_cost.Throughput.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep_cost.py#L300)
 
 ```python
 def to_dict() -> dict[str, float]
@@ -39067,7 +39067,7 @@ Return the figures as plain values, for the cache.
 
 <a id="fim.sweep_cost.ThroughputProbe"></a>
 
-## ThroughputProbe Objects
+## [ThroughputProbe Objects](./sweep_cost.py#L311)
 
 ```python
 class ThroughputProbe(Protocol)
@@ -39077,7 +39077,7 @@ Measures the throughput of one configuration.
 
 <a id="fim.sweep_cost.ThroughputProbe.measure"></a>
 
-#### measure
+#### [measure](./sweep_cost.py#L314)
 
 ```python
 def measure(params: SimulationParams, generations: int) -> Throughput
@@ -39092,7 +39092,7 @@ Run a short burst of `params` and report its throughput.
 
 <a id="fim.sweep_cost.ShapeClass"></a>
 
-## ShapeClass Objects
+## [ShapeClass Objects](./sweep_cost.py#L325)
 
 ```python
 @dataclass(frozen=True, slots=True, order=True)
@@ -39112,7 +39112,7 @@ What decides how fast a configuration runs and how big its files are.
 
 <a id="fim.sweep_cost.ShapeClass.of"></a>
 
-#### of
+#### [of](./sweep_cost.py#L345)
 
 ```python
 @classmethod
@@ -39123,7 +39123,7 @@ Return the shape class of a resolved configuration.
 
 <a id="fim.sweep_cost.ShapeClass.key"></a>
 
-#### key
+#### [key](./sweep_cost.py#L359)
 
 ```python
 @property
@@ -39134,7 +39134,7 @@ Return a text key for this class (the cache's key).
 
 <a id="fim.sweep_cost.ShapeClass.distance"></a>
 
-#### distance
+#### [distance](./sweep_cost.py#L367)
 
 ```python
 def distance(other: ShapeClass) -> float
@@ -39144,7 +39144,7 @@ Return how far apart two classes are, in (log d, log N).
 
 <a id="fim.sweep_cost.nearest_class"></a>
 
-#### nearest\_class
+#### [nearest\_class](./sweep_cost.py#L375)
 
 ```python
 def nearest_class(target: ShapeClass,
@@ -39170,7 +39170,7 @@ on the order the classes were found in.
 
 <a id="fim.sweep_cost.ThroughputCache"></a>
 
-## ThroughputCache Objects
+## [ThroughputCache Objects](./sweep_cost.py#L397)
 
 ```python
 class ThroughputCache()
@@ -39187,7 +39187,7 @@ unwritable file is ignored (the figures are measured again).
 
 <a id="fim.sweep_cost.ThroughputCache.key_for"></a>
 
-#### key\_for
+#### [key\_for](./sweep_cost.py#L413)
 
 ```python
 @staticmethod
@@ -39198,7 +39198,7 @@ Return the cache key of a shape class on this machine.
 
 <a id="fim.sweep_cost.ThroughputCache.get"></a>
 
-#### get
+#### [get](./sweep_cost.py#L417)
 
 ```python
 def get(shape: ShapeClass) -> Throughput | None
@@ -39208,7 +39208,7 @@ Return the cached throughput of a class, or `None`.
 
 <a id="fim.sweep_cost.ThroughputCache.put"></a>
 
-#### put
+#### [put](./sweep_cost.py#L433)
 
 ```python
 def put(shape: ShapeClass, throughput: Throughput) -> None
@@ -39218,7 +39218,7 @@ Remember a class's throughput.
 
 <a id="fim.sweep_cost.ThroughputCache.save"></a>
 
-#### save
+#### [save](./sweep_cost.py#L438)
 
 ```python
 def save() -> None
@@ -39228,7 +39228,7 @@ Write the cache if it changed; a failure is logged, never raised.
 
 <a id="fim.sweep_cost.EngineProbe"></a>
 
-## EngineProbe Objects
+## [EngineProbe Objects](./sweep_cost.py#L477)
 
 ```python
 class EngineProbe()
@@ -39250,7 +39250,7 @@ with generations (starting the engine, the scatter plot) cancel out.
 
 <a id="fim.sweep_cost.EngineProbe.measure"></a>
 
-#### measure
+#### [measure](./sweep_cost.py#L501)
 
 ```python
 def measure(params: SimulationParams, generations: int) -> Throughput
@@ -39260,7 +39260,7 @@ Time bursts of `generations` and twice that, and return the rates.
 
 <a id="fim.sweep_cost.probed_cost"></a>
 
-#### probed\_cost
+#### [probed\_cost](./sweep_cost.py#L595)
 
 ```python
 def probed_cost(
@@ -39305,7 +39305,7 @@ from `cache`); every other point takes the nearest measured class.
 
 <a id="fim.sweep_cost.format_duration"></a>
 
-#### format\_duration
+#### [format\_duration](./sweep_cost.py#L805)
 
 ```python
 def format_duration(seconds: float) -> str
@@ -39325,7 +39325,7 @@ Write a duration the way a person would say it.
 
 <a id="fim.sweep_cost.format_bytes"></a>
 
-#### format\_bytes
+#### [format\_bytes](./sweep_cost.py#L828)
 
 ```python
 def format_bytes(size: float) -> str
@@ -39344,7 +39344,7 @@ Write a size in decimal units, to two significant figures.
 
 <a id="fim.sweep_cost.band_text"></a>
 
-#### band\_text
+#### [band\_text](./sweep_cost.py#L846)
 
 ```python
 def band_text(band: Band, formatter: Callable[[float], str]) -> str
@@ -39354,7 +39354,7 @@ Write a band as "a to b", or just "a" when both ends read the same.
 
 <a id="fim.sweep_cost.order_costliest_first"></a>
 
-#### order\_costliest\_first
+#### [order\_costliest\_first](./sweep_cost.py#L852)
 
 ```python
 def order_costliest_first(points: Sequence[SweepPoint]) -> list[SweepPoint]
@@ -39380,7 +39380,7 @@ depend on when it ran.
 
 <a id="fim.sweep_cost.Actual"></a>
 
-## Actual Objects
+## [Actual Objects](./sweep_cost.py#L885)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39398,7 +39398,7 @@ What a finished point really cost, read back from its manifests.
 
 <a id="fim.sweep_cost.read_actual"></a>
 
-#### read\_actual
+#### [read\_actual](./sweep_cost.py#L920)
 
 ```python
 def read_actual(run_id: str, directory: Path) -> Actual | None
@@ -39423,7 +39423,7 @@ already in the manifests every run writes.
 
 <a id="fim.sweep_cost.Remaining"></a>
 
-## Remaining Objects
+## [Remaining Objects](./sweep_cost.py#L968)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39445,7 +39445,7 @@ What is left of a sweep, with the estimate calibrated by what has run.
 
 <a id="fim.sweep_cost.remaining_cost"></a>
 
-#### remaining\_cost
+#### [remaining\_cost](./sweep_cost.py#L989)
 
 ```python
 def remaining_cost(cost: SweepCost, finished: Mapping[str,
@@ -39472,7 +39472,7 @@ over the points run at once. It sharpens as more points finish.
 
 <a id="fim.sweep_cost.CostLines"></a>
 
-## CostLines Objects
+## [CostLines Objects](./sweep_cost.py#L1025)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39489,7 +39489,7 @@ The sentences that state a probed cost, for the command line and the app.
 
 <a id="fim.sweep_cost.describe_cost"></a>
 
-#### describe\_cost
+#### [describe\_cost](./sweep_cost.py#L1039)
 
 ```python
 def describe_cost(cost: SweepCost,
@@ -39513,7 +39513,7 @@ Write a probed cost as three sentences.
 
 <a id="fim.sweep_cost.parse_size"></a>
 
-#### parse\_size
+#### [parse\_size](./sweep_cost.py#L1098)
 
 ```python
 def parse_size(text: str) -> int
@@ -39540,7 +39540,7 @@ writes them, and a number with no unit is bytes.
 
 <a id="fim.sweep_run"></a>
 
-# fim.sweep\_run
+# [fim.sweep\_run](./sweep_run.py#L1)
 
 Running a sweep: create its Study, run the points, resume, and report status.
 
@@ -39570,7 +39570,7 @@ The execution half of `fim.sweep`
 
 <a id="fim.sweep_run.PointState"></a>
 
-#### PointState
+#### [PointState](./sweep_run.py#L99)
 
 Where a point stands.
 
@@ -39581,7 +39581,7 @@ version); `failed` (recorded before any Run object existed); or `waiting`.
 
 <a id="fim.sweep_run.SweepLockedError"></a>
 
-## SweepLockedError Objects
+## [SweepLockedError Objects](./sweep_run.py#L155)
 
 ```python
 class SweepLockedError(StoreError, ValueError)
@@ -39594,7 +39594,7 @@ a plain error, like any other reason a sweep cannot start.
 
 <a id="fim.sweep_run.FailureClass"></a>
 
-#### FailureClass
+#### [FailureClass](./sweep_run.py#L163)
 
 Whether trying a failed point again can help: a `transient` failure (a
 worker process that died, a file system error) can pass; a `deterministic`
@@ -39602,7 +39602,7 @@ one (the engine rejected the configuration) happens every time.
 
 <a id="fim.sweep_run.classify_failure"></a>
 
-#### classify\_failure
+#### [classify\_failure](./sweep_run.py#L177)
 
 ```python
 def classify_failure(error: BaseException) -> FailureClass
@@ -39622,7 +39622,7 @@ Say whether a point that failed with `error` is worth trying again.
 
 <a id="fim.sweep_run.PointFailure"></a>
 
-## PointFailure Objects
+## [PointFailure Objects](./sweep_run.py#L194)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39640,7 +39640,7 @@ Why one point produced no run.
 
 <a id="fim.sweep_run.PointPaused"></a>
 
-## PointPaused Objects
+## [PointPaused Objects](./sweep_run.py#L210)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39655,7 +39655,7 @@ A point's Run object stopped, resumable, before it completed.
 
 <a id="fim.sweep_run.SweepEvent"></a>
 
-## SweepEvent Objects
+## [SweepEvent Objects](./sweep_run.py#L221)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39675,7 +39675,7 @@ One progress event from `run_sweep`.
 
 <a id="fim.sweep_run.SweepOutcome"></a>
 
-## SweepOutcome Objects
+## [SweepOutcome Objects](./sweep_run.py#L242)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39690,7 +39690,7 @@ not start stays waiting, to be resumed.
 
 <a id="fim.sweep_run.PointStatus"></a>
 
-## PointStatus Objects
+## [PointStatus Objects](./sweep_run.py#L262)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39701,7 +39701,7 @@ One planned point and where it stands.
 
 <a id="fim.sweep_run.PointRunner"></a>
 
-## PointRunner Objects
+## [PointRunner Objects](./sweep_run.py#L273)
 
 ```python
 class PointRunner(Protocol)
@@ -39716,7 +39716,7 @@ identity is its content hash, so no shared state is needed.
 
 <a id="fim.sweep_run.PointRunner.run_point"></a>
 
-#### run\_point
+#### [run\_point](./sweep_run.py#L282)
 
 ```python
 def run_point(params: SimulationParams,
@@ -39732,7 +39732,7 @@ batch's replicates); `None` leaves the runner's own default.
 
 <a id="fim.sweep_run.ObjectPointRunner"></a>
 
-## ObjectPointRunner Objects
+## [ObjectPointRunner Objects](./sweep_run.py#L298)
 
 ```python
 @runtime_checkable
@@ -39743,7 +39743,7 @@ A runner that can also execute a point as a resumable Run object.
 
 <a id="fim.sweep_run.ObjectPointRunner.run_object_point"></a>
 
-#### run\_object\_point
+#### [run\_object\_point](./sweep_run.py#L301)
 
 ```python
 def run_object_point(
@@ -39759,7 +39759,7 @@ A set `cancel_event` pauses the object at its next safe point.
 
 <a id="fim.sweep_run.LocalPointRunner"></a>
 
-## LocalPointRunner Objects
+## [LocalPointRunner Objects](./sweep_run.py#L335)
 
 ```python
 class LocalPointRunner()
@@ -39781,7 +39781,7 @@ call from several threads at once, one call per point in flight.
 
 <a id="fim.sweep_run.LocalPointRunner.run_point"></a>
 
-#### run\_point
+#### [run\_point](./sweep_run.py#L359)
 
 ```python
 def run_point(params: SimulationParams,
@@ -39794,7 +39794,7 @@ Run `params` synchronously; see `PointRunner.run_point`.
 
 <a id="fim.sweep_run.LocalPointRunner.run_object_point"></a>
 
-#### run\_object\_point
+#### [run\_object\_point](./sweep_run.py#L381)
 
 ```python
 def run_object_point(
@@ -39808,7 +39808,7 @@ Execute a point's Run object here; see `ObjectPointRunner`.
 
 <a id="fim.sweep_run.execute_point_object"></a>
 
-#### execute\_point\_object
+#### [execute\_point\_object](./sweep_run.py#L441)
 
 ```python
 def execute_point_object(
@@ -39844,7 +39844,7 @@ point: the checkpoint it leaves lets the next sweep resume the point.
 
 <a id="fim.sweep_run.ProcessPointRunner"></a>
 
-## ProcessPointRunner Objects
+## [ProcessPointRunner Objects](./sweep_run.py#L575)
 
 ```python
 class ProcessPointRunner()
@@ -39877,7 +39877,7 @@ the sweep ending on the first submit to a dead pool.
 
 <a id="fim.sweep_run.ProcessPointRunner.run_point"></a>
 
-#### run\_point
+#### [run\_point](./sweep_run.py#L701)
 
 ```python
 def run_point(params: SimulationParams,
@@ -39890,7 +39890,7 @@ Run `params` in a worker process; see `PointRunner.run_point`.
 
 <a id="fim.sweep_run.ProcessPointRunner.run_object_point"></a>
 
-#### run\_object\_point
+#### [run\_object\_point](./sweep_run.py#L724)
 
 ```python
 def run_object_point(
@@ -39904,7 +39904,7 @@ Execute a point's Run object in a worker process.
 
 <a id="fim.sweep_run.ProcessPointRunner.close"></a>
 
-#### close
+#### [close](./sweep_run.py#L750)
 
 ```python
 def close() -> None
@@ -39914,7 +39914,7 @@ Stop the worker processes and the shared-event server.
 
 <a id="fim.sweep_run.Concurrency"></a>
 
-## Concurrency Objects
+## [Concurrency Objects](./sweep_run.py#L759)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39933,7 +39933,7 @@ How a sweep spreads its points over the machine.
 
 <a id="fim.sweep_run.resolve_concurrency"></a>
 
-#### resolve\_concurrency
+#### [resolve\_concurrency](./sweep_run.py#L775)
 
 ```python
 def resolve_concurrency(*,
@@ -39969,7 +39969,7 @@ point's worker count and shrinks how many fit.
 
 <a id="fim.sweep_run.STORED_PLAN_LIMIT"></a>
 
-#### STORED\_PLAN\_LIMIT
+#### [STORED\_PLAN\_LIMIT](./sweep_run.py#L824)
 
 Points up to which a Study stores the whole plan.
 
@@ -39979,7 +39979,7 @@ the digest keeps the check that the plan still matches this version.
 
 <a id="fim.sweep_run.create_sweep_study"></a>
 
-#### create\_sweep\_study
+#### [create\_sweep\_study](./sweep_run.py#L846)
 
 ```python
 def create_sweep_study(spec: SweepSpec,
@@ -40016,7 +40016,7 @@ Create the Study for a sweep, its spec and plan stored before any run.
 
 <a id="fim.sweep_run.attach_sweep_to_study"></a>
 
-#### attach\_sweep\_to\_study
+#### [attach\_sweep\_to\_study](./sweep_run.py#L888)
 
 ```python
 def attach_sweep_to_study(study_id: str,
@@ -40039,7 +40039,7 @@ already a member counts as done. A Study holds at most one sweep.
 
 <a id="fim.sweep_run.sweep_spec_of"></a>
 
-#### sweep\_spec\_of
+#### [sweep\_spec\_of](./sweep_run.py#L921)
 
 ```python
 def sweep_spec_of(study: StudyManifest) -> SweepSpec
@@ -40053,7 +40053,7 @@ Rebuild the `SweepSpec` a sweep Study stored.
 
 <a id="fim.sweep_run.stored_points"></a>
 
-#### stored\_points
+#### [stored\_points](./sweep_run.py#L932)
 
 ```python
 def stored_points(study: StudyManifest) -> list[Mapping[str, Any]]
@@ -40067,7 +40067,7 @@ Return the planned points stored in a sweep Study.
 
 <a id="fim.sweep_run.sweep_point_statuses"></a>
 
-#### sweep\_point\_statuses
+#### [sweep\_point\_statuses](./sweep_run.py#L952)
 
 ```python
 def sweep_point_statuses(study: StudyManifest,
@@ -40090,7 +40090,7 @@ reported as done.
 
 <a id="fim.sweep_run.completed_run_ids"></a>
 
-#### completed\_run\_ids
+#### [completed\_run\_ids](./sweep_run.py#L1054)
 
 ```python
 def completed_run_ids(*,
@@ -40104,7 +40104,7 @@ See `completed_runs`; this is only the ids.
 
 <a id="fim.sweep_run.completed_runs"></a>
 
-#### completed\_runs
+#### [completed\_runs](./sweep_run.py#L1064)
 
 ```python
 def completed_runs(*,
@@ -40125,7 +40125,7 @@ so a plan can say beforehand which points are already computed.
 
 <a id="fim.sweep_run.SweepBudget"></a>
 
-## SweepBudget Objects
+## [SweepBudget Objects](./sweep_run.py#L1106)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40148,7 +40148,7 @@ did not start stay waiting for `fim sweep resume`.
 
 <a id="fim.sweep_run.SweepBudget.__post_init__"></a>
 
-#### \_\_post\_init\_\_
+#### [\_\_post\_init\_\_](./sweep_run.py#L1125)
 
 ```python
 def __post_init__() -> None
@@ -40158,7 +40158,7 @@ Refuse a limit that is not positive.
 
 <a id="fim.sweep_run._LinkedEvent"></a>
 
-## \_LinkedEvent Objects
+## [\_LinkedEvent Objects](./sweep_run.py#L1133)
 
 ```python
 class _LinkedEvent(threading.Event)
@@ -40171,7 +40171,7 @@ mistaken for the user cancelling.
 
 <a id="fim.sweep_run._LinkedEvent.is_set"></a>
 
-#### is\_set
+#### [is\_set](./sweep_run.py#L1144)
 
 ```python
 def is_set() -> bool
@@ -40181,7 +40181,7 @@ Return whether the caller cancelled or the budget stopped the sweep.
 
 <a id="fim.sweep_run._BudgetTracker"></a>
 
-## \_BudgetTracker Objects
+## [\_BudgetTracker Objects](./sweep_run.py#L1149)
 
 ```python
 class _BudgetTracker()
@@ -40191,7 +40191,7 @@ Counts what a call has spent and decides when a budget is reached.
 
 <a id="fim.sweep_run._BudgetTracker.reserve"></a>
 
-#### reserve
+#### [reserve](./sweep_run.py#L1164)
 
 ```python
 def reserve() -> bool
@@ -40201,7 +40201,7 @@ Claim one new point to compute; `False` once a budget is reached.
 
 <a id="fim.sweep_run._BudgetTracker.add_bytes"></a>
 
-#### add\_bytes
+#### [add\_bytes](./sweep_run.py#L1177)
 
 ```python
 def add_bytes(size: int) -> None
@@ -40211,7 +40211,7 @@ Count the bytes of a finished point, then check the budget.
 
 <a id="fim.sweep_run._BudgetTracker.check"></a>
 
-#### check
+#### [check](./sweep_run.py#L1183)
 
 ```python
 def check() -> None
@@ -40221,7 +40221,7 @@ Stop the sweep if the time or disk limit has been reached.
 
 <a id="fim.sweep_run._Context"></a>
 
-## \_Context Objects
+## [\_Context Objects](./sweep_run.py#L1223)
 
 ```python
 @dataclass(slots=True)
@@ -40232,7 +40232,7 @@ What every point of one `run_sweep` call shares.
 
 <a id="fim.sweep_run._Context.emit"></a>
 
-#### emit
+#### [emit](./sweep_run.py#L1257)
 
 ```python
 def emit(kind: EventKind,
@@ -40246,7 +40246,7 @@ Send one event; a finishing event advances the finished count.
 
 <a id="fim.sweep_run.run_sweep"></a>
 
-#### run\_sweep
+#### [run\_sweep](./sweep_run.py#L1270)
 
 ```python
 def run_sweep(study_id: str,
@@ -40347,7 +40347,7 @@ falls back to the runner's `run_point`.
 
 <a id="fim.sweep_run.sweep_lock_held"></a>
 
-#### sweep\_lock\_held
+#### [sweep\_lock\_held](./sweep_run.py#L1389)
 
 ```python
 def sweep_lock_held(study_id: str, *, results: Path | None = None) -> bool
@@ -40368,7 +40368,7 @@ Return whether a process is running the sweep `study_id` right now.
 
 <a id="fim.sweep_run.sweep_lock_path"></a>
 
-#### sweep\_lock\_path
+#### [sweep\_lock\_path](./sweep_run.py#L1403)
 
 ```python
 def sweep_lock_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40381,7 +40381,7 @@ sees it.
 
 <a id="fim.sweep_run.verification_path"></a>
 
-#### verification\_path
+#### [verification\_path](./sweep_run.py#L1610)
 
 ```python
 def verification_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40394,7 +40394,7 @@ see it.
 
 <a id="fim.sweep_run.read_verification"></a>
 
-#### read\_verification
+#### [read\_verification](./sweep_run.py#L1621)
 
 ```python
 def read_verification(study_id: str,
@@ -40411,7 +40411,7 @@ Keys: `verified_at` (UTC text), `software_version`, `plan_digest`,
 
 <a id="fim.sweep_run.failures_path"></a>
 
-#### failures\_path
+#### [failures\_path](./sweep_run.py#L1678)
 
 ```python
 def failures_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40424,7 +40424,7 @@ Kept in a subdirectory of the Study index so the index's own
 
 <a id="fim.sweep_run.read_failures"></a>
 
-#### read\_failures
+#### [read\_failures](./sweep_run.py#L1687)
 
 ```python
 def read_failures(study_id: str,
@@ -40436,7 +40436,7 @@ Return recorded failures by point `run_id`; empty if none or unreadable.
 
 <a id="fim.sweep_run.read_point_objects"></a>
 
-#### read\_point\_objects
+#### [read\_point\_objects](./sweep_run.py#L1695)
 
 ```python
 def read_point_objects(study_id: str,
@@ -40448,7 +40448,7 @@ Return each point's linked Run object ID by point `run_id`.
 
 <a id="fim.sweep_run.Replan"></a>
 
-## Replan Objects
+## [Replan Objects](./sweep_run.py#L1778)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40474,7 +40474,7 @@ What `replan_sweep` changed, or would change.
 
 <a id="fim.sweep_run.replan_sweep"></a>
 
-#### replan\_sweep
+#### [replan\_sweep](./sweep_run.py#L1811)
 
 ```python
 def replan_sweep(study_id: str,
@@ -40518,7 +40518,7 @@ an ordinary run, listed in the result, and its point runs again.
 
 <a id="fim.sweep_run.write_reproducibility_note"></a>
 
-#### write\_reproducibility\_note
+#### [write\_reproducibility\_note](./sweep_run.py#L2222)
 
 ```python
 def write_reproducibility_note(directory: Path,
@@ -40532,7 +40532,7 @@ the run's own record of itself is untouched.
 
 <a id="fim.sweep_run.sweep_point_results"></a>
 
-#### sweep\_point\_results
+#### [sweep\_point\_results](./sweep_run.py#L2233)
 
 ```python
 def sweep_point_results(study: StudyManifest,
@@ -40553,7 +40553,7 @@ nothing.
 
 <a id="fim.sweep_run.health_cache_path"></a>
 
-#### health\_cache\_path
+#### [health\_cache\_path](./sweep_run.py#L2264)
 
 ```python
 def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40563,7 +40563,7 @@ Return the disposable cache of a sweep's point health counts.
 
 <a id="fim.sweep_run.trajectory_cache_path"></a>
 
-#### trajectory\_cache\_path
+#### [trajectory\_cache\_path](./sweep_run.py#L2269)
 
 ```python
 def trajectory_cache_path(study_id: str,
@@ -40575,7 +40575,7 @@ Return the disposable folder of a sweep's cached point trajectories.
 
 <a id="fim.sweep_status"></a>
 
-# fim.sweep\_status
+# [fim.sweep\_status](./sweep_status.py#L1)
 
 Where a sweep stands: its points by state, who is running it, and the ETA.
 
@@ -40585,7 +40585,7 @@ another is running the sweep, and nothing is written.
 
 <a id="fim.sweep_status.FailedPoint"></a>
 
-## FailedPoint Objects
+## [FailedPoint Objects](./sweep_status.py#L37)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40603,7 +40603,7 @@ A point that failed, and what is known about why.
 
 <a id="fim.sweep_status.SweepStatus"></a>
 
-## SweepStatus Objects
+## [SweepStatus Objects](./sweep_status.py#L54)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40628,7 +40628,7 @@ A snapshot of a sweep.
 
 <a id="fim.sweep_status.SweepStatus.finished"></a>
 
-#### finished
+#### [finished](./sweep_status.py#L82)
 
 ```python
 @property
@@ -40639,7 +40639,7 @@ Whether every point is done and no process is running the sweep.
 
 <a id="fim.sweep_status.read_sweep_status"></a>
 
-#### read\_sweep\_status
+#### [read\_sweep\_status](./sweep_status.py#L87)
 
 ```python
 def read_sweep_status(study_id: str,
@@ -40666,7 +40666,7 @@ Read a sweep Study's status.
 
 <a id="fim.sweep_status.describe_remaining"></a>
 
-#### describe\_remaining
+#### [describe\_remaining](./sweep_status.py#L162)
 
 ```python
 def describe_remaining(status: SweepStatus) -> str
@@ -40687,7 +40687,7 @@ Say in a sentence how much of the sweep is left and how long it may take.
 
 <a id="fim.sweep_table"></a>
 
-# fim.sweep\_table
+# [fim.sweep\_table](./sweep_table.py#L1)
 
 What a sweep's points produced: their statistics and how far to trust them.
 
@@ -40710,7 +40710,7 @@ how to read it.
 
 <a id="fim.sweep_table.HealthClass"></a>
 
-#### HealthClass
+#### [HealthClass](./sweep_table.py#L48)
 
 How far to trust a point: `healthy` (every replicate settled, within the
 requested precision), `degraded` (some capped or unsettled, or wider than the
@@ -40718,7 +40718,7 @@ precision), or `unreliable` (every replicate hit the generation cap).
 
 <a id="fim.sweep_table.StatisticCell"></a>
 
-## StatisticCell Objects
+## [StatisticCell Objects](./sweep_table.py#L55)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40739,7 +40739,7 @@ One statistic of one point, with its across-replicate interval.
 
 <a id="fim.sweep_table.StatisticCell.from_summary_entry"></a>
 
-#### from\_summary\_entry
+#### [from\_summary\_entry](./sweep_table.py#L77)
 
 ```python
 @classmethod
@@ -40750,7 +40750,7 @@ Build a cell from one statistic's entry in a batch `summary.json`.
 
 <a id="fim.sweep_table.HealthPolicy"></a>
 
-## HealthPolicy Objects
+## [HealthPolicy Objects](./sweep_table.py#L96)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40767,13 +40767,13 @@ The thresholds that turn replicate outcomes into a `HealthClass`.
 
 <a id="fim.sweep_table.DEFAULT_HEALTH_POLICY"></a>
 
-#### DEFAULT\_HEALTH\_POLICY
+#### [DEFAULT\_HEALTH\_POLICY](./sweep_table.py#L108)
 
 The policy used unless a caller passes another.
 
 <a id="fim.sweep_table.PointHealth"></a>
 
-## PointHealth Objects
+## [PointHealth Objects](./sweep_table.py#L113)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40794,7 +40794,7 @@ How a point's replicates ended.
 
 <a id="fim.sweep_table.PointHealth.classify"></a>
 
-#### classify
+#### [classify](./sweep_table.py#L133)
 
 ```python
 def classify(policy: HealthPolicy = DEFAULT_HEALTH_POLICY) -> HealthClass
@@ -40804,7 +40804,7 @@ Return how far to trust this point under `policy`.
 
 <a id="fim.sweep_table.PointHealth.describe"></a>
 
-#### describe
+#### [describe](./sweep_table.py#L141)
 
 ```python
 def describe(policy: HealthPolicy = DEFAULT_HEALTH_POLICY) -> str
@@ -40814,7 +40814,7 @@ Say in words why a point is not healthy; empty for a healthy one.
 
 <a id="fim.sweep_table.PointHealth.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep_table.py#L157)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -40824,7 +40824,7 @@ Return the health as plain values, for JSON.
 
 <a id="fim.sweep_table.PointRow"></a>
 
-## PointRow Objects
+## [PointRow Objects](./sweep_table.py#L177)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40852,7 +40852,7 @@ One point of a sweep, read back from its run.
 
 <a id="fim.sweep_table.HealthCache"></a>
 
-## HealthCache Objects
+## [HealthCache Objects](./sweep_table.py#L213)
 
 ```python
 class HealthCache()
@@ -40871,7 +40871,7 @@ changed run is read again. Deleting the file loses nothing.
 
 <a id="fim.sweep_table.HealthCache.get"></a>
 
-#### get
+#### [get](./sweep_table.py#L230)
 
 ```python
 def get(run_id: str,
@@ -40882,7 +40882,7 @@ Return `(converged, hit_cap, other, watched)` if cached for `digest`.
 
 <a id="fim.sweep_table.HealthCache.put"></a>
 
-#### put
+#### [put](./sweep_table.py#L248)
 
 ```python
 def put(run_id: str, digest: str, counts: tuple[int, int, int],
@@ -40893,7 +40893,7 @@ Remember a point's counts.
 
 <a id="fim.sweep_table.HealthCache.save"></a>
 
-#### save
+#### [save](./sweep_table.py#L263)
 
 ```python
 def save() -> None
@@ -40903,7 +40903,7 @@ Write the cache if it changed; a failure is logged, never raised.
 
 <a id="fim.sweep_table.read_point_health"></a>
 
-#### read\_point\_health
+#### [read\_point\_health](./sweep_table.py#L290)
 
 ```python
 def read_point_health(directory: Path,
@@ -40930,32 +40930,32 @@ come from `summary.json`, for the statistics the monitor watched.
 
 <a id="fim.sweep_table.DEFAULT_EXPORT_STATISTICS"></a>
 
-#### DEFAULT\_EXPORT\_STATISTICS
+#### [DEFAULT\_EXPORT\_STATISTICS](./sweep_table.py#L402)
 
 The statistics an export writes unless told otherwise (botanist question
 Q1: `D` and `G_ST` first, every statistic selectable).
 
 <a id="fim.sweep_table.ALL_STATISTICS"></a>
 
-#### ALL\_STATISTICS
+#### [ALL\_STATISTICS](./sweep_table.py#L406)
 
 Pass as `statistics` to write every statistic a sweep has.
 
 <a id="fim.sweep_table.COLUMN_DESCRIPTIONS"></a>
 
-#### COLUMN\_DESCRIPTIONS
+#### [COLUMN\_DESCRIPTIONS](./sweep_table.py#L447)
 
 What each exported column means, for the sidecar and for readers.
 
 <a id="fim.sweep_table.AXIS_DESCRIPTIONS"></a>
 
-#### AXIS\_DESCRIPTIONS
+#### [AXIS\_DESCRIPTIONS](./sweep_table.py#L475)
 
 What a swept configuration key means, for the sidecar's column dictionary.
 
 <a id="fim.sweep_table.TablePoint"></a>
 
-## TablePoint Objects
+## [TablePoint Objects](./sweep_table.py#L509)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40974,7 +40974,7 @@ One planned point of a sweep and, if it has finished, its row.
 
 <a id="fim.sweep_table.SeriesPoint"></a>
 
-## SeriesPoint Objects
+## [SeriesPoint Objects](./sweep_table.py#L528)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -41001,7 +41001,7 @@ One finished point on a response curve.
 
 <a id="fim.sweep_table.Series"></a>
 
-## Series Objects
+## [Series Objects](./sweep_table.py#L563)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -41018,7 +41018,7 @@ One curve of a family: the points that share a value of the `by` axis.
 
 <a id="fim.sweep_table.ResultTable"></a>
 
-## ResultTable Objects
+## [ResultTable Objects](./sweep_table.py#L576)
 
 ```python
 class ResultTable()
@@ -41040,7 +41040,7 @@ An immutable view of a sweep's points, ready to write as data.
 
 <a id="fim.sweep_table.ResultTable.read"></a>
 
-#### read
+#### [read](./sweep_table.py#L611)
 
 ```python
 @classmethod
@@ -41061,7 +41061,7 @@ Read a sweep Study's points and results.
 
 <a id="fim.sweep_table.ResultTable.axis_keys"></a>
 
-#### axis\_keys
+#### [axis\_keys](./sweep_table.py#L651)
 
 ```python
 @property
@@ -41072,7 +41072,7 @@ The swept keys, in axis order.
 
 <a id="fim.sweep_table.ResultTable.statistic_names"></a>
 
-#### statistic\_names
+#### [statistic\_names](./sweep_table.py#L655)
 
 ```python
 def statistic_names() -> tuple[str, ...]
@@ -41082,7 +41082,7 @@ Return every statistic any finished point has, sorted.
 
 <a id="fim.sweep_table.ResultTable.columns"></a>
 
-#### columns
+#### [columns](./sweep_table.py#L665)
 
 ```python
 def columns(*,
@@ -41095,7 +41095,7 @@ Return the column names of the long (default) or wide table.
 
 <a id="fim.sweep_table.ResultTable.long_rows"></a>
 
-#### long\_rows
+#### [long\_rows](./sweep_table.py#L692)
 
 ```python
 def long_rows(statistics: Sequence[str] | str | None = None,
@@ -41121,7 +41121,7 @@ Yield one row per finished point and statistic.
 
 <a id="fim.sweep_table.ResultTable.wide_rows"></a>
 
-#### wide\_rows
+#### [wide\_rows](./sweep_table.py#L721)
 
 ```python
 def wide_rows(statistics: Sequence[str] | str | None = None,
@@ -41134,7 +41134,7 @@ Yield one row per point, with a column group per statistic.
 
 <a id="fim.sweep_table.ResultTable.series"></a>
 
-#### series
+#### [series](./sweep_table.py#L763)
 
 ```python
 def series(x: str,
@@ -41172,7 +41172,7 @@ no finished point is still returned, so a legend can show it.
 
 <a id="fim.sweep_table.ResultTable.to_csv"></a>
 
-#### to\_csv
+#### [to\_csv](./sweep_table.py#L850)
 
 ```python
 def to_csv(
@@ -41202,7 +41202,7 @@ Write the table as CSV, and its sidecar beside it.
 
 <a id="fim.sweep_table.ResultTable.to_jsonl"></a>
 
-#### to\_jsonl
+#### [to\_jsonl](./sweep_table.py#L898)
 
 ```python
 def to_jsonl(
@@ -41231,7 +41231,7 @@ Write the long table as JSON Lines, and its sidecar beside it.
 
 <a id="fim.sweep_table.ResultTable.metadata"></a>
 
-#### metadata
+#### [metadata](./sweep_table.py#L941)
 
 ```python
 def metadata(
@@ -41249,7 +41249,7 @@ Return the sidecar content: how to read the table and where it came from.
 
 <a id="fim.sweep_table.relative_difference"></a>
 
-#### relative\_difference
+#### [relative\_difference](./sweep_table.py#L1122)
 
 ```python
 def relative_difference(difference: float | None,
@@ -41274,7 +41274,7 @@ offered beside it, since some statistics span orders of magnitude).
 
 <a id="fim.sweep_trajectory"></a>
 
-# fim.sweep\_trajectory
+# [fim.sweep\_trajectory](./sweep_trajectory.py#L1)
 
 How each point of a sweep approached equilibrium, in a fixed small size.
 
@@ -41294,26 +41294,26 @@ changed run recomputes. Deleting the cache loses nothing.
 
 <a id="fim.sweep_trajectory.MAX_SAMPLES"></a>
 
-#### MAX\_SAMPLES
+#### [MAX\_SAMPLES](./sweep_trajectory.py#L41)
 
 Most generations in one point trajectory.
 
 <a id="fim.sweep_trajectory.QUORUM_FRACTION"></a>
 
-#### QUORUM\_FRACTION
+#### [QUORUM\_FRACTION](./sweep_trajectory.py#L44)
 
 A sample drawn from fewer than this fraction of a point's replicates is
 drawn dashed: the others have stopped, so the interval is less sure.
 
 <a id="fim.sweep_trajectory.CACHE_SCHEMA"></a>
 
-#### CACHE\_SCHEMA
+#### [CACHE\_SCHEMA](./sweep_trajectory.py#L48)
 
 Version of the cached trajectory file; a different one recomputes.
 
 <a id="fim.sweep_trajectory.TrajectorySeries"></a>
 
-## TrajectorySeries Objects
+## [TrajectorySeries Objects](./sweep_trajectory.py#L53)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -41335,7 +41335,7 @@ Every tuple has one entry per sampled generation of the trajectory.
 
 <a id="fim.sweep_trajectory.PointTrajectory"></a>
 
-## PointTrajectory Objects
+## [PointTrajectory Objects](./sweep_trajectory.py#L75)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -41356,7 +41356,7 @@ A point's replicates reduced to a fixed small number of generations.
 
 <a id="fim.sweep_trajectory.PointTrajectory.has_quorum"></a>
 
-#### has\_quorum
+#### [has\_quorum](./sweep_trajectory.py#L95)
 
 ```python
 def has_quorum(position: int, statistic: str) -> bool
@@ -41371,7 +41371,7 @@ Return whether enough replicates contribute at a sampled position.
 
 <a id="fim.sweep_trajectory.PointTrajectory.to_dict"></a>
 
-#### to\_dict
+#### [to\_dict](./sweep_trajectory.py#L105)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -41381,7 +41381,7 @@ Return the JSON-ready form, the cache's file content.
 
 <a id="fim.sweep_trajectory.PointTrajectory.from_dict"></a>
 
-#### from\_dict
+#### [from\_dict](./sweep_trajectory.py#L127)
 
 ```python
 @classmethod
@@ -41396,7 +41396,7 @@ Rebuild a trajectory from `to_dict`.
 
 <a id="fim.sweep_trajectory.trajectory_grid"></a>
 
-#### trajectory\_grid
+#### [trajectory\_grid](./sweep_trajectory.py#L157)
 
 ```python
 def trajectory_grid(final: int, maximum: int = MAX_SAMPLES) -> tuple[int, ...]
@@ -41421,7 +41421,7 @@ short enough to fit is sampled at every generation.
 
 <a id="fim.sweep_trajectory.point_trajectory"></a>
 
-#### point\_trajectory
+#### [point\_trajectory](./sweep_trajectory.py#L178)
 
 ```python
 def point_trajectory(run_directory: Path,
@@ -41448,7 +41448,7 @@ Reduce a point's replicates to a trajectory, from the cache if it holds one.
 
 <a id="fim.sweep_trajectory.TrajectoryCache"></a>
 
-## TrajectoryCache Objects
+## [TrajectoryCache Objects](./sweep_trajectory.py#L233)
 
 ```python
 class TrajectoryCache()
@@ -41462,7 +41462,7 @@ A disposable cache of point trajectories, one JSON file per run id.
 
 <a id="fim.sweep_trajectory.TrajectoryCache.get"></a>
 
-#### get
+#### [get](./sweep_trajectory.py#L243)
 
 ```python
 def get(run_id: str, key: str) -> PointTrajectory | None
@@ -41472,7 +41472,7 @@ Return the cached trajectory for `run_id` if it was made with `key`.
 
 <a id="fim.sweep_trajectory.TrajectoryCache.put"></a>
 
-#### put
+#### [put](./sweep_trajectory.py#L253)
 
 ```python
 def put(run_id: str, key: str, trajectory: PointTrajectory) -> None
@@ -41482,7 +41482,7 @@ Store a trajectory; a cache that cannot be written is ignored.
 
 <a id="fim.sweep_trajectory.TrajectoryEntry"></a>
 
-## TrajectoryEntry Objects
+## [TrajectoryEntry Objects](./sweep_trajectory.py#L269)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -41493,7 +41493,7 @@ One point's trajectory with the point it belongs to.
 
 <a id="fim.sweep_trajectory.TrajectoryCurve"></a>
 
-## TrajectoryCurve Objects
+## [TrajectoryCurve Objects](./sweep_trajectory.py#L277)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -41509,7 +41509,7 @@ The trajectories of the points that share a value of the `by` axis.
 
 <a id="fim.sweep_trajectory.table_trajectories"></a>
 
-#### table\_trajectories
+#### [table\_trajectories](./sweep_trajectory.py#L289)
 
 ```python
 def table_trajectories(
@@ -41543,7 +41543,7 @@ Read the trajectories of a sweep's finished points, grouped for an overlay.
 
 <a id="fim.sweep_trajectory.write_trajectories_csv"></a>
 
-#### write\_trajectories\_csv
+#### [write\_trajectories\_csv](./sweep_trajectory.py#L336)
 
 ```python
 def write_trajectories_csv(table: ResultTable,
@@ -41576,7 +41576,7 @@ health.
 
 <a id="fim.termination"></a>
 
-# fim.termination
+# [fim.termination](./termination.py#L1)
 
 Turn SIGTERM into an orderly stop for command-line runs.
 
@@ -41600,13 +41600,13 @@ cannot install handlers, both blocks do nothing.
 
 <a id="fim.termination.TERMINATED_EXIT_STATUS"></a>
 
-#### TERMINATED\_EXIT\_STATUS
+#### [TERMINATED\_EXIT\_STATUS](./termination.py#L31)
 
 The exit status a shell reports for a process ended by SIGTERM.
 
 <a id="fim.termination.sigterm_raises_exit"></a>
 
-#### sigterm\_raises\_exit
+#### [sigterm\_raises\_exit](./termination.py#L38)
 
 ```python
 @contextlib.contextmanager
@@ -41621,7 +41621,7 @@ Raise `SystemExit(143)` on the first SIGTERM within the block.
 
 <a id="fim.termination.sigterm_requests_stop"></a>
 
-#### sigterm\_requests\_stop
+#### [sigterm\_requests\_stop](./termination.py#L56)
 
 ```python
 @contextlib.contextmanager
@@ -41636,7 +41636,7 @@ Record the first SIGTERM within the block as a stop request.
 
 <a id="fim.update"></a>
 
-# fim.update
+# [fim.update](./update.py#L1)
 
 Explicit, opt-in release-check logic shared by every front end.
 
@@ -41662,7 +41662,7 @@ threat model permits.
 
 <a id="fim.update.compare_versions"></a>
 
-#### compare\_versions
+#### [compare\_versions](./update.py#L44)
 
 ```python
 def compare_versions(current: str, latest: str) -> int
@@ -41687,7 +41687,7 @@ wrong.
 
 <a id="fim.update.fetch_latest_release"></a>
 
-#### fetch\_latest\_release
+#### [fetch\_latest\_release](./update.py#L67)
 
 ```python
 def fetch_latest_release() -> Mapping[str, Any]
@@ -41728,7 +41728,7 @@ independent case.
 
 <a id="fim.update.latest_release"></a>
 
-#### latest\_release
+#### [latest\_release](./update.py#L121)
 
 ```python
 def latest_release(
@@ -41755,7 +41755,7 @@ confusing `TypeError` or `KeyError` somewhere else entirely.
 
 <a id="fim.update.version_parts"></a>
 
-#### version\_parts
+#### [version\_parts](./update.py#L153)
 
 ```python
 def version_parts(value: str) -> tuple[int, int, int]
@@ -41771,19 +41771,19 @@ before calling this function, which only ever handles the bare
 
 <a id="fim.viz"></a>
 
-# fim.viz
+# [fim.viz](./viz/__init__.py#L1)
 
 Headless visualizations for simulation results and diagnostics.
 
 <a id="fim.viz.diagnostics"></a>
 
-# fim.viz.diagnostics
+# [fim.viz.diagnostics](./viz/diagnostics.py#L1)
 
 Convergence and per-deme frequency diagnostic plots.
 
 <a id="fim.viz.diagnostics.plot_convergence_trace"></a>
 
-#### plot\_convergence\_trace
+#### [plot\_convergence\_trace](./viz/diagnostics.py#L25)
 
 ```python
 def plot_convergence_trace(generations: Sequence[int],
@@ -41808,7 +41808,7 @@ Plot one convergence-statistic value per recorded generation.
 
 <a id="fim.viz.diagnostics.plot_frequency_bars"></a>
 
-#### plot\_frequency\_bars
+#### [plot\_frequency\_bars](./viz/diagnostics.py#L55)
 
 ```python
 def plot_frequency_bars(state: ModelState,
@@ -41832,13 +41832,13 @@ Plot a STRUCTURE-style stacked frequency bar for every deme.
 
 <a id="fim.viz.scatter"></a>
 
-# fim.viz.scatter
+# [fim.viz.scatter](./viz/scatter.py#L1)
 
 Canonical deme-coordinate allele-frequency scatter plots.
 
 <a id="fim.viz.scatter.PcaSummary"></a>
 
-## PcaSummary Objects
+## [PcaSummary Objects](./viz/scatter.py#L33)
 
 ```python
 class PcaSummary(TypedDict)
@@ -41848,7 +41848,7 @@ class PcaSummary(TypedDict)
 
 <a id="fim.viz.scatter.plot_frequency_scatter"></a>
 
-#### plot\_frequency\_scatter
+#### [plot\_frequency\_scatter](./viz/scatter.py#L49)
 
 ```python
 def plot_frequency_scatter(
@@ -41875,7 +41875,7 @@ Plot one point per locus/allele in deme-frequency coordinate space.
 
 <a id="fim.viz.scatter.frequency_points"></a>
 
-#### frequency\_points
+#### [frequency\_points](./viz/scatter.py#L113)
 
 ```python
 def frequency_points(state: ModelState) -> FloatArray
@@ -41892,7 +41892,7 @@ about that path changes.
 
 <a id="fim.viz.scatter.pooled_frequency_points"></a>
 
-#### pooled\_frequency\_points
+#### [pooled\_frequency\_points](./viz/scatter.py#L151)
 
 ```python
 def pooled_frequency_points(states: Sequence[ModelState]) -> FloatArray
@@ -41928,7 +41928,7 @@ special case needed either way.
 
 <a id="fim.viz.scatter.grouped_points"></a>
 
-#### grouped\_points
+#### [grouped\_points](./viz/scatter.py#L182)
 
 ```python
 def grouped_points(
@@ -41950,7 +41950,7 @@ other.
 
 <a id="fim.viz.scatter.marker_groups"></a>
 
-#### marker\_groups
+#### [marker\_groups](./viz/scatter.py#L208)
 
 ```python
 def marker_groups(
@@ -41969,7 +41969,7 @@ output as readily as over one state's own `frequency_points` output
 
 <a id="fim.viz.scatter.scatter_panels"></a>
 
-#### scatter\_panels
+#### [scatter\_panels](./viz/scatter.py#L233)
 
 ```python
 def scatter_panels(state: ModelState,
@@ -42006,7 +42006,7 @@ are ever dispatched to automatically any more, at any `d`.
 
 <a id="fim.viz.scatter.pooled_scatter_panels"></a>
 
-#### pooled\_scatter\_panels
+#### [pooled\_scatter\_panels](./viz/scatter.py#L266)
 
 ```python
 def pooled_scatter_panels(
@@ -42054,7 +42054,7 @@ layout dispatch needs no special case for "pooled" either.
 
 <a id="fim.viz.scatter.panels_from_points"></a>
 
-#### panels\_from\_points
+#### [panels\_from\_points](./viz/scatter.py#L311)
 
 ```python
 def panels_from_points(
@@ -42095,7 +42095,7 @@ need not change their own signatures.
 
 <a id="fim.viz.scatter.deme_pair_panel"></a>
 
-#### deme\_pair\_panel
+#### [deme\_pair\_panel](./viz/scatter.py#L349)
 
 ```python
 def deme_pair_panel(points: FloatArray, first: int,
@@ -42147,7 +42147,7 @@ caller-chosen pair is a different question with a different
 
 <a id="fim.viz.scatter.pca_project"></a>
 
-#### pca\_project
+#### [pca\_project](./viz/scatter.py#L437)
 
 ```python
 def pca_project(points: FloatArray) -> FloatArray
@@ -42163,7 +42163,7 @@ calls this too — one implementation, two consumers.
 
 <a id="fim.viz.scatter.pca_summary"></a>
 
-#### pca\_summary
+#### [pca\_summary](./viz/scatter.py#L456)
 
 ```python
 def pca_summary(points: FloatArray) -> PcaSummary
@@ -42195,7 +42195,7 @@ svd`'s own `Vh`/`right` return, discarded by `pca_project` today).
 
 <a id="fim.viz.scatter.pca_axis_labels"></a>
 
-#### pca\_axis\_labels
+#### [pca\_axis\_labels](./viz/scatter.py#L511)
 
 ```python
 def pca_axis_labels(points: FloatArray) -> tuple[str, str]
@@ -42208,7 +42208,7 @@ label and `_plot_pca`'s matplotlib title — never two.
 
 <a id="fim.workspace"></a>
 
-# fim.workspace
+# [fim.workspace](./workspace.py#L1)
 
 A results directory holding saved runs that can be paused and resumed.
 
@@ -42225,7 +42225,7 @@ uninterrupted run would have given.
 
 <a id="fim.workspace.RunHandle"></a>
 
-## RunHandle Objects
+## [RunHandle Objects](./workspace.py#L53)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -42245,7 +42245,7 @@ process or after a restart.
 
 <a id="fim.workspace.RunHandle.state"></a>
 
-#### state
+#### [state](./workspace.py#L73)
 
 ```python
 @property
@@ -42256,7 +42256,7 @@ Return the run's lifecycle state.
 
 <a id="fim.workspace.RunHandle.directory"></a>
 
-#### directory
+#### [directory](./workspace.py#L78)
 
 ```python
 @property
@@ -42267,7 +42267,7 @@ Return the run's directory.
 
 <a id="fim.workspace.RunHandle.start"></a>
 
-#### start
+#### [start](./workspace.py#L82)
 
 ```python
 def start(*,
@@ -42296,7 +42296,7 @@ gives.
 
 <a id="fim.workspace.RunHandle.pause"></a>
 
-#### pause
+#### [pause](./workspace.py#L128)
 
 ```python
 def pause() -> None
@@ -42306,7 +42306,7 @@ Ask the run to pause at its next safe point.
 
 <a id="fim.workspace.RunHandle.cancel"></a>
 
-#### cancel
+#### [cancel](./workspace.py#L137)
 
 ```python
 def cancel() -> None
@@ -42316,7 +42316,7 @@ Cancel the run; partial data is kept.
 
 <a id="fim.workspace.RunHandle.delete"></a>
 
-#### delete
+#### [delete](./workspace.py#L146)
 
 ```python
 def delete() -> None
@@ -42326,7 +42326,7 @@ Delete the run, which must not be executing.
 
 <a id="fim.workspace.RunHandle.open"></a>
 
-#### open
+#### [open](./workspace.py#L155)
 
 ```python
 def open() -> StoredRun
@@ -42340,7 +42340,7 @@ Open the completed run's files.
 
 <a id="fim.workspace.Workspace"></a>
 
-## Workspace Objects
+## [Workspace Objects](./workspace.py#L169)
 
 ```python
 class Workspace()
@@ -42356,7 +42356,7 @@ A results directory of saved, resumable runs.
 
 <a id="fim.workspace.Workspace.__init__"></a>
 
-#### \_\_init\_\_
+#### [\_\_init\_\_](./workspace.py#L180)
 
 ```python
 def __init__(path: Path | str) -> None
@@ -42366,7 +42366,7 @@ Remember the directory.
 
 <a id="fim.workspace.Workspace.path"></a>
 
-#### path
+#### [path](./workspace.py#L185)
 
 ```python
 @property
@@ -42377,7 +42377,7 @@ Return the workspace directory.
 
 <a id="fim.workspace.Workspace.__repr__"></a>
 
-#### \_\_repr\_\_
+#### [\_\_repr\_\_](./workspace.py#L189)
 
 ```python
 def __repr__() -> str
@@ -42387,7 +42387,7 @@ Return the workspace's path.
 
 <a id="fim.workspace.Workspace.plan"></a>
 
-#### plan
+#### [plan](./workspace.py#L193)
 
 ```python
 def plan(spec: RunSpec | RunConfig,
@@ -42419,7 +42419,7 @@ Save a run without starting it.
 
 <a id="fim.workspace.Workspace.run"></a>
 
-#### run
+#### [run](./workspace.py#L243)
 
 ```python
 def run(spec: RunSpec | RunConfig,
@@ -42443,7 +42443,7 @@ Save a run and run it to completion.
 
 <a id="fim.workspace.Workspace.handle"></a>
 
-#### handle
+#### [handle](./workspace.py#L266)
 
 ```python
 def handle(object_id: str) -> RunHandle
@@ -42457,7 +42457,7 @@ Return the handle of a saved run.
 
 <a id="fim.workspace.Workspace.handles"></a>
 
-#### handles
+#### [handles](./workspace.py#L278)
 
 ```python
 def handles() -> tuple[RunHandle, ...]

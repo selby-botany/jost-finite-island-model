@@ -39,6 +39,9 @@ Arguments:
     OUTPUT_PATH   Where to write the generated Markdown file.
                   Default: test/TESTS.md (the file actually committed to
                   the repository).
+
+Headings link to source declaration lines, relative to OUTPUT_PATH.
+Existing section anchors and table-of-contents links are preserved.
 """
 
 from __future__ import annotations
@@ -54,6 +57,8 @@ _ROOT = Path(__file__).resolve().parents[2]
 _BIN_DIR = _ROOT / "bin"
 _TEST_ROOT = _ROOT / "test"
 _DEFAULT_OUTPUT = _TEST_ROOT / "TESTS.md"
+sys.path.insert(0, str(_ROOT / "dev" / "lib"))
+from docsource import link_document, source_target  # noqa: E402
 
 # Every documented group, in the order they appear in the generated
 # file -- `""` is the synthetic group for files directly under `test/`
@@ -217,7 +222,7 @@ def _render_group(group: str) -> tuple[str, list[str]]:
     return "\n\n".join(sections), toc_lines
 
 
-def _render_document() -> str:
+def _render_document(output: Path = _DEFAULT_OUTPUT) -> str:
     """Render the complete `TESTS.md` document: intro, table of contents,
     then every group's own content in `_GROUPS` order."""
     group_bodies: list[str] = []
@@ -238,13 +243,27 @@ def _render_document() -> str:
         "in full; `doc/fim-simulator-detailed-test-plan.md` links "
         "directly into specific entries rather than repeating their own "
         "explanations. Return to the [source-tree orientation]"
-        "(../src/README.md) or the [developer guide](../doc/developer.md)."
+        f"({source_target(_ROOT / 'src' / 'README.md', output)}) or the "
+        f"[developer guide]({source_target(_ROOT / 'doc' / 'developer.md', output)})."
     )
-    return "\n\n".join([intro, "\n".join(toc), *group_bodies]) + "\n"
+    document = "\n\n".join([intro, "\n".join(toc), *group_bodies]) + "\n"
+    modules = {
+        f"{_group_label(group)}.{source.stem}": source
+        for group in _GROUPS
+        for source in _module_files(_group_directory(group))
+    }
+    return link_document(document, modules, output)
 
 
 def main(argv: list[str] | None = None) -> int:
     """Regenerate `test/TESTS.md` (or a caller-chosen path) and write it."""
+    if sys.version_info < (3, 12):  # noqa: UP036 -- bootstrap older shebang Pythons
+        project_python = str(_BIN_DIR / "python3")
+        script = str(Path(__file__).resolve())
+        os.execv(
+            project_python,
+            [project_python, script, *(sys.argv[1:] if argv is None else argv)],
+        )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "output",
@@ -262,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     # a caller would otherwise see, which names neither the missing
     # tool nor the fix.
     try:
-        document = _render_document()
+        document = _render_document(args.output)
     except subprocess.CalledProcessError as error:
         sys.stderr.write(
             f"generate-test-docs: {' '.join(error.cmd)} failed "

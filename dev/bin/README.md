@@ -16,6 +16,7 @@
   - [`generate-api-docs`](#generate-api-docs)
   - [`generate-heatmap-queue`](#generate-heatmap-queue)
   - [`generate-help-html`](#generate-help-html)
+  - [`generate-test-docs`](#generate-test-docs)
   - [`regenerate-example-outputs`](#regenerate-example-outputs)
   - [`render-heatmap`](#render-heatmap)
   - [`update-worked-examples`](#update-worked-examples)
@@ -81,6 +82,7 @@ run by hand.
 | [`generate-api-docs`](#generate-api-docs) | Rebuilds the generated API reference (`src/fim/API.md`) from the code's own docstrings |
 | [`generate-heatmap-queue`](#generate-heatmap-queue) | Writes a `benchmark-queue` file that measures every combination of deme count and locus length at once, to check whether the engines' own speed crossover is really a simple rectangle in that two-setting space |
 | [`generate-help-html`](#generate-help-html) | Rebuilds the desktop app's in-app Help screen content from `doc/usage.md`/`doc/configuration.md` |
+| [`generate-test-docs`](#generate-test-docs) | Rebuilds the test-suite reference (`test/TESTS.md`) from test docstrings |
 | [`regenerate-example-outputs`](#regenerate-example-outputs) | Reruns the worked examples under `doc/examples/` and replaces their committed result files, so the results the desktop app ships with are exactly what the current code produces |
 | [`render-heatmap`](#render-heatmap) | Turns `generate-heatmap-queue`'s own results into two readable grids: which engine won at each combination, and by how much |
 | [`update-worked-examples`](#update-worked-examples) | Keeps the usage guide's inline worked-example YAML synchronized with canonical configs under `doc/examples/<example>/config.yaml` |
@@ -649,6 +651,12 @@ package) -- every module, class, and function -- together with its
 docstring (the explanation written directly above it in the source
 code).
 
+Module, class, function, method, and data headings link to their Python
+source using GitHub-relative line anchors. Modules link to line 1;
+decorated declarations link to the `class`, `def`, or `async def` line,
+not the first decorator. Existing section anchors and table-of-contents
+links remain unchanged.
+
 **Why it matters:** Anyone who wants to know exactly what a function
 does or what values it expects should be able to look that up on GitHub
 without installing Python or opening a code editor -- that is what
@@ -683,9 +691,33 @@ dev/bin/generate-api-docs /tmp/scratch-api.md
 
 With no arguments, overwrites the real, committed `src/fim/API.md`. A
 path argument writes there instead, without touching the committed
-file -- used by the freshness check described above, which renders into
-a temporary location and compares it against what is actually
-committed, rather than overwriting the real file just to check it.
+file. Source and navigation links are relative to the output's directory,
+including when the output is outside the repository. Freshness checks
+therefore use a temporary file beside the committed reference so their
+relative links are identical, without overwriting the reference.
+
+## `generate-test-docs`
+
+**What it does:** Rebuilds [`test/TESTS.md`](../../test/TESTS.md) from
+test-module, class, fixture, helper, and test-function docstrings.
+Like `generate-api-docs`, headings link to source declaration lines,
+including methods of nested classes and decorated tests. Module links
+start at line 1, and existing qualified section anchors stay unchanged.
+
+**When to run it:** After changing Python files under `test/` or this
+generator. The pre-commit hook refreshes it for staged test changes;
+pre-push and `./build --ci` check freshness.
+
+**Usage:**
+
+```console
+dev/bin/generate-test-docs
+dev/bin/generate-test-docs /tmp/scratch-tests.md
+```
+
+An optional path writes a separate reference with links relative to that
+location. Freshness checks render beside the committed reference, as for
+`generate-api-docs`.
 
 ## `generate-heatmap-queue`
 
