@@ -163,6 +163,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_watched_statistics_screen`](#gui.test_watched_statistics_screen)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
   - [`test_welcome_screen`](#gui.test_welcome_screen)
+  - [`test_workspace`](#gui.test_workspace)
 - [`test/model/`](#group-model)
   - [`test_allele`](#model.test_allele)
   - [`test_initial`](#model.test_initial)
@@ -12760,6 +12761,41 @@ waits inside JavaScript (see `drive_and_read`).
 **Raises**:
 
 - `AssertionError` - If no accepted value is read before the backstop.
+
+<a id="gui.conftest.poll_document_signal"></a>
+
+#### poll\_document\_signal
+
+```python
+def poll_document_signal(target_window: Any,
+                         tab_id: str,
+                         name: str,
+                         is_done: Callable[[Any], bool] = bool,
+                         *,
+                         what: str | None = None,
+                         interval: float = _POLL_INTERVAL_SECONDS) -> Any
+```
+
+Wait for one document's workspace settle signal.
+
+**Arguments**:
+
+- `target_window` - The window containing the workspace.
+- `tab_id` - The document whose signal is read.
+- `name` - The document-local signal name.
+- `is_done` - Whether a value means the signal has settled.
+- `what` - Optional name for a failed wait.
+- `interval` - Delay between reads, not an attempt limit.
+  
+
+**Returns**:
+
+  The first signal value accepted by `is_done`.
+  
+
+**Raises**:
+
+- `AssertionError` - If the signal does not settle by the backstop.
 
 <a id="gui.conftest.wait_for_run_view_ready"></a>
 
@@ -28834,6 +28870,66 @@ resolves -- so this waits for that call's settle flag
 `get_welcome_dismissed()` back through a second `Api` call on the
 same window. It used to wait a fixed 50 ms instead, which let the
 read race the save it was meant to observe.
+
+<a id="gui.test_workspace"></a>
+
+# gui.test\_workspace
+
+Tests for the browser document store and its compatibility signals.
+
+<a id="gui.test_workspace.test_workspace_registers_every_existing_global_flag"></a>
+
+#### test\_workspace\_registers\_every\_existing\_global\_flag
+
+```python
+def test_workspace_registers_every_existing_global_flag() -> None
+```
+
+All legacy browser flags route through the document-local store.
+
+<a id="gui.test_workspace.test_workspace_order_selection_and_ids_are_stable"></a>
+
+#### test\_workspace\_order\_selection\_and\_ids\_are\_stable
+
+```python
+def test_workspace_order_selection_and_ids_are_stable(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Closing a document preserves order and never makes its ID reusable.
+
+<a id="gui.test_workspace.test_workspace_history_is_owned_by_each_document"></a>
+
+#### test\_workspace\_history\_is\_owned\_by\_each\_document
+
+```python
+def test_workspace_history_is_owned_by_each_document(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Moving one document's history cursor leaves another history intact.
+
+<a id="gui.test_workspace.test_legacy_settle_aliases_route_to_the_selected_document"></a>
+
+#### test\_legacy\_settle\_aliases\_route\_to\_the\_selected\_document
+
+```python
+def test_legacy_settle_aliases_route_to_the_selected_document(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Existing global flags read and write the selected document's signal.
+
+<a id="gui.test_workspace.test_job_and_resource_indexes_follow_document_lifecycle"></a>
+
+#### test\_job\_and\_resource\_indexes\_follow\_document\_lifecycle
+
+```python
+def test_job_and_resource_indexes_follow_document_lifecycle(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Indexes resolve to their owner and are cleared when it closes.
 
 
 

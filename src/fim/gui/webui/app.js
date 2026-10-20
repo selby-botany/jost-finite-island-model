@@ -41,26 +41,26 @@ let completedOutputDirectory = null;
 // `completedOutputDirectory` already established immediately above.
 let completedTrajectoryPath = null;
 
-let screenHistory = ["screen-open-run"];
-let screenHistoryIndex = 0;
-
 /**
- * Enable/disable every screen-history control from the shared history
- * cursor. Buttons can live in the always-visible strip or inside a
- * specific screen; they all expose the same operation.
+ * Enable/disable every screen-history control from the selected
+ * document's history cursor. Buttons can live in the always-visible
+ * strip or inside a specific screen; they all expose the same operation.
  */
 function syncHistoryControls() {
-    const canGoBack = screenHistoryIndex > 0;
-    const canGoForward = screenHistoryIndex < screenHistory.length - 1;
+    const selectedId = window.fim.workspace.selectedId();
+    const history = selectedId === null
+        ? { back: false, forward: false }
+        : window.fim.workspace.historyState(selectedId);
     for (const button of document.querySelectorAll("[data-history-back]")) {
-        button.disabled = !canGoBack;
+        button.disabled = !history.back;
     }
     for (const button of document.querySelectorAll("[data-history-forward]")) {
-        button.disabled = !canGoForward;
+        button.disabled = !history.forward;
     }
 }
 
 const fim = {
+    workspace: window.fimWorkspace,
     /**
      * Show exactly one top-level `.screen` section, hiding the rest.
      * @param {string} screenId
@@ -71,9 +71,10 @@ const fim = {
         const currentScreenId =
             currentlyVisible === null ? null : currentlyVisible.id;
         if (recordHistory && currentScreenId !== screenId) {
-            screenHistory = screenHistory.slice(0, screenHistoryIndex + 1);
-            screenHistory.push(screenId);
-            screenHistoryIndex = screenHistory.length - 1;
+            const selectedId = window.fim.workspace.selectedId();
+            if (selectedId !== null) {
+                window.fim.workspace.recordHistory(selectedId, screenId);
+            }
         }
         for (const section of document.querySelectorAll(".screen")) {
             section.hidden = section.id !== screenId;
@@ -92,23 +93,25 @@ const fim = {
     },
 
     navigateBack() {
-        if (screenHistoryIndex === 0) {
+        const selectedId = window.fim.workspace.selectedId();
+        if (selectedId === null) {
             return;
         }
-        screenHistoryIndex -= 1;
-        window.fim.showScreen(screenHistory[screenHistoryIndex], {
-            recordHistory: false,
-        });
+        const screenId = window.fim.workspace.moveHistory(selectedId, -1);
+        if (screenId !== null) {
+            window.fim.showScreen(screenId, { recordHistory: false });
+        }
     },
 
     navigateForward() {
-        if (screenHistoryIndex >= screenHistory.length - 1) {
+        const selectedId = window.fim.workspace.selectedId();
+        if (selectedId === null) {
             return;
         }
-        screenHistoryIndex += 1;
-        window.fim.showScreen(screenHistory[screenHistoryIndex], {
-            recordHistory: false,
-        });
+        const screenId = window.fim.workspace.moveHistory(selectedId, 1);
+        if (screenId !== null) {
+            window.fim.showScreen(screenId, { recordHistory: false });
+        }
     },
 
     syncHistoryControls,
