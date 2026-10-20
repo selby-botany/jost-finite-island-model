@@ -28982,6 +28982,17 @@ def test_run_controls_title_settings_and_saved_run_are_document_local(
 
 Run metadata, overrides, title, and saved-run editing follow tabs.
 
+<a id="gui.test_workspace.test_configure_form_and_composite_editors_restore_per_document"></a>
+
+#### test\_configure\_form\_and\_composite\_editors\_restore\_per\_document
+
+```python
+def test_configure_form_and_composite_editors_restore_per_document(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Form values and composite-editor modes follow the selected document.
+
 
 
 <a id="group-model"></a>

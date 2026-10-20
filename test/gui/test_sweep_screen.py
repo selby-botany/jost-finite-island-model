@@ -155,6 +155,82 @@ def test_configure_opens_the_sweep_screen_with_one_default_axis(
     assert state["values"] == ["0.0001, 0.001, 0.01, 0.1"]
 
 
+def test_sweep_dialog_refuses_to_apply_after_its_document_closes(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        window.evaluate_js(
+            "window.__fimSweepOwner = window.fim.workspace.selectedId();"
+            "window.fim.workspace.createDocument();"
+            "window.fim.workspace.closeDocument(window.__fimSweepOwner);"
+        )
+        window.evaluate_js("document.getElementById('sweep-done-button').click();")
+        return window.evaluate_js("""({
+            dialogOpen: document.getElementById('modal-sweep').open,
+            banner: document.getElementById('sweep-banner-dialog').textContent,
+            selectedSweepEnabled:
+                document.getElementById('configure-sweep-checkbox').checked
+        })""")
+
+    state = _drive(window, steps)
+
+    assert state["dialogOpen"] is True
+    assert "document was closed" in state["banner"]
+    assert state["selectedSweepEnabled"] is False
+
+
+def test_sweep_dialog_applies_only_to_its_opening_document(
+    fast_scalar_run_settings: Path, window: webview.Window
+) -> None:
+    def steps(poll_until: Poll) -> Any:
+        window.evaluate_js(_SET_TINY_FIELDS + _OPEN_SWEEP)
+        poll_until(_SCREEN_STATE, _plan_ready)
+        window.evaluate_js("""(() => {
+            const workspace = window.fim.workspace;
+            window.__fimSweepOwner = workspace.selectedId();
+            window.__fimSweepOther = workspace.createDocument();
+            document.getElementById('sweep-done-button').click();
+        })()""")
+        poll_until(
+            "window.fim.getSweepDocumentSnapshot(window.__fimSweepOwner)"
+            ".config !== null",
+            lambda value: value is True,
+        )
+        return window.evaluate_js("""(() => {
+            const workspace = window.fim.workspace;
+            const owner = window.__fimSweepOwner;
+            const other = window.__fimSweepOther;
+            const ownerSetup = window.fim.getSweepDocumentSnapshot(owner);
+            const otherSetup = window.fim.getSweepDocumentSnapshot(other);
+            workspace.select(owner);
+            const ownerChecked =
+                document.getElementById('configure-sweep-checkbox').checked;
+            workspace.select(other);
+            return {
+                ownerEnabled: ownerSetup.enabled,
+                ownerHasConfig: ownerSetup.config !== null,
+                otherEnabled: otherSetup.enabled,
+                otherHasConfig: otherSetup.config !== null,
+                ownerChecked,
+                otherChecked:
+                    document.getElementById('configure-sweep-checkbox').checked,
+            };
+        })()""")
+
+    state = _drive(window, steps)
+
+    assert state == {
+        "ownerEnabled": True,
+        "ownerHasConfig": True,
+        "otherEnabled": False,
+        "otherHasConfig": False,
+        "ownerChecked": True,
+        "otherChecked": False,
+    }
+
+
 def test_adding_and_removing_an_axis_changes_the_grid(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
@@ -391,7 +467,9 @@ def test_closing_the_dialog_any_way_but_cancel_keeps_what_it_showed(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
     saved = """({
-        axes: sweepConfig === null ? null : sweepConfig.request.axes.map((a) => a.key),
+        axes: window.fim.getSweepDocumentSnapshot(
+            window.fim.workspace.selectedId()
+        ).config.request.axes.map((axis) => axis.key),
         summary: document.getElementById('configure-sweep-summary').textContent,
         open: document.getElementById('modal-sweep').open
     })"""

@@ -648,3 +648,116 @@ def test_run_controls_title_settings_and_saved_run_are_document_local(
         "editing": None,
         "pauseHidden": True,
     }
+
+
+def test_configure_form_and_composite_editors_restore_per_document(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Form values and composite-editor modes follow the selected document."""
+    state = drive(
+        window,
+        trigger="""window.__fimTestPromise = (async () => {
+            const workspace = window.fim.workspace;
+            const first = workspace.selectedId();
+            function setField(name, value) {
+                const field = document.getElementById(`field-${name}`);
+                field.value = value;
+                field.dispatchEvent(new Event("input", {bubbles: true}));
+            }
+            function setMode(name, value) {
+                const radio = document.querySelector(
+                    `input[name="${name}"][value="${value}"]`
+                );
+                radio.checked = true;
+                radio.dispatchEvent(new Event("change", {bubbles: true}));
+            }
+
+            setField("d", "3");
+            setField("N", "11, 22, 33");
+            setField(
+                "m_matrix_json",
+                "[[0.9,0.1,0],[0.2,0.7,0.1],[0,0.3,0.7]]"
+            );
+            setField("loci_json", '[{"locus_id":7,"length":50}]');
+            setField("p0_json", '[[{"0":0.8,"1":0.2}]]');
+            setMode("m_mode", "matrix");
+            setMode("loci_mode", "custom");
+            setMode("initial_conditions_mode", "explicit_p0");
+            setMode("n_mode", "per_deme");
+            await window.fim.revalidateForm();
+
+            const second = workspace.createDocument();
+            setField("d", "5");
+            setField("N", "99");
+            setField("m_matrix_json", "[[0.6,0.4]]");
+            setField("loci_json", '[{"locus_id":4,"length":60}]');
+            setField("p0_json", '[[{"1":1}]]');
+            setMode("n_mode", "same");
+            await window.fim.revalidateForm();
+            workspace.select(first);
+            const firstView = {
+                d: document.getElementById("field-d").value,
+                N: document.getElementById("field-N").value,
+                nMode: document.querySelector(
+                    'input[name="n_mode"]:checked'
+                ).value,
+                migrationMode: document.querySelector(
+                    'input[name="m_mode"]:checked'
+                ).value,
+                lociMode: document.querySelector(
+                    'input[name="loci_mode"]:checked'
+                ).value,
+                initialMode: document.querySelector(
+                    'input[name="initial_conditions_mode"]:checked'
+                ).value,
+                matrix: document.getElementById("field-m_matrix_json").value,
+                matrixCell: document.querySelector(".matrix-cell").value,
+                loci: document.getElementById("field-loci_json").value,
+                locusId: document.querySelector(".loci-id-cell").value,
+                p0: document.getElementById("field-p0_json").value,
+                p0Cell: document.querySelector(".p0-cell").value,
+            };
+            workspace.select(second);
+            const secondView = {
+                d: document.getElementById("field-d").value,
+                N: document.getElementById("field-N").value,
+                nMode: document.querySelector(
+                    'input[name="n_mode"]:checked'
+                ).value,
+                migrationMode: document.querySelector(
+                    'input[name="m_mode"]:checked'
+                ).value,
+                lociMode: document.querySelector(
+                    'input[name="loci_mode"]:checked'
+                ).value,
+                initialMode: document.querySelector(
+                    'input[name="initial_conditions_mode"]:checked'
+                ).value,
+                matrixCell: document.querySelector(".matrix-cell").value,
+                locusId: document.querySelector(".loci-id-cell").value,
+                p0Cell: document.querySelector(".p0-cell").value,
+            };
+            return {firstView, secondView};
+        })().then((result) => window.__fimTestResult = result);""",
+        read="window.__fimTestResult",
+        ready="window.__fimRunViewReady === true",
+    )
+
+    assert state["firstView"]["d"] == "3"
+    assert state["firstView"]["N"] == "11, 22, 33"
+    assert state["firstView"]["nMode"] == "per_deme"
+    assert state["firstView"]["migrationMode"] == "matrix"
+    assert state["firstView"]["lociMode"] == "custom"
+    assert state["firstView"]["initialMode"] == "explicit_p0"
+    assert state["firstView"]["matrixCell"] == "0.9"
+    assert state["firstView"]["locusId"] == "7"
+    assert state["firstView"]["p0Cell"] == "0:0.8,1:0.2"
+    assert state["secondView"]["d"] == "5"
+    assert state["secondView"]["N"] == "99"
+    assert state["secondView"]["nMode"] == "same"
+    assert state["secondView"]["migrationMode"] == "matrix"
+    assert state["secondView"]["lociMode"] == "custom"
+    assert state["secondView"]["initialMode"] == "explicit_p0"
+    assert state["secondView"]["matrixCell"] == "0.6"
+    assert state["secondView"]["locusId"] == "4"
+    assert state["secondView"]["p0Cell"] == "1:1"

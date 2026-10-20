@@ -60,8 +60,8 @@ const runSettingsStripValue = document.getElementById(
  * The run's own run settings, to add to a form submission.
  * @returns {Record<string, string>} empty when Settings apply.
  */
-function perRunSettingValues() {
-    const state = runSettingsStateFor();
+function perRunSettingValues(tabId = window.fim.workspace.selectedId()) {
+    const state = runSettingsStateFor(tabId);
     return state === null || state.loaded === null ? {} : { ...state.loaded };
 }
 
@@ -144,8 +144,11 @@ window.fim.renderRunSettingsNotice = renderRunSettingsNotice;
  *     (`Api.load_example`, `load_preset`, `load_yaml`,
  *     `load_run_configuration`).
  */
-function applyLoadedRunSettings(result) {
-    const state = runSettingsStateFor();
+function applyLoadedRunSettings(
+    result,
+    tabId = window.fim.workspace.selectedId()
+) {
+    const state = runSettingsStateFor(tabId);
     if (!state) {
         return;
     }
@@ -156,14 +159,14 @@ function applyLoadedRunSettings(result) {
     state.dismissed = false;
     state.adopted = false;
     state.adoptionError = null;
-    renderRunSettingsNotice();
+    renderRunSettingsNotice(state);
 }
 
 window.fim.applyLoadedRunSettings = applyLoadedRunSettings;
 
 /** Go back to Settings for the run settings (a fresh configuration). */
-function clearLoadedRunSettings() {
-    const state = runSettingsStateFor();
+function clearLoadedRunSettings(tabId = window.fim.workspace.selectedId()) {
+    const state = runSettingsStateFor(tabId);
     if (!state) {
         return;
     }
@@ -174,7 +177,7 @@ function clearLoadedRunSettings() {
     state.dismissed = false;
     state.adopted = false;
     state.adoptionError = null;
-    renderRunSettingsNotice();
+    renderRunSettingsNotice(state);
 }
 
 window.fim.clearLoadedRunSettings = clearLoadedRunSettings;

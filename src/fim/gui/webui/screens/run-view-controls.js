@@ -267,7 +267,7 @@ async function startConfiguredRun() {
         runDescriptionInput.value = "";
     }
     // The configuration now belongs to a run, so it is nothing left to save.
-    window.fim.markFormClean();
+    window.fim.markFormClean(tabId);
     if (started.reused) {
         // Already computed: nothing was started. Show the existing run the
         // way Home opens it, and say so.
@@ -305,33 +305,48 @@ async function startConfiguredRun() {
 }
 
 async function onLoadYamlClicked() {
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
     const result = await window.pywebview.api.load_yaml();
+    if (window.fim.workspace.get(tabId) !== documentState) {
+        showRunBanner("The document was closed before the configuration loaded.");
+        return;
+    }
     if (!result.ok) {
-        if (result.message) {
+        if (result.message && window.fim.workspace.selectedId() === tabId) {
             showRunBanner(result.message);
         }
         return;
     }
-    showRunBanner("");
-    applyFormValues(result.values);
+    const selected = window.fim.workspace.selectedId() === tabId;
+    if (selected) {
+        showRunBanner("");
+    }
+    applyFormValues(result.values, { tabId, render: selected });
     // The file's run settings apply to this run only
     // (`run-settings-notice.js`).
-    window.fim.applyLoadedRunSettings(result);
-    await revalidate();
+    window.fim.applyLoadedRunSettings(result, tabId);
+    if (selected) {
+        await revalidate(tabId);
+    }
 }
 
 async function onSaveYamlClicked() {
-    const values = collectFormValues();
+    const tabId = window.fim.workspace.selectedId();
+    const values = collectFormValues(tabId);
     const result = await window.pywebview.api.save_yaml(values);
     if (!result.ok) {
-        if (result.message) {
+        if (result.message && window.fim.workspace.selectedId() === tabId) {
             showRunBanner(result.message);
         }
         return;
     }
-    showRunBanner("");
-    runReason.textContent = `Saved to ${result.path}`;
-    window.fim.markFormClean();
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner("");
+        runReason.textContent = `Saved to ${result.path}`;
+    }
+    window.fim.markFormClean(tabId);
 }
 
 window.fim.openConfiguration = async function openConfiguration() {

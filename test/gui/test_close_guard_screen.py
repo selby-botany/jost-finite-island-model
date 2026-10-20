@@ -37,6 +37,13 @@ _EDIT_DEMES = (
     "field.dispatchEvent(new Event('input', {bubbles: true}));"
     "return true;})()"
 )
+_EDIT_DEMES_TO_FOUR = (
+    "(function(){"
+    "var field = document.getElementById('field-d');"
+    "field.value = '4';"
+    "field.dispatchEvent(new Event('input', {bubbles: true}));"
+    "return true;})()"
+)
 
 
 def _click(window: webview.Window, element_id: str) -> None:
@@ -104,6 +111,31 @@ def test_editing_the_form_reports_unsaved_edits_and_loading_one_clears_them() ->
         _wait_for_unsaved(api, True)
         # A new configuration is a loaded form, so it is the new baseline.
         window.evaluate_js("resetInputForm(); true;")
+        _wait_for_unsaved(api, False)
+
+    _drive(steps)
+
+
+def test_unsaved_edits_are_aggregated_across_documents() -> None:
+    def steps(window: webview.Window, api: Api) -> None:
+        first = window.evaluate_js("window.fim.workspace.selectedId()")
+        window.evaluate_js(_EDIT_DEMES)
+        _wait_for_unsaved(api, True)
+
+        second = window.evaluate_js("window.fim.workspace.createDocument()")
+        window.evaluate_js("window.fim.markFormClean(); true;")
+        window.evaluate_js(_EDIT_DEMES_TO_FOUR)
+        _wait_for_unsaved(api, True)
+
+        window.evaluate_js(
+            f"window.fim.workspace.select('{first}');"
+            f"window.fim.markFormClean('{first}'); true;"
+        )
+        _wait_for_unsaved(api, True)
+        window.evaluate_js(
+            f"window.fim.workspace.select('{second}');"
+            f"window.fim.markFormClean('{second}'); true;"
+        )
         _wait_for_unsaved(api, False)
 
     _drive(steps)
@@ -191,5 +223,47 @@ def test_saving_before_a_close_clears_the_unsaved_edits() -> None:
         _click(window, "save-run-object-button")
         _wait_for_unsaved(api, False)
         assert _start_close(window) is False
+
+    _drive(steps)
+
+
+def test_saving_before_a_close_does_not_discard_unsaved_sweep_setup() -> None:
+    def steps(window: webview.Window, api: Api) -> bool:
+        window.evaluate_js(
+            "(function(){"
+            "var state = window.fim.workspace.selected();"
+            "state.sweepSetup = {"
+            "enabled: true, config: {request: {axes: []}},"
+            "draft: {axes: [{key: 'm'}]}"
+            "};"
+            "window.fim.refreshUnsavedEdits();"
+            "return true;})()"
+        )
+        _wait_for_unsaved(api, True)
+
+        assert _start_close(window) is True
+        poll_page(window, _DIALOG_OPEN, what="the close dialog to open")
+        _click(window, "confirm-close-primary-button")
+        poll_page(
+            window,
+            "document.getElementById('confirm-close-error').hidden === false",
+            what="the close dialog to explain that sweep setup was not saved",
+        )
+        assert api._close_gate.closing is False
+        assert api._close_gate.unsaved_edits is True
+        assert (
+            window.evaluate_js(
+                "document.getElementById('confirm-close-primary-button').disabled"
+            )
+            is True
+        )
+        _click(window, "confirm-close-discard-button")
+        poll_or_fail(
+            lambda: api._close_gate.closing,
+            lambda closing: closing is True,
+            "the window to close after discarding sweep setup",
+            interval=_POLL_INTERVAL_SECONDS,
+        )
+        return True
 
     _drive(steps)

@@ -295,8 +295,9 @@ async function saveFormForLater() {
         .getElementById("run-description-input")
         .value.trim();
     window.fim.setRunDetails(name, description);
+    const values = collectFormValues(tabId);
     const saved = await window.pywebview.api.save_run_object(
-        collectFormValues(),
+        values,
         state ? state.editingObjectId : null,
         name,
         description
@@ -305,9 +306,7 @@ async function saveFormForLater() {
         if (state) {
             state.editingObjectId = saved.objectId;
         }
-        if (window.fim.workspace.selectedId() === tabId) {
-            window.fim.markFormClean();
-        }
+        window.fim.markFormClean(tabId);
     }
     return saved;
 }
