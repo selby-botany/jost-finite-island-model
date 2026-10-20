@@ -113,6 +113,21 @@ function createCompletedViewState() {
         currentScrubGeneration: null,
         currentScrubIsFinal: true,
         currentScrubStatistics: null,
+        completedPair: [1, 2],
+        completedFinalPairStatistics: null,
+        completedPairFrameStatistics: null,
+        lastScrubbedPairFrame: null,
+        completedBatchSummary: null,
+        completedBatchEffectiveAlleles: null,
+        completedBatch: null,
+        completedBatchPairStatistics: null,
+        completedBatchReplicates: null,
+        completedBatchP0Statistics: null,
+        pooledConvergenceHistories: null,
+        batchScrubGeneration: null,
+        savedResultNote: null,
+        completedPanels: null,
+        completedDemeCount: null,
         isBatch: false,
         hasCompletedResult: false,
     };
@@ -192,18 +207,6 @@ function markWatchedStatisticRow(row, name) {
     }
 }
 
-// The deme pair the completed view's scatter shows (`[x, y]`, 1-based),
-// its final-generation statistics, and, once fetched, its per-frame
-// statistics for the scrubber (`null` until then; the default pair's
-// ride on the scrubber's own frames).
-let completedPair = [1, 2];
-let completedFinalPairStatistics = null;
-let completedPairFrameStatistics = null;
-
-// The scrubber frame last shown, so pair values fetched later can be
-// painted onto it (`loadPairFrameStatistics`).
-let lastScrubbedPairFrame = null;
-
 /**
  * Fetch the chosen pair's statistics for every scrubber frame, once, and
  * repaint the frame on screen. Only reached when someone scrubs a pair
@@ -212,12 +215,17 @@ let lastScrubbedPairFrame = null;
  * scrubber's own fetches.
  */
 async function loadPairFrameStatistics() {
+    const state = activeCompletedViewState;
     const outputDirectory = window.fim.getCompletedOutputDirectory();
-    if (outputDirectory === null || completedPairFrameStatistics !== null) {
+    if (
+        !state ||
+        outputDirectory === null ||
+        state.completedPairFrameStatistics !== null
+    ) {
         return;
     }
-    const [x, y] = completedPair;
-    completedPairFrameStatistics = [];
+    const [x, y] = state.completedPair;
+    state.completedPairFrameStatistics = [];
     window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
     try {
         const result = await window.pywebview.api.get_animation_deme_pair_frames(
@@ -225,16 +233,21 @@ async function loadPairFrameStatistics() {
             x,
             y
         );
-        if (completedPair[0] !== x || completedPair[1] !== y) {
+        if (
+            activeCompletedViewState !== state ||
+            window.fim.getCompletedOutputDirectory() !== outputDirectory ||
+            state.completedPair[0] !== x ||
+            state.completedPair[1] !== y
+        ) {
             return;
         }
-        completedPairFrameStatistics = result.ok
+        state.completedPairFrameStatistics = result.ok
             ? result.frames.map((frame) => frame.pairStatistics)
             : null;
-        if (lastScrubbedPairFrame) {
-            const { frame, index, isFinal } = lastScrubbedPairFrame;
+        if (state.lastScrubbedPairFrame) {
+            const { frame, index, isFinal } = state.lastScrubbedPairFrame;
             renderPairStatistics(
-                pairStatisticsForFrame(frame, index, isFinal),
+                pairStatisticsForFrame(state, frame, index, isFinal),
                 "not known at this generation for this pair"
             );
         }
@@ -251,18 +264,88 @@ async function loadPairFrameStatistics() {
  * @param {boolean} isFinal
  * @returns {object|null}
  */
-function pairStatisticsForFrame(frame, index, isFinal) {
-    if (isFinal && completedFinalPairStatistics) {
-        return completedFinalPairStatistics;
+function pairStatisticsForFrame(state, frame, index, isFinal) {
+    if (isFinal && state.completedFinalPairStatistics) {
+        return state.completedFinalPairStatistics;
     }
-    if (completedPair[0] === 1 && completedPair[1] === 2) {
+    if (state.completedPair[0] === 1 && state.completedPair[1] === 2) {
         return frame.pairStatistics || null;
     }
-    if (completedPairFrameStatistics === null) {
+    if (state.completedPairFrameStatistics === null) {
         loadPairFrameStatistics();
         return null;
     }
-    return completedPairFrameStatistics[index] || null;
+    return state.completedPairFrameStatistics[index] || null;
+}
+
+/** Show one completed run's selected pair without painting into another tab. */
+async function showCompletedPair(state, x, y) {
+    const outputDirectory = window.fim.getCompletedOutputDirectory();
+    if (!state || activeCompletedViewState !== state || outputDirectory === null) {
+        return;
+    }
+    const isBatch = state.isBatch;
+    const getPanel = isBatch
+        ? window.pywebview.api.get_batch_deme_pair_panel
+        : window.pywebview.api.get_deme_pair_panel;
+    const result = await getPanel(outputDirectory, x, y);
+    if (
+        activeCompletedViewState !== state ||
+        window.fim.getCompletedOutputDirectory() !== outputDirectory
+    ) {
+        return;
+    }
+    if (result.ok) {
+        drawScatter(runCanvas, result.panel);
+    }
+    state.completedPair = [x, y];
+    state.completedPairFrameStatistics = null;
+    if (isBatch) {
+        window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
+        try {
+            const pairStatistics =
+                await window.pywebview.api.get_batch_pair_statistics(
+                    outputDirectory,
+                    x,
+                    y
+                );
+            if (
+                activeCompletedViewState !== state ||
+                window.fim.getCompletedOutputDirectory() !== outputDirectory
+            ) {
+                return;
+            }
+            state.completedBatchPairStatistics = pairStatistics;
+            renderPairSummary(pairStatistics);
+        } finally {
+            window.__fimScrubberPending -= 1;
+        }
+        return;
+    }
+    state.completedFinalPairStatistics = result.ok
+        ? result.pairStatistics
+        : null;
+    renderPairStatistics(state.completedFinalPairStatistics);
+}
+
+/** Wire the selector to the currently selected document's saved result. */
+function wireCompletedPairSelector(state) {
+    const panels = state.completedPanels;
+    const demeCount = state.completedDemeCount;
+    runDemePairSelector.hidden =
+        !panels || demeCount < DEMES_NEEDED_FOR_PAIR;
+    if (!panels || panels.length === 0) {
+        return;
+    }
+    window.fim.wireDemePairSelector({
+        xSelect: runXDeme,
+        ySelect: runYDeme,
+        container: runDemePairSelector,
+        selfComparisonNote: runDemePairSelfNote,
+        demeCount,
+        pair: state.completedPair,
+        onShowPair: (x, y) => showCompletedPair(state, x, y),
+    });
 }
 
 /**
@@ -568,10 +651,13 @@ function statisticMessages() {
     }
     if (
         activeCompletedViewState.isBatch &&
-        completedBatch &&
-        completedBatchSummary
+        activeCompletedViewState.completedBatch &&
+        activeCompletedViewState.completedBatchSummary
     ) {
-        return batchMessagesFor(completedBatch, completedBatchSummary);
+        return batchMessagesFor(
+            activeCompletedViewState.completedBatch,
+            activeCompletedViewState.completedBatchSummary
+        );
     }
     if (!activeCompletedViewState.completedWindowStatistics) {
         return [];
@@ -781,16 +867,6 @@ onStatisticCatalogReady(() => {
 // Shares `hiddenTrajectoryStatistics` with the scalar panel (only one
 // of the two views ever shows at once, so there is no risk of one
 // view's own toggle silently fighting the other's).
-let lastPooledConvergenceHistories = null;
-// The scrub position that accompanied `lastPooledConvergenceHistories`,
-// cached for the same reason as the rest of the pair: a repaint that
-// only knows the data (a legend toggle, a zoom-frame resize) would
-// otherwise redraw the batch panel *without* its position marker while
-// the scrubber's own label still names a generation -- reported from
-// the zoom frame, where every resize dropped the marker until the next
-// scrubber nudge. The scalar path never had this gap, since
-// `lastTrajectoryRenderArgs` already carries its scrub argument.
-let lastBatchScrubGeneration = null;
 
 /**
  * Reset the trajectory legend's own hidden-statistic set to this
@@ -919,13 +995,9 @@ const OMITTED_SCRUB_TEXT = "not known at this generation";
 // source. Set by `enterCompletedState`'s own batch branch, nulled by
 // its scalar one, matching the lifetime every `completed*` variable
 // above already observes.
-let completedBatchSummary = null;
-let completedBatchEffectiveAlleles = null;
-
 // How the completed batch was configured to stop (`Api` payload `batch`:
 // replicates run, cap, minimum, precision, confidence, method, watched
 // statistics), which the run messages explain; `null` for a single run.
-let completedBatch = null;
 // The scalar entry's own final `effectiveAlleles` payload, retained for
 // the same reason and on the same lifetime: a scrub tick back at the
 // final frame restores the two derived rows (`renderEffectiveAlleles`)
@@ -1913,9 +1985,12 @@ function repaintTrajectory() {
     }
     if (
         activeCompletedViewState.activeTrajectoryRenderMode === "batch" &&
-        lastPooledConvergenceHistories
+        activeCompletedViewState.pooledConvergenceHistories
     ) {
-        renderBatchTrajectory(lastPooledConvergenceHistories, lastBatchScrubGeneration);
+        renderBatchTrajectory(
+            activeCompletedViewState.pooledConvergenceHistories,
+            activeCompletedViewState.batchScrubGeneration
+        );
     }
 }
 
@@ -3537,8 +3612,9 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled, scrubGeneration) {
  *     on, or `null`/omitted while it tracks the newest tick.
  */
 function renderBatchTrajectory(pooledConvergenceHistories, scrubGeneration) {
-    lastPooledConvergenceHistories = pooledConvergenceHistories;
-    lastBatchScrubGeneration = scrubGeneration ?? null;
+    activeCompletedViewState.pooledConvergenceHistories =
+        pooledConvergenceHistories || null;
+    activeCompletedViewState.batchScrubGeneration = scrubGeneration ?? null;
     // A batch draws its own across-replicate band; the per-run display
     // choice does not apply.
     runTrajectoryDisplayControl.hidden = true;
@@ -4074,11 +4150,49 @@ function restoreCompletedViewForSelectedDocument() {
     if (
         !state ||
         !state.hasCompletedResult ||
-        state.isBatch ||
         window.fim.getRunViewState() !== "completed"
     ) {
         return;
     }
+    window.fim.showSavedResultNote(state.savedResultNote);
+    drawCompletedOverview(
+        state.completedPanels && state.completedPanels[0]
+            ? [state.completedPanels[0]]
+            : null
+    );
+    wireCompletedPairSelector(state);
+    if (state.isBatch) {
+        resultsStats.hidden = true;
+        batchResultsTableEl.hidden = false;
+        batchResultsTable.hidden = false;
+        runResultsTableEl.hidden = true;
+        window.fim.setWatchedStatistics(state.watchedStatisticNames, true);
+        renderBatchSummary(
+            state.completedBatchSummary,
+            state.completedBatchEffectiveAlleles
+        );
+        renderBatchTable(
+            state.completedBatchReplicates || [],
+            state.completedBatchP0Statistics
+        );
+        renderPairSummary(state.completedBatchPairStatistics);
+        renderBatchTrajectory(
+            state.pooledConvergenceHistories,
+            state.batchScrubGeneration
+        );
+        renderSupplementalPanels(state.completedFinalLiteratureVisuals);
+        if (state.completedPair[0] !== 1 || state.completedPair[1] !== 2) {
+            void showCompletedPair(
+                state,
+                state.completedPair[0],
+                state.completedPair[1]
+            );
+        }
+        return;
+    }
+    resultsStats.hidden = false;
+    batchResultsTableEl.hidden = true;
+    batchResultsTable.hidden = true;
     runTrajectoryDisplay.value = state.trajectoryDisplay;
     runTrajectoryBandWidth.value = String(state.trajectoryBandWidth);
     window.fim.setWatchedStatistics(state.watchedStatisticNames, true);
@@ -4115,6 +4229,11 @@ function restoreCompletedViewForSelectedDocument() {
         repaintTrajectory();
     }
     renderSupplementalPanels(state.completedFinalLiteratureVisuals);
+    if (state.completedPair[0] !== 1 || state.completedPair[1] !== 2) {
+        void showCompletedPair(state, state.completedPair[0], state.completedPair[1]);
+    } else {
+        renderPairStatistics(state.completedFinalPairStatistics);
+    }
 }
 
 window.fim.workspace.onSelectionChange((selectedId) => {
@@ -4166,16 +4285,20 @@ window.fim.workspace.onSelectionChange((selectedId) => {
  *     index comparison, not a generation-number comparison).
  */
 function updateScrubbedBatchSummary(frameGeneration, isFinalFrame) {
-    if (!lastPooledConvergenceHistories) {
+    const state = activeCompletedViewState;
+    if (!state || !state.pooledConvergenceHistories) {
         return;
     }
     if (isFinalFrame) {
-        renderBatchSummary(completedBatchSummary, completedBatchEffectiveAlleles);
+        renderBatchSummary(
+            state.completedBatchSummary,
+            state.completedBatchEffectiveAlleles
+        );
         return;
     }
     batchResultsSummary.replaceChildren();
     for (const name of STATISTIC_NAMES) {
-        const points = lastPooledConvergenceHistories[name];
+        const points = state.pooledConvergenceHistories[name];
         // Each statistic's own point list carries its own generation
         // per point (a replicate whose own history dropped an interior
         // gap shifts every later point's own alignment), so the nearest
@@ -4254,6 +4377,7 @@ function setScrubberControlsHidden(hidden) {
  * @param {number} generationCount
  */
 async function wireCompletedScrubber(outputDirectory, generationCount) {
+    const state = activeCompletedViewState;
     if (generationCount <= 1) {
         setScrubberControlsHidden(true);
         runResultsTableEl.hidden = true;
@@ -4274,6 +4398,7 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
         // different completed run opened) by the time this resolves --
         // never draw stale frames into whatever the canvas now shows.
         if (
+            activeCompletedViewState !== state ||
             window.fim.getRunViewState() !== "completed" ||
             window.fim.getCompletedOutputDirectory() !== outputDirectory
         ) {
@@ -4297,6 +4422,9 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
         window.fim.setScrubberFrames(
             result.frames,
             (frame, index) => {
+                if (activeCompletedViewState !== state) {
+                    return;
+                }
                 const isFinal = index === result.frames.length - 1;
                 drawCompletedOverview(frame.panels);
                 updateScrubbedTrajectory(frame.generation, isFinal);
@@ -4305,13 +4433,12 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
                 if (!isFinal) {
                     renderHistoryFreeStatistics(frame.statistics);
                 }
-                const state = activeCompletedViewState;
                 state.currentScrubGeneration = frame.generation;
                 state.currentScrubIsFinal = isFinal;
                 state.currentScrubStatistics = frame.statistics || null;
-                lastScrubbedPairFrame = { frame, index, isFinal };
+                state.lastScrubbedPairFrame = { frame, index, isFinal };
                 renderPairStatistics(
-                    pairStatisticsForFrame(frame, index, isFinal),
+                    pairStatisticsForFrame(state, frame, index, isFinal),
                     "loading the values for this pair…"
                 );
                 if (isFinal && state.completedFinalLiteratureVisuals) {
@@ -4350,6 +4477,7 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
  * @param {string} outputDirectory
  */
 async function wireCompletedBatchScrubber(outputDirectory) {
+    const state = activeCompletedViewState;
     window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
     try {
         const result = await window.pywebview.api.get_batch_animation_frames(
@@ -4359,6 +4487,7 @@ async function wireCompletedBatchScrubber(outputDirectory) {
         // this call is un-awaited by its own caller, so the state may
         // already have moved on by the time it resolves.
         if (
+            activeCompletedViewState !== state ||
             window.fim.getRunViewState() !== "completed" ||
             window.fim.getCompletedOutputDirectory() !== outputDirectory
         ) {
@@ -4375,6 +4504,9 @@ async function wireCompletedBatchScrubber(outputDirectory) {
         window.fim.setScrubberFrames(
             result.frames,
             (frame, index) => {
+                if (activeCompletedViewState !== state) {
+                    return;
+                }
                 drawCompletedOverview(frame.panels);
                 // Every panel on the card follows the scrubber, not
                 // the scatter alone. Reported directly: scrubbing a
@@ -4386,9 +4518,10 @@ async function wireCompletedBatchScrubber(outputDirectory) {
                     renderSupplementalPanels(frame.literatureVisuals);
                 }
                 const isFinal = index === result.frames.length - 1;
-                if (lastPooledConvergenceHistories) {
+                state.batchScrubGeneration = isFinal ? null : frame.generation;
+                if (state.pooledConvergenceHistories) {
                     renderBatchTrajectory(
-                        lastPooledConvergenceHistories,
+                        state.pooledConvergenceHistories,
                         isFinal ? null : frame.generation
                     );
                 }
@@ -4411,9 +4544,6 @@ async function wireCompletedBatchScrubber(outputDirectory) {
  *     the statistics/table fields this function reads conditionally.
  * @param {boolean} isBatch
  */
-// The directory "Run it" loads, while the saved-result note is showing.
-let savedResultDirectory = null;
-
 // Set once "Run it" has finished (loaded or refused) -- the ready-flag
 // precedent `__fimExampleLoadSettled` (`screens/examples.js`) follows.
 window.__fimSavedRunLoadSettled = false;
@@ -4427,12 +4557,14 @@ window.__fimSavedRunLoadSettled = false;
  */
 window.fim.showSavedResultNote = function showSavedResultNote(payload) {
     const show = payload !== null && payload !== undefined;
+    if (activeCompletedViewState) {
+        activeCompletedViewState.savedResultNote = show ? payload : null;
+    }
     runSavedResultNote.hidden = !show;
     runGraphToolbar.hidden = show;
     runGraphBody.hidden = show;
     runSavedResultError.hidden = true;
     runSavedResultError.textContent = "";
-    savedResultDirectory = show ? payload.outputDirectory : null;
     if (show) {
         runSavedResultText.textContent = payload.readOnly
             ? "Run this example to see its trajectories"
@@ -4443,6 +4575,8 @@ window.fim.showSavedResultNote = function showSavedResultNote(payload) {
 // "Run it": load the run into Configure as an editable copy, the same
 // way the Examples dialog's "Load into Configure" does.
 runSavedResultRunButton.addEventListener("click", async () => {
+    const savedResultNote = activeCompletedViewState?.savedResultNote;
+    const savedResultDirectory = savedResultNote?.outputDirectory ?? null;
     if (savedResultDirectory === null) {
         return;
     }
@@ -4504,6 +4638,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     // `string|null`, matching `completedOutputDirectory`'s identical
     // shape immediately above.
     window.fim.setCompletedTrajectoryPath(payload.trajectoryPath ?? null);
+    state.completedPanels = payload.panels || null;
+    state.completedDemeCount = payload.demeCount;
     // A run opened from its saved results alone has nothing to draw:
     // say so, and offer "Run it", in place of the graphs.
     const reportOnly = Boolean(payload.reportOnly);
@@ -4588,12 +4724,19 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         );
         // Set before the summary renders: it renders the run messages, which
         // explain this batch's stop and intervals.
-        completedBatch = payload.batch || null;
-        completedBatchSummary = payload.summary || null;
+        state.completedBatch = payload.batch || null;
+        state.completedBatchSummary = payload.summary || null;
+        state.completedBatchEffectiveAlleles = payload.effectiveAlleles || null;
+        state.completedBatchReplicates = payload.replicates || null;
+        state.completedBatchP0Statistics = payload.p0Statistics || null;
+        state.pooledConvergenceHistories =
+            payload.pooledConvergenceHistories || null;
+        state.completedPanels = payload.panels || null;
+        state.completedDemeCount = payload.demeCount;
         // The statistics whose intervals decide the batch's stop are marked
         // like a single run's watched statistics.
         window.fim.setWatchedStatistics(
-            completedBatch ? completedBatch.statistics : [],
+            state.completedBatch ? state.completedBatch.statistics : [],
             true
         );
         renderBatchSummary(payload.summary, payload.effectiveAlleles);
@@ -4640,9 +4783,11 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         state.currentScrubGeneration = null;
         state.currentScrubIsFinal = true;
         state.currentScrubStatistics = null;
-        completedPair = [1, 2];
-        completedFinalPairStatistics = null;
-        completedPairFrameStatistics = null;
+        state.completedPair = [1, 2];
+        state.completedFinalPairStatistics = null;
+        state.completedPairFrameStatistics = null;
+        state.lastScrubbedPairFrame = null;
+        state.completedBatchPairStatistics = null;
         renderPairStatistics(null, reportOnly ? "not saved with this run" : "loading…");
         if (!reportOnly && payload.demeCount >= DEMES_NEEDED_FOR_PAIR) {
             // Counted with the scrubber's own fetches, so anything waiting
@@ -4651,15 +4796,20 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
             window.pywebview.api
                 .get_batch_pair_statistics(payload.outputDirectory, 1, 2)
-                .then(renderPairSummary)
+                .then((pairStatistics) => {
+                    state.completedBatchPairStatistics = pairStatistics;
+                    if (activeCompletedViewState === state) {
+                        renderPairSummary(pairStatistics);
+                    }
+                })
                 .finally(() => {
                     window.__fimScrubberPending -= 1;
                 });
         }
         state.completedEffectiveAlleles = null;
-        completedBatchSummary = payload.summary || null;
-        completedBatchEffectiveAlleles = payload.effectiveAlleles || null;
-        completedBatch = payload.batch || null;
+        state.completedBatchSummary = payload.summary || null;
+        state.completedBatchEffectiveAlleles = payload.effectiveAlleles || null;
+        state.completedBatch = payload.batch || null;
         renderBatchTrajectory(payload.pooledConvergenceHistories);
     } else {
         const report = payload.report;
@@ -4687,11 +4837,13 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         state.completedWatchedStatistics =
             (payload.convergence && payload.convergence.statistics) || [];
         window.fim.setWatchedStatistics(state.completedWatchedStatistics, true);
-        completedPair = [1, 2];
-        completedFinalPairStatistics = payload.pairStatistics || null;
-        completedPairFrameStatistics = null;
+        state.completedPair = [1, 2];
+        state.completedFinalPairStatistics = payload.pairStatistics || null;
+        state.completedPairFrameStatistics = null;
+        state.lastScrubbedPairFrame = null;
+        state.completedBatchPairStatistics = null;
         renderPairStatistics(
-            completedFinalPairStatistics,
+            state.completedFinalPairStatistics,
             reportOnly ? "not saved with this run" : "no second deme to compare"
         );
         // Set before the row loop just below reads it (`windowStatistics
@@ -4772,9 +4924,13 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         state.completedGenerationCount = payload.generationCount;
         state.completedFinalStatistics = payload.statistics;
         state.completedFinalLiteratureVisuals = payload.literatureVisuals || null;
-        completedBatchSummary = null;
-        completedBatchEffectiveAlleles = null;
-        completedBatch = null;
+        state.completedBatchSummary = null;
+        state.completedBatchEffectiveAlleles = null;
+        state.completedBatch = null;
+        state.completedBatchReplicates = null;
+        state.completedBatchP0Statistics = null;
+        state.pooledConvergenceHistories = null;
+        state.batchScrubGeneration = null;
         state.completedEffectiveAlleles = payload.effectiveAlleles || null;
         state.currentScrubGeneration = null;
         state.currentScrubIsFinal = true;
@@ -4800,51 +4956,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     }
 
     renderSupplementalPanels(payload.literatureVisuals);
-    const panels = payload.panels;
-    drawCompletedOverview(panels);
-    runDemePairSelector.hidden = !panels || payload.demeCount < DEMES_NEEDED_FOR_PAIR;
-    if (panels && panels.length > 0) {
-        window.fim.wireDemePairSelector({
-            xSelect: runXDeme,
-            ySelect: runYDeme,
-            container: runDemePairSelector,
-            selfComparisonNote: runDemePairSelfNote,
-            demeCount: payload.demeCount,
-            onShowPair: async (x, y) => {
-                const outputDirectory = window.fim.getCompletedOutputDirectory();
-                if (outputDirectory === null) {
-                    return;
-                }
-                const getPanel = isBatch
-                    ? window.pywebview.api.get_batch_deme_pair_panel
-                    : window.pywebview.api.get_deme_pair_panel;
-                const result = await getPanel(outputDirectory, x, y);
-                if (result.ok) {
-                    drawScatter(runCanvas, result.panel);
-                }
-                // The pair rows follow the pair the scatter now shows.
-                completedPair = [x, y];
-                completedPairFrameStatistics = null;
-                if (isBatch) {
-                    window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
-                    try {
-                        renderPairSummary(
-                            await window.pywebview.api.get_batch_pair_statistics(
-                                outputDirectory,
-                                x,
-                                y
-                            )
-                        );
-                    } finally {
-                        window.__fimScrubberPending -= 1;
-                    }
-                    return;
-                }
-                completedFinalPairStatistics = result.ok ? result.pairStatistics : null;
-                renderPairStatistics(completedFinalPairStatistics);
-            },
-        });
-    }
+    drawCompletedOverview(state.completedPanels);
+    wireCompletedPairSelector(state);
 
 };
 

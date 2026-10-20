@@ -26,21 +26,6 @@
 // read it.
 let runViewState = "initial";
 
-// The most recently completed run's own output directory, `null` until
-// one exists -- `run-view-completed.js`'s own `enterCompletedState`
-// sets this; `run-view-controls.js`'s "Open output folder" button and
-// `fim.menu.revealOutputFolder` both read it via the getter below,
-// rather than each screen tracking its own copy the way `results.js`/
-// `batch-results.js` used to (one state model, not two, design §3.2.5,
-// applied here too).
-let completedOutputDirectory = null;
-
-// The currently showing scalar run's own `trajectory.tlog` path, `null`
-// for a batch (which has no single trajectory of its own) or before any
-// run has completed -- the same one-state-model precedent
-// `completedOutputDirectory` already established immediately above.
-let completedTrajectoryPath = null;
-
 /**
  * Enable/disable every screen-history control from the selected
  * document's history cursor. Buttons can live in the always-visible
@@ -138,22 +123,28 @@ const fim = {
 
     /** @returns {string|null} */
     getCompletedOutputDirectory() {
-        return completedOutputDirectory;
+        return window.fim.workspace.selected()?.completedOutputDirectory ?? null;
     },
 
     /** @param {string|null} outputDirectory */
     setCompletedOutputDirectory(outputDirectory) {
-        completedOutputDirectory = outputDirectory;
+        const state = window.fim.workspace.selected();
+        if (state) {
+            state.completedOutputDirectory = outputDirectory;
+        }
     },
 
     /** @returns {string|null} */
     getCompletedTrajectoryPath() {
-        return completedTrajectoryPath;
+        return window.fim.workspace.selected()?.completedTrajectoryPath ?? null;
     },
 
     /** @param {string|null} trajectoryPath */
     setCompletedTrajectoryPath(trajectoryPath) {
-        completedTrajectoryPath = trajectoryPath;
+        const state = window.fim.workspace.selected();
+        if (state) {
+            state.completedTrajectoryPath = trajectoryPath;
+        }
     },
 
     /**
@@ -254,11 +245,19 @@ const fim = {
      * @param {HTMLElement} config.selfComparisonNote - Shown only while
      *     `xSelect`/`ySelect` name the same deme; hidden otherwise.
      * @param {number} config.demeCount
+     * @param {[number, number]} [config.pair]
      * @param {(x: number, y: number) => (void|Promise<void>)} config.onShowPair
      */
     wireDemePairSelector(config) {
-        const { xSelect, ySelect, container, selfComparisonNote, demeCount, onShowPair } =
-            config;
+        const {
+            xSelect,
+            ySelect,
+            container,
+            selfComparisonNote,
+            demeCount,
+            pair = [1, 2],
+            onShowPair,
+        } = config;
         if (!demeCount || demeCount < DEMES_NEEDED_FOR_PAIR) {
             container.hidden = true;
             return;
@@ -273,8 +272,8 @@ const fim = {
             xSelect.appendChild(xOption);
             ySelect.appendChild(xOption.cloneNode(true));
         }
-        xSelect.value = "1";
-        ySelect.value = "2";
+        xSelect.value = String(pair[0]);
+        ySelect.value = String(pair[1]);
 
         function updateSelfComparisonNote() {
             const isSelfComparison = xSelect.value === ySelect.value;

@@ -42,14 +42,19 @@ const deleteSelectedButton = document.getElementById(
 const selectionCountLabel = document.getElementById("open-run-selection-count");
 const compareSelectedButton = document.getElementById("open-run-compare-selected-button");
 
-let selectedTrajectoryPath = null;
-// A batch row's own counterpart to `selectedTrajectoryPath` -- a batch
-// has no single trajectory of its own to select (`run.trajectoryPath`
-// is `null` for one), so it needs its own directory-shaped selection
-// instead. The two are mutually exclusive by construction
-// (`setSelectedTrajectory`/`setSelectedBatch` each clear the other),
-// never both non-null at once.
-let selectedBatchDirectory = null;
+function selectedOpenRunSelection() {
+    const state = window.fim.workspace.selected();
+    if (!state) {
+        return null;
+    }
+    if (!state.openRunSelection) {
+        state.openRunSelection = {
+            trajectoryPath: null,
+            batchDirectory: null,
+        };
+    }
+    return state.openRunSelection;
+}
 
 // Every run/Study/Experiment fetched for this visit (`refreshRecentRuns`),
 // unfiltered and ungrouped -- `renderRecentRuns` derives the actual
@@ -434,21 +439,26 @@ function showOpenRunBanner(message) {
 }
 
 function setSelectedTrajectory(path) {
-    selectedTrajectoryPath = path;
-    selectedBatchDirectory = null;
+    const selection = selectedOpenRunSelection();
+    if (selection) {
+        selection.trajectoryPath = path;
+        selection.batchDirectory = null;
+    }
     openButton.disabled = path === null;
 }
 
 /**
  * A batch row's own counterpart to `setSelectedTrajectory` -- see
- * `selectedBatchDirectory`'s own comment for why a batch needs a
- * separate, directory-shaped selection rather than reusing the same
- * variable a trajectory path already occupies.
+ * `openRunSelection`'s two mutually exclusive fields: a batch has no
+ * single trajectory path, so its selection is its directory instead.
  * @param {string | null} directory
  */
 function setSelectedBatch(directory) {
-    selectedBatchDirectory = directory;
-    selectedTrajectoryPath = null;
+    const selection = selectedOpenRunSelection();
+    if (selection) {
+        selection.batchDirectory = directory;
+        selection.trajectoryPath = null;
+    }
     openButton.disabled = directory === null;
 }
 
@@ -2091,15 +2101,16 @@ function buildRecomputeAllButton(group) {
 }
 
 openButton.addEventListener("click", async () => {
-    if (selectedBatchDirectory !== null) {
-        await openBatch(selectedBatchDirectory);
+    const selection = selectedOpenRunSelection();
+    if (selection?.batchDirectory !== null && selection?.batchDirectory !== undefined) {
+        await openBatch(selection.batchDirectory);
         return;
     }
-    if (selectedTrajectoryPath === null) {
+    if (!selection || selection.trajectoryPath === null) {
         showOpenRunBanner("no trajectory selected");
         return;
     }
-    await openTrajectory(selectedTrajectoryPath);
+    await openTrajectory(selection.trajectoryPath);
 });
 
 window.fim.showOpenRunScreen = async function showOpenRunScreen() {
@@ -2126,6 +2137,13 @@ window.fim.showOpenRunScreen = async function showOpenRunScreen() {
     await refreshRecentRuns();
     await window.fim.refreshSavedRuns();
 };
+
+window.fim.workspace.onSelectionChange(() => {
+    const selection = selectedOpenRunSelection();
+    openButton.disabled =
+        !selection ||
+        (selection.trajectoryPath === null && selection.batchDirectory === null);
+});
 
 // A rename or new description saved anywhere (`screens/details.js`) shows
 // in the tree at once. Only while Home is showing: it refetches on every

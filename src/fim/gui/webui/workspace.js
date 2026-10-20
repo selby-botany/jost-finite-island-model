@@ -91,6 +91,10 @@ const workspace = (() => {
             resourceKey: initialState.resourceKey ?? null,
             readOnly: initialState.readOnly ?? false,
             capabilities: initialState.capabilities ?? {},
+            completedOutputDirectory:
+                initialState.completedOutputDirectory ?? null,
+            completedTrajectoryPath:
+                initialState.completedTrajectoryPath ?? null,
             history: initialState.history ?? ["screen-open-run"],
             historyIndex: initialState.historyIndex ?? 0,
             attachedJobId: initialState.attachedJobId ?? null,

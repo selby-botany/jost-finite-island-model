@@ -28949,6 +28949,17 @@ def test_completed_view_state_restores_for_each_document(
 
 Completed statistics and trajectory choices survive document switches.
 
+<a id="gui.test_workspace.test_completed_pair_batch_and_saved_note_are_document_local"></a>
+
+#### test\_completed\_pair\_batch\_and\_saved\_note\_are\_document\_local
+
+```python
+def test_completed_pair_batch_and_saved_note_are_document_local(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Switching documents restores each batch's pair and saved-result note.
+
 <a id="gui.test_workspace.test_live_progress_is_owned_by_the_addressed_document"></a>
 
 #### test\_live\_progress\_is\_owned\_by\_the\_addressed\_document

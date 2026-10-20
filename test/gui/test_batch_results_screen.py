@@ -1240,10 +1240,12 @@ def test_a_batch_repaint_keeps_the_scrub_position_marker(
             settled = window.evaluate_js(
                 "({"
                 "expected: window.fim.getScrubberGenerations()[0], "
-                "cached: lastBatchScrubGeneration, "
+                "cached: window.fim.workspace.selected().completedView."
+                "batchScrubGeneration, "
                 "afterRepaint: (() => {"
                 "repaintTrajectory();"
-                "return lastBatchScrubGeneration;"
+                "return window.fim.workspace.selected().completedView."
+                "batchScrubGeneration;"
                 "})()"
                 "})"
             )

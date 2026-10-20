@@ -270,6 +270,7 @@ def test_completed_view_state_restores_for_each_document(
     """Completed statistics and trajectory choices survive document switches."""
     state = drive(
         window,
+        ready="STATISTIC_NAMES.length > 0",
         trigger="""window.__fimTestResult = (() => {
             const workspace = window.fim.workspace;
             const first = workspace.selectedId();
@@ -356,6 +357,96 @@ def test_completed_view_state_restores_for_each_document(
         "bandWidth": "1",
         "statistic": "0.17",
         "hidden": False,
+    }
+
+
+def test_completed_pair_batch_and_saved_note_are_document_local(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Switching documents restores each batch's pair and saved-result note."""
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const first = workspace.selectedId();
+            window.fim.setWatchedStatistics([], true);
+            const firstState = workspace.get(first).completedView;
+            Object.assign(firstState, {
+                hasCompletedResult: true,
+                isBatch: true,
+                completedPair: [1, 3],
+                completedBatchSummary: {},
+                completedBatchEffectiveAlleles: null,
+                completedBatchReplicates: [],
+                completedBatchP0Statistics: null,
+                pooledConvergenceHistories: null,
+                completedDemeCount: null,
+                completedPanels: null,
+                savedResultNote: {
+                    outputDirectory: "/runs/first",
+                    readOnly: true,
+                },
+            });
+            window.fim.setCompletedOutputDirectory("/runs/first");
+            window.fim.setRunViewState("completed");
+
+            const second = workspace.createDocument();
+            window.fim.setWatchedStatistics([], true);
+            const secondState = workspace.get(second).completedView;
+            Object.assign(secondState, {
+                hasCompletedResult: true,
+                isBatch: true,
+                completedPair: [2, 4],
+                completedBatchSummary: {},
+                completedBatchEffectiveAlleles: null,
+                completedBatchReplicates: [],
+                completedBatchP0Statistics: null,
+                pooledConvergenceHistories: null,
+                completedDemeCount: null,
+                completedPanels: null,
+                savedResultNote: {
+                    outputDirectory: "/runs/second",
+                    readOnly: false,
+                },
+            });
+            window.fim.setCompletedOutputDirectory("/runs/second");
+
+            workspace.select(first);
+            const firstView = {
+                pair: [...firstState.completedPair],
+                outputDirectory: window.fim.getCompletedOutputDirectory(),
+                savedNote: document.getElementById("run-saved-result-text")
+                    .textContent,
+                batchTableHidden:
+                    document.getElementById("batch-results-table").hidden,
+            };
+            workspace.select(second);
+            const secondView = {
+                pair: [...secondState.completedPair],
+                outputDirectory: window.fim.getCompletedOutputDirectory(),
+                savedNote: document.getElementById("run-saved-result-text")
+                    .textContent,
+                batchTableHidden:
+                    document.getElementById("batch-results-table").hidden,
+            };
+            return {firstView, secondView};
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["firstView"] == {
+        "pair": [1, 3],
+        "outputDirectory": "/runs/first",
+        "savedNote": "Run this example to see its trajectories",
+        "batchTableHidden": False,
+    }
+    assert state["secondView"] == {
+        "pair": [2, 4],
+        "outputDirectory": "/runs/second",
+        "savedNote": (
+            "This run's trajectory is not saved. Run it again to see its trajectories"
+        ),
+        "batchTableHidden": False,
     }
 
 
