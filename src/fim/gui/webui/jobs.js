@@ -5,12 +5,13 @@
  * per real event, numbered by one sequence per job that never resets while
  * that job is claimed (`fim.gui.jobs.JobAdmission`/`fim.gui.app._push_job_
  * event`). This script tracks the sequence, de-duplicates events, and
- * retains the latest snapshot after a gap or view change. It does not yet
- * drive any screen (that starts at A9, once a document exists to receive
- * it). The existing named pushes (`fim.onRunProgress`,
- * `fim.onBatchDone`, `fim.onSweepEvent`, ...) are untouched and keep
- * driving the page exactly as before; `onJobEvent` is a second, additive
- * channel, not a replacement.
+ * retains the latest snapshot after a gap or view change.
+ * `run-view-running.js` consumes accepted progress events to update the
+ * attached document's live model (A11). Existing named pushes
+ * (`fim.onRunProgress`, `fim.onBatchDone`, `fim.onSweepEvent`, ...) remain
+ * the single-document rendering path; with multiple documents, live
+ * progress uses the addressed channel to avoid changing the selected
+ * document by mistake.
  *
  * Progress events are coalesced before delivery (`fim.gui.publisher`'s
  * own module docstring), so a jump in a job's own sequence is routine for
@@ -128,24 +129,27 @@ window.fim.jobs.isDocumentClosed = function isDocumentClosed(jobId) {
  * instead of applying the event that revealed it. A gap before
  * `"annotation"` or `"finished"` can be caused by coalesced progress,
  * so those ordered follow-up events request a snapshot and still apply.
+ * Returns whether the event passed sequence checks and was applied, so
+ * document-owned consumers do not process stale progress.
  *
  * @param {{jobId: string, sequence: number, type: string, payload: *}} event
+ * @returns {boolean}
  */
 window.fim.onJobEvent = function onJobEvent(event) {
     const { jobId, sequence, type, payload } = event;
     if (closedJobIds.has(jobId)) {
-        return;
+        return false;
     }
     const last = lastJobEventSequence.has(jobId)
         ? lastJobEventSequence.get(jobId)
         : null;
     if (last !== null && sequence <= last) {
-        return;
+        return false;
     }
     if (type !== "progress" && last !== null && sequence > last + 1) {
         window.fim.jobs.requestSnapshot(jobId);
         if (type !== "annotation" && type !== "finished") {
-            return;
+            return false;
         }
     }
     lastJobEventSequence.set(jobId, sequence);
@@ -158,6 +162,7 @@ window.fim.onJobEvent = function onJobEvent(event) {
     ) {
         window.fim.onJobAnnotation(jobId, payload);
     }
+    return true;
 };
 
 // Test-only introspection -- no production caller reads these.

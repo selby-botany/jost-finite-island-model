@@ -18124,11 +18124,7 @@ start (a replicate's own generation-0 state never changes, so it
 stays counted even after that replicate moves on), so calling this
 again with a larger `sampleCount` must overwrite the existing
 generation-0 point in place, not append a second one alongside it.
-Called directly (`liveBatchTrajectory`, `setLiveBatchTrajectory
-InitialPoint`, and `STATISTIC_NAMES` are plain globals shared
-across every script this page loads, this file's own module
-docstring's "one shared canvas... sharing one global scope" already
-established) rather than through a real batch, since this is pure
+Called directly rather than through a real batch, since this is pure
 client-side accumulator logic with no bridge call of its own to
 exercise.
 
@@ -28941,6 +28937,17 @@ def test_scrubber_and_graph_state_restore_for_each_document(
 ```
 
 Frames, playback, graph choices, and scatter style stay document-local.
+
+<a id="gui.test_workspace.test_live_progress_is_owned_by_the_addressed_document"></a>
+
+#### test\_live\_progress\_is\_owned\_by\_the\_addressed\_document
+
+```python
+def test_live_progress_is_owned_by_the_addressed_document(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Background scalar and batch progress changes only their owner model.
 
 
 

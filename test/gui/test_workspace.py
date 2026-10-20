@@ -262,3 +262,113 @@ def test_scrubber_and_graph_state_restore_for_each_document(
     assert state["secondStyle"] == "circles"
     assert state["slider"] == "1"
     assert state["label"] == "Generation 20"
+
+
+def test_live_progress_is_owned_by_the_addressed_document(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Background scalar and batch progress changes only their owner model."""
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const scalar = workspace.selectedId();
+            const batch = workspace.createDocument({}, { select: false });
+            const selected = workspace.createDocument();
+            workspace.attachJob(scalar, "job-scalar");
+            workspace.attachJob(batch, "job-batch");
+            const trajectoryName = TRAJECTORY_STATISTIC_NAMES[0];
+            const progressBefore =
+                document.getElementById("progress-generation-label").textContent;
+
+            const scalarPayload = {
+                generation: 10,
+                maxGenerations: 100,
+                demeCount: 2,
+                statistics: {[trajectoryName]: "0.25"},
+                panels: [],
+            };
+            window.fim.onRunProgress(scalarPayload);
+            window.fim.onJobEvent({
+                jobId: "job-scalar",
+                sequence: 1,
+                type: "progress",
+                payload: scalarPayload,
+            });
+            const batchPayload = {
+                replicateCount: 2,
+                meanReportedGeneration: 7,
+                maxGenerations: 100,
+                demeCount: 2,
+                initialStatistics: {
+                    [trajectoryName]: {
+                        mean: "0.5",
+                        low: "0.4",
+                        high: "0.6",
+                        sampleCount: 2,
+                    },
+                },
+                statistics: {
+                    [trajectoryName]: {
+                        mean: "0.3",
+                        low: "0.2",
+                        high: "0.4",
+                        sampleCount: 2,
+                    },
+                },
+                panels: [],
+            };
+            window.fim.onBatchProgress(batchPayload);
+            window.fim.onJobEvent({
+                jobId: "job-batch",
+                sequence: 1,
+                type: "progress",
+                payload: batchPayload,
+            });
+
+            const scalarState = workspace.get(scalar).liveRun;
+            const batchState = workspace.get(batch).liveRun;
+            return {
+                scalar,
+                batch,
+                selected,
+                scalarGenerations: scalarState.liveTrajectoryGenerations,
+                trajectoryName,
+                scalarHistory:
+                    scalarState.liveTrajectoryHistories[trajectoryName],
+                scalarBatch: scalarState.liveBatchTrajectory,
+                batchGenerations: batchState.liveTrajectoryGenerations,
+                batchTrajectory:
+                    batchState.liveBatchTrajectory[trajectoryName],
+                batchScalar: batchState.liveTrajectoryHistories,
+                selectedProgress:
+                    document.getElementById("progress-generation-label").textContent,
+                progressBefore,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["scalarGenerations"] == [10]
+    assert state["trajectoryName"]
+    assert state["scalarHistory"] == [0.25]
+    assert state["scalarBatch"] == {}
+    assert state["batchGenerations"] == []
+    assert state["batchTrajectory"] == [
+        {
+            "generation": 0,
+            "mean": "0.5",
+            "low": "0.4",
+            "high": "0.6",
+            "sampleCount": 2,
+        },
+        {
+            "generation": 7,
+            "mean": "0.3",
+            "low": "0.2",
+            "high": "0.4",
+            "sampleCount": 2,
+        },
+    ]
+    assert state["batchScalar"] == {}
+    assert state["selectedProgress"] == state["progressBefore"]

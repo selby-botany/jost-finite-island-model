@@ -70,15 +70,58 @@
 // would rebuild the dropdowns and reset whatever pair the user already
 // picked; wiring once, on the first push a fresh run makes, is enough
 // (`demeCount` is the same for every push within one run).
-let liveDemeSelectorWired = false;
+// Live progress is model state, not page state: addressed job pushes can
+// arrive while a different document is selected.
+function createLiveRunState() {
+    return {
+        liveDemeSelectorWired: false,
+        showingLiveDemePair: false,
+        liveTrajectoryGenerations: [],
+        liveTrajectoryHistories: {},
+        liveBatchTrajectory: {},
+        liveEquilibriumReference: null,
+        liveIdentityRecoveryReference: null,
+        liveClosedForm: null,
+        liveConvergence: null,
+        lastProgressSequence: -1,
+        isBatch: false,
+    };
+}
+
+function liveRunStateFor(tabId) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.liveRun) {
+        documentState.liveRun = createLiveRunState();
+    }
+    return documentState.liveRun;
+}
+
+let activeLiveRunState = liveRunStateFor(
+    window.fim.workspace.selectedId()
+);
+
+window.fim.workspace.onSelectionChange((selectedId) => {
+    activeLiveRunState = selectedId === null
+        ? null
+        : liveRunStateFor(selectedId);
+    if (activeLiveRunState) {
+        window.fim.setWatchedStatistics(
+            activeLiveRunState.liveConvergence
+                ? activeLiveRunState.liveConvergence.statistics
+                : []
+        );
+    }
+});
+
 // Whether the canvas is currently showing `pairPanel` (one explicit,
 // user-chosen deme pair) rather than `panels` (the default Deme 1/Deme 2
 // panel) -- `onShowPair` below sets this; every push's own handler
 // reads it to decide which of the two to draw. Never resets to `false`
 // mid-run (there is no "Show overview" button any more) -- selecting
 // Deme 1/Deme 2 directly requests the same panel `panels` already holds.
-let showingLiveDemePair = false;
-
 // The live trajectory panel (botanist GUI design doc `20260907-claude-
 // sonnet-5-botanist-gui-redesign.md` §6.2: "updating in lockstep as the
 // run advances," not only once the run finishes). Accumulated entirely
@@ -103,9 +146,6 @@ let showingLiveDemePair = false;
 // not just a line (batch trajectory panel design `20260912-claude-
 // sonnet-5-batch-trajectory-panel-design.md`, `selby/restricted`,
 // commit 3).
-let liveTrajectoryGenerations = [];
-let liveTrajectoryHistories = {};
-
 // A live batch's own trajectory accumulator -- one entry per tracked
 // statistic, each a growing array of `{generation, mean, low, high,
 // sampleCount}` points, the identical shape `run-view-completed.js`'s
@@ -121,8 +161,6 @@ let liveTrajectoryHistories = {};
 // side approximation exists only for while the batch is still going,
 // matching `liveTrajectoryGenerations`/`liveTrajectoryHistories`'s own
 // identical "replaced once real data exists" scalar precedent above.
-let liveBatchTrajectory = {};
-
 // The live trajectory's own predicted-equilibrium reference line (design
 // §6.2's own closing paragraph: "the run's own progress toward... that
 // prediction is visible while it is still happening, not only in
@@ -138,27 +176,19 @@ let liveBatchTrajectory = {};
 // `null` for every fresh run, the same per-run-reset shape
 // `liveTrajectoryGenerations`/`liveTrajectoryHistories` above already
 // establish.
-let liveEquilibriumReference = null;
-
 // The live trajectory's own identity-recovery closed-form curve overlay —
 // a second, different reference from `liveEquilibriumReference` above
 // (see `_identity_recovery_reference_payload`, `fim/gui/app.py`, for what
 // it is and why it is not the same thing). Cached and reset the same way
 // and at the same two points as `liveEquilibriumReference`, immediately
 // above.
-let liveIdentityRecoveryReference = null;
-
 // The live trajectory's own closed-form expected D(t)/G_ST(t) payload
 // (`_closed_form_trajectory_payload`, `fim/gui/app.py`) — cached and reset
 // exactly like the two references above.
-let liveClosedForm = null;
-
 // The live run's convergence window and tolerance (`Api.start_run`'s own
 // `convergence` field, `_convergence_reference_payload`): what the
 // trailing mean in the tooltips and the trajectory graph averages over.
 // Cached and reset like the references above.
-let liveConvergence = null;
-
 /**
  * Apply just the run-kind-dependent parts of the running state.
  *
@@ -215,19 +245,14 @@ window.fim.applyRunKind = applyRunKind;
  */
 function enterRunningState(isBatch = false) {
     window.fim.setRunViewState("running");
-    liveDemeSelectorWired = false;
-    showingLiveDemePair = false;
-    liveTrajectoryGenerations = [];
-    liveTrajectoryHistories = {};
-    liveBatchTrajectory = {};
-    // `Api.start_run` has not resolved yet at this point (called
-    // synchronously, before `run-view-controls.js`'s own `onRunClicked`
-    // awaits that bridge call) -- reset now, set for real once it
-    // resolves (`setLiveEquilibriumReference`, below).
-    liveEquilibriumReference = null;
-    liveIdentityRecoveryReference = null;
-    liveClosedForm = null;
-    liveConvergence = null;
+    activeLiveRunState = liveRunStateFor(
+        window.fim.workspace.selectedId()
+    );
+    Object.assign(activeLiveRunState, createLiveRunState(), {
+        isBatch,
+    });
+    // `Api.start_run` has not resolved yet at this point; its reference
+    // payloads are set for real once that bridge call resolves.
     // A genuinely new run starting is one of the two points the
     // trajectory legend's own display-only visibility toggle resets
     // (design §6.2's legend-toggle; `run-view-completed.js`'s own
@@ -246,7 +271,10 @@ function enterRunningState(isBatch = false) {
     // `renderTrajectory` is declared in `run-view-completed.js`, which
     // loads after this file.
     if (typeof renderTrajectory === "function") {
-        renderTrajectory(liveTrajectoryGenerations, liveTrajectoryHistories);
+        renderTrajectory(
+            activeLiveRunState.liveTrajectoryGenerations,
+            activeLiveRunState.liveTrajectoryHistories
+        );
     }
     progressBar.value = 0;
     // Same "never leave a previous run's own stale content on screen
@@ -303,7 +331,7 @@ window.fim.enterRunningState = enterRunningState;
 window.fim.setLiveEquilibriumReference = function setLiveEquilibriumReference(
     equilibrium
 ) {
-    liveEquilibriumReference = equilibrium ?? null;
+    activeLiveRunState.liveEquilibriumReference = equilibrium ?? null;
 };
 
 /**
@@ -317,7 +345,8 @@ window.fim.setLiveEquilibriumReference = function setLiveEquilibriumReference(
 window.fim.setLiveIdentityRecoveryReference = function setLiveIdentityRecoveryReference(
     identityRecovery
 ) {
-    liveIdentityRecoveryReference = identityRecovery ?? null;
+    activeLiveRunState.liveIdentityRecoveryReference =
+        identityRecovery ?? null;
 };
 
 /**
@@ -329,7 +358,7 @@ window.fim.setLiveIdentityRecoveryReference = function setLiveIdentityRecoveryRe
  * @param {object|null|undefined} closedForm
  */
 window.fim.setLiveClosedForm = function setLiveClosedForm(closedForm) {
-    liveClosedForm = closedForm ?? null;
+    activeLiveRunState.liveClosedForm = closedForm ?? null;
 };
 
 /**
@@ -340,18 +369,22 @@ window.fim.setLiveClosedForm = function setLiveClosedForm(closedForm) {
  * @param {{window: number, burnIn: number, tolerance: number}|null|undefined} convergence
  */
 window.fim.setLiveConvergence = function setLiveConvergence(convergence) {
-    liveConvergence = convergence ?? null;
-    window.fim.setWatchedStatistics(liveConvergence ? liveConvergence.statistics : []);
+    activeLiveRunState.liveConvergence = convergence ?? null;
+    window.fim.setWatchedStatistics(
+        activeLiveRunState.liveConvergence
+            ? activeLiveRunState.liveConvergence.statistics
+            : []
+    );
 };
 
-function drawProgressPanels(payload) {
+function drawProgressPanels(state, payload) {
     // `pairPanel` is only ever present once a live pair has been
     // selected (`Api._drain_run_messages`/`_push_batch_progress` only
     // compute it then) -- `showingLiveDemePair` alone is not enough to
     // draw from it, since the very first push after "Show pair" is
     // clicked can still land before the *next* one carries a fresh
     // `pairPanel` for it.
-    const panel = showingLiveDemePair && payload.pairPanel
+    const panel = state.showingLiveDemePair && payload.pairPanel
         ? payload.pairPanel
         : payload.panels?.[0];
     if (!panel) {
@@ -368,7 +401,7 @@ function drawProgressPanels(payload) {
  *
  * @param {number} demeCount
  */
-function wireLiveDemePairSelector(demeCount) {
+function wireLiveDemePairSelector(demeCount, state) {
     runDemePairSelector.hidden = demeCount < DEMES_NEEDED_FOR_PAIR;
     window.fim.wireDemePairSelector({
         xSelect: runXDeme,
@@ -387,7 +420,7 @@ function wireLiveDemePairSelector(demeCount) {
             // payload genuinely carried `pairPanel` still draw as the
             // default panel because the flag itself had not caught up
             // yet.
-            showingLiveDemePair = true;
+            state.showingLiveDemePair = true;
             await window.pywebview.api.set_live_deme_pair(x, y);
         },
     });
@@ -415,16 +448,18 @@ function wireLiveDemePairSelector(demeCount) {
  * @param {Record<string, string> | undefined} statistics
  * @param {number} [generation] the tick's generation; the latest when omitted.
  */
-function renderLiveStatistics(statistics, generation) {
+function renderLiveStatistics(state, statistics, generation) {
     if (!statistics) {
         return;
     }
     const index =
-        generation === undefined ? null : liveTrajectoryGenerations.indexOf(generation);
+        generation === undefined
+            ? null
+            : state.liveTrajectoryGenerations.indexOf(generation);
     const estimateSource = {
-        generations: liveTrajectoryGenerations,
-        histories: liveTrajectoryHistories,
-        convergence: liveConvergence,
+        generations: state.liveTrajectoryGenerations,
+        histories: state.liveTrajectoryHistories,
+        convergence: state.liveConvergence,
         anchors: {},
         sums: {},
     };
@@ -465,20 +500,20 @@ function renderLiveStatistics(statistics, generation) {
  * already makes for the completed view.
  * @param {Record<string, string> | undefined} statistics
  */
-function accumulateLiveTrajectory(generation, statistics) {
+function accumulateLiveTrajectory(state, generation, statistics) {
     if (!statistics) {
         return;
     }
-    liveTrajectoryGenerations.push(generation);
+    state.liveTrajectoryGenerations.push(generation);
     // Only statistics with a per-generation history get a curve, so the
     // live chart and the completed one plot the same set.
     for (const name of TRAJECTORY_STATISTIC_NAMES) {
         const value = Number(statistics[name]);
         if (Number.isFinite(value)) {
-            if (!liveTrajectoryHistories[name]) {
-                liveTrajectoryHistories[name] = [];
+            if (!state.liveTrajectoryHistories[name]) {
+                state.liveTrajectoryHistories[name] = [];
             }
-            liveTrajectoryHistories[name].push(value);
+            state.liveTrajectoryHistories[name].push(value);
         }
     }
 }
@@ -538,7 +573,10 @@ function accumulateLiveTrajectory(generation, statistics) {
  * @param {Record<string, {mean: string, low: string, high: string,
  *     sampleCount: number}> | undefined} initialStatistics
  */
-function setLiveBatchTrajectoryInitialPoint(initialStatistics) {
+function setLiveBatchTrajectoryInitialPoint(
+    initialStatistics,
+    state = activeLiveRunState
+) {
     if (!initialStatistics) {
         return;
     }
@@ -554,17 +592,17 @@ function setLiveBatchTrajectoryInitialPoint(initialStatistics) {
             high: interval.high,
             sampleCount: interval.sampleCount,
         };
-        if (!liveBatchTrajectory[name]) {
-            liveBatchTrajectory[name] = [point];
-        } else if (liveBatchTrajectory[name][0]?.generation === 0) {
-            liveBatchTrajectory[name][0] = point;
+        if (!state.liveBatchTrajectory[name]) {
+            state.liveBatchTrajectory[name] = [point];
+        } else if (state.liveBatchTrajectory[name][0]?.generation === 0) {
+            state.liveBatchTrajectory[name][0] = point;
         } else {
-            liveBatchTrajectory[name].unshift(point);
+            state.liveBatchTrajectory[name].unshift(point);
         }
     }
 }
 
-function accumulateLiveBatchTrajectory(meanGeneration, statistics) {
+function accumulateLiveBatchTrajectory(state, meanGeneration, statistics) {
     if (meanGeneration === undefined || !statistics) {
         return;
     }
@@ -573,10 +611,10 @@ function accumulateLiveBatchTrajectory(meanGeneration, statistics) {
         if (!interval) {
             continue;
         }
-        if (!liveBatchTrajectory[name]) {
-            liveBatchTrajectory[name] = [];
+        if (!state.liveBatchTrajectory[name]) {
+            state.liveBatchTrajectory[name] = [];
         }
-        liveBatchTrajectory[name].push({
+        state.liveBatchTrajectory[name].push({
             generation: meanGeneration,
             mean: interval.mean,
             low: interval.low,
@@ -586,15 +624,22 @@ function accumulateLiveBatchTrajectory(meanGeneration, statistics) {
     }
 }
 
-window.fim.onRunProgress = function onRunProgress(payload) {
+function recordRunProgress(state, payload) {
+    accumulateLiveTrajectory(
+        state,
+        payload.generation,
+        payload.statistics
+    );
+}
+
+function renderRunProgress(state, payload) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
     progressLabel.textContent = `${payload.generation} / ${payload.maxGenerations}`;
-    if (!liveDemeSelectorWired) {
-        wireLiveDemePairSelector(payload.demeCount);
-        liveDemeSelectorWired = true;
+    if (!state.liveDemeSelectorWired) {
+        wireLiveDemePairSelector(payload.demeCount, state);
+        state.liveDemeSelectorWired = true;
     }
-    accumulateLiveTrajectory(payload.generation, payload.statistics);
 
     const liveFrame = {
         generation: payload.generation,
@@ -606,32 +651,41 @@ window.fim.onRunProgress = function onRunProgress(payload) {
     };
 
     window.fim.appendLiveFrame(liveFrame, (f, _index, isLiveHead) => {
-        renderLiveStatistics(f.statistics, f.generation);
+        renderLiveStatistics(state, f.statistics, f.generation);
         renderPairStatistics(f.pairStatistics);
         if (typeof renderTrajectory === "function") {
             renderTrajectory(
-                liveTrajectoryGenerations,
-                liveTrajectoryHistories,
+                state.liveTrajectoryGenerations,
+                state.liveTrajectoryHistories,
                 undefined,
                 undefined,
-                liveEquilibriumReference,
-                liveIdentityRecoveryReference,
-                liveClosedForm,
+                state.liveEquilibriumReference,
+                state.liveIdentityRecoveryReference,
+                state.liveClosedForm,
                 isLiveHead ? null : f.generation,
-                liveConvergence
+                state.liveConvergence
                     ? {
-                          window: liveConvergence.window,
-                          burnIn: liveConvergence.burnIn,
+                          window: state.liveConvergence.window,
+                          burnIn: state.liveConvergence.burnIn,
                           anchors: {},
                       }
                     : null
             );
         }
-        drawProgressPanels(f);
+        drawProgressPanels(state, f);
         if (typeof renderSupplementalPanels === "function" && f.literatureVisuals) {
             renderSupplementalPanels(f.literatureVisuals);
         }
     });
+}
+
+window.fim.onRunProgress = function onRunProgress(payload) {
+    if (window.fim.workspace.ids().length > 1 || !activeLiveRunState) {
+        return;
+    }
+    activeLiveRunState.isBatch = false;
+    recordRunProgress(activeLiveRunState, payload);
+    renderRunProgress(activeLiveRunState, payload);
 };
 
 /**
@@ -668,17 +722,24 @@ window.fim.onRunError = function onRunError(message) {
     cancelButton.disabled = true;
 };
 
-window.fim.onBatchProgress = function onBatchProgress(payload) {
+function recordBatchProgress(state, payload) {
+    setLiveBatchTrajectoryInitialPoint(payload.initialStatistics, state);
+    accumulateLiveBatchTrajectory(
+        state,
+        payload.meanReportedGeneration,
+        payload.statistics
+    );
+}
+
+function renderBatchProgress(state, payload) {
     const meanGeneration = payload.meanReportedGeneration ?? 0;
     progressBar.max = payload.maxGenerations;
     progressBar.value = meanGeneration;
     progressLabel.textContent = `mean completed generation ${meanGeneration}`;
-    if (!liveDemeSelectorWired) {
-        wireLiveDemePairSelector(payload.demeCount);
-        liveDemeSelectorWired = true;
+    if (!state.liveDemeSelectorWired) {
+        wireLiveDemePairSelector(payload.demeCount, state);
+        state.liveDemeSelectorWired = true;
     }
-    setLiveBatchTrajectoryInitialPoint(payload.initialStatistics);
-    accumulateLiveBatchTrajectory(payload.meanReportedGeneration, payload.statistics);
 
     // The batch counterpart to `onRunProgress`'s own live frame: every
     // tick is retained so the scrubber can go back to an earlier pooled
@@ -708,13 +769,67 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
         // immediately below `onRunProgress`. The accumulated band always
         // shows in full; only the scrub marker moves back with the frame.
         if (typeof renderBatchTrajectory === "function") {
-            renderBatchTrajectory(liveBatchTrajectory, isLiveHead ? null : f.generation);
+            renderBatchTrajectory(
+                state.liveBatchTrajectory,
+                isLiveHead ? null : f.generation
+            );
         }
-        drawProgressPanels(f);
+        drawProgressPanels(state, f);
         if (typeof renderSupplementalPanels === "function" && f.literatureVisuals) {
             renderSupplementalPanels(f.literatureVisuals);
         }
     });
+}
+
+window.fim.onBatchProgress = function onBatchProgress(payload) {
+    if (window.fim.workspace.ids().length > 1 || !activeLiveRunState) {
+        return;
+    }
+    activeLiveRunState.isBatch = true;
+    recordBatchProgress(activeLiveRunState, payload);
+    renderBatchProgress(activeLiveRunState, payload);
+};
+
+const applyAddressedJobEvent = window.fim.onJobEvent;
+window.fim.onJobEvent = function onJobEvent(event) {
+    const accepted = applyAddressedJobEvent(event);
+    if (!accepted) {
+        return false;
+    }
+    if (
+        event.type !== "progress" ||
+        window.fim.workspace.ids().length < 2 ||
+        !event.payload ||
+        typeof event.payload !== "object" ||
+        window.fim.jobs.isDocumentClosed(event.jobId)
+    ) {
+        return true;
+    }
+
+    const tabId = window.fim.workspace.documentForJob(event.jobId);
+    const state = tabId === null ? null : liveRunStateFor(tabId);
+    if (!state || event.sequence <= state.lastProgressSequence) {
+        return true;
+    }
+    state.lastProgressSequence = event.sequence;
+
+    if (event.payload.replicateCount > 1) {
+        state.isBatch = true;
+        recordBatchProgress(state, event.payload);
+        if (tabId === window.fim.workspace.selectedId()) {
+            renderBatchProgress(state, event.payload);
+        }
+        return true;
+    }
+
+    if (typeof event.payload.generation === "number") {
+        state.isBatch = false;
+        recordRunProgress(state, event.payload);
+        if (tabId === window.fim.workspace.selectedId()) {
+            renderRunProgress(state, event.payload);
+        }
+    }
+    return true;
 };
 
 window.fim.onBatchDone = function onBatchDone(payload) {

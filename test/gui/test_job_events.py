@@ -378,18 +378,25 @@ def test_duplicate_and_stale_events_are_ignored() -> None:
             wait_for_run_view_ready(window)
             window.evaluate_js(
                 """
-                window.fim.onJobEvent(
-                    {jobId: "job-a", sequence: 0, type: "progress", payload: "first"});
-                window.fim.onJobEvent(
-                    {jobId: "job-a", sequence: 1, type: "status", payload: "second"});
+                const applied = [];
+                applied.push(window.fim.onJobEvent(
+                    {jobId: "job-a", sequence: 0, type: "progress", payload: "first"}));
+                applied.push(window.fim.onJobEvent(
+                    {jobId: "job-a", sequence: 1, type: "status", payload: "second"}));
                 // Duplicate and stale: both already applied.
-                window.fim.onJobEvent(
-                    {jobId: "job-a", sequence: 0, type: "progress", payload: "dup-0"});
-                window.fim.onJobEvent(
-                    {jobId: "job-a", sequence: 1, type: "status", payload: "dup-1"});
+                applied.push(window.fim.onJobEvent(
+                    {jobId: "job-a", sequence: 0, type: "progress", payload: "dup-0"}));
+                applied.push(window.fim.onJobEvent(
+                    {jobId: "job-a", sequence: 1, type: "status", payload: "dup-1"}));
+                window.__fimAppliedEvents = applied;
                 """
             )
-            outcome.put(window.evaluate_js(_read_job_state("job-a")))
+            outcome.put(
+                {
+                    "job": window.evaluate_js(_read_job_state("job-a")),
+                    "applied": window.evaluate_js("window.__fimAppliedEvents"),
+                }
+            )
         finally:
             window.destroy()
 
@@ -397,7 +404,12 @@ def test_duplicate_and_stale_events_are_ignored() -> None:
     state = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert state is not None
-    assert state == {"lastSequence": 1, "appliedCount": 2, "latest": "second"}
+    assert state["job"] == {
+        "lastSequence": 1,
+        "appliedCount": 2,
+        "latest": "second",
+    }
+    assert state["applied"] == [True, True, False, False]
 
 
 @pytest.mark.gui
