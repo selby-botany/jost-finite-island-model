@@ -392,6 +392,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.app.Api.__init__)
     * [start\_run](#fim.gui.app.Api.start_run)
     * [can\_start\_run](#fim.gui.app.Api.can_start_run)
+    * [get\_job\_snapshot](#fim.gui.app.Api.get_job_snapshot)
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
     * [pause\_run](#fim.gui.app.Api.pause_run)
     * [save\_run\_object](#fim.gui.app.Api.save_run_object)
@@ -566,6 +567,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
 * [fim.gui.jobs](#fim.gui.jobs)
   * [JobAdmission](#fim.gui.jobs.JobAdmission)
+    * [new\_job\_id](#fim.gui.jobs.JobAdmission.new_job_id)
+    * [next\_sequence](#fim.gui.jobs.JobAdmission.next_sequence)
+    * [latest\_sequence](#fim.gui.jobs.JobAdmission.latest_sequence)
+    * [forget](#fim.gui.jobs.JobAdmission.forget)
 * [fim.gui.literature\_visuals](#fim.gui.literature_visuals)
   * [LiteratureVisualPayload](#fim.gui.literature_visuals.LiteratureVisualPayload)
   * [literature\_visual\_payload](#fim.gui.literature_visuals.literature_visual_payload)
@@ -10406,6 +10411,46 @@ then refused would wipe the view of the run still in flight.
 - ``{"ok"` - True}`, or `{"ok": False, "message": ...}` with the
   reason `start_run` or `start_run_object` would give.
 
+<a id="fim.gui.app.Api.get_job_snapshot"></a>
+
+#### get\_job\_snapshot
+
+```python
+@_log_bridge_call
+def get_job_snapshot(job_id: str) -> dict[str, Any]
+```
+
+Return `job_id`'s latest delivered sequence, for `webui/jobs.js` to resync.
+
+This commit's own, deliberately minimal snapshot (design doc
+§7.3's "asks for a snapshot after a gap"): just enough for the
+page to re-align its own sequence tracking, nothing about the
+job's own state beyond that. A fuller snapshot -- enough to
+repaint a document's own view after a gap, not only resync its
+sequence counter -- is a later commit's own job (job view
+levels and snapshots, A7; a document's own state, A9 onward);
+this makes no promise about a job once its own claim is
+released, since nothing here retains anything about it past
+that point.
+
+**Arguments**:
+
+- `job_id` - A job this process currently has claimed
+- `(`self._job_id`)` - the run, saved run, or sweep now
+  executing. Any other value, including a job that has
+  already finished, is "no such job": there is exactly
+  one job at a time in this release, and nothing is kept
+  about one once it ends.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "jobId": job_id, "sequence": N}`, `N` being
+  the latest sequence `job_id` has been assigned (`-1` if it
+  has not pushed anything yet); `{"ok": False, "message":
+  ...}` if `job_id` names no job this process currently has
+  claimed.
+
 <a id="fim.gui.app.Api.cancel_run"></a>
 
 #### cancel\_run
@@ -15211,7 +15256,7 @@ Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
 
 # fim.gui.jobs
 
-The one lock that admits a run, a saved run, or a sweep.
+The one lock that admits a run, a saved run, or a sweep -- and its jobId/sequence.
 
 Before this module existed, `Api._claim_run` (plain and saved runs) and
 `Api.start_sweep`/`resume_sweep` (sweeps) each decided whether they could
@@ -15233,12 +15278,24 @@ synchronization moves here, so `Api._claim_run`/`_claim_sweep` (and
 their own release counterparts) can never both see a free slot for the
 same instant.
 
-A fuller job registry -- one record per running job, addressed by its
-own `jobId`, independent of whether it is a run, a saved run, or a
-sweep -- is a later commit's own job (`20261019-claude-opus-5-5-fim-gui-
-tabs-design.md` §7.1, commit A5 onward); this module only closes the one
-admission race A4 promises, in the file that work will eventually grow
-into.
+Commit A5 of that same schedule ("addressed job events and controls")
+adds the one other piece of state every job push now needs: a `jobId`,
+minted the instant a claim succeeds, and a sequence number, one per
+`jobId`, that every one of that job's own pushes (`fim.gui.app._push_
+job_event`) counts up from zero. `Api._job_id` (set by `_claim_run`/
+`_claim_sweep`, cleared by their own release counterparts) is the one
+currently-claimed job's id, carried as a plain argument into whichever
+drain/push function needs to tag its own pushes with it -- exactly how
+`output_directory` already is -- never read back live from `Api` by a
+background thread, which could by then be tagging a *different* job's
+pushes with a stale id.
+
+A fuller job registry -- one record per running job, independent of
+whether it is a run, a saved run, or a sweep, holding enough to answer
+`list_jobs`/`set_job_view`/`get_job_snapshot` in full -- is a later
+commit's own job (`20261019-claude-opus-5-5-fim-gui-tabs-design.md`
+§7.1-§7.3, commit A7 onward); this module only mints the id and counts
+the sequence, in the file that work will eventually grow into.
 
 <a id="fim.gui.jobs.JobAdmission"></a>
 
@@ -15253,7 +15310,82 @@ One lock, held only long enough to decide and record one claim.
 Never held across anything that waits on another thread or on the
 page -- every caller takes it, makes its decision, and releases it
 again within the same few lines (`Api._claim_run`/`_claim_sweep`,
-and their own release counterparts).
+and their own release counterparts). The same lock also guards
+`_next_sequence`, below: a short enough critical section (one dict
+read and one write) that sharing it costs nothing worth a second
+lock, and `JobAdmission`'s own docstring already expects this
+module to grow into the fuller registry that will need one lock
+for all of it anyway.
+
+<a id="fim.gui.jobs.JobAdmission.new_job_id"></a>
+
+#### new\_job\_id
+
+```python
+def new_job_id() -> str
+```
+
+Mint a fresh id for one claim, never reused.
+
+Called from inside `_claim_run`/`_claim_sweep`, under `self.
+lock`, the instant a claim succeeds -- not by the page (unlike
+the eventual `start_job(jobId, request)` of design doc §7.2,
+where the page mints it before this registry exists at all);
+nothing about this id's own shape is a promise to any later
+commit, including A6's "`jobId` is the lifecycle's own `command_
+key` for a Run-object job" -- that constraint is this module's
+own later problem to satisfy, not a reason to constrain this id
+now.
+
+<a id="fim.gui.jobs.JobAdmission.next_sequence"></a>
+
+#### next\_sequence
+
+```python
+def next_sequence(job_id: str) -> int
+```
+
+Return `job_id`'s next sequence number, starting at 0.
+
+Every call for the same `job_id` returns one more than the
+last, forever (not reset by anything here) -- `forget` only
+drops the bookkeeping once a job is done with it; a stray,
+late call for an already-forgotten id simply starts again at 0,
+indistinguishable on the wire from a fresh job's own first
+event, since the two can never be confused (`forget` is only
+ever called once a job's own claim is released, and a `job_id`
+is never reused across two different claims).
+
+<a id="fim.gui.jobs.JobAdmission.latest_sequence"></a>
+
+#### latest\_sequence
+
+```python
+def latest_sequence(job_id: str) -> int | None
+```
+
+Return the most recently assigned sequence for `job_id`, or `None`.
+
+`None` means `job_id` has never had `next_sequence` called for
+it at all (including: never claimed, or claimed but not yet
+pushed anything) -- `Api.get_job_snapshot`'s own "nothing yet"
+case, distinct from a real sequence of `0`.
+
+<a id="fim.gui.jobs.JobAdmission.forget"></a>
+
+#### forget
+
+```python
+def forget(job_id: str) -> None
+```
+
+Drop `job_id`'s own sequence bookkeeping once its claim is released.
+
+Keeps this dict from growing for the life of the process, one
+entry per job ever claimed -- harmless at any one point, but
+needless to keep once nothing can call `next_sequence` for
+`job_id` again (`Api._release_run_claim`/`_release_sweep_claim`,
+the only callers, clear `Api._job_id` in the same breath).
 
 <a id="fim.gui.literature_visuals"></a>
 

@@ -118,6 +118,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_help_screen`](#gui.test_help_screen)
   - [`test_home_hierarchy_screen`](#gui.test_home_hierarchy_screen)
   - [`test_input_screen`](#gui.test_input_screen)
+  - [`test_job_events`](#gui.test_job_events)
   - [`test_literature_visuals`](#gui.test_literature_visuals)
   - [`test_live_statistic_toggle_screen`](#gui.test_live_statistic_toggle_screen)
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
@@ -21942,6 +21943,246 @@ def test_the_per_statistic_precision_field_is_submitted(
 ```
 
 The optional per-statistic precision is part of the submitted form values.
+
+<a id="gui.test_job_events"></a>
+
+# gui.test\_job\_events
+
+Addressed job events (`fim.onJobEvent`): sequencing, dedup, gaps, snapshots.
+
+Commit A5 of `20261019-claude-opus-5-5-fim-gui-tabs-design.md`'s own
+Release A schedule adds a second, additive push channel alongside every
+existing named one (`fim.onRunProgress`, `fim.onBatchDone`, `fim.
+onSweepEvent`, ...): `fim.onJobEvent({jobId, sequence, type, payload})`,
+one sequence per job, covering every event that job ever pushes
+(`fim.gui.jobs.JobAdmission.next_sequence`, `fim.gui.app._push_job_
+event`). `webui/jobs.js` is the page side -- it tracks that sequence
+alone; nothing yet reads it to drive a screen (that starts at A9, once a
+document exists to receive it).
+
+Three groups of tests:
+
+- Backend, no window: `JobAdmission`'s own sequence bookkeeping, and
+  `Api._claim_run`/`_claim_sweep` minting a job id, `Api.get_job_snapshot`
+  answering from it.
+- Backend, a fake window: a real `_drain_run_messages` call proves the
+  legacy push and its addressed companion both land, in order.
+- The real page, no real run: synthetic `window.fim.onJobEvent(...)`
+  calls drive `webui/jobs.js` directly, the same "no real run" shape
+  `test_scrubber_frame_cap.py`'s own module docstring already uses.
+
+<a id="gui.test_job_events.test_next_sequence_starts_at_zero_and_counts_up"></a>
+
+#### test\_next\_sequence\_starts\_at\_zero\_and\_counts\_up
+
+```python
+def test_next_sequence_starts_at_zero_and_counts_up() -> None
+```
+
+One job's own sequence: 0, 1, 2, never resetting on its own.
+
+<a id="gui.test_job_events.test_two_jobs_have_independent_sequences"></a>
+
+#### test\_two\_jobs\_have\_independent\_sequences
+
+```python
+def test_two_jobs_have_independent_sequences() -> None
+```
+
+A second job's own counter starts at 0 regardless of the first's.
+
+<a id="gui.test_job_events.test_latest_sequence_is_none_before_any_push"></a>
+
+#### test\_latest\_sequence\_is\_none\_before\_any\_push
+
+```python
+def test_latest_sequence_is_none_before_any_push() -> None
+```
+
+A claimed job that has not pushed anything yet has no latest sequence.
+
+<a id="gui.test_job_events.test_forget_drops_the_bookkeeping"></a>
+
+#### test\_forget\_drops\_the\_bookkeeping
+
+```python
+def test_forget_drops_the_bookkeeping() -> None
+```
+
+Forgetting a job's own id lets a later, unrelated use of it start fresh.
+
+<a id="gui.test_job_events.test_claim_run_mints_a_job_id_and_release_clears_it"></a>
+
+#### test\_claim\_run\_mints\_a\_job\_id\_and\_release\_clears\_it
+
+```python
+def test_claim_run_mints_a_job_id_and_release_clears_it(
+        tmp_path: Path) -> None
+```
+
+`_claim_run` mints `Api._job_id`; `_release_run_claim` clears it.
+
+<a id="gui.test_job_events.test_claim_sweep_mints_a_job_id_and_release_clears_it"></a>
+
+#### test\_claim\_sweep\_mints\_a\_job\_id\_and\_release\_clears\_it
+
+```python
+def test_claim_sweep_mints_a_job_id_and_release_clears_it(
+        tmp_path: Path) -> None
+```
+
+`_claim_sweep` mints `Api._job_id`; `_release_sweep_claim` clears it.
+
+<a id="gui.test_job_events.test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id"></a>
+
+#### test\_a\_run\_claim\_and\_a\_sweep\_claim\_each\_mint\_their\_own\_job\_id
+
+```python
+def test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id(
+        tmp_path: Path) -> None
+```
+
+A run's own job id and a later sweep's own are never the same value.
+
+<a id="gui.test_job_events.test_get_job_snapshot_before_any_push"></a>
+
+#### test\_get\_job\_snapshot\_before\_any\_push
+
+```python
+def test_get_job_snapshot_before_any_push(tmp_path: Path) -> None
+```
+
+A snapshot taken before the job has pushed anything reports sequence -1.
+
+<a id="gui.test_job_events.test_get_job_snapshot_reports_the_latest_assigned_sequence"></a>
+
+#### test\_get\_job\_snapshot\_reports\_the\_latest\_assigned\_sequence
+
+```python
+def test_get_job_snapshot_reports_the_latest_assigned_sequence(
+        tmp_path: Path) -> None
+```
+
+A snapshot reflects however many pushes `next_sequence` has already given out.
+
+<a id="gui.test_job_events.test_get_job_snapshot_refuses_an_unknown_job_id"></a>
+
+#### test\_get\_job\_snapshot\_refuses\_an\_unknown\_job\_id
+
+```python
+def test_get_job_snapshot_refuses_an_unknown_job_id(tmp_path: Path) -> None
+```
+
+A `jobId` nobody has claimed is refused, not reported as empty.
+
+<a id="gui.test_job_events.test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released"></a>
+
+#### test\_get\_job\_snapshot\_refuses\_a\_job\_whose\_claim\_has\_been\_released
+
+```python
+def test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released(
+        tmp_path: Path) -> None
+```
+
+A job this process once ran, but no longer has claimed, is "no such job".
+
+Nothing is retained about a finished job past its own claim's
+release in this commit (`Api.get_job_snapshot`'s own docstring) --
+a fuller, persistent snapshot is a later commit's job.
+
+<a id="gui.test_job_events.test_the_addressed_push_rides_alongside_the_legacy_push_in_order"></a>
+
+#### test\_the\_addressed\_push\_rides\_alongside\_the\_legacy\_push\_in\_order
+
+```python
+def test_the_addressed_push_rides_alongside_the_legacy_push_in_order() -> None
+```
+
+A real drain's legacy push and its `onJobEvent` companion both land.
+
+Proves A5's own "legacy pushes still reach the single document": the
+addressed channel is additive, never a replacement, and is delivered
+right after the push it accompanies, in the one publisher's own
+delivery order (`fim.gui.publisher`'s own module docstring).
+
+<a id="gui.test_job_events.test_one_sequence_per_job_and_jobs_never_cross"></a>
+
+#### test\_one\_sequence\_per\_job\_and\_jobs\_never\_cross
+
+```python
+@pytest.mark.gui
+def test_one_sequence_per_job_and_jobs_never_cross() -> None
+```
+
+Two jobs' own sequences are tracked independently, never conflated.
+
+<a id="gui.test_job_events.test_duplicate_and_stale_events_are_ignored"></a>
+
+#### test\_duplicate\_and\_stale\_events\_are\_ignored
+
+```python
+@pytest.mark.gui
+def test_duplicate_and_stale_events_are_ignored() -> None
+```
+
+A repeated or older sequence never re-applies, never regresses tracking.
+
+<a id="gui.test_job_events.test_a_jobs_first_ever_event_is_never_treated_as_a_gap"></a>
+
+#### test\_a\_jobs\_first\_ever\_event\_is\_never\_treated\_as\_a\_gap
+
+```python
+@pytest.mark.gui
+def test_a_jobs_first_ever_event_is_never_treated_as_a_gap() -> None
+```
+
+Progress may arrive before anything else names a job; it is still applied.
+
+Design doc §7.3: "progress may arrive before the start reply; it is
+routed by jobId." A never-before-seen `jobId`'s first event is
+accepted however large its own sequence is -- there is nothing yet
+to call a gap relative to -- and is attributed to exactly that job,
+leaving any other, already-tracked job untouched.
+
+<a id="gui.test_job_events.test_a_progress_gap_never_requests_a_snapshot"></a>
+
+#### test\_a\_progress\_gap\_never\_requests\_a\_snapshot
+
+```python
+@pytest.mark.gui
+def test_a_progress_gap_never_requests_a_snapshot() -> None
+```
+
+A skipped progress sequence is routine (coalescing), not a loss.
+
+<a id="gui.test_job_events.test_a_gap_before_a_status_or_terminal_event_requests_a_snapshot"></a>
+
+#### test\_a\_gap\_before\_a\_status\_or\_terminal\_event\_requests\_a\_snapshot
+
+```python
+@pytest.mark.gui
+def test_a_gap_before_a_status_or_terminal_event_requests_a_snapshot() -> None
+```
+
+A skipped `status`/`terminal` sequence means a push was lost: resync.
+
+The gap-revealing event itself is not applied -- `lastSequenceFor`
+stays at whatever it was before the gap was seen.
+
+<a id="gui.test_job_events.test_a_snapshot_resyncs_the_tracked_sequence"></a>
+
+#### test\_a\_snapshot\_resyncs\_the\_tracked\_sequence
+
+```python
+@pytest.mark.gui
+def test_a_snapshot_resyncs_the_tracked_sequence() -> None
+```
+
+Once a snapshot resolves, its own reported sequence is adopted.
+
+`window.pywebview.api.get_job_snapshot` is stubbed here with no real
+job in flight -- the same "no real run" shape this module's own
+docstring describes.
 
 <a id="gui.test_literature_visuals"></a>
 

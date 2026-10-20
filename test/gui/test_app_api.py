@@ -41,6 +41,7 @@ from fim.engine import (
 from fim.engine import backends as engine_backends
 from fim.engine import simulate_params as engine_fim
 from fim.gui import app as app_module
+from fim.gui import jobs as jobs_module
 from fim.gui import presets as presets_module
 from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
@@ -3032,14 +3033,30 @@ class _FakeWindow:
 
 
 def _one_call_payload(window: _FakeWindow, function_name: str) -> dict[str, object]:
-    """Extract and parse the one JSON argument `evaluate_js` was called with."""
-    assert len(window.scripts) == 1
-    script = window.scripts[0]
+    """Extract and parse the one `function_name` call's own JSON argument.
+
+    Every `_drain_run_messages`/`_push_batch_progress` push now rides
+    alongside its own addressed `fim.onJobEvent` companion (`_push_job_
+    event`, commit A5) -- `window.scripts` therefore no longer holds
+    exactly one entry overall, so this picks out the one call matching
+    `function_name` specifically, tolerating whatever else landed
+    beside it.
+    """
     prefix = f"fim.{function_name}("
-    assert script.startswith(prefix)
+    matches = [script for script in window.scripts if script.startswith(prefix)]
+    assert len(matches) == 1
+    script = matches[0]
     assert script.endswith(")")
     result: dict[str, object] = json.loads(script[len(prefix) : -1])
     return result
+
+
+# A fixed job id and a fresh `JobAdmission` for every direct `_drain_run_
+# messages`/`_push_batch_progress` call below -- these functions now
+# require both (commit A5), but no test here exercises the addressed
+# channel's own sequencing; `job_admission.next_sequence` is never
+# otherwise read, so one id, claimed by nothing, is enough.
+_TEST_JOB_ID = "test-job"
 
 
 def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
@@ -3080,7 +3097,13 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
 
     publisher = Publisher()
     app_module._push_batch_progress(
-        window, params, run_id, tmp_path, publisher=publisher
+        window,
+        params,
+        run_id,
+        tmp_path,
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
     )
     assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
@@ -3164,7 +3187,13 @@ def test_push_batch_progress_includes_a_generation_zero_baseline(
 
     publisher = Publisher()
     app_module._push_batch_progress(
-        window, params, run_id, tmp_path, publisher=publisher
+        window,
+        params,
+        run_id,
+        tmp_path,
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
     )
     assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
@@ -3193,7 +3222,13 @@ def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
 
     publisher = Publisher()
     app_module._push_batch_progress(
-        window, params, "batch-run-1", tmp_path, publisher=publisher
+        window,
+        params,
+        "batch-run-1",
+        tmp_path,
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
     )
     assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
@@ -3241,7 +3276,14 @@ def test_push_batch_progress_includes_a_live_deme_pair_panel_when_selected(
 
     publisher = Publisher()
     app_module._push_batch_progress(
-        window, params, run_id, tmp_path, lambda: (1, 2), publisher=publisher
+        window,
+        params,
+        run_id,
+        tmp_path,
+        lambda: (1, 2),
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
     )
     assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
@@ -3307,6 +3349,8 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
         output_directory=Path("/unused"),
         live_deme_pair=lambda: (1, 3),
         publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
     )
     assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
@@ -3441,12 +3485,22 @@ def test_drain_run_messages_forwards_a_status_note_and_keeps_draining() -> None:
         deme_count=300,
         output_directory=Path("/unused"),
         publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
     )
     assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
-    assert window.scripts[0].startswith("fim.onRunStatus(")
-    assert "44,850 pairs of 300 demes" in window.scripts[0]
-    assert window.scripts[1].startswith("fim.onRunCancelled(")
+    # `_push_job_event`'s own addressed companion (commit A5) now rides
+    # alongside each of these, so positional indices into `window.scripts`
+    # no longer hold -- matched by prefix instead, as `_one_call_payload`
+    # already does for a single push.
+    status_scripts = [s for s in window.scripts if s.startswith("fim.onRunStatus(")]
+    cancelled_scripts = [
+        s for s in window.scripts if s.startswith("fim.onRunCancelled(")
+    ]
+    assert len(status_scripts) == 1
+    assert "44,850 pairs of 300 demes" in status_scripts[0]
+    assert len(cancelled_scripts) == 1
 
 
 def test_pairwise_status_text_names_pairs_and_replicates() -> None:

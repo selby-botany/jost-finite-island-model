@@ -50,7 +50,7 @@ import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from math import isfinite
@@ -2032,6 +2032,15 @@ class Api:
         # outcome.
         self._run_in_flight = False
         self._jobs = jobs.JobAdmission()
+        # The one currently-claimed job's own id, minted by `_claim_run`/
+        # `_claim_sweep` the instant their claim succeeds, and cleared by
+        # their own release counterparts -- `fim.gui.jobs`'s own module
+        # docstring (commit A5). Carried into whichever drain/push
+        # function needs to tag its own `fim.onJobEvent` pushes with it,
+        # as a plain argument, exactly like `output_directory` -- never
+        # read back live from a background thread, which could by then
+        # be tagging a different job's pushes with a stale id.
+        self._job_id: str | None = None
         # The saved run (`start_run_object`) now executing, if any, and its
         # worker thread; Pause and Cancel are routed to it.
         self._active_object_id: str | None = None
@@ -2318,7 +2327,10 @@ class Api:
         click, Run beside a saved run's Start, or a run racing a sweep --
         cannot both see a free slot. The claim is released by the run's
         drain thread (`_drain_then_release`), or by the starting method
-        itself when it starts nothing.
+        itself when it starts nothing. Also mints `self._job_id`
+        (`fim.gui.jobs.JobAdmission.new_job_id`) -- the caller reads it
+        back once claimed, exactly as it already reads back `self.
+        _sweep_cancel_event` after `_claim_sweep`.
 
         Returns:
             `None` once claimed; otherwise `_run_refusal`'s message.
@@ -2327,6 +2339,7 @@ class Api:
             refusal = self._run_refusal()
             if refusal is None:
                 self._run_in_flight = True
+                self._job_id = self._jobs.new_job_id()
             return refusal
 
     def _release_run_claim(self) -> None:
@@ -2334,11 +2347,21 @@ class Api:
 
         Clears the saved run first, under the same lock as `_claim_run`,
         so a run that claims the slot next never has its own saved run
-        cleared by the one that just ended.
+        cleared by the one that just ended. Forgets `self._job_id`'s own
+        sequence bookkeeping after releasing that lock, not under it --
+        `JobAdmission.lock` is a plain, non-reentrant `threading.Lock`,
+        and `forget` takes it itself (`fim.gui.jobs.JobAdmission.forget`'s
+        own docstring), so calling it while still holding the lock here
+        would deadlock the releasing thread against itself. Safe either
+        way, since `forget` only ever touches the one, never-reused id
+        this call already owns.
         """
         with self._jobs.lock:
             self._active_object_id = None
             self._run_in_flight = False
+            job_id, self._job_id = self._job_id, None
+        if job_id is not None:
+            self._jobs.forget(job_id)
 
     def _claim_sweep(self) -> str | None:
         """Claim the one sweep slot, or return why it is taken.
@@ -2349,11 +2372,12 @@ class Api:
         (`fim.gui.jobs.JobAdmission`'s own docstring: the exact gap
         `_busy_message` used to leave open on its own, checked with no
         lock at all). Claiming creates and assigns the new sweep's own
-        `_sweep_cancel_event`; `_start_sweep_thread` reads it back
-        rather than creating a second one of its own. The claim is
-        released by `_release_sweep_claim`, called from the sweep's own
-        thread once it reports its own terminal outcome, or by the
-        starting method itself when it starts nothing.
+        `_sweep_cancel_event`, and mints `self._job_id`
+        (`fim.gui.jobs.JobAdmission.new_job_id`); `_start_sweep_thread`
+        reads both back rather than creating or minting its own. The
+        claim is released by `_release_sweep_claim`, called from the
+        sweep's own thread once it reports its own terminal outcome, or
+        by the starting method itself when it starts nothing.
 
         Returns:
             `None` once claimed; otherwise `_busy_message`'s message.
@@ -2363,12 +2387,21 @@ class Api:
             if busy is not None:
                 return busy
             self._sweep_cancel_event = threading.Event()
+            self._job_id = self._jobs.new_job_id()
             return None
 
     def _release_sweep_claim(self) -> None:
-        """Release the sweep slot: no sweep is in flight now."""
+        """Release the sweep slot: no sweep is in flight now.
+
+        Forgets `self._job_id`'s own sequence bookkeeping after
+        releasing `self._jobs.lock`, not under it -- see `_release_run_
+        claim`'s own identical note on why.
+        """
         with self._jobs.lock:
             self._sweep_cancel_event = None
+            job_id, self._job_id = self._job_id, None
+        if job_id is not None:
+            self._jobs.forget(job_id)
 
     def _run_refusal(self) -> str | None:
         """Return why a run cannot start now, or `None` if it can.
@@ -2402,6 +2435,45 @@ class Api:
         if refusal is not None:
             return {"ok": False, "message": refusal}
         return {"ok": True}
+
+    @_log_bridge_call
+    def get_job_snapshot(self, job_id: str) -> dict[str, Any]:
+        """Return `job_id`'s latest delivered sequence, for `webui/jobs.js` to resync.
+
+        This commit's own, deliberately minimal snapshot (design doc
+        §7.3's "asks for a snapshot after a gap"): just enough for the
+        page to re-align its own sequence tracking, nothing about the
+        job's own state beyond that. A fuller snapshot -- enough to
+        repaint a document's own view after a gap, not only resync its
+        sequence counter -- is a later commit's own job (job view
+        levels and snapshots, A7; a document's own state, A9 onward);
+        this makes no promise about a job once its own claim is
+        released, since nothing here retains anything about it past
+        that point.
+
+        Args:
+            job_id: A job this process currently has claimed
+                (`self._job_id`) -- the run, saved run, or sweep now
+                executing. Any other value, including a job that has
+                already finished, is "no such job": there is exactly
+                one job at a time in this release, and nothing is kept
+                about one once it ends.
+
+        Returns:
+            `{"ok": True, "jobId": job_id, "sequence": N}`, `N` being
+            the latest sequence `job_id` has been assigned (`-1` if it
+            has not pushed anything yet); `{"ok": False, "message":
+            ...}` if `job_id` names no job this process currently has
+            claimed.
+        """
+        if job_id != self._job_id:
+            return {"ok": False, "message": "no such job"}
+        sequence = self._jobs.latest_sequence(job_id)
+        return {
+            "ok": True,
+            "jobId": job_id,
+            "sequence": -1 if sequence is None else sequence,
+        }
 
     def _start_scalar_run(
         self,
@@ -2459,6 +2531,8 @@ class Api:
         closed_form = _closed_form_trajectory_payload(params)
         self._run_in_flight = True
         self._comparison_target = (output_directory, window)
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_run` always mints it first
         self._drain_thread = threading.Thread(
             target=self._drain_then_release,
             args=(
@@ -2477,7 +2551,11 @@ class Api:
                 study_id,
                 run_details,
             ),
-            kwargs={"publisher": self._publisher},
+            kwargs={
+                "publisher": self._publisher,
+                "job_admission": self._jobs,
+                "job_id": job_id,
+            },
             daemon=True,
         )
         self._drain_thread.start()
@@ -2563,6 +2641,8 @@ class Api:
             self._on_run_started()
         self._run_in_flight = True
         self._comparison_target = (output_directory, window)
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_run` always mints it first
         self._drain_thread = threading.Thread(
             target=self._drain_then_release,
             args=(
@@ -2579,7 +2659,11 @@ class Api:
                 study_id,
                 run_details,
             ),
-            kwargs={"publisher": self._publisher},
+            kwargs={
+                "publisher": self._publisher,
+                "job_admission": self._jobs,
+                "job_id": job_id,
+            },
             daemon=True,
         )
         self._drain_thread.start()
@@ -2759,6 +2843,8 @@ class Api:
         self._live_deme_pair = None
         if self._on_run_started is not None:
             self._on_run_started()
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_run` always mints it first
 
         if is_batch:
             batch_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
@@ -2783,7 +2869,11 @@ class Api:
                     self._on_message,
                     self._on_batch_progress,
                 ),
-                kwargs={"publisher": self._publisher},
+                kwargs={
+                    "publisher": self._publisher,
+                    "job_admission": self._jobs,
+                    "job_id": job_id,
+                },
                 daemon=True,
             )
             self._drain_thread.start()
@@ -2824,7 +2914,11 @@ class Api:
                 identity_recovery,
                 closed_form,
             ),
-            kwargs={"publisher": self._publisher},
+            kwargs={
+                "publisher": self._publisher,
+                "job_admission": self._jobs,
+                "job_id": job_id,
+            },
             daemon=True,
         )
         self._drain_thread.start()
@@ -6192,14 +6286,17 @@ class Api:
         the exact event this run must watch and `cancel_sweep` must set --
         read back here, not recreated, or `cancel_sweep`'s own call would
         set a different event than the one `run_sweep` is actually
-        watching.
+        watching. `self._job_id`, likewise minted by `_claim_sweep`, is
+        read back the same way.
         """
         cancel_event = self._sweep_cancel_event
         assert cancel_event is not None  # `_claim_sweep` always sets it first
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_sweep` always mints it first
         self._sweep_study_id = study_id
 
         def push(event: SweepEvent) -> None:
-            _push_sweep_event(window, event, self._publisher)
+            _push_sweep_event(window, event, self._publisher, self._jobs, job_id)
 
         pairwise_max_demes = self._preferences.pairwise_max_demes
 
@@ -6221,7 +6318,11 @@ class Api:
                 # that never finishes, so every failure becomes an error event.
                 logger.exception("sweep %s failed", study_id)
                 _push_sweep_error(
-                    window, str(error) or type(error).__name__, self._publisher
+                    window,
+                    str(error) or type(error).__name__,
+                    self._publisher,
+                    self._jobs,
+                    job_id,
                 )
             finally:
                 self._release_sweep_claim()
@@ -7523,7 +7624,11 @@ _WHOLE_SWEEP_EVENT_KINDS: Final = frozenset(
 
 
 def _push_sweep_event(
-    window: _EvaluatesJs, event: SweepEvent, publisher: Publisher
+    window: _EvaluatesJs,
+    event: SweepEvent,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
 ) -> None:
     """Push one sweep event to the page; a page that is gone is not an error.
 
@@ -7548,6 +7653,14 @@ def _push_sweep_event(
     push has landed, so these three alone wait for delivery
     (`_publish_and_wait`), the same way a run's or batch's own terminal
     push already does.
+
+    Also pushes this same event, addressed, through `_push_job_event`
+    (`job_admission`/`job_id`: the one sweep job this process now has
+    claimed) -- additive, alongside the legacy push above, never
+    waiting for delivery regardless of `event.kind` (unlike the legacy
+    push's own three-kind exception: nothing yet depends on the
+    addressed channel's own delivery, so there is no equivalent reason
+    to block here for any kind).
     """
     detail = event.detail if isinstance(event.detail, str | dict) else None
     payload = {
@@ -7561,27 +7674,60 @@ def _push_sweep_event(
     script = f"fim.onSweepEvent({json.dumps(payload)})"
     if event.kind in _WHOLE_SWEEP_EVENT_KINDS:
         _publish_and_wait(publisher, window, script, label="a sweep event")
+        _push_job_event(window, publisher, job_admission, job_id, "terminal", payload)
         return
-    coalesce_key = (
-        ("sweep-point-progress", event.run_id)
-        if event.kind == "point_progress"
+    if event.kind == "point_progress":
+        coalesce_key: Hashable | None = ("sweep-point-progress", event.run_id)
+        event_type = "progress"
+    else:
+        coalesce_key = None
+        event_type = "status"
+    publisher.publish(window, script, coalesce_key=coalesce_key, label="a sweep event")
+    job_coalesce_key = (
+        ("job-event-progress", job_id, event.run_id)
+        if event_type == "progress"
         else None
     )
-    publisher.publish(window, script, coalesce_key=coalesce_key, label="a sweep event")
+    _push_job_event(
+        window,
+        publisher,
+        job_admission,
+        job_id,
+        event_type,
+        payload,
+        coalesce_key=job_coalesce_key,
+    )
 
 
-def _push_sweep_error(window: _EvaluatesJs, message: str, publisher: Publisher) -> None:
+def _push_sweep_error(
+    window: _EvaluatesJs,
+    message: str,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
+) -> None:
     """Tell the page a sweep could not start or continue.
 
     Called from `work()`'s own top-level `except`, with no lock held —
     like `_WHOLE_SWEEP_EVENT_KINDS`, right before the same `finally`
     clears `Api._sweep_cancel_event`, so this waits for delivery too.
+    Also pushes the addressed companion (`_push_job_event`, type
+    `"terminal"`), same as `_push_sweep_event`'s own three whole-sweep
+    kinds -- never waited for, for the same reason given there.
     """
     _publish_and_wait(
         publisher,
         window,
         f"fim.onSweepError({json.dumps(message)})",
         label="a sweep error",
+    )
+    _push_job_event(
+        window,
+        publisher,
+        job_admission,
+        job_id,
+        "terminal",
+        {"kind": "error", "value": message},
     )
 
 
@@ -7778,6 +7924,68 @@ def _publish_and_wait(
     delivered.wait()
 
 
+def _push_job_event(
+    window: _EvaluatesJs,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
+    event_type: str,
+    payload: Any,
+    *,
+    coalesce_key: Hashable | None = None,
+) -> None:
+    """Publish one addressed `fim.onJobEvent`, alongside whichever legacy push.
+
+    Additive, never a replacement: every call site here sits right
+    beside the existing `fim.onRun*`/`fim.onBatch*`/`fim.onSweep*` push
+    that already carries this same event to the page's one document
+    (`20261019-claude-opus-5-5-fim-gui-tabs-design.md` §7.3) --
+    `webui/jobs.js` tracks this channel's own sequence, but nothing
+    yet reads it to drive the page (that starts at A9, once a document
+    exists to receive it).
+
+    `event_type` is `"progress"`, `"status"`, or `"terminal"` for this
+    commit; `"annotation"` and `"finished"` are a later commit's own
+    job (§7.3: annotations follow the terminal event, and `finished` --
+    after every follow-up, releasing the reservation -- comes last of
+    all). Never waits for delivery (`publisher.publish`, never
+    `_publish_and_wait`): nothing yet depends on this channel's own
+    push having landed before anything else proceeds, unlike the
+    legacy terminal push beside it, which `_drain_then_release`'s own
+    claim release still only waits for.
+
+    Args:
+        window: Where the push lands.
+        publisher: Queues it, same as every other push in this module.
+        job_admission: `Api._jobs`, read for `job_id`'s own next
+            sequence number (`fim.gui.jobs.JobAdmission.next_sequence`).
+        job_id: The job this event belongs to.
+        event_type: As above.
+        payload: Whatever shape `event_type` carries -- never
+            re-validated here, the same "trust the caller" the legacy
+            pushes beside each call site already give their own
+            payload.
+        coalesce_key: As `Publisher.publish`'s own parameter -- a
+            `"progress"` push is always coalesced per job (and, for a
+            sweep, per point too); every other type is `None`
+            (queued unconditionally, in order), matching the legacy
+            push it accompanies.
+    """
+    sequence = job_admission.next_sequence(job_id)
+    envelope = {
+        "jobId": job_id,
+        "sequence": sequence,
+        "type": event_type,
+        "payload": payload,
+    }
+    publisher.publish(
+        window,
+        f"fim.onJobEvent({json.dumps(envelope)})",
+        coalesce_key=coalesce_key,
+        label=f"a {event_type} job event",
+    )
+
+
 def _drain_run_messages(
     window: _EvaluatesJs,
     message_queue: queue.Queue[runner.RunMessage],
@@ -7794,6 +8002,8 @@ def _drain_run_messages(
     run_details: RunDetails | None = None,
     *,
     publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
 
@@ -7855,6 +8065,11 @@ def _drain_run_messages(
     once the run has actually published successfully" ordering — never
     for a `"cancelled"` or error outcome, which publish nothing to
     attach in the first place.
+
+    `job_admission`/`job_id` (`Api._jobs`/`Api._job_id` at the moment
+    this thread was started) tag every push above with its own addressed
+    `fim.onJobEvent` companion (`_push_job_event`) — additive, never
+    replacing the push beside it.
     """
     logger.debug("run message-drain thread started: %s", output_directory)
     while True:
@@ -7896,6 +8111,15 @@ def _drain_run_messages(
                 coalesce_key=("run-progress", output_directory),
                 label="run progress",
                 on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "progress",
+                progress_payload,
+                coalesce_key=("job-event-progress", job_id),
             )
         elif message[0] == "done":
             result = message[1]
@@ -7973,6 +8197,14 @@ def _drain_run_messages(
                 label="run done",
                 on_delivered=_notify_on_delivery(on_message, message),
             )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "done", "value": payload},
+            )
             return
         elif message[0] == "status":
             # Not terminal: a note such as "saving every deme pair's
@@ -7982,6 +8214,9 @@ def _drain_run_messages(
                 f"fim.onRunStatus({json.dumps(message[1])})",
                 coalesce_key=("run-status", output_directory),
                 label="run status",
+            )
+            _push_job_event(
+                window, publisher, job_admission, job_id, "status", message[1]
             )
         elif message[0] in ("cancelled", "paused"):
             # Only a saved Run (`fim.gui.object_runner`) pauses; its
@@ -7995,6 +8230,14 @@ def _drain_run_messages(
                 label=f"run {message[0]}",
                 on_delivered=_notify_on_delivery(on_message, message),
             )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": message[0], "value": message[1]},
+            )
             return
         else:
             logger.warning("run error: %s", message[1])
@@ -8004,6 +8247,14 @@ def _drain_run_messages(
                 f"fim.onRunError({json.dumps(message[1])})",
                 label="run error",
                 on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "error", "value": message[1]},
             )
             return
 
@@ -8095,6 +8346,8 @@ def _push_batch_progress(
     on_progress: Callable[[dict[str, object]], None] | None = None,
     *,
     publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
 ) -> None:
     """Read every currently-reporting replicate's live state, push a pooled scatter.
 
@@ -8177,6 +8430,9 @@ def _push_batch_progress(
             docstring) — coalesced per `working_directory`, so a batch
             whose page is briefly behind never backs up more than one
             undelivered tick.
+        job_admission: `Api._jobs`, for this tick's own addressed
+            companion push (`_push_job_event`).
+        job_id: This batch's own job id.
     """
     if initial_states is None:
         initial_states = {}
@@ -8282,6 +8538,15 @@ def _push_batch_progress(
         coalesce_key=("batch-progress", working_directory),
         label="batch progress",
         on_delivered=_notify_on_delivery(on_progress, progress_payload),
+    )
+    _push_job_event(
+        window,
+        publisher,
+        job_admission,
+        job_id,
+        "progress",
+        progress_payload,
+        coalesce_key=("job-event-progress", job_id),
     )
 
 
@@ -8727,6 +8992,8 @@ def _drain_batch_messages(
     run_details: RunDetails | None = None,
     *,
     publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
 ) -> None:
     """Push every `batch_runner.BatchMessage`, polling live progress between them.
 
@@ -8760,6 +9027,11 @@ def _drain_batch_messages(
     attached to `output_directory` only once the batch's own `"done"`
     message arrives, exactly mirroring `_drain_run_messages`'s own
     identical ordering one level down.
+
+    `job_admission`/`job_id`, as `_drain_run_messages`'s own identical
+    parameters: forwarded to `_push_batch_progress` and this function's
+    own pushes alike, so every one of this batch's addressed `fim.
+    onJobEvent` pushes shares the one job id and sequence.
     """
     started = message_queue.get()
     if started[0] != "started":
@@ -8793,6 +9065,8 @@ def _drain_batch_messages(
                 initial_states,
                 on_progress,
                 publisher=publisher,
+                job_admission=job_admission,
+                job_id=job_id,
             )
             continue
         if message[0] == "status":
@@ -8803,6 +9077,9 @@ def _drain_batch_messages(
                 f"fim.onRunStatus({json.dumps(message[1])})",
                 coalesce_key=("batch-status", output_directory),
                 label="batch status",
+            )
+            _push_job_event(
+                window, publisher, job_admission, job_id, "status", message[1]
             )
             continue
         if message[0] == "done":
@@ -8818,6 +9095,14 @@ def _drain_batch_messages(
                 label="batch done",
                 on_delivered=_notify_on_delivery(on_message, message),
             )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "done", "value": payload},
+            )
             return
         elif message[0] == "paused":
             logger.info(
@@ -8830,6 +9115,14 @@ def _drain_batch_messages(
                 label="batch paused",
                 on_delivered=_notify_on_delivery(on_message, message),
             )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "paused", "value": message[1]},
+            )
             return
         elif message[0] == "cancelled":
             cancelled_payload = {"replicateIndex": message[1], "generation": message[2]}
@@ -8841,6 +9134,14 @@ def _drain_batch_messages(
                 label="batch cancelled",
                 on_delivered=_notify_on_delivery(on_message, message),
             )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "cancelled", "value": cancelled_payload},
+            )
             return
         else:
             logger.warning("batch error: %s", message[1])
@@ -8850,6 +9151,14 @@ def _drain_batch_messages(
                 f"fim.onBatchError({json.dumps(message[1])})",
                 label="batch error",
                 on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "error", "value": message[1]},
             )
             return
 
