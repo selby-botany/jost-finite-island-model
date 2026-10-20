@@ -14,6 +14,11 @@ precedes copyediting, typesetting, and proofreading. A short note near the
 end of this document records the handful of places where recomputing the
 paper's own numbers turned up a discrepancy from the printed text.
 
+Mathematical symbols and formulas use $\TeX$; literal API identifiers,
+result keys, and sequence labels use backticks. Displayed equations in
+this guide have unique tags beginning with $\text{J}$. These local tags
+are distinct from equation numbers cited from the papers.
+
 - [Differentiation measures for conservation genetics](#differentiation-measures-for-conservation-genetics)
   - [Who this document is for, and how to read it](#who-this-document-is-for-and-how-to-read-it)
   - [The one-paragraph version](#the-one-paragraph-version)
@@ -32,7 +37,6 @@ paper's own numbers turned up a discrepancy from the printed text.
   - [Appendix C: where this paper sits in Jost's larger program](#appendix-c-where-this-paper-sits-in-josts-larger-program)
   - [Appendix D: works cited](#appendix-d-works-cited)
   - [Appendix E: the differentiation debate, 2008–2011](#appendix-e-the-differentiation-debate-20082011)
-  - [Implementation in fim](#implementation-in-fim)
 
 ---
 
@@ -180,7 +184,7 @@ the statistics: it is part of how alleles are *individuated*, not part of any fo
 
 Length re-enters only in the model half (Part VI), through the mutation
 rate. A longer interval offers proportionally more sites at which a copying
-error can land, so $\mu \approx \mu_b · L$ for a per-base-pair rate
+error can land, so $\mu \approx \mu_b L$ for a per-base-pair rate
 $\mu_b$ and length $L$ — which is the whole content of Eq. 5. The
 consequence is sharp, and it is one more instance of the dissociation this
 paper is built around: **locus length is invisible to $G_{ST}$ and
@@ -205,7 +209,7 @@ carries **two** copies of every locus, one from each parent.
 - **Heterozygous** at a locus: the two copies are different alleles.
 
 A group of $N$ diploid individuals therefore contains $2N$ gene copies at
-any given locus. That factor of 2 is the only reason `2` and `4` keep
+any given locus. That factor of 2 is the only reason $2$ and $4$ keep
 appearing in the formulas below; it carries no conceptual weight.
 
 ### Populations and demes
@@ -300,9 +304,9 @@ orders of magnitude, which is central to the paper's argument:
 
 | Marker type | Rough mutation rate $\mu$ per generation |
 |---|---|
-| Single nucleotide site | $10^{-9} \mathellipsis 10^{-8}$ |
-| Typical protein-coding gene | $10^{-6} \mathellipsis 10^{-5}$ |
-| Microsatellite | $10^{-4} \mathellipsis 10^{-3}$ |
+| Single nucleotide site | $10^{-9} \ldots 10^{-8}$ |
+| Typical protein-coding gene | $10^{-6} \ldots 10^{-5}$ |
+| Microsatellite | $10^{-4} \ldots 10^{-3}$ |
 
 **Selection** improves the survival or reproduction of some alleles over
 others. The models here assume **neutral** loci — no selection — which is
@@ -354,11 +358,11 @@ different answer.
 
 ### Expected heterozygosity
 
-Given one deme's frequency vector $p = (p_1, p_2, …, p_k)$, the
+Given one deme's frequency vector $p = (p_1, p_2, \ldots, p_k)$, the
 standard diversity statistic is **expected heterozygosity**:
 
 ```math
-H = 1 - \sum_i p_i^2
+H = 1 - \sum_i p_i^2 \tag{J.1}
 ```
 
 Interpretation: draw two gene copies at random, with replacement, from the
@@ -374,8 +378,8 @@ Range and behavior:
 
 - $H = 0$ exactly when the deme is fixed.
 - $H$ increases with more alleles and with more even frequencies.
-- $H < 1$ always, and H → 1 only as the number of alleles
-  → ∞.
+- $H < 1$ always, and $H\to1$ only as the number of alleles
+  $\to\infty$.
 
 That last point is the seed of the whole problem. $H$ is bounded above
 by 1 no matter how much variation exists, so once a deme has, say, 20
@@ -388,7 +392,7 @@ $0.975$. The measure saturates.
 Nei's **gene identity** is the complement:
 
 ```math
-J = \sum_i p_i^2 = 1 - H
+J = \sum_i p_i^2 = 1 - H \tag{J.2}
 ```
 
 $J$ is the probability two random gene copies match. Working in $J$
@@ -403,20 +407,20 @@ ratios. The fix, due to Kimura and Crow (1964), is the **effective number
 of alleles**:
 
 ```math
-{}^{H}D = \frac{1}{1 - H} = \frac{1}{J}
+{}^{H}D = \frac{1}{1 - H} = \frac{1}{J} \tag{J.3}
 ```
 
-Read ${}^{q}D_T$ as "the number of *equally common* alleles a deme would
+Read ${}^{H}D$ as "the number of *equally common* alleles a deme would
 need, to have this much heterozygosity." Check it: if a deme has $n$
 equally common alleles, each at frequency $1/n$, then
-$J = n · (1/n)^2 = 1/n$, so ${}^{H}D = n$ exactly. The
+$J = n\cdot(1/n)^2 = 1/n$, so ${}^{H}D = n$ exactly. The
 transformation inverts perfectly on the uniform case, which is what makes
 it interpretable.
 
 Comparing the two scales on the same data makes the saturation problem
 concrete:
 
-| Deme composition | $H$ | $H^D$ (effective alleles) |
+| Deme composition | $H$ | ${}^{H}D$ (effective alleles) |
 |---|---|---|
 | 2 equally common alleles | 0.500 | 2.0 |
 | 5 equally common alleles | 0.800 | 5.0 |
@@ -424,7 +428,7 @@ concrete:
 | 40 equally common alleles | 0.975 | 40.0 |
 
 On the $H$ scale, going from 20 alleles to 40 looks like a trivial change
-(0.950 → 0.975). On the $H^D$ scale, it is what it actually is: a
+(0.950 → 0.975). On the ${}^{H}D$ scale, it is what it actually is: a
 doubling. **Diversity doubled; heterozygosity moved by 2.5%.** Every "most
 of the diversity is within populations" claim in the conservation
 literature that was computed on the $H$ scale is suspect for exactly
@@ -437,11 +441,11 @@ The effective number of alleles generalizes to a one-parameter family, the
 weight rare alleles get:
 
 ```math
-{}^{q}D = \left(\sum_i p_i^q\right)^{1/(1-q)} \quad (q \neq 1)
+{}^{q}D = \left(\sum_i p_i^q\right)^{1/(1-q)} \quad (q \neq 1) \tag{J.4}
 ```
 
 ```math
-{}^{1}D = \exp\left(-\sum_i p_i \ln p_i\right) \quad (\text{the } q \to 1 \text{ limit})
+{}^{1}D = \exp\left(-\sum_i p_i \ln p_i\right) \quad (\text{the } q \to 1 \text{ limit}) \tag{J.5}
 ```
 
 All of them return $n$ for $n$ equally common alleles; they differ only
@@ -450,10 +454,17 @@ in how they treat unevenness.
 | $q$ | Name | What it counts | Rare alleles |
 |---|---|---|---|
 | $0$ | Allele richness | Every allele present, however rare | Full weight |
-| $1$ | Shannon diversity, $\exp\left(entropy\right)$ | Alleles weighted by their frequency | Proportional weight |
+| $1$ | Shannon diversity, exponential of entropy | Alleles weighted by their frequency | Proportional weight |
 | $2$ | Effective number of alleles, $1/(1-H)$ | Alleles weighted by squared frequency | Nearly ignored |
 
-$q = 2$ is the heterozygosity case above — check it by substituting $q = 2$ into the general formula: $(\sum_i p_i^2)^{1/(1-2)} = (\sum_i p_i^2)^{-1}) = 1/J$. This ladder
+$q = 2$ is the heterozygosity case above — check it by substituting
+$q = 2$ into the general formula:
+
+```math
+{}^{2}D = \left(\sum_i p_i^2\right)^{1/(1-2)} = \left(\sum_i p_i^2\right)^{-1} = 1/J \tag{J.5a}
+```
+
+This ladder
 matters because the paper's three recommended differentiation measures are exactly the $q = 2$, $q = 1$, and $q = 0$
 members of one family (Part III). They are not three rival proposals — they are three settings of one dial, and the
 paper recommends reporting several precisely because the *disagreement between them* is informative (Part IV).
@@ -479,9 +490,8 @@ frequency of an allele is the unweighted mean of its per-deme frequencies,
 not a count-weighted mean. (For $E_{ST}$, size weighting is available
 and is in fact one of its selling points; see below.)
 
-Necessarily $H_T$ ≥ $H_S$: pooling different
-demes can only add variation. The gap $H_T$ -
-$H_S$ is the raw material both families of statistics work with — and the two
+Necessarily $H_T\geq H_S$: pooling different
+demes can only add variation. The gap $H_T-H_S$ is the raw material both families of statistics work with — and the two
 families normalize that same gap by **different denominators**. That one choice of denominator is the whole
 disagreement.
 
@@ -498,16 +508,16 @@ $G_{ST}$ (Nei, 1973) is the multi-allele version expressed purely in
 allele frequencies:
 
 ```math
-G_{ST} = \frac{H_T - H_S}{H_T} = 1 - \frac{H_S}{H_T}
+G_{ST} = \frac{H_T - H_S}{H_T} = 1 - \frac{H_S}{H_T} \tag{J.6}
 ```
 
-θ (Weir & Cockerham, 1984) is an unbiased *estimator* of
+$\theta$ (Weir & Cockerham, 1984) is an unbiased *estimator* of
 $F_{ST}$ that corrects for finite sample size.
 
 Because $G_{ST}$ is a function only of allele frequencies, the paper
 notes it is **not measuring exactly the same thing as Wright's original**
 $F_{ST}$ — it is a frequency-based stand-in, used throughout the paper
-for analytical simplicity, on the premise that $F_{ST}$ and θ
+for analytical simplicity, on the premise that $F_{ST}$ and $\theta$
 behave broadly similarly.
 
 Denominator: $H_T$.
@@ -547,45 +557,56 @@ allele." The design contract:
 **Jost's D**, the $q = 2$ member:
 
 ```math
-D = \left[\frac{H_T - H_S}{1 - H_S}\right]\cdot\frac{d}{d-1}
-  = 1 - \frac{J_{\mathrm{between}}}{J_{\mathrm{within}}}
-  = 1 - \exp(-\mathrm{NGD})
+D = \left[\frac{H_T-H_S}{1-H_S}\right]\frac{d}{d-1} \tag{J.7}
 ```
 
-where $J$ is Nei's gene identity and <span class="roman">NGD</span> is Nei's genetic
-distance (Nei, 1972). Denominator: $1 - H_S$, i.e. $J_{within}$.
+```math
+D = 1-\frac{J_{\mathrm{between}}}{J_{\mathrm{within}}} \tag{J.7a}
+```
+
+```math
+D = 1-\exp(-\mathrm{NGD}) \tag{J.7b}
+```
+
+where $J$ is Nei's gene identity and $\mathrm{NGD}$ denotes the
+arithmetic-denominator genetic distance
+$-\ln(J_{\mathrm{between}}/J_{\mathrm{within}})$. The arithmetic
+denominator is required for this equality; it differs from Nei's
+original geometric denominator (Nei, 1972). See
+[Nei distances](nei-distances.md). Denominator for $D$:
+$1-H_S$, i.e. $J_{\mathrm{within}}$.
 
 The middle form is the one that makes $D$ obvious:
 
 ```math
-J_{\mathrm{within}} = \text{mean over demes of } \sum_i p_i^2
+J_{\mathrm{within}} = \text{mean over demes of } \sum_i p_i^2 \tag{J.8}
 ```
 
 (the chance two copies drawn from the *same* deme match)
 
 ```math
-J_{\mathrm{between}} = \text{mean over deme pairs of } \sum_i p_{A,i}\,p_{B,i}
+J_{\mathrm{between}} = \text{mean over deme pairs of } \sum_i p_{A,i}\,p_{B,i} \tag{J.9}
 ```
 
 (the chance two copies drawn from *different* demes match)
 
 In words: **draw one gene copy from each of two different demes, and ask
 how often they match — relative to how often two copies from the same
-deme match.** If demes share nothing, $J_{between} = 0$ and
-$D = 1$. If demes are identical, $J_{between} =
-J_{within} = 0$ and $D = 0$. No saturation, no ceiling imported
+deme match.** If demes share nothing, $J_{\mathrm{between}} = 0$ and
+$D = 1$. If demes are identical, $J_{\mathrm{between}} =
+J_{\mathrm{within}} > 0$ and $D = 0$. No saturation, no ceiling imported
 from $H$. The $d/(d-1)$ factor rescales so the maximum is exactly 1
 rather than $(d-1)/d$.
 
 **Entropy differentiation** $E_{ST}$, the $q = 1$ member:
 
 ```math
-E_{ST} = \frac{E_T - E_S}{E_w}
+E_{ST} = \frac{E_T - E_S}{E_w} \tag{J.10}
 ```
 
 $E_T$ is the Shannon entropy of the pooled demes,
 $E_S$ the mean within-deme entropy weighted by deme size, and
-$E_w$ the entropy of the *relative deme sizes* — $E_w = ln d$ for **$d$**
+$E_w$ the entropy of the *relative deme sizes* — $E_w = \ln d$ for **$d$**
 equally sized demes.
 
 Two advantages the paper claims for $E_{ST}$:
@@ -604,7 +625,7 @@ Two advantages the paper claims for $E_{ST}$:
 **Allele-number differentiation** $K_{ST}$, the $q = 0$ member:
 
 ```math
-K_{ST} = 1 - \frac{K_T/K_S - d}{1 - d}
+K_{ST} = 1 - \frac{K_T/K_S - d}{1 - d} \tag{J.11}
 ```
 
 $K_T$ is the total number of distinct alleles across all demes;
@@ -618,8 +639,7 @@ All three measures come from a single expression (the one-complement of a
 similarity measure from Jost, Chao & Chazdon, 2011):
 
 ```math
-\mathrm{Differentiation}_q
-  = 1 - \frac{({}^{q}D_S / {}^{q}D_T)^{q-1} - (1/d)^{q-1}}{1 - (1/d)^{q-1}}
+\mathrm{Differentiation}_q   = 1 - \frac{({}^{q}D_S / {}^{q}D_T)^{q-1} - (1/d)^{q-1}}{1 - (1/d)^{q-1}} \tag{J.12}
 ```
 
 ${}^{q}D_T$ and ${}^{q}D_S$ are the
@@ -639,15 +659,15 @@ Two notes on that formula worth keeping:
 
 | | Fixation family ($G_{ST}$) | Allelic differentiation family ($D$) |
 |---|---|---|
-| Formula | <code>(H<sub><small>T</small></sub> - H<sub><small>S</small></sub>)/H<sub><small>T</small></sub></code> | <code>[(H<sub><small>T</small></sub>-H<sub><small>S</small></sub>)/(1-H<sub><small>S</small></sub>)]· d/(d-1)</code> |
-| Denominator | $H_T$ | <code>1 - H<sub><small>S</small></sub></code> |
+| Formula | $(H_{T} - H_{S})/H_{T}$ | $[(H_{T}-H_{S})/(1-H_{S})]\cdot  d/(d-1)$ |
+| Denominator | $H_T$ | $1 - H_{S}$ |
 | Question answered | Have demes lost internal variation? | Do demes hold different alleles? |
 | $= 1$ when | All demes fixed (same or different alleles) | Demes share no alleles |
 | $= 0$ when | Demes identical **or** all have high $H$ | Demes identical, and only then |
 | Undefined when | All demes fixed for the same allele | Never |
-| Depends on $μ$? | Barely, when $μ ≪ m$ | Strongly, always |
-| Equilibrium driver | $Nm$ (absolute migrant count) | $m/(μ(d-1))$ |
-| Comparable across loci? | Yes (that is its design goal) | Only among loci with similar $μ$ |
+| Depends on $\mu$? | Barely, when $\mu \ll m$ | Strongly, always |
+| Equilibrium driver | $Nm$ (absolute migrant count) | $m/(\mu(d-1))$ |
+| Comparable across loci? | Yes (that is its design goal) | Only among loci with similar $\mu$ |
 | Comparable across species? | Not reliably ($H_T$ varies) | Yes |
 | Right tool for | Estimating demography, gene flow | Deciding which demes to protect |
 
@@ -661,43 +681,64 @@ the one place a recomputation disagrees with the paper's printed value).
 ### Ten fixed demes, three ways
 
 Three hypothetical species, each with $d = 10$ demes. In every case **all ten demes are fixed**, so $H = 0$ in each one
-and <code>H<sub><small>S</small></sub> = 0</code> throughout — which makes <code>G<sub><small>ST</small></sub> =
-(H<sub><small>T</small></sub> - 0)/H<sub><small>T</small></sub> = 1</code> identically, no matter how the fixed alleles
+and $H_{S} = 0$ throughout — which makes $G_{ST} = (H_{T} - 0)/H_{T} = 1$ identically, no matter how the fixed alleles
 are distributed.
 
 **Nine demes fixed for allele A, one for allele B:**
 
 ```math
-\begin{aligned}
-p_A &= 0.9, \quad p_B = 0.1 \\
-H_T &= 1 - (0.9^2 + 0.1^2) = 0.18 \\
-G_{ST} &= 0.18/0.18 = 1.0 \\
-D &= \frac{0.18}{1}\cdot\frac{10}{9} = 0.20
-\end{aligned}
+p_A = 0.9 \tag{J.13}
+```
+
+```math
+p_B = 0.1 \tag{J.14}
+```
+
+```math
+H_T = 1 - (0.9^2 + 0.1^2) = 0.18 \tag{J.15}
+```
+
+```math
+G_{ST} = 0.18/0.18 = 1.0 \tag{J.16}
+```
+
+```math
+D = \frac{0.18}{1}\cdot\frac{10}{9} = 0.20 \tag{J.17}
 ```
 
 **Five demes fixed for A, five for B:**
 
 ```math
-\begin{aligned}
-p_A &= p_B = 0.5 \\
-H_T &= 1 - (0.25 + 0.25) = 0.5 \\
-G_{ST} &= 0.5/0.5 = 1.0 \\
-D &= \frac{0.5}{1}\cdot\frac{10}{9} = 0.5556
-\end{aligned}
+p_A = p_B = 0.5 \tag{J.18}
+```
+
+```math
+H_T = 1 - (0.25 + 0.25) = 0.5 \tag{J.19}
+```
+
+```math
+G_{ST} = 0.5/0.5 = 1.0 \tag{J.20}
+```
+
+```math
+D = \frac{0.5}{1}\cdot\frac{10}{9} = 0.5556 \tag{J.21}
 ```
 
 **All ten demes fixed for a different allele:**
 
 ```math
-\begin{aligned}
-H_T &= 1 - 10\cdot(0.1^2) = 0.9 \\
-G_{ST} &= 0.9/0.9 = 1.0 \\
-D &= \frac{0.9}{1}\cdot\frac{10}{9} = 1.0
-\end{aligned}
+H_T = 1 - 10\cdot(0.1^2) = 0.9 \tag{J.22}
 ```
 
-| Scenario | $H_S$ | $H_T$ | $G_{ST}$ | `D` |
+```math
+G_{ST} = 0.9/0.9 = 1.0 \tag{J.23}
+```
+
+```math
+D = \frac{0.9}{1}\cdot\frac{10}{9} = 1.0 \tag{J.24}
+```
+
+| Scenario | $H_S$ | $H_T$ | $G_{ST}$ | $D$ |
 |---|---|---|---|---|
 | 9 + 1 | 0.00 | 0.18 | **1.00** | **0.20** |
 | 5 + 5 | 0.00 | 0.50 | **1.00** | **0.5556** |
@@ -711,64 +752,82 @@ locus, the first scenario needs only **two demes** to capture all the
 variation there is, while the third needs **all ten**; every one is
 irreplaceable.
 
-**`D`** distinguishes them (0.20, 0.56, 1.00), and it has a direct,
-intuitive reading. Write out all 10·9/2 = 45 pairs of demes; for
+**$D$** distinguishes them (0.20, 0.56, 1.00), and it has a direct,
+intuitive reading. Write out all $10\cdot9/2 = 45$ pairs of demes; for
 each pair, score 0 if the two demes are fixed for the same allele and 1 if
 fixed for different alleles. In the first scenario, the one odd deme
 differs from each of the other nine (nine differing pairs), and the
 remaining 36 pairs are between identical demes:
 
 ```math
-\bar{d}_{\text{pairs}} = \frac{9\cdot 1 + 36\cdot 0}{45} = 0.20
+\bar{d}_{\text{pairs}} = \frac{9\cdot 1 + 36\cdot 0}{45} = 0.20 \tag{J.25}
 ```
 
-which matches **`D`** exactly. The same reading works for the other two
-scenarios (`25/45 = 0.5556` and `45/45 = 1.0`). So **`D` is the mean
+which matches **$D$** exactly. The same reading works for the other two
+scenarios ($25/45 \approx 0.5556$ and $45/45 = 1.0$). So **$D$ is the mean
 pairwise allelic differentiation over deme pairs** — a property worth
-remembering, since it means the same **`D`** value carries the same meaning
+remembering, since it means the same **$D$** value carries the same meaning
 whether it came from two demes or two hundred.
 
 ### Three species, GST near zero in all of them
 
-The complementary embarrassment. Three species, each with `d = 2` demes,
+The complementary embarrassment. Three species, each with $d = 2$ demes,
 all alleles equally frequent within a deme. Here $G_{ST}$ is near
-**zero** in all three, while **`D`** sweeps its entire possible range.
+**zero** in all three, while **$D$** sweeps its entire possible range.
 
 **Species A — both demes share the same 20 alleles at the same
 frequencies:**
 
 ```math
-\begin{aligned}
-H_S = H_T &= 0.95 \\
-G_{ST} &= 0.00 \\
-D &= 0.00
-\end{aligned}
+H_S = H_T = 0.95 \tag{J.26}
+```
+
+```math
+G_{ST} = 0.00 \tag{J.27}
+```
+
+```math
+D = 0.00 \tag{J.28}
 ```
 
 **Species B — each deme has 6 alleles, 3 shared and 3 private (9 distinct
 total):**
 
 ```math
-\begin{aligned}
-H_S &= 0.8333 \\
-H_T &= 1 - \bigl[3\cdot(1/6)^2 + 6\cdot(1/12)^2\bigr] = 0.875 \\
-G_{ST} &= \frac{0.875 - 0.8333}{0.875} = 0.0476 \\
-D &= \frac{0.041667}{0.166667}\cdot 2 = 0.50
-\end{aligned}
+H_S = 0.8333 \tag{J.29}
+```
+
+```math
+H_T = 1 - \bigl[3\cdot(1/6)^2 + 6\cdot(1/12)^2\bigr] = 0.875 \tag{J.30}
+```
+
+```math
+G_{ST} = \frac{0.875 - 0.8333}{0.875} = 0.0476 \tag{J.31}
+```
+
+```math
+D = \frac{0.041667}{0.166667}\cdot 2 = 0.50 \tag{J.32}
 ```
 
 **Species C — 20 equally common alleles per deme, none shared:**
 
 ```math
-\begin{aligned}
-H_S &= 0.95 \\
-H_T &= 1 - 40\cdot(0.025^2) = 0.975 \\
-G_{ST} &= \frac{0.975 - 0.95}{0.975} = 0.0256 \\
-D &= \frac{0.025}{0.05}\cdot 2 = 1.00
-\end{aligned}
+H_S = 0.95 \tag{J.33}
 ```
 
-| Species | Shared alleles | $H_S$ | $H_T$ | $G_{ST}$ | **D** |
+```math
+H_T = 1 - 40\cdot(0.025^2) = 0.975 \tag{J.34}
+```
+
+```math
+G_{ST} = \frac{0.975 - 0.95}{0.975} = 0.0256 \tag{J.35}
+```
+
+```math
+D = \frac{0.025}{0.05}\cdot 2 = 1.00 \tag{J.36}
+```
+
+| Species | Shared alleles | $H_S$ | $H_T$ | $G_{ST}$ | **$D$** |
 |---|---|---|---|---|---|
 | A | all 20 | 0.950 | 0.950 | **0.000** | **0.00** |
 | B | 3 of 6 | 0.833 | 0.875 | **0.0476** | **0.50** |
@@ -786,15 +845,14 @@ allelic diversity irrecoverably; losing a deme of species B costs only its
 ### Interpreting the proportion of diversity within demes
 
 A population with two equally large demes, each holding many low-frequency
-alleles, almost none shared. The paper reports <code>H<sub><small>T</small></sub> = 0.97</code>,
-<code>H<sub><small>S</small></sub> = 0.95</code>, with effective numbers 38.8 and 20.4. Back-solving from
-the effective numbers gives the more precise <code>H<sub><small>T</small></sub> = 0.9742,
-H<sub><small>S</small></sub> = 0.9510</code>; the calculation below uses those.
+alleles, almost none shared. The paper reports $H_{T} = 0.97$,
+$H_{S} = 0.95$, with effective numbers 38.8 and 20.4. Back-solving from
+the effective numbers gives the more precise $H_{T} = 0.9742, H_{S} = 0.9510$; the calculation below uses those.
 
 **The standard — and wrong — analysis:**
 
 ```math
-\text{"within-group share"} = H_S/H_T = 0.95/0.97 \approx 98\%
+\text{"within-group share"} = H_S/H_T = 0.95/0.97 \approx 98\% \tag{J.37}
 ```
 
 Conclusion typically drawn: 98% of the diversity is within demes,
@@ -805,11 +863,15 @@ standard paragraph in the literature.
 **The correct analysis** — convert to effective numbers of alleles first:
 
 ```math
-\begin{aligned}
-{}^{H}D_S &= \frac{1}{1 - 0.9510} = 20.4 \text{ effective alleles} \\
-{}^{H}D_T &= \frac{1}{1 - 0.9742} = 38.8 \text{ effective alleles} \\
-\beta &= {}^{H}D_T / {}^{H}D_S = 1.902
-\end{aligned}
+{}^{H}D_S = \frac{1}{1 - 0.9510} = 20.4 \text{ effective alleles} \tag{J.38}
+```
+
+```math
+{}^{H}D_T = \frac{1}{1 - 0.9742} = 38.8 \text{ effective alleles} \tag{J.39}
+```
+
+```math
+\beta = {}^{H}D_T / {}^{H}D_S = 1.902 \tag{J.40}
 ```
 
 Pooling the two demes **nearly doubles** the diversity. With only two
@@ -817,15 +879,15 @@ demes, a ratio approaching its maximum of 2 means they have almost nothing
 in common:
 
 ```math
-D = \left(1 - \frac{1}{1.902}\right)\cdot\frac{2}{1} = 0.4742\cdot 2 = 0.948 \approx 0.95
+D = \left(1 - \frac{1}{1.902}\right)\cdot\frac{2}{1} = 0.4742\cdot 2 = 0.948 \approx 0.95 \tag{J.41}
 ```
 
 | Statistic | Value | Story it tells |
 |---|---|---|
 | $G_{ST}$ | 0.024 | Demes are far from fixation — **true, and irrelevant** |
-| "98% within-group" | — | An artifact of **H**'s ceiling — **meaningless** |
+| "98% within-group" | — | An artifact of **$H$**'s ceiling — **meaningless** |
 | ${}^{H}D_T / {}^{H}D_S$ | 1.90 of a max 2.00 | Demes are nearly disjoint |
-| **D** | **0.95** | Demes are 95% allelically differentiated |
+| **$D$** | **0.95** | Demes are 95% allelically differentiated |
 | $E_{ST}$ | 0.90 | Same conclusion, frequency-weighted |
 | $K_{ST}$ | 0.77 | 77% of each deme's alleles are unique to it |
 
@@ -840,23 +902,30 @@ more differentiated than the full allele list — the alleles the demes do
 share are all at very low frequency, a conclusion no single index could
 have delivered on its own.
 
-### Where <code>D</code> and $K_{ST}$ disagree completely
+### Where $D$ and $K_{ST}$ disagree completely
 
 Two demes sharing **all 11** of their alleles, but at nearly reversed
 frequencies (allele 1 at 0.95 in deme 1 and 0.005 in deme 2; allele 11 the
 mirror image; nine more alleles at 0.005 each in both demes):
 
 ```math
-\begin{aligned}
-H_S &= 1 - \bigl[0.95^2 + 10\cdot(0.005^2)\bigr] = 0.09725 \\
-H_T &= 1 - \bigl[2\cdot(0.4775^2) + 9\cdot(0.005^2)\bigr] = 0.5438 \\
-G_{ST} &= \frac{0.5438 - 0.09725}{0.5438} = 0.8211 \\
-D &= \frac{0.44651}{0.90275}\cdot 2 = 0.99
-\end{aligned}
+H_S = 1 - \bigl[0.95^2 + 10\cdot(0.005^2)\bigr] = 0.09725 \tag{J.42}
 ```
 
 ```math
-K_{ST} = 1 - \frac{11/11 - 2}{1 - 2} = 1 - 1 = 0
+H_T = 1 - \bigl[2\cdot(0.4775^2) + 9\cdot(0.005^2)\bigr] = 0.5438 \tag{J.43}
+```
+
+```math
+G_{ST} = \frac{0.5438 - 0.09725}{0.5438} = 0.8211 \tag{J.44}
+```
+
+```math
+D = \frac{0.44651}{0.90275}\cdot 2 = 0.99 \tag{J.45}
+```
+
+```math
+K_{ST} = 1 - \frac{11/11 - 2}{1 - 2} = 1 - 1 = 0 \tag{J.46}
 ```
 
 | Measure | Value | What it is reporting |
@@ -892,16 +961,23 @@ of 100 demes identical) to total.
 | | at $t = 0$ | at equilibrium | Direction |
 |---|---|---|---|
 | Truth (allelic differentiation) | near zero | maximal | ↑ |
-| **D** | near 0 | → 1.00 | ↑ **correct** |
+| **$D$** | near 0 | → 1.00 | ↑ **correct** |
 | $G_{ST}$ | 1.00 | ≈ 0.02 | ↓ **backwards** |
 
 ```math
-D \approx \frac{1}{1 + m/[\mu(d-1)]} = \frac{1}{1+0} = 1.00 \text{ exactly}
+D \approx \frac{1}{1 + m/[\mu(d-1)]} = \frac{1}{1+0} = 1.00 \text{ exactly} \tag{J.47}
 ```
 
 ```math
-G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1}
-       = \frac{1}{0 + 1.0101\cdot 40 + 1} = \frac{1}{41.4} = 0.0242
+G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot4Nm+(d/(d-1))\cdot4N\mu+1} \tag{J.48}
+```
+
+```math
+G_{ST} \approx \frac{1}{0+1.0101\cdot40+1} \tag{J.48a}
+```
+
+```math
+G_{ST} \approx \frac{1}{41.4} \approx 0.0242 \tag{J.48b}
 ```
 
 $G_{ST}$ **falls monotonically from unity to near zero over exactly the interval in
@@ -924,7 +1000,7 @@ incorrect. Here are the steps, separately.
 A short proof with large consequences. Since $H_T \le 1$ always,
 
 ```math
-G_{ST} = 1 - \frac{H_S}{H_T} \leq 1 - \frac{H_{S}}{1} = 1 - H_{S}
+G_{ST} = 1 - \frac{H_S}{H_T} \leq 1 - \frac{H_{S}}{1} = 1 - H_{S} \tag{J.49}
 ```
 
 So if within-deme heterozygosity is $H_S = 0.95$, then
@@ -937,27 +1013,26 @@ fixed verbal scale ("below 0.05 is negligible structure, above 0.25 is
 strong"). With high-diversity markers such as microsatellites — chosen
 *because* they are informative — the entire upper range of $G_{ST}$ is
 mathematically unreachable. At the descriptive level this behavior is, the
-paper stresses, **correct**: a population with low <code>1 - H<sub><small>S</small></sub></code> really is
+paper stresses, **correct**: a population with low $1 - H_{S}$ really is
 far from fixation, and $G_{ST}$ is a nearness-to-fixation measure. The
 defect lies entirely in the interpretation people give it.
 
 ### Heterozygosity is subadditive
 
-The classical partition assumes <code>H<sub><small>T</small></sub> = H<sub><small>S</small></sub> +
-H<sub>between</sub></code>, so that <code>H<sub><small>T</small></sub> -
-H<sub><small>S</small></sub></code> is "the between-group component" and
-<code>H<sub><small>S</small></sub>/H<sub><small>T</small></sub></code> is "the fraction of diversity found within
+The classical partition assumes $H_T = H_S + H_{\mathrm{between}}$,
+so that $H_T-H_S$ is "the between-group component" and
+$H_S/H_T$ is "the fraction of diversity found within
 demes." Shannon entropy really is additive this way — **heterozygosity is not**; it is subadditive. The correct
 partition into independent within- and between-group components (Jost, 2007), with equal deme weights, is:
 
 ```math
-H_{T} = H_{S} + H_{ST} - H_{S}\cdot H_{ST}
+H_{T} = H_{S} + H_{ST} - H_{S}\cdot H_{ST} \tag{J.50}
 ```
 
 Solving for the between-group component gives:
 
 ```math
-H_{ST} = \frac{H_{T} - H_{S}}{1 - H_{S}}
+H_{ST} = \frac{H_{T} - H_{S}}{1 - H_{S}} \tag{J.51}
 ```
 
 which is exactly the first bracket of **$D$**. So: **$D$ is nothing more
@@ -979,10 +1054,11 @@ candidates on species C from above (20 private alleles per deme, two
 demes, nothing shared):
 
 ```math
-\begin{aligned}
-H\text{ scale: } &H_{S} = 0.950 \to H_{T} = 0.975 \quad (\times 1.026) \quad \text{fails} \\
-{}^{H}D\text{ scale: } &{}^{H}D_{S} = 20.0 \to {}^{H}D_{T} = 40.0 \quad (\times 2.000) \quad \text{passes}
-\end{aligned}
+H\text{ scale: } H_{S} = 0.950 \to H_{T} = 0.975 \quad (\times 1.026) \quad \text{fails} \tag{J.52}
+```
+
+```math
+{}^{H}D\text{ scale: } {}^{H}D_{S} = 20.0 \to {}^{H}D_{T} = 40.0 \quad (\times 2.000) \quad \text{passes} \tag{J.53}
 ```
 
 Heterozygosity moved by 2.6% where the true diversity doubled. Any ratio
@@ -1042,7 +1118,7 @@ are on the table.
 ### Equilibrium $G_{ST}$: controlled by $Nm$
 
 ```math
-G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1}
+G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1} \tag{J.54}
 ```
 
 The $(d/(d-1))^2$ factor multiplying the migration term is the
@@ -1050,12 +1126,12 @@ finite-number-of-demes correction from Crow & Aoki (1984) — see
 Appendix D — confirmed directly against their Eq. 7/Eq. 8
 ($G_{ST} \approx 1/(4Nm\alpha+1)$, $\alpha = [n/(n-1)]^2$, their $n$ this document's $d$),
 not to this paper or to Wright's own original (infinite-island)
-derivation; it vanishes as $d \to \infin$, recovering Wright's classical
+derivation; it vanishes as $d \to \infty$, recovering Wright's classical
 $1/(4Nm+1)$, exactly as Crow & Aoki's own paper notes. One boundary of
-that attribution worth being precise about: Crow & Aoki\'s own Eq. 7
+that attribution worth being precise about: Crow & Aoki's own Eq. 7
 carries **no mutation term at all** — dropping it entirely is the
 "pleasing result" their own paper highlights, valid under their stated
-$\mu \ll m, 1/N \ll 1$ approximation. The $(d/(d-1))·4N\mu$ mutation term
+$\mu \ll m, 1/N \ll 1$ approximation. The $(d/(d-1))\cdot4N\mu$ mutation term
 above is this project's own retention of a term Crow & Aoki chose to
 drop, not something their paper itself provides; Crow & Aoki's own
 references (their eq. 6, with mutation retained) instead credit
@@ -1067,7 +1143,7 @@ $4N\mu$ term is negligible and this collapses to a function of **$Nm$**
 and **$d$** alone:
 
 ```math
-G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + 1}
+G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + 1} \tag{J.55}
 ```
 
 Two consequences follow. First, $G_{ST}$ depends on the **absolute
@@ -1083,7 +1159,7 @@ to demography, comparable across loci.
 ### Equilibrium $D$: controlled by the mutation ratio
 
 ```math
-D \approx \frac{1}{1 + m/[\mu(d-1)]}
+D \approx \frac{1}{1 + m/[\mu(d-1)]} \tag{J.56}
 ```
 
 Note what is present and what is absent: **$N$ does not appear at all.**
@@ -1091,7 +1167,7 @@ The controlling quantity is $m/(\mu(d-1))$ — a ratio of migration rate to
 mutation rate, scaled by deme count. The same quantity controls Nei's
 genetic distance, and $D$ is a simple monotonic function of it (Jost,
 2009). Sanity checks: with no migration ($m = 0$), $D = 1$, and demes
-diverge completely; with $m \gg \mu(d-1), D \to 0$ and migration
+diverge completely; with $m \gg \mu(d-1)$, $D \to 0$ and migration
 homogenizes them.
 
 ### Limits of equilibrium-based inference
@@ -1135,7 +1211,7 @@ already settled, because the two are easy to run together.
   decision you make, and it is available to you regardless of any model.
 - **A model assumption** (here): the *generative process* that produced
   the data had equal demes. Nothing you choose at analysis time repairs a
-  mismatch here. This is what Eq. 2 and Eq. 4 rest on.
+  mismatch here. This is what (J.54) and (J.56) rest on.
 
 **What goes wrong.** Drift acts at rate $1/(2N)$, so unequal demes drift
 at unequal rates: small demes lose variation and reach fixation far faster
@@ -1149,15 +1225,17 @@ than the arithmetic mean — and the harmonic mean is dominated by the
 The gap is not subtle. Take $d = 10$, one deme of 10,000 and nine of 100:
 
 ```math
-\bar{N}_{\text{arithmetic}} = \frac{10000 + 9(100)}{10} = 1090
-\qquad
-\bar{N}_{\text{harmonic}} = \frac{10}{\tfrac{1}{10000} + \tfrac{9}{100}} \approx 111
+\bar{N}_{\text{arithmetic}} = \frac{10000 + 9(100)}{10} = 1090 \tag{J.57}
 ```
 
-A factor of 9.8. Feeding each into Eq. 2 with $m = 0.01$ and negligible
+```math
+\bar{N}_{\text{harmonic}} = \frac{10}{\tfrac{1}{10000} + \tfrac{9}{100}} \approx 111 \tag{J.58}
+```
+
+A factor of 9.8. Feeding each into (J.54) with $m = 0.01$ and negligible
 $\mu$:
 
-| $N$ used | $4Nm$ | Eq. 2 $G_{ST}$ |
+| $N$ used | $4Nm$ | $G_{ST}$ from (J.54) |
 |---|---|---|
 | 1090 (arithmetic mean) | 43.6 | 0.018 |
 | 111 (harmonic mean) | 4.44 | **0.153** |
@@ -1176,14 +1254,14 @@ constant across demes is a modeling decision with no default, and "the
 absolute number of migrants per generation" quietly presumes it has been
 made.
 
-**$D$ fares better, and for a structural reason.** Look again at Eq. 4: $N$ does not appear in it at all. Allelic
+**$D$ fares better, and for a structural reason.** Look again at (J.56): $N$ does not appear in it at all. Allelic
 differentiation at equilibrium is set by the migration–mutation balance governing whether two lineages drawn from
 *different* demes are identical, and the deme-size dependence that dominates within-deme identity largely cancels in the
-ratio <code>J<sub>between</sub>/J<sub>within</sub></code> on which $D$ is built. For the
-numbers above, Eq. 4 returns $D \approx 0.083$ whichever deme size you use, because it never asks. This is the same robustness
+ratio $J_{\mathrm{between}}/J_{\mathrm{within}}$ on which $D$ is built. For the
+numbers above, (J.56) returns $D \approx 0.083$ whichever deme size you use, because it never asks. This is the same robustness
 the paper is pointing at when it calls $D$ "more stable against variation in deme size."
 
-Do not over-read it as immunity, though. Eq. 4 still assumes demes are
+Do not over-read it as immunity, though. Equation (J.56) still assumes demes are
 *exchangeable*, sharing one migration rate $m$ and one mutation rate
 $\mu$; unequal sizes in real metapopulations usually come with unequal
 migration rates, and then $m$ is not a scalar and the derivation's
@@ -1191,7 +1269,7 @@ premise is gone. The $\approx$ is doing real work.
 
 **Scope of the assumption.** The equal-size assumption applies to the
 equilibrium relationships in Part VI. Everything in Parts II–V — the ceiling argument
-<code>G<sub><small>ST</small></sub> ≤ 1 - H<sub><small>S</small></sub></code>, the subadditivity of heterozygosity, the
+$G_{ST} \leq 1 - H_{S}$, the subadditivity of heterozygosity, the
 replication principle, and every worked example in Part IV — is computed
 from allele frequency vectors alone and assumes **nothing whatever** about
 deme sizes, migration, mutation, or equilibrium. The paper's central thesis
@@ -1206,7 +1284,7 @@ unequal demes, see Whitlock MC & Barton NH (1997), "The effective size of a
 subdivided population," *Genetics* 146:427–441. Relaxations of the
 migration *topology* rather than deme size — stepping-stone and
 continent-island models — are a separate axis, and equally absent from
-Eq. 2 and Eq. 4.
+equations (J.54) and (J.56).
 
 ### Equilibrium assumptions in conservation applications
 
@@ -1238,7 +1316,7 @@ thousand — a low-diversity regime worth treating separately.
 
 **Many demes, two alleles.** The same ambiguity as the infinite-allele
 case: with ten demes, nine fixed for one base and one for the other,
-<code>G<sub><small>ST</small></sub> = 1.00</code> while $D = 0.20$ — numerically identical to the first
+$G_{ST} = 1.00$ while $D = 0.20$ — numerically identical to the first
 worked example above. Split five-five and $G_{ST}$ is still $1.00$
 (all demes remain fixed), while $D = 0.5556$. Note that with two alleles
 and ten demes, $D$ **cannot** reach 1.00 — and, per the ceiling
@@ -1311,12 +1389,12 @@ hierarchical levels.
 
 | Common claim | Status | Where |
 |---|---|---|
-| "<code>F<sub><small>ST</small></sub>/G<sub><small>ST</small></sub></code> measures how different populations are." | **False.** It measures nearness to fixation. | Part III |
+| "$F_{ST}/G_{ST}$ measures how different populations are." | **False.** It measures nearness to fixation. | Part III |
 | "$D$ is a corrected or standardized $F_{ST}$." | **False.** Different quantity, different question. | Part III, VIII |
-| "High $G_{ST}$ means the demes hold different alleles." | **False.** <code>G<sub><small>ST</small></sub>=1</code> when 9 of 10 demes are identical. | Part IV |
-| "Low $G_{ST}$ means the demes are genetically similar." | **False.** Species C shares zero alleles at <code>G<sub><small>ST</small></sub>=0.026</code>. | Part IV |
-| "$G_{ST}$ below 0.05 means negligible structure." | **Unsound.** <code>G<sub><small>ST</small></sub> ≤ 1-H<sub><small>S</small></sub></code>, so with <code>H<sub><small>S</small></sub>=0.95</code> it can never exceed 0.05. | Part V |
-| "<code>H<sub><small>T</small></sub> - H<sub><small>S</small></sub></code> is the between-group diversity." | **False.** $H$ is subadditive; the correct form is <code>H<sub><small>T</small></sub> = H<sub><small>S</small></sub> + H<sub><small>ST</small></sub> - H<sub><small>S</small></sub> H<sub><small>ST</small></sub></code>. | Part V |
+| "High $G_{ST}$ means the demes hold different alleles." | **False.** $G_{ST}=1$ when 9 of 10 demes are identical. | Part IV |
+| "Low $G_{ST}$ means the demes are genetically similar." | **False.** Species C shares zero alleles at $G_{ST}=0.026$. | Part IV |
+| "$G_{ST}$ below 0.05 means negligible structure." | **Unsound.** $G_{ST} \leq 1-H_{S}$, so with $H_{S}=0.95$ it can never exceed 0.05. | Part V |
+| "$H_{T} - H_{S}$ is the between-group diversity." | **False.** $H$ is subadditive; the correct form is $H_{T} = H_{S} + H_{ST} - H_{S} H_{ST}$. | Part V |
 | "98% of diversity is within demes, so protect one." | **False.** Artifact of the $H$ scale; on effective alleles the demes are nearly disjoint. | Part IV, V |
 | "$Nm$ determines allelic differentiation when $\mu$ is low." | **False.** $Nm$ determines nearness to fixation; $m/(\mu(d-1))$ determines differentiation. | Part VI |
 | "$D$ varies across loci, so it is unreliable." | **False.** That variation is a real biological effect of differing $\mu$. | Part VI |
@@ -1371,8 +1449,8 @@ visible from a single number.
 **Name the quantity by what it measures.** The paper's central practical
 lesson is that a naming collision — two inequivalent quantities both
 called "differentiation" — caused decades of wrong conclusions. The same
-hazard attaches to any function called $distance$, $similarity$, or
-$difference$ without a statement of which of several inequivalent things
+hazard attaches to any function called `distance`, `similarity`, or
+`difference` without a statement of which of several inequivalent things
 it computes.
 
 **The relation to Jaccard and Sørensen.** $K_{ST}$ is the one-complement
@@ -1433,122 +1511,169 @@ changes results — make it explicitly and record it.
 | $E_T$, $E_S$, $E_w$ | Total / mean-within / deme-size Shannon entropies |
 | $K_{T}$, $K_S$ | Total / mean-per-deme allele counts |
 | $q$ | Order of a diversity measure (rare-allele weighting) |
-| <span class="roman">NGD</span> | Nei's genetic distance |
+| $\mathrm{NGD}$ | Arithmetic-denominator genetic distance used in the identity for $D$ |
 | $\bar{D}_m$ | Nei's absolute mean pairwise between-deme gene diversity |
 | $R_{ST}$ | Nei's $\bar{D}_m$ relative to within-deme diversity |
 | $G^{\prime}_{ST}$ (Nei) | Nei's log-based large-differentiation $G_{ST}$ estimator |
 | $G^{\prime}_{ST}$ (Hedrick) | Hedrick's standardized $G_{ST}$ — a *different* quantity from Nei's own $G^{\prime}_{ST}$ above, despite the shared name |
-| $G_{ST}(max)$ | Hedrick's own attainable $G_{ST}$ ceiling given $H_S$ |
-| $Gs$, $Gd$ | Ryman & Leimar's within-/between-deme gene identities ($J_0$, $J_1$) |
+| $G_{ST}(\max)$ | Hedrick's own attainable $G_{ST}$ ceiling given $H_S$ |
+| $J_{\mathrm{within}}$, $J_{\mathrm{between}}$ | Within-/between-deme gene identities, reported as `Gs` and `Gd` |
 
 ### Within one deme
 
 ```math
-H = 1 - \sum_i p_i^2 \qquad J = \sum_i p_i^2 = 1 - H \qquad {}^{H}D = \frac{1}{1-H} = \frac{1}{J}
+H = 1 - \sum_i p_i^2 \tag{J.59}
 ```
 
 ```math
-{}^{q}D = \left(\sum_i p_i^q\right)^{1/(1-q)}\ (q \neq 1), \qquad {}^{1}D = \exp\left(-\sum_i p_i \ln p_i\right)
+J = \sum_i p_i^2 = 1 - H \tag{J.60}
+```
+
+```math
+{}^{H}D = \frac{1}{1-H} = \frac{1}{J} \tag{J.61}
+```
+
+```math
+{}^{q}D = \left(\sum_i p_i^q\right)^{1/(1-q)}\ (q \neq 1) \tag{J.62}
+```
+
+```math
+{}^{1}D = \exp\left(-\sum_i p_i \ln p_i\right) \tag{J.63}
 ```
 
 ### Across demes
 
-Ryman & Leimar (2008) work in gene identities rather than heterozygosities — $Gs$ (their $J_0$) and
-$Gd$ (their <$J_1$) — related to
-<code>H<sub><small>S</small></sub>/H<sub><small>S</small></sub></code> by the same complement `J = 1 - H` above, plus
-one correction for `Gd` specifically (`gs`/`gd` in `fim.statistics.differentiation`; see `doc/migration-conventions.md`
-for the with-replacement-versus- distinct-pair identity convention `fim` and the paper use, and the exact `O(1/N)`
-mapping between the two):
+Ryman & Leimar (2008) work in gene identities, $J_0$ within demes
+and $J_1$ between demes, rather than heterozygosities. The simulator's
+within- and between-deme identities are reported as `Gs` and `Gd`
+and calculated by `gs` and `gd` in `fim.statistics.differentiation`.
+In the simulator's with-replacement convention, they relate to $H_S$
+and $H_T$ as follows. See [migration conventions](migration-conventions.md)
+for the distinct-pair convention used in the paper and the exact
+$O(1/N)$ mapping between the two conventions.
 
 ```math
-Gs = 1 - H_S, \qquad Gd = \frac{d\,(1-H_T) - (1-H_S)}{d-1}
+J_{\mathrm{within}} = 1 - H_S \tag{J.64}
 ```
 
 ```math
-G_{ST} = \frac{H_{T} - H_{S}}{H_{T}} = 1 - \frac{H_{S}}{H_{T}}
+J_{\mathrm{between}} = \frac{d\,(1-H_T) - (1-H_S)}{d-1} \tag{J.65}
 ```
 
 ```math
-G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1}
+G_{ST} = \frac{H_{T} - H_{S}}{H_{T}} = 1 - \frac{H_{S}}{H_{T}} \tag{J.66}
 ```
 
 ```math
-D = \left[\frac{H_{T}-H_{S}}{1-H_{S}}\right]\cdot\frac{d}{d-1}
-  = 1 - \frac{J_{\mathrm{between}}}{J_{\mathrm{within}}}
-  = 1 - \exp(-\mathrm{NGD})
+G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1} \tag{J.67}
 ```
 
 ```math
-D \approx \frac{1}{1 + m/[\mu(d-1)]}
+D = \left[\frac{H_T-H_S}{1-H_S}\right]\frac{d}{d-1} \tag{J.68}
 ```
 
 ```math
-\mathrm{Differentiation}_q
-  = 1 - \frac{({}^{q}D_{S}/{}^{q}D_{T})^{q-1} - (1/d)^{q-1}}{1 - (1/d)^{q-1}}
+D = 1-\frac{J_{\mathrm{between}}}{J_{\mathrm{within}}} \tag{J.68a}
 ```
 
 ```math
-E_{ST} = \frac{E_{T} - E_{S}}{E_{w}} \qquad (E_{w} = \ln d \text{ for equal deme sizes})
+D = 1-\exp(-\mathrm{NGD}) \tag{J.68b}
 ```
 
 ```math
-K_{ST} = 1 - \frac{K_{T}/K_{S} - d}{1 - d}
+D \approx \frac{1}{1 + m/[\mu(d-1)]} \tag{J.69}
 ```
 
-Nei (1973) also defines two further statistics this project implements (<code>d<sub>m</sub></code>,
-<code>r<sub>st</sub></code>, `g_st_log`) but does not otherwise discuss above: an *absolute*, not-`[0, 1]`-bounded
+```math
+\mathrm{Differentiation}_q   = 1 - \frac{({}^{q}D_{S}/{}^{q}D_{T})^{q-1} - (1/d)^{q-1}}{1 - (1/d)^{q-1}} \tag{J.70}
+```
+
+```math
+E_{ST} = \frac{E_{T} - E_{S}}{E_{w}} \tag{J.71}
+```
+
+```math
+(E_{w} = \ln d \text{ for equal deme sizes}) \tag{J.72}
+```
+
+```math
+K_{ST} = 1 - \frac{K_{T}/K_{S} - d}{1 - d} \tag{J.73}
+```
+
+Nei (1973) also defines three further statistics this project implements (`d_m`,
+`r_st`, `g_st_log`) but does not otherwise discuss above: an *absolute*, not-$[0,1]$-bounded
 pairwise diversity, its ratio to within-deme diversity, and a log-based alternative to
 $G_{ST}$ recommended specifically for strong (subspecies-level) differentiation,
 where linear $G_{ST}$ saturates.
-<code>\bar{D}<sub>m</sub></code> and $R_{ST}$ assume equal deme weights, the same
-restriction `D`, above, already carries and for the same reason (Nei's own Eq. 4 derivation assumes <code>w<sub>i</sub>
-= 1/s</code>):
+$\bar{D}_{m}$ and $R_{ST}$ assume equal deme weights, the same
+restriction $D$, above, already carries and for the same reason (Nei's own Eq. 4 derivation assumes $w_{i} = 1/s$):
 
 ```math
-\bar{D}_m = \frac{d}{d-1}(H_T - H_S), \qquad R_{ST} = \frac{\bar{D}_m}{H_S}
+\bar{D}_m = \frac{d}{d-1}(H_T - H_S) \tag{J.74}
 ```
 
 ```math
-G'_{ST} \text{ (Nei)} = \frac{-\ln(J_T/J_S)}{-\ln J_T} = \frac{\ln(J_S/J_T)}{-\ln J_T}
+R_{ST} = \frac{\bar{D}_m}{H_S} \tag{J.75}
+```
+
+```math
+G'_{ST} \text{ (Nei)} = \frac{-\ln(J_T/J_S)}{-\ln J_T} = \frac{\ln(J_S/J_T)}{-\ln J_T} \tag{J.76}
 ```
 
 Hedrick (2005)'s own, differently defined $G^{\prime}_{ST}$ — Ryman & Leimar
-(2008)'s own Equations 7-8, <code>g<sub>st</sub>(max) / g'<sub>st</sub></code> in `fim.statistics.
-differentiation` — rescales ordinary $G_{ST}$ by its own attainable
-ceiling instead:
+(2008)'s own Equations 7–8, `g_st_max` / `g_st_prime` in
+`fim.statistics.differentiation` — rescales ordinary $G_{ST}$ by its own attainable
+ceiling instead. In the following formula, $s=d$ is the paper's
+number of demes:
 
 ```math
-G_{ST}(\max) = \frac{(s-1)(1-H_S)}{s-1+H_S}, \qquad
-G'_{ST} \text{ (Hedrick)} = \frac{G_{ST}}{G_{ST}(\max)}
+G_{ST}(\max) = \frac{(s-1)(1-H_S)}{s-1+H_S} \tag{J.77}
+```
+
+```math
+G'_{ST} \text{ (Hedrick)} = \frac{G_{ST}}{G_{ST}(\max)} \tag{J.78}
 ```
 
 Ryman & Leimar's own two transition-phase/equilibrium mutation-
-negligibility conditions (Equations 9-10, `mutation_negligible_
-transition / mutation_negligible_equilibrium`), each at the paper's own
+negligibility conditions (Equations 9–10,
+`mutation_negligible_transition` / `mutation_negligible_equilibrium`),
+each at the paper's own
 published calibration factor for a 10% effect on $G_{ST}$:
 
 ```math
-t \ll \frac{H_S(0)}{2\mu} \text{ (one-fifth)}, \qquad
-\mu \ll m + \frac{1}{4N} \text{ (one-tenth)}
+t \ll \frac{H_S(0)}{2\mu} \text{ (one-fifth)} \tag{J.79}
+```
+
+```math
+\mu \ll m + \frac{1}{4N} \text{ (one-tenth)} \tag{J.80}
 ```
 
 ### Useful identities
 
 ```math
-H_{T} = H_{S} + H_{ST} - H_{S}\cdot H_{ST}, \qquad H_{ST} = \frac{H_{T}-H_{S}}{1-H_{S}}
+H_{T} = H_{S} + H_{ST} - H_{S}\cdot H_{ST} \tag{J.81}
 ```
 
 ```math
-D = \left(1 - \frac{1}{\beta}\right)\cdot\frac{d}{d-1}, \qquad \beta = {}^{H}D_{T}/{}^{H}D_{S}
+H_{ST} = \frac{H_{T}-H_{S}}{1-H_{S}} \tag{J.82}
 ```
 
 ```math
-G_{ST} \leq 1 - H_S
+D = \left(1 - \frac{1}{\beta}\right)\cdot\frac{d}{d-1} \tag{J.83}
 ```
 
-The middle form of `D` in Part III, `1 - J_between/J_within`, also links
-`D` to Nei's genetic distance with an arithmetic-mean denominator:
-<code>NGD<sub>arith</sub> = -ln(1 - D)</code>. `fim` reports that distance,
+```math
+\beta = {}^{H}D_{T}/{}^{H}D_{S} \tag{J.84}
+```
+
+```math
+G_{ST} \leq 1 - H_S \tag{J.85}
+```
+
+The middle form of $D$ in Part III,
+$1-J_{\mathrm{between}}/J_{\mathrm{within}}$, also links
+$D$ to Nei's genetic distance with an arithmetic-mean denominator:
+$\mathrm{NGD}_{\mathrm{arith}} = -\ln(1 - D)$. `fim` reports that distance,
 Nei's original geometric-mean form, and pair and all-demes versions of
 both; see [Nei distances in fim](nei-distances.md).
 
@@ -1562,38 +1687,46 @@ several small discrepancies. None affects the central argument; all are minor
 editorial or typographical issues, and some may already have been corrected in the
 final published version of record.
 
-**1. Figure 2, middle scenario: `D = 0.5` should be `0.5556`.**
+**1. Figure 2, middle scenario: $D = 0.5$ should be $0.5556$.**
 
-The text reports `D` values of "0.2, 0.5, and 1.0" for the three ten-deme
+The text reports $D$ values of "0.2, 0.5, and 1.0" for the three ten-deme
 scenarios. The first and third are exact. The middle case (five demes fixed for
 one allele and five fixed for another) computes as:
 
 ```math
-H_{S} = 0, \qquad H_{T} = 0.5, \qquad D = (0.5/1)\cdot(10/9) = 0.5556.
+H_{S} = 0 \tag{J.86}
 ```
-
-The pairwise derivation the paper itself offers agrees: `25` differing pairs out
-of `45` gives `25/45 = 0.5556`. The printed `0.5` appears to be a rounding or
-transcription slip. Nothing in the argument depends on the exact figure — the
-point is only that `D` differs across the three scenarios while $G_{ST}$ does
-not.
-
-**2. Equation 5 omits `L`.** The paper gives a refinement of the `D`
-equilibrium formula for sets of loci with a roughly constant per-base-pair
-mutation rate $\mu_b$ and locus length `L` (harmonic mean, in base pairs):
 
 ```math
-D \approx \frac{1}{1 + m/[(d-1)\cdot\mu_{b}\cdot L]}.
+H_{T} = 0.5 \tag{J.87}
 ```
 
-As printed in the accepted article, the `L` term is missing from the denominator,
-even though the sentence immediately following the equation defines `L`.
-Substituting $\mu \approx \mu_b$· `L` into Eq. 4 gives the intended form above,
+```math
+D = (0.5/1)\cdot(10/9) = 0.5556 \tag{J.88}
+```
+
+The pairwise derivation the paper itself offers agrees: $25$ differing pairs out
+of $45$ gives $25/45 \approx 0.5556$. The printed $0.5$ appears to be a rounding or
+transcription slip. Nothing in the argument depends on the exact figure — the
+point is only that $D$ differs across the three scenarios while $G_{ST}$ does
+not.
+
+**2. Equation 5 omits $L$.** The paper gives a refinement of the $D$
+equilibrium formula for sets of loci with a roughly constant per-base-pair
+mutation rate $\mu_b$ and locus length $L$ (harmonic mean, in base pairs):
+
+```math
+D \approx \frac{1}{1 + m/[(d-1)\cdot\mu_{b}\cdot L]} \tag{J.89}
+```
+
+As printed in the accepted article, the $L$ term is missing from the denominator,
+even though the sentence immediately following the equation defines $L$.
+Substituting $\mu \approx \mu_b L$ into Eq. 4 gives the intended form above,
 which is the version used in this document and is clearly the intended reading of
 the surrounding text.
 
-**3. The discussion of "low $G_{ST}$ and high `m`" is a wording problem rather
-than a mathematical one.** In the source sentence, "high `m`" must mean "high
+**3. The discussion of "low $G_{ST}$ and high $m$" is a wording problem rather
+than a mathematical one.** In the source sentence, "high $m$" must mean "high
 inferred migration rate" rather than an actual high migration value in the
 scenario being described, because the populations in question are explicitly
 stipulated to be isolated. The point is that the inference is wrong, not that the
@@ -1602,17 +1735,17 @@ migration rate is truly high.
 **4. Cross-reference slip in the SNP discussion.** In the bi-allelic SNP
 section, the nine-plus-one configuration is compared to "Species A in Figure 2".
 Figure 2's scenarios are unlabeled, while the species labels A/B/C belong to
-Figure 3, where species A is the "all alleles shared" case (`D=0`). The intended
-referent is the leftmost scenario of Figure 2, where `D=0.20`, which matches the
+Figure 3, where species A is the "all alleles shared" case ($D=0$). The intended
+referent is the leftmost scenario of Figure 2, where $D=0.20$, which matches the
 quoted value.
 
 **5. Reference-list inconsistencies.** The bibliography contains a few mix-ups:
 
-- `Gregorius and Roberds (1986)` is cited in text as `Gregorius et al. 1986`.
+- "Gregorius and Roberds (1986)" is cited in text as "Gregorius et al. 1986".
 - Hedrick (2005) appears in the reference list and Figure 4 legend but is not
   cited in the body text.
-- `Gilner et al. 2001` is almost certainly `Gliner et al. 2001`.
-- The `Chao et al. (2015)` entry spells `Hseih` instead of `Hsieh`.
+- "Gilner et al. 2001" is almost certainly "Gliner et al. 2001".
+- The "Chao et al. (2015)" entry spells "Hseih" instead of "Hsieh".
 
 These are editorial inconsistencies, not substantive scientific errors, but they
 are real and can confuse citation matching.
@@ -1622,10 +1755,11 @@ while the corresponding contact address is `eric.archer@noaa.gov`. This is not a
 mathematical issue, but it is a genuine name mismatch and could confuse readers
 trying to reconcile the paper with the author metadata.
 
-**7. Table S1 rounding.** The text gives <code>H<sub><small>S</small></sub> = 0.97</code> and
-<code>H<sub><small>S</small></sub> = 0.95</code> but reports effective numbers `38.8` and `20.4`, which correspond to
-the more precise values <code>H<sub><small>T</small></sub> = 0.9742</code> and <code>H<sub><small>S</small></sub> =
-0.9510</code>. Using the rounded two-decimal figures gives `1/(1 - 0.97) = 33.3`, not `38.8`. Part IV.3 back-solves from
+**7. Table S1 rounding.** The text gives $H_{S} = 0.97$ and
+$H_{S} = 0.95$ but reports effective numbers $38.8$ and $20.4$, which correspond to
+the more precise values $H_T = 0.9742$ and $H_S = 0.9510$.
+Using the rounded two-decimal figures gives
+$1/(1 - 0.97) \approx 33.3$, not $38.8$. Part IV.3 back-solves from
 the effective numbers, which are the relevant precise figures.
 
 ---
@@ -1644,7 +1778,7 @@ types. Part II of this document is that result applied to alleles.
 **The partitioning machinery (2007).** *Partitioning diversity into independent
 alpha and beta components* derives the correct decomposition of diversity into
 within- and between-group parts, and shows the classical additive partition of
-non-additive indices is invalid. This is where `D` itself is born, and it
+non-additive indices is invalid. This is where $D$ itself is born, and it
 supplies Part V.2 directly.
 
 **The genetics polemic (2008–2009).** *$G_{ST}$ and its relatives do not measure
@@ -1653,8 +1787,8 @@ sustained exchange (Heller & Siegismund 2009, Ryman & Leimar 2009, Meirmans &
 Hedrick 2011, Whitlock 2011), to which Jost (2009) is the reply.
 
 **The similarity framework (2011).** *Compositional similarity and beta diversity* generalises the machinery into a
-parametric family of similarity measures indexed by `q`; its Eq. 6.12 is the direct parent of this paper's Eq. 6, and
-hence of `D`, $E_{ST}$, and $K_{ST}$ together.
+parametric family of similarity measures indexed by $q$; its Eq. 6.12 is the direct parent of this paper's Eq. 6, and
+hence of $D$, $E_{ST}$, and $K_{ST}$ together.
 
 **The synthesis (2018).** The paper summarized here, alongside its companion
 Gaggiotti et al. (2018) in the same special issue of *Evolutionary
@@ -1693,7 +1827,7 @@ listed with full citation details for lookup.
 - Jost L (2008). $G_{ST}$ and its relatives do not measure differentiation.
   *Molecular Ecology* 17(18):4015–4026.
   DOI: [10.1111/j.1365-294X.2008.03887.x](https://doi.org/10.1111/j.1365-294X.2008.03887.x)
-- Jost L (2009). `D` vs. $G_{ST}$: response to Heller and Siegismund (2009) and
+- Jost L (2009). $D$ vs. $G_{ST}$: response to Heller and Siegismund (2009) and
   Ryman and Leimar (2009). *Molecular Ecology* 18:2088–2091.
 - Jost L (2010). The relation between evenness and diversity. *Diversity*
   2(2):207–232.
@@ -1718,14 +1852,14 @@ listed with full citation details for lookup.
 ### Classical sources for the fixation family
 
 - Wright S (1931). Evolution in Mendelian populations. *Genetics*
-  16(2):97–159. The island model and <code>F<sub><small>ST</small></sub> ≈ 1/(4Nm+1)</code> itself — per
+  16(2):97–159. The island model and $F_{ST}\approx 1/(4Nm+1)$ itself — per
   Whitlock & McCauley (1999) below, not the more commonly cited Wright
   1943 paper (a different contribution, on isolation by distance). Added
   here because this document referenced "Wright's original infinite
   island model" without it; not independently verified against Wright's
   own 1931 text, only against Whitlock & McCauley's account of it.
 - Wright S (1943). Isolation by distance. *Genetics* 28(2):114.
-- Wright S (1965). The interpretation of population structure by `F`-statistics
+- Wright S (1965). The interpretation of population structure by $F$-statistics
   with special regard to systems of mating. *Evolution* 19(3):395–420.
 - Wright S (1978). *Evolution and the Genetics of Populations, vol. 4:
   Variability Within and Among Populations.* (Source of the p. 84 quotation.)
@@ -1740,38 +1874,38 @@ listed with full citation details for lookup.
 - Crow JF, Aoki K (1984). Group selection for a polygenic behavioral trait:
   estimating the degree of population subdivision. *Proceedings of the
   National Academy of Sciences* 81(19):6073–6077. Confirmed directly
-  (full text) as the source of the finite-deme `(d/(d-1))²` migration-term
-  correction Part VI's Eq. 2 and Appendix A carry — added here because
+  (full text) as the source of the finite-deme $(d/(d-1))^2$ migration-term
+  correction Part VI's (J.54) and Appendix A carry — added here because
   those sections previously stated the correction with no attribution at
   all. Their own Eq. 7 has no mutation term; see Part VI for the
-  distinction from this document's own Eq. 2.
+  distinction from this document's own (J.54).
 - Takahata N (1983). Gene identity and genetic differentiation of
   populations in the finite island model. *Genetics* 104(3):497–512.
   Cited by Crow & Aoki (1984) as the source of the general
-  finite-`K`-allele solution (their eq. 6) their own Eq. 7 simplifies by
+  finite-$K$-allele solution (their eq. 6) their own Eq. 7 simplifies by
   dropping the mutation term — not independently verified here.
-- Weir BS, Cockerham CC (1984). Estimating `F`-statistics for the analysis of
+- Weir BS, Cockerham CC (1984). Estimating $F$-statistics for the analysis of
   population structure. *Evolution* 38(6):1358–1370.
 
 ### The surrounding debate
 
 - Gerlach G, Jueterbock A, Kraemer P, Deppermann J, Harmand P (2010). Calculations of population differentiation
-  based on $G_{ST}$ and `D`: forget $G_{ST}$ but
+  based on $G_{ST}$ and $D$: forget $G_{ST}$ but
   not all of statistics! *Molecular Ecology* 19(18):3845–3852.
 - Gregorius HR, Roberds JH (1986). Measurement of genetical differentiation among subpopulations. *Theoretical and
   Applied Genetics* 71:826–834.
 - Gregorius HR (2010). Linking diversity and differentiation. *Diversity* 2:370–394.
 - Hedrick PW (2005). A standardized genetic differentiation measure. *Evolution* 59(8):1633–1638.
 - Heller R, Siegismund HR (2009). Relationship between three measures of genetic differentiation
-  $G_{ST}$, <code>D<sub><small>EST</small></sub></code> and
+  $G_{ST}$, $D_{EST}$ and
   $G^{\prime}_{ST}$: how wrong have we been? *Molecular Ecology* 18(10):2080–2083.
 - Meirmans PG, Hedrick PW (2011). Assessing population structure: $F_{ST}$ and
   related measures. *Molecular Ecology Resources* 11(1):5–18.
 - Wang J (2012). On the measurements of genetic differentiation among populations. *Genetics Research* 94:275–289.
-- Whitlock MC (2011). $G^{\prime}_{ST}$ and `D` do not replace
+- Whitlock MC (2011). $G^{\prime}_{ST}$ and $D$ do not replace
   $F_{ST}$. *Molecular Ecology* 20(6):1083–1091.
 - Whitlock MC, McCauley DE (1999). Indirect measures of gene flow and migration:
-  <code>F<sub><small>ST</small></sub> ≠ 1/(4Nm+1)</code>. *Heredity* 82:117–125.
+  $F_{ST} \neq 1/(4Nm+1)$. *Heredity* 82:117–125.
   DOI: [10.1046/j.1365-2540.1999.00496.x](https://doi.org/10.1046/j.1365-2540.1999.00496.x)
 
 ### Other works cited in the argument
@@ -1788,7 +1922,7 @@ listed with full citation details for lookup.
   hypothesis significance testing. *Journal of the American Academy of Child and
   Adolescent Psychiatry* 40(2):250–252. (Cited in the paper as "Gilner".)
 - Leng L, Zhang DX (2013). Time matters: some interesting properties of the
-  population differentiation measures $G_{ST}$ and `D` overlooked in the
+  population differentiation measures $G_{ST}$ and $D$ overlooked in the
   equilibrium perspective. *Journal of Systematics and Evolution* 51(1):44–60.
 - Sherwin W (2010). Entropy and information approaches to genetic diversity and
   its expression: genomic geography. *Entropy* 12(7):1765–1798.
@@ -1803,7 +1937,7 @@ listed with full citation details for lookup.
 
 ## Appendix E: the differentiation debate, 2008–2011
 
-The 2008–2011 exchange over $G_{ST}$ and `D` is best read not as a contest over
+The 2008–2011 exchange over $G_{ST}$ and $D$ is best read not as a contest over
 which formula is numerically larger on a given dataset, but as a dispute over which
 question addressed by an analysis. One question is how close demes are to
 fixation; another is how different their allele compositions are. The
@@ -1812,14 +1946,14 @@ discussed in the 2008–2011 exchange.
 
 **Jost's position.** In the 2008 paper, Jost argued that the classical
 $G_{ST}$ family, and by extension many uses of
-$F_{ST}$ and `θ`, was being interpreted as if it measured absolute genetic
+$F_{ST}$ and $\theta$, was being interpreted as if it measured absolute genetic
 differentiation when it in fact measured the opposite: the degree to which a population has moved toward fixation within
 the pooled array. The formal point was not trivial. The classical family normalizes by
-$H_T$, while the allelic family normalizes by <code>1 -
-H<sub><small>S</small></sub></code>. Those are different denominators, and therefore different concepts. Once this is
+$H_T$, while the allelic family normalizes by $1-H_S$. Those are
+different denominators, and therefore different concepts. Once this is
 acknowledged, the apparent paradoxes in the paper's worked examples are no longer paradoxes at all: a population can be
 nearly fixed within demes and yet retain almost no common allele content across demes, producing a very low
-$G_{ST}$ and a very high `D`.
+$G_{ST}$ and a very high $D$.
 
 **The counter-argument.** The critics were not simply defending a formula; they
 were defending a working interpretation that had become standard in a large body
@@ -1907,13 +2041,3 @@ fact that “differentiation” is not a single thing.
 ---
 
 -->
-
-## Implementation in fim
-
-The [statistics reference](statistics.md) maps measures to their result
-identifiers and formulas. For programmatic use, see the
-[Python API guide](python-api.md) and generated
-[API reference](../src/fim/API.md). The `jost_d()` implementation is in
-[`src/fim/statistics/differentiation.py`](../src/fim/statistics/differentiation.py);
-the relevant identity recursion is in
-[`src/fim/statistics/identity_recursion.py`](../src/fim/statistics/identity_recursion.py).
