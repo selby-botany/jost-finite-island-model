@@ -95,6 +95,7 @@ from fim.examples import seed
 from fim.examples.artifacts import materialize_outputs
 from fim.gui import (
     batch_runner,
+    jobs,
     object_bridge,
     object_runner,
     presets,
@@ -2019,15 +2020,18 @@ class Api:
                 collides with — a real user's saved preferences.
         """
         self._cancel_event: threading.Event | None = None
-        # One active thing at a time: two runs, or a run and a sweep,
-        # cannot overlap (`start_run`, `start_run_object`, `start_sweep`).
-        # A run start claims `_run_in_flight` under `_run_claim_lock`
-        # (`_claim_run`), so two starts that arrive together cannot both
-        # pass the check; the run's own drain thread clears it once it
-        # reports a terminal message. `_sweep_cancel_event` is non-`None`
-        # for exactly as long as a sweep's own thread is running.
+        # One active thing at a time: two runs, a run and a sweep, or two
+        # sweeps, cannot overlap (`start_run`, `start_run_object`, `start_
+        # sweep`). A run start claims `_run_in_flight`, and a sweep start
+        # claims `_sweep_cancel_event`, under `self._jobs`'s one shared
+        # lock (`_claim_run`/`_claim_sweep`, `fim.gui.jobs.JobAdmission`'s
+        # own docstring), so two starts of any kind that arrive together
+        # cannot both pass their own check. The run's own drain thread
+        # clears `_run_in_flight`, and the sweep's own thread clears
+        # `_sweep_cancel_event`, once each reports its own terminal
+        # outcome.
         self._run_in_flight = False
-        self._run_claim_lock = threading.Lock()
+        self._jobs = jobs.JobAdmission()
         # The saved run (`start_run_object`) now executing, if any, and its
         # worker thread; Pause and Cancel are routed to it.
         self._active_object_id: str | None = None
@@ -2308,16 +2312,18 @@ class Api:
     def _claim_run(self) -> str | None:
         """Claim the one run slot, or return why it is taken.
 
-        The check and the claim happen under `_run_claim_lock`, so two
-        starts that arrive together (a double click, or Run beside a saved
-        run's Start) cannot both see a free slot. The claim is released by
-        the run's drain thread (`_drain_then_release`), or by the starting
-        method itself when it starts nothing.
+        The check and the claim happen under `self._jobs.lock`, shared
+        with `_claim_sweep` (`fim.gui.jobs.JobAdmission`'s own
+        docstring), so two starts that arrive together -- a double
+        click, Run beside a saved run's Start, or a run racing a sweep --
+        cannot both see a free slot. The claim is released by the run's
+        drain thread (`_drain_then_release`), or by the starting method
+        itself when it starts nothing.
 
         Returns:
             `None` once claimed; otherwise `_run_refusal`'s message.
         """
-        with self._run_claim_lock:
+        with self._jobs.lock:
             refusal = self._run_refusal()
             if refusal is None:
                 self._run_in_flight = True
@@ -2330,16 +2336,49 @@ class Api:
         so a run that claims the slot next never has its own saved run
         cleared by the one that just ended.
         """
-        with self._run_claim_lock:
+        with self._jobs.lock:
             self._active_object_id = None
             self._run_in_flight = False
+
+    def _claim_sweep(self) -> str | None:
+        """Claim the one sweep slot, or return why it is taken.
+
+        The check and the claim happen under `self._jobs.lock`, shared
+        with `_claim_run`, so a sweep's own admission and a run's own
+        admission can never both see a free slot for the same instant
+        (`fim.gui.jobs.JobAdmission`'s own docstring: the exact gap
+        `_busy_message` used to leave open on its own, checked with no
+        lock at all). Claiming creates and assigns the new sweep's own
+        `_sweep_cancel_event`; `_start_sweep_thread` reads it back
+        rather than creating a second one of its own. The claim is
+        released by `_release_sweep_claim`, called from the sweep's own
+        thread once it reports its own terminal outcome, or by the
+        starting method itself when it starts nothing.
+
+        Returns:
+            `None` once claimed; otherwise `_busy_message`'s message.
+        """
+        with self._jobs.lock:
+            busy = self._busy_message()
+            if busy is not None:
+                return busy
+            self._sweep_cancel_event = threading.Event()
+            return None
+
+    def _release_sweep_claim(self) -> None:
+        """Release the sweep slot: no sweep is in flight now."""
+        with self._jobs.lock:
+            self._sweep_cancel_event = None
 
     def _run_refusal(self) -> str | None:
         """Return why a run cannot start now, or `None` if it can.
 
         Shared by `start_run`, `start_run_object` and `can_start_run`, so
         the page's own check before a start and the start itself always
-        give the same answer.
+        give the same answer. `can_start_run` calls this as a plain,
+        unsynchronized snapshot; `_claim_run` calls it with `self._jobs.
+        lock` already held, which is what makes *that* call atomic with
+        the claim it makes from the answer.
         """
         if self._sweep_cancel_event is not None:
             return "a sweep is running; wait for it or cancel it first"
@@ -5721,40 +5760,48 @@ class Api:
             "message": ...}`, with `"needsConfirmation": True` (and
             `"total"`) for an unconfirmed large plan.
         """
-        busy = self._busy_message()
+        busy = self._claim_sweep()
         if busy is not None:
             return {"ok": False, "message": busy}
-        window = _active_window()
-        if window is None:
-            return {"ok": False, "message": "no active window"}
+        started = False
         try:
-            spec = self._sweep_spec(values, request)
-            plan = enumerate_points(spec)
-            if plan.needs_confirmation and not confirmed:
-                return {
-                    "ok": False,
-                    "needsConfirmation": True,
-                    "total": len(plan.points),
-                    "message": (
-                        f"this sweep has {len(plan.points)} points; "
-                        "run again to confirm"
-                    ),
-                }
-            if study_id:
-                study = attach_sweep_to_study(study_id, spec, plan)
-            else:
-                study = create_sweep_study(spec, plan, _default_sweep_name(spec))
-        except ValueError as error:
-            return {"ok": False, "message": str(error)}
-        at_once, max_workers = self._sweep_run_options(values, request)
-        self._start_sweep_thread(
-            window,
-            study.study_id,
-            retry_failed=False,
-            points_at_once=at_once,
-            max_workers=max_workers,
-        )
-        return {"ok": True, "studyId": study.study_id, "total": len(plan.points)}
+            window = _active_window()
+            if window is None:
+                return {"ok": False, "message": "no active window"}
+            try:
+                spec = self._sweep_spec(values, request)
+                plan = enumerate_points(spec)
+                if plan.needs_confirmation and not confirmed:
+                    return {
+                        "ok": False,
+                        "needsConfirmation": True,
+                        "total": len(plan.points),
+                        "message": (
+                            f"this sweep has {len(plan.points)} points; "
+                            "run again to confirm"
+                        ),
+                    }
+                if study_id:
+                    study = attach_sweep_to_study(study_id, spec, plan)
+                else:
+                    study = create_sweep_study(spec, plan, _default_sweep_name(spec))
+            except ValueError as error:
+                return {"ok": False, "message": str(error)}
+            at_once, max_workers = self._sweep_run_options(values, request)
+            self._start_sweep_thread(
+                window,
+                study.study_id,
+                retry_failed=False,
+                points_at_once=at_once,
+                max_workers=max_workers,
+            )
+            started = True
+            return {"ok": True, "studyId": study.study_id, "total": len(plan.points)}
+        finally:
+            # Nothing started means no sweep thread will ever release the
+            # claim, so release it here (`start_run`'s identical pattern).
+            if not started:
+                self._release_sweep_claim()
 
     @_log_bridge_call
     def resume_sweep(
@@ -5781,27 +5828,33 @@ class Api:
             ...}` if a run or another sweep is in progress or the Study is
             not a sweep.
         """
-        busy = self._busy_message()
+        busy = self._claim_sweep()
         if busy is not None:
             return {"ok": False, "message": busy}
-        window = _active_window()
-        if window is None:
-            return {"ok": False, "message": "no active window"}
+        started = False
         try:
-            study = groups.get_study(study_id)
-            sweep_bridge.status_payload(study)
-        except ValueError as error:
-            return {"ok": False, "message": str(error)}
-        saved = self._merge_default_run_settings({})
-        self._start_sweep_thread(
-            window,
-            study_id,
-            retry_failed=retry_failed,
-            rerun=rerun,
-            points_at_once=points_at_once,
-            max_workers=_parse_max_workers(saved.get("max_workers", "")),
-        )
-        return {"ok": True, "studyId": study_id}
+            window = _active_window()
+            if window is None:
+                return {"ok": False, "message": "no active window"}
+            try:
+                study = groups.get_study(study_id)
+                sweep_bridge.status_payload(study)
+            except ValueError as error:
+                return {"ok": False, "message": str(error)}
+            saved = self._merge_default_run_settings({})
+            self._start_sweep_thread(
+                window,
+                study_id,
+                retry_failed=retry_failed,
+                rerun=rerun,
+                points_at_once=points_at_once,
+                max_workers=_parse_max_workers(saved.get("max_workers", "")),
+            )
+            started = True
+            return {"ok": True, "studyId": study_id}
+        finally:
+            if not started:
+                self._release_sweep_claim()
 
     @_log_bridge_call
     def cancel_sweep(self) -> None:
@@ -6104,7 +6157,13 @@ class Api:
         return {"ok": True, "path": str(target), "sidecar": str(sidecar)}
 
     def _busy_message(self) -> str | None:
-        """Return why a sweep cannot start now, or `None` if it can."""
+        """Return why a sweep cannot start now, or `None` if it can.
+
+        Called only from `_claim_sweep`, with `self._jobs.lock` already
+        held -- the check and the claim this answer feeds into must
+        happen atomically, so no caller outside `_claim_sweep` should
+        call this directly.
+        """
         if self._sweep_cancel_event is not None:
             return "a sweep is already running"
         if self._run_in_flight:
@@ -6127,9 +6186,16 @@ class Api:
         points_at_once: int | None = None,
         max_workers: int | None = None,
     ) -> None:
-        """Run `study_id`'s sweep on a daemon thread, pushing each event."""
-        cancel_event = threading.Event()
-        self._sweep_cancel_event = cancel_event
+        """Run `study_id`'s sweep on a daemon thread, pushing each event.
+
+        `self._sweep_cancel_event` is already set, by `_claim_sweep`, to
+        the exact event this run must watch and `cancel_sweep` must set --
+        read back here, not recreated, or `cancel_sweep`'s own call would
+        set a different event than the one `run_sweep` is actually
+        watching.
+        """
+        cancel_event = self._sweep_cancel_event
+        assert cancel_event is not None  # `_claim_sweep` always sets it first
         self._sweep_study_id = study_id
 
         def push(event: SweepEvent) -> None:
@@ -6158,7 +6224,7 @@ class Api:
                     window, str(error) or type(error).__name__, self._publisher
                 )
             finally:
-                self._sweep_cancel_event = None
+                self._release_sweep_claim()
 
         self._sweep_thread = threading.Thread(target=work, daemon=True)
         self._sweep_thread.start()

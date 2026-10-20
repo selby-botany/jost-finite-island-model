@@ -22711,6 +22711,22 @@ def test_a_sweep_in_flight_is_named_by_every_run_start(api: Api) -> None
 
 The page's check and both run starts agree while a sweep runs.
 
+<a id="gui.test_one_run_at_a_time.test_a_run_claim_and_a_sweep_claim_share_one_lock"></a>
+
+#### test\_a\_run\_claim\_and\_a\_sweep\_claim\_share\_one\_lock
+
+```python
+def test_a_run_claim_and_a_sweep_claim_share_one_lock(api: Api) -> None
+```
+
+`_claim_run` and `_claim_sweep` can never both see a free slot.
+
+Unlike the test above, which sets `_sweep_cancel_event` directly to
+stand in for a running sweep, this calls `_claim_sweep` itself, so
+it exercises the actual claim `start_sweep`/`resume_sweep` make
+(`fim.gui.jobs.JobAdmission`'s own docstring on the race this
+closes), not only the refusal a sweep already in flight gives.
+
 <a id="gui.test_one_run_at_a_time.test_a_start_that_starts_nothing_releases_the_claim"></a>
 
 #### test\_a\_start\_that\_starts\_nothing\_releases\_the\_claim

@@ -216,6 +216,10 @@ def test_a_large_sweep_needs_confirmation_before_anything_is_created(
     assert result["needsConfirmation"] is True
     assert groups.list_studies() == []
     assert window.pushed == []
+    # Nothing started, so the sweep slot `start_sweep` claimed on entry
+    # must be released again -- otherwise a second attempt, even a
+    # confirmed one, would be refused as "a sweep is already running".
+    assert api._sweep_cancel_event is None
 
 
 def test_a_sweep_and_a_run_cannot_overlap(api: Api, window: _FakeWindow) -> None:

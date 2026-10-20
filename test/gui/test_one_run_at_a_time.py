@@ -204,6 +204,28 @@ def test_a_sweep_in_flight_is_named_by_every_run_start(
     assert api._run_in_flight is False
 
 
+def test_a_run_claim_and_a_sweep_claim_share_one_lock(
+    api: Api,  # noqa: F811
+) -> None:
+    """`_claim_run` and `_claim_sweep` can never both see a free slot.
+
+    Unlike the test above, which sets `_sweep_cancel_event` directly to
+    stand in for a running sweep, this calls `_claim_sweep` itself, so
+    it exercises the actual claim `start_sweep`/`resume_sweep` make
+    (`fim.gui.jobs.JobAdmission`'s own docstring on the race this
+    closes), not only the refusal a sweep already in flight gives.
+    """
+    assert api._claim_run() is None
+    assert api._claim_sweep() == "a run is in progress; wait for it to finish first"
+    api._release_run_claim()
+    assert api.can_start_run() == {"ok": True}
+
+    assert api._claim_sweep() is None
+    assert api._claim_run() == _SWEEP_RUNNING
+    api._release_sweep_claim()
+    assert api.can_start_run() == {"ok": True}
+
+
 @pytest.mark.parametrize(
     "outcome",
     [
@@ -289,7 +311,7 @@ def test_the_check_and_the_claim_happen_under_one_lock(
 
     def observed(self: Api) -> str | None:
         """Record whether the claim lock is held, then check as before."""
-        locked_during_check.append(self._run_claim_lock.locked())
+        locked_during_check.append(self._jobs.lock.locked())
         return check(self)
 
     monkeypatch.setattr(Api, "_run_refusal", observed)
