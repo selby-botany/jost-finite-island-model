@@ -18,18 +18,21 @@
 
 const runTitleElement = document.getElementById("run-plot-title");
 
-// What the run view shows: `{phase, directory, directoryName, studyId,
-// runName}`; see `window.fim.setRunCardTitle`.
-let runTitleState = { phase: "initial" };
-
-// The last `Api.get_run_context` result and the key (`runTitleKey`) of
-// the state it was fetched for: a context is drawn only for that same
-// state, never a previous run's.
-let runTitleContext = null;
-let runTitleContextKey = null;
-
-// Bumped by every fetch, so a slow reply for an older state is dropped.
-let runTitleToken = 0;
+function runTitleStateFor(tabId) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.runTitle) {
+        documentState.runTitle = {
+            state: { phase: "initial" },
+            context: null,
+            contextKey: null,
+            requestToken: 0,
+        };
+    }
+    return documentState.runTitle;
+}
 
 /**
  * The key a context belongs to: a run's directory, else the Study it is
@@ -37,7 +40,7 @@ let runTitleToken = 0;
  * @param {object} state
  * @returns {string}
  */
-function runTitleKey(state) {
+function runTitleKey(state, tabId) {
     if (state.directory) {
         return `run:${state.directory}`;
     }
@@ -45,7 +48,7 @@ function runTitleKey(state) {
         return `study:${state.studyId}`;
     }
     const selected = window.fim.getSelectedRunStudyId
-        ? window.fim.getSelectedRunStudyId()
+        ? window.fim.getSelectedRunStudyId(tabId)
         : null;
     return `selected:${selected ?? ""}`;
 }
@@ -60,34 +63,48 @@ function runTitleKey(state) {
  *     Study; `runName` the name typed for a run in progress.
  */
 window.fim.setRunCardTitle = function setRunCardTitle(state) {
-    runTitleState = { ...state };
+    const tabId = window.fim.workspace.selectedId();
+    const title = runTitleStateFor(tabId);
+    if (!title) {
+        return;
+    }
+    title.state = { ...state };
     renderRunTitle();
-    refreshRunTitleContext();
+    refreshRunTitleContext(tabId);
 };
 
 /** Fetch the current state's context and redraw; a no-op before the bridge is up. */
-async function refreshRunTitleContext() {
-    const token = ++runTitleToken;
-    window.__fimRunTitleReady = false;
+async function refreshRunTitleContext(tabId = window.fim.workspace.selectedId()) {
+    const title = runTitleStateFor(tabId);
+    if (!title) {
+        return;
+    }
+    const token = ++title.requestToken;
+    window.fim.workspace.settle(tabId, "runTitle", false);
     const api = window.pywebview && window.pywebview.api;
     if (!api || typeof api.get_run_context !== "function") {
         return;
     }
-    const key = runTitleKey(runTitleState);
+    const key = runTitleKey(title.state, tabId);
     const selected = window.fim.getSelectedRunStudyId
-        ? window.fim.getSelectedRunStudyId()
+        ? window.fim.getSelectedRunStudyId(tabId)
         : null;
     const context = await api.get_run_context(
-        runTitleState.directory ?? null,
-        runTitleState.studyId ?? selected
+        title.state.directory ?? null,
+        title.state.studyId ?? selected
     );
-    if (token !== runTitleToken) {
+    if (
+        !window.fim.workspace.get(tabId) ||
+        token !== title.requestToken
+    ) {
         return;
     }
-    runTitleContext = context && context.ok ? context : null;
-    runTitleContextKey = key;
-    renderRunTitle();
-    window.__fimRunTitleReady = true;
+    title.context = context && context.ok ? context : null;
+    title.contextKey = key;
+    if (window.fim.workspace.selectedId() === tabId) {
+        renderRunTitle();
+    }
+    window.fim.workspace.settle(tabId, "runTitle", true);
 }
 
 window.fim.refreshRunCardTitle = refreshRunTitleContext;
@@ -97,8 +114,7 @@ window.fim.refreshRunCardTitle = refreshRunTitleContext;
  * @param {object|null} context The matching context, or `null`.
  * @returns {{text: string, details: object|null}}
  */
-function runTitleSubject(context) {
-    const state = runTitleState;
+function runTitleSubject(state, context) {
     if (state.phase === "running") {
         return {
             text: state.runName ? `${state.runName} — in progress` : "in progress",
@@ -124,20 +140,28 @@ function runTitleSubject(context) {
     return { text: "initial conditions (p₀)", details: null };
 }
 
-/** Draw the title from `runTitleState` and, when it matches, `runTitleContext`. */
+/** Draw the selected document's title and its matching run context. */
 function renderRunTitle() {
     if (!runTitleElement) {
         return;
     }
+    const tabId = window.fim.workspace.selectedId();
+    const title = tabId === null ? null : runTitleStateFor(tabId);
+    if (!title) {
+        runTitleElement.replaceChildren();
+        return;
+    }
     const context =
-        runTitleContextKey === runTitleKey(runTitleState) ? runTitleContext : null;
+        title.contextKey === runTitleKey(title.state, tabId)
+            ? title.context
+            : null;
     const experiment = context ? context.experiment : null;
     const experimentPart = document.createElement("span");
     experimentPart.textContent = experiment ? experiment.name : "FIM simulation";
     if (experiment) {
         window.fim.attachDetails(experimentPart, experiment);
     }
-    const subject = runTitleSubject(context);
+    const subject = runTitleSubject(title.state, context);
     const subjectPart = document.createElement("span");
     subjectPart.textContent = subject.text;
     if (subject.details) {
@@ -159,6 +183,13 @@ function renderRunTitle() {
 // A rename anywhere (Home, this title, a sweep) shows here at once.
 window.addEventListener("fim:details-saved", () => {
     refreshRunTitleContext();
+});
+
+window.fim.workspace.onSelectionChange((selectedId) => {
+    renderRunTitle();
+    if (selectedId !== null) {
+        refreshRunTitleContext(selectedId);
+    }
 });
 
 // The title is first drawn before the bridge exists (`enterInitialState`

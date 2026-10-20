@@ -28971,6 +28971,17 @@ def test_live_progress_is_owned_by_the_addressed_document(
 
 Background scalar and batch progress changes only their owner model.
 
+<a id="gui.test_workspace.test_run_controls_title_settings_and_saved_run_are_document_local"></a>
+
+#### test\_run\_controls\_title\_settings\_and\_saved\_run\_are\_document\_local
+
+```python
+def test_run_controls_title_settings_and_saved_run_are_document_local(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Run metadata, overrides, title, and saved-run editing follow tabs.
+
 
 
 <a id="group-model"></a>

@@ -142,3 +142,58 @@ def test_a_draft_is_fixed_saved_and_run_from_home(
     assert "edit" in row["actions"]
     assert messages[-1][0] == "done"
     assert settled["pauseHidden"] is True
+
+
+def test_editing_saved_run_stays_with_its_document(
+    saved_run_settings: Path,
+) -> None:
+    window = create_window(api=Api(), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            first = window.evaluate_js("window.fim.workspace.selectedId()")
+            window.evaluate_js(_SET_FIELDS % {"N": "20"})
+            poll_page(
+                window,
+                _RUN_BANNER,
+                lambda text: str(text).startswith("Saved."),
+                what="saved-run confirmation",
+            )
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            poll_page(window, _SAVED_ROWS, bool, what="Saved runs row")
+            window.evaluate_js(
+                "document.querySelector("
+                "'#saved-runs-body button[data-action=\"edit\"]').click();"
+            )
+            editing = poll_page(
+                window,
+                "window.fim.getEditingObjectId()",
+                bool,
+                what="editing saved-run ID",
+            )
+            second = window.evaluate_js("window.fim.workspace.createDocument()")
+            second_editing = window.evaluate_js("window.fim.getEditingObjectId()")
+            window.evaluate_js(f"window.fim.workspace.select({first!r});")
+            first_editing = window.evaluate_js("window.fim.getEditingObjectId()")
+            outcome.put(
+                {
+                    "editing": editing,
+                    "first": first,
+                    "second": second,
+                    "secondEditing": second_editing,
+                    "firstEditing": first_editing,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["editing"]
+    assert settled["second"] != settled["first"]
+    assert settled["secondEditing"] is None
+    assert settled["firstEditing"] == settled["editing"]

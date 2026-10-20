@@ -27,12 +27,28 @@ const savedRunsBody = document.getElementById("saved-runs-body");
 const saveRunObjectButton = document.getElementById("save-run-object-button");
 const pauseRunButton = document.getElementById("pause-run-button");
 
-// The saved run whose configuration Configure is showing, so "Save for
-// later" updates it instead of creating another. Cleared whenever a
-// different configuration is loaded or the form starts fresh.
-let editingObjectId = null;
-// The saved run now executing in this window, or `null`.
-let activeSavedRunId = null;
+function savedRunStateFor(tabId = window.fim.workspace.selectedId()) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.savedRunState) {
+        documentState.savedRunState = {
+            editingObjectId: null,
+            activeSavedRunId: null,
+            pausePending: false,
+        };
+    }
+    return documentState.savedRunState;
+}
+
+function renderPauseRunButton() {
+    const state = savedRunStateFor();
+    pauseRunButton.hidden = !state || state.activeSavedRunId === null;
+    pauseRunButton.disabled = !state || state.pausePending;
+}
+
+window.fim.workspace.onSelectionChange(renderPauseRunButton);
 
 // Actions in the order their buttons appear in a row.
 const SAVED_RUN_ACTIONS = [
@@ -67,9 +83,23 @@ function showSavedRunsBanner(message) {
 
 /** Hide Pause and forget the active saved run once it stops for any reason. */
 function endActiveSavedRun() {
-    activeSavedRunId = null;
-    pauseRunButton.hidden = true;
-    pauseRunButton.disabled = false;
+    for (const tabId of window.fim.workspace.ids()) {
+        const state = savedRunStateFor(tabId);
+        if (state) {
+            state.activeSavedRunId = null;
+            state.pausePending = false;
+        }
+    }
+    renderPauseRunButton();
+}
+
+function clearEditingObject(objectId) {
+    for (const tabId of window.fim.workspace.ids()) {
+        const state = savedRunStateFor(tabId);
+        if (state && state.editingObjectId === objectId) {
+            state.editingObjectId = null;
+        }
+    }
 }
 
 /**
@@ -162,8 +192,8 @@ async function onSavedRunAction(action, run) {
             return;
         }
         result = await window.pywebview.api.delete_run_object(run.objectId);
-        if (result.ok && editingObjectId === run.objectId) {
-            editingObjectId = null;
+        if (result.ok) {
+            clearEditingObject(run.objectId);
         }
     }
     if (!result.ok) {
@@ -177,16 +207,22 @@ async function onSavedRunAction(action, run) {
  * @param {string} objectId The saved run.
  */
 async function editSavedRun(objectId) {
+    const tabId = window.fim.workspace.selectedId();
     const opened = await window.pywebview.api.open_run_object(objectId);
     if (!opened.ok) {
         showSavedRunsBanner(opened.message);
         return;
     }
+    if (window.fim.workspace.selectedId() !== tabId) {
+        return;
+    }
     applyFormValues(opened.values);
     window.fim.applyLoadedRunSettings(opened);
-    editingObjectId = opened.editable ? objectId : null;
-    document.getElementById("run-name-input").value = opened.name || "";
-    document.getElementById("run-description-input").value = opened.description || "";
+    const state = savedRunStateFor(tabId);
+    if (state) {
+        state.editingObjectId = opened.editable ? objectId : null;
+    }
+    window.fim.setRunDetails(opened.name || "", opened.description || "");
     window.fim.showScreen("screen-run");
     await revalidate();
     window.fim.showRunBanner(
@@ -216,16 +252,22 @@ async function startSavedRun(run) {
  * @param {object} run The row's saved run.
  */
 async function beginSavedRun(run) {
+    const tabId = window.fim.workspace.selectedId();
     window.fim.showScreen("screen-run");
     window.fim.showRunBanner("");
     window.fim.enterRunningState(false);
     window.fim.setRunCardTitle({ phase: "running", runName: run.name || null });
-    activeSavedRunId = run.objectId;
-    pauseRunButton.hidden = false;
-    pauseRunButton.disabled = false;
+    const state = savedRunStateFor(tabId);
+    if (state) {
+        state.activeSavedRunId = run.objectId;
+    }
+    renderPauseRunButton();
     const started = await window.pywebview.api.start_run_object(run.objectId);
     if (!started.ok) {
-        endActiveSavedRun();
+        if (state) {
+            state.activeSavedRunId = null;
+        }
+        renderPauseRunButton();
         window.fim.enterInitialState();
         window.fim.showRunBanner(started.message);
         return;
@@ -246,15 +288,26 @@ async function beginSavedRun(run) {
  * @returns {Promise<object>} `Api.save_run_object`'s result.
  */
 async function saveFormForLater() {
+    const tabId = window.fim.workspace.selectedId();
+    const state = savedRunStateFor(tabId);
+    const name = document.getElementById("run-name-input").value.trim();
+    const description = document
+        .getElementById("run-description-input")
+        .value.trim();
+    window.fim.setRunDetails(name, description);
     const saved = await window.pywebview.api.save_run_object(
         collectFormValues(),
-        editingObjectId,
-        document.getElementById("run-name-input").value.trim(),
-        document.getElementById("run-description-input").value.trim()
+        state ? state.editingObjectId : null,
+        name,
+        description
     );
     if (saved.ok) {
-        editingObjectId = saved.objectId;
-        window.fim.markFormClean();
+        if (state) {
+            state.editingObjectId = saved.objectId;
+        }
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.markFormClean();
+        }
     }
     return saved;
 }
@@ -262,7 +315,11 @@ async function saveFormForLater() {
 window.fim.saveFormForLater = saveFormForLater;
 
 async function onSaveRunObjectClicked() {
+    const tabId = window.fim.workspace.selectedId();
     const saved = await saveFormForLater();
+    if (window.fim.workspace.selectedId() !== tabId) {
+        return;
+    }
     if (!saved.ok) {
         window.fim.showRunBanner(saved.message);
         return;
@@ -275,11 +332,20 @@ async function onSaveRunObjectClicked() {
 }
 
 async function onPauseClicked() {
-    pauseRunButton.disabled = true;
+    const tabId = window.fim.workspace.selectedId();
+    const state = savedRunStateFor(tabId);
+    if (!state || state.activeSavedRunId === null || state.pausePending) {
+        return;
+    }
+    state.pausePending = true;
+    renderPauseRunButton();
     const paused = await window.pywebview.api.pause_run();
+    state.pausePending = false;
+    renderPauseRunButton();
     if (!paused.ok) {
-        pauseRunButton.disabled = false;
-        window.fim.showRunBanner(paused.message);
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.showRunBanner(paused.message);
+        }
     }
 }
 
@@ -306,7 +372,7 @@ window.fim.onRunPaused = function onRunPaused(generation) {
 };
 
 window.fim.getEditingObjectId = function getEditingObjectId() {
-    return editingObjectId;
+    return savedRunStateFor()?.editingObjectId ?? null;
 };
 
 // After every screen script has loaded, so the wrapped functions exist.
@@ -317,7 +383,13 @@ document.addEventListener("DOMContentLoaded", () => {
     wrapFimFunction("onBatchError", endActiveSavedRun);
     const plainCancelled = window.fim.onRunCancelled;
     window.fim.onRunCancelled = function onRunCancelled(generation) {
-        if (activeSavedRunId === null) {
+        const activeSavedRunId = window.fim.workspace
+            .ids()
+            .some((tabId) => {
+                const state = savedRunStateFor(tabId);
+                return state !== null && state.activeSavedRunId !== null;
+            });
+        if (!activeSavedRunId) {
             plainCancelled(generation);
             return;
         }
@@ -330,7 +402,13 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     const plainBatchCancelled = window.fim.onBatchCancelled;
     window.fim.onBatchCancelled = function onBatchCancelled(payload) {
-        if (activeSavedRunId === null) {
+        const activeSavedRunId = window.fim.workspace
+            .ids()
+            .some((tabId) => {
+                const state = savedRunStateFor(tabId);
+                return state !== null && state.activeSavedRunId !== null;
+            });
+        if (!activeSavedRunId) {
             if (plainBatchCancelled) {
                 plainBatchCancelled(payload);
             }
@@ -347,7 +425,10 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     // Loading or resetting a configuration is no longer editing the saved run.
     const clearEditing = () => {
-        editingObjectId = null;
+        const state = savedRunStateFor();
+        if (state) {
+            state.editingObjectId = null;
+        }
     };
     wrapFimFunction("applyLoadedRunSettings", clearEditing);
     wrapFimFunction("clearLoadedRunSettings", clearEditing);

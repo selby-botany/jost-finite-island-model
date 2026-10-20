@@ -30,6 +30,43 @@ const runDescriptionInput = document.getElementById("run-description-input");
 // Every Study `refreshRunStudySelectOptions` last listed, by id, so the
 // select's tooltip can show the chosen Study's description.
 let runStudiesById = new Map();
+let renderedRunControlsTabId = null;
+
+function runControlsState(tabId = window.fim.workspace.selectedId()) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.runControls) {
+        documentState.runControls = {
+            runName: "",
+            runDescription: "",
+            studySelection: "",
+            newStudyName: "",
+            newStudyDescription: "",
+            newStudyExperimentId: "",
+        };
+    }
+    return documentState.runControls;
+}
+
+function restoreRunControls() {
+    const state = runControlsState();
+    if (!state) {
+        return;
+    }
+    runNameInput.value = state.runName;
+    runDescriptionInput.value = state.runDescription;
+    runStudySelect.value = state.studySelection;
+    runStudyNewNameInput.value = state.newStudyName;
+    runStudyNewDescriptionInput.value = state.newStudyDescription;
+    renderedRunControlsTabId = window.fim.workspace.selectedId();
+    syncRunStudySelectTooltip();
+    syncRunStudyNewRowVisibility();
+}
+
+window.fim.workspace.onSelectionChange(restoreRunControls);
+restoreRunControls();
 
 // True while a run start is being decided (`startRunExclusively`), so a
 // second request meanwhile -- a double click, the Run menu, Configure's
@@ -106,13 +143,24 @@ async function onRunClicked() {
  * other run is starting or in flight.
  */
 async function startConfiguredRun() {
+    const tabId = window.fim.workspace.selectedId();
+    const controls = runControlsState(tabId);
+    if (!controls) {
+        return;
+    }
+    controls.runName = runNameInput.value;
+    controls.runDescription = runDescriptionInput.value;
+    controls.studySelection = runStudySelect.value;
+    const studyId = controls.studySelection || null;
+    const runName = controls.runName.trim();
+    const runDescription = controls.runDescription.trim();
     // "New study…" selected but never actually created (or cancelled)
     // -- `Api.start_run` would otherwise reject this as an unknown
     // study id, a confusing failure mode for a botanist who simply
     // has not finished the inline row yet. Checked before `revalidate`
     // below so this reads as its own, more specific message rather
     // than piggybacking on the form's own field-level errors.
-    if (runStudySelect.value === "__new__") {
+    if (studyId === "__new__") {
         showRunBanner("create or cancel the new study first");
         runStudyNewNameInput.focus();
         return;
@@ -125,7 +173,7 @@ async function startConfiguredRun() {
     // Configure's Sweep box: Run means Run, so with it on this same button
     // starts the sweep (`sweep.js`) into the same study choice.
     if (window.fim.isSweepEnabled()) {
-        await window.fim.runConfiguredSweep(runStudySelect.value || null);
+        await window.fim.runConfiguredSweep(studyId || null);
         return;
     }
     // Design §3.1: "clicking 'Run simulation' anywhere in Configure
@@ -189,11 +237,8 @@ async function startConfiguredRun() {
     // study" default option) becomes `null`, `Api.start_run`'s own
     // "attach nothing" case -- identical to a plain `fim run` with no
     // `--study` flag at the CLI layer.
-    const studyId = runStudySelect.value || null;
     // The run's own optional name and description: shown in the Run
     // card's title while it runs, then stored with it once it finishes.
-    const runName = runNameInput.value.trim();
-    const runDescription = runDescriptionInput.value.trim();
     window.fim.setRunCardTitle({ phase: "running", runName: runName || null });
     const started = await window.pywebview.api.start_run(
         values,
@@ -212,8 +257,15 @@ async function startConfiguredRun() {
         return;
     }
     // Started (or reused): the name belonged to this run, not the next.
-    runNameInput.value = "";
-    runDescriptionInput.value = "";
+    const currentControls = runControlsState(tabId);
+    if (currentControls) {
+        currentControls.runName = "";
+        currentControls.runDescription = "";
+    }
+    if (window.fim.workspace.selectedId() === tabId) {
+        runNameInput.value = "";
+        runDescriptionInput.value = "";
+    }
     // The configuration now belongs to a run, so it is nothing left to save.
     window.fim.markFormClean();
     if (started.reused) {
@@ -331,6 +383,7 @@ async function onOpenFolderClicked() {
 // not a hypothetical one -- confirmed live, driving Configure this
 // same way a fraction of a second after launch.
 let runStudyRefreshToken = 0;
+let runStudyNewExperimentRefreshToken = 0;
 
 /**
  * Repopulate `run-study-select` from `Api.list_studies()` -- called once
@@ -339,13 +392,11 @@ let runStudyRefreshToken = 0;
  * so a Study created since app launch appears with no restart needed,
  * the same "never trust a stale fetch across visits" precedent `screens/
  * open-run.js`'s own `refreshHomeExampleOptions` already established.
- * Preserves the currently selected study, if it still exists after the
- * refetch, rather than silently resetting to "Default study" underneath a
- * choice the botanist already made this session.
+ * Preserves each document's selected Study, rather than silently resetting
+ * to "Default study" underneath a choice the botanist already made.
  */
 async function refreshRunStudySelectOptions() {
     const token = ++runStudyRefreshToken;
-    const previousValue = runStudySelect.value;
     const studies = await window.pywebview.api.list_studies();
     if (token !== runStudyRefreshToken) {
         return;
@@ -372,10 +423,19 @@ async function refreshRunStudySelectOptions() {
         runStudySelect.appendChild(option);
     }
     runStudiesById = new Map(editable.map((study) => [study.studyId, study]));
-    if (previousValue === "study-default") {
-        runStudySelect.value = "";
-    } else if (editable.some((study) => study.studyId === previousValue)) {
-        runStudySelect.value = previousValue;
+    const controls = runControlsState();
+    if (controls) {
+        if (
+            controls.studySelection === "study-default" ||
+            (controls.studySelection &&
+                controls.studySelection !== "__new__" &&
+                !editable.some(
+                    (study) => study.studyId === controls.studySelection
+                ))
+        ) {
+            controls.studySelection = "";
+        }
+        runStudySelect.value = controls.studySelection;
     }
     syncRunStudySelectTooltip();
     // A refresh mid-creation (rare -- Configure is only re-shown by
@@ -395,9 +455,29 @@ window.fim.refreshRunStudySelectOptions = refreshRunStudySelectOptions;
  * (`screens/run-title.js`) names that Study's Experiment.
  * @returns {string|null}
  */
-window.fim.getSelectedRunStudyId = function getSelectedRunStudyId() {
-    const value = runStudySelect.value;
+window.fim.getSelectedRunStudyId = function getSelectedRunStudyId(tabId) {
+    const selectedId = tabId ?? window.fim.workspace.selectedId();
+    const controls = runControlsState(selectedId);
+    if (
+        controls &&
+        selectedId === window.fim.workspace.selectedId() &&
+        renderedRunControlsTabId === selectedId
+    ) {
+        controls.studySelection = runStudySelect.value;
+    }
+    const value = controls?.studySelection ?? "";
     return value && value !== "__new__" ? value : null;
+};
+
+window.fim.setRunDetails = function setRunDetails(name, description) {
+    const controls = runControlsState();
+    if (!controls) {
+        return;
+    }
+    controls.runName = name || "";
+    controls.runDescription = description || "";
+    runNameInput.value = controls.runName;
+    runDescriptionInput.value = controls.runDescription;
 };
 
 /** Give `run-study-select` the chosen Study's description as its tooltip. */
@@ -430,8 +510,20 @@ function syncRunStudyNewRowVisibility() {
  * exists. A study is placed in an experiment when it is created.
  */
 async function populateRunStudyNewExperiments() {
+    const tabId = window.fim.workspace.selectedId();
+    const token = ++runStudyNewExperimentRefreshToken;
     const experiments = await window.pywebview.api.list_experiments();
-    const previous = runStudyNewExperimentSelect.value;
+    if (
+        token !== runStudyNewExperimentRefreshToken ||
+        window.fim.workspace.selectedId() !== tabId ||
+        runStudyNewRow.hidden
+    ) {
+        return;
+    }
+    const controls = runControlsState(tabId);
+    if (!controls) {
+        return;
+    }
     runStudyNewExperimentSelect.replaceChildren();
     const none = document.createElement("option");
     none.value = "";
@@ -443,12 +535,23 @@ async function populateRunStudyNewExperiments() {
         option.textContent = experiment.name;
         runStudyNewExperimentSelect.appendChild(option);
     }
-    if (experiments.some((experiment) => experiment.experimentId === previous)) {
-        runStudyNewExperimentSelect.value = previous;
+    if (
+        experiments.some(
+            (experiment) =>
+                experiment.experimentId === controls.newStudyExperimentId
+        )
+    ) {
+        runStudyNewExperimentSelect.value = controls.newStudyExperimentId;
+    } else {
+        controls.newStudyExperimentId = "";
     }
 }
 
 runStudySelect.addEventListener("change", () => {
+    const controls = runControlsState();
+    if (controls) {
+        controls.studySelection = runStudySelect.value;
+    }
     syncRunStudyNewRowVisibility();
     syncRunStudySelectTooltip();
     // The title names the chosen Study's Experiment until a run finishes.
@@ -466,33 +569,59 @@ runStudySelect.addEventListener("change", () => {
  * scoped to Configure's own footer rather than a Home card (§1 Option B).
  */
 async function onRunStudyNewCreateClicked() {
+    const tabId = window.fim.workspace.selectedId();
+    const controls = runControlsState(tabId);
     const name = runStudyNewNameInput.value.trim();
     if (!name) {
         showRunBanner("a study needs a name");
         return;
     }
+    if (controls) {
+        controls.newStudyName = name;
+        controls.newStudyDescription = runStudyNewDescriptionInput.value.trim();
+        controls.newStudyExperimentId = runStudyNewExperimentSelect.value;
+    }
     const result = await window.pywebview.api.create_study(
         name,
-        runStudyNewDescriptionInput.value.trim(),
-        runStudyNewExperimentSelect.value || null
+        controls?.newStudyDescription ?? "",
+        controls?.newStudyExperimentId || null
     );
     if (!result.ok) {
-        showRunBanner(result.message);
+        if (window.fim.workspace.selectedId() === tabId) {
+            showRunBanner(result.message);
+        }
         return;
     }
-    showRunBanner("");
-    runStudyNewNameInput.value = "";
-    runStudyNewDescriptionInput.value = "";
+    if (controls) {
+        controls.newStudyName = "";
+        controls.newStudyDescription = "";
+        controls.newStudyExperimentId = "";
+        controls.studySelection = result.studyId;
+    }
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner("");
+        runStudyNewNameInput.value = "";
+        runStudyNewDescriptionInput.value = "";
+    }
     await refreshRunStudySelectOptions();
     // Not covered by `refreshRunStudySelectOptions`'s own previous-value
     // preservation (that logic matches `"__new__"` against nothing,
     // §"refreshRunStudySelectOptions" above) -- the freshly created
     // study's own id is only known here, after this call resolves.
-    runStudySelect.value = result.studyId;
-    syncRunStudyNewRowVisibility();
+    if (window.fim.workspace.selectedId() === tabId) {
+        runStudySelect.value = result.studyId;
+        syncRunStudyNewRowVisibility();
+    }
 }
 
 function onRunStudyNewCancelClicked() {
+    const controls = runControlsState();
+    if (controls) {
+        controls.newStudyName = "";
+        controls.newStudyDescription = "";
+        controls.newStudyExperimentId = "";
+        controls.studySelection = "";
+    }
     runStudyNewNameInput.value = "";
     runStudyNewDescriptionInput.value = "";
     runStudySelect.value = "";
@@ -511,6 +640,10 @@ runStudyNewCancelButton.addEventListener("click", onRunStudyNewCancelClicked);
  * file's own private `<select>` reference directly.
  */
 window.fim.preselectNewStudy = function preselectNewStudy() {
+    const controls = runControlsState();
+    if (controls) {
+        controls.studySelection = "__new__";
+    }
     runStudySelect.value = "__new__";
     syncRunStudyNewRowVisibility();
     runStudyNewNameInput.focus();
@@ -527,7 +660,12 @@ window.fim.preselectNewStudy = function preselectNewStudy() {
  * @param {string} studyId
  */
 window.fim.selectStudyForNewRun = function selectStudyForNewRun(studyId) {
-    runStudySelect.value = studyId === "study-default" ? "" : studyId;
+    const value = studyId === "study-default" ? "" : studyId;
+    const controls = runControlsState();
+    if (controls) {
+        controls.studySelection = value;
+    }
+    runStudySelect.value = value;
     syncRunStudyNewRowVisibility();
     syncRunStudySelectTooltip();
 };
@@ -540,6 +678,36 @@ function wireRunViewControls() {
     if (sweepBox !== null) {
         sweepBox.addEventListener("change", syncRunDetailsRowVisibility);
     }
+    runNameInput.addEventListener("input", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.runName = runNameInput.value;
+        }
+    });
+    runDescriptionInput.addEventListener("input", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.runDescription = runDescriptionInput.value;
+        }
+    });
+    runStudyNewNameInput.addEventListener("input", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.newStudyName = runStudyNewNameInput.value;
+        }
+    });
+    runStudyNewDescriptionInput.addEventListener("input", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.newStudyDescription = runStudyNewDescriptionInput.value;
+        }
+    });
+    runStudyNewExperimentSelect.addEventListener("change", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.newStudyExperimentId = runStudyNewExperimentSelect.value;
+        }
+    });
     syncRunDetailsRowVisibility();
     refreshRunStudySelectOptions();
 }

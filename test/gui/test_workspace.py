@@ -456,6 +456,7 @@ def test_live_progress_is_owned_by_the_addressed_document(
     """Background scalar and batch progress changes only their owner model."""
     state = drive(
         window,
+        ready="STATISTIC_NAMES.length > 0",
         trigger="""window.__fimTestResult = (() => {
             const workspace = window.fim.workspace;
             const scalar = workspace.selectedId();
@@ -558,3 +559,92 @@ def test_live_progress_is_owned_by_the_addressed_document(
     ]
     assert state["batchScalar"] == {}
     assert state["selectedProgress"] == state["progressBefore"]
+
+
+def test_run_controls_title_settings_and_saved_run_are_document_local(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Run metadata, overrides, title, and saved-run editing follow tabs."""
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const first = workspace.selectedId();
+            window.fim.setRunDetails("First run", "First description");
+            window.fim.selectStudyForNewRun("study-default");
+            window.fim.setRunCardTitle({
+                phase: "running",
+                runName: "First run",
+            });
+            window.fim.applyLoadedRunSettings({
+                runSettings: {n_replicates: "11"},
+                runSettingDifferences: [],
+            });
+            workspace.get(first).savedRunState = {
+                editingObjectId: "saved-first",
+                activeSavedRunId: "active-first",
+                pausePending: false,
+            };
+
+            const second = workspace.createDocument();
+            window.fim.setRunDetails("Second run", "Second description");
+            window.fim.preselectNewStudy();
+            window.fim.setRunCardTitle({
+                phase: "running",
+                runName: "Second run",
+            });
+            window.fim.applyLoadedRunSettings({
+                runSettings: {n_replicates: "22"},
+                runSettingDifferences: [],
+            });
+
+            const secondView = {
+                name: document.getElementById("run-name-input").value,
+                description:
+                    document.getElementById("run-description-input").value,
+                study: document.getElementById("run-study-select").value,
+                title: document.getElementById("run-plot-title").textContent,
+                settings: window.fim.originalRunSettings(),
+                replicates: collectFormValues().n_replicates,
+                editing: window.fim.getEditingObjectId(),
+                pauseHidden:
+                    document.getElementById("pause-run-button").hidden,
+            };
+            workspace.select(first);
+            const firstView = {
+                name: document.getElementById("run-name-input").value,
+                description:
+                    document.getElementById("run-description-input").value,
+                study: document.getElementById("run-study-select").value,
+                title: document.getElementById("run-plot-title").textContent,
+                settings: window.fim.originalRunSettings(),
+                replicates: collectFormValues().n_replicates,
+                editing: window.fim.getEditingObjectId(),
+                pauseHidden:
+                    document.getElementById("pause-run-button").hidden,
+            };
+            return {firstView, secondView};
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["firstView"] == {
+        "name": "First run",
+        "description": "First description",
+        "study": "",
+        "title": "FIM simulation — First run — in progress",
+        "settings": {"n_replicates": "11"},
+        "replicates": "11",
+        "editing": "saved-first",
+        "pauseHidden": False,
+    }
+    assert state["secondView"] == {
+        "name": "Second run",
+        "description": "Second description",
+        "study": "__new__",
+        "title": "FIM simulation — Second run — in progress",
+        "settings": {"n_replicates": "22"},
+        "replicates": "22",
+        "editing": None,
+        "pauseHidden": True,
+    }
