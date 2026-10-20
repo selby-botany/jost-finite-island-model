@@ -2032,6 +2032,7 @@ class Api:
         # outcome.
         self._run_in_flight = False
         self._jobs = jobs.JobAdmission()
+        self._output_reservation: Path | None = None
         # The one currently-claimed job's own id, minted by `_claim_run`/
         # `_claim_sweep` the instant their claim succeeds, and cleared by
         # their own release counterparts -- `fim.gui.jobs`'s own module
@@ -2298,9 +2299,10 @@ class Api:
             iter(groups.find_stale_run_directories(run_id, fim_version)), None
         )
         try:
-            output_directory = paths.default_output_directory()
+            output_directory, reservation = paths.allocate_output_directory()
         except FileExistsError as error:
             return {"ok": False, "message": str(error)}
+        self._output_reservation = reservation
         is_batch = params.n_replicates > 1
         result = (
             self._start_batch_run(
@@ -2360,6 +2362,18 @@ class Api:
             self._active_object_id = None
             self._run_in_flight = False
             job_id, self._job_id = self._job_id, None
+            reservation, self._output_reservation = self._output_reservation, None
+        if reservation is not None:
+            try:
+                reservation.rmdir()
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                logger.warning(
+                    "could not remove output directory reservation %s: %s",
+                    reservation,
+                    error,
+                )
         if job_id is not None:
             self._jobs.forget(job_id)
 

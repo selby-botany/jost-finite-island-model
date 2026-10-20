@@ -448,6 +448,46 @@ def default_output_directory(
     raise FileExistsError(f"could not allocate a unique output directory below: {base}")
 
 
+def allocate_output_directory(
+    results: Path | None = None,
+    *,
+    clock: Clock = lambda: datetime.now(UTC),
+) -> tuple[Path, Path]:
+    """Reserve and return a unique `(output_directory, reservation)` pair.
+
+    The output directory remains absent until its run is published. A
+    neighboring hidden marker directory reserves its name in the meantime,
+    preventing concurrent callers from receiving the same path. The caller
+    must remove the reservation after publication or failure.
+
+    Args:
+        results: Optional results-directory override (default:
+            `results_directory()`).
+        clock: Injectable UTC clock for deterministic tests.
+
+    Returns:
+        The not-yet-created output directory and its reservation marker.
+
+    Raises:
+        FileExistsError: If all bounded fallback names are already used or
+            reserved.
+    """
+    base = results if results is not None else results_directory()
+    stem = f"run-{clock().strftime('%Y%m%d-%H%M%S-%f')}"
+    for suffix in range(1000):
+        name = stem if suffix == 0 else f"{stem}-{suffix:03d}"
+        candidate = base / name
+        if candidate.exists():
+            continue
+        reservation = base / f".reserve-{name}"
+        try:
+            reservation.mkdir(parents=True)
+        except FileExistsError:
+            continue
+        return candidate, reservation
+    raise FileExistsError(f"could not allocate a unique output directory below: {base}")
+
+
 def project_root() -> Path:
     """Return the source checkout root, falling back to a writable default.
 

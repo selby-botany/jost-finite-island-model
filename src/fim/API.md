@@ -863,6 +863,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [STAGING\_LOCK\_FILENAME](#fim.paths.STAGING_LOCK_FILENAME)
   * [atomic\_directory](#fim.paths.atomic_directory)
   * [default\_output\_directory](#fim.paths.default_output_directory)
+  * [allocate\_output\_directory](#fim.paths.allocate_output_directory)
   * [project\_root](#fim.paths.project_root)
   * [results\_directory](#fim.paths.results_directory)
   * [log\_directory](#fim.paths.log_directory)
@@ -22893,6 +22894,41 @@ existing name without replacing any run data.
 **Raises**:
 
 - `FileExistsError` - If all bounded fallback names already exist.
+
+<a id="fim.paths.allocate_output_directory"></a>
+
+#### allocate\_output\_directory
+
+```python
+def allocate_output_directory(
+    results: Path | None = None,
+    *,
+    clock: Clock = lambda: datetime.now(UTC)) -> tuple[Path, Path]
+```
+
+Reserve and return a unique `(output_directory, reservation)` pair.
+
+The output directory remains absent until its run is published. A
+neighboring hidden marker directory reserves its name in the meantime,
+preventing concurrent callers from receiving the same path. The caller
+must remove the reservation after publication or failure.
+
+**Arguments**:
+
+- `results` - Optional results-directory override (default:
+  `results_directory()`).
+- `clock` - Injectable UTC clock for deterministic tests.
+
+
+**Returns**:
+
+  The not-yet-created output directory and its reservation marker.
+
+
+**Raises**:
+
+- `FileExistsError` - If all bounded fallback names are already used or
+  reserved.
 
 <a id="fim.paths.project_root"></a>
 

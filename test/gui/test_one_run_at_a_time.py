@@ -147,6 +147,10 @@ def test_a_second_run_is_refused_while_the_first_is_in_flight(
     del window
     first = api.start_run(_form())
     assert first["ok"] is True, first.get("message")
+    reservation = held_runs.started[0].parent / (
+        f".reserve-{held_runs.started[0].name}"
+    )
+    assert reservation.is_dir()
 
     second = api.start_run(_form())
 
@@ -156,12 +160,28 @@ def test_a_second_run_is_refused_while_the_first_is_in_flight(
 
     held_runs.release_all()
     _wait_until_no_run(api)
+    assert not reservation.exists()
     assert api.can_start_run() == {"ok": True}
     third = api.start_run(_form())
     assert third["ok"] is True, third.get("message")
     assert len(held_runs.started) == 2
     held_runs.release_all()
     _wait_until_no_run(api)
+
+
+def test_a_start_without_an_active_window_releases_its_reservation(
+    api: Api,  # noqa: F811
+    results: Path,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A refused start leaves no output-directory marker behind."""
+    monkeypatch.setattr(app_module, "_active_window", lambda: None)
+
+    refused = api.start_run(_form())
+
+    assert refused["ok"] is False
+    assert refused["message"] == "no active window"
+    assert not list(results.glob(".reserve-*"))
 
 
 def test_a_refused_start_leaves_the_running_saved_run_alone(

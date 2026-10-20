@@ -2952,6 +2952,17 @@ def test_default_output_directory_retries_existing_timestamped_name(
 
 An existing automatic name receives a deterministic numeric suffix.
 
+<a id="test.test_paths.test_allocate_output_directories_reserves_distinct_names_with_one_clock"></a>
+
+#### test\_allocate\_output\_directories\_reserves\_distinct\_names\_with\_one\_clock
+
+```python
+def test_allocate_output_directories_reserves_distinct_names_with_one_clock(
+        tmp_path: Path) -> None
+```
+
+A fixed timestamp still gets a unique name while earlier names are held.
+
 <a id="test.test_paths.test_default_output_directory_uses_results_directory_by_default"></a>
 
 #### test\_default\_output\_directory\_uses\_results\_directory\_by\_default
@@ -4749,6 +4760,18 @@ def results(tmp_path: Path) -> Iterator[Path]
 ```
 
 Point the results directory at a temporary one for the test.
+
+<a id="test.test_sweep_run.test_local_point_runner_releases_its_reservation"></a>
+
+#### test\_local\_point\_runner\_releases\_its\_reservation
+
+```python
+@pytest.mark.parametrize("fails", [False, True], ids=["published", "failed"])
+def test_local_point_runner_releases_its_reservation(
+        results: Path, monkeypatch: pytest.MonkeyPatch, fails: bool) -> None
+```
+
+A point releases its marker after publishing or when its run fails.
 
 <a id="test.test_sweep_run.test_each_point_run_is_named_after_its_study_and_coordinates"></a>
 
@@ -22921,6 +22944,17 @@ def test_a_second_run_is_refused_while_the_first_is_in_flight(
 ```
 
 A second start is refused until the first run ends, then allowed again.
+
+<a id="gui.test_one_run_at_a_time.test_a_start_without_an_active_window_releases_its_reservation"></a>
+
+#### test\_a\_start\_without\_an\_active\_window\_releases\_its\_reservation
+
+```python
+def test_a_start_without_an_active_window_releases_its_reservation(
+        api: Api, results: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A refused start leaves no output-directory marker behind.
 
 <a id="gui.test_one_run_at_a_time.test_a_refused_start_leaves_the_running_saved_run_alone"></a>
 

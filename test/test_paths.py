@@ -238,6 +238,25 @@ def test_default_output_directory_retries_existing_timestamped_name(
     )
 
 
+def test_allocate_output_directories_reserves_distinct_names_with_one_clock(
+    tmp_path: Path,
+) -> None:
+    """A fixed timestamp still gets a unique name while earlier names are held."""
+
+    def clock() -> datetime:
+        return datetime(2026, 8, 27, 14, 22, 5, tzinfo=UTC)
+
+    first, first_reservation = paths.allocate_output_directory(tmp_path, clock=clock)
+    second, second_reservation = paths.allocate_output_directory(tmp_path, clock=clock)
+
+    assert first == tmp_path / "run-20260827-142205-000000"
+    assert second == tmp_path / "run-20260827-142205-000000-001"
+    assert first_reservation.is_dir()
+    assert second_reservation.is_dir()
+    first_reservation.rmdir()
+    second_reservation.rmdir()
+
+
 def test_default_output_directory_uses_results_directory_by_default() -> None:
     """Omitting `results` falls back to `results_directory()`."""
     output = paths.default_output_directory()
