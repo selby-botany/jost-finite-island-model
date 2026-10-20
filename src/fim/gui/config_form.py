@@ -1,33 +1,10 @@
-"""Marshal `SimulationParams` to and from the tabbed model-input screen.
+"""Convert between model parameters and GUI configuration form values.
 
-Every function here is a pure, Tk-free transformation between three
-shapes: a `SimulationParams` instance, a `dict[str, str]` of one string
-per form field (what `screens.input_screen.InputScreen` reads from and
-writes to its widgets), and a `dict[str, object]` payload ready for
-`fim.model.params.SimulationParams.from_mapping` — the identical
-validator `fim.cli` already uses (`doc/fim-gui-design.md` §6.1).
-Nothing here duplicates a validation rule `from_mapping` already
-enforces: a malformed string is only ever coerced to the right Python
-type before being handed to that one validator, never re-checked
-against a second, GUI-local copy of a rule.
-
-`TABS` groups fields the same way
-[configuration.md](../../doc/configuration.md)'s own section
-headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
-decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
-sized fields do (a comma-separated text field faithfully represents
-either); a `d`-by-`d` migration matrix, a `loci` list with custom
-`locus_id`s, and a `d`-by-locus explicit `p_0` now do too, each edited
-cell by cell (botanist GUI design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4 —
-`m_to_payload`/`m_from_params`'s own `"matrix"` mode,
-`loci_to_payload`/`loci_from_params`'s own `"custom"` mode, and
-`initial_conditions_to_payload`/`initial_conditions_from_params`'s own
-`"explicit_p0"` mode, respectively); a genuinely per-locus `mu` still
-does not, and instead raises a clear `ValueError` from
-`params_to_form_values` (the same "edit the YAML file directly" pattern
-this form has always used for a construct it cannot represent at all)
-— see `doc/fim-gui-design.md` §6.2.
+The module maps `SimulationParams` to and from form dictionaries and
+payloads validated by `SimulationParams.from_mapping`. Supported inputs
+include per-deme and per-locus lists, migration matrices, custom loci, and
+explicit initial-frequency tables. Per-locus mutation rates are not
+represented by the form; configurations using them must be edited as YAML.
 """
 
 from __future__ import annotations

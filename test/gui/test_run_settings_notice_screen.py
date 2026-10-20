@@ -454,13 +454,13 @@ def test_loading_a_lineal_example_runs_it_without_changing_settings(
 
     loaded = result["loaded"]
     assert loaded["configure"]["hidden"] is False
-    assert "your Settings have not changed" in loaded["configure"]["summary"]
+    assert "Saved Settings are unchanged" in loaded["configure"]["summary"]
     assert loaded["configure"]["rows"] == [
         ["engine_backend", "Execution engine", "lineal", "auto"],
         ["n_replicates", "Number of replicates", "1", "200"],
     ]
     assert loaded["stripHidden"] is False
-    assert loaded["stripText"] == "this run's own (2 differ)"
+    assert loaded["stripText"] == "run settings (2 differ)"
     assert (loaded["engine"], loaded["replicates"]) == ("lineal", "1")
     # Settings untouched by the load, on disk and in the dialog.
     settings = result["settingsAfterLoad"]
@@ -474,7 +474,7 @@ def test_loading_a_lineal_example_runs_it_without_changing_settings(
     # The button made them Settings, and the strip item went away.
     adopted = result["adopted"]
     assert adopted["configure"]["hidden"] is False
-    assert adopted["configure"]["summary"].startswith("Done.")
+    assert adopted["configure"]["summary"].startswith("Settings saved.")
     assert adopted["configure"]["rows"] == []
     assert adopted["stripHidden"] is True
     after = result["settingsAfterAdopt"]

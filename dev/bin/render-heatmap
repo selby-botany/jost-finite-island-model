@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
-"""Render a d x locus-length heatmap from `generate-heatmap-queue`'s own results.
+"""Summarize benchmark results as a deme-count by locus-length heatmap.
 
-Reads every `result-len*.json` file `generate-heatmap-queue` pointed a
-`benchmark-engines --output` at (one per locus-length value, each
-holding one point per `d` value swept) and prints two grids: which
-backend actually won at each (d, length) point, and the `V`/`G-jit`
-wall-clock ratio there (below 1 means V is still ahead; above 1 means
-`"generational"` with `jit="numba"` has taken over) -- side by side, so
-the *shape* of the winning-backend boundary and *how much* it costs to
-be on the wrong side of it are both visible at once, without needing
-every raw second column `benchmark-engines`'s own table already prints.
-
-Usage:
-    dev/bin/render-heatmap /tmp/fim-heatmap
+Reads the `result-len*.json` files produced by
+`dev/bin/generate-heatmap-queue` and prints the winning backend and the vector-to-generational-JIT
+wall-clock ratio at each point. Ratios below one favor the vector backend.
 """
 
 from __future__ import annotations

@@ -1,19 +1,9 @@
-"""Replayable, verifiable run-manifest representation and JSON I/O.
+"""Represent and verify run and batch manifests.
 
-A "manifest" is a run's own receipt: a small JSON file
-(`manifest.json`) written once a run finishes, recording everything
-needed to identify it (its `run_id`), reproduce it exactly (its full
-`SimulationParams`, via `RunManifest.params`), and know why it stopped
-(`stop_reason`, `converged`). It also records a cryptographic
-fingerprint of every other durable output file the run produced (a
-SHA-256 digest and byte count, via `hash_file`, below) — the run's own
-way of proving, later, that those files have not been silently edited,
-truncated, or replaced since the run completed (`verify_trajectory_
-integrity`, below, is what actually performs that check).
-
-`RunManifest` describes one scalar run; `BatchManifest`, further down,
-is the parallel structure for a whole replicate batch — see each
-class's own docstring for the details specific to it.
+A run manifest records parameters, run identity, stop status, and digests of
+persisted artifacts. A batch manifest describes a replicate batch. Readers
+and writers validate these versioned JSON records; integrity checks verify
+artifact bytes against the recorded digests.
 """
 
 from __future__ import annotations
@@ -100,67 +90,28 @@ def hash_file(path: Path | str) -> ArtifactDigest:
 class RunManifest:
     """Capture everything needed to identify, verify, and replay a run.
 
-    `artifacts` is `None` for a manifest as the engine constructs it —
-    `fim.engine.lineal.run_one` returns a `RunResult` without ever writing to
-    disk, so it cannot yet know a durable file's content digest. A
-    manifest actually persisted to disk (`artifacts.write_run_artifacts`)
-    is written only once every other artifact (`trajectory.tlog`,
-    `report.json`, `scatter.png`) is fully flushed, with `artifacts`
-    populated from their real on-disk digests — so `artifacts is not
-    None` on a *read* manifest doubles as "every sibling artifact this
-    manifest names existed, complete, at the moment this manifest was
-    written." `fim stats` (this module's own `verify_trajectory_integrity`)
-    uses that digest to refuse a trajectory that was edited, truncated,
-    or replaced after the fact.
+    `artifacts` is `None` for an in-memory result. Persisted manifests
+    contain digests for completed sibling artifacts; these digests
+    support integrity checks when files are read later.
 
-    `engine_backend`/`jit` record which of `fim.engine`'s own engine
-    implementations, and JIT setting, actually produced this run —
-    `None` for a manifest built by anything that predates this field
-    (an older stored manifest, or a caller building `RunManifest`
-    directly without them). Both stay `str | None` here rather than the
-    engine's own `Literal` types (`EngineBackendChoice`/`JitOption`):
-    this module has no import-time dependency on `fim.engine` today,
-    and a manifest is meant to remain readable even if a future engine
-    version renames or retires a choice this one recorded — a plain
-    string degrades gracefully where a `Literal` reconstruction would
-    not. `engine_backend` always records the *resolved* choice: for a
-    run built with `engine_backend="auto"`, this is whichever of
-    `"generational"`/`"generational-vector"` `"auto"` actually picked,
-    never the literal string `"auto"` itself — the whole reason this
-    field exists is so a runtime-data-dependent choice is not lost
-    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-    §7.4).
+    `engine_backend` and `jit` record the resolved engine settings, or
+    `None` if the manifest predates these fields. They are stored as
+    strings so manifests can be read without importing the engine and
+    remain readable if an engine option is renamed. For
+    `engine_backend="auto"`, the manifest records the selected backend,
+    not `"auto"`.
 
-    `initial_condition_mode`/`equilibrium_generation_count`/
-    `equilibrium_final_heterozygosity` record which strategy
-    (`fim.model.initial`) actually produced this run's own generation
-    zero, and — for `"equilibrium_split"` only — the ancestral phase's
-    own runtime outcome (`20260907-claude-sonnet-5-equilibrium-split-
-    design.md`, decision 5). `initial_condition_mode` is deliberately a
-    plain string, not a stricter type, for the identical reason
-    `engine_backend`/`jit` already are: it always records the
-    *resolved* strategy a caller actually got, and a manifest should
-    stay readable even if a future strategy's own name is not one this
-    module has ever heard of. All three are `None` for a manifest
-    written before this field existed, or whenever the run used
-    `"dirichlet"`/`"explicit"` instead — the two equilibrium-specific
-    fields have no meaning outside `"equilibrium_split"` and are never
-    populated for either of the other two.
+    `initial_condition_mode` records the resolved initialization
+    strategy. `equilibrium_generation_count` and
+    `equilibrium_final_heterozygosity` are populated only for
+    `"equilibrium_split"`. These fields are `None` for older manifests
+    and for other initial-condition modes.
 
-    `auto_derived`/`relaxation_time` record whether this run's own
-    `convergence_burn_in`/`max_generations` were auto-derived from the
-    model's own relaxation time rather than given explicitly
-    (`SimulationParams._resolve_convergence_defaults`'s own identically
-    named fields, copied here at manifest-construction time) --
-    `parameters` above only ever holds the *resolved* concrete integers
-    either way (`SimulationParams.to_dict`'s own documented contract:
-    reconstructing from it must reproduce an equal `SimulationParams`,
-    and `auto_derived`/`relaxation_time` deliberately take no part in
-    that equality), so without a dedicated field of its own here, a
-    reopened run could never tell a `convergence_burn_in` the botanist
-    typed from one this project chose on its own. `auto_derived` is
-    empty (not `None`) whenever both were given explicitly; `None` for
-    either field only means a manifest written before they existed.
+    `auto_derived` and `relaxation_time` record whether convergence
+    settings were derived from the model's relaxation time.
+    `parameters` contains the resolved integer settings; `auto_derived`
+    is empty when both settings were supplied explicitly. `None` in
+    these fields indicates a manifest written before they were added.
     """
 
     schema_version: int
@@ -356,25 +307,11 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None:
 def verify_trajectory_integrity(
     trajectory_path: Path, manifest: RunManifest, *, artifact: str = "trajectory"
 ) -> None:
-    """Refuse to analyze a trajectory that no longer matches its manifest.
+    """Raise `ValueError` if a file does not match its recorded digest.
 
-    Called by `fim.reanalyze.reanalyze_trajectory` before it trusts
-    anything else about the file: recomputes `trajectory_path`'s own
-    current SHA-256 digest (via `hash_file`, above) and compares it
-    against the digest the run itself recorded, in its own manifest, at
-    the moment it finished writing that file durably. A mismatch means
-    the file has changed in some way since — accidentally, through
-    corruption, or deliberately — and this raises rather than letting
-    re-analysis silently produce numbers for a file that is no longer
-    what the run actually produced.
-
-    Regression fix (`cli.py`'s own history, predating this
-    extraction): an edited or truncated trajectory used to re-analyze
-    silently under `fim stats`. The run that wrote `trajectory_path`
-    also recorded its exact SHA-256 digest and byte count in
-    `manifest.json` at the moment the run finished writing it durably;
-    recomputing that digest now and comparing catches any edit,
-    truncation, or replacement since.
+    The manifest's SHA-256 digest and byte count are compared with the
+    current file. A missing digest or a mismatch prevents analysis from
+    proceeding with an unverified artifact.
 
     Args:
         trajectory_path: The trajectory file about to be read.
@@ -384,9 +321,8 @@ def verify_trajectory_integrity(
             run's ancestral phase.
 
     Raises:
-        ValueError: If the manifest has no recorded trajectory digest
-            (written before this check existed), or the file no longer
-            matches the digest it does have.
+        ValueError: If the manifest has no digest for `artifact`, or the
+            file does not match its recorded digest.
     """
     if manifest.artifacts is None or artifact not in manifest.artifacts:
         raise ValueError(
@@ -420,13 +356,9 @@ def verify_trajectory_integrity(
 class BatchManifest:
     """Capture everything needed to identify and verify a replicate batch.
 
-    Parallel to `RunManifest`, but describes a whole batch rather than
-    one replicate: `replicate_run_ids` names every published
-    `replicate-NNN/` subdirectory, and `artifacts` — populated the same
-    way as `RunManifest.artifacts`, only once every sibling artifact is
-    flushed — digests `summary.json` and each replicate's own
-    `manifest.json`, so an edited, truncated, or replaced batch-level
-    artifact is detectable the same way a scalar run's is.
+    `replicate_run_ids` lists the published `replicate-NNN/`
+    subdirectories. Persisted artifact digests cover `summary.json` and
+    each replicate's `manifest.json`.
     """
 
     schema_version: int

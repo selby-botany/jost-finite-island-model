@@ -1,18 +1,11 @@
-# Dear-Nolan high-migration example
+# Dear-Nolan high-migration scenario
 
-This example is a worked explanation of the exact high-migration botanical
-scenario used in the validation suite. It shows how to move from a
-configuration a person would naturally write to the final, research-grade
-initialization used by the model. Like every other example, it runs with
-`fim run` from its `config.yaml`; what is unusual is that a script derives the
-file's starting state (section 6).
+This example documents the high-migration botanical scenario used in the
+validation suite. The configuration uses an initial state derived from the
+model's equilibrium identity recursion. Section 6 describes the derivation
+script and the resulting `p_0` table.
 
-The target audience is a botanist or ecological researcher, not a software
-engineer. The goal is clarity: what the model is trying to represent, why the
-obvious configuration is not enough, and how the final setup matches the
-biological equilibrium the paper is studying.
-
-## 1. The starting point a user would naturally write
+## 1. Baseline configuration
 
 A researcher reading the usage docs would likely build a configuration like
 this:
@@ -32,7 +25,7 @@ precision: 0.01
 max_generations: 3000
 ```
 
-This is the natural, readable configuration for a finite-island model:
+This configuration specifies:
 
 - 2000 individuals per patch
 - 100 patches
@@ -41,50 +34,32 @@ This is the natural, readable configuration for a finite-island model:
 - a single locus
 - a seed chosen for reproducibility
 
-It is also the configuration that looks right to a reader of the docs. It is
-how a sensible user would start.
-
-The problem is that this configuration begins from the default founder state:
+It begins from the default founder state:
 all demes are assumed to start with the same broad distribution of allele
 frequencies, and then the simulation is allowed to drift and settle. In the
 high-migration Dear-Nolan regime, that settling process is extremely slow.
 
-This is not a failure of the model. It is a property of the biological
-question: the equilibrium state for this scenario is a very specific
-near-stationary population structure, not a routine random start.
+The equilibrium state for this scenario is a specific near-stationary
+population structure rather than a generic random start.
 
-## 2. Why the naive configuration does not reach the published equilibrium
+## 2. Equilibrium initialization
 
-The published scenario in the validation suite is not a `fim` failure; it is a
-special biological equilibrium.
-
-The model is trying to represent a system where:
+The validation scenario represents a system where:
 
 - many alleles are shared across the whole metapopulation
 - each patch also carries some private alleles
 - the within-patch identity and between-patch identity are both at a
   fixed, balanced point
 
-That equilibrium is a target state, not a random accident of starting values.
+The validation test supplies an explicit near-equilibrium initial state and
+checks whether the simulator preserves its predicted statistics. A generic
+founder state would instead require a long transient to approach equilibrium;
+the explicit `p_0` makes this a stationarity check rather than a convergence
+test from a generic start.
 
-If you start from a generic initial condition, the model still runs, but it
-must evolve toward that equilibrium from a less informative starting point.
-For the high-migration Dear-Nolan case, this drifts over a long time and is
-not a practical demonstration for a user.
+## 3. Equilibrium allele-frequency structure
 
-This is why the validation test does not simply call `fim run` on a YAML
-config and hope for the equilibrium to appear. Instead it constructs a
-near-equilibrium initial state and asks whether the simulator preserves that
-state.
-
-In plain language: the scientific question is not "what does random starting
-configuration do after 1800 generations?" The scientific question is "does the
-simulator hold the known equilibrium state when the system starts exactly at
-that fixed point?"
-
-## 3. What the equilibrium state actually looks like
-
-The core idea is simple and biologically meaningful:
+The initial state has the following structure:
 
 - some alleles are common to nearly all patches
 - the rest are patch-specific
@@ -98,32 +73,27 @@ masses so that:
 - the private alleles reproduce the desired within-patch identity
 - both identities match the fixed point of the recursion used by the model
 
-This is not arbitrary.
+The test computes the fixed point `(jw*, jb*)` of the identity recursion.
+These values specify the expected within-patch and between-patch identity
+in the high-migration regime. The starting state is constructed to match
+that point.
 
-The test computes the fixed point `(jw*, jb*)` of the identity recursion. That
-value tells us the equilibrium within-patch and between-patch identity we
-expect in the high-migration regime. The starting state is then built to match
-that point as closely as possible.
+## 4. Interpretation of the initial state
 
-## 4. The user-facing explanation of the final construction
+The initial state has the following structure:
 
-The final state is best thought of as follows:
-
-- imagine 100 patches
+- 100 patches
 - each patch shares a set of common alleles with all other patches
 - each patch also has a private set of alleles that only it carries
 - the frequencies are chosen so the whole metapopulation sits at the
   equilibrium point rather than slowly wandering toward it
 
-This is the crucial trick: instead of asking the model to discover the
-equilibrium on its own, we begin the simulation at the equilibrium that the
-math says should hold.
+The state is initialized at the recursion's predicted equilibrium. The
+subsequent simulation tests whether the model maintains the predicted
+statistics; it is a stationarity check rather than a simulation from a
+random initial state.
 
-Once the state is built this way, the simulator is tested to see whether it
-continues to hold the same statistics as before. That is a stationarity check,
-not a fresh simulation from a random start.
-
-## 5. The exact logic, written in plain English
+## 5. Derivation procedure
 
 The validation code uses the recursion fixed point:
 
@@ -148,8 +118,7 @@ Then it builds the initial state with a helper called
 3. adds a private set of alleles to each patch so that the within-patch
    identity also matches the fixed point
 
-The function is intentionally long and explicit because this is a scientific
-initial condition, not an everyday parameter file.
+The function constructs this initial condition.
 
 ## 6. From the derivation to `config.yaml`
 
@@ -183,7 +152,9 @@ averages generations 1 to 30 and stops, whatever its noise. That is the right
 reading here, because the question is whether the state *stays* at
 equilibrium, not whether it settles.
 
-The script never changes anything unless you ask it to:
+The script prints the derived configuration by default. Use `--check` to
+compare it with the committed configuration or `--write` to replace that
+file:
 
 ```console
 python3 doc/examples/dear-nolan-high/reproduce.py           # print the file
@@ -191,7 +162,7 @@ python3 doc/examples/dear-nolan-high/reproduce.py --check   # is it current?
 python3 doc/examples/dear-nolan-high/reproduce.py --write   # rewrite it
 ```
 
-## 7. What the output means biologically
+## 7. Interpreting the output
 
 The run writes `summary.json`, the mean over the five replicates of each
 replicate's average over its 30 generations, with a 95% confidence interval:
@@ -201,22 +172,16 @@ replicate's average over its 30 generations, with a 95% confidence interval:
 | G<sub>ST</sub> | 0.02204 ± 0.00011 | 0.02196 |
 | D | 0.9081 ± 0.0021 | 0.9088 |
 
-Both predictions lie inside their intervals. This is the published
-high-migration equilibrium: low differentiation between patches, but still
-enough structure that Jost's D remains high. The fixed-point configuration
-is therefore a realistic scientific test of the model's stationarity, not a
-random drift measurement.
+Both predictions lie inside their intervals. The result is consistent with
+the high-migration equilibrium: differentiation between patches is low by
+`G_ST`, while Jost's `D` remains high. The fixed-point configuration tests
+whether the model preserves the predicted stationary statistics.
 
-In more botanical terms, the high-migration scenario describes many patches
-connected strongly by dispersal, where species-level differentiation is low,
-but the identity-based differentiation measure still records a meaningful
-signal of structure. That is precisely the subtle regime the test is designed
-to examine.
+The scenario represents many patches connected by frequent dispersal. In
+this regime, `G_ST` is low while the identity-based measure `D` retains a
+larger value.
 
-## 8. The shortest, clearest summary
-
-If someone asks, "why is this example different from the other examples?" the
-answer is:
+## 8. Summary
 
 - the literature scenario is an equilibrium calculation, not a generic random
   initialization
@@ -226,9 +191,8 @@ answer is:
 - the run therefore checks whether `fim` preserves that equilibrium under
   the model dynamics rather than waiting for the system to find it by chance
 
-That is why the example is longer and more explanatory than the other worked
-examples. The scientific question is more subtle, and the initialization is
-reasonably specialized.
+The specialized initialization makes the equilibrium-stationarity question
+testable over a short run.
 
 ## 9. Reproducing it
 
@@ -239,8 +203,8 @@ fim run doc/examples/dear-nolan-high/config.yaml \
     --output results/dear-nolan-high --quiet
 ```
 
-The five replicates run in parallel, one worker process per processor, and
-take about two minutes on ordinary development hardware.
+The five replicates run in parallel, with one worker process per processor,
+and take about two minutes on the measured development system.
 `results/dear-nolan-high/summary.json` matches `summary.json` in this
 directory exactly, and each `replicate-NNN/report.json` matches its
 committed copy.
@@ -254,3 +218,11 @@ committed copy.
 | `manifest.json`, `summary.json` | The batch's metadata and five-replicate summary |
 | `replicate-NNN/` | Each replicate's own `manifest.json` and `report.json` |
 | `README.md` | This document |
+
+For the mathematical definitions, see the
+[differentiation-measures guide](../../jost-differentiation-measures.md)
+and [migration-conventions reference](../../migration-conventions.md).
+The validation helpers are
+[`_identity_fixed_point()`](../../../test/validation/test_simulator_equilibrium.py)
+and
+[`_dn2_equilibrium_start()`](../../../test/validation/test_simulator_equilibrium.py).

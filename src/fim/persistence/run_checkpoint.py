@@ -1,21 +1,9 @@
-"""Durable, atomically published Run checkpoints.
+"""Publish and verify immutable checkpoints for resumable Run objects.
 
-A checkpoint is an immutable directory `checkpoints/<checkpoint_id>/` inside a
-Run object holding `checkpoint.json` (versioned metadata) and `arrays.npz`
-(numeric state). It becomes authoritative only when `run.json` points at it:
-publication writes the files into a hidden staging sibling, flushes them to
-disk, renames the directory into place, and only then asks the execution
-lease to record the pointer. A crash at any step leaves either the previous
-pointer (and its checkpoint, still intact) or the new one; any directory the
-pointer does not name is garbage, never an alternate truth.
-
-The reference digest is the SHA-256 of the exact `checkpoint.json` bytes, and
-that document records the SHA-256 of `arrays.npz`, so one digest verifies
-both files. The archive is written with fixed entry metadata, so identical
-state always produces identical bytes.
-
-Design: `20261011-gpt-6-luna-phase-2-trajectory-persistence-and-run-lifecycle-
-plan.md` (`selby/restricted`), "Checkpoint contents and commit protocol".
+Each checkpoint contains versioned JSON metadata and a NumPy archive. The
+lifecycle record points to the authoritative checkpoint only after the staged
+directory has been flushed and published. Digests verify both files, and
+unreferenced checkpoint directories are not authoritative.
 """
 
 from __future__ import annotations

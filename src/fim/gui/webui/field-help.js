@@ -33,43 +33,42 @@ const FIELD_HELP = {
         "multiplied by the ploidy you chose (diploid: 2 gene copies per " +
         "individual). Per-deme mode gives each deme its own count.",
     d: "Number of demes (islands). At least 2.",
-    seed: "Seed for this run's random number generator. The same seed and " +
-        "configuration always produce byte-identical results.",
+    seed: "Seed for this run's random number generator. The seed and " +
+        "configuration determine the simulated trajectory; reproducibility " +
+        "across machines also depends on the execution environment.",
     ploidy: "How many gene copies each individual carries: haploid 1, " +
-        "diploid 2, triploid 3, tetraploid 4. New configurations start " +
-        "diploid (change that in Settings). Choose it first; the " +
-        "simulator counts gene copies, so it multiplies your individuals " +
-        "by this number.",
+        "diploid 2, triploid 3, tetraploid 4. Settings controls the default. " +
+        "The simulator multiplies individuals per deme by this number.",
     n_mode: "Same for every deme uses one count of individuals for all " +
         "demes; per-deme lets each deme have its own.",
     m_mode: "How migration between demes is configured: a single scalar " +
         "rate, a named spatial topology (ring/linear/torus), or a full " +
         "d-by-d matrix.",
-    m_rate: "Migration rate — the fraction of each deme's own frequency " +
+    m_rate: "Migration rate — the fraction of each deme's frequency " +
         "vector replaced by migrants each generation (symmetric island " +
         "model).",
     m_topology: "ring wraps around in a circle; linear is a bounded chain " +
         "with no wraparound; torus is a rows-by-columns grid that wraps in " +
-        "both directions, so no deme is on an edge. Each deme migrates only " +
-        "with its actual neighbors (two for a ring, four for a torus).",
+        "both directions. Migration is restricted to adjacent demes " +
+        "(two for a ring, four for a torus).",
     m_topology_rate: "Each deme's total outgoing migration fraction, split " +
-        "evenly among its actual neighbors.",
+        "evenly among adjacent demes.",
     m_topology_rows: "Torus only: grid rows. Rows times columns must equal " +
         "d, and each side must be at least 3. Demes are numbered row by " +
         "row.",
     m_topology_columns: "Torus only: grid columns. Rows times columns must " +
         "equal d, and each side must be at least 3.",
     mu_mode: "Specify the per-generation mutation rate directly, or derive " +
-        "it from a per-base rate that scales with each locus's own length.",
+        "it from a per-base rate and each locus's length.",
     mu_value: "Per-gene-copy mutation probability per generation, applied " +
         "identically to every locus.",
-    mu_b_value: "Per-base-pair mutation probability; each locus's own mu " +
+    mu_b_value: "Per-base-pair mutation probability; each locus's mu " +
         "is derived from this and its length (Eq. 5) — edit this field, " +
         "not mu directly.",
-    migrant_sampling: "continuous: each generation's migrant count is an " +
-        "exact fraction of N. stochastic: it is drawn fresh from a " +
-        "Binomial distribution every generation.",
-    mutation_model: "infinite_alleles: every mutation creates a brand-new " +
+    migrant_sampling: "continuous: migration mixes allele frequencies " +
+        "deterministically. stochastic: migrant gene-copy counts are " +
+        "sampled from a binomial distribution each generation.",
+    mutation_model: "infinite_alleles: every mutation creates a distinct " +
         "allele. finite_alleles: mutations draw from a bounded set of " +
         "4^length possible states.",
     deme_weighting: "How E_ST weights demes: by population size, or " +
@@ -87,15 +86,14 @@ const FIELD_HELP = {
         "minus 1) the Dirichlet draw starts from.",
     initial_concentration: "Concentration parameter of the Dirichlet draw " +
         "— smaller values produce more uneven starting frequencies.",
-    equilibrium_convergence_window: "The fewest generations the ancestral " +
-        "population's own pre-run simulation runs, however quickly it " +
-        "reaches equilibrium.",
+    equilibrium_convergence_window: "Minimum generations for the ancestral " +
+        "population simulation before the split.",
     equilibrium_convergence_tolerance: "How close to equilibrium the " +
         "ancestral population must be, in H_S units. Sets how long its " +
         "pre-run simulation lasts: about ln(1/tolerance) relaxation times.",
     equilibrium_max_generations: "Safety cap on the ancestral " +
-        "population's own pre-run simulation, independent of the main " +
-        "run's own max generations. A run needing more stops with an error.",
+        "population simulation, independent of the main run's generation " +
+        "cap. Reaching this cap before the split criteria are met is an error.",
     cs_group: "Which statistic(s) to watch for convergence: any global " +
         "statistic. Checking more than one reveals the choice of when to " +
         "stop, at the foot of this panel. E_ST, K_ST, A_CGD, Delta and MI " +
@@ -108,20 +106,17 @@ const FIELD_HELP = {
         "still be trending or imprecise when the run ends: their reported " +
         "values and window means are not converged estimates. With one " +
         "watched statistic the two are the same.",
-    convergence_burn_in: "Generations discarded before averaging starts: " +
-        "the time the population needs to forget where it started. Leave it " +
-        "as auto and the app sets it from how slowly this population " +
-        "forgets its starting state (its migration, mutation and size) and " +
-        "the precision. A run that finishes in a hundred generations is a " +
-        "warning sign, not good news.",
+    convergence_burn_in: "Generations excluded before time averaging. auto " +
+        "derives the burn-in from the model's relaxation time and requested " +
+        "precision. Short burn-ins can retain initial-state bias.",
     convergence_estimate: "Which expected value a run estimates for D and " +
         "G_ST. Mean of values (the default): the average of the statistic " +
-        "itself, which is what published replicate means are. Value of " +
+        "itself. Value of " +
         "means: the statistic computed from the averaged heterozygosities, " +
-        "which is what the closed form predicts and stays defined near " +
+        "which corresponds to the closed-form prediction and stays defined near " +
         "fixation. Automatic: the second when the statistic is undefined " +
         "or its denominator is tiny in the averaging window. The two " +
-        "differ slightly (about 0.01 for D at one locus); every report " +
+        "can differ; every report " +
         "carries both.",
     statistic_precision: "Optional. A plus-or-minus for single watched " +
         "statistics, written NAME=number and separated by commas, in the " +
@@ -156,9 +151,8 @@ const FIELD_HELP = {
         "confidence level. A single run averages over time until it gets " +
         "there; a batch adds replicates until it gets there. Smaller is " +
         "more precise and takes longer.",
-    max_generations: "Hard cap on generations. Leave it as auto and the " +
-        "app sets it to a comfortable multiple of the time this " +
-        "population needs to settle. Reaching it without converging is " +
+    max_generations: "Hard cap on generations. auto derives the cap from " +
+        "the model's relaxation time. Reaching it without converging is " +
         "still reported as a valid, non-converged outcome.",
     // A native `<select>` has nowhere to hang a per-option tooltip, so
     // all four options' one-line descriptions live in this one field
@@ -168,11 +162,11 @@ const FIELD_HELP = {
     // machine; the compiled array-native choice gives up only
     // cross-machine bit-for-bit reproducibility), so the wording keeps
     // the choice about speed, which is all it actually is.
-    engine_backend: "Which engine runs the simulation. auto picks the " +
-        "fastest for your configuration and is the recommended choice. " +
+    engine_backend: "Which engine runs the simulation. auto selects an " +
+        "engine using deme count and locus capacity thresholds. " +
         "lineal is the single-threaded reference implementation; " +
         "generational is thread-parallel; generational-vector is " +
-        "array-native and fastest for large configurations. Every choice " +
+        "array-native. Every choice " +
         "computes the same statistics, and on one machine gives the same " +
         "results for the same seed.",
     n_replicates: "Number of independently seeded replicate runs. 1 means " +
@@ -181,13 +175,14 @@ const FIELD_HELP = {
         "reached: every watched statistic's cross-replicate confidence " +
         "interval is plus or minus the precision or narrower. Unchecked: " +
         "always run the full number of replicates.",
-    replicate_minimum: "Fewest replicates run before the batch may stop " +
-        "early, guarding against an early lucky-tight fluke.",
-    confidence: "How sure the plus-or-minus is, and the confidence level " +
-        "of the cross-replicate interval reported once a batch finishes. " +
-        "95% is the usual choice.",
+    replicate_minimum: "Minimum completed replicates before the batch " +
+        "may stop on its confidence-interval width.",
+    confidence: "Confidence level used to construct intervals. Under the " +
+        "interval assumptions, this is their coverage over repeated " +
+        "experiments, not the probability that this interval contains " +
+        "the true value.",
     max_workers: "How many replicates run in parallel. Not a model " +
-        "parameter — defaults to this machine's own CPU count.",
+        "parameter — defaults to this machine's CPU count.",
     max_concurrent_replicates: "Caps how many replicate lanes run at once " +
         "under the generational/generational-vector engines. Unlike " +
         "parallel workers, this is a real model parameter, and has no " +
@@ -206,8 +201,8 @@ const FIELD_HELP = {
         "infinite alleles. Only meaningful when the execution engine " +
         "above is auto; ignored otherwise.",
     significant_digits: "How many digits every displayed statistic rounds " +
-        "to. Cosmetic only — saved files always keep full precision.",
-    dark_mode_override: "Follow system matches your OS's own light/dark " +
+        "to. Display only — saved files keep full precision.",
+    dark_mode_override: "Follow system matches your operating system's light/dark " +
         "setting. Light or Dark overrides it for this app only, applied " +
         "immediately.",
 };

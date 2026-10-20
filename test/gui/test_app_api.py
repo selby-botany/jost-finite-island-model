@@ -5022,6 +5022,7 @@ def test_build_menu_has_exactly_file_run_and_help() -> None:
     assert help_items == [
         "Usage guide",
         "Configuration reference",
+        "Statistics reference",
         "Documentation on GitHub",
         "Check for updates",
         "About fim",

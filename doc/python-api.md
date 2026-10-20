@@ -1,9 +1,8 @@
 # Using `fim` from Python
 
-This guide is for a researcher who writes Python and wants to run the finite
-island model in a script or a notebook, save the results, and read them back.
-It needs no knowledge of the desktop app or the command line. Every code block
-below runs as written (a test runs them in order), so you can copy them.
+Run the finite island model in a Python script or notebook, save results,
+and reopen them for analysis. No desktop or command-line knowledge is
+required. The code blocks form a sequence checked by automated tests.
 
 - [Using `fim` from Python](#using-fim-from-python)
   - [Describe a run](#describe-a-run)
@@ -18,10 +17,9 @@ below runs as written (a test runs them in order), so you can copy them.
 
 ## Describe a run
 
-A run is described by a `RunSpec`: a frozen (immutable) value you build once
-and can print, compare, and reuse. It is grouped by what each part decides:
-the `Model` (what is simulated), `Stopping` (when a replicate counts as
-converged), and `Replication` (how many independent replicates).
+A `RunSpec` is an immutable specification that can be printed, compared,
+and reused. It groups settings into `Model` (population and processes),
+`Stopping` (replicate convergence), and `Replication` (replicate count).
 
 ```python
 import fim
@@ -42,7 +40,7 @@ spec = fim.RunSpec(
 Everything not stated has a default that matches the configuration file's:
 for example, `Stopping` watches `D` and `G_ST`, and `"auto"` (the default for
 `burn_in` and `max_generations`) derives the value from the model. Every field
-is checked when you build the object, and a mistake names its field:
+is validated at construction; errors name the field:
 
 ```python
 try:
@@ -66,8 +64,8 @@ print(result.run_id)
 print(len(result.replicates), result.batch_stop)
 ```
 
-Each replicate has its own seed, why it stopped, its final statistics, and the
-history of the statistics it watched:
+Each replicate records its seed, stop reason, final statistics, and watched
+statistic histories:
 
 ```python
 first = result.replicates[0]
@@ -105,9 +103,9 @@ picks between them), return identical results.
 
 ## Save a run and open it again
 
-Give `simulate` a directory in `Recording` and it publishes the run there, in
-the same layout the `fim run` command writes. The directory must not exist
-yet; a run is published whole or not at all.
+Set `Recording.directory` to publish results in the same layout as `fim run`.
+The target must not exist. Publication is atomic: the target directory
+appears only after the run finishes.
 
 ```python
 import tempfile
@@ -134,9 +132,9 @@ print(replicate.reanalyze().report["D"] == replicate.report["D"])
 
 ## Pause and resume a long run
 
-A `Workspace` is a results directory of runs that are checkpointed as they go.
-A run survives a closed laptop or a crash and resumes to exactly the numbers
-an uninterrupted run would have given. The path is always explicit.
+A `Workspace` stores checkpointed runs. After a pause or interruption,
+resuming from the latest committed checkpoint reproduces an uninterrupted
+run. The workspace path is explicit.
 
 ```python
 long_spec = fim.RunSpec(
@@ -206,8 +204,8 @@ Keyword arguments to `simulate` override the execution and recording it holds.
 
 ## Statistics and errors
 
-Statistic IDs (`"D"`, `"G_ST"`, `"H_S"`, and so on) come from one catalog,
-and a report holds exactly those the catalog lists:
+Statistic IDs (`"D"`, `"G_ST"`, `"H_S"`, and so on) come from a shared catalog.
+Reports use its keys:
 
 ```python
 from fim.statistics.catalog import report_keys
@@ -215,20 +213,19 @@ from fim.statistics.catalog import report_keys
 print(report_keys()[:5])
 ```
 
-Every exception the package raises on purpose is a `fim.FimError`.
+Expected package errors inherit from `fim.FimError`.
 `ConfigurationError` means the specification or file is invalid,
 `UnsupportedError` means it is valid but no available engine can run it (for
 example a backend that needs `numba`, without it installed), and both are also
-`ValueError`s. The package ships type information, so a type checker such as
-mypy checks your calls.
+`ValueError`s. The package includes type information for tools such as mypy.
 
 ## What decides a run's identity
 
-`fim.run_identity(spec)` is the run's ID. It depends on the science only: the
+`fim.run_identity(spec)` is the run's ID. It depends on the
 model, the stopping and replication settings, the analysis, and the seed. It
 does not depend on the backend, JIT, worker processes, or how much of the
-trajectory is stored. One setting looks like execution but is not:
-`Replication(max_concurrent=...)` changes the numbers of an adaptive batch,
+trajectory is stored. The concurrency setting
+`Replication(max_concurrent=...)` can change adaptive-batch results,
 because the first wave of replicates sets the averaging window of the later
 ones, so it is part of the identity.
 
@@ -243,6 +240,8 @@ itself.
 ## Where to go next
 
 - [The configuration reference](configuration.md) explains every setting.
+- [The statistics reference](statistics.md) links definitions and
+  interpretation to API functions and implementation source.
 - [The engine API](fim-simulator-functional-api.md) lists the lower-level
   modules (`fim.statistics`, `fim.model`, `fim.persistence`, `fim.viz`).
 - [The saved-run lifecycle](run-lifecycle.md) explains planned, paused, and

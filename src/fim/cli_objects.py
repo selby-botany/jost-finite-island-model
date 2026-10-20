@@ -1,21 +1,13 @@
-"""`fim object`: save, inspect, and control persisted Run objects.
+"""CLI handlers for creating and managing persisted Run objects.
 
-A Run object (`fim.persistence.run_objects`) holds a saved configuration of
-any validity and its lifecycle: `draft` while the configuration is invalid
-or incomplete, `planned` once it is valid, then executing, paused, or
-finished. Every command here calls `fim.run_service` or
-`fim.persistence.run_ownership`; none applies lifecycle rules itself.
-
-`start` and `resume` execute in the foreground. From another terminal,
-`pause` asks the running command to publish a checkpoint and stop, and
-`cancel` asks it to stop and keep its partial trajectory. SIGTERM pauses
-the command the same way; a second SIGTERM ends it at once. A command that
-is killed leaves the object `running` until any later command notices that
-its owner is gone and records it as `interrupted`; `resume` then continues
-from the latest checkpoint. A command killed after it published every
-artifact is recorded as `completed` instead, once its completion receipt
-verifies. A run stopped before its first checkpoint cannot resume; `clone`
-saves its configuration as a new object that starts from generation zero.
+Run objects store configurations and lifecycle state. Commands delegate
+lifecycle rules and execution to `fim.persistence` and `fim.run_service`.
+`start` and `resume` run in the foreground; `pause` checkpoints and stops,
+while `cancel` stops and retains partial data. Interrupted runs resume from
+their latest checkpoint. SIGTERM requests a pause; a second SIGTERM ends
+execution immediately. A later command reconciles a lost owner as interrupted,
+or as completed when its completion receipt verifies. An object without a
+checkpoint can be cloned to start a new run from generation zero.
 """
 
 from __future__ import annotations

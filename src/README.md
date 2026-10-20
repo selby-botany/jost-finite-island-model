@@ -1,27 +1,33 @@
 # Source tree
 
-The `fim` package implements a pure migration → mutation → drift pipeline,
+The `fim` package implements a migration → drift → mutation pipeline,
 statistics independent of the engine, incremental persistence, convergence
 monitoring, headless plots, and a thin command-line boundary.
 
 ## Module map
 
-- `fim/model/` — validated model values, initialization, and operators
-- `fim/statistics/` — diversity and differentiation formulas, and
+- [`model`](fim/model/) — validated model values, initialization, and operators
+- [`statistics`](fim/statistics/) — diversity and differentiation formulas, and
   across-replicate confidence intervals
-- `fim/config/` — named policy constants and numerical guards, with a
-  table (`config/README.md`) and a test that keeps magic numbers out of
+- [`config`](fim/config/) — named policy constants and numerical guards, with a
+  table ([`config/README`](config/README.md)) and a test that keeps magic numbers out of
   the other modules
-- `fim/convergence/` — stability and confidence-interval criteria, the
+- [`convergence`](fim/convergence/) — stability and confidence-interval criteria, the
   monitor, and stop outcomes
-- `fim/persistence/` — trajectory protocol, binary trajectory log, manifests
-- `fim/engine.py` — deterministic run loop
-- `fim/viz/` — botanist-facing and diagnostic plots
-- `fim/cli.py` — YAML and command dispatch
+- [`persistence`](fim/persistence/) — trajectory protocol, binary trajectory log, manifests
+- [`engine`](fim/engine/) — seeded run loops and backend selection
+- [`viz`](fim/viz/) — frequency scatters and diagnostic plots
+- [`cli`](fim/cli.py) — YAML and command dispatch
+- [`gui`](fim/gui/) — desktop bridge, background run coordination, and web assets
+- [`spec`](fim/spec/) — structured public run specifications
+- [`run_service`](fim/run_service.py) — saved-run lifecycle coordination
 
 Read the [developer guide](../doc/developer.md) before changing module
 boundaries. Exact public signatures and docstrings are in the
 [generated API reference](fim/API.md).
+The [model design](../doc/fim-simulator-design.md) defines the update
+equations; the [Python guide](../doc/python-api.md) documents supported
+library workflows.
 
 ## Quality gates
 
@@ -34,4 +40,4 @@ dev/bin/generate-api-docs
 dev/bin/check-doc-links
 ```
 
-`src/fim/API.md` is generated and committed. Do not edit it directly.
+[`src/fim/API.md`](./fim/API.md) is generated and committed. Do not edit it directly.

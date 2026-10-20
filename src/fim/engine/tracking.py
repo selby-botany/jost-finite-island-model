@@ -802,24 +802,10 @@ def pooled_g_st_and_d(
 ) -> tuple[float | None, float]:
     """Return ``(G_ST, D)``, aggregated across loci per `locus_aggregation`.
 
-    Two genuinely different estimators of the same two named statistics
-    (`SimulationParams.locus_aggregation`'s own docstring has the full
-    argument for why they differ and which this project recommends):
-
-    - `"ratio_of_means"` (the default): pool `H_S`/`H_T` across loci
-      first — `mean_h_s`/`mean_h_t`, already computed by the caller for
-      the report's own `H_S`/`H_T` fields, reused here rather than
-      recomputed — then compute one `G_ST`/`D` from those pooled values,
-      via the identical private cores `g_st`/`jost_d` use internally
-      (`g_st_from_demes`/`jost_d_from_within_and_total`), so this
-      function does not re-derive either formula independently.
-    - `"mean_of_ratios"` (this project's own original behavior): average
-      each locus's own already-computed `G_ST`/`D` — unchanged from
-      before this function existed.
-
-    `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST` are unaffected by either choice
-    (`SimulationParams.locus_aggregation`'s own docstring again) and stay
-    a plain per-locus mean regardless, computed by the caller.
+    With `"ratio_of_means"`, compute each statistic from pooled `H_S`
+    and `H_T` values supplied by the caller. With `"mean_of_ratios"`,
+    average the per-locus `G_ST` and `D` values. `E_ST`, `K_ST`, `H_S`,
+    `H_T`, and `H_ST` are averaged per locus regardless of this option.
     """
     if locus_aggregation == "mean_of_ratios":
         return (
@@ -839,34 +825,23 @@ def statistics_for_locus(
     *,
     statistics: Collection[str] | None = None,
 ) -> DifferentiationReport:
-    """Compute one locus's scalar statistics.
+    """Compute the requested differentiation statistics for one locus.
 
-    Builds the input `fim.statistics.differentiation.statistics_report`
-    actually expects — one dictionary per deme, mapping each allele
-    identity present at this locus to its frequency (what fraction of
-    that deme's gene copies at this locus currently carry it) — from
-    this state's own internal representation, then hands that off to do
-    the actual math. This function itself computes nothing statistical;
-    it only reshapes data.
+    Builds a normalized allele-frequency table from ``state`` and passes
+    it to ``fim.statistics.differentiation.statistics_report``. When
+    ``params.deme_weighting`` is ``"size"``, population-size weights are
+    supplied for ``E_ST``, ``Delta``, and ``MI`` only. Other statistics,
+    including ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``,
+    ``A_CGD``, ``Gs``, and ``Gd``, use equal deme treatment.
 
-    `deme_weighting` controls whether every deme counts equally toward
-    the reported statistics regardless of its own population size
-    (`params.deme_weighting == "equal"`), or whether a larger deme
-    counts proportionally more than a smaller one (`"size"`, the
-    default, weighting by `params.population_sizes`) — the same
-    "should a bigger group's own numbers count for more" choice that
-    comes up whenever averaging across groups of unequal size, with no
-    universally correct answer; which is more appropriate depends on the
-    actual scientific question being asked.
+    Args:
+        state: Population state to summarize.
+        params: Validated model parameters, including deme weighting.
+        locus_index: Zero-based locus position in the state.
+        statistics: Optional names of statistics to calculate.
 
-    `statistics`: forwarded verbatim to `statistics_report` — `None`
-    (the default) for `report_for_state`'s own final-report call, which
-    needs every field; `convergence_values`'s own per-generation call
-    passes `params.convergence_statistics` instead, so the fields no
-    watched statistic ever reads are skipped rather than computed and
-    discarded every generation (Phase 7 item 4, `FIM-24`/`FIM-32`; see
-    `statistics_report`'s own `statistics` parameter for the full
-    contract).
+    Returns:
+        A ``DifferentiationReport`` for the selected locus.
     """
     table: list[Mapping[Any, float]] = [
         {

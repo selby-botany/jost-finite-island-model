@@ -1,9 +1,9 @@
 # Nei distances in `fim`: two denominators, pairs and all demes
 
-`fim` reports Nei's genetic distance in eight forms, and the matching
-genetic identities. This guide explains what each form measures, why the
-forms can disagree, and how to read one result that surprises almost
-everyone the first time: a *negative* distance.
+`fim` reports Nei's genetic distance in eight forms, together with the
+corresponding genetic identities. This guide defines each form, explains
+why they can differ, and describes the conditions under which the
+all-demes geometric distance is negative.
 
 Mathematical symbols use $\TeX$; literal setting names, statistic keys,
 and code identifiers use backticks. Each displayed equation has one
@@ -31,7 +31,9 @@ Written first for a researcher reading `fim`'s results, with no
 programming assumed. The derivations and worked examples are for anyone
 who wants to check the arithmetic step by step. Statistic keys such as
 `NEI_D_PAIR_ARITH` are the literal names used in saved results and in the
-Settings dialog; they are not mathematical variables.
+Settings dialog; they are not mathematical variables. The
+[statistics reference](statistics.md) lists statistic definitions and
+result identifiers.
 
 ## The short version
 
@@ -170,10 +172,10 @@ the within-deme identities differ.
 
 ## A pair of demes, or all of them
 
-**Pair forms** (`NEI_D_PAIR_*`) compare two demes: whichever two the
-scatter plot shows, Deme 1 and Deme 2 unless you choose others. The values
-follow your choice live, in a finished run, and while scrubbing through
-generations. A deme compared with itself has distance 0.
+**Pair forms** (`NEI_D_PAIR_*`) compare two demes: the pair selected in the
+scatter plot, or Demes 1 and 2 by default. Values update with the selected
+pair in the live view, in completed runs, and across generations. A deme
+compared with itself has distance 0.
 
 **All-demes forms** (`NEI_D_ALL_*`) summarize every deme at once. At one
 locus, for $d$ demes, the numerator averages $J_{k\ell}$ over all
@@ -492,10 +494,9 @@ The formulas use only a few familiar operations:
   and averaging the resulting distances. Equations (N.11)–(N.19) spell
   out the two orders rather than hiding them in a formula name.
 
-The worked three-deme example above combines actual frequency vectors,
-squared probabilities, pair products, averages, a geometric mean, and
-the logarithm. Each intermediate number is shown so the negative
-distance can be checked without trusting the software.
+The worked three-deme example above combines frequency vectors, squared
+probabilities, pair products, averages, a geometric mean, and the
+logarithm. Each intermediate value is shown for independent verification.
 
 ## Formula sheet
 
@@ -514,8 +515,12 @@ per-locus pair distances, while `NEI_D_ALL_ARITH` is the pooled
 all-demes arithmetic-denominator distance.
 
 The identities use `fim`'s with-replacement convention,
-$J_k=\sum_i p_{k,i}^2$, as the rest of `fim` does (see
-[migration conventions](migration-conventions.md)).
+$J_k=\sum_i p_{k,i}^2$ (see [migration conventions](migration-conventions.md)).
+The [statistics reference](statistics.md) maps saved identifiers to
+definitions. The [Python API guide](python-api.md) and generated
+[API reference](../src/fim/API.md) document programmatic access. The
+pair and all-demes calculations are implemented by
+[`nei_pair_distance()` and `nei_all_demes_distance()`](../src/fim/statistics/genetic_distance.py).
 
 ## References
 

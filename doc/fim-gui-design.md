@@ -5,13 +5,13 @@
 - [Desktop GUI design](#desktop-gui-design)
   - [Who this document is for](#who-this-document-is-for)
   - [1. What the GUI is](#1-what-the-gui-is)
-  - [2. Why pywebview, not Tk](#2-why-pywebview-not-tk)
+  - [2. Rendering backend](#2-rendering-backend)
   - [3. Architecture overview](#3-architecture-overview)
   - [4. The `Api` bridge](#4-the-api-bridge)
     - [4.1 The `evaluate_js`/Promise pattern](#41-the-evaluate_jspromise-pattern)
     - [4.2 Bridge method surface](#42-bridge-method-surface)
   - [5. The unified run view](#5-the-unified-run-view)
-    - [5.1 From six screens to one view](#51-from-six-screens-to-one-view)
+    - [5.1 View structure](#51-view-structure)
     - [5.2 States: initial, running, completed](#52-states-initial-running-completed)
   - [6. The configuration form](#6-the-configuration-form)
     - [6.1 Two panels and the cardinality rule](#61-two-panels-and-the-cardinality-rule)
@@ -34,7 +34,7 @@
 ## Who this document is for
 
 Anyone maintaining or extending `fim.gui` — the desktop application.
-The companion [design document](fim-simulator-design.md) and its own
+The companion [design document](fim-simulator-design.md) and
 [engineering reference](fim-simulator-detailed-design.md) cover the
 simulator core and its release process; this document covers the
 desktop front end specifically: why it is built the way it is, how its
@@ -55,7 +55,7 @@ screen calls `fim.engine.simulate_params`, `fim.viz.scatter`, and
 already uses (see
 [`doc/fim-simulator-functional-api.md`](fim-simulator-functional-api.md))
 — and never duplicates validation, statistics, or run orchestration of
-its own. [`doc/developer.md`](developer.md)'s own architecture table
+its own. The [developer guide](developer.md) architecture table
 states that rule directly: "GUI: call `fim.engine.simulate_params`; do not
 duplicate model logic."
 
@@ -64,43 +64,24 @@ and `--graphical` invocations, exactly as it dispatches to `fim.cli`
 otherwise — the GUI is one more front end over the same engine, not a
 parallel implementation.
 
-## 2. Why pywebview, not Tk
+## 2. Rendering backend
 
-The GUI was originally built on Tk (Python's bundled toolkit) and later
-migrated to pywebview. The reasons the migration settled on pywebview
-rather than staying on Tk:
+pywebview embeds the platform's native web view: WKWebView on macOS,
+WebView2 on Windows, and WebKitGTK on Linux. The executable does not
+bundle a separate browser engine. Platform dependencies are documented
+in the [installation guide](../install/README.md).
 
-- **A real rendering engine for the visualizations that matter most.**
-  The scatter plots this project's own reference visualization is
-  built around (Lou Jost's `Dear-NolanMarch17Final.pdf` Figs. 1-2) are
-  naturally suited to Canvas-based client-side rendering — smooth
-  scrubbing/animation, coincidence-count marker scaling, and
-  common/rare coloring are all cheap in a browser engine and awkward to
-  reproduce well in Tk's own canvas widget.
-- **One shared visual language with the rest of the project's own
-  documentation**, which is already HTML/Markdown-based (`doc/`,
-  `src/fim/API.md`, `test/TESTS.md`) — the in-app help screen (§11)
-  reuses the exact same generated fragments a browser or GitHub already
-  renders, rather than a second, Tk-specific help representation.
-- **No new runtime dependency for the common case.** pywebview embeds
-  the platform's own native web view (WKWebView, WebView2, WebKitGTK)
-  rather than bundling a browser engine — the same "no heavy toolkit
-  in the one-file executable" constraint (detailed design §2.1) that
-  ruled out a full Electron-style front end in the first place.
-
-The migration kept every screen's own responsibility and every
-bridge-visible behavior unchanged; only the rendering technology
-underneath moved. `fim.gui.store.RunCancelledError` (§7) is named that,
-not the Tk-era prototype's `RunCancelled`, purely because ruff's `N818`
-(exception names end in `Error`) is part of this project's lint gate —
-a naming correction, not a behavior change.
+Canvas renders the allele-frequency scatter, coincidence counts, and
+trajectory playback. HTML and CSS provide the controls and layout.
+The Help screen displays HTML generated from the same Markdown sources
+as the repository documentation (§11).
 
 ## 3. Architecture overview
 
 | Module | Responsibility |
 |---|---|
 | `fim.launcher` | Dispatches to `fim.gui.app.main` (zero-argument, `--graphical`) or `fim.cli.main` otherwise. Does not change across front ends. |
-| `fim.gui.app` | pywebview bootstrap, native menu construction, and the `Api` bridge class (§4) — the GUI's own entry point. |
+| `fim.gui.app` | pywebview bootstrap, native menus, and the `Api` bridge class (§4). |
 | `fim.gui.config_form` | Pure, pywebview-free marshaling between `SimulationParams`, the form's `dict[str, str]`, and `SimulationParams.from_mapping`'s payload shape (§6). |
 | `fim.gui.runner` | Background-thread orchestration for a single scalar run (§7.1). |
 | `fim.gui.batch_runner` | Background-thread orchestration for a multi-replicate batch, using real OS worker processes (§7.2). |
@@ -156,57 +137,44 @@ as a structured `{"error": ...}` payload the page renders).
 | `start_run` | Validate the form, then dispatch to a scalar or batch run depending on `n_replicates`. |
 | `cancel_run` | Signal cancellation to whichever run is in flight (§7). |
 | `open_output_folder` | Open a completed run's output directory in the OS file browser. |
-| `get_starter_form` | Return `starter_form_values()` — the config form's own default values. |
+| `get_starter_form` | Return `starter_form_values()`, the default configuration form values. |
 | `validate_form` | Validate form values without starting a run (live field-level feedback). |
 | `get_initial_state_panels` / `get_initial_state_deme_pair_panel` | The `p_0` scatter shown before a run starts (§5.2). |
 | `load_yaml` / `save_yaml` | The File menu's "Open/Save configuration" actions. |
-| `get_default_max_workers` | The batch tab's own default worker-count suggestion. |
+| `get_default_max_workers` | Default batch worker count. |
 | `get_engine_backend_availability` | Whether the optional `numba` dependency is installed, so the execution-engine selector can relabel the two options that need it (§6.3). |
-| `get_significant_digits` / `set_significant_digits` | The View menu's numeric-precision setting. |
-| `get_live_deme_pair` / `set_live_deme_pair` | The deme-pair selector for a `d > 3` scatter (matching `fim.viz.scatter`'s own large-`d` fallback). |
+| `get_significant_digits` / `set_significant_digits` | Display precision in Settings. |
+| `get_live_deme_pair` / `set_live_deme_pair` | Selected demes for pairwise scatter plots. |
 | `list_recent_runs` | Screen 6's/File-menu's recent-runs list (§9). |
 | `open_run` | Reopen a persisted run into the unified results view. |
-| `compare_runs` | The Compare workspace: overlay two or more completed runs' own final-state scatter panels, naming which configuration field(s) differ (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §8). |
+| `compare_runs` | Overlay completed runs' final-state scatter panels and identify differing configuration fields. |
 | `get_animation_frames` / `get_animation_deme_pair_frames` | Sampled scatter coordinates for the scrubber (§8). |
 | `get_deme_pair_panel` / `get_batch_deme_pair_panel` | Re-render a completed run's scatter at a different deme pair. |
 | `ping` / `ping_from_worker` | The walking-skeleton round-trip proof, in-process and cross-process. |
 | `open_external_link` | Opens a URL in the OS default browser (Help menu, About). |
-| `check_for_updates` | The GUI's own "Check for updates" action, via `fim.update` (§12). |
+| `check_for_updates` | Check for updates through `fim.update` (§12). |
 | `get_about_info` | Version string and repository/documentation links for the About dialog. |
 
 ## 5. The unified run view
 
-### 5.1 From six screens to one view
+### 5.1 View structure
 
-The GUI originally had six separate screens: model input, running,
-scalar results, batch results, animation, and open/recent runs. The
-running, results, batch-results, and animation screens were later
-consolidated into one **unified run view** — a single page
-(`run-view-initial.js`, `run-view-running.js`, `run-view-completed.js`,
-`run-view-controls.js`) that renders differently depending on the
-run's own state, rather than four separate screen files the app
-navigates between. The scrubber (`scrubber.js`), previously its own
-fifth screen reached only by a separate "Animate" button, is folded
-directly into the `completed` state instead: the one time slider simply
-keeps existing across scalar and batch results, rather than requiring
-a dedicated screen and button to reach it.
+The run view uses three states: `initial`, `running`, and `completed`.
+The corresponding scripts are `run-view-initial.js`,
+`run-view-running.js`, and `run-view-completed.js`;
+`run-view-controls.js` handles shared controls. The view contains the
+scatter canvas, statistics tables, deme-pair selector, and trajectory
+scrubber. Scalar and batch results share this structure.
 
-Configuration input and the open/recent-runs picker remain their own
-areas — the rail's own Configure and Home destinations (§10) — only the
-run-in-progress and run-completed states were unified, since those four
-screens shared almost all of their own rendering logic (the same scatter
-canvas, the same six named statistics, the same deme-pair selector) and
-differed mainly in which state a given run happened to be in. (At the
-time this consolidation happened, Configure was still reached through a
-native menu's modals rather than the rail's own always-visible screen —
-see §10's own historical note; the unification described here predates
-that later navigation change and is unaffected by it.)
+Configure and Home are separate destinations for editing model inputs
+and browsing saved runs. Navigation history records the destination
+from which Help was opened.
 
 ### 5.2 States: initial, running, completed
 
 - **`initial`** (`run-view-initial.js`) — shown as soon as the form has
   valid values, before any run starts: the `p_0` scatter, axis labels,
-  the six named statistics, and a generation-0 progress bar, so the
+  the selected statistics, and a generation-0 progress bar, so the
   canvas is never blank at startup or after a form reset. Backed by
   `Api.get_initial_state_panels`.
 - **`running`** (`run-view-running.js`) — a live scalar or batch run in
@@ -220,7 +188,7 @@ that later navigation change and is unaffected by it.)
   "one state model, not two." Every statistic arrives already
   formatted server-side (matching `cli._format_optional`), except
   `Differentiation_q`, which is never server-formatted and appears only
-  on a batch's own confidence-interval display.
+  on a batch confidence-interval display.
 
 Every classic (non-module) script on this page shares one global
 scope: a `const` declared in one `screens/*.js` file is visible by bare
@@ -235,7 +203,7 @@ every element reference the other two also need.
 ### 6.1 Two panels and the cardinality rule
 
 `fim.gui.config_form` is a pure, pywebview-free set of functions
-marshaling `SimulationParams` to and from the model-input screen's own
+marshaling `SimulationParams` to and from the model-input screen's
 `dict[str, str]` of one string per field, and from there to a
 `dict[str, object]` payload ready for `SimulationParams.from_mapping`
 — the identical validator `fim.cli` already uses. Nothing in this
@@ -244,39 +212,19 @@ malformed string is coerced to the right Python type before being
 handed to that one validator, never re-checked against a second,
 GUI-local copy of a rule.
 
-**Historical note.** Earlier releases grouped these same fields into
-six per-section modal dialogs (Population, Migration, Mutation,
-Initial conditions, Convergence, Batch), reached from a "Configure"
-native menu. The botanist GUI redesign (design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md`) replaced every
-modal with the always-visible, two-panel Configure *screen* described
-in §10 below — FIM parameters (N, d, m, mu, seed) and Structure
-(everything else) — reached from the persistent rail, not a menu.
-`config_form`'s own marshaling functions are unchanged by that move;
-only what renders them (modal dialogs versus one scrollable screen)
-did.
-
-The cardinality rule decides what earns a live widget at all: `O(1)`
-and `O(d)`/`O(loci)`-sized fields do (a comma-separated text field
-faithfully represents either); a `d`-by-`d` migration matrix, a `loci`
-list with custom `locus_id`s, and a `d`-by-locus explicit `p_0` now do
-too, each as a real grid editor (botanist GUI design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4); a genuinely
-per-locus `mu` still does not.
+Configure is reached from the persistent rail. Scalar fields use
+individual controls; per-deme and per-locus lists use list or grid
+editors. Grid editors support a `d`-by-`d` migration matrix, custom
+locus identifiers, and explicit deme-by-locus starting frequencies.
+Arbitrary per-locus mutation rates require a configuration file.
 
 ### 6.2 Load-only badges and unrepresentable constructs
 
-`m`'s `"matrix"` mode, `loci`'s `"custom"` mode, and the initial-
-conditions selector's `"explicit_p0"` mode each replaced an earlier
-read-only "loaded from file" badge with a real, editable grid — a
-loaded configuration using any of the three now renders as real values
-in real editable cells, not a rejected re-run. The one remaining
-widget-unfriendly construct:
+The migration matrix, custom loci, and explicit initial-frequency modes
+support editing values loaded from a configuration file.
 
-- **A genuinely per-locus `mu`** raises a clear `ValueError` from
-  `params_to_form_values` instead — the same "edit the YAML file
-  directly" pattern this form has always used for a construct it
-  cannot represent at all. Per-locus rates that one per-base rate
+- **Arbitrary per-locus `mu`** raises `ValueError` from
+  `params_to_form_values`; edit these values in YAML. Per-locus rates that one per-base rate
   generates (`mu_b` over loci of unequal length, which
   `SimulationParams` keeps only in expanded form) are not "genuinely
   per-locus": `mu_from_params` recovers the `mu_b` and renders it in
@@ -284,74 +232,28 @@ widget-unfriendly construct:
 
 ### 6.3 The execution-engine selector
 
-The Structure panel's **execution engine** field sets
-`SimulationParams.engine_backend` — the first and, for now, only field
-of the "Advanced: execution & performance" group
-[`configuration.md`](configuration.md) documents under "Engine backend
-and JIT". Design doc:
-`20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`
-(`selby/restricted`).
-
-It is a plain `<select>` offering all four legal values, ordered so the
-two real choices come first:
+The **execution engine** selector sets
+`SimulationParams.engine_backend`. Settings provides defaults, and a
+configuration can override them. See the
+[configuration reference](configuration.md) for backend and JIT constraints.
 
 | Option | What it is |
 |---|---|
 | `lineal` | The single-threaded reference implementation every other backend's correctness is checked against. |
-| `auto` (**default**) | Picks whichever backend this project's own recorded benchmarks found fastest for the configuration at hand. |
+| `auto` (**desktop default**) | Selects a backend using deme-count and locus-capacity thresholds. |
 | `generational` | Thread-parallel; bit-identical to `lineal` for a given seed. |
-| `generational-vector` | Array-native; fastest for large configurations. Needs `numba`. |
+| `generational-vector` | Array-native backend; requires `numba`. |
 
-Three points worth stating plainly, because each one is a decision
-rather than an accident:
+All four values remain selectable so configurations round-trip without
+substituting a different backend. The bridge reports optional-dependency
+availability; options requiring an unavailable dependency are labeled
+accordingly. Platform packaging determines whether `numba` is bundled (§15).
 
-- **`auto` is the default, and `lineal` is not the fast option.**
-  `lineal` wins no configuration in this project's own recorded
-  benchmark history (`fim.model.params`'s own
-  `DEFAULT_AUTO_VECTOR_MIN_D`/`DEFAULT_AUTO_VECTOR_MAX_CAPACITY`
-  docstrings, re-measured across two machines); it is a correctness
-  reference, not a competitive execution choice. `auto` costs nothing
-  in reproducibility either — it resolves to a concrete backend and
-  stamps *that* into the run's own `manifest.json`, so a run started
-  with `auto` replays from its saved configuration exactly like one
-  that named a backend explicitly.
-- **All four values appear, even though a botanist realistically picks
-  between two.** A `<select>` with no `<option>` for a value cannot
-  render that value: the browser silently shows a different one, and
-  the next save writes *that* back. A hand-edited YAML or a reopened
-  manifest naming `generational`/`generational-vector` must round-trip
-  unchanged, so emphasis is carried by order and labeling rather than
-  by withholding values — the same "never silently misrepresent a real
-  field value" rule §6.2's per-locus `mu` case follows.
-- **`auto` and `generational-vector` are relabeled when `numba` is
-  missing.** Both need that optional dependency —
-  `generational-vector` imports it unconditionally, and `auto` resolves
-  to that backend for essentially every vector-eligible configuration
-  at the shipped thresholds. A source checkout installed without the
-  `[jit]` extra therefore gets both options relabeled "needs numba;
-  install `fim[jit]`" (`Api.get_engine_backend_availability`, §4.2)
-  rather than a selector promising something this install cannot do.
-  Relabeled, never disabled or removed, so the round trip above still
-  holds. Packaged builds bundle `numba` on the three platform/
-  architecture combinations `numba`/`llvmlite` actually ship a wheel
-  for — Apple Silicon macOS, Windows x64, and Linux x64 — so this path
-  is a source-checkout case there, but a real, expected case on Intel
-  macOS and Windows ARM64, where no packaged build bundles it at all
-  (§15).
-
-The other four fields of that group — `jit`, `auto_vector_min_d`,
-`auto_vector_max_capacity`, `max_concurrent_replicates` — stay
-unexposed at their `SimulationParams` defaults, on purpose rather than
-pending. The first three are machine-specific benchmark artifacts meant
-to be re-measured with `dev/bin/benchmark-engines`, a developer
-workflow this screen's audience has no use for, and `auto`'s own
-resolution needs none of them set by hand.
-
-The σ band toggle above it needs no gating against this selector: every
-engine backend computes a within-run σ band. Earlier in this feature's
-history only `lineal` did, and gating was designed for; the engine-side
-work lifting that restriction landed first, so the gate was never
-built.
+Settings exposes `jit`, `auto_vector_min_d`, `auto_vector_max_capacity`,
+and `max_concurrent_replicates`. Engine-specific controls appear when
+relevant. Threshold calibration is documented in the
+[maintainer scripts reference](../dev/bin/README.md).
+Every engine supports the within-run standard-deviation band.
 
 ## 7. Run orchestration
 
@@ -359,7 +261,7 @@ built.
 
 `fim.gui.runner` runs `fim.engine.simulate_params` — a single blocking call — on a
 `threading.Thread`, so a multi-thousand-generation run never freezes
-the GUI's own main thread. Progress and cancellation come from
+the GUI main thread. Progress and cancellation come from
 `fim.gui.store.GuiProgressStore`, a decorator around the
 `TrajectoryStore` protocol that holds a `threading.Event` and a
 callback closure directly — real Python objects the calling thread can
@@ -380,16 +282,15 @@ queue: a `threading.Event` and a callback closure cannot be pickled
 across a `ProcessPoolExecutor` worker boundary, so each worker's
 `LiveProgressStore` instead writes a small `.progress` sidecar file
 after each generation and checks a shared cancellation file before
-each write. The bridge polls every in-flight replicate's own sidecar
+each write. The bridge polls each in-flight replicate's sidecar
 on a coarser cadence (`_BATCH_POLL_INTERVAL_SECONDS`, 0.5s) than the
-scalar path's own in-process push interval, since each poll re-reads a
+scalar in-process push interval, since each poll re-reads a
 whole `trajectory.tlog` per currently-reporting replicate (a block scan, then
 one rebuilt generation; see `doc/trajectory-log.md`) — a real,
 if usually small, cost that grows with replicate count and how far
 each has run. A batch's terminal outcome (done, cancelled, or error)
-still arrives through the same in-process message queue as before,
-since that remains a single discrete event worth queueing; only
-per-generation progress moved off the queue and onto the filesystem.
+arrives through the in-process message queue. Per-generation progress
+uses filesystem sidecars.
 
 ### 7.3 Shared output-directory semantics with the CLI
 
@@ -400,26 +301,19 @@ temporary sibling of `output_directory`, published with one atomic
 rename only if the `with` block exits normally. A cancelled run raises
 `RunCancelledError` out of that block; an unexpected engine error
 raises one of a small set of expected engine errors. Either way,
-`atomic_directory`'s own exception handling discards the temporary
+`atomic_directory` exception handling discards the temporary
 directory and `output_directory` is never created — no GUI-specific
 cleanup code is needed for either outcome. The same four artifacts are
-written, in the same order, as the CLI's own
+written, in the same order, as the CLI's
 `_write_run_artifacts`: `trajectory.tlog` streamed generation by
 generation, then `report.json` and `scatter.png` once the run
 finishes, then — last, and only once both are flushed —
 `manifest.json`, augmented with each artifact's SHA-256 digest.
 
-`paths.default_output_directory()` names a directory by the current
-second (`run-YYYYMMDD-HHMMSS`, UTC), deliberately unchanged from the
-CLI's own pre-extraction naming — so two calls inside the same real
-second collide on the identical path. This bridge owns fixing that
-narrow reliability gap, not `fim.paths` itself: a user clicking "Run
-simulation" again within the same second a previous attempt's
-directory was created would otherwise see a confusing "output
-directory already exists" error for what is, from their perspective,
-an entirely fresh run. `start_run` retries at a short interval, up to
-a small maximum wait, for the wall clock to cross into a new second
-before giving up for real.
+`paths.default_output_directory()` uses `run-YYYYMMDD-HHMMSS` in UTC.
+Two calls in one second can select the same path. `start_run` uses a
+bounded wait for a distinct timestamp before reporting a directory
+collision.
 
 ## 8. Animation
 
@@ -433,10 +327,8 @@ literature visualization payloads (`allele_composition_payload`,
 `frequency_spectrum_payload`), not a rendered Matplotlib `Figure`: the
 scrubber ships the whole sampled set to the page once and drives
 play/pause/scrub entirely with client-side Canvas redraws across the
-main scatter canvas and supplemental cards, so nothing on this path
-needs to render anything at all — pre-computation itself is cheaper too,
-since building coordinate arrays costs a fraction of what building the
-same number of Matplotlib figures did.
+main scatter canvas and supplemental cards. Frame preparation supplies
+data; the client renders it.
 
 The scrubber (`webui/scrubber.js`) functions in dual modes: during a
 live scalar run, it operates in `"live"` mode, pinning by default to the
@@ -459,23 +351,23 @@ a second time.
 `fim.gui.recent_runs` scans `fim.paths.results_directory()` for
 `*/manifest.json`, reading each with `fim.persistence.manifest.
 read_manifest` (scalar) or `read_batch_manifest` (batch) — the same
-files `fim stats` and `fim run`'s own batch summary already default to.
+files used by `fim stats` and command-line batch summaries.
 A batch's manifest is listed but labeled distinctly (e.g. "batch
 (14/20)") rather than treated as something the picker can open
-directly: opening one specific replicate's own trajectory is the path
+directly: open an individual replicate's trajectory
 to any single replicate, since a batch-level manifest has no single
 trajectory of its own to verify or re-analyze.
 
 ## 10. Navigation: the persistent rail and native menus
 
 A persistent rail (`webui/screens/nav-rail.js`) is always visible along
-the window's own left edge: **Home**, **Configure**, **Explore**, **Run**,
+the window's left edge: **Home**, **Configure**, **Explore**, **Run**,
 **Results**, **Compare**, and — set apart at the bottom — **Help**, current
 destination highlighted, reachable from any screen including mid-run. Run
 and Results both point at the same unified run view §5 describes; Configure
 is the two-panel screen §6.1 describes (FIM parameters, Structure); Explore
 and Compare are their own destinations (theoretical-prediction lookup and
-multi-run overlay, respectively — see [`doc/usage.md`'s own GUI
+multi-run overlay, respectively — see the [desktop workflow
 table](usage.md#desktop-gui-fim-gui) for what each shows). A read-only
 parameter strip beneath the title bar always shows the current N/d/m/mu;
 clicking any of the four jumps straight to Configure.
@@ -492,77 +384,69 @@ business logic:
 - **Help** — the in-app help screen (§11), "Documentation on GitHub,"
   Check for updates, and About.
 
-**Configure and View — a six-section menu plus a "Significant digits"
-submenu, in this project's pre-redesign shape — are gone entirely, not
-merely renamed** (botanist GUI redesign doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §3.3): every field
-either menu used to reach, including the three former quick-toggle leaves
-("Deme weighting"/"Mutation model"/"Convergence statistic") and
-significant digits itself, now lives directly on the always-visible
-Configure screen the rail reaches, reachable the same way regardless of
-how quick a toggle it used to be.
+Configure provides model and convergence controls. Settings provides
+display preferences, including significant digits, and default run
+settings.
 
 ## 11. In-app help
 
-The Help screen (`webui/screens/help.js`) fetches one of
-`dev/bin/generate-help-html`'s own committed, body-only HTML fragments
-(`webui/help/usage.html`, `webui/help/configuration.html`, generated
-from `doc/usage.md`/`doc/configuration.md`) and injects it into the
-page — no bridge call, since the fragment is a static file already
-bundled alongside `index.html` (`packaging/fim.spec`'s own
-whole-`webui/`-tree `datas` entry needs no special-casing for it).
-`dev/lib/docslug.py`'s `anchor_for` is shared, unchanged, between
-`dev/bin/check-doc-links` and `dev/bin/generate-help-html`, so an
-in-app help link and the same heading's real GitHub anchor can never
-independently drift — one slugger, two callers.
+The Help screen ([help.js](../src/fim/gui/webui/screens/help.js)) loads
+committed HTML fragments generated by
+[`generate-help-html`](../dev/bin/generate-help-html):
 
-The Help screen is reachable from every other screen via the native
-Help menu, including mid-run — the one screen in this app that needs a
-real "return to wherever I was" instead of a fixed Back target, since
-every other screen has one obvious place Back returns to and Help does
-not.
+| Source | Bundled page |
+|---|---|
+| [Usage guide](usage.md) | `webui/help/usage.html` |
+| [Configuration reference](configuration.md) | `webui/help/configuration.html` |
+| [Statistics reference](statistics.md) | `webui/help/statistics.html` |
+
+These pages are bundled with the application and available offline.
+Links between them use `data-fim-help` and stay in the application.
+Links to mathematical guides, generated API entries, and source use
+`data-fim-external` and open through the bridge in the system browser.
+The generator and link checker share `dev/lib/docslug.py` for heading IDs.
+
+The native Help menu provides all three references. Statistic names
+in table rows and result-column headings are keyboard-accessible help
+buttons built by [`buildStatisticName`](../src/fim/gui/webui/meters.js).
+Each catalog entry's
+`help_anchor` selects its definition, which links to the mathematical
+guide, API symbol, and implementation. Non-catalog display quantities
+use `STATISTIC_REFERENCE_ANCHORS` in `statistics-catalog.js`.
+Help-button events do not activate the row's trajectory toggle.
+
+Back returns to the preceding screen, including when Help is opened
+during a simulation.
 
 ## 12. Shared logic with the CLI
 
-Four modules were extracted out of `fim.cli`'s own private helpers into
-shared, public homes specifically so the GUI performs the exact same
-operation as the CLI, not a second, independently maintained
-implementation of it:
+The GUI and command line share these modules:
 
-| Module | Extracted from | Shared by |
+| Module | Responsibility | Shared by |
 |---|---|---|
-| `fim.paths` | `cli._atomic_directory` and the CLI's output-directory naming | `fim run`'s own scalar/batch paths, and §7.1/§7.2 above |
+| `fim.paths` | Atomic directory publication and output-directory naming | Scalar and batch command-line and GUI runs |
 | `fim.update` | `fim update --check`'s GitHub Releases lookup | The GUI's "Check for updates" action (`Api.check_for_updates`) |
-| `fim.reanalyze` | `cli.reanalyze_trajectory` | `fim stats`, and the GUI's "open an existing run"/animation paths (§8, §9) |
-| `fim.persistence.report` | `cli.py`'s private `_write_json` | `report.json`'s writer, shared by `fim run`'s reports, `fim stats`'s re-analysis reports, and the GUI's own run reports |
+| `fim.reanalyze` | Recompute statistics from saved trajectories | `fim stats` and GUI run reopening and playback (§8, §9) |
+| `fim.persistence.report` | Write report JSON | Simulation reports and reanalysis in both interfaces |
 
-`fim.viz.scatter` gained a parallel set of "public" (no longer
-module-private) functions the GUI's bridge calls directly to get raw
-scatter coordinates for client-side rendering, entirely separate from
-`plot_frequency_scatter`'s own `Figure`-building path: `frequency_
+`fim.viz.scatter` provides functions the GUI bridge calls to obtain
+scatter coordinates for client-side rendering: `frequency_
 points`, `pooled_frequency_points`, `panels_from_points`/`scatter_
 panels`, and `pooled_scatter_panels`/`deme_pair_panel`.
 `plot_frequency_scatter` itself still calls the same underlying
-functions internally for the CLI's own `scatter.png` — one
-implementation, two consumers, not a second copy of the coordinate math
-for the GUI's own use.
+functions internally for the command-line `scatter.png`.
 
 ## 13. Milestone glossary
 
-Development work on this GUI was tracked against short milestone codes
-(`G<n>` for GUI milestones, `W<n>` for a later "unified run view"
-work stream) that still appear in a handful of test names and comments
-as a stable, searchable label for "the change that introduced this."
-This is not a complete project history — only the codes with a
-concrete, still-relevant meaning are listed:
+Test names and comments use the following labels for implementation areas:
 
-| Code | What it named |
+| Code | Implementation area |
 |---|---|
-| G0 | Extracting `fim.paths`/atomic-directory-publish out of `fim.cli` into a shared module (§12), including the unchanged `run-YYYYMMDD-HHMMSS` naming and the stricter "no pre-existing target directory at all" contract. |
-| G3 | The six named statistics (`D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`) every results view shows. |
+| G0 | Atomic directory publication through `fim.paths`, timestamp-based naming, and rejection of existing output directories (§12). |
+| G3 | The core differentiation and diversity statistics (`D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`). |
 | G11 | The configuration form's `mu`/`mu_b` scope: shared scalars only, with a genuinely per-locus `mu` handled by the load-only-badge/raise path instead of a dedicated widget (§6.2). |
-| W5 | `Api.start_run` dispatching to `fim.gui.batch_runner.start_batch_run`, and `fim.gui.app._drain_batch_messages` draining its messages — the batch path's own backend half. |
-| W6 | `fim.gui.animation.pre_render_frames` returning plain coordinate data, and `Api.get_animation_frames` as its own bridge caller (§8). |
+| W5 | Batch dispatch through `start_batch_run` and progress delivery through `_drain_batch_messages`. |
+| W6 | Coordinate preparation through `pre_render_frames` and delivery through `Api.get_animation_frames` (§8). |
 
 ## 14. Testing
 
@@ -570,7 +454,7 @@ Full detail is in
 [`doc/fim-gui-test-plan.md`](fim-gui-test-plan.md): the `gui` pytest
 marker's meaning, the file-by-file test coverage table, and the
 recurring `evaluate_js`/structural-assertion testing patterns this
-package's own suite uses.
+package uses.
 
 ## 15. Packaging
 
@@ -581,24 +465,12 @@ are covered in
 [`doc/fim-simulator-detailed-design.md`](fim-simulator-detailed-design.md)
 §6.
 
-One packaging fact belongs here rather than there, because it is the
-execution-engine selector's own prerequisite: three of each workflow's
-five packaging jobs install the `[jit]` extra, so a packaged build for
-Apple Silicon macOS, Windows x64, or Linux x64 bundles `numba` and the
-selector's recommended `auto` default actually works in the artifact a
-tester or user downloads there. Without it, `auto` would fail nearly
-every real run with "needs the optional numba dependency" — a
-recommendation the product could not keep. The download is
-correspondingly larger on those three platforms. The other two
-(Windows ARM64, Intel macOS) do not bundle `numba` at all — confirmed
-live (`beta.yml` run `34733912094`) that `numba==0.67.*`'s own required
-`llvmlite` release ships no wheel for either, a real upstream gap this
-project cannot pin its way around (`pyproject.toml`'s own `[jit]`
-comment has the full citation) — so a build for either platform
-relabels the two `numba`-dependent options in the selector itself
-(§6.3), the identical mechanism a source checkout without `[jit]`
-installed already uses, rather than promising something that platform
-cannot do.
+Apple Silicon macOS, Windows x64, and Linux x64 builds install the
+`[jit]` extra and bundle `numba`. Windows ARM64 and Intel macOS builds
+omit it because the pinned dependency set lacks compatible binary
+wheels. The engine selector labels options that require an unavailable
+dependency (§6.3). The dependency declarations and platform constraints
+are recorded in [`pyproject.toml`](../pyproject.toml).
 
 ## Metadata
 
@@ -611,23 +483,6 @@ generation-date: 2026-08-30
 generator-responsibility: primary
 ```
 
-### Revisions
-
-Documentation drift audit: corrected §6.1 (the six-tab modal system was
-replaced by the two-panel Configure screen), §10 (the native menu bar
-shrank from five menus to three — File/Run/Help — with Configure and
-View removed entirely once every field they reached moved onto the
-rail's own always-visible Configure screen), and §5.1 (the
-open/recent-runs picker and configuration input are now the rail's own
-Home and Configure destinations, not menu actions). This document still
-does not fully describe the persistent rail's own remaining
-destinations (Explore, Compare, Home's recent-runs enrichment), the
-Configure screen's own field-level tooltips, the light/dark preference,
-the first-launch welcome panel, the Presets "View YAML" action, or the
-trajectory panel's σ-band/predicted-equilibrium overlays — all shipped
-since this document's own last full pass (see `CHANGELOG.md`'s own
-`[Unreleased]` section) — a fuller pass covering those is still needed.
-
 ```text
 generator-name: Claude Code
 generator-version: Claude Sonnet 5
@@ -636,11 +491,6 @@ generator-provider: Anthropic
 generation-date: 2026-09-11
 generator-responsibility: revision
 ```
-
-Updated §8 (Animation): documented dual-mode time scrubber (live-tracking
-with historical inspection during runs, replay in completed state) and
-supplemental literature visual payload sampling (`allele_composition`,
-`frequency_spectrum`) on animation frames.
 
 ```text
 generator-name: Claude Code

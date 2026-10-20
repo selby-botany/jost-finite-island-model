@@ -10,7 +10,7 @@ matrices, convergence histories, and full trajectories. JSONL files are
 losslessly compressed and split into parts no larger than 50 MiB for Git.
 The desktop app restores them automatically when you open an example.
 
-The desktop app ships every example as a read-only run in its Examples
+The desktop app includes every example as a read-only run in its Examples
 experiment, grouped by the classes in [`classes.yaml`](classes.yaml)
 (see [The Examples experiment](../usage.md#the-examples-experiment)).
 The [Configure card examples](#configure-card-examples) are also
@@ -23,28 +23,25 @@ fim run doc/examples/<example>/config.yaml \
     --output results/<example> --quiet
 ```
 
-Every example names `engine_backend: auto`, the recommended choice, except the
+Every example names `engine_backend: auto`, except the
 two that exist to show one engine. The committed outputs were produced by the
 engine `auto` resolved to (the manifests record it), and `lineal`, the
 reference implementation, reproduces them exactly: the slow test
 `test/validation/test_examples_auto_backend.py` reruns each example on
 `lineal` and requires identical reports. The `report.json` (or
-`summary.json`) you get matches the committed one for the same numerical
+`summary.json`) matches the committed artifact in the same numerical
 environment. On every backend, FFT/BLAS reductions used for evidence-window
 diagnostics and the system logarithm used for Shannon-entropy statistics can
 round differently across platforms. Archive checks allow only tightly bounded
 rounding in `window_statistics`, `E_ST`, and `MI` floats (relative `1e-12`,
 absolute `1e-14`); keys, discrete values, and other report fields remain exact.
-Most examples finish in a few seconds to
-about eight minutes. The calibration examples take longer: Golden Part VI
-about two and a half minutes and Dear-Nolan high about two minutes. These
-times were measured on `lineal` with several examples running at once on a
-development machine; an idle machine is faster, and `auto` (which picks a
-vectorized engine) is usually much faster still. Dear-Nolan low runs about
-2.6 million generations to convergence in about three and a half minutes
-under `auto`, and about an hour and three quarters on `lineal`. Seven examples
-thin their saved trajectory (every generation to 5,000, then one in ten) to keep
-the committed files small.
+Runtime depends on configuration, backend, host, and concurrent workload.
+The calibration examples take longer than most; their individual READMEs
+describe recorded runtimes. Dear-Nolan low runs about 2.6 million
+generations to convergence in about three and a half minutes under `auto`,
+and about an hour and three quarters on `lineal`. Seven examples thin their
+saved trajectories (every generation through 5,000, then one in ten) to
+limit committed file size.
 
 For maintainers: `dev/bin/regenerate-example-outputs` reruns the examples
 and replaces their committed outputs, and `test/test_doc_examples.py`
@@ -59,30 +56,30 @@ and replaces their committed outputs, and `test/test_doc_examples.py`
 Four demes, N = 100, moderate migration (m = 0.01) and mutation
 (mu = 0.005). D converges at generation 176,575, averaged over a
 176,127-generation window: D = 0.608 ± 0.004 and G_ST = 0.173 ± 0.001.
-Published ensemble values (100 replicates, multi-locus engineered
-start): G_ST ≈ 0.176, D ≈ 0.604 — see the example's own README for why
-one locus needs such a long window, and where the real, calibrated
-multi-locus/multi-replicate agreement lives.
+Published ensemble values (100 replicates, multi-locus initial state):
+G_ST ≈ 0.176, D ≈ 0.604. The example README discusses the single-locus
+averaging window and compares the result with the multi-locus,
+multi-replicate calibration.
 
 ### [dear-nolan-low](dear-nolan-low/README.md)
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
-(mu = 0.000001). **This example runs to convergence:** it stops at generation 2,625,168
+(mu = 0.000001). This example runs to convergence and stops at generation
+2,625,168
 (about three and a half minutes under `auto`) with `converged_on: D`. D's
 average is 0.0390 ± 0.0031 over 74 effective samples, against the theoretical
 0.0385; G_ST from the averaged heterozygosities is 0.9695 ± 0.0005, against
 theory 0.9695. Jost's published targets (200 runs) are D ≈ 0.04 and
-G_ST ≈ 0.97. D and G_ST are
-not equally noisy for this scenario, see its own README.
+G_ST ≈ 0.97. The example README compares the uncertainty of D and G_ST
+for this scenario.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)
 
 **Dear-Nolan high-migration botanical scenario** — the exact equilibrium
 validation case from `test/validation/test_simulator_equilibrium.py`.
 The test derives a near-equilibrium initial state
-(`_dn2_equilibrium_start`) so the engine is started at the fixed point
-rather than slowly integrating from an undifferentiated state;
+(`_dn2_equilibrium_start`) from the identity-recursion fixed point.
 `reproduce.py` writes that state into `config.yaml` as an explicit `p_0`.
 Five replicates of 30 generations land at mean G_ST 0.0219 ± 0.0001 and
 mean D 0.908 ± 0.003, matching the predicted equilibrium (G_ST 0.0220,

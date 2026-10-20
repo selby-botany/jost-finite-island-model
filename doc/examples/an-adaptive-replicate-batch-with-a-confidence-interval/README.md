@@ -31,13 +31,11 @@ under `engine_backend: auto`, not a pool of workers.
 
 ## Why eight loci and `precision: 0.03`
 
-One `precision` states the batch's goal: the interval across replicates is
-plus or minus 0.03 at 95% confidence. Each replicate pools eight loci. An
-earlier version used one locus per replicate at the default 0.01, and a single
-locus is noisy: each replicate then needed tens of thousands of generations
-and the batch took hours. Eight loci make each replicate much less scattered
-(standard deviation 0.02 across replicates), so 0.03 is reached with the
-minimum of 10.
+The `precision` value sets a target half-width of 0.03 for each 95% interval
+across replicates. Each replicate pools eight loci, reducing between-replicate
+variation relative to a single-locus estimate. This configuration reaches
+the target at the minimum of 10 replicates. A stricter precision target or a
+single-locus configuration may require more simulation.
 
 ## Run
 

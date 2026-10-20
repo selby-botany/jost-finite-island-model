@@ -1,24 +1,7 @@
-"""Read the bundled examples catalog for the Examples dialog and presets.
+"""Read bundled examples for the Examples dialog and configuration form.
 
-Every `doc/examples/<id>/` directory is one example.
-`dev/bin/build-examples-catalog` writes them, with the class tree from
-`doc/examples/classes.yaml`, into `webui/examples/catalog.json` at commit
-time (design doc
-`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
-§4.1, `selby/restricted`). `packaging/fim.spec` bundles the whole
-`webui/` tree into every packaged executable, so the catalog exists both
-in a development checkout and inside a frozen application, while
-`doc/examples/` itself is not bundled.
-
-An example's configuration may carry labels (`name`, `description`,
-`class`) and internal attributes (`_read_only` and any other key that
-starts with `_`). `split_configuration` separates them from the model
-keys, so a loaded example reaches the Configure form as an ordinary,
-editable configuration (design §1, "Consequence").
-
-`list_presets` and `get_preset` are the older, flat view of the same
-catalog, kept as thin aliases until their callers (the File menu's
-"Load example…" picker) move to the Examples dialog (design §5).
+The packaged catalog contains example metadata and configuration files.
+Legacy preset lookup functions provide a flat view of the same catalog.
 """
 
 from __future__ import annotations

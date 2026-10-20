@@ -1,27 +1,9 @@
-"""Parameter sweeps: what varies, which points result, and which are valid.
+"""Define parameter sweeps and enumerate validated configuration points.
 
-A sweep is a Study generated from a specification instead of assembled by
-hand (`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`). This module is the pure half: it turns a
-`SweepSpec` (a complete base configuration plus the axes that vary) into
-an ordered list of validated points, each a whole configuration with a
-deterministic `run_id`. Nothing here runs a simulation, touches disk, or
-imports the GUI, so the command line, the desktop app and any future
-service share it.
-
-Three ideas carry the design:
-
-- **Plan before running.** `enumerate_points` builds and validates every
-  point up front. A combination that cannot be run (a torus whose
-  `rows * columns` differs from `d`) is reported with its reason, never
-  discovered at point 47.
-- **Points are content-addressed.** A point's `run_id` is the hash of its
-  whole configuration (`fim.engine.deterministic_run_id`), so a resumed or
-  overlapping sweep can recognize a point it already computed.
-- **`N` counts individuals.** `N` means individuals per deme in the base
-  configuration and on an axis alike, the number the botanist sees
-  everywhere else in the app; the base's required `ploidy` turns it into
-  gene copies when a point is built (`SimulationParams.from_mapping`).
+A `SweepSpec` combines a base configuration with parameter axes.
+`enumerate_points` validates each combination before execution and assigns a
+deterministic run ID from its complete configuration. This module performs no
+simulation or filesystem operations.
 """
 
 from __future__ import annotations

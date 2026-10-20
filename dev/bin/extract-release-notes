@@ -1,39 +1,9 @@
 #!/usr/bin/env python3
-"""Extract one version's release notes from a Keep a Changelog file.
+"""Extract one release section from a Keep a Changelog file.
 
-`CHANGELOG.md` is written in the "Keep a Changelog" format: one `##
-[X.Y.Z]` heading per released version, each followed by the bullet points
-describing what changed in that release, down to the next `##` heading or
-a trailing block of `[version]: URL` reference links at the very end of
-the file.
-
-This script pulls out just one version's section -- the bullet points
-between its own `## [X.Y.Z]` heading and whichever comes next (another
-release heading, or the reference-link block) -- and prints exactly that
-text, with the surrounding heading and everything else stripped away.
-
-Why this exists: when a GitHub Release is published for a tag, GitHub
-needs release notes to show on that release's own page. Hand-copying
-the relevant `CHANGELOG.md` section into the release form every time
-is both tedious and a chance to copy the wrong section, or to let the
-two texts quietly drift apart over releases. Since the changelog is
-already the authoritative, hand-written record of what changed --
-maintained as part of normal development, not written specially for
-each release -- this script is run once per release, by the automated
-release workflow, to generate the GitHub Release body directly from it.
-There should never be a reason to maintain the release notes as a
-second, separate piece of writing.
-
-Usage:
-    dev/bin/extract-release-notes v1.2.0
-    dev/bin/extract-release-notes 1.2.0 --changelog path/to/CHANGELOG.md
-
-The version tag's leading "v" (if present, as in a real Git tag like
-"v1.2.0") is stripped automatically before searching, since
-`CHANGELOG.md`'s own headings are written as `## [1.2.0]`, without the
-"v". Prints the extracted section to stdout; prints an error to stderr
-and exits with status 1 if the changelog cannot be read, has no section
-for the requested version, or that section is empty.
+The requested version may include a leading `v`; the matching section body is
+written to standard output without its heading. An unreadable changelog, a
+missing version, or an empty section produces an error and exit status 1.
 """
 
 from __future__ import annotations

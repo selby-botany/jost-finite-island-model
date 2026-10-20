@@ -1,34 +1,9 @@
-"""Progress reporting and cancellation for a background run (§7 of the GUI design doc).
+"""Progress reporting and cancellation support for background runs.
 
-`fim.persistence.store.TrajectoryStore` is a `Protocol` (structural
-typing, not an ABC), and `fim.engine.lineal.run_one`'s generation loop already
-calls `store.write_generation(...)` unconditionally, every generation,
-with no `try`/`except` around it — a clean, pre-existing extension point
-`GuiProgressStore`/`LiveProgressStore` decorate rather than a change to
-`fim.engine` itself.
-
-Named `RunCancelledError`, not an earlier prototype's `RunCancelled` —
-ruff's `N818` (exception names end in `Error`) is part of this
-project's lint gate (`doc/fim-gui-design.md` §2).
-
-Two decorators live here, for two execution shapes (`doc/
-fim-gui-design.md` §7.1, §7.2):
-
-- `GuiProgressStore` — a scalar run, one in-process background thread.
-  Holds a `threading.Event` and a callback closure; both are real
-  Python objects the calling thread can read/write directly, because
-  nothing here ever crosses a process boundary.
-- `LiveProgressStore` — a batch replicate, running inside its own
-  `ProcessPoolExecutor` worker process. A `threading.Event` and a
-  closure cannot be pickled across that boundary, so this decorator
-  holds only plain, picklable `Path`s instead: it *writes* a small
-  progress sidecar file after each generation and *checks* a shared
-  cancellation file before each write, rather than calling back into
-  the parent process directly (which nothing here could safely do).
-  The parent discovers progress by polling the sidecar, and requests
-  cancellation by creating the cancellation file — both plain
-  filesystem operations, needing no cross-process synchronization
-  primitive at all.
+`GuiProgressStore` reports scalar-run progress through an in-process callback.
+`LiveProgressStore` reports worker-process progress through sidecar files and
+checks a shared cancellation file. Both implement the trajectory-store
+interface used by the simulation engine.
 """
 
 from __future__ import annotations

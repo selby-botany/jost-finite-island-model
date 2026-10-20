@@ -1,54 +1,9 @@
-"""Researcher-facing command-line interface for the simulator.
+"""Command-line interface for simulation, analysis, and run organization.
 
-This is what actually runs when you type `fim` at a terminal — the part
-of the program that reads what you typed, figures out which of the
-things you asked for, and calls the right code to do it. Its commands,
-each its own subsection below:
-
-- `fim init` — write out a starter configuration file (a filled-in
-  example, ready to run or edit) so a new user has something concrete to
-  start from rather than an empty file and a blank page of documentation
-  (`_command_init`).
-- `fim run CONFIG` — actually run a simulation from a configuration file
-  and write its results to disk. Dispatches to one of two paths
-  depending on the configuration's own `n_replicates` (`_command_run`):
-  a single simulation (`_command_run_scalar`) or a whole batch of
-  independent, differently seeded repeats of the same configuration
-  (`_command_run_batch`) — see `fim.engine`'s own docstring for why
-  running several repeats matters at all. The configuration's labels
-  (`name`, `description`, `class`) and `--name`/`--description` attach
-  optional metadata to the completed run; `--study` adds it to an
-  existing Study once it finishes (`_record_run_organization`).
-- `fim study create/add-run/list/delete/copy` — organize completed runs
-  into a named Study, a purely local bookkeeping operation with no
-  engine involved (`_command_study`; `fim.persistence.groups`). See
-  `20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`
-  (`selby/restricted`) for the full Run/Study/Experiment design.
-- `fim experiment create/add-study/list/delete/copy` — the identical
-  bookkeeping one level up, grouping Studies into a named Experiment
-  (`_command_experiment`; `fim.persistence.groups`).
-- `fim sweep plan/run/resume/report` — run one configuration over a
-  parameter space as a single Study (`fim.cli_sweep`; `fim.sweep`).
-- `fim object create/edit/list/status/start/resume/pause/cancel/delete` —
-  save a configuration of any validity as a Run object (`draft` until it
-  is valid, then `planned`) and execute it with durable checkpoints, so a
-  paused or interrupted run continues exactly (`fim.cli_objects`;
-  `fim.run_service`).
-- `fim stats TRAJECTORY` — recompute statistics from a run's own saved
-  data, for any generation, without re-running the simulation
-  (`_command_stats`; see `fim.reanalyze`'s own docstring for what
-  "re-analysis" means and why it is useful).
-- `fim update --check` — the one place this whole program ever makes a
-  network connection: ask GitHub whether a newer release exists
-  (`_command_update`; see `fim.update`'s own docstring for the full
-  reasoning and the security posture behind it).
-
-This file's own job stops at parsing arguments, calling the right
-function, and printing the result or a plain-language error message —
-the actual scientific work (running the simulation, computing
-statistics) always lives in `fim.engine`/`fim.reanalyze`, never here.
-That separation is what lets the exact same underlying logic also power
-the desktop app (`fim.gui`) without duplicating it.
+The `fim` commands parse configuration and options, delegate simulation,
+analysis, and persistence to package modules, and report results. The
+interface includes `init`, `run`, `stats`, `study`, `experiment`, `object`,
+`sweep`, and `update`.
 """
 
 from __future__ import annotations
@@ -123,7 +78,7 @@ logger = logging.getLogger(__name__)
 
 STARTER_CONFIG = """\
 # Finite island model starter configuration
-# N is individuals per deme; ploidy says how many gene copies each carries.
+# N is individuals per deme; ploidy sets gene copies per individual.
 # 225 diploid individuals = 450 gene copies.
 N: 225
 ploidy: diploid
@@ -138,45 +93,14 @@ initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: equal
 convergence_statistic: [D, G_ST]
-# `auto` derives the burn-in and the generation cap from how fast this
-# population forgets its starting state (its migration, mutation and size).
-# Write a whole number instead to choose your own.
+# `auto` derives burn-in and the generation cap from model parameters.
+# Set an integer to choose a fixed value.
 convergence_burn_in: auto
 precision: 0.01
 max_generations: auto
-# Explicit, not merely `DEFAULT_N_REPLICATES`'s own value (200) --
-# a real, reported request: the target default behavior for a new
-# configuration is to converge on confidence intervals, so a fresh
-# `fim init`/desktop-app starter should already be a real, CI-producing
-# batch out of the box, not a single scalar run. This reverses an
-# earlier version of this file's own choice, which pinned this to `1`
-# specifically so a first-time user's very first `fim run` stayed one
-# quick, single run they could read the result of immediately rather
-# than an unannounced 200-replicate batch -- that reasoning no longer
-# wins against the newer "converges on CIs by default" product
-# decision. Explicit rather than left absent purely for readability:
-# an absent `n_replicates` already means the identical 200
-# (`SimulationParams.__post_init__`'s own docstring), so this line
-# changes nothing a reader could not already infer, it just states it.
+# Number of independent replicates to run.
 n_replicates: 200
-# Explicit, not merely `PARAMETER_DEFAULTS["engine_backend"]`'s own
-# value (`"lineal"`): the desktop app's own Configure screen already
-# defaults a fresh form to `"auto"`, the choice this project's own
-# recorded cross-machine benchmark history (`params.py`'s own `DEFAULT_
-# AUTO_VECTOR_MIN_D`/`DEFAULT_AUTO_VECTOR_MAX_CAPACITY` docstrings)
-# never found `"lineal"` winning at any tested configuration -- `fim
-# init`'s own starter config is the CLI's identical "what does a new
-# user start from" moment, so it makes the same recommendation rather
-# than silently putting a terminal user on the one backend this
-# project's own evidence treats as a reference implementation, not a
-# competitive execution choice (design doc `20260911-claude-sonnet-5-
-# gui-engine-backend-selector-design.md`, `selby/restricted`, "Current
-# state"). A batch (n_replicates above 1) under this same `auto` choice
-# now runs correctly too, for the equally natural next step of bumping
-# n_replicates from here (`20260914-claude-sonnet-5-non-lineal-batch-
-# execution-design.md`, `selby/restricted`) -- it once failed with a
-# confusing, unrelated-looking error, and briefly failed with a clearer
-# but still overly broad one before that gap was actually closed.
+# Select the execution backend automatically from the configuration.
 engine_backend: auto
 """ + expert_template()
 
@@ -231,31 +155,13 @@ def _read_config_mapping(path: Path | str) -> Mapping[str, Any]:
 def main(argv: Sequence[str] | None = None) -> int:
     """Parse command-line arguments and dispatch one operation.
 
-    This is the single entry point every invocation of `fim` from a
-    terminal reaches (via `pyproject.toml`'s own `[project.scripts]`
-    entry, by way of `fim.launcher`) — it parses whatever was typed,
-    figures out which command (see this module's own docstring, above)
-    was requested, and calls the matching function (`_dispatch_command`).
-
-    Every error that any command can reasonably raise on genuinely bad
-    input (a malformed configuration file, an invalid parameter
-    combination, a missing file, and so on) is caught here in one place
-    and turned into a short, plain "fim: error: ..." message on a single
-    line, with an exit status a shell script can check, rather than a
-    long, intimidating Python traceback — this project's programming
-    mistakes should look like tracebacks (so they get noticed and
-    fixed), but a *user's* mistake (a typo in a config file, an
-    out-of-range value) should look like a normal, readable command-line
-    error, the same way a real command-line tool a person did not write
-    themselves would report it. The specific exception types listed are
-    exactly the ones the actual work below (`fim.engine`, YAML parsing,
-    file I/O) can raise for an ordinary, expectable mistake; anything
-    else escaping this function uncaught is treated as a real bug in
-    this project's own code, and is deliberately allowed to surface as
-    a full traceback instead of being hidden behind a generic message.
+    Expected input, validation, and file-operation errors are reported as
+    concise command-line messages with a nonzero status. Unexpected
+    exceptions propagate with a traceback.
 
     Args:
-        argv: Arguments excluding the program name, or ``None`` for ``sys.argv``.
+        argv: Arguments excluding the program name, or ``None`` to use
+            ``sys.argv``.
 
     Returns:
         Process-style exit status.
@@ -1139,29 +1045,12 @@ def _terminable(command: Callable[[], int]) -> int:
 
 
 def _format_optional(value: float | None) -> str:
-    """Format an optional statistic for terminal output.
-
-    Only `G_ST` can genuinely be `None` (see
-    `fim.engine.FinalReport`'s own docstring for why) — printed here as
-    the plain word "undefined" rather than Python's own "None", which
-    would look like a bug to a reader who does not already know this is
-    an expected, legitimate outcome for this one specific statistic.
-    """
+    """Format a statistic, using `undefined` for a missing value."""
     return "undefined" if value is None else f"{value:.6g}"
 
 
 def _parser() -> argparse.ArgumentParser:
-    """Build the complete command parser.
-
-    Defines the exact text of every command, flag, and `--help` message
-    `fim` shows at a terminal — the four subcommands described in this
-    module's own docstring, above, each with its own arguments. This
-    function only ever *describes* the command line; none of it decides
-    what to actually do with the parsed result — that happens back in
-    `main`, once `argparse` (Python's own standard library tool for
-    exactly this job) has already turned the raw command-line text into
-    a structured, validated set of values.
-    """
+    """Build the parser for the `fim` command and its subcommands."""
     parser = argparse.ArgumentParser(
         prog="fim",
         description="Simulate and analyze the finite island model.",
@@ -1229,9 +1118,8 @@ def _parser() -> argparse.ArgumentParser:
         "--preferences-file",
         metavar="PATH",
         help=(
-            "the GUI's own preferences.json (form defaults, named "
-            "presets, Settings) -- meaningful only for a later "
-            "fim --graphical/fim-gui launch, accepted here regardless"
+            "GUI preferences file for form defaults, presets, and settings; "
+            "used when launching graphical mode"
         ),
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -1306,7 +1194,7 @@ def _parser() -> argparse.ArgumentParser:
             "every requested replicate at once; ignored for a scalar run "
             "or under 'lineal', which has no such lane concept — see "
             "max_concurrent_replicates in doc/configuration.md); "
-            "overrides the loaded config's own value for this run only"
+            "overrides the loaded configuration for this run only"
         ),
     )
     run_parser.add_argument(
@@ -1314,7 +1202,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help=(
             "short name recorded for this run, once it completes; "
-            "overrides the configuration's own name"
+            "overrides the configured name"
         ),
     )
     run_parser.add_argument(
@@ -1322,7 +1210,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="TEXT",
         help=(
             "longer description recorded for this run, once it completes; "
-            "overrides the configuration's own description"
+            "overrides the configured description"
         ),
     )
     run_parser.add_argument(
@@ -1454,7 +1342,7 @@ def _add_study_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
     study_delete_parser.add_argument("study_id", metavar="STUDY_ID")
     study_copy_parser = study_subcommands.add_parser(
         "copy",
-        help="copy a study's own run list into a new, independent study",
+        help="copy a study's run list into a new, independent study",
     )
     study_copy_parser.add_argument("study_id", metavar="STUDY_ID")
     study_copy_parser.add_argument(
@@ -1512,7 +1400,7 @@ def _add_experiment_subcommands(subcommands: argparse._SubParsersAction[Any]) ->
     experiment_delete_parser.add_argument("experiment_id", metavar="EXPERIMENT_ID")
     experiment_copy_parser = experiment_subcommands.add_parser(
         "copy",
-        help="copy an experiment's own study list into a new, independent experiment",
+        help="copy an experiment's study list into a new, independent experiment",
     )
     experiment_copy_parser.add_argument("experiment_id", metavar="EXPERIMENT_ID")
     experiment_copy_parser.add_argument(

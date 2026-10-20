@@ -109,8 +109,7 @@ def founding_allele_ids(count: int) -> tuple[AlleleId, ...]:
 class AlleleRegistry:
     """Allocate globally unique identities for alleles created by mutation.
 
-    The infinite-alleles model's allocator (see this module's own
-    docstring, above): every call to `next_id` returns an integer that
+    In the infinite-alleles model, every call to `next_id` returns an integer that
     has never been returned before, from this registry or from
     `founding_allele_ids`, so a mutant allele's ID alone is always
     enough to tell it apart from every founding allele and from every
@@ -172,22 +171,8 @@ class AlleleRegistry:
     def next_k_ids(self, k: int) -> np.ndarray:
         """Reserve ``k`` consecutive, never-before-returned allele identities.
 
-        The vectorized counterpart to `next_id`, designed but never
-        built in `20260829-claude-sonnet-5-fim-vector-design.md` §5.2 —
-        built here for `20260901-claude-sonnet-5-fim-engine-backend-
-        factory-design.md` §10 item 10e's own stage 3 (batching
-        `mutate`'s own infinite-alleles minting across a whole
-        generation instead of one `next_id()` call per event). The
-        correctness guarantee `next_id`'s own docstring states —
-        "every call returns something no earlier call ever returned" —
-        constrains only the *reservation*, a single, genuinely
-        sequential integer read-modify-write, not how the reserved
-        block of `k` identities gets constructed afterward: `k`
-        sequential `next_id()` calls and one `next_k_ids(k)` call return
-        bit-identical values, in the same order, since both are exactly
-        ``base, base + 1, ..., base + k - 1`` — the only difference is
-        that this method pays the sequential counter's own cost once,
-        not `k` times.
+        Values match `k` consecutive `next_id()` calls: the returned
+        sequence is ``base, base + 1, ..., base + k - 1``.
 
         Args:
             k: Number of identities to reserve. `0` is valid and
@@ -201,18 +186,10 @@ class AlleleRegistry:
         Raises:
             ValueError: If `k` is negative.
 
-        Noted, not fixed (this project's own multi-model engine review,
-        2026-09-04, `FIM-20`/finding Kimi-FIM-20, calls this "minor
-        (theoretical)" and prescribes no fix): `base + np.arange(k,
-        dtype=np.int64)` computes in fixed-width `int64`, which silently
-        wraps around to a negative identity on overflow rather than
-        raising, unlike `self._next` itself (a plain Python `int`, never
-        fixed-width). Reaching it needs roughly `2**63` calls to `next_
-        id`/`next_k_ids` combined over one run's own lifetime — an
-        allele-minting rate no realistic configuration this project
-        validates for could approach before every other resource
-        (wall-clock time not least) already made the run practically
-        impossible to finish.
+        Note:
+            The returned array uses `int64`; an identity above the
+            signed `int64` range would wrap. The internal counter is an
+            arbitrary-precision Python integer.
         """
         if k < 0:
             raise ValueError("next_k_ids() requires a non-negative k")
@@ -235,15 +212,10 @@ class FiniteAlleleSpace:
     large: a target is decided as "one specific already-minted state" or
     "any not-yet-minted state" via a single float probability, computed as
     plain Python division rather than a fixed-width integer draw, so it
-    never overflows regardless of ``capacity``. For a large enough
-    ``capacity`` relative to how many states have actually been minted so
-    far, that probability underflows all the way to an exact ``0.0`` and
-    every mutation mints fresh, indistinguishable from the infinite-alleles
-    model — recovering it in the limit, as the differentiation-measures
-    guide's own approximation argument predicts. At the more moderate
-    capacities where this model actually changes anything, the same
-    computation instead gives a real, honestly nonzero recurrence
-    probability.
+    never overflows regardless of ``capacity``.
+    When `capacity` is large relative to the number of minted states,
+    the recurrence probability can underflow to zero, and mutations
+    mint fresh states as in the infinite-alleles limit.
     """
 
     def __init__(self, capacity: int, initial_ids: Iterable[AlleleId]) -> None:
@@ -389,9 +361,8 @@ class FiniteAlleleSpace:
                 entries holding every minted state, in minting order.
             minted_count: How many of `minted_list`'s own entries are
                 valid.
-            next_unminted: Inert since `FIM-46`'s fix (`to_arrays`'s own
-                docstring) — stored back verbatim, never read for a
-                mint decision.
+            next_unminted: Stored verbatim for compatibility; mint
+                decisions do not use this value.
         """
         del minted_mask  # see docstring: order-preserving minted_list suffices
         self._minted = [
@@ -412,43 +383,11 @@ class FiniteAlleleSpace:
             rng: The run's explicitly threaded random generator.
 
         Returns:
-            A state drawn uniformly from the ``capacity - 1`` others: an
-            already-minted one (a recurrence), chosen uniformly among the
-            tracked minted set excluding ``current``, or a fresh one,
-            chosen uniformly among every not-yet-minted state — not
-            merely the smallest one.
-
-            **Corrected 2026-09-05** (this project's own multi-model
-            engine review, 2026-09-04, `FIM-46`/finding C-05/finding
-            P1.1/finding P1-5, independently found by three of four
-            reviewers): the mint branch below used to always return
-            ``self._next_unminted``, the smallest not-yet-minted state,
-            deterministically — a specific unminted state other than
-            that one had probability exactly zero of ever being this
-            call's own return value, contradicting this docstring's own
-            "uniformly at random" claim and this class's own module
-            docstring. `_mutate_targets_batched` (`fim.model.vectorized`
-            and `fim.model.operators`, kept as duplicate implementations
-            for a documented circular-import reason) shared the
-            identical defect and is fixed the same way, so cross-backend
-            parity tests could never have caught this on their own —
-            they validate agreement between two implementations of the
-            same wrong distribution. A new, independent target-identity
-            oracle test (`test_mutate_target_mint_branch_is_uniform_
-            over_every_unminted_state`, `test/model/test_allele.py`)
-            checks the actual distribution directly, not merely
-            cross-backend agreement.
-
-            Uniform rejection sampling over ``0 .. capacity - 1``,
-            retrying only on an already-minted draw: correct regardless
-            of ``capacity``'s own magnitude, and cheap in the regime this
-            class exists for (`capacity` far larger than ``minted_
-            count`` — this class's own module docstring), since the
-            rejection probability is exactly ``minted_count / capacity``.
-            Never materializes a ``capacity``-sized structure, matching
-            this class's own documented "the full state space is never
-            materialized" contract, even at an astronomical ``capacity``
-            no array could hold at all.
+            A state drawn uniformly from the other ``capacity - 1``
+            states. Previously minted states excluding ``current`` are
+            selected uniformly as recurrences. Fresh states are sampled
+            uniformly from all unminted states using rejection sampling;
+            the full state space is not materialized.
 
         Raises:
             RuntimeError: If every state in ``0 .. capacity - 1`` is already

@@ -1,46 +1,11 @@
-"""Expected trajectory of the identity-based statistics, in closed form.
+"""Compute expected identity-based statistics through time.
 
-`equilibrium_d` and `equilibrium_g_st` say where `D` and `G_ST` settle.
-This module says how they get there: the deterministic (expected) value of
-each statistic at every generation, from a chosen starting state.
-
-Why this is exact for the engine's own model: every quantity here is a
-function of two expected identities,
-
-- `within` = `E[sum_k x_k^2]`, two gene copies drawn from one deme, and
-- `between` = `E[sum_k x_k y_k]`, one copy drawn from each of two demes,
-
-and one generation of the engine (migrate, drift, mutate) maps that pair to
-a new pair by an *affine* rule, `x' = A x + c` with a 2 by 2 matrix `A`. The
-derivation is in the design document `20260911-claude-sonnet-5-derived-
-differentiation-trajectory-design.md` (approach B, iterate the verified
-recursion), and `test/validation/test_simulator_equilibrium.py` carries an
-independent implementation of the same recursion as the engine's oracle.
-
-An affine map has a closed-form solution. With fixed point `x*` and
-eigenpairs `(lambda_k, v_k)` of `A`,
-
-    x_t = x* + sum_k c_k lambda_k^t v_k,   c = V^-1 (x_0 - x*),
-
-so the value at any generation costs a few multiplications, however
-large the generation number is. `IdentityRecursion` holds `x*`, `lambda`, `V`
-and `V^-1` (the "ingredients"), which is exactly what the GUI receives and
-evaluates in the page.
-
-Two solvers share the same recursion:
-
-- `identity_recursion` is the fast 2 by 2 form for `d` equal demes of `N`
-  gene copies with symmetric island migration `m` and one mutation
-  probability. It needs only the run's own `H_S` and `H_T` to start.
-- `matrix_identity_trajectory` keeps the whole `d` by `d` identity matrix,
-  so it handles unequal deme sizes and any migration matrix (a hub, a
-  ring). The price is the state: it starts from the full matrix of
-  identities, `identity_matrix_from_frequencies`, not two averages.
-
-Scope: one shared mutation probability. Expected values are exact for those
-assumptions; a single run scatters around them by drift, and a
-multi-locus run whose `locus_aggregation` is `mean_of_ratios` differs from
-the ratio-of-means form used here by a small amount.
+The recursion evolves within- and between-deme identity expectations with an
+affine transition. `identity_recursion` provides a two-variable solution for
+symmetric island models; `matrix_identity_trajectory` supports unequal deme
+sizes and arbitrary migration matrices. Both use a shared mutation
+probability. Results are expected values; individual trajectories vary due to
+drift. See `doc/finite-island-model-introduction.md` for model context.
 """
 
 from __future__ import annotations

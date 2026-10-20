@@ -8,7 +8,7 @@
 - [2. Per-paper mappings](#2-per-paper-mappings)
   - [2.1 Ryman & Leimar (2008)](#21-ryman--leimar-2008)
   - [2.2 Crow & Aoki (1984)](#22-crow--aoki-1984)
-- [3. Why this document exists](#3-why-this-document-exists)
+- [3. Comparison protocol](#3-comparison-protocol)
 - [Metadata](#metadata)
 
 Mathematical symbols and operations use $\TeX$; literal configuration
@@ -85,9 +85,9 @@ one fixed point.
 
 ## 1. `fim`'s four conventions
 
-Four independent choices, each of which some cited paper makes
-differently. None is inherently more correct; each formalizes
-the same biology under a different convention.
+Four independent choices distinguish the `fim` conventions from those used
+in some cited papers. Each convention formalizes the same biological
+process under different assumptions or definitions.
 
 ### 1.1 Population unit
 
@@ -398,8 +398,8 @@ conversion. This is why checking only a large-population
 equilibrium can conceal a convention mismatch that matters
 for trajectory comparisons.
 
-The mutation update is also part of the agreement. For two
-distinct copies under infinite alleles, the exact shared-label
+The mutation update is also part of the comparison. For two
+distinct copies under infinite alleles, the shared-label
 survival factor is:
 
 ```math
@@ -407,11 +407,8 @@ survival factor is:
 ```
 
 Either copy mutating makes its label new, so both must avoid
-mutation. A former proportional-update rule introduced the
-extra term $u(1-u)/n$; after replacing the textbook factor,
-the old comparison residual reached 0.11% for $G_{ST}$ and
-0.45% for $D$. Those historical residuals are not the current
-recursion's tolerance.
+mutation. A proportional update that includes the sampling correction
+adds the term $u(1-u)/n$ and does not match the distinct-copy recursion.
 
 ### 2.2 Crow & Aoki (1984)
 
@@ -450,21 +447,26 @@ One must specify the entire row of the spatial migration matrix,
 including whether the home deme participates, before comparing
 rates.
 
-## 3. Why this document exists
+## 3. Comparison protocol
 
-Every literature comparison in this project used to re-derive its own
-mapping implicitly in a test docstring. A shared reference makes the
-assumptions inspectable and prevents a locally correct equation from
-being compared under incompatible units or definitions. Add a new
-subsection for each paper: list its variables and source-pool rule,
+This reference makes the assumptions in each literature comparison
+inspectable and prevents equations from being compared under incompatible
+units or definitions. For each paper, list its variables and source-pool rule,
 derive any conversion, show the identity definition, state the
 operator phase, and record both positive and unresolved checks.
 
 Numerical agreement is evidence only after the translation is
-derived independently of the desired target. Pin deterministic
+derived independently of the target value. Pin deterministic
 recursion comparisons with fixed tolerances. For stochastic
 simulations, separately account for Monte Carlo uncertainty;
 do not use a seed search to force agreement.
+
+The relevant implementation points are
+[`identity_recursion()`](../src/fim/statistics/identity_recursion.py)
+and [`migrate()`](../src/fim/model/operators.py). The
+[Python API guide](python-api.md) and generated
+[API reference](../src/fim/API.md) document programmatic access; the
+[statistics reference](statistics.md) lists result identifiers.
 
 ---
 

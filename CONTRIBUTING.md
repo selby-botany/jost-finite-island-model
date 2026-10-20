@@ -1,8 +1,6 @@
 # Maintainer runbook
 
-This is a single-maintainer project built to be inherited. This runbook covers
-setup, validation, commits, and releases; it does not assume access to the
-original author.
+This runbook covers development setup, validation, commits, and releases.
 
 ## Setup
 
@@ -54,12 +52,9 @@ must pass on each Python version. The first step still runs the packaging
 test and enforces combined coverage; only final artifact assembly and smoke
 tests move to the second step. Local `./build --ci` still runs both parts.
 
-A timeout is not proof of a stuck test: inspect the last command and stage
-durations first. Run `39280427237` passed every Python 3.13 test and
-documentation check, then exhausted the shared 30-minute limit while
-building the source distribution. Splitting the steps keeps assembly from
-competing with tests for that budget without dropping checks or raising
-the test limit. Slow tests remain in their separate scheduled/on-demand job.
+For a timeout, inspect the last command and stage durations to distinguish
+slow execution from a blocked process. Separate test and assembly steps
+provide independent time budgets. Slow tests run in a scheduled/on-demand job.
 Full worked-example replays, including reference-backend (`lineal`) parity
 checks, belong to that `slow` layer. Do not schedule a replay using timings
 measured for a different backend. Example policy guards and focused engine
@@ -85,24 +80,22 @@ Public functions require typed signatures and docstrings. Regenerate
 
 ## Release
 
-Work promotes through three branches, each with a distinct role — `dev`
-itself never packages or publishes anything:
+Work promotes through three branches:
 
 1. **`dev`** — normal development. Every push runs `ci.yml`'s `build`
-   job (lint, type-check, the full test suite including the
-   `gui`-marked suite under Xvfb). No packaging, no release artifact of
-   any kind comes from `dev` directly.
+   job (lint, type-check, and the test suite including the
+   `gui`-marked suite under Xvfb). It does not publish release artifacts.
 2. **`staging`** — the beta stage. Pushing (or merging) verified `dev`
    work to `staging` triggers `.github/workflows/beta.yml`, a separate
    workflow from `ci.yml`. It builds and smoke-tests all five platform
    executables (`windows-beta-x64`, `windows-beta-arm64`,
    `macos-beta-arm64`, `macos-beta-x64`, `linux-beta-x64`), each
    stamped with a computed `beta-YYYYMMDD.NN` label rather than
-   `version.txt`'s own value, and `publish-beta` ships them as a GitHub
+   the value in `version.txt`, and `publish-beta` publishes them as a GitHub
    **prerelease** for testers — `workflow_dispatch` triggers the same
    pipeline manually, without a push. A beta build touches none of
    `version.txt`, `CHANGELOG.md`, or the `vX.Y.Z` tag namespace.
-3. **`main`** — the real release, once a beta build (or `dev` directly,
+3. **`main`** — stable releases, once a beta build (or `dev` directly,
    if skipping the beta stage for a given change) is verified:
 
    1. Run `./build --ci` on the verified commit.
@@ -119,7 +112,7 @@ itself never packages or publishes anything:
       every executable (checksummed), the wheel, and the source
       distribution. Every platform job is independent — PyInstaller
       never cross-compiles, so each OS/architecture combination needs
-      its own runner — and none can start until every `build` matrix
+      an architecture-matched runner — and none can start until every `build` matrix
       leg and `verify-tag` succeed for that exact commit
       (`needs: [build, verify-tag]`); `publish` cannot start until
       every one of them has. `verify-tag` itself rejects a tag that is
@@ -132,13 +125,10 @@ itself never packages or publishes anything:
 
 ### Repository settings (one-time, applied via GitHub, not this repo)
 
-`ci.yml`'s `verify-tag` job (workflow-level, checked on every tag push) is
-necessary but not sufficient on its own — it still runs *after* a tag has
-already been pushed. Closing the remaining gap (who is *allowed* to push to
-`main` or push a `v*` tag in the first place) requires GitHub repository
-settings that live outside this repo's version control and must be applied
-by hand, once, in the GitHub UI (Settings → Rules → Rulesets, or the legacy
-Settings → Branches / Tags):
+The `verify-tag` job checks tags after they are pushed; it cannot restrict
+who creates them. Configure access controls in GitHub repository settings,
+outside this repository's version control: **Settings → Rules → Rulesets**,
+or the legacy **Settings → Branches / Tags**:
 
 - **Branch protection on `main`**: require the `build` status check
   (all matrix legs) to pass before merging; disallow force-pushes and
@@ -147,10 +137,8 @@ Settings → Branches / Tags):
   matching tag to maintainers, so a release cannot be triggered by
   anyone with ordinary push access alone.
 
-Neither setting is expressible in a workflow YAML file — a workflow only
-ever runs *after* a push has already happened, so it can refuse to
-*publish* a bad tag (which `verify-tag` now does) but cannot prevent the
-push itself. These two settings are what closes that remaining gap.
+Workflow validation can reject publication of an invalid tag. Branch and tag
+protection restrict the pushes themselves.
 
 ## Related documents
 

@@ -39,14 +39,10 @@
 
 ## Who this document is for
 
-Written for whoever maintains or extends the simulator's tests — the
-technical, secondary audience of this project's own two-document test
-plan (see `doc/fim-simulator-test-plan.md`, the botanist-facing
-companion this document assumes rather than repeats: what each test
-means biologically, why it matters, and the citations behind it live
-there, not here). This document organizes and tabulates; the full
-detail behind any one test lives in that test's own docstring (pydoc),
-not duplicated here.
+This developer reference covers test organization, contracts, oracles,
+and quality gates. The [scientific test plan](fim-simulator-test-plan.md)
+summarizes biological interpretation and citations. Per-test docstrings
+are indexed in [the test reference](../test/TESTS.md).
 
 Three companion references this document assumes:
 
@@ -71,22 +67,17 @@ differentiation-measures guide.
 
 ## 1. The determinism contract for tests
 
-This is the governing rule for the whole suite, and it is not negotiable: a
-test must be a pure function of the commit it runs against. Given the same
-code, it produces the same result every time. A test whose outcome can
-change while the code does not is broken — a defect of the same rank as a
-test that asserts the wrong thing — regardless of how "unlucky" the failure
-looks. This is doubly load-bearing here because the object under test is a
-stochastic simulator, where the temptation to tolerate a random failure is
-strongest and most wrong.
+A test must produce the same result for the same commit and supported
+environment. A randomly varying outcome is a test defect, including
+when the code under test is stochastic.
 
 The contract, applied to every test in this plan:
 
 1. **One seeded RNG, threaded explicitly.** Tests construct a
    `numpy.random.Generator(PCG64(seed))` with a fixed literal seed and pass
-   it into the code under test. No test relies on the global NumPy RNG, the
-   `random` module, `hash()` ordering, set iteration order, or wall-clock
-   time.
+   it into the code under test. Synthetic-series helpers may use an
+   explicitly seeded `random.Random`. Tests do not rely on global random
+   state, `hash()` ordering, set iteration order, or wall-clock time.
 2. **Bands derived before seeds are chosen.** For any statistical test
    (§7), the pass/fail tolerance is computed analytically from the sample
    size *first*; the seed is then fixed once and never reselected because
@@ -106,8 +97,7 @@ The contract, applied to every test in this plan:
    `derandomize=True` profile in CI so property tests are reproducible —
    [`test/test_hypothesis_profile.py`](../test/TESTS.md#test.test_hypothesis_profile) asserts `settings.default.derandomize`
    directly, so a future edit to [`test/conftest.py`](../test/TESTS.md#test.conftest)'s profile registration
-   fails loudly instead of only showing up as an intermittently flipping
-   property test months later.
+   detects changes to the reproducibility profile.
 
 A test that cannot be made deterministic is redesigned (stub the stochastic
 dependency) rather than retried. Retry is reserved for cases where the
@@ -117,7 +107,7 @@ has none, because the simulator has no external interactions during a run.
 ## 2. Test taxonomy
 
 Two taxonomies apply at once, answering two different questions. The
-first (unchanged from earlier revisions of this document) is *what kind
+first is *what kind
 of check is this* — unit, property, golden, statistical, and so on:
 
 | Layer | Question it answers | Determinism source | Home |
@@ -134,9 +124,8 @@ The first three layers are fully deterministic by construction. The middle
 two are stochastic-but-reproducible under §1. The last two exercise
 integration and shipping.
 
-The second taxonomy is orthogonal to the first, and is the one that
-matters most ahead of a future core-engine refactor: *what does this
-test's own pass/fail criterion depend on*.
+The second taxonomy identifies the API or implementation contract on
+which an assertion depends.
 
 | Category | What it may call/assert against | Survives a core refactor? | Reference |
 |---|---|---|---|
@@ -163,11 +152,7 @@ scaffolding:
 - tiny_params — a small, fast `SimulationParams` (`d=2`, `N=20`, one
   200bp locus) for end-to-end tests.
 
-These two are the only fixtures `conftest.py` exports; they are the
-sanctioned way to get a generator or a minimal parameter object, but they
-are not the whole story for the property and golden layers below, which
-each own their scaffolding locally rather than sharing it through
-`conftest.py`:
+The property and golden layers also define local scaffolding:
 
 - The property tests (§5) build their own bounded per-deme frequency-table
   Hypothesis strategy (frequency_tables() in
@@ -189,9 +174,8 @@ Markers keep the fast/slow split explicit:
 
 The default `pytest` invocation (no markers — `pyproject.toml`'s own
 `addopts` excludes `statistical`, `slow`, `packaging`, and `gui`) must
-stay fast enough to run on every save. `build --ci` runs everything,
-with no marker exclusion at all — see §10.1's own "Changelog-backed
-release notes" item for the check enforcing this.
+provide a fast local subset. `build --ci` excludes only `slow`; the
+scheduled/on-demand job runs that marker separately. See §10.1.
 
 ## 4. Unit tests, by module
 
@@ -202,10 +186,9 @@ release notes" item for the check enforcing this.
   (design §3.2).
 - Founding IDs (locus-relative `0..K-1`) and minted IDs occupy disjoint
   ranges and can never collide (design §3.3).
-- `AlleleId` supports only equality — a test asserts that ordering/arithmetic
-  is either absent or never used by the model code (enforced structurally by
-  the `NewType` + `mypy --strict`, checked here at runtime for the equality
-  contract).
+- Allele IDs are used only for identity in model equations. `NewType`
+  distinguishes identifiers in typed interfaces but does not prohibit
+  integer ordering or arithmetic by itself.
 - **`FiniteAlleleSpace`** (the opt-in finite-alleles mutation model, design
   §9): construction rejects a capacity too small for the initial IDs already
   in use; a mutation target is always different from its own source and
@@ -280,7 +263,7 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   design §4.3); invalid inputs raise with a clear message naming the
   offending field (`m ∉ [0,1]`, `μ ∉ [0,1]`, `d < 2`, `N < 1`, empty
   `loci`, unknown `P`-bag key, deme_weighting outside
-  `{"equal","size"}`, convergence_window < 2, and the newer fields
+  `{"equal","size"}`, and the fields
   below), and an unknown top-level config key is rejected by name.
 - Every `P`-bag default matches design §4.3's table exactly; a self-checking
   test parses the schema and asserts the documented defaults are the applied
@@ -309,10 +292,10 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
 - **Locus configuration shapes**: both the explicit `loci` list and the
   n<sub>loci</sub>/locus_lengths shorthand are accepted; malformed shapes are
   rejected; a scalar locus_lengths expands to every locus while explicit
-  locus_ids round-trip, and a list of genuinely distinct per-locus
+  locus_ids round-trip, and a list of distinct per-locus
   lengths is preserved (not collapsed).
 - **Migration config sugar** (design §9): the scalar and dense-matrix
-  parsers reject wrong types/shapes as before; in addition, a
+  parsers reject wrong types/shapes; a
   `{topology, rate}` mapping expands through stepping_stone_neighbors +
   dense_matrix_from_neighbors (§4.3) into the equivalent dense matrix,
   and a hand-authored one-based sparse neighbor map (`{deme: {neighbor:
@@ -327,29 +310,16 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   non-finite precision, a non-boolean stop_batch_early, a replicate_minimum below 2, and an
   unsupported confidence level are each rejected by name.
   precision, stop_batch_early and confidence always round-trip through
-  to_dict() (never omitted); the three old names (the two tolerances and
-  the replicate confidence) are refused by name, with no alias kept.
-- **A stopping rule that can never fire**: convergence_window is
-  rejected (_validate_stopping_rules) once it exceeds
-  max_generations + 1 — the most generations a run can ever record
-  (generation 0 plus max_generations steps) — since a trailing
-  window that large could never fill before the generation cap ends
-  the run. Covered by a parametrized case in this file's own
-  scalar-contract table.
+  to_dict() (never omitted); unsupported keys are rejected by name.
+- **Generation cap and burn-in**: a cap at or before the end of burn-in
+  is a valid fixed-horizon configuration. The run ends as capped, with
+  no post-burn-in evidence window. A finite cap is not a guarantee
+  that requested precision is reachable.
 - **replicate_minimum above n<sub>replicates</sub> is clamped, not
-  rejected**: previously a `_validate_stopping_rules` rejection
-  (structurally the same shape as the convergence_window check above —
-  the adaptive criterion could never be evaluated before the batch's
-  own n<sub>replicates</sub> cap ends it) — changed once stop_batch_early
-  became the default: the identical combination now arises
-  from nothing more deliberate than setting a small n<sub>replicates</sub>
-  without separately thinking about replicate_minimum at all, found
-  live when every GUI batch test that only ever sets n<sub>replicates</sub>
-  failed exactly this way in CI (`jost-finite-island-model` run
-  33656031751). `SimulationParams.__post_init__` now silently clamps
-  replicate_minimum down to n<sub>replicates</sub> instead (a no-op at
-  n<sub>replicates</sub> == 1, where the adaptive machinery is provably
-  inert regardless). Covered by [`test_replicate_minimum_above_n_replicates_is_clamped_not_rejected`](../test/TESTS.md#model.test_params.test_replicate_minimum_above_n_replicates_is_clamped_not_rejected)
+  rejected**: `SimulationParams.__post_init__` clamps the minimum to
+  the replicate cap, allowing small batches without a separate minimum
+  override. At n<sub>replicates</sub> == 1, adaptive batching is inactive.
+  Covered by [`test_replicate_minimum_above_n_replicates_is_clamped_not_rejected`](../test/TESTS.md#model.test_params.test_replicate_minimum_above_n_replicates_is_clamped_not_rejected)
   and, end to end, by [`test/engine/test_engine.py::test_replicate_minimum_above_n_replicates_runs_to_completion`](../test/TESTS.md#engine.test_engine.test_replicate_minimum_above_n_replicates_runs_to_completion),
   which also documents the *legal* neighbor this behavior is
   distinguished from — [`test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic`](../test/TESTS.md#engine.test_engine.test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic),
@@ -379,7 +349,7 @@ form.
   total allele frequency across demes; `m=0` is identity; `m=1` fully
   replaces each deme with the pool (design §3.4). Matrix migration is
   checked against a naive reference implementation, applies each row's
-  source weights (including a genuinely **asymmetric** matrix's
+  source weights (including an **asymmetric** matrix's
   per-row-directional weights), ignores population size (a matrix's rows
   are authoritative and never rescaled by `N`), and reduces to the scalar
   symmetric case exactly when the matrix is that case's dense form.
@@ -411,22 +381,23 @@ form.
   when `N` is unequal across demes. The dense fast path and the sparse
   path produce identical results for a fixed-`K` no-mutation state at the
   same seed.
-- **pipeline**: `step` composes `drift ∘ mutate ∘ migrate` in that order
+- **pipeline**: `step` composes `mutate ∘ drift ∘ migrate` in that order
   (design §3.4); same seed ⇒ identical next state; the invariant holds
   after every stage; population-size shape is validated once, at the
   operator boundary shared by all three stages.
 
 ### 4.8 `convergence/`
 
-- Trailing-window criterion: a constant sequence is stable immediately once
-  the window fills; a linearly drifting sequence is *not* stable; an
-  oscillating sequence within tolerance *is* stable (checked via
-  half-window means), one exceeding it is not.
-- max_generations criterion always eventually fires regardless of the
-  statistic's behavior (the safety valve — design §3.5).
-- `ConvergenceMonitor.reason()` distinguishes "statistic converged" from
-  "hit the cap"; a capped-unconverged run is a valid result, not an
-  exception (design §5).
+- **Within-run burn-in and averaging**
+  (`test/convergence/test_burn_in_monitor.py`): `BurnInMonitor` never
+  stops during burn-in. Checks follow the configured first-check and
+  doubling schedule. Generation 0 is excluded from the evidence window.
+  Both the Geyer effective-sample-size floor and
+  `SE <= precision / z` must hold. Synthetic constant and seeded
+  autocorrelated series exercise the schedule and thresholds.
+- **Generation cap**: a capped run is a valid non-converged result;
+  a cap inside burn-in has no evidence window. Outcomes distinguish
+  precision convergence from reaching `max_generations` (design §3.5).
 - **Several watched statistics with a combinator** (design §9): the
   monitor requires a mapping that covers every watched statistic; the
   `"all"` combinator requires every one stable before stopping, `"any"`
@@ -440,11 +411,11 @@ form.
   count; and the criterion composes with an unmodified
   `ConvergenceMonitor`, which is what makes the replicate layer reuse the
   within-run mechanism rather than duplicate it.
-- Constructor and criteria validation: invalid trailing-window
-  configuration, an incomplete window, invalid combinator children, and
-  `any`/`all` short-circuiting on child results are all covered directly,
-  as are a monitor rejecting invalid records and rejecting further records
-  once already converged.
+- Constructor and criteria validation cover invalid minimum count,
+  non-finite or negative tolerance, and unsupported confidence.
+  A terminal `ConvergenceMonitor` rejects additional observations.
+  Window estimators, monitor checkpoint state, and estimate forms have
+  dedicated tests in `test/convergence/`.
 
 ### 4.9 `statistics/interval.py`
 
@@ -546,7 +517,7 @@ without the engine:
   store_factory gives every replicate its own store in either execution
   mode, and the fixture factory is a module-level function precisely
   because a worker process must be able to pickle it.
-- The legacy positional `(N, m, mu, d)` arguments are validated against the
+- Positional `(N, m, mu, d)` arguments are validated against the
   parameter bag they must agree with, each mismatch reported by name.
 - A manifest `clock` without an explicit timezone is rejected.
 - A run watching only G<sub>ST</sub> at total shared fixation (every locus
@@ -579,7 +550,7 @@ without the engine:
   matrix run is
   reproducible; a report over several loci with equal deme weighting is
   shaped correctly; locus `length` does not affect the report (data only,
-  per §4.2); a multi-locus run with genuinely unequal lengths is
+  per §4.2); a multi-locus run with unequal lengths is
   reproducible.
 - **Stepping-stone topology, stochastic migrant sampling, and the
   finite-alleles model** (design §9): a run using topology sugar for `m`
@@ -618,9 +589,9 @@ Functional detail in §8.
   entire output directory is built in a hidden temporary sibling and
   published with one atomic rename (_atomic_directory), only once every
   artifact is flushed and `manifest.json` — written last — records each
-  sibling artifact's SHA-256 digest (_write_run_artifacts). `-o` now
-  refuses *any* pre-existing target directory, empty or not (stricter than
-  the prior any-artifact-file check). **Failure injection** at three
+  sibling artifact's SHA-256 digest (_write_run_artifacts). `-o`
+  refuses any pre-existing target directory, empty or not.
+  **Failure injection** at three
   boundaries — mid-trajectory (the write itself), the report write, and
   the plot render — each confirms the target directory does not exist
   afterward, at both the scalar and (a replicate write, sequential batch)
@@ -629,8 +600,8 @@ Functional detail in §8.
   recomputes the trajectory's SHA-256 digest and distinct generation count
   against the manifest's recorded values before reading a single row,
   refusing an edited, truncated, or replaced trajectory with a named error
-  instead of silently re-analyzing it; a manifest predating this check
-  (no `artifacts` recorded) is refused with its own distinct message.
+  instead of silently re-analyzing it; a manifest without recorded
+  `artifacts` is refused with a distinct message.
 
 ## 5. Property-based invariants for the statistics module
 
@@ -703,11 +674,10 @@ The procedure every test in this section follows, in order:
 3. *Then* fix one literal seed. Run once. The test asserts the sample
    estimate falls inside the pre-derived band.
 
-The seed is never chosen to make the test pass; the band is wide enough,
-by construction from `R`, that a correct implementation passes at
-essentially any seed, and the fixed seed only makes the single realization
-reproducible. This is the operational meaning of "deterministic given the
-commit" for a stochastic check.
+The seed is not selected to obtain a passing result. The band specifies
+an acceptance probability under the sampling assumptions; it does not
+guarantee acceptance for every seed. Fixing the seed makes the selected
+realization reproducible.
 
 **Where step 2's standard error is empirical, not closed-form.** The
 three [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)
@@ -723,14 +693,9 @@ characterization pass is itself stochastic by design, so it stays out of
 the deterministic PR gate) — whose raw per-replicate output, seeds, and
 environment fingerprint are retained in the
 [calibration evidence document](statistical-calibration-evidence.md), not
-only summarized in a code comment. This replaces an earlier, unretained
-characterization pass whose
-program, seeds, and environment were never recorded; re-running the new
-script against the current deployed constants found two (_SIGMA<sub>PART</sub>_VI<sub>D</sub>,
-_SIGMA<sub>DEAR</sub>_NOLAN<sub>LOW</sub>_G) narrower than a larger, retained sample supports,
-and they were widened accordingly — the assertion tests continue to pass
-at their existing fixed seeds either way, since a wider band only relaxes
-the check.
+only summarized in a code comment. The retained sample supports the
+spread constants, including _SIGMA<sub>PART</sub>_VI<sub>D</sub> and
+_SIGMA<sub>DEAR</sub>_NOLAN<sub>LOW</sub>_G.
 
 ### 7.2 Drift variance
 
@@ -749,8 +714,8 @@ on (design §10).
 Home: [`test/validation/test_equilibrium.py`](../test/TESTS.md#validation.test_equilibrium) (the closed-form formulas
 directly) and [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium) (the real
 engine against the same oracle). Two independent oracles are used, per the
-latter file's own module docstring, and are cross-checked against each
-other before either is trusted against the engine:
+latter file's module docstring, and cross-checked before the engine
+comparison:
 
 1. The closed-form diffusion equilibria equilibrium_g_st/equilibrium_d
    (differentiation guide Part VI Eq. 2/Eq. 4) — `O(1/N)` approximations.
@@ -781,8 +746,8 @@ analytic values (design §10):
 | Low migration, low mutation | 100 | 5 | 0.0001 | 0.000001 | 0.97 | 0.04 (0.04) |
 | Higher migration, higher mutation | 2000 | 100 | 0.01 | 0.001 | 0.02 | 0.91 (0.90) |
 
-Both plug in directly under the ploidy-neutral `N` convention (no
-conversion — design §4.3). Each is checked at two levels:
+Both use `ploidy: haploid`, so individual counts equal gene-copy counts
+(design §4.3). Each is checked at two levels:
 
 - [`test_equilibrium.py`](../test/TESTS.md#validation.test_equilibrium) plugs the scenario's `(N, m, μ, d)` directly into
   the closed-form formulas and checks them against the published values.
@@ -797,14 +762,13 @@ conversion — design §4.3). Each is checked at two levels:
 
 ### 7.5 Literature-grounded scenarios beyond Dear-Nolan
 
-Five further sources, each closing a specific, identified gap rather
-than adding coverage for its own sake — citations for all five are in
-`doc/fim-simulator-test-plan.md`'s own references appendix; each
-scenario test's own docstring carries the full worked derivation. This
-section states only what each contributes and how it is tested.
+These sources cover additional topologies, statistic families, and
+identity dynamics. Citations are in the
+[scientific test plan](fim-simulator-test-plan.md#appendix-c-citations-and-references);
+test docstrings contain the worked derivations.
 
 - **Crow & Aoki (1984)**, Table 1's toroidal stepping-stone scenario
-  ([`test_crow_aoki_torus_scenario_via_engine`](../test/TESTS.md#validation.test_simulator_equilibrium.test_crow_aoki_torus_scenario_via_engine), home file [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)) — a genuinely different
+  ([`test_crow_aoki_torus_scenario_via_engine`](../test/TESTS.md#validation.test_simulator_equilibrium.test_crow_aoki_torus_scenario_via_engine), home file [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)) — a different
   migration topology (a 3-by-3 torus, four-nearest-neighbor migration)
   from every other scenario in this section (the symmetric island
   model), and from an author with no connection to the Jost/Chao
@@ -820,10 +784,9 @@ section states only what each contributes and how it is tested.
   fim-simulator-test-plan.md` for the full, still-unresolved finding,
   and this file's own [`test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus`](../test/TESTS.md#validation.test_simulator_equilibrium.test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus) for the internal side of that discrepancy).
 - **Chao, Chiu, Jost, Sherwin & Rollins (2015)**, the Shannon-entropy
-  equilibrium formulas (Eqs. 2A/5A/6/7D/10) — a genuinely independent
+  equilibrium formulas (Eqs. 2A/5A/6/7D/10) — an additional
   *statistic family* (mutual-information-based Shannon differentiation,
-  not heterozygosity-based `G_ST`/`D`) validated against the real engine
-  for the first time in this project
+  not heterozygosity-based `G_ST`/`D`) compared with engine output
   ([`test_chao_shannon_equilibrium_scenario_via_engine`](../test/TESTS.md#validation.test_simulator_equilibrium.test_chao_shannon_equilibrium_scenario_via_engine), same home
   file). **Fully fim functional**: compares the engine directly against
   the public closed-form `equilibrium_shannon_entropy_total`/
@@ -843,7 +806,7 @@ section states only what each contributes and how it is tested.
   facts `g_st` already relies on. No engine-level scenario test: the
   paper supplies no numeric worked example to reproduce, only formulas.
 - **Whitlock (1992)** — `identity_recovery_rate`/`_equilibrium`/
-  `_trajectory`/`_half_life`, a genuinely different *kind* of prediction
+  `_trajectory`/`_half_life`, a different *kind* of prediction
   from every other formula in `fim.statistics`: how fast a disturbed
   population's identity by descent returns toward equilibrium, not what
   value it settles to. Shown to be an exact algebraic reduction of this
@@ -951,11 +914,8 @@ are headless and reproducible.
   §4) give reproducibility without fragility.
 - `d ≤ 3` renders the direct scatter; `d > 3` dispatches to the pairwise
   matrix (moderate `d`) or one explicit deme pair, Deme 1 vs. Deme 2 by
-  default (large `d` — design §8, corrected in that document's own
-  revision history: an earlier version of this dispatch used a PCA
-  projection instead). _plot_pca itself is unchanged and directly
-  tested, just no longer reached automatically by `plot_frequency_
-  scatter` at any `d`.
+  default (large `d` — design §8). `_plot_pca` is tested directly;
+  `plot_frequency_scatter` does not select it automatically.
 - Coincidence-count marker scaling and common/rare coloring appear when many
   points coincide (design §8).
 - Diagnostics: the convergence-trace series has one point per recorded
@@ -970,7 +930,7 @@ are headless and reproducible.
   specific `d` that reaches it; the PCA projection's single-point
   special case (skipping `numpy.linalg.svd` entirely) is exercised by
   calling the module-private projection function directly, since no
-  public dispatch reaches it automatically at any `d` any longer;
+  public dispatch selects it automatically;
   a locus with more alleles than MAX<sub>LEGEND</sub>_ALLELES renders without
   a legend. One guard in _frequency_points (an empty point matrix)
   is unreachable through any validly constructed `ModelState` — marked
@@ -1011,7 +971,7 @@ no wall-clock, fully reproducible.
   docs-only or non-Python change leaves it untouched); rejects a newly
   added non-ASCII filename.
 - **`pre-push`** ([`test_git_hooks.py`](../test/TESTS.md#validation.test_git_hooks)): detects a stale generated
-  `src/fim/API.md` (the same doc-freshness gate `pre-commit` enforces,
+  `src/fim/API.md` (the doc-freshness gate `pre-commit` enforces,
   checked again at push time) and passes once it is regenerated.
 - **Graceful degradation** ([`test_git_hooks.py`](../test/TESTS.md#validation.test_git_hooks)): each hook — including
   `pre-push` — is run in a fixture repository with the relevant tool (or
@@ -1022,9 +982,8 @@ no wall-clock, fully reproducible.
   symlinks every documented hook (`commit-msg`, `pre-commit`, `pre-push`)
   into a fixture repository's `.git/hooks/`.
 - **Doc-freshness gate** ([`test_api_docs.py`](../test/TESTS.md#validation.test_api_docs)): every committed Python
-  module receives an API section in the generated reference, the direct
-  proof (alongside the `pre-commit`/`pre-push` hook coverage above) that a
-  stale API reference cannot reach `main` (§8.1). [`test_test_docs.py`](../test/TESTS.md#validation.test_test_docs)
+  module receives an API section in the generated reference.
+  [`test_test_docs.py`](../test/TESTS.md#validation.test_test_docs)
   is the identical check for `test/TESTS.md` (`dev/bin/generate-
   test-docs`): every committed test module receives its own anchor, and
   the generator's own `_GROUPS` list is independently checked to cover
@@ -1097,7 +1056,7 @@ no wall-clock, fully reproducible.
 - The gate runs in `build --ci` and `ci.yml` identically (detailed design
   §5.2/§7), so local and CI coverage cannot diverge.
 - Coverage is a floor, not the goal: the golden, property, and statistical
-  layers are what actually establish correctness; coverage only catches
+  layers   check distinct aspects of correctness; coverage catches
   code no test exercises at all.
 
 ## 12. Requirement traceability matrix
@@ -1142,13 +1101,9 @@ generator-responsibility: primary
 
 ### Revisions
 
-Documentation review. Corrected the claim that the CLI rejects a
-multi-replicate configuration, and added the coverage that had no entry
-here: the confidence-interval module
-(§4.9), the confidence-interval criterion (§4.8), the replicate-batch
-parameter keys (§4.5), adaptive stopping and parallel execution (§4.11,
-§4.12), the batch artifact contract (§8), and two traceability rows
-(§12).
+Revision scope: confidence intervals (§4.8–§4.9), batch parameters
+(§4.5), adaptive stopping and parallel execution (§4.11–§4.12),
+batch artifacts (§8), and traceability (§12).
 
 ```text
 generator-name: Claude Code
@@ -1159,11 +1114,8 @@ generation-date: 2026-08-18
 generator-responsibility: revision
 ```
 
-Corrected §9's own scatter-plot description to match design §8's own
-correction: large-`d` no longer dispatches to a PCA projection by
-default, and the single-point SVD-skip test now calls the projection
-function directly rather than relying on a public dispatch path that no
-longer reaches it.
+Revision scope: scatter dispatch and direct testing of the PCA
+single-point path (§9).
 
 ```text
 generator-name: Claude Code
@@ -1174,24 +1126,9 @@ generation-date: 2026-08-23
 generator-responsibility: revision
 ```
 
-Split into two documents: this one (renamed from `fim-simulator-
-test-plan.md`, developer-facing) and a new, separately authored `doc/
-fim-simulator-test-plan.md` (rewritten from scratch, botanist-facing —
-the primary audience for that document, this document's own readership
-demoted to secondary there and made primary here instead). Extracted
-two further companion references: `doc/fim-simulator-functional-api.md`
-(the externally accessible engine API §2's "fim functional" category is
-scoped to) and `doc/fim-gui-test-plan.md` (`test/gui/`'s own coverage,
-previously undocumented in this document at all). Added §2's second,
-orthogonal taxonomy (fim functional / fim-gui functional / internal-
-deep) and the `gui` marker row missing from §3's own table. Added §7.5,
-documenting five literature-grounded scenarios added since this
-document's last revision (Crow & Aoki 1984, Chao et al. 2015, Nei 1973,
-Whitlock 1992, Kimura & Weiss 1964 via Whitlock & McCauley 1999) that
-had no entry here. Fixed a stale, out-of-repository doc reference in
-`fim.gui`'s own package docstring (`src/fim/gui/__init__.py`), found
-while auditing this document's own citation trail for references
-outside this repository.
+Revision scope: scientific and developer test-plan organization,
+functional API and GUI companion references, test taxonomy (§2), GUI
+marker (§3), and literature scenarios (§7.5).
 
 ```text
 generator-name: Claude Code

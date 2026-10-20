@@ -1,37 +1,18 @@
-"""The one list of every statistic fim computes, captures or shows.
+"""Catalog of statistics, computation policies, and display metadata.
 
-Every statistic's name used to be spelled out by hand in a dozen places:
-the engine's tracked sets, the convergence choices, the GUI's result
-list, the Compare history sampler, the statistics table's rows, the
-results tables' columns, the tooltips. Two recorded bugs came from those
-copies drifting apart (`A_CGD` missing from one list raised `KeyError`
-in Compare; `H_ST` missing from another left it with no history). This
-module is the single definition the others now derive from: one
-`StatisticSpec` per statistic, in display order.
+Each `StatisticSpec` defines a statistic's identifier, labels, scope,
+bounds, history policy, and reference anchor. The engine and desktop
+application derive their statistic lists from this catalog.
 
-Each spec answers four separate questions:
+History policies are ``"always"`` (tracked every generation),
+``"opt_in"`` (tracked when requested for display or convergence), and
+``"none"`` (computed for reports and displayed frames). Showing any
+opt-in statistic requests per-generation tracking of all five opt-in
+statistics; hiding them does not suppress a statistic watched for
+convergence.
 
-- **What is it?** `key`, the labels, `description`, `help`.
-- **What does it describe?** `scope`: one value per generation
-  (``"global"``) or one value per pair of demes (``"pair"``).
-- **When is it computed?** `history`: tracked every generation always
-  (``"always"``), every generation only when
-  `SimulationParams.track_expensive_statistics` opts in or the run
-  watches it (``"opt_in"``: the expensive ones, each a real extra cost
-  every generation), or not tracked per generation (``"none"``: computed
-  for each report, each displayed frame and each saved result instead).
-- **Is it shown by default?** `default_shown`. What a researcher
-  actually sees is their own choice (the GUI's "Statistics shown"
-  setting); this is only the starting point. For every statistic but
-  the ``"opt_in"`` ones, showing or hiding it changes only the screen.
-  The desktop app opts a run in exactly when one of the ``"opt_in"``
-  statistics is shown (`expensive_statistics_requested`), so showing one
-  makes its per-generation history real and hiding them all avoids the
-  cost; none of them is shown by default, so a fresh install's runs cost
-  what they always did.
-
-This module imports nothing from the simulator or the GUI. It sits in
-`fim.statistics` beside the formulas it describes.
+The [statistics reference](../../doc/statistics.md) links displayed
+values to mathematical definitions, API entries, and implementations.
 """
 
 from __future__ import annotations
@@ -106,6 +87,7 @@ class StatisticSpec:
         help: Longer explanation for Settings and Help, or ``""``.
         nei: For the Nei family, ``(measure, denominator, locus_rule)``;
             ``None`` otherwise.
+        help_anchor: Heading anchor in the bundled statistics reference.
     """
 
     key: str
@@ -121,6 +103,7 @@ class StatisticSpec:
     default_plotted: bool = True
     help: str = ""
     nei: tuple[Measure, NeiDenominator, NeiLocusRule] | None = None
+    help_anchor: str = ""
 
 
 def _core(
@@ -153,6 +136,7 @@ def _core(
         convergence_eligible=True,
         default_shown=history != "opt_in",
         default_plotted=default_plotted,
+        help_anchor=key.lower(),
     )
 
 
@@ -188,7 +172,8 @@ _ORIGINAL: Final[tuple[StatisticSpec, ...]] = (
         "K_ST",
         "K<sub>ST</sub>",
         "K_ST",
-        "allelic differentiation, counting alleles unique to a deme (q=0)",
+        "allele-number differentiation from pooled and mean within-deme "
+        "allele counts (q=0)",
         "differentiation",
         "opt_in",
         _PROPORTION,
@@ -215,7 +200,7 @@ _ORIGINAL: Final[tuple[StatisticSpec, ...]] = (
         "H_ST",
         "H<sub>ST</sub>",
         "H_ST",
-        "nearness to fixation, Hedrick's maximum-standardized form",
+        "partitioned between-deme heterozygosity, (H_T - H_S) / (1 - H_S)",
         "differentiation",
         "always",
         _PROPORTION,
@@ -234,7 +219,8 @@ _ORIGINAL: Final[tuple[StatisticSpec, ...]] = (
         "Delta",
         "δ<sub>G</sub>",
         "δ_G",
-        "Gregorius's δ — mean pairwise allelic differentiation over deme pairs",
+        "Gregorius's δ — mean total variation distance from each deme "
+        "to the mixture of the remaining demes",
         "differentiation",
         "opt_in",
         _NON_NEGATIVE,
@@ -265,6 +251,7 @@ _IDENTITIES: Final[tuple[StatisticSpec, ...]] = (
         bounds=_PROPORTION,
         convergence_eligible=True,
         default_shown=False,
+        help_anchor="gs",
     ),
     StatisticSpec(
         key="Gd",
@@ -278,6 +265,7 @@ _IDENTITIES: Final[tuple[StatisticSpec, ...]] = (
         bounds=_PROPORTION,
         convergence_eligible=True,
         default_shown=False,
+        help_anchor="gd",
     ),
 )
 
@@ -297,10 +285,9 @@ _ATTRIBUTION: Final[dict[NeiDenominator, str]] = {
 }
 
 _NEGATIVE_NOTE: Final = (
-    " Unlike every other form, this one can be negative: when one deme is "
-    "far more diverse than the others, the mean between-deme identity can "
-    "exceed the geometric mean of the within-deme identities. A negative "
-    "value is not an error; see Help, 'Nei distances'."
+    " With unequal deme diversities, all-demes geometric identity can exceed "
+    "1 and its distance can be negative. See the statistics reference, "
+    "'Nei distances', for the interpretation."
 )
 
 
@@ -348,7 +335,8 @@ def _nei_spec(
         else "across all demes"
     )
     rule_sentence = (
-        "Loci are combined by averaging each locus's own distance."
+        "Loci are combined by averaging per-locus distances; identity is "
+        "the exponential of the negative mean distance."
         if locus_rule == "locus_mean"
         else "Loci are combined by Nei's rule: identities are averaged "
         "over loci first, then one ratio is taken."
@@ -380,6 +368,7 @@ def _nei_spec(
         convergence_eligible=scope == "global",
         default_shown=False,
         nei=(measure, denominator, locus_rule),
+        help_anchor="nei-distances",
     )
 
 
@@ -416,6 +405,7 @@ def _derived(
         bounds=bounds,
         convergence_eligible=scope == "global",
         default_shown=False,
+        help_anchor=key.lower(),
     )
 
 

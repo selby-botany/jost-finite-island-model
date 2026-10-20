@@ -1,7 +1,7 @@
 # Convergence: burn in, then average
 
-How `fim` decides when a run is finished, and why the burn-in and the
-generation cap are derived from your model instead of being fixed numbers.
+This guide describes how `fim` determines run completion and derives
+burn-in and generation-cap values from model parameters.
 
 ## Contents
 
@@ -17,7 +17,6 @@ generation cap are derived from your model instead of being fixed numbers.
 - [Checking the numbers yourself](#checking-the-numbers-yourself)
 - [Limits](#limits)
 - [Notation and implementation map](#notation-and-implementation-map)
-- [Metadata](#metadata)
 
 Mathematical quantities use $\TeX$, such as $\tau$ for a relaxation time.
 Literal configuration keys, report fields, and Python names use backticks,
@@ -26,18 +25,18 @@ this document as (C.1), (C.2), and so on; the prefix means
 **convergence reference**, not Appendix C of the
 [simulator design](fim-simulator-design.md). That design's Appendices C–F
 provide additional algebra, probability, and linear-algebra refreshers.
+Statistic definitions and saved-result identifiers are listed in the
+[statistics reference](statistics.md).
 
 ## If you only read one section
 
-A run first waits out a **burn-in**: the time the population needs to forget
-where it started. Only then does it start **averaging**, and it keeps
-averaging until the average is known to the precision you asked for (plus or
-minus `precision`, at `confidence`). The result is the average, with its error
-bar. If the run reaches its generation cap before the average is that
-precise, it says so ("hit the cap") and still reports the average it has,
-with the error bar it really has. A run that finishes in a hundred
-generations is not necessarily wrong, but a small generation count alone
-is no evidence of equilibrium. Check `convergence_burn_in`,
+A run first completes a **burn-in**, the period during which the initial
+condition's influence decays. It then collects an **evidence window** until
+the estimated average reaches the requested precision (`precision` at the
+specified `confidence`). The report includes the estimated average and its
+uncertainty. If the generation cap is reached first, the run reports that
+status and the uncertainty achieved. A short run does not by itself
+demonstrate equilibrium. Check `convergence_burn_in`,
 `max_generations`, and the reported uncertainty against the model's
 timescale.
 
@@ -56,32 +55,29 @@ to be estimable.
 
 ## Why does my run take so long?
 
-*For everyone, including non-technical readers.*
+### Interpretation
 
-A simulated population does not settle at once. When several islands begin
-with different genes, it takes a long time for gene flow and mutation to shape
-what you finally see. With very little migration between islands, "a long
-time" means tens of thousands of generations. After that the numbers still
-wobble from generation to generation by drift, so `fim` averages them over a
-long stretch until the average is steady to the precision you chose.
+Population structure changes over generations through migration, mutation,
+and drift. Low migration can produce long relaxation times, often tens of
+thousands of generations. Drift continues to cause generation-to-generation
+variation at equilibrium; the evidence window estimates the average to the
+requested precision.
 
-You do not have to choose the lengths: leave the settings on `auto`. The app
-shows the expected burn-in next to the **Run simulation** button before you
-start, for example:
+Set `convergence_burn_in` and `max_generations` to `auto` to use the
+model-derived values. The app displays the expected burn-in next to the
+**Run simulation** button before execution, for example:
 
 > Convergence: burn-in 104,338 generations, cap 399,728 (derived; this model
 > needs about 19,693 generations to forget its starting state)
 
-If a run stops at the cap without reaching the precision, the report says how
-precise the average is, so you can decide whether to allow more generations,
-ask for a larger allowed error, use more independent loci, or run several
-replicates. Replicates can reduce elapsed time when parallel resources
-are available, but each still pays its own burn-in cost; a batch is not
-guaranteed to require less total computation.
+If a run reaches the cap before meeting its precision criterion, the report
+gives the achieved uncertainty. Possible responses include increasing the
+generation cap, accepting a wider interval, adding independent loci, or
+using multiple replicates. Parallel execution can reduce elapsed time, but
+each replicate incurs its own burn-in, so a batch need not reduce total
+computation.
 
 ## Quick reference
-
-*For sysops and technicians who need a reminder, not a tutorial.*
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -1618,22 +1614,8 @@ The evidence-window schedule and per-statistic verdicts live in
 The parameter reference, not the notation table, is authoritative
 for accepted literal keys and expert overrides:
 [configuration reference](configuration.md).
-
-## Metadata
-
-Expanded the existing convergence reference with $\TeX$ notation, numbered
-derivations, local symbol definitions, and worked calculations. Checked
-the explanations against the relaxation-defaults, monitor, window-estimator,
-and batch-window implementations. Distinguished mathematical approximations,
-implemented policy, empirical measurements, and unsupported assumptions.
-The generating model identifier is not exposed in this session and is
-recorded as unavailable rather than inferred from earlier documents.
-
-```text
-generator-name: Copilot SDK in VS Code
-generator-version: unavailable
-generator-model-token: unavailable
-generator-provider: OpenAI
-generation-date: 2026-10-18
-generator-responsibility: revision
-```
+For programmatic use, see the
+[Python API guide](python-api.md) and generated
+[API reference](../src/fim/API.md). The API delegates convergence-default
+calculation to [`derive_convergence_defaults()`](../src/fim/convergence/defaults.py)
+and [`relaxation_time()`](../src/fim/convergence/defaults.py).

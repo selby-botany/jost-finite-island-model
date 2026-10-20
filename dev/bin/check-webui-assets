@@ -1,48 +1,10 @@
 #!/usr/bin/env python3
-"""Validate the desktop GUI's stylesheets, markup, and asset references.
+"""Check cross-file references in the desktop web interface.
 
-Everything under `src/fim/gui/webui/` is checked four ways:
-
-1. Every class a stylesheet defines a rule for must be referenced by
-   some HTML file or script. A rule nothing can ever match is dead
-   weight: it survives renames, gets copied around, and quietly misleads
-   the next person who greps for it expecting to find live styling.
-2. Every class the HTML or a script puts on an element must either have
-   a rule in a stylesheet or be read back by a script (a selector passed
-   to `querySelector`/`closest`/`matches`, or a `classList.contains`
-   test). A class that is neither styled nor read does nothing at all --
-   it is usually the residue of a rule that was deleted, or a typo that
-   silently switched off the styling somebody thought they were getting.
-3. Every local `href`/`src` must resolve to a file that exists, and an
-   SVG sprite reference (`icons/fim-icons.svg#icon-run`) must name a
-   symbol that exists inside that sprite. A missing icon is invisible in
-   the worst way: the button still renders, just blank.
-4. Every same-page `#fragment` link must name an `id` that exists in the
-   same file. The generated Help pages are full of these, and a renamed
-   heading breaks them without breaking anything a Markdown check sees.
-
-Why this exists: `bin/stylelint`, `bin/eslint`, and `bin/htmlhint`
-between them check that each *file* is well-formed, but none of them
-looks across files, because none of them knows that these particular
-scripts, stylesheets, and pages are one application. Whether a class in
-`index.html` has any styling behind it, or whether `<use href="...">`
-points at a symbol that is really in the sprite, is a question about the
-relationship *between* those files, and it is exactly the sort of thing
-that decays silently as screens are added and removed. This is the
-counterpart to `dev/bin/check-doc-links`, which asks the same question
-of the documentation set; like that script it runs in `./build --ci`,
-needs no Docker, and can be run directly at any time.
-
-Deliberate exceptions are listed in `ALLOWED_UNSTYLED_CLASSES` and
-`ALLOWED_UNUSED_CLASS_PREFIXES` below, each with the reason it is there.
-
-Usage:
-    dev/bin/check-webui-assets
-
-Takes no arguments -- it always scans the whole `src/fim/gui/webui/`
-tree starting from this script's own location. Exit status is 0 if every
-class is accounted for and every reference resolves, or 1 (with one line
-per problem printed to stderr) otherwise.
+Validates stylesheet and script class references, local `href` and `src`
+targets, SVG sprite symbols, and same-page fragment links. The check scans
+`src/fim/gui/webui/` and takes no arguments; problems are printed to standard
+error with exit status 1.
 """
 
 from __future__ import annotations

@@ -1,42 +1,9 @@
-"""Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
+"""Background orchestration for multi-replicate GUI runs.
 
-Under `engine_backend="lineal"`, runs a multi-replicate batch in
-parallel, as real OS processes, via `fim.engine.simulate_params(..., max_workers=N,
-store_factory=...)` — the same call shape `cli._command_run_batch`'s own
-default (non-`--sequential`) path already makes. This reverses the
-Tk-era design's "sequential-only, deliberately" decision: that
-constraint belonged to `GuiProgressStore`'s in-process
-`threading.Event`/callback pair, which cannot cross a process boundary —
-not to the engine, which has supported real parallel replicate execution
-since before any GUI existed. Under any other `engine_backend`,
-`max_workers` is never passed (there is no process pool for it to size);
-`store_factory` alone drives every backend's own batch execution now
-(`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
-`selby/restricted`).
-
-Progress and cancellation for this parallel path are entirely
-file-mediated (`fim.gui.store.LiveProgressStore`), not posted through
-`message_queue` per generation the way the Tk-era sequential runner did:
-a lightweight poller elsewhere (the pywebview bridge, not yet built)
-discovers progress by reading each in-flight replicate's own `.progress`
-sidecar, and requests cancellation by creating one shared file every
-worker's `LiveProgressStore` checks before each write. `message_queue`
-still carries the batch's terminal outcome — done, cancelled, or error —
-exactly as before, since those remain discrete events worth queueing;
-only per-generation progress moved off the queue and onto the filesystem.
-
-Writes the same artifacts `cli._command_run_batch`'s own default
-(parallel) path does, including the same orphan-replicate-directory
-pruning `fim.persistence.saved_run.prune_orphan_replicate_directories` performs: under
-`max_workers`, an adaptive early stop is applied only
-after a whole concurrent worker batch completes
-(`fim.engine.lineal.run_batch_parallel`), so a worker beyond the replicate that
-triggered the stop can still have fully written its own `replicate-NNN/`
-directory even though its result is discarded, never appearing in the
-tuple `fim` returns. Without pruning, `fim.paths.atomic_directory` would
-publish that orphan directory verbatim — a bug class the Tk-era sequential
-runner could never hit (sequential execution never overshoots), mirrored
-here now that real parallelism reopens it for the GUI too.
+For the lineal backend, replicate workers run in separate processes. Progress
+and cancellation use `LiveProgressStore` sidecar files; the message queue
+carries terminal results. The runner writes the same artifacts as the CLI and
+removes output from replicates discarded by an adaptive early stop.
 """
 
 from __future__ import annotations

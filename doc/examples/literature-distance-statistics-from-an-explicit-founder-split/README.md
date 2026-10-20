@@ -16,8 +16,8 @@ Watch the trajectory and allele-composition graphs to compare three questions:
   or disappears, and it is not bounded by 1.
 - Gregorius's `Delta`: how different are each population's allele frequencies
   from those of the other populations combined?
-- Sherwin's mutual information (`MI`): how much does knowing population
-  membership tell you about allele identity? Values use natural logarithms
+- Sherwin's mutual information (`MI`): how much information does population
+  membership provide about allele identity? Values use natural logarithms
   (nats), not bits.
 
 These are compared with `D` and `G_ST`, which summarize differentiation
@@ -70,8 +70,9 @@ distinct unordered deme pairs. Caballero and García-Dorado's equation 6
 instead includes zero self-distances in the all-pairs average; multiply
 this implementation's value by `(d - 1) / d` to obtain that convention.
 For three demes fixed for different alleles the two values are 1 and 2/3.
-That endpoint remains a useful formula check, but is no longer the runnable
-example: with no migration or mutation it has no population dynamics.
+That endpoint provides a formula check. The runnable example uses a
+founder-split configuration with population dynamics; with no migration or
+mutation, the endpoint configuration has no population dynamics.
 
 ## Why a single run
 

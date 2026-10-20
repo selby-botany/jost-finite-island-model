@@ -1,44 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate `test/TESTS.md`, the committed reference listing every test
-module, class, and test function under `test/` together with its
-docstring, from the docstrings actually written in `test/` -- the
-`test/` counterpart to `dev/bin/generate-api-docs`'s own `src/fim/
-API.md`. Never hand-edit the generated file itself.
+"""Generate the committed test reference from test module and function docstrings.
 
-Why this exists: `doc/fim-simulator-detailed-test-plan.md` organizes and
-tabulates the test suite; the detail behind any one test -- what it
-checks, how, and why -- lives in that test's own docstring, deliberately
-not duplicated in the plan document. `test/TESTS.md` is where that
-detail becomes browsable on its own, the same way `src/fim/API.md`
-already makes every production docstring browsable without installing
-Python or opening an editor, and the same way `doc/fim-simulator-
-detailed-test-plan.md` links directly into it rather than repeating any
-one test's own explanation.
-
-How this differs from `generate-api-docs`: `src/fim/` is a real Python
-package (every directory has an `__init__.py`), so `pydoc-markdown` can
-resolve a fully dotted module name (`fim.model.params`) directly. Most
-of `test/` is not a package this way (only `test/gui/` happens to carry
-an empty `__init__.py`) -- confirmed the hard way, `pydoc-markdown`'s own
-`find_module` raised `ImportError` on a dotted `test.model.test_allele`
-name, unlike Python's own `importlib`, which would have resolved it as a
-namespace package. This script works around that by treating each test
-directory as its own self-contained search path (`-I test/<group>`) and
-each file within it by its own bare filename (`-m test_allele`) -- one
-`pydoc-markdown` invocation per file, never a package-qualified one --
-then re-qualifies every heading and anchor it produces with that
-directory's own name before combining every group's output into one
-document, both for organization and because two directories genuinely
-do contain a same-named file (`test/gui/test_store.py` and `test/
-persistence/test_store.py`) that would otherwise collide.
-
-Usage:
-    dev/bin/generate-test-docs [OUTPUT_PATH]
-
-Arguments:
-    OUTPUT_PATH   Where to write the generated Markdown file.
-                  Default: test/TESTS.md (the file actually committed to
-                  the repository).
+Writes a Markdown listing of test modules, classes, and tests. The optional
+output path defaults to `test/TESTS.md`. Generated output should be changed by
+updating source docstrings and regenerating this reference.
 """
 
 from __future__ import annotations

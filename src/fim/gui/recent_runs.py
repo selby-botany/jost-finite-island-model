@@ -1,16 +1,7 @@
-"""Scan `results/` for recently completed runs, scalar and batch
-(`doc/fim-gui-design.md` §9).
+"""Find recent scalar and batch runs in the results directory.
 
-The recent-runs picker is populated by scanning
-`fim.paths.results_directory()` for `*/manifest.json`, reading each with
-`fim.persistence.manifest.read_manifest` (scalar) or
-`fim.persistence.manifest.read_batch_manifest` (batch) — the same files
-`fim stats` and `fim run`'s own batch summary default to. A batch's
-manifest is listed but labeled distinctly (e.g. "batch (14/20)") rather
-than treated as something the picker can open directly: "Open
-replicate" on a batch's own results table is the path to any one
-replicate's trajectory, since a batch-level manifest has no single
-trajectory of its own to verify or re-analyze.
+Run manifests provide the list entries. Scalar runs can be opened directly;
+for a batch, the interface opens an individual replicate.
 """
 
 from __future__ import annotations

@@ -64,9 +64,9 @@ const EFFECTIVE_ALLELE_LABELS = [
 // not a separately positioned element beside the statistics table
 // (reported live: that older placement broke the table's own layout).
 const G_ST_CAUTION_TEXT =
-    "Gₓₛₜ is compressed toward zero when within-deme diversity " +
-    "is this high, even between demes that share no alleles at all " +
-    "— Jost's D does not have this artifact.";
+    "High within-deme diversity limits the maximum possible G_ST, " +
+    "even when demes share no alleles. Jost's D equals one when " +
+    "demes share no alleles.";
 
 // The two "always present" info lines (design: the run's own outcome,
 // and the derived-convergence-settings note when the window/cap were

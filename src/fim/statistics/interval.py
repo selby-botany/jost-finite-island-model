@@ -1,46 +1,10 @@
-"""Confidence intervals for across-replicate sample means.
+"""Compute confidence intervals for means across independent replicates.
 
-A **confidence interval** is a range around a measured average that
-expresses how much uncertainty is left after averaging only a limited
-number of independent measurements — the same idea a poll reports as
-"52% ± 3%" rather than a single bare number, where the "± 3%" is exactly
-this kind of interval. See `fim.engine.reports_summary`'s own docstring
-for the fuller explanation of what problem this solves in this project
-specifically: each independently seeded replicate run contributes one
-scalar draw (its own final ``D``, ``G_ST``, and so on), and this module
-is what turns a handful of those draws into a mean plus a defensible
-range around it.
-
-The confidence interval of the mean of several such draws is a standard
-Student's-t interval on the sample mean, exactly as for any other
-independent, identically distributed sample — no bootstrap or other
-resampling scheme is needed on top of draws that are already independent
-by construction. "Student's-t" is the standard statistical method for
-exactly this situation: a small number of independent measurements whose
-own true variability is not known in advance and must itself be
-estimated from the measurements at hand (as opposed to the simpler,
-better-known bell-curve method, which assumes that variability is
-already known) — the correction it applies matters most for a handful of
-replicates and fades away as more are added, which is why the "degrees
-of freedom" (one less than the number of values being averaged — see
-`confidence_interval`'s own docstring) appears throughout this file.
-
-The critical value (how many standard errors wide the interval needs to
-be, for the requested confidence level and sample size) comes from a
-standard published Student's-t table (linear interpolation in ``1/df``
-between listed degrees of freedom, the conventional way to read an
-unlisted row off a printed table) rather than an inverse regularized-
-incomplete-beta computation (a more general but numerically delicate way
-of computing the identical values from first principles): every tabled
-degrees of freedom below 120 matches a printed statistics table exactly,
-needs no dependency beyond the standard library, and avoids hand-rolling
-a numerically delicate special function in the one area of this project
-under direct outside statistical review. Above the table's tail, the
-exact standard-normal quantile is used (a t-distribution's
-``degrees_of_freedom -> infinity`` limit — with enough replicates, the
-small-sample correction becomes negligible and the ordinary bell-curve
-answer is exact), computed by the standard library's `statistics.
-NormalDist`, not another approximate table row.
+`confidence_interval` uses the Student's t distribution for finite samples.
+Critical values are read from a published table, with linear interpolation in
+``1/df`` for unlisted degrees of freedom; above the table range, the standard
+normal quantile is used as the limiting value. See `fim.engine.reports_summary`
+for the batch-summary context.
 """
 
 from __future__ import annotations

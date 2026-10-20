@@ -130,3 +130,10 @@ class CatalogTests(unittest.TestCase):
         """The bridge payload round-trips through JSON in catalog order."""
         payload = json.loads(json.dumps(catalog_payload()))
         self.assertEqual([row["key"] for row in payload], [e.key for e in CATALOG])
+        self.assertTrue(all(row["help_anchor"] for row in payload))
+
+    def test_descriptions_distinguish_partitioning_and_distance(self) -> None:
+        """Hover descriptions identify the formulas used by the implementation."""
+        self.assertIn("(H_T - H_S) / (1 - H_S)", spec("H_ST").description)
+        self.assertNotIn("Hedrick", spec("H_ST").description)
+        self.assertIn("remaining demes", spec("Delta").description)

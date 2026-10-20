@@ -1471,6 +1471,23 @@ fieldset.combinator-choice label {
     text-decoration: underline;
 }
 
+.statistic-help-link {
+    border: none;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    text-decoration: underline dotted;
+    text-underline-offset: 0.15em;
+    cursor: help;
+}
+
+.statistic-help-link:hover,
+.statistic-help-link:focus-visible {
+    color: var(--fim-accent);
+}
+
 /* Settings, "Statistics shown": presets, then the grouped checklist. */
 .settings-statistics {
     border: 1px solid var(--fim-border);
@@ -1580,6 +1597,10 @@ fieldset.combinator-choice label {
 .stats-table tr.stat-watched .stat-name {
     text-decoration: underline;
     text-underline-offset: 0.2em;
+}
+
+.stat-watched .statistic-help-link {
+    text-decoration: none;
 }
 
 .stats-table tr.stat-burn-in .stat-value {

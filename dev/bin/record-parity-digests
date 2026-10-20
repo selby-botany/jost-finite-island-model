@@ -1,39 +1,11 @@
 #!/usr/bin/env python3
-"""Record and compare bit-parity digests of simulation output.
+"""Record or compare hashes of simulation results for parity checks.
 
-The public API redesign (`20261014-claude-sonnet-5-5-public-api-redesign-
-design.md`, `selby/restricted`) must not change one trajectory bit. This
-tool turns a build's output into a small JSON file of SHA-256 digests, so
-any commit can be compared with the baseline taken before the redesign.
-
-What is digested, per case and backend:
-
-- every trajectory row, in order (allele identity and frequency bits);
-- the final report, the convergence histories, and the manifest apart from
-  the fields that name the backend.
-
-Cases: the shared configuration matrices in `test/vector_support.py`
-(infinite and finite alleles, continuous and stochastic migration), each
-run on every backend that is available, plus a three-replicate batch.
-Every shipped example's configuration is also resolved and digested (its
-parameters and run ID), which is cheap; `--run-examples` additionally runs
-the examples through `fim.launcher` and digests the trajectory log and
-report, which can take hours on `lineal`.
-
-Digests describe one platform: compiled kernels use Numba's math routines,
-which match CPython bit for bit only on the platform that recorded them.
-Record and check on the same machine.
-
-Usage:
-    dev/bin/record-parity-digests --output baseline.json
-    dev/bin/record-parity-digests --check baseline.json
-    dev/bin/record-parity-digests --check baseline.json --ignore-run-ids
-    dev/bin/record-parity-digests --output baseline.json --run-examples \\
-        dear-nolan-high
-
-`--check` prints each differing entry and exits 1 on any difference.
-`--ignore-run-ids` skips run IDs and the digests that include them, for the
-commit that deliberately changes run identity.
+The JSON evidence covers trajectory rows, reports, convergence histories, and
+configuration identities across available backends. Digests for compiled
+kernels are platform-specific; record and compare them on the same platform.
+`--run-examples` also runs selected bundled examples and may take substantial
+time. `--check` exits 1 when an entry differs.
 """
 
 from __future__ import annotations

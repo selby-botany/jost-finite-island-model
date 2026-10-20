@@ -1,9 +1,10 @@
 # Using `fim`
 
-This guide covers every `fim` command and output, not what the simulator
-models or why — see [what this simulates](../README.md#what-this-simulates)
-for that first. For parameter types and defaults, use the
-[configuration reference](configuration.md). Return to the
+This guide covers commands, desktop workflows, and output files. See
+[what this simulates](../README.md#what-this-simulates) for the model,
+the [configuration reference](configuration.md) for parameter types and
+defaults, and the [statistics reference](statistics.md) for definitions,
+interpretation, and implementation links. Return to the
 [project overview](../README.md) for installation and documentation links.
 
 ## Contents
@@ -67,18 +68,17 @@ non-converged result.
 
 ### Why does my run take so long?
 
-A simulated population does not settle at once. With little migration between
-islands, gene flow and mutation take tens of thousands of generations to shape
-what you finally see, so a run first waits out a burn-in of about that long and
-then averages until the average is known to the precision you asked for. You do
-not choose those lengths: `convergence_burn_in` and `max_generations` default to
-`auto`, derived from your migration, mutation and population sizes.
+Low migration or mutation can require tens of thousands of generations for
+dependence on initial conditions to decay. A run first discards a burn-in,
+then averages until its stopping rule is satisfied.
+`convergence_burn_in` and `max_generations` default to `auto`, derived from
+migration, mutation, and population sizes; explicit values override them.
 
 `fim run` prints the derived values unless `--quiet`, and the desktop app shows
 them next to **Run simulation** before you start. For five islands of 100 gene
 copies with `m: 0.0001` and `mu: 0.000001` that is a burn-in of about 104,000
-generations. A run that finishes in a hundred generations is a warning sign,
-not good news. The derivation and its evidence are in
+generations. A 100-generation run cannot provide an equilibrium estimate
+for that configuration. The derivation and evidence are in
 [Convergence](convergence.md); the settings are in
 [configuration.md](configuration.md#convergence_burn_in).
 
@@ -87,34 +87,28 @@ not good news. The derivation and its evidence are in
 A config's n_replicates (see [configuration.md](configuration.md#n_replicates))
 controls whether one run or a whole batch executes:
 
-- **n_replicates: 1**: the four-file scalar-run contract below,
-  directly in the output directory. Set this explicitly for a single,
-  ordinary run with no batching at all.
+- **n_replicates: 1**: scalar-run artifacts directly in the output directory.
 - **n_replicates greater than one (the default: `200`, with
   [stop_batch_early](configuration.md#stop_batch_early) and a
   [precision](configuration.md#precision) of `0.01` usually stopping well
-  short of it)**: each replicate gets its
-  own `replicate-NNN/` subdirectory, keeping that same four-file contract,
+  short of it)**: each replicate gets a
+  `replicate-NNN/` subdirectory containing scalar-run artifacts,
   plus a batch-level `manifest.json` and `summary.json` — see
   [Output schemas](#output-schemas).
 
-An unconfigured run — no `n_replicates` key at all — is therefore a batch,
-not a single scalar run: this is a deliberate default (an unattended run
-reports a real confidence interval instead of a single, uncertainty-free
-point estimate), and a config that wants one run says so with
-`n_replicates: 1`. [`fim init`](#create-a-configuration)'s starter
-configuration states the default (`n_replicates: 200`) explicitly. Most of
-the worked examples below run as the default batch; the few that are about
-one run's own behavior set `n_replicates: 1` and give the reason.
+Omitting `n_replicates` selects a batch with an across-replicate confidence
+interval. Set `n_replicates: 1` for a single run.
+The [`fim init`](#create-a-configuration) configuration states
+`n_replicates: 200` explicitly. Most worked examples use batches; examples
+of within-run behavior use one replicate.
 
 A batch runs under any [engine_backend](configuration.md#engine_backend),
 not only `lineal`; every backend writes the same `replicate-NNN/` +
-`manifest.json` + `summary.json` layout. Whether a replicate's own
-trajectory is bit-identical across backends for the same seed follows
-`engine_backend`'s own documented parity rules: `lineal`,
+`manifest.json` + `summary.json` layout. Backend parity follows the
+documented `engine_backend` rules: `lineal`,
 `generational` and `generational-vector` produce the same trajectory,
 bit for bit, for the same seed on the same machine, so running the same
-batch under a different backend reproduces every replicate exactly (and
+batch under a different backend reproduces every replicate (and
 across different machines, statistically — the compiled arithmetic
 `generational-vector` and `jit: numba` use is checked against Python's
 only on the development platform).
@@ -124,12 +118,12 @@ pool), batch replicates run in parallel by default, one worker per
 processor. `--workers N` sets an explicit worker count; `--sequential`
 runs replicates one at a time — the worker count affects only how long the
 batch takes, never its result. Both flags are rejected with a
-usage error under any other `engine_backend`, which has no process pool
-for them to mean anything about; use
+usage error under other backends, which do not use process pools. Use
 [max_concurrent_replicates](configuration.md#max_concurrent_replicates)
 instead (also settable for this run only via `--max-concurrent-replicates
 N`, without editing the config file), the `generational`/
-`generational-vector` path's own concurrency/memory-bounding control.
+`generational-vector` concurrency and memory control. In adaptive batches,
+this setting also affects averaging-window selection and can change results.
 
 With stop_batch_early off in the config, exactly n_replicates
 replicates run. With it on (the default), the batch can stop earlier, once every watched
@@ -150,7 +144,7 @@ fim object resume OBJECT_ID          # continue exactly where it stopped
 fim object list                      # every saved run and its state
 ```
 
-A resumed run produces exactly the result of one that never stopped. Ctrl-C,
+A resumed run reproduces an uninterrupted run. Ctrl-C,
 SIGTERM, a crash, or a power failure loses at most the work since the last
 checkpoint (1,000 generations or 60 seconds). The desktop app's
 **Save for later** and **Saved runs** use the same objects. See
@@ -162,26 +156,20 @@ command, and recovery case.
 Each example below is a complete config and the command that runs it: save
 the YAML, run the command, and the reported values match those shown here,
 because the same seed, parameters, and version always give the same
-`report.json` (see [Reproduce a run](#reproduce-a-run)). Each example uses
-a small `N` and `d`, and lets [convergence_burn_in and
-max_generations](convergence.md) be derived from the model (the default), so
-each run burns in and then averages until its statistic's mean is known to the
-requested `precision`. With one
-locus that can take tens of thousands of generations, so
-several examples set a looser precision (0.02 to 0.05) or pool
-eight loci, and each one's README says what that costs. Every example
-here finishes in a few seconds to about eight minutes of wall-clock
-time on a development machine (an idle one is faster), except Dear-Nolan low,
-which takes a few minutes under `auto`. Most use one locus, so a single run's
-numbers scatter widely around the model's expectation; use a batch
-(`n_replicates`) when you want a stable value. Each uses a
+`report.json` on the same platform (see [Reproduce a run](#reproduce-a-run)).
+Most use model-derived [burn-in and generation caps](convergence.md);
+timing examples use fixed averaging windows. Several use looser precision
+(0.02–0.05) or eight pooled loci to limit runtime. Their READMEs document
+the trade-offs and measurements. Runtime depends on backend, hardware,
+and workload. Single-locus results can vary widely; use replicates to
+estimate the mean and its uncertainty. Each example uses a
 seed distinct from [`fim init`](#create-a-configuration)'s starter config.
 Each configuration starts with its labels (`name`, `description`,
-`class`) and `_read_only: true`, which marks the copy shipped with the app
-as read-only; delete that line in your own copy (see
+`class`) and `_read_only: true`, which protects the bundled copy;
+delete that line in an editable copy (see
 [Run labels](configuration.md#run-labels)).
 Each demonstrates one option, or one natural pair of options, from the
-[configuration reference](configuration.md); a real study combines them
+[configuration reference](configuration.md); studies can combine them
 freely.
 
 In the [desktop app](#desktop-gui-fim-gui), you do not need to copy the
@@ -202,7 +190,7 @@ copy. An example that the form cannot represent (a different `mu` for each
 locus that no single per-base rate `mu_b` produces, for example) or that has
 no configuration file says so in the dialog, and
 **Load into Configure** stays unavailable for it. **Open saved result**
-shows the example's own result, as shipped with the app, without running
+shows the bundled result without running
 anything (see [Opening a saved example](#opening-a-saved-example)); it is
 unavailable for an example whose result has not been saved yet.
 
@@ -265,24 +253,24 @@ fim run hub-island.yaml --output results/hub-island --quiet
 
 The batch of 10 replicates takes about five minutes and gives an average D of
 0.0652 ± 0.0028 across replicates. The example pools eight loci: one locus
-alone swings too widely for its D to settle honestly (see the
+alone has greater sampling variation (see the
 [example's README](examples/unequal-island-sizes-with-a-migration-hub/README.md)).
 `manifest.json`'s `parameters.N`
-and `parameters.m` record the exact per-deme sizes and matrix rows used —
+and `parameters.m` record the per-deme sizes and matrix rows used —
 compare them against a run with one shared `N/m` to see the effect of
 unequal size and asymmetric connectivity on differentiation.
 
-deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
+`deme_weighting` affects E<sub>ST</sub>, δ<sub>G</sub>, and mutual
+information; `D` and K<sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme `N` above,
 the default `equal` weighting and `deme_weighting: size` give different
-E<sub>ST</sub> — deme 4's own 800-gene-copy weight pulls the size-weighted value
+E<sub>ST</sub> — deme 4's 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.
 
 ### Stepping-stone (spatial) migration
 
 Six demes arranged on a ring, each migrating only with its two neighbors —
-`fim.model.topology`'s compact sugar for a sparse migration matrix, instead
-of hand-writing all 36 matrix entries:
+specified through a named topology rather than all 36 matrix entries:
 
 <!-- worked-example-config: examples/stepping-stone-spatial-migration/config.yaml -->
 ```yaml
@@ -391,14 +379,11 @@ for the normalization and the different questions these measures answer.
 
 ### Equilibrium-split founding
 
-The example above hand-picks generation-0 frequencies directly. This one
-derives them instead: your demes are founded from a single shared ancestral
-population rather than an independent Dirichlet draw per deme — the
-ancestral population simulates alone until it reaches mutation-drift
-equilibrium, then splits into your demes by sampling without replacement,
-so the demes
-already differ a little at generation 0 purely from which copies each one
-happened to receive, a genuine founder effect rather than an assumption:
+This example derives generation-0 frequencies from a shared ancestral
+population rather than specifying them directly or using independent
+Dirichlet draws. The ancestral population undergoes drift and mutation for
+a model-derived equilibration period, then splits into demes by sampling
+without replacement. Sampling introduces founder variation at generation 0:
 
 <!-- worked-example-config: examples/equilibrium-split-founding/config.yaml -->
 ```yaml
@@ -453,9 +438,8 @@ fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
 
 The ancestral phase runs 1,256 generations in each replicate; the batch of 10
 replicates takes about fifteen minutes and gives an average D of
-0.285 ± 0.012 across replicates (the model's expectation is 0.287) — real differentiation that grew from the
-ancestral-population founder effect, with no explicit `p_0` anywhere in the
-file. The example pools
+0.285 ± 0.012 across replicates (the model's expectation is 0.287).
+Initial frequencies are derived without an explicit `p_0`. The example pools
 eight loci and sets `precision: 0.03`, because one locus here
 needs about 30,000 generations to settle (see the
 [example's README](examples/equilibrium-split-founding/README.md)). How long the ancestral phase runs is worked out from
@@ -477,8 +461,7 @@ equilibrium_max_generations](configuration.md#equilibrium_convergence_window-equ
 By default, migration blends each deme's frequencies with an exact
 `rate * N` fraction of its neighbors' — a deterministic step given that
 generation's frequencies. migrant_sampling: stochastic instead draws the
-migrant *count* from `Binomial(N, rate)`, adding a genuine, explicit source
-of randomness some studies want counted:
+migrant count from `Binomial(N, rate)`, adding variation in migrant number:
 
 <!-- worked-example-config: examples/stochastic-migrant-counts/config.yaml -->
 ```yaml
@@ -521,9 +504,8 @@ globally unique identity — the standard population-genetics idealization
 for a locus long enough that two independent mutations essentially never
 land on the same state. finite_alleles instead bounds a locus to
 4<sup>length</sup> states and lets a mutation recur to one already present
-elsewhere in the run — deliberately exercised here with a very short
-3-base locus (only 4<sup>3</sup> = 64 states) and a high `mu` so recurrence is
-actually likely within the run, not just theoretically possible:
+elsewhere in the run. This example uses a 3-base locus
+(4<sup>3</sup> = 64 states) and high `mu` to make recurrent mutation likely:
 
 <!-- worked-example-config: examples/finite-length-alleles-the-k-allele-model/config.yaml -->
 ```yaml
@@ -653,7 +635,7 @@ fim run kimura-weiss-isolation-by-distance.yaml \
 
 The batch of 10 replicates takes about six minutes and gives averages D =
 0.563 and G<sub>ST</sub> = 0.122 across replicates. `precision: 0.05` is
-deliberately loose: the default 0.01 would need many times as long, hours (see
+loose to limit runtime; the default 0.01 would take hours in this example (see
 the [example's README](examples/kimura-weiss-isolation-by-distance/README.md)).
 Open the result in `fim-gui` and inspect the Literature visualizations panel:
 the identity-decay plot groups deme pairs by shortest-path distance over the
@@ -662,9 +644,8 @@ non-zero migration edges and overlays a log-linear fit.
 ### Per-base mutation rate across unequal locus lengths
 
 μ<sub>b</sub> (mutually exclusive with `mu`) is a single per-base-pair mutation
-probability; each locus derives its own `mu` from μ<sub>b</sub> and its own
-`length` via mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup> — so two loci of very
-different lengths do not silently mutate at the same rate:
+probability. Each locus derives `mu` from its `length` through
+mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup>:
 
 <!-- worked-example-config: examples/per-base-mutation-rate-across-unequal-locus-lengths/config.yaml -->
 ```yaml
@@ -702,12 +683,12 @@ state; `precision: 0.03` keeps the batch short; see the
 `results/mu-b/manifest.json`'s
 `parameters.mu` records the two derived rates — `0.0009995` for the
 50-base locus and `0.0099503` for the 500-base one — the expanded,
-canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never stored.
+canonical form represented by `mu_b`; the per-base input is not stored.
 
 ### Several convergence statistics
 
 Watch more than one statistic and decide whether stopping needs every one
-of them stable (convergence_combinator: all, the default) or just one
+of them stable (convergence_combinator: all, the default) or one
 (`any`). In the desktop app this is the "stop the run when" pair of
 radio buttons at the foot of Configure's "convergence statistic(s)"
 panel, shown once two or more statistics are checked.
@@ -745,7 +726,7 @@ fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
 Converges at generation 2,327, after a few seconds. `report.json`'s
-converged_on lists the watched statistics that had actually settled when the
+converged_on lists the watched statistics that had settled when the
 run stopped: here ["G<sub>ST</sub>"] alone, because G<sub>ST</sub>'s
 average was already known precisely (0.0606 ± 0.0047) while D's
 was not (0.151 ± 0.020), and `any` needs only one. A run that reaches its cap
@@ -755,11 +736,10 @@ records `null`, since it converged on nothing.
 
 A run burns in and then averages; everything after the burn-in is its
 evidence window. The report gives, for the window, both the precision of the
-average (the standard error) and how much the statistic still wobbles,
-generation to generation (the standard deviation, `σ`) — a different question
-from the across-replicate confidence interval in the next example, which asks
-how much independent replicates disagree with each other, not how noisy any
-one of them still is:
+average (the standard error) and generation-to-generation variation
+(the standard deviation, `σ`). The across-replicate confidence interval
+in the next example instead measures uncertainty in a mean across
+independent replicates:
 
 <!-- worked-example-config: examples/within-run-sigma-band/config.yaml -->
 ```yaml
@@ -823,10 +803,9 @@ are in `report.json` under `window_statistics`.
 
 ### An adaptive replicate batch with a confidence interval
 
-Rather than guessing how many replicate runs a confidence interval needs,
-set n_replicates well above the plausible requirement and let
-[precision](configuration.md#precision) decide when
-enough have run:
+Set `n_replicates` as an upper limit and let
+[`precision`](configuration.md#precision) determine when the
+across-replicate interval is narrow enough:
 
 <!-- worked-example-config: examples/an-adaptive-replicate-batch-with-a-confidence-interval/config.yaml -->
 ```yaml
@@ -887,7 +866,7 @@ runs more replicates.) Each replicate pools eight loci and is itself averaged to
 `precision: 0.03`, so most settle within a few thousand generations; one-locus
 replicates would take hours for the whole batch (see the
 [example's README](examples/an-adaptive-replicate-batch-with-a-confidence-interval/README.md)).
-`results/adaptive-batch/summary.json` reports every statistic's own
+`results/adaptive-batch/summary.json` reports every statistic's
 interval; `results/adaptive-batch/replicate-001/` through
 `replicate-010/` each hold the ordinary scalar-run files for
 that one replicate. Under `engine_backend: auto` the replicates advance
@@ -901,27 +880,20 @@ wall-clock time differs.
 
 Every example above names `engine_backend: auto`, the recommended choice and
 the desktop app's starting value for a fresh form. `auto` never resolves to
-`lineal` (the library's own default): it picks `generational` or
+`lineal` (the library default): it picks `generational` or
 `generational-vector` (see [engine_backend](configuration.md#engine_backend)),
 which reproduce `lineal` bit for bit for the same seed, so each example's
-committed output is also exactly what `lineal` produces
+committed output matches `lineal`
 (`test/validation/test_examples_auto_backend.py` checks this by rerunning each
-example on `lineal`). This example and the next are the deliberate exception:
-each names a different engine backend and runs a real, moderately long batch (a few seconds, not
-instant) large enough for that backend's own advantage to actually show.
-They are also the exception to the derived convergence defaults: each pins a
-fixed amount of work, 16 replicates of exactly 100 generations
-(`max_generations: 100` with `precision: 0.0`, which can never be reached,
-and `convergence_burn_in: 1`, and `stop_batch_early: false` so no replicate is
-skipped), so a
-timing comparison always does the same work. The population is nowhere
-near equilibrium when it stops, so read these two as timing workloads, not
-as results.
+example on `lineal`). This example and the next explicitly select their
+backends. Each performs fixed work: 16 replicates, a one-generation burn-in,
+and a 99-generation averaging window, with `stop_batch_early: false`.
+These are timing workloads, not equilibrium estimates.
 `generational-vector` keeps a dense, array-native representation of every
 active replicate at once, and is the fastest measured choice once `d`
 grows large enough — see [choosing an engine
 backend](fim-simulator-design.md#46-choosing-an-engine-backend) for the
-full measured comparison this example's own shape is drawn from:
+measurements motivating this workload:
 
 <!-- worked-example-config: examples/a-large-d-batch-under-generational-vector/config.yaml -->
 ```yaml
@@ -960,7 +932,7 @@ fim run vector-showcase.yaml --output results/vector-showcase --quiet
 Ran in about 10 seconds on a development machine, all 16 replicates
 for exactly 100 generations (a fixed averaging window), with `D`'s 95%
 confidence interval at `0.0465 +/- 0.0020`. In the desktop
-app, loading this example runs it with its own `generational-vector`
+app, loading this example uses its `generational-vector`
 engine and 16 replicates, whatever your Settings hold, and leaves your
 Settings unchanged; a notice lists the differences and offers to make
 them your Settings (see
@@ -971,9 +943,8 @@ them your Settings (see
 The same batch shape as the example above, but favoring locus length over
 deme count instead — `d: 35` with a 7-base locus (16384 possible allele
 states under `finite_alleles`) rather than `d: 70` with a 5-base one —
-and the plain `generational` engine, which this project's own measured
-benchmarks find winning over `generational-vector` in exactly this kind of
-region (moderate `d`, a longer locus):
+and the `generational` engine. Benchmarks favor this backend in regions
+with moderate `d` and longer loci:
 
 <!-- worked-example-config: examples/a-long-locus-batch-under-the-generational-engine/config.yaml -->
 ```yaml
@@ -1010,12 +981,11 @@ fim run generational-showcase.yaml --output results/generational-showcase --quie
 ```
 
 Ran in about 35 seconds on the same hardware, with `D`'s 95% confidence
-interval at `0.0451 +/- 0.0024`. That is a little slower than the
-`generational-vector` example above, although an earlier measurement on a
-less loaded machine found it a little faster: neither backend is
-universally faster, and which one wins depends on where a configuration
-sits on the `d`/locus-length grid and on the machine itself. In the desktop
-app, loading this example runs it with its own `generational` engine, the
+interval at `0.0451 +/- 0.0024`. These two examples have different model
+sizes, so their runtimes are not a controlled backend comparison.
+Backend performance depends on the configuration and hardware; see the
+[benchmark reference](fim-engine-backend-benchmarks.md).
+In the desktop app, loading this example uses its `generational` engine, the
 same way the previous example runs with `generational-vector`, without
 changing your Settings.
 
@@ -1048,7 +1018,7 @@ In a sweep, `N` counts **individuals per deme** on an axis and in the base
 alike, the number the desktop app shows; the file's `ploidy` turns it into gene
 copies for each point.
 
-By default every point gets its own seed (`base seed + point index times
+By default each point receives a distinct seed (`base seed + point index times
 n_replicates`), so no two points share a replicate seed. Set
 `seed_policy: same` in the `sweep:` block to give every point the base seed.
 
@@ -1073,39 +1043,36 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 - `plan` states the work as a range, in replicate-generations (one replicate
   stepped one generation): at least the burn-in for the fewest replicates a
   point may stop at, at most the generation cap for every replicate. It is a
-  range because nobody knows in advance how soon a run settles; a run that
-  settles early sits near the low end. The same range appears in the app's
+  range because convergence time is not known in advance.
+  The same range appears in the app's
   Sweep dialog.
   `plan` (and `run`, before it starts) then times the engine for a few seconds
   and adds how long the sweep may take and how much disk it may use, for
   example `time about 35 s to 1 h 50 min (1 point(s) at once on 10 core(s))`
   and `disk about 62 MB to 12 GB with the full trajectory log; 17 MB to 3.2 GB
-  statistics only`. The measurement is of one short run of your own
-  configuration, thrown away afterwards, so it reflects this computer. Points
+  statistics only`. The probe runs the selected
+  configuration briefly and discards its output, measuring this computer. Points
   of a similar size share one measurement, and the results are remembered
-  beside your preferences file (`sweep-throughput.json`), so planning again is
-  instant. `--no-probe` skips the measurement and prints the work range only.
+  beside your preferences file (`sweep-throughput.json`) for reuse.
+  `--no-probe` skips the measurement and prints the work range only.
   The app's Sweep dialog shows the same three lines (time, disk, and what was
   measured) under the plan, for the points that still have to run; it says
   "Measuring the engine…" for the first few seconds of a new size, and a
   running sweep's progress view shows the time left and how long each point
   took.
-- A sweep starts the points that may take longest first, so the last point to
-  finish is not one that could have started at the beginning. This changes no
-  result; each point is stored by its configuration. Each finished point's line
-  says how long it took.
+- A sweep starts the points with the longest estimated duration first.
+  Scheduling does not change point configurations or results.
+  Each finished point's line reports its duration.
 - `fim sweep status STUDY_ID` shows the points by state, whether a process is
-  running the sweep now (it reads the sweep's lock, so it works from another
+  running the sweep (it reads the sweep's lock, including from another
   terminal), the last point finished, any failures with the command to retry
-  them, and the time left. The time left is worked out from the points that
-  have finished: their real duration against the top of what the plan allowed
-  them, applied to the points still to come, so it sharpens as the sweep goes
-  and is an upper figure (a point that settles early finishes sooner).
+  them, and the estimated time remaining. The estimate uses completed
+  points' measured durations relative to their planned upper estimates,
+  scaled to the remaining points. Early convergence can shorten execution.
   `--watch SECONDS` repeats it until the sweep is finished.
-- A sweep can be reproduced from its paper's supplement. `plan` prints a
-  `digest sha256:...`, a fingerprint of the experiment (its base settings,
-  axes, seed policy and the ids of its points; the order of keys does not
-  matter). Two people who hold the same digest hold the same experiment.
+- To document a sweep for reproduction, record the `digest sha256:...`
+  printed by `plan`. It identifies the experiment's base settings,
+  axes, seed policy, and point IDs; key order does not affect the digest.
   `fim sweep spec STUDY_ID > sweep.yaml` writes the sweep file that
   regenerates a study, with every axis written out as its exact values, and
   `fim sweep plan sweep.yaml` then prints the same digest.
@@ -1116,22 +1083,23 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   differed; both runs are then kept). The export's `.meta.json` file carries
   the digest, that record, and for each point its seed, engine and software
   version, so the table can be read without the app.
-- A run can be given limits so it cannot spend more than you meant to:
-  `--max-hours H` (time), `--max-new-points N` (points it computes; reused
-  ones are free) and `--max-disk SIZE` (for example `50GB`, counted as the size
-  of the points it has finished). They work on `run` and `resume`. When one is
-  reached the run starts no more points, pauses the ones in flight where it
+- Limit sweep resource use with
+  `--max-hours H` (time), `--max-new-points N` (newly computed points,
+  excluding reused results), and `--max-disk SIZE` (for example `50GB`,
+  counted as the size of completed points). These options apply to
+  `run` and `resume`. At a limit the run starts no more points,
+  pauses the ones in flight where it
   can, says which limit it reached, and exits with status 3 (0 means done, 1 a
-  failure, 130 a cancel). Nothing is lost or marked failed: the points it did
-  not start are waiting, and `fim sweep resume` carries on, with a new limit
-  if you like. A limit equal to the work to do is not reached.
+  failure, 130 a cancellation). Unstarted points remain pending rather than
+  failed. Continue with `fim sweep resume`, optionally setting a new limit.
+  A limit equal to the remaining work is not reached.
 - `fim sweep run FILE --pilot K` runs the K points that may take longest first,
   prints each one's planned range against what it took and the time left for
   the rest, and asks before running the rest (`--yes` answers yes). The pilot
-  points are real stored results, so nothing is wasted whichever you answer,
-  and a sweep you stop there continues with `fim sweep resume`.
+  points remain stored whether or not the rest proceeds.
+  Continue a stopped pilot with `fim sweep resume`.
 - **Points run at the same time, by default as many as fill the machine, each
-  in its own process.** A single run, or a batch on any engine but `lineal`
+  in a separate process.** A single run, or a batch on any engine but `lineal`
   (including `auto`), uses about one core; a `lineal` batch of `r` replicates
   uses about `r`. So a sweep of single runs or generational batches runs up to
   one point per core, a sweep of small lineal batches a few at once, and a sweep
@@ -1140,7 +1108,7 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   batch point uses, and `--sequential` runs one point at a time with one
   worker. In the app, the Sweep dialog's **Points at once** does the same, and
   the Settings value "max workers" applies. Results do not depend on the
-  setting: each point is fixed by its own configuration and seed.
+  setting: each point is fixed by its configuration and seed.
 - A point that fails for a transient reason, such as a worker process the
   system ended, is tried again once; `--max-attempts N` sets how many tries in
   all. A failure the engine reports is never tried again, because the same
@@ -1164,8 +1132,8 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   chart…** saves the chart as it is drawn as a PNG image.
   In the app, the sweep results screen draws one curve for a sweep over one
   axis. To compare values of a second axis, set **and** to "(none: a line)"
-  and choose **Curves by**: each value gets its own color and marker shape, with
-  its own error bars and, if you ask for it, its own theory curve. **Error
+  and choose **Curves by**: each value gets a color, marker shape,
+  error bars, and optional theory curve. **Error
   bars** show the 95% interval of the mean (the default), the spread across
   replicates, or both. Axes are linear or log; "Automatic" uses a log axis for a
   geometric series of values. With the chart selected, the arrow keys move from
@@ -1182,22 +1150,21 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   investigating. For exactly two sweeps it adds their difference (first minus
   second) with a 95% interval from Welch's method, which allows each sweep a
   different spread. That interval assumes the two sweeps' replicates are
-  independent, so the command looks at the seeds the runs actually used and
+  independent, so the command examines recorded seeds and
   says whether they were different, shared (two sweeps built from the same
   seed and grid use the same seeds, point for point), or partly shared. It
-  never changes the method on its own. Nothing is stored; the comparison is
-  worked out each time.
+  does not adjust the method for shared seeds. The comparison is recomputed
+  on request rather than stored.
   In the app, comparing starts on Home: an experiment row has **Compare
   sweeps…** for the sweep studies inside it, and **Select** lets you tick any
   sweep studies, from any experiment, and choose **Compare selected sweeps…**.
-  The comparison screen draws one curve per sweep, each in its own color and
+  The comparison screen draws one curve per sweep with a distinct color and
   marker shape, over the axis you pick (the other shared axes are held at a
   value), with the error-bar, scale and theory controls of the results screen.
   With exactly two sweeps a second panel shows their difference with its
-  interval and a zero line. Each sweep's theory curve uses that sweep's own
+  interval and a zero line. Each theory curve uses its sweep's
   settings. A point flagged as degraded or unreliable stays flagged. Nothing is
-  saved: closing the screen forgets the comparison, and opening it again works
-  it out afresh.
+  saved: reopening the screen recomputes the comparison.
 - Each point has a health mark. A point is `unreliable` if every replicate
   stopped at the generation limit before its statistics settled, `degraded` if
   some did or if the interval is wider than the `precision` you asked for, and
@@ -1210,8 +1177,7 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 - A sweep holds a lock on its Study while it runs. A second `fim sweep resume`
   (or the app) on the same Study stops at once with a message that another
   process is running it, instead of both writing the same files. The system
-  releases the lock if the process dies, so a crashed sweep never leaves its
-  Study locked.
+  releases the lock when the process exits, including after a crash.
 - A run id is a hash of the point's configuration, so a release that changes
   what the hash covers makes a stored sweep refuse to run ("the stored sweep
   plan no longer matches"). `fim sweep replan STUDY_ID` enumerates the points
@@ -1239,12 +1205,12 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   plain `resume` only runs the points still missing.
 - In the desktop app a sweep is part of Configure. Tick **Sweep**, choose
   what varies in the **Set up sweep…** dialog (a live count and, on request,
-  every point), and press **Run** as always: with **Sweep** on, Run runs the
-  configuration over those ranges into the study chosen at the bottom of
+  every point), and press **Run**. With **Sweep** enabled, Run executes the
+  configuration over those ranges in the study chosen at the bottom of
   Configure. That study then holds the sweep; a study holds at most one.
 - On Home, a study that holds a sweep has two more buttons beside **Continue
   sweep**. **Retry failed (N)** appears while N points have failed and runs
-  just those again (`fim sweep resume --retry-failed`). **Recompute all…**
+  only those points (`fim sweep resume --retry-failed`). **Recompute all…**
   asks you to confirm, then recomputes every finished point and compares each
   with its stored run (`fim sweep resume --rerun`). Both open the sweep's
   progress view.
@@ -1252,7 +1218,7 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   finished points stay in the study.
 - Every point keeps its full trajectories. A sweep multiplies disk use by its
   number of points.
-- Each point's run is named after the study and its own values, for example
+- Each point's run is named after the study and its parameter values, for example
   `Migration and number of demes sweep m=0.001, d=8`, and its description says
   where it sits in the sweep (`Point 8 of 21 of the sweep "Migration and
   number of demes": m=0.001 of m=[0.0001..0.1] (7 values); d=8 of
@@ -1275,10 +1241,10 @@ fim stats run/trajectory.tlog --q 0 --q 1 --q 2
 ```
 
 JSON is printed to standard output. `--output` also writes the same result.
-`--q 0` and `--q 2` always match the report's own K<sub>ST</sub> and `D`; `--q 1`
-matches E<sub>ST</sub>, including the run's own deme_weighting setting — a
-size-weighted E<sub>ST</sub> and an equal-weighted Differentiation_1 would
-otherwise silently disagree on the same trajectory.
+`--q 0` and `--q 2` match the report's K<sub>ST</sub> and `D`; `--q 1`
+matches E<sub>ST</sub> using the recorded `deme_weighting`.
+See [differentiation measures](jost-differentiation-measures.md) for the
+Hill-number family and [statistics](statistics.md) for implementation links.
 
 ## Check for updates
 
@@ -1297,62 +1263,87 @@ offline.
 fim-gui
 ```
 
-A desktop application — three screens over a small, static local web page
-(`fim`'s own bundled `webview` renderer, the OS's native web view; no
-browser, no server beyond the one opt-in release check below) — that runs
-the same simulations and reads the same `results/` folder as the commands
-above. Install it alongside `fim` (`python -m pip install .` already
-provides both console scripts), or launch it from a packaged executable by
-opening it with no arguments — for example by double-clicking
-`fim-windows-x64.exe`/`fim.app`, or running `fim-gui`/`fim --graphical` from
-a Linux install. n_replicates in the configuration is the only thing that
-decides whether a run goes through the scalar or the batch path — there is
-no separate "batch mode" toggle. Every screen calls the identical underlying
-function this guide already documents; nothing here is a second
-implementation.
+The desktop app renders local HTML, CSS, and JavaScript in the operating
+system's native web view. It uses the same simulation functions and
+`results/` folder as the command line. `python -m pip install .` provides
+both `fim` and `fim-gui`. Packaged executables open the GUI with no arguments:
+double-click `fim-windows-x64.exe` or `fim.app`, or run
+`fim-gui`/`fim --graphical` on Linux.
 
-The run view — where a configuration is built, a run proceeds, and its
-result is shown — is one screen in exactly one of three states at a time,
-not three separate screens reached by navigating away from each other:
-building/editing a configuration ("initial"), a run in progress
-("running"), and a finished run's own summary ("completed"). "Run
-simulation" moves from initial to running from wherever it is clicked,
-including straight from a previous run's own completed view — the same
-button starts the next run, reusing whatever the form already holds, with
-no separate "New run" step. Cancelling a run, or a run ending in an error,
-freezes the view exactly as it last rendered, with a banner on top,
-rather than switching anywhere else:
+`n_replicates` selects a single run or batch; there is no separate batch-mode
+control. The run view has initial, running, and completed states.
+**Run simulation** starts from the current configuration, including when a
+previous result is displayed. Cancellation or an error preserves the last
+rendered view and adds a status banner.
 
-A persistent rail (Home, Configure, Explore, Run, Results, Compare, and —
-set apart at the bottom — Help) is always visible along the window's own
-left edge, current destination highlighted, reachable from any screen
-including mid-run; Run and Results both point at the same run view
-described in the table below (a run in progress shows through either one,
-a finished run's own summary too — splitting them into two genuinely
-distinct layouts is still on this project's own GUI roadmap). A read-only
-parameter strip beneath the title bar always shows the current N/d/m/mu;
-clicking any of the four jumps straight to Configure. The same strip also
-has Back, Forward, and Settings controls at its right edge. Back and Forward
-walk through the screen history like a web browser; on a fresh startup there
-is no previous screen, so Back is disabled. A native File/Run/Help menu bar
-duplicates the everyday actions a mouse-and-rail user already has, for
-keyboard-shortcut users: File covers configuration/run file-system actions
-(New/Open/Save configuration, Open run…, Reveal output folder, Quit); Run
-covers the simulation lifecycle (Run simulation, Cancel run); Help covers
-this guide and the [configuration reference](configuration.md) (rendered
-in-app — see the Help screen row below), a link to the full documentation on
-GitHub, Check for updates, and About. Every menu item reuses the exact same
-action the matching on-screen control already performs.
+The left navigation rail provides Home, Configure, Explore, Run, Results,
+Compare, and Help throughout a run. Run and Results share the run view.
+The parameter strip shows N/d/m/mu; selecting a value opens Configure.
+Back and Forward traverse screen history, and Settings opens preferences.
+
+The native File/Run/Help menus provide the same actions as on-screen
+controls. File covers configuration and output files; Run starts and
+cancels simulations. Help opens this guide, the
+[configuration reference](configuration.md), and **Statistics reference**
+([definitions and implementation links](statistics.md)) offline in the app.
+It also provides the full documentation on GitHub, Check for updates, and
+About.
 
 | Screen/state | What it does | Same as |
 |---|---|---|
-| Home | An Experiment/Study/Run tree: every Experiment expands to its own Studies, each expanding to its own Runs, each row carrying a config-summary and a final-statistics/outcome column read from that run's own `report.json`/`summary.json` — a batch row's outcome is its own confidence interval, and is expandable to its individual replicates, each independently reachable for re-analysis. Selecting a scalar or batch row and clicking "Open" (or double-clicking it directly) opens the identical Results card either way — a batch's own pooled statistics, table, and scatter, rebuilt fresh from its own persisted replicates, not only what a live batch's own completion shows. A Study row's own "Open…" goes one level up: every member run, and every replicate of every member batch, pooled together the same way — a mismatched parameter across members (say, two different `d` values) is never refused, only named in a "varies across members" note, since intentionally pooling runs in the same parameter neighborhood is a legitimate choice a botanist is free to make. A run always belongs to a Study; a botanist who never organizes anything still has one to start from — a default Study, inside a default Experiment, created automatically the first time it's needed. An Experiment row's own "Create study…" and a Study row's own "Create run…" (which opens Configure with that Study already selected) put creation on the row that receives it, rather than a separate step elsewhere; "Create experiment…" beside the filter bar is the one page-level exception, since a new Experiment has no row of its own yet to hang the action off of. The read-only [Examples experiment](#the-examples-experiment), holding the shipped worked examples, is always listed last; its rows carry a lock and offer no edits ([Read-only items](#read-only-items)). Deletion is Select/Select all/Delete: every row (Run, Study, Experiment) gets a checkbox, hidden until "Select" is toggled on, and "Delete selected" removes exactly what was checked — deleting a Study or Experiment cascades to its own Runs, named explicitly in the confirmation so a botanist never underestimates what is about to disappear. A recent-runs row, or browsing for a `trajectory.tlog` directly, re-renders its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-`q` sweep. Reachable from the rail's own Home button, or the File menu's "Open run…", from any screen | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
-| Configure | Two always-visible, independently scrollable panels: FIM parameters (ploidy — chosen first and never guessed, starting on diploid unless Settings' default ploidy says otherwise ("Ask me each time" leaves it blank, and a blank ploidy blocks the run) — then N, the number of *individuals* per deme, scalar or a per-deme table, then d, m, mu, seed: the values that together are "the finite island model"; the app multiplies individuals by ploidy into the gene-copy `N` the simulator and the YAML format use) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, whether to stop a batch early, and the replicate minimum) — one per [configuration reference](configuration.md) section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Default ploidy, the Run card's graph columns and scatter-plot style, execution engine, n_replicates, max_generations, convergence burn-in, precision and confidence, the expected-value form, the precision method and replicate averaging window, trajectory retention, the Expert settings, and the batch-execution tuning fields (JIT, the `auto` engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example uses its own values for that run only and leaves Settings unchanged, with a notice listing any differences and a "Make these my Settings" button (see [Loading a configuration does not change your Settings](#loading-a-configuration-does-not-change-your-settings)). "Load configuration…"/"Save configuration…" read and write the exact YAML file format above, "Examples…" opens the Examples dialog (example classes on the left, the selected class's examples on the right with an excerpt of each one's explanation; "Load into Configure", or Return, fills the form and the Run name and description boxes — see [Worked examples](#worked-examples)), the File menu's "Load example…" opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and "▶ Run"/"🔮 Explore" jump to those destinations with the configuration exactly as shown. An invalid field on "Run simulation" (from anywhere) navigates here and marks the specific field, not only the section it lives in | [Create a configuration](#create-a-configuration) |
-| Run view — running | The scatter plot and the trajectories side by side by default — a "Graphs" menu on the card chooses which graphs to show together (the choice is remembered), the columns they use are a Settings choice, and the statistics table beside them stays visible as both the colour legend and the on/off control for each trajectory line. A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same axis selectors `completed` (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. For a scalar run, a statistic-vs-generation trajectory panel grows alongside the scatter as the run advances, plotting all six report statistics, each beside its own predicted-equilibrium reference line (D, G<sub>ST</sub>, E<sub>ST</sub> only — the three with a closed-form prediction). D, G<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub> and H<sub>ST</sub> also get a dash-dot closed-form curve: the value theory expects at every generation, starting from the state the run itself started in and settling at that statistic's equilibrium, so you can see whether the run is on track and how far drift has carried it. It is the model's expectation, so a run with few loci scatters around it and its D and G<sub>ST</sub> sit somewhat below it on average (a ratio of noisy quantities); with several loci the two agree closely. It covers unequal deme sizes and explicit migration matrices too (up to 24 demes), starting from the run's own seeded founding population. It is not drawn for per-locus mutation rates, for a founding population built by equilibration, or for a matrix with more than 24 demes, and it is shown and hidden together with its own statistic's on/off control. A "Show" chooser under the panel's title picks how each statistic is drawn: every generation's value; its trailing mean over the convergence window; or its cumulative mean, everything from where averaging began up to each generation — the run's own estimate as it accumulates, which homes in on the prediction as its band narrows. Both means carry a band of ±1 or ±2 standard errors (the Band chooser; ±2 by default); the every-generation display shows the standard deviation over the evidence window as a band of the same width, and the closed-form curve is averaged over the same windows, so the two still compare like with like while the run is relaxing. The cumulative mean begins where the convergence monitor began averaging a statistic, when a finished run records that, and otherwise after a burn-in of one convergence window. In both averaged displays a solid accent-colored line topped by a small flag marks where the window ending at the shown generation begins, with the window itself faintly shaded; it is drawn in a statistic's own color when statistics start averaging at different generations, and it is never dashed, so it cannot be confused with the scrubber's dashed grey marker. The choice is remembered, applies while the run is going and after it finishes, and changes nothing that is computed or saved. Hovering a statistic's row in the statistics panel shows, right after its value, the statistic's mean over the convergence window ending at the generation shown, with that mean's standard error and how many standard errors it lies from the prediction averaged over the same generations — for example `mean 0.5506 ± 0.0048 over generations 1,399–174,966 (173,568 generations; 1 SE); predicted 0.5448, +1.2 SE`. This is the result to read for a noisy statistic: a single generation's value can sit far from the prediction by drift alone, while the window mean shows whether the run agrees with theory. At the last generation of a finished run the window is the one the convergence monitor actually stopped on — it keeps widening a watched statistic's window until the mean is known to half the tolerance, so it can be far longer than the convergence window — and "not yet noise-adequate" marks a mean that is not yet known that well. The standard error allows for the correlation between neighbouring generations the same way the monitor does (a first-order autoregressive estimate), which reads somewhat low when a statistic relaxes on more than one time scale. After that comes how far the run is from its prediction at that one generation: Δ<sub>p</sub>, the observed value minus the predicted one at the generation shown (for example `ΔDₚ = +0.012, MSE = 4.1e-5`), and the mean squared error of the trajectory so far, from the first recorded generation to the one shown. Both are running values: they update with every live tick and follow the scrubber. The prediction is the closed-form expected trajectory when the run's model has one; otherwise (stochastic migrant counts, finite alleles, unequal deme sizes beyond the closed form's reach) it is the predicted equilibrium, the dashed line, which also covers E<sub>ST</sub>. The tooltip names which one it used. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top | `run`'s own progress/error output, on one screen instead of terminal lines |
-| Run view — completed | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own `mean [lower, upper]` caption) over the evidence window in the "Every generation" display — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled "uncertainty across N independent replicates" so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered `0.0`-`1.0` probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; the statistics panel's deme-pair rows (Nei distances and pairwise F<sub>ST</sub>, when shown) follow the same choice, live, after the run and while scrubbing; which statistics the panel, the results tables, the trajectory chart and the sweep charts show is a Settings choice ("Statistics shown", or "Choose…" in the panel's caption) that never changes what is computed or saved — see [Nei distances](#nei-distances); a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own "Open" button reaches this same view for that one replicate; "Open output folder" reveals the run's own artifacts (a batch's own `summary.json` and every replicate subdirectory, for a batch) | [Output schemas](#output-schemas), [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
-| Explore | Four fields (N in individuals, d, m, mu; predictions use the form's ploidy to turn individuals into gene copies) and a theoretical-prediction table covering differentiation (D, G<sub>ST</sub>, E<sub>ST</sub>), equilibrium diversity (within-deme and pooled heterozygosity, Shannon entropy, and effective allele counts), and Whitlock identity-recovery metrics. The table also reports whether mutation is negligible at equilibrium and marks the typical-deme entropy as approximate, especially at d = 2. Values update when a field is committed — no simulation ever runs, so this remains immediate regardless of N or d. A sweep curve plots any of the predicted statistics across a fixed range of the selected field. Every statistic can be charted on every one of the four sweeps — click a table row to plot it. Because these are measured in different units (proportions, nats, effective alleles, generations), the chart shows one unit family at a time and switches families when you pick a statistic from another one. A statistic that does not depend on the swept field draws a flat line, which is itself informative: D does not vary with N at all, and the identity-recovery metrics do not vary with mutation rate. A slider beneath the chart moves the marker along the swept range and re-reads the whole table at that value, leaving your four fields untouched until you change them yourself. "▶ Run this for real" seeds Configure with these same four values and takes you there, with a new study pre-selected (change or clear it before running). Reachable from the rail's own Explore button, or "🔮 Explore" on Configure (which carries Configure's own current values over), from any screen; Back/Forward use the shared screen history | No CLI equivalent — a direct `fim.statistics` call from Python or a script is the closest terminal equivalent |
-| Compare | Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection, plus a trajectory-over-generations overlay (one statistic at a time, one color per run, selectable from the same six named statistics) — "how does the conclusion change as I vary this one knob," on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; Back/Forward use the shared screen history | No CLI equivalent — comparing several exported `trajectory.jsonl` and `report.json` files by hand is the closest terminal equivalent |
-| Help | This guide and the [configuration reference](configuration.md), rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the rail's own Help button, or the Help menu, from any screen; Back/Forward use the shared screen history | No CLI equivalent — the terminal reads these same two files directly |
+| Home | Browse Experiments, Studies, runs, and batch replicates. Open results, clone configurations, and manage membership. Rows show summaries from `report.json`/`summary.json`; batch results are reconstructed from saved replicates. Default Study/Experiment groups are created when needed. A Study's pooled results can combine different parameters, identified by a “varies across members” note. The protected Examples experiment appears last. **Select** exposes deletion checkboxes; confirmation names runs affected by group deletion. Opening a trajectory supports retained-generation analysis and differentiation-`q` sweeps | [Re-analyze a trajectory](#re-analyze-a-trajectory), [Read-only items](#read-only-items) |
+| Configure | Edit parameters and structure in independently scrolling panels with hover/focus help. Parameters include ploidy, `N` in individuals (scalar or per-deme), `d`, `m`, `mu`, and seed. Both YAML and the form use individuals; the engine converts to gene copies. Ploidy starts from Settings (initially diploid); “Ask me each time” requires selection before running. Structure covers initial conditions, sampling/mutation models, weighting, loci, watched statistics, and batch stopping. Settings supplies execution, convergence, storage, Expert, plot, and concurrency defaults; **Run settings...** edits the pending run. Load/save YAML, select an example, or open the File menu's preset picker (with YAML copying and duplication). **Run**/**Explore** use current inputs; invalid input returns here and marks the field | [Create a configuration](#create-a-configuration), [Loading settings](#loading-a-configuration-does-not-change-your-settings) |
+| Run view — running | Follow live allele frequencies, statistic trajectories, progress, and cancellation. **Graphs** selects visible graphs; Settings controls columns. The statistics table is the trajectory legend and line-visibility control. Batch scatter plots pool advancing replicates. Deme selectors apply to subsequent updates. Cancellation or an error preserves the last view with a status banner | [Run a simulation](#run-a-simulation), [Batches](#batches-n_replicates-greater-than-one) |
+| Run view — completed | Inspect reports, stop outcomes, scatter plots, and persisted histories. Scalar runs show within-run σ bands and playback/scrubbing when multiple generations are retained. Batch results pool final-state scatter and list each replicate's status, final generation, and statistics, with intervals labeled “uncertainty across N independent replicates”. **Open** on a replicate displays scalar results; **Open output folder** reveals artifacts. Deme selectors (initially 1 versus 2) update scatter and pairwise statistics during execution, completion, and scrubbing. Frequency axes span 0–1. **Statistics shown**/**Choose…** controls visible statistics, not saved final reports; supplementary histories can add computation. Statistic names open their [reference sections](statistics.md) | [Output schemas](#output-schemas), [Supplementary histories](configuration.md#track_expensive_statistics) |
+| Explore | Evaluate analytic predictions from `N` (individuals), `d`, `m`, and `mu`, converting by the form's ploidy. The table includes differentiation, diversity, entropy, effective allele counts, identity-recovery metrics, and mutation-negligibility information. Typical-deme entropy is approximate, especially at `d = 2`. Committing a field updates predictions without simulation. Select a statistic row to chart it over any parameter range; charts group compatible units (proportions, nats, allele counts, generations). Parameter-independent predictions appear flat: analytic `D` is independent of `N`, and recovery metrics of mutation rate. The slider evaluates along the range without changing inputs. **Run this for real** copies inputs to Configure with a new Study selected | [Statistics reference](statistics.md), [Python statistics API](fim-simulator-functional-api.md#4-fimstatistics--differentiation-and-diversity-measures) |
+| Compare | Select at least two completed runs. Scatter panels identify differing parameters, and a trajectory overlay shows one statistic with one color per run. No rerun is required | No direct CLI equivalent; compare exported trajectories and reports in an analysis tool |
+| Help | Read this guide, the [configuration reference](configuration.md), and the [statistics reference](statistics.md) offline with cross-links. Other documents open on GitHub in the default browser. Available from the rail or Help menu; Back/Forward uses screen history | The same three Markdown guides are available in the repository |
+
+**Trajectory references and averages.** Scalar trajectories include
+analytic equilibrium lines for `D`, `G_ST`, and `E_ST`, and dash-dot
+expected trajectories for `D`, `G_ST`, `H_S`, `H_T`, and `H_ST` where
+available. Expected trajectories start from the seeded founding state and
+support unequal deme sizes and explicit migration matrices up to 24 demes.
+They are omitted for per-locus mutation rates, equilibrium-split founding,
+and larger matrices. These are model expectations, not individual
+stochastic paths; with few loci, the mean of a ratio can differ from a
+ratio of expectations. See
+[convergence estimates](configuration.md#convergence_estimate).
+
+**Show** selects per-generation values, trailing means, or cumulative
+means. **Band** selects ±1 or ±2 (default) standard errors for means;
+the per-generation display instead shows standard deviations over the
+evidence window. Reference curves are averaged over matching windows.
+Cumulative averaging begins at the recorded averaging start, or after one
+convergence window if that information is absent.
+Solid colored lines with flags mark averaging-window starts; the windows
+are shaded. Per-statistic colors distinguish different starts, and the
+scrubber uses a dashed gray marker. Display choices are remembered and do
+not alter computed or saved results.
+
+Hover a statistic row for its window mean, standard error, generation
+range, and standardized difference from the window-averaged prediction:
+
+```text
+mean 0.5506 ± 0.0048 over generations 1,399–174,966
+(173,568 generations; 1 SE); predicted 0.5448, +1.2 SE
+```
+
+At the final generation, the displayed window is the monitor's stopping
+window. It may be longer than the configured convergence window because
+the monitor widens it to assess precision. “Not yet noise-adequate” marks
+a mean that has not met that precision requirement.
+The first-order autoregressive standard-error estimate accounts for
+neighboring-generation correlation, but can underestimate uncertainty when
+relaxation involves several time scales.
+
+The row also shows Δ<sub>p</sub> (observed minus predicted at the selected
+generation) and trajectory mean squared error, for example
+`ΔDₚ = +0.012, MSE = 4.1e-5`. Both update during execution and scrubbing.
+The prediction uses the expected trajectory when supported, otherwise
+the equilibrium line (including `E_ST`). The tooltip identifies which
+reference applies. See the [statistics reference](statistics.md) for
+definitions and API/source links.
 
 A GUI-authored run with the same parameters and seed produces byte-identical
 `report.json` and `trajectory.tlog` to the same configuration run from the
@@ -1366,14 +1357,12 @@ distributions already have installed — see
 [installation alternatives](../install/README.md) if `fim-gui` reports it
 is missing rather than opening a window.
 
-A double-clicked or `fim --graphical`-launched GUI takes no flags of its
-own, so its operational log is configured from two environment
-variables instead — `FIM_LOG_LEVEL` and `FIM_LOG_OPTIONS`, the exact
-equivalents of `-l`/`-L` below, set before launching (a modified
-shortcut's own "Target" field, or a wrapper script). See [operational
-logging design](fim-logging-design.md) §5. The separate `fim-gui`
-console-script entry point additionally accepts real flags of its own
-— see [Where results, logs, and preferences are
+A double-clicked or `fim --graphical`-launched GUI accepts no logging
+flags. Set `FIM_LOG_LEVEL` and `FIM_LOG_OPTIONS` before launching;
+they correspond to `-l` and `-L` below. See the
+[operational logging design](fim-logging-design.md) §5.
+The separate `fim-gui` entry point also accepts directory flags; see
+[Where results, logs, and preferences are
 written](#where-results-logs-and-preferences-are-written), below.
 
 ### Names, descriptions, and documentation
@@ -1413,7 +1402,7 @@ From the terminal, `fim study create` and `fim experiment create` take
 description either from `fim run --name` and `--description`, or from the
 `name` and `description` [run labels](configuration.md#run-labels) in its
 configuration file (with an optional `class`); the options win over the
-labels. A run's name, description, and class live in its own
+labels. A run's name, description, and class live in
 `metadata.json`, beside `manifest.json`, which they never change, and are
 never part of the run's ID: renaming a configuration does not make it a
 different run. The labels are written only when the run has no
@@ -1421,13 +1410,13 @@ different run. The labels are written only when the run has no
 
 ### The Examples experiment
 
-Home always lists one more Experiment, **Examples**, last, after your own
-work. It holds the worked examples that ship with the app, one Study per
+Home lists the **Examples** experiment after user-created experiments.
+It holds the worked examples bundled with the app, one Study per
 example class (a class inside another is named "Parent — Child"), each
 holding that class's examples as runs with their saved results. The app
 writes these when it starts, into an `examples` folder inside your results
 folder, and writes them again if you remove them; a newer version of the
-app replaces them with its own. An example whose result has not been saved
+app replaces them with its bundled versions. An example whose result has not been saved
 yet is not listed here, but is still in the Examples dialog, ready to load
 into Configure.
 
@@ -1444,11 +1433,11 @@ one:
 - **A run:** click **Clone** on its Home row, or load its configuration
   from the Examples dialog. Configure receives an editable copy,
   with the example's name and description in the Run name and Run
-  description boxes; running it makes a new run of your own.
+  description boxes; running it creates an editable result.
 Home's **Clone** action is available for regular runs too.
 It fills the parameters, Run name, and Run description without changing
 the source run or adding it to another Study. Modify the configuration
-and run it to create your own result. Configure's Study selector starts
+and run it to create a separate result. Configure's Study selector starts
 at **Default study**, where runs go unless you choose another destination.
 Its configuration buttons are ordered **Load configuration…**,
 **Save configuration…**, then **Examples…**.
@@ -1484,8 +1473,8 @@ Every result is retained. To keep the download manageable, trajectory
 files are stored losslessly compressed; the app reconstructs them
 automatically. You do not need to unpack files or manage archive parts.
 
-Use **Load into Configure** to run an editable copy. The copy is your own
-run and never replaces the read-only example. Batch examples include every
+Use **Load into Configure** to run an editable copy without replacing the
+read-only example. Batch examples include every
 kept replicate's full results and the shared batch summary.
 
 ### Closing the window
@@ -1516,31 +1505,25 @@ If nothing would be lost, the window closes at once.
 
 ### If the window closes but `fim` keeps running
 
-Closing the window should end the program immediately. If something
-inside it fails to stop, `fim` guards against being left running
-invisibly — with no window to click and no obvious way to quit — by
-forcing itself to exit about 20 seconds after the window closes. When
-that happens it prints a line explaining why, so the cause can be
-reported rather than guessed at:
+If shutdown has not completed 20 seconds after the window closes,
+`fim` records diagnostics and forces an exit with status `3`:
 
 ```text
 fim: shutdown did not complete within 20s; forcing exit
 ```
 
-Your results are unaffected. Everything a run produces is written to its
-output directory as the run proceeds, so a forced exit after the window
-is already closed cannot lose any of it.
+Completed results remain on disk. A saved run resumes from its latest
+committed checkpoint; work since that checkpoint may need to be repeated.
+Unsaved runs stopped before publication do not produce a completed result.
 
 A diagnostic report is written at the same time, to `logs/fim.log` as well
-as to the terminal — so it is kept even when `fim` was started from an icon
-or shortcut with no terminal attached. If this happens to you, please report
-it: the section of that file beginning `shutdown deadman fired` names what
-failed to stop, and is what makes the cause findable. See
+as to the terminal, including when launched without a terminal.
+Report the section beginning `shutdown deadman fired`, together with
+your platform and launch method. See
 [known issues](../ISSUES.md#intermittent-hang-during-gui-shutdown).
 
-If you are investigating such a shutdown yourself and need the process to
-stay alive rather than be terminated, set `FIM_GUI_SHUTDOWN_TIMEOUT` to
-the number of seconds to allow, or to `0` to wait indefinitely:
+For shutdown investigation, set `FIM_GUI_SHUTDOWN_TIMEOUT` to a longer
+timeout in seconds, or `0` to disable forced exit:
 
 ```console
 FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
@@ -1553,17 +1536,17 @@ max_generations, convergence burn-in, precision, confidence,
 JIT, the `auto` engine's two thresholds, and max concurrent replicates —
 have defaults in Settings. **Run settings...** on Configure edits their
 effective values for the pending configuration only. A configuration you
-load can name its own values for them. Every way of loading one works the same:
+load can supply values for them. This applies to:
 
 - **Examples…** → **Load into Configure**, and **Run it** on a saved example
-- File menu → **Load example…** (the presets picker), built-in or your own
+- File menu → **Load example…** (built-in or user-saved presets)
 - **Load configuration…** (a YAML file)
 - **Clone** on a run listed on Home
 
 The loaded values are used **for this run only**. Your Settings stay
-exactly as they were, so the next **New configuration** starts from your
-Settings again. A value the loaded file does not name takes the
-simulator's own default, the same value `fim run` would use for that
+unchanged, so **New configuration** starts from saved defaults.
+A setting omitted from the loaded file takes the
+simulator default, as in `fim run` for that
 file.
 
 When any loaded run setting differs from your Settings, a notice appears
@@ -1588,7 +1571,7 @@ the notice lists both settings.
   stays while they differ; click it to see the notice again.
 
 If you change Settings after loading, the notice is updated to compare
-against your new Settings; the loaded configuration still keeps its own
+against the new Settings; the loaded configuration retains its
 values. To use your Settings for the run, choose **Run settings...** →
 **Use saved Settings** → **Apply to this run**. This copies a snapshot:
 later edits to saved Settings do not silently change it. The editor is
@@ -1605,36 +1588,32 @@ settings come from your Settings, not from that configuration.
 
 ### Saved preferences
 
-The GUI remembers these things between launches: Settings' own Significant
-digits setting, which statistics are shown ("Statistics shown"; showing
-E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub> or I also
-makes every new run compute all five every generation, which takes longer —
-see [track_expensive_statistics](configuration.md#track_expensive_statistics)), the
-largest deme count for which runs save every pair's statistics, the light/dark override (absent/`null` means "follow the
-OS," the default), whether the first-launch welcome panel has already been
-dismissed, the startup behavior selected in Settings, the execution defaults
-(execution engine, n_replicates, and the rest of Settings' own
-"how the computation runs" fields — see the Configure row above) every fresh
-configuration starts from, and the last configuration you successfully
-clicked "Run simulation" with. In Settings, "Restore the last submitted
-configuration" keeps the existing behavior: a fresh launch's own Run view
-starts from that saved configuration rather than from the built-in starter
-values. "Restart from the starter configuration" uses the built-in starter
-values on the next launch instead — with the saved execution defaults still
-applied over them, the same as any other fresh configuration. A genuinely
-first launch (welcome not yet dismissed) shows the welcome panel offering
-"Examples…" (the Examples dialog) or "Start from scratch." File menu → "New
-configuration" always resets to the built-in starter values (execution
-defaults included) regardless of what is saved as the last submitted
-configuration; it is the one action that ignores that saved configuration on
-purpose. Loading a saved configuration file, a preset, a worked example or
-a saved run never changes the saved execution defaults: see
+The GUI saves display preferences, startup behavior, execution defaults,
+and the last submitted configuration between launches:
+
+- Significant digits and **Statistics shown**. Showing E<sub>ST</sub>,
+  K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub>, or I enables computation
+  of all five each generation; see
+  [`track_expensive_statistics`](configuration.md#track_expensive_statistics).
+- The pairwise-output deme limit and light/dark choice. An absent or
+  `null` theme follows the operating system.
+- Whether the welcome panel has been dismissed.
+- Startup configuration policy and execution/convergence defaults.
+- The configuration last submitted with **Run simulation**.
+
+**Restore the last submitted configuration** opens that configuration at
+launch; **Restart from the starter configuration** uses built-in model
+values. Both apply saved execution defaults. The first-launch welcome
+panel offers **Examples…** or **Start from scratch**.
+File → **New configuration** uses starter model values and saved
+execution defaults, ignoring the last submitted configuration.
+Loading a file, preset, worked example, or saved run does not change saved
+defaults; see
 [Loading a configuration does not change your Settings](#loading-a-configuration-does-not-change-your-settings).
 
-Nothing scientific is stored here: a run's own configuration, seed, and
-results always live in that run's own `manifest.json`/`trajectory.tlog`
-under `results/`, exactly as described throughout this guide. This file
-holds only the GUI conveniences above.
+Preferences supply defaults and interface state; they are not the record
+of a completed run. Its configuration, seed, and results remain in
+`manifest.json`, `trajectory.tlog`, and related artifacts under `results/`.
 
 It lives in the platform's normal per-user settings location — you do not
 need to find or edit it for ordinary use:
@@ -1645,15 +1624,11 @@ need to find or edit it for ordinary use:
 | Windows | `%APPDATA%\fim\preferences.json` |
 | Linux | `$XDG_CONFIG_HOME/fim/preferences.json` (usually `~/.config/fim/preferences.json`) |
 
-If this file is ever unreadable — edited by hand into invalid JSON, or left
-over from an incompatible future version — the GUI notices on the next
-launch, shows a dismissible banner naming the problem, and starts from
-built-in defaults instead of failing to open or guessing at a broken value.
-The unreadable file is never deleted: it is renamed alongside itself with a
-timestamp (`preferences.invalid-<timestamp>.json`) so nothing is lost, and a
-fresh, working file is written in its place. Deleting the whole `fim`
-folder shown above is always a safe way to reset both saved preferences
-from scratch; it never touches anything under `results/`.
+If preferences contain invalid JSON or an unsupported format, the next
+launch shows a dismissible error banner and uses built-in defaults.
+The invalid file is retained as `preferences.invalid-<timestamp>.json`
+beside a newly written preferences file. Removing the preferences folder
+resets saved settings without changing `results/`.
 
 ## Global flags
 
@@ -1669,8 +1644,8 @@ manifests, and release tags.
 
 `-l`/`--log LEVEL` (`debug`, `info`, `warn`, `error`, or `critical`;
 default `warning`) and `-L`/`--log-options KEY=VALUE[,KEY=VALUE]...`
-control this program's own operational log — separate from, and
-unaffected by, `run`'s own `--quiet` and progress/artifact messages
+control the operational log, independently of
+`run --quiet` and progress/artifact messages
 above. Every run already writes a rotated log file at
 `project-root/logs/fim.log` by default, whether or not `-l`/`-L` is
 given at all; `-l debug` raises what reaches it (and the terminal),
@@ -1683,13 +1658,13 @@ each log call in the source lives:
 `--logging-config PATH` (or the `FIM_LOGGING_CONFIG` environment
 variable) replaces `-l`/`-L` entirely for one invocation, reading a
 standard-library `logging.config.dictConfig` YAML file instead — for a
-setup that needs more than `-L`'s own inline options can express
+setup beyond the inline `-L` options
 (several loggers, several handlers, a custom formatter). It is not
-layered with `-l`/`-L`: whichever one is actually given wins outright.
+combined with `-l`/`-L`: the selected configuration replaces the other.
 
 ### Where results, logs, and preferences are written
 
-By default, `fim` writes into `results/`/`logs/` beside a real checkout,
+By default, `fim` writes into `results/`/`logs/` in a source checkout,
 or a `fim/` folder in your home directory for a packaged build (see
 [operational logging design](fim-logging-design.md) §6). Four flags,
 each with a matching environment variable, override this independently
@@ -1701,15 +1676,13 @@ the same as `-l`/`-L` above:
 | `--root PATH` | `FIM_HOME` | Both `results/` and `logs/` at once, unless a more specific flag/variable below also applies |
 | `-R`/`--results-directory PATH` | `FIM_RESULTS_DIRECTORY` | Where runs, batches, Studies, and Experiments are written |
 | `--log-directory PATH` | `FIM_LOG_DIRECTORY` | Where `fim.log` is written |
-| `--preferences-file PATH` | `FIM_PREFERENCES_FILE` | The desktop app's own `preferences.json` (form defaults, named presets, Settings) — meaningful only to a later `fim --graphical`/`fim-gui` launch, accepted here regardless |
+| `--preferences-file PATH` | `FIM_PREFERENCES_FILE` | Desktop `preferences.json` (form defaults, named presets, Settings); affects GUI launches |
 
 `fim-gui` (the separate desktop-app entry point) accepts the identical
-four flags directly; `fim --graphical`/a double-clicked packaged build
-honors the matching environment variables only, with no flags of its
-own — set them before launching (a modified shortcut's own "Target"
-field, or a wrapper script), the same mechanism already documented
-above for `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`. The desktop app's own
-Settings dialog additionally offers a "Storage location" field for
+four flags directly. For `fim --graphical` or a double-clicked build,
+set matching environment variables before launching, as with
+`FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`.
+Settings additionally provides a **Storage location** field for
 results — see the in-app Help screen.
 
 ## Output schemas
@@ -1749,7 +1722,7 @@ nonzero frequency, byte for byte what `json.dumps` writes with sorted keys:
 ### `equilibrium_trajectory.tlog`
 
 Written only by an [equilibrium-split](#equilibrium-split-founding) run: the
-ancestral population's own trajectory, simulated before it is split into
+ancestral trajectory, simulated before splitting into
 your demes, as a binary log like `trajectory.tlog`. Every generation of that
 ancestral phase is kept. Its rows (export it with `fim export` to see them as
 `equilibrium_trajectory.jsonl`) have exactly the `trajectory.jsonl` fields
@@ -1758,10 +1731,10 @@ differences:
 
 - `deme` is always 1: the ancestral population is one deme holding all of
   your demes' gene copies.
-- `generation` counts the ancestral phase on its own, from 0 (the starting
+- `generation` counts the ancestral phase separately, from 0 (the starting
   draw) to the manifest's `equilibrium_generation_count`. Its last
-  generation is the population that was split. The main run's own
-  generation 0 in `trajectory.tlog` is the moment just after that split,
+  generation is the population that was split. The main run's
+  generation 0 in `trajectory.tlog` is the moment after that split,
   so ancestral generation `g` happened
   `equilibrium_generation_count - g` generations before it.
 
@@ -1775,11 +1748,10 @@ The manifest records the complete parameter mapping, seed, software version,
 UTC start/end timestamps, generation, watched statistic, and whether
 convergence or the hard cap ended the run. It also carries:
 
-- schema_version: the manifest's own shape version.
-- convergence.generation_count: how many distinct generations the run
-  actually wrote to `trajectory.tlog` (`convergence.generation + 1` for
-  every run, since no generation is ever skipped — recorded explicitly
-  rather than left implicit).
+- `schema_version`: manifest format version.
+- `convergence.generation_count`: number of generations stored in
+  `trajectory.tlog`. With full retention this is
+  `convergence.generation + 1`; thinning reduces the stored count.
 - `artifacts`: the SHA-256 digest and byte count of `trajectory.tlog`,
   `report.json`, `scatter.png`, and every other file the run wrote (for
   example `equilibrium_trajectory.tlog`) as they existed at the moment
@@ -1789,24 +1761,25 @@ convergence or the hard cap ended the run. It also carries:
   completed is refused with a clear error rather than re-analyzed
   silently.
 
-output_directory (the whole four-file set for a scalar run, or the whole
+output_directory (scalar-run artifacts, or the
 `replicate-NNN/` plus `summary.json`/`manifest.json` tree for a batch) is
 built in a hidden temporary location beside the target path and published
 with a single atomic rename only once every file in it is flushed and
 `manifest.json` has been written last with its `artifacts` digests. An
 interrupted run — an exception, `^C`, or a killed process — therefore never
 leaves a partial directory at the target path: it is either not there at
-all, or complete. This guarantee covers process-level interruption, not
-an unclean power loss: nothing in the write path calls `fsync`, so on
-power loss a directory can look complete (the rename itself is atomic)
-while some file inside it has content that never reached physical disk.
+all, or complete. Directory publication is separate from trajectory durability. The log
+writer syncs committed blocks; see
+[trajectory durability](trajectory-log.md#for-sysops-size-interruption-and-recovery).
+Atomic rename alone does not guarantee that every output artifact survives
+an unclean power loss.
 
 **Compatibility with `fim` 1.0.0 output.** `fim` 1.0.0, the only version
 released before schema_version and `artifacts` existed, wrote manifests
 with neither field. `fim stats` refuses such a manifest — it has no
 digest to verify the trajectory against — with an error naming both the
 cause and that there is no automated migration: re-run the same
-configuration (the manifest's own `parameters`) with the current `fim`
+configuration (the manifest's `parameters`) with the current `fim`
 to get a manifest this version can read and verify.
 
 ### `report.json`
@@ -1816,9 +1789,8 @@ The final report contains:
 - run identity, generation, convergence flag, watched statistic, and reason;
 - H<sub>S</sub>, H<sub>T</sub>, and the correctly partitioned H<sub>ST</sub>;
 - G<sub>ST</sub> (`null` only when *every* tracked locus is fixed for the same
-  allele in every deme; with several loci, a locus that is fixed on its
-  own does not blank out the others — it is dropped and the remaining,
-  genuinely polymorphic loci are averaged);
+  allele in every deme; under per-locus ratio averaging, undefined loci
+  are excluded rather than replacing defined values);
 - Jost's `D`, entropy differentiation E<sub>ST</sub>, and allele-number
   differentiation K<sub>ST</sub>;
 - literature-derived supplemental statistics:
@@ -1837,18 +1809,19 @@ The final report contains:
   [Nei distances](#nei-distances)). A distance is `null` when infinite; its
   identity is always a number.
 
-A `report.json` written before a statistic existed simply lacks that key.
-Opening such a run computes the missing values from its saved trajectory
+A `report.json` may lack statistics added after its software version.
+Opening the run computes missing values from its saved trajectory
 without rewriting the file.
 
 Multiple loci are independent repeats. H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>,
-and K<sub>ST</sub> are always each locus's own arithmetic mean. `D` and G<sub>ST</sub>
+and K<sub>ST</sub> are arithmetic means across loci. `D` and G<sub>ST</sub>
 instead follow [locus_aggregation](configuration.md#locus_aggregation):
 by default (`ratio_of_means`), H<sub>S</sub>/H<sub>T</sub> are pooled across loci
 first and one `D`/G<sub>ST</sub> is computed from those pooled values, not
 averaged per-locus ratios; the opt-in `mean_of_ratios` restores the
 per-locus-ratio-then-average behavior. `D` and K<sub>ST</sub> always use equal
-deme weighting. deme_weighting affects E<sub>ST</sub>.
+deme weighting. `deme_weighting` affects E<sub>ST</sub>, δ<sub>G</sub>,
+and mutual information.
 
 ### `pairwise.json`
 
@@ -1885,7 +1858,7 @@ limit is recorded as `"max_demes"`, and there are no matrices.
 
 ### Nei distances
 
-`fim` reports Nei's genetic distance with Nei's own geometric-mean
+`fim` reports Nei's genetic distance with the geometric-mean
 denominator and with the arithmetic-mean denominator (Jost, L. (2026)
 private communication), for the pair of demes the scatter plot shows and
 across all demes, combining loci by Nei's rule or by averaging per-locus
@@ -1922,27 +1895,21 @@ and annotated.
 
 #### What the marker colors mean
 
-Points are colored to answer one question at a glance: which allele is the
-most common one?
+Color identifies the most frequent allele in each displayed deme:
 
 | Color | Meaning |
 |---|---|
 | Blue | The most frequent allele in either of the two demes shown |
 | Orange | Every other allele |
 
-Two blue points is normal and correct. Each of the two demes on the plot
-gets its own most frequent allele marked, and they are often different
-alleles — that difference is frequently the interesting result. You will see
-a single blue point when both demes happen to agree on the same allele.
+There are two blue points when the demes have different most-frequent
+alleles, and one when they share the same most-frequent allele.
 
-If two or more alleles are exactly tied for most frequent, only the first is
-marked, so that one plot never implies more "most frequent" alleles than it
-has demes. The choice is stable: the same data always marks the same allele,
-and the legend states the rule.
+For ties, only the first allele is marked. The choice is deterministic and
+stated in the legend.
 
-Blue does not mean "important", "significant", or "above a cutoff". It marks
-a maximum, and a maximum exists in every data set — including one where all
-the alleles are rare and nearly equal.
+Blue indicates a frequency maximum, not statistical significance or a
+frequency threshold.
 
 ### Batch `summary.json` and `manifest.json`
 
@@ -1971,24 +1938,20 @@ interval:
 }
 ```
 
-`half_width` and `sample_std` answer two different questions, and it is
-worth keeping them apart:
+`half_width` and `sample_std` describe different sources of uncertainty:
 
 - `half_width` is how precisely the **average** is known — the "± 0.021"
   half of a "0.643 ± 0.021" report. Running more replicates shrinks it.
 - `sample_std` is how much the **replicates themselves** differ from one
   another. Running more replicates does not shrink it, because it
-  describes the model's own run-to-run variability rather than your
+  describes run-to-run variability rather than
   measurement of it.
 
-`sample_std` can also be `null`, meaning "this interval has no single
-honest value to report here." That happens only for an interval built by
-resampling rather than by the ordinary Student's-t formula (see
-`fim.engine.bootstrap_replicate_summary`), whose two sides are not
-generally the same width — for such an interval, read `low` and `high`
-as the real bounds rather than treating `mean` ± `half_width` as the
-whole story. Every interval the command line writes today reports a real
-number.
+`sample_std` can be `null` for intervals built by resampling rather than
+the Student's-t formula (`fim.engine.bootstrap_replicate_summary`).
+Resampling intervals can be asymmetric; use `low` and `high` rather than
+assuming bounds of `mean ± half_width`. CLI-generated intervals use the
+Student's-t form and report a numeric `sample_std`.
 
 A `summary.json` written by an older version of this program has no
 `sample_std` field at all. Nothing needs converting: every tool here
@@ -1996,8 +1959,8 @@ reads such a file as though the value were `null`.
 
 G<sub>ST</sub> can have a smaller sample_count than the other statistics: a
 replicate whose locus is monomorphic across every deme reports G<sub>ST</sub> as
-`null` in its own `report.json`, and that replicate is excluded from
-G<sub>ST</sub>'s interval rather than papered over with a substitute value. The
+`null` in `report.json`, and that replicate is excluded from
+G<sub>ST</sub>'s interval. The
 other statistics that can be `null` because they are undefined (R<sub>ST</sub>,
 both G'<sub>ST</sub>, F<sub>ST</sub>) are treated the same way. A Nei distance
 is different: `null` there means *infinite*, and a mean that includes an
@@ -2006,28 +1969,28 @@ replicate is omitted from `summary.json`; its identity is still summarized.
 A statistic left with fewer than two defined replicates is omitted from
 `summary.json` entirely.
 
-The batch's own `manifest.json` (distinct from each replicate's own) records
+The batch-level `manifest.json` (distinct from replicate manifests) records
 schema_version, the batch run_id, every replicate_run_ids entry,
 replicate_count, the shared `parameters`, batch start/end timestamps, and
-software_version — not a per-run convergence outcome, since each replicate
-has its own. Like a scalar run's manifest, it also carries `artifacts`: the
-SHA-256 digest and byte count of `summary.json` and of each replicate's own
+software_version. Convergence outcomes are recorded per replicate.
+The batch manifest also carries `artifacts`: the
+SHA-256 digest and byte count of `summary.json` and each replicate's
 `manifest.json` (keyed `replicate-NNN`), recorded once every one of them is
 flushed, so an edited, truncated, or replaced batch-level artifact is
 detectable the same way a scalar run's is. Under parallel execution — the
 CLI default — an adaptive early stop can leave a worker that
-had already started its own `replicate-NNN/` directory before the stop was
+had already started a `replicate-NNN/` directory before the stop was
 decided; that directory is pruned before publishing, so the `replicate-*`
-subdirectories actually present always equal replicate_run_ids exactly.
+published subdirectories match `replicate_run_ids`.
 
 ## Reproduce a run
 
 1. Copy `manifest.json`.
 2. Use its `parameters` object as a new YAML config.
 3. Run the same `fim` version shown in software_version.
-4. Compare `trajectory.tlog` and `report.json` byte for byte (a run made by
-   `fim run`; the desktop app writes the same generations but may place block
-   boundaries differently, so compare its exported `trajectory.jsonl`).
+4. Compare `trajectory.tlog` and `report.json` byte for byte on the same
+   platform. Desktop logs are canonicalized on close; if canonicalization
+   reports a failure, compare exported `trajectory.jsonl` instead.
 
 **Across software versions.** One configuration and seed give the same result,
 bit for bit, every time within a software version (checked for single runs and
@@ -2039,12 +2002,14 @@ digests each run records for its trajectory, report and summary (the scatter
 image is left out, since its bytes can change without any result changing). If
 they match, the old run is replaced by the new one and you are told. If they
 do not match, a warning names the values that changed, both runs are kept, and
-the difference is written to `reproducibility.json` beside the new run: the
-simulator guarantees bit-for-bit reproducibility, so a difference is a
-finding, not a detail. `fim sweep` prints the same and exits with status 1.
+the difference is written to `reproducibility.json` beside the new run.
+`fim sweep` reports the difference and exits with status 1.
 
-Given the same version, parameters, and seed, those files are identical.
-Manifest timestamps may differ.
+Reproduction requires the same version, parameters, seed, and compatible
+platform arithmetic. Compiled backends are checked for bit parity on the
+development platform; cross-platform results are not guaranteed byte
+identical. Manifest timestamps may differ. See
+[`engine_backend`](configuration.md#engine_backend).
 
 ## Troubleshooting
 

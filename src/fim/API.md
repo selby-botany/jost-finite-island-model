@@ -2230,57 +2230,12 @@ Refuse a batch configuration a resumable batch session cannot run.
 
 # fim.cli
 
-Researcher-facing command-line interface for the simulator.
+Command-line interface for simulation, analysis, and run organization.
 
-This is what actually runs when you type `fim` at a terminal — the part
-of the program that reads what you typed, figures out which of the
-things you asked for, and calls the right code to do it. Its commands,
-each its own subsection below:
-
-- `fim init` — write out a starter configuration file (a filled-in
-  example, ready to run or edit) so a new user has something concrete to
-  start from rather than an empty file and a blank page of documentation
-  (`_command_init`).
-- `fim run CONFIG` — actually run a simulation from a configuration file
-  and write its results to disk. Dispatches to one of two paths
-  depending on the configuration's own `n_replicates` (`_command_run`):
-  a single simulation (`_command_run_scalar`) or a whole batch of
-  independent, differently seeded repeats of the same configuration
-  (`_command_run_batch`) — see `fim.engine`'s own docstring for why
-  running several repeats matters at all. The configuration's labels
-  (`name`, `description`, `class`) and `--name`/`--description` attach
-  optional metadata to the completed run; `--study` adds it to an
-  existing Study once it finishes (`_record_run_organization`).
-- `fim study create/add-run/list/delete/copy` — organize completed runs
-  into a named Study, a purely local bookkeeping operation with no
-  engine involved (`_command_study`; `fim.persistence.groups`). See
-  `20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`
-  (`selby/restricted`) for the full Run/Study/Experiment design.
-- `fim experiment create/add-study/list/delete/copy` — the identical
-  bookkeeping one level up, grouping Studies into a named Experiment
-  (`_command_experiment`; `fim.persistence.groups`).
-- `fim sweep plan/run/resume/report` — run one configuration over a
-  parameter space as a single Study (`fim.cli_sweep`; `fim.sweep`).
-- `fim object create/edit/list/status/start/resume/pause/cancel/delete` —
-  save a configuration of any validity as a Run object (`draft` until it
-  is valid, then `planned`) and execute it with durable checkpoints, so a
-  paused or interrupted run continues exactly (`fim.cli_objects`;
-  `fim.run_service`).
-- `fim stats TRAJECTORY` — recompute statistics from a run's own saved
-  data, for any generation, without re-running the simulation
-  (`_command_stats`; see `fim.reanalyze`'s own docstring for what
-  "re-analysis" means and why it is useful).
-- `fim update --check` — the one place this whole program ever makes a
-  network connection: ask GitHub whether a newer release exists
-  (`_command_update`; see `fim.update`'s own docstring for the full
-  reasoning and the security posture behind it).
-
-This file's own job stops at parsing arguments, calling the right
-function, and printing the result or a plain-language error message —
-the actual scientific work (running the simulation, computing
-statistics) always lives in `fim.engine`/`fim.reanalyze`, never here.
-That separation is what lets the exact same underlying logic also power
-the desktop app (`fim.gui`) without duplicating it.
+The `fim` commands parse configuration and options, delegate simulation,
+analysis, and persistence to package modules, and report results. The
+interface includes `init`, `run`, `stats`, `study`, `experiment`, `object`,
+`sweep`, and `update`.
 
 <a id="fim.cli.load_config"></a>
 
@@ -2322,32 +2277,14 @@ def main(argv: Sequence[str] | None = None) -> int
 
 Parse command-line arguments and dispatch one operation.
 
-This is the single entry point every invocation of `fim` from a
-terminal reaches (via `pyproject.toml`'s own `[project.scripts]`
-entry, by way of `fim.launcher`) — it parses whatever was typed,
-figures out which command (see this module's own docstring, above)
-was requested, and calls the matching function (`_dispatch_command`).
-
-Every error that any command can reasonably raise on genuinely bad
-input (a malformed configuration file, an invalid parameter
-combination, a missing file, and so on) is caught here in one place
-and turned into a short, plain "fim: error: ..." message on a single
-line, with an exit status a shell script can check, rather than a
-long, intimidating Python traceback — this project's programming
-mistakes should look like tracebacks (so they get noticed and
-fixed), but a *user's* mistake (a typo in a config file, an
-out-of-range value) should look like a normal, readable command-line
-error, the same way a real command-line tool a person did not write
-themselves would report it. The specific exception types listed are
-exactly the ones the actual work below (`fim.engine`, YAML parsing,
-file I/O) can raise for an ordinary, expectable mistake; anything
-else escaping this function uncaught is treated as a real bug in
-this project's own code, and is deliberately allowed to surface as
-a full traceback instead of being hidden behind a generic message.
+Expected input, validation, and file-operation errors are reported as
+concise command-line messages with a nonzero status. Unexpected
+exceptions propagate with a traceback.
 
 **Arguments**:
 
-- `argv` - Arguments excluding the program name, or ``None`` for ``sys.argv``.
+- `argv` - Arguments excluding the program name, or ``None`` to use
+  ``sys.argv``.
 
 
 **Returns**:
@@ -2358,24 +2295,16 @@ a full traceback instead of being hidden behind a generic message.
 
 # fim.cli\_objects
 
-`fim object`: save, inspect, and control persisted Run objects.
+CLI handlers for creating and managing persisted Run objects.
 
-A Run object (`fim.persistence.run_objects`) holds a saved configuration of
-any validity and its lifecycle: `draft` while the configuration is invalid
-or incomplete, `planned` once it is valid, then executing, paused, or
-finished. Every command here calls `fim.run_service` or
-`fim.persistence.run_ownership`; none applies lifecycle rules itself.
-
-`start` and `resume` execute in the foreground. From another terminal,
-`pause` asks the running command to publish a checkpoint and stop, and
-`cancel` asks it to stop and keep its partial trajectory. SIGTERM pauses
-the command the same way; a second SIGTERM ends it at once. A command that
-is killed leaves the object `running` until any later command notices that
-its owner is gone and records it as `interrupted`; `resume` then continues
-from the latest checkpoint. A command killed after it published every
-artifact is recorded as `completed` instead, once its completion receipt
-verifies. A run stopped before its first checkpoint cannot resume; `clone`
-saves its configuration as a new object that starts from generation zero.
+Run objects store configurations and lifecycle state. Commands delegate
+lifecycle rules and execution to `fim.persistence` and `fim.run_service`.
+`start` and `resume` run in the foreground; `pause` checkpoints and stops,
+while `cancel` stops and retains partial data. Interrupted runs resume from
+their latest checkpoint. SIGTERM requests a pause; a second SIGTERM ends
+execution immediately. A later command reconciles a lost owner as interrupted,
+or as completed when its completion receipt verifies. An object without a
+checkpoint can be cloned to start a new run from generation zero.
 
 <a id="fim.cli_objects.add_object_subcommands"></a>
 
@@ -2414,15 +2343,11 @@ Dispatch one `fim object` invocation.
 
 # fim.cli\_sweep
 
-`fim sweep`: plan, run, resume and report a parameter sweep.
+Command handlers for planning, running, and reporting parameter sweeps.
 
-The command-line half of the sweep-as-Study feature
-(`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`, section 5). A sweep file is an ordinary configuration
-plus a `sweep:` block; `fim.sweep.spec_from_config` splits it, so the
-ordinary configuration validator never sees `sweep`. The work itself is in
-`fim.sweep` (what the points are) and `fim.sweep_run` (running them); this
-module parses arguments and prints.
+A sweep configuration combines model settings with a `sweep:` block.
+`fim.sweep` validates the specification and enumerates points;
+`fim.sweep_run` executes and resumes them. This module provides the CLI.
 
 <a id="fim.cli_sweep.BUDGET_EXIT_STATUS"></a>
 
@@ -2468,19 +2393,12 @@ for the scan that enforces it.
 
 # fim.config.convergence
 
-Convergence policy constants.
+Policy constants for single-run and replicate-batch convergence.
 
-Every value here is a choice a careful person could make differently, so
-each is a policy constant: named, documented with its evidence, and an
-Expert Setting (`fim.config.expert`) a run's configuration can change.
-
-The rule these constants steer is "burn in, then average" (design
-`20261005-claude-opus-5-5-simplified-convergence-rule-design.md`,
-`selby/restricted`): wait out the burn-in, then average each watched
-statistic over an evidence window that grows until its standard error is
-small enough and its effective sample size large enough.
-
-See `README.md` in this directory for the table of every constant.
+The settings govern burn-in, evidence-window growth, sample-size limits, and
+generation or replicate caps. A run can override eligible values through
+`fim.config.expert.ExpertSettings`. See `doc/convergence.md` for the method
+and its rationale.
 
 <a id="fim.config.convergence.BURN_IN_MINIMUM_RELAXATION_TIMES"></a>
 
@@ -2979,18 +2897,12 @@ Kind: policy (display).
 
 # fim.config.expert
 
-Expert Settings: the policy constants a run's configuration may change.
+Validated per-run overrides for convergence and storage policy settings.
 
-Each field is the run-specific form of a policy constant in
-`fim.config.convergence`; its default is that constant. A run's configuration
-can carry an `expert:` mapping of the fields it changes. `SimulationParams`
-validates the mapping here, copies it into the run's parameters (so the
-manifest says exactly what ran, and the run ID changes with it), and only
-non-default entries are written back out, so a run with default Expert Settings
-is byte-for-byte the run it was before the mapping existed.
-
-Numerical guards and derivable constants are not Expert Settings (design
-`20261005-claude-opus-5-5-simplified-convergence-rule-design.md`, 11.1).
+`ExpertSettings` collects eligible policy constants from
+`fim.config.convergence` and `fim.config.storage`. Defaults preserve standard
+behavior; numerical guards and values derived from model parameters are not
+configurable through this mapping.
 
 <a id="fim.config.expert.ExpertSettings"></a>
 
@@ -3908,27 +3820,13 @@ method's whole job is deciding whether that computed interval
 
 # fim.convergence.defaults
 
-Derive convergence defaults from the modeled population's own timescale.
+Derive convergence defaults from the population relaxation time.
 
-How long a run must be watched depends on how fast the population forgets its
-starting state: its *relaxation time*, `tau`. This module estimates `tau` from
-the migration, mutation and deme-size parameters (the slowest locus sets it)
-and turns it into a default burn-in and `max_generations`.
-
-Why `tau` has this form, and the numerical check behind it, is written up in
-the design document `20260925-claude-sonnet-5-convergence-defaults-derived-
-from-model-design.md` (Appendix A) and, for users, in `doc/convergence.md`.
-In short: every watched statistic is a smooth function of the pairwise
-identity probabilities `J`, `J` obeys a linear recurrence, and the run is
-settled only once that recurrence's slowest mode has decayed.
-
-Two routes give `tau`:
-
-- `island_relaxation_time` is a closed form, exact to about 1% for the
-  symmetric island model with equal deme sizes (the default `m` scalar).
-- `recursion_relaxation_time` builds the recurrence's linear part as a
-  `d² by d²` matrix and takes its spectral radius. It handles any migration
-  matrix and unequal deme sizes, at a cost that limits it to small `d`.
+The relaxation time estimates how quickly the modeled population approaches
+its stationary distribution. The symmetric island model has a closed-form
+estimate; a matrix-based recursion supports arbitrary migration matrices and
+unequal deme sizes for populations within the configured size limit. See
+`doc/convergence.md` for the derivation and calibration.
 
 <a id="fim.convergence.defaults.DerivedConvergence"></a>
 
@@ -4295,21 +4193,12 @@ form.
 
 # fim.convergence.monitor
 
-Stateful convergence monitoring with an explicit hard-cap outcome.
+Monitor single-run and replicate-batch convergence.
 
-Two monitors share one result type. `BurnInMonitor` drives a single run: it
-waits out the burn-in, then averages each watched statistic over an evidence
-window that grows until its standard error is small enough and its effective
-sample size large enough (design `20261005-claude-opus-5-5-simplified-
-convergence-rule-design.md`, `selby/restricted`, 6.1). `ConvergenceMonitor`
-drives the replicate batch: it remembers one value per completed replicate
-and asks a `fim.convergence.criteria.ConvergenceCriterion` whether the
-across-replicate interval is tight enough.
-
-Both always enforce a hard generation (or replicate) cap, so a statistic that
-genuinely never settles still cannot run a simulation forever.
-`ConvergenceOutcome` is the small, immutable record they hand back describing
-which of the two things happened, if either yet has.
+`BurnInMonitor` discards the burn-in and evaluates statistics over a growing
+evidence window. The batch monitor tracks values from completed replicates
+and evaluates the configured confidence-interval criterion. Both report when
+a convergence criterion or a hard generation or replicate cap is reached.
 
 <a id="fim.convergence.monitor.StopReason"></a>
 
@@ -5365,104 +5254,19 @@ accounted for.
 
 # fim.engine
 
-Public deterministic finite-island-model simulation engine.
+Simulation engine for the finite island model.
 
-What this file does, in plain terms: it is the part of the program that
-actually *runs* the simulation, generation by generation, and decides
-when to stop. Everything else in the `fim` package either sets up the
-inputs this file consumes (`fim.model.*` — validated parameters, the
-starting population) or does something with the outputs this file
-produces (`fim.persistence.*` writes them to disk, `fim.viz.*` plots
-them, `fim.cli`/`fim.gui` present them to a person). This module has no
-knowledge of files, plots, or user interfaces at all — it only computes.
+The engine advances replicate trajectories under migration, mutation, and
+genetic drift, computes differentiation statistics, and produces run
+reports. Model parameters and initial states come from `fim.model`;
+persistence and user interfaces are handled by separate package modules.
 
-If you have not already read
-[the finite island model introduction](../../doc/finite-island-model-introduction.md),
-this is a good place to stop and do that first; it explains, from zero,
-what a "finite island model" is and why anyone would want to simulate
-one. The short version, just enough to follow the code below: a
-population is split into several separate sub-populations, each called
-a **deme**, connected by occasional **migration** (some individuals move
-from one deme to another each generation). Within each deme, which two
-gene copies (**alleles**) a given offspring inherits at each genetic
-location (**locus**) is partly a matter of chance — a small deme can
-drift, purely by chance, toward one allele becoming common and another
-rare or extinct, a process called **genetic drift** — and partly subject
-to a small, constant chance of a brand-new mutation appearing
-(**mutation**). Migration, mutation, and drift pull in different
-directions: migration tends to make demes more genetically similar to
-each other (since they keep exchanging alleles), while drift tends to
-make them diverge (since each deme's own random luck runs independently
-of the others'). The whole point of running this simulation is to watch
-how genetically different the demes become over time under some chosen
-combination of population size, migration rate, and mutation rate — the
-kind of question real population geneticists ask about real,
-physically separated populations of plants or animals.
-
-"How different the demes have become" is not a single number; this
-project reports several different ways of measuring it side by side —
-Jost's D, Nei's G_ST, and others, named throughout this file as short,
-capitalized labels (`D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`).
-Each measures something related but genuinely different, and they can
-disagree about how large "the" differentiation is for the very same
-simulated population — which is itself one of the scientific points this
-whole project exists to illustrate, following
-[Jost et al. (2018)](../../doc/jost-differentiation-measures.md). This
-file never explains what any one of those measures actually *means*; it
-only ever computes, reports, and averages them (delegating the actual
-formulas to `fim.statistics.differentiation`). Read the linked guide for
-that.
-
-A single run does not go on forever. Two different, unrelated ideas both
-called "stopping" appear in this file, and it is easy to conflate them,
-so they are named distinctly throughout:
-
-- **Convergence** (`ConvergenceMonitor`, `TrailingWindowCriterion`): a
-  single simulated population's own statistics, tracked generation by
-  generation, are watched for having stopped changing meaningfully —
-  once they hold roughly steady for a stretch of generations in a row
-  (a "trailing window"), the run stops there rather than continuing to
-  a fixed, arbitrarily large generation count for no further scientific
-  reason. If the statistics never settle down, the run still stops once
-  it reaches `SimulationParams.max_generations`, a hard cap — that
-  outcome is reported honestly as "did not converge," not disguised as
-  success. `_run_one` below is the function that runs one simulated
-  population generation by generation until one of these two things
-  happens.
-- **Replication / the adaptive replicate stop** (`_replicate_monitor`,
-  `ConfidenceIntervalCriterion`): because the model is stochastic (its
-  own randomness is part of what it simulates — the same setup run
-  twice with two different random seeds gives two different, both
-  individually valid, outcomes), a single run's own final numbers are
-  only one sample from many possible ones. Running the *same*
-  configuration many times over with different seeds — each independent
-  run called a **replicate** — and looking at the spread across
-  replicates is how this project answers "how confident can we be in
-  this differentiation estimate," the same way a scientist would not
-  trust a single coin flip to tell them whether a coin is fair. By
-  default, a requested number of replicates (`SimulationParams.
-  n_replicates`) simply all run. Optionally
-  (`SimulationParams.stop_batch_early`), the batch instead stops
-  *early*, as soon as enough replicates have run to pin down each
-  watched statistic's own across-replicate confidence interval (see
-  `fim.statistics.interval`) to within a chosen tolerance — running
-  further replicates past that point would only narrow an already-
-  narrow-enough interval, at the cost of more computing time for no
-  real gain in confidence. Replicates are always considered in
-  replicate order (1, 2, 3, ...), on every engine backend, never in the
-  order they happen to finish: which replicates converge soonest is
-  itself correlated with their statistics, so keeping the fastest ones
-  would bias the estimate (`run_batch`'s own docstring).
-
-Determinism matters throughout: the same configuration and the same
-random seed always produce the exact same generation-by-generation
-trajectory, on any machine, every time. That is not a performance detail
-— it is what makes a result reproducible and verifiable by someone else,
-which for simulated *scientific* results is exactly as important as
-being able to show your work for a hand calculation. Every replicate
-gets its own seed, deterministically derived from the base seed
-(`fim.engine.identity.replicate_seed`), so a batch of replicates is itself fully
-reproducible too, not just each individual replicate in isolation.
+A trajectory ends when its convergence criterion is met or its generation
+limit is reached. A replicate batch may stop when the requested confidence
+interval precision is achieved. Replicates are accepted in index order,
+independent of completion order, and their seeds are derived from the base
+seed. See `doc/finite-island-model-introduction.md` for model background and
+`doc/convergence.md` for stopping criteria.
 
 <a id="fim.engine.api"></a>
 
@@ -5669,36 +5473,16 @@ def resolve_auto_engine_backend(
 ) -> Literal["generational", "generational-vector"]
 ```
 
-Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
+Resolve `"auto"` to `"generational"` or `"generational-vector"`.
 
-Shared by `build_engine_backend` (to know which backend to actually
-construct) and `simulate_params()` (to know what to record in the run's own
-manifest as provenance, `RunManifest.engine_backend`) — kept in one
-place so the two can never silently drift apart on what `"auto"`
-actually picked for a given `params`. Never resolves to `"lineal"`
-— see `build_engine_backend`'s own `engine_backend` Args entry for
-why only the generational-vs-vector axis is automated so far.
-
-`"generational-vector"` is chosen when all of these hold:
-
-- `jit` is `"off"`: Backend V has no `jit` toggle, only Backend G
-  offers one, and a caller who asked for it gets it (the output is the
-  same either way);
-- `numba` is importable. Backend V's output is identical to
-  Backend G's, so a missing `numba` costs only speed: `"auto"` falls
-  back to `"generational"` instead of raising, as an explicit
-  `"generational-vector"` choice does;
-- `params.d >= auto_vector_min_d`;
-- under `mutation_model="finite_alleles"` only, the largest locus
-  capacity (`4 ** length`) is at most `auto_vector_max_capacity`: a
-  finite-alleles table is `capacity` columns wide however few states
-  are in use. Under infinite alleles the table is as wide as the
-  alleles alive at once, so there is no such ceiling (the table's own
-  memory ceiling, `fim.model.vector_block`, guards the rest).
-
-Otherwise `"generational"`. Because V reproduces G bit for bit, the
-choice changes how fast a run finishes and nothing in its output but
-the manifest's `engine_backend` field.
+Select `"generational-vector"` when `jit` is `"off"`, Numba is
+available, `params.d` meets `auto_vector_min_d`, and the largest
+finite-alleles locus capacity (when applicable) does not exceed
+`auto_vector_max_capacity`. Otherwise select `"generational"`.
+This function does not select `"lineal"`. The generational backends
+produce the same results for the same seed on the development
+platform; cross-platform bitwise parity has not been established.
+The selected backend is recorded in the run manifest.
 
 <a id="fim.engine.backends.numba_is_available"></a>
 
@@ -5708,29 +5492,7 @@ the manifest's `engine_backend` field.
 def numba_is_available() -> bool
 ```
 
-Return whether the optional `numba` dependency can actually be imported.
-
-`importlib.util.find_spec` locates the module without importing it —
-cheap enough to call on every `"generational-vector"` construction,
-and it never pays numba's own (non-trivial) import cost just to
-answer "is it there at all."
-
-`build_engine_backend` calls this before constructing a
-`VectorizedAdvancer` — `fim.model.vectorized`'s own mutate step
-imports `numba` unconditionally on first use (its own module
-docstring), with no pure-Python fallback, so a numba-less install
-used to fail on the *first `advance()` call*, after generation zero
-had already been built and persisted to the trajectory store — a
-real, previously unguarded gap (this project's own multi-model
-engine review, 2026-09-04, `FIM-01`/finding C-03/finding P1-3,
-independently found by three of four reviewers). Checking here
-instead turns that into a named `ValueError` at config time, before
-anything has been written.
-
-A module-level function, not inlined into `build_engine_backend`,
-specifically so a test can monkeypatch it directly (`fim.engine.
-numba_is_available`) to exercise the numba-less path without
-actually uninstalling numba from the test environment.
+Return whether Python can locate `numba` without importing it.
 
 <a id="fim.engine.backends.build_engine_backend"></a>
 
@@ -5751,140 +5513,48 @@ def build_engine_backend(
 
 Return the configured backend `simulate_params()` should run against.
 
-One function, not a class hierarchy: Python's own first-class
-functions make a `ConcreteFactory` subclass per backend unnecessary
-ceremony here — a plain function that reads a choice and returns an
-object satisfying `EngineBackend`'s shape does the same job with no
-class tree to maintain.
-
 **Arguments**:
 
-- `engine_backend` - Which backend to build. `"generational"` builds
-  `GenerationalBackend(ThreadedAdvancer())` — real thread-based
-  parallelism, not merely the structural reshuffle
-  `SequentialAdvancer` alone would give (still directly
-  available by constructing `GenerationalBackend()` without
-  going through this factory, if a caller wants zero new
-  thread-safety surface). `"generational-vector"` builds
-  `GenerationalBackend(VectorizedAdvancer())` — array-native,
-  one compiled kernel call per generation over every locus
-  (`fim.model.vector_block`); runs both mutation models,
-  both migrant sampling modes — needs the optional `numba`
-  dependency unconditionally (see `jit`, below, for why that is
-  not the same thing as `jit="numba"`).
-  `"auto"` picks between `"generational"` and
-  `"generational-vector"` using `params`/`auto_vector_min_d`
-  (below) — never `"lineal"`, since no data yet characterizes
-  where that boundary sits (see `auto_vector_min_d`'s own
-  entry for why only the L-vs-V axis is automated so far).
-  `resolve_auto_engine_backend` lists the conditions: V for
-  continuous migration when `numba` is importable and `d` is
-  large enough (and, for finite alleles, the capacity small
-  enough), otherwise G. The output is identical either way.
-- `jit` - Whether the chosen backend should JIT-compile its own
-  operators. Under `"generational"`, `"numba"` JIT-compiles
-  `drift`'s own multinomial draw (`fim.model.operators.drift`'s
-  own docstring) — bit-identical output to `"off"`, for the
-  same seed, *on the same machine*: that claim (and every
-  "generational-vector" trajectory's own reliance on `numba`,
-  unconditionally, further below) rests on `numba`'s own
-  compiled math matching CPython's own `libm` bit for bit,
-  verified only on this project's own development platform so
-  far, not across the different `libm` implementations a
-  different operating system or CPU architecture can ship
-  (this project's own multi-model engine review, 2026-09-04,
-  `FIM-22`/finding Kimi-FIM-22) — a portability caveat to keep
-  in mind before treating a `jit="numba"`/"generational-
-  vector" result as reproducible across machines the way
-  every `jit="off"` result already is, not a known, confirmed
-  divergence. Not yet shown to be a standalone wall-clock win,
-- `though` - it fixes a real, separately measured regression an
-  earlier, per-pair-call version had, but `drift`'s own
-  dominant cost at this project's reference scale is
-  marshaling to and from `ModelState`'s sparse representation,
-  not the compiled draw itself (`drift`'s own docstring has
-  the full measurement). `migrate`/`mutate`'s own RNG calls
-  are not JIT-compiled at all. Needs the optional `numba`
-  dependency installed (``pip install fim[jit]``) — not
-  imported at all unless `jit="numba"` is actually requested.
-  `"generational-vector"` has no separate toggle for this yet
-  — its own mutate step always requires `numba` internally,
-  regardless of this argument, so only `jit="off"` (the
-  default) is accepted there; passing `jit="numba"` raises
-  `ValueError`, not a silent no-op. `"lineal"` never accepts
-  anything but `"off"` — a permanent restriction, not a
-  temporary gap: `LinealBackend` stays the untouched golden
-  reference every other backend's own parity tests are checked
-  against (see its own docstring).
-- `max_workers` - `LinealBackend`-only; ignored by every other
-  backend, since there is no process pool anywhere else for it
-  to size — `ThreadedAdvancer`'s own thread count is a
-  separate, not-yet-publicly-reachable knob (see its own
-  docstring for why this name is not reused for it there);
-  `run_batch`'s own `max_concurrent_replicates` is the
-  `"generational"`/`"generational-vector"` equivalent
-  concurrency/memory-bounding control, a real `SimulationParams`
-  field rather than a `build_engine_backend` argument.
-- `store_factory` - Every backend accepts this the same way now — one
-  real, independent store per replicate, keyed by that
-  replicate's own run id. `LinealBackend` uses it directly (a
-  worker process needs its own store; nothing else could be
-  shared across a process boundary). `GenerationalBackend`
-  wraps it in a `ReplicateFanoutStore` instead
-  (`GenerationalBackend`'s own docstring) — no process pool
-  involved, but the same one-store-per-replicate outcome.
-- `params` - The run this backend is actually being built for —
-  required, and only actually read, when `engine_backend ==
-  "auto"`, to look at `params.d`/`params.mutation_model`/
-  `params.migrant_sampling` and decide. Every other choice
-  ignores it entirely (a caller building a `"lineal"`/
-  `"generational"`/`"generational-vector"` backend directly
-  never needs to pass a real `SimulationParams` here at all).
-- `auto_vector_min_d` - The deme-count cutover `"auto"` uses to
-  decide between `"generational"` and `"generational-vector"`
-  — irrelevant, and unused, under every other `engine_backend`
-  value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (`2`), this
-  project's own best current estimate from a real benchmark
-  sweep (see that constant's own docstring for the full
-  finding, including its cross-environment caveats) —
-  deliberately a parameter, not a hardcoded constant, because
-  a follow-on check (the same sweep, run inside a Docker
-  container instead of natively) found the threshold does
-  *not* port cleanly across platforms: the qualitative
-  direction held, but neither the exact crossover point nor
-  the performance magnitude did. A deployment on
-  meaningfully different hardware should re-run that same
-  characterization and pass its own measured value here
-  rather than trust this default blindly.
-- `auto_vector_max_capacity` - The per-locus capacity ceiling
-  `"auto"` uses alongside `auto_vector_min_d` — the largest
-  capacity across every locus in `params.loci` must be at
-  most this value, in addition to `d >= auto_vector_min_d`,
-  for `"auto"` to pick `"generational-vector"` — under
-  `mutation_model="finite_alleles"` only (an infinite-alleles
-  table is as wide as the alleles alive at once, not
-  `4 ** length`); irrelevant, and unused, under every other
-  `engine_backend` value.
-  Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
-  see that constant's own docstring for the measured finding
-  behind it and the same cross-environment/cross-fix
-  staleness caveats `auto_vector_min_d` already carries.
+- `engine_backend` - Backend to construct. `"lineal"` uses
+  `LinealBackend`; `"generational"` uses
+  `GenerationalBackend` with `ThreadedAdvancer`;
+  `"generational-vector"` uses `GenerationalBackend` with
+  `VectorizedAdvancer` and requires `numba`. `"auto"` selects
+  between the generational backends and never selects
+  `"lineal"`. The vector backend is selected when `numba` is
+  importable, `jit` is `"off"`, `params.d` meets
+  `auto_vector_min_d`, and, for finite alleles, the largest
+  locus capacity does not exceed `auto_vector_max_capacity`.
+  Otherwise, `"auto"` selects `"generational"`.
+- `jit` - JIT option for the selected backend. `"generational"`
+  accepts `"off"` or `"numba"`; `"lineal"` and
+  `"generational-vector"` require `"off"`. The vector backend
+  uses Numba internally regardless. The generational JIT path
+  preserves results for the same seed on the development
+  platform; cross-platform bitwise parity has not been
+  established.
+- `max_workers` - Worker-process count for `"lineal"`; ignored by
+  other backends. Generational batch concurrency is configured
+  through `SimulationParams.max_concurrent_replicates`.
+- `store_factory` - Optional factory for a separate trajectory store
+  per replicate.
+- `params` - Run parameters. Required for `"auto"` and used to check
+  finite-alleles capacity when `"generational-vector"` is
+  selected explicitly, if provided.
+- `auto_vector_min_d` - Minimum deme count for `"auto"` to select the
+  vector backend. Defaults to `2`; benchmark crossover points
+  may vary by platform.
+- `auto_vector_max_capacity` - Maximum finite-alleles locus capacity
+  for `"auto"` to select the vector backend. Defaults to
+  `4096`.
 
 
 **Raises**:
 
-- `ValueError` - If `engine_backend == "lineal"` and `jit != "off"`,
-  `engine_backend == "generational-vector"` (or `"auto"`
-  resolves to it) and `jit != "off"`, `engine_backend ==
-  "generational-vector"` (or `"auto"` resolves to it) and the
-  optional `numba` dependency is not installed, `engine_backend
-  == "generational-vector"` and `params` uses `mutation_model ==
-  "finite_alleles"` and names a locus whose capacity exceeds
-  `auto_vector_max_capacity` (checked only when `params` is
-  given; `"auto"` already refuses an over-capacity config on its
-  own, before ever reaching this branch),
-  `engine_backend == "auto"` and `params` is `None`, or
-  `engine_backend` names something unrecognized.
+- `ValueError` - If the backend name or JIT option is invalid, `"auto"`
+  is used without `params`, the vector backend lacks `numba`,
+  or an explicitly selected vector backend exceeds the
+  finite-alleles capacity limit.
 
 <a id="fim.engine.batch"></a>
 
@@ -5904,77 +5574,21 @@ def run_batch(params: SimulationParams, store: TrajectoryStore,
 
 Run every replicate `params` describes, generation-first.
 
-The generation-first counterpart to `LinealBackend`'s own
-replica-first dispatch: every currently-active lane's own generation
-*g* is advanced before any of them moves on to generation *g + 1*
-(via `advancer.advance`), rather than one replica's entire trajectory
-running to completion before the next starts.
+Each active lane advances one generation per call to
+`advancer.advance`. Adaptive stopping is evaluated on the accepted
+replicate prefix: the cross-replicate monitor receives results in
+ascending replicate order, regardless of lane completion order.
+This preserves the stopping decision and accepted replicate set
+relative to `LinealBackend` for the same seed. Lanes continue
+advancing while a lower-numbered replicate is unfinished; completed
+results are held until they join the prefix. Lanes beyond a stopping
+point are discarded, including their stored trajectory rows.
 
-An adaptive early stop (`SimulationParams.
-stop_batch_early`; see `replicate_monitor`) is judged on an
-*accepted prefix*, in replicate order, exactly as `LinealBackend`'s
-own sequential loop judges it: replicate *i* is fed to the cross-
-replica monitor only once it and every lower-numbered replicate have
-finished, so the monitor sees replicates 1, 2, 3, ... in that order
-regardless of which lane happened to converge first. The stop fires
-at the same replicate, on the same values, as `LinealBackend` for
-the same seed, so both backends keep the same replicates and report
-the same summary. Feeding the monitor in finishing order instead
-(this function's own behavior through 2026-10-06) kept whichever
-replicates converged soonest; convergence time correlates with the
-statistics being estimated (in the adaptive worked example, the
-replicates that converge earliest have lower `D`), so that order
-biased the batch's own estimate rather than merely reordering it.
-
-Waiting for a slow, low-numbered replicate costs only time, never
-correctness: every lane keeps advancing, generation by generation,
-while the prefix waits. A lane that finishes ahead of the prefix is
-finalized immediately (its `RunResult` held until the prefix reaches
-it, the same memory every kept replicate already uses) and its
-window slot (`max_concurrent_replicates`) is reused at once. Once the
-stop fires, every lane past the stopping replicate — still running,
-or finished but not yet admitted — is discarded, exactly as
-`LinealBackend` never runs, and `run_batch_parallel` discards,
-replicates past its own stopping point.
-
-Every lane owns its own, never-shared `np.random.Generator` and its
-own `AlleleRegistry` — nothing here ever reads or writes another
-lane's state, which is what makes the traversal order above safe:
-reordering *when* one lane's generation is computed relative to
-another's never changes that lane's own result, and the accepted-
-prefix rule above means it never changes *which* lanes are kept.
-
-An adaptive stop's own discarded lanes have their own rows discarded
-from `store` before returning, not left behind as orphaned data no
-returned `RunResult` accounts for (this project's own multi-model
-engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
-1). `build_replica_lane` already wrote each lane's own generation
-zero eagerly, before this loop ever runs, so even a lane the
-generation-first loop below never advances past that point still
-has rows to discard, not merely lanes that got partway through.
-
-At most `params.max_concurrent_replicates` lanes are ever alive at
-once — `None` (the default) means every requested replicate, exactly
-every prior release's own behavior, since `min(window_size,
-n_replicates)` below then equals `n_replicates` itself and every
-lane is built up front as before. A smaller window instead builds
-lanes lazily: only the window's own worth exist up front, and a
-lane is constructed for replicate index *i* only once some earlier
-lane's own slot frees up, immediately before advancing past that
-point — never merely reserved. This is `FIM-45`/`P-04`/`P2-7`'s own
-fix (a replicate `run_batch` never gets to before an adaptive stop
-now never pays for that replicate's own setup either, on any
-`Advancer`) and, for `VectorizedAdvancer` specifically,
-`FIM-48`'s own fix too: that advancer's cached `VectorBlock`
-(`ReplicaLane.vectorized_state`, released immediately once a lane
-finalizes — see `finalize_replica_lane`) is held by every
-concurrently active lane at once, so bounding how many lanes are
-ever active at once directly bounds this backend's own steady-state
-memory, independent of `n_replicates` itself. A replacement lane is
-built only *after* confirming the cross-replica monitor has not
-just decided to stop — building one first and discarding it a line
-later would reintroduce exactly the wasted setup this fix exists to
-remove.
+At most `params.max_concurrent_replicates` lanes are active
+simultaneously. When set, additional lanes are constructed as slots
+become available; no new lane is built after the adaptive monitor
+stops. Limiting active lanes bounds per-lane state and vectorized
+buffers independently of the total replicate count.
 
 <a id="fim.engine.batch.waiting_for_window"></a>
 
@@ -6266,54 +5880,15 @@ monitor.should_stop():` loop, per lane, in order.
 class ThreadedAdvancer()
 ```
 
-Fans `SequentialAdvancer`'s own per-lane stepping out across threads.
+Advance active lanes concurrently using worker threads.
 
-Partitions whichever lanes are active this tick into up to
-`max_workers` contiguous blocks (`_partition_into_blocks`) and steps
-each block — sequentially, in order, exactly what `SequentialAdvancer`
-already does — inside its own thread, via `ThreadPoolExecutor`.
-Blocks are disjoint (every lane belongs to exactly one), so no two
-threads ever touch the same lane's own state, RNG, or allele
-registry at once; the one thing genuinely shared across threads is
-`store`, made safe by the `threading.Lock` both
-`fim.persistence.store.InMemoryTrajectoryStore` and
-`fim.persistence.binary_store.BinaryLogStore` now hold around
-their own `write_generation`.
-
-Whether this delivers real wall-clock speedup over
-`SequentialAdvancer` depends on how much of each generation's own
-work happens inside NumPy/JIT calls that release the GIL versus
-pure-Python loop overhead — measured, not merely open, as of
-`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§10 items 10a/10c: at this project's own reference scale, `drift`'s
-own `_inversion_binomial` primitive (needed to keep this backend
-bit-identical to `LinealBackend`, see below) is pure Python and
-holds the GIL for nearly all of `drift`'s own wall-clock time. That
-measurement predates §10 item 10e's own stages 1-3b (2026-09-03):
-`migrate`'s own scalar-rate, continuous-migration path and `mutate`'s
-own event-count draw, whole-generation minting, source attribution,
-and (below a per-locus capacity bound) target selection are now
-`nogil`-compiled too, under `jit=True` — the "unjitted and GIL-bound
-regardless of `jit`" claim this paragraph made through 2026-09-02 is
-no longer an accurate description of the code. Whether that
-translates into real wall-clock thread scaling is a genuinely
-different, re-measured-not-yet question — `20260903-claude-sonnet-
-5-fim-vg-performance-campaign-design.md` §6.3 item 1 schedules the
-re-sweep this claim now depends on; until that lands, treat this
-class's own real-world thread-scaling behavior as unmeasured against
-the current code, not as either the old regression or a new win.
-What this class does guarantee, unconditionally:
-identical results to `SequentialAdvancer` for the same seed, since
-the actual per-lane computation is the same code
-(`SequentialAdvancer.advance` itself, called once per block), only
-fanned out across threads rather than run in one.
-
-Block assignment is computed fresh every tick from whichever lanes
-happen to be active (`_partition_into_blocks`), not a persistent,
-static assignment decided once at batch start — worth revisiting as
-a later, separately-measured optimization once lane membership is
-treated as fixed-and-masked rather than genuinely shrinking, but not
-this class's own current scope.
+Each tick, the active lanes are divided into up to `max_workers`
+contiguous blocks. Each block is advanced sequentially by
+`SequentialAdvancer`; blocks contain disjoint lanes. The same
+per-lane operations preserve results for the same seed as
+`SequentialAdvancer`. Threading may improve throughput when the
+workload releases the Python global interpreter lock; speedup is
+workload-dependent. Block assignments are recalculated each tick.
 
 <a id="fim.engine.lanes.ThreadedAdvancer.__init__"></a>
 
@@ -6325,33 +5900,19 @@ def __init__(max_workers: int | None = None,
              jit: JitOption = "off") -> None
 ```
 
-Configure how many blocks/threads this advancer fans out across.
+Configure the worker count and JIT option.
 
 **Arguments**:
 
-- `max_workers` - Defaults to `os.cpu_count()` (or 1 if that
-  cannot be determined) — the same default reasoning
-  `concurrent.futures.ThreadPoolExecutor` itself uses.
-  Deliberately not the same `max_workers` `simulate_params()`'s own
-  public signature accepts — that one is `LinealBackend`-
-  only (a process count); reusing the name for a thread
-  count here was flagged, not settled, by the design this
-  implements, so this constructor's own parameter is
-  reachable only by building a `GenerationalBackend`
-  directly, not yet through `simulate_params()` itself.
-- `jit` - Passed through to each block's own `SequentialAdvancer`
-  — see its docstring. ``"numba"`` JIT-compiles `drift`'s
-  own multinomial draw (`fim.model.operators.drift`'s own
-  docstring) — bit-identical, and no longer regresses
-  wall-clock time the way an earlier, per-pair-call version
-  measurably did, but is not yet shown to be a clear
-  standalone win either: `drift`'s own dominant cost at
-  this project's reference scale is marshaling to and from
-  `ModelState`'s sparse representation, not the compiled
-  draw itself, so this setting alone should not be assumed
-  to speed up `ThreadedAdvancer`'s own thread fan-out in
-  practice. `migrate`/`mutate`'s RNG calls stay unjitted
-  and GIL-bound regardless of this setting either way.
+- `max_workers` - Maximum worker threads. Defaults to the
+  available CPU count, or 1 if it cannot be determined.
+  This option is available through a directly configured
+  `GenerationalBackend`; `simulate_params()`'s
+  `max_workers` option configures processes for
+  `LinealBackend`.
+- `jit` - Passed to each block's `SequentialAdvancer`. The
+  `"numba"` option requires Numba and preserves results
+  for the same seed.
 
 
 **Raises**:
@@ -6782,48 +6343,12 @@ def run_batch_parallel(
 
 Run replicates in parallel worker-process batches of `max_workers`.
 
-This is `fim`'s own `max_workers` path — see that function's
-docstring for why real, separate operating-system processes are used
-at all here rather than something lighter-weight. This function's
-own job is just the bookkeeping around that: hand out replicates
-`max_workers` at a time to a pool of worker processes
-(`ProcessPoolExecutor`, from Python's own standard library), collect
-each one's result as it finishes, and — if an adaptive replicate
-stop is configured (`monitor`; see this module's own docstring,
-above) — decide after each whole batch of workers finishes whether
-enough replicates have now run to stop early.
-
-Replicates run in these fixed-size batches, rather than all being
-submitted to the worker pool at once, specifically so that adaptive
-stopping decision stays meaningful: the decision is always applied
-strictly in ascending replicate order (replicate 1's result seen
-before replicate 2's, and so on), the exact same order the
-sequential (non-parallel) loop already uses, so parallelizing the
-*computation* never reorders which replicate's own values actually
-fed the stopping decision. The one real trade-off for that
-guarantee: a batch can overshoot the exact minimal replicate count
-by up to ``max_workers - 1`` extra replicates, since the whole batch
-a stopping replicate happened to fall in has already been started by
-the time the decision is made.
-
-That overshoot's own compute is unavoidable — every future in the
-current batch was submitted to a pool sized exactly `max_workers`,
-so by the time a stop is decided, the rest have almost always
-already started running, and `Future.cancel()` cannot interrupt a
-worker process once it has (this project's own multi-model engine
-review, 2026-09-04, `FIM-50`/finding P2-1 case 2, confirms the
-compute cost is already documented and accepted). What is not
-accepted: `store_factory`, when given, makes each overshoot
-replicate's own worker write a real, persistent trajectory — those
-artifacts used to be left behind with no `RunResult` in this
-function's own return value to account for them, discoverable only
-by a reader of the store noticing a `run_id` that does not belong to
-any of the results actually returned. Now: `cancel()` is still tried
-first (a genuine, if rare, win for a future that has not started
-yet), then each overshoot future is waited on and, if `store_
-factory` is real, its own artifacts are discarded — never left
-orphaned regardless of whether the worker itself succeeded, raised,
-or was actually cancelled in time.
+Replicates are submitted in batches, and results are processed in
+ascending replicate order. If adaptive stopping is enabled, the
+stopping decision is evaluated after each batch; the final batch can
+therefore include up to ``max_workers - 1`` replicates beyond the
+stopping point. When `store_factory` is provided, artifacts from
+replicates beyond the accepted result prefix are discarded.
 
 <a id="fim.engine.lineal.run_one"></a>
 
@@ -8188,24 +7713,10 @@ def pooled_g_st_and_d(
 
 Return ``(G_ST, D)``, aggregated across loci per `locus_aggregation`.
 
-Two genuinely different estimators of the same two named statistics
-(`SimulationParams.locus_aggregation`'s own docstring has the full
-argument for why they differ and which this project recommends):
-
-- `"ratio_of_means"` (the default): pool `H_S`/`H_T` across loci
-  first — `mean_h_s`/`mean_h_t`, already computed by the caller for
-  the report's own `H_S`/`H_T` fields, reused here rather than
-  recomputed — then compute one `G_ST`/`D` from those pooled values,
-  via the identical private cores `g_st`/`jost_d` use internally
-  (`g_st_from_demes`/`jost_d_from_within_and_total`), so this
-  function does not re-derive either formula independently.
-- `"mean_of_ratios"` (this project's own original behavior): average
-  each locus's own already-computed `G_ST`/`D` — unchanged from
-  before this function existed.
-
-`E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST` are unaffected by either choice
-(`SimulationParams.locus_aggregation`'s own docstring again) and stay
-a plain per-locus mean regardless, computed by the caller.
+With `"ratio_of_means"`, compute each statistic from pooled `H_S`
+and `H_T` values supplied by the caller. With `"mean_of_ratios"`,
+average the per-locus `G_ST` and `D` values. `E_ST`, `K_ST`, `H_S`,
+`H_T`, and `H_ST` are averaged per locus regardless of this option.
 
 <a id="fim.engine.tracking.statistics_for_locus"></a>
 
@@ -8220,34 +7731,26 @@ def statistics_for_locus(
         statistics: Collection[str] | None = None) -> DifferentiationReport
 ```
 
-Compute one locus's scalar statistics.
+Compute the requested differentiation statistics for one locus.
 
-Builds the input `fim.statistics.differentiation.statistics_report`
-actually expects — one dictionary per deme, mapping each allele
-identity present at this locus to its frequency (what fraction of
-that deme's gene copies at this locus currently carry it) — from
-this state's own internal representation, then hands that off to do
-the actual math. This function itself computes nothing statistical;
-it only reshapes data.
+Builds a normalized allele-frequency table from ``state`` and passes
+it to ``fim.statistics.differentiation.statistics_report``. When
+``params.deme_weighting`` is ``"size"``, population-size weights are
+supplied for ``E_ST``, ``Delta``, and ``MI`` only. Other statistics,
+including ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``,
+``A_CGD``, ``Gs``, and ``Gd``, use equal deme treatment.
 
-`deme_weighting` controls whether every deme counts equally toward
-the reported statistics regardless of its own population size
-(`params.deme_weighting == "equal"`), or whether a larger deme
-counts proportionally more than a smaller one (`"size"`, the
-default, weighting by `params.population_sizes`) — the same
-"should a bigger group's own numbers count for more" choice that
-comes up whenever averaging across groups of unequal size, with no
-universally correct answer; which is more appropriate depends on the
-actual scientific question being asked.
+**Arguments**:
 
-`statistics`: forwarded verbatim to `statistics_report` — `None`
-(the default) for `report_for_state`'s own final-report call, which
-needs every field; `convergence_values`'s own per-generation call
-passes `params.convergence_statistics` instead, so the fields no
-watched statistic ever reads are skipped rather than computed and
-discarded every generation (Phase 7 item 4, `FIM-24`/`FIM-32`; see
-`statistics_report`'s own `statistics` parameter for the full
-contract).
+- `state` - Population state to summarize.
+- `params` - Validated model parameters, including deme weighting.
+- `locus_index` - Zero-based locus position in the state.
+- `statistics` - Optional names of statistics to calculate.
+
+
+**Returns**:
+
+  A ``DifferentiationReport`` for the selected locus.
 
 <a id="fim.errors"></a>
 
@@ -8312,16 +7815,7 @@ read-only run.
 
 # fim.examples
 
-The shipped worked examples and the run classes that group them.
-
-`fim.examples.classes` reads and validates `doc/examples/classes.yaml`,
-the class tree the Examples dialog shows and a configuration's `class`
-label is checked against (design doc `20261005-claude-opus-5-5-read-
-only-examples-and-classes-design.md`, `selby/restricted`, section 2).
-`fim.examples.seed` writes the desktop app's bundled examples into the
-results folder as read-only runs, Studies, and the Examples Experiment
-(section 4.2). Nothing is re-exported here, so importing one submodule never pays for
-another.
+Load, validate, and seed the bundled worked examples and run classes.
 
 <a id="fim.examples.artifacts"></a>
 
@@ -8450,43 +7944,13 @@ Missing, reordered, corrupt, or truncated parts fail explicitly.
 
 # fim.examples.classes
 
-Read and validate the run-class tree, `doc/examples/classes.yaml`.
+Read and validate the run-class hierarchy in `doc/examples/classes.yaml`.
 
-A **class** is a group ID for runs: the worked examples use classes to
-build the Examples dialog's tree, and a user's own run may carry one
-too, as the configuration label `class` (`doc/configuration.md`). This
-module is the only reader of the class file (design doc
-`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
-`selby/restricted`, section 2).
-
-The file holds one top-level key, `classes`, a list of entries:
-
-```yaml
-classes:
-  - id: getting-started
-    title: Getting started
-    description: One-screen runs that show the core statistics settling.
-  - id: literature
-    title: Literature comparisons
-    children:
-      - id: literature-distances
-        title: Genetic distances
-```
-
-Rules, all enforced by `parse_class_tree`:
-
-- The tree is shallow: top-level classes plus at most one level of
-  `children`. A child with `children` of its own is rejected.
-- Order in the file is display order, and it is preserved.
-- Every `id` is lowercase kebab-case (`getting-started`) and unique
-  across the whole tree, parents and children together.
-- `title` is required; `description` is optional. Any other key is
-  rejected, so a typo is reported rather than ignored.
-
-The file lives in the source checkout, beside the examples. A packaged
-build carries no `doc/` directory, so `load_default_class_tree` returns
-`None` there, and `validate_run_class` then checks only the ID's format
-(see its docstring for why that is the safe choice).
+The YAML file defines ordered top-level classes and optional single-level
+children. IDs must be unique lowercase kebab-case strings; titles are
+required, descriptions are optional, and unknown keys or deeper nesting are
+rejected. Packaged builds without the source `doc/` tree validate class IDs
+by format only.
 
 <a id="fim.examples.classes.RunClass"></a>
 
@@ -8766,45 +8230,13 @@ both cases.
 
 # fim.examples.seed
 
-Seed the bundled worked examples into the results folder as read-only runs.
+Install bundled worked examples as read-only runs and groupings.
 
-Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
-and-classes-design.md`, `selby/restricted`), section 4.2. The desktop app
-carries every worked example in `webui/examples/` (`dev/bin/build-
-examples-catalog` writes it): a `catalog.json` naming each example's
-labels, class, and configuration, and a copy of each example's saved
-output files. `seed_examples` turns that bundle into ordinary results the
-Home card can list:
-
-- **Run directories.** An example with a saved result (a `manifest.json`
-  in the bundle) gets `results/examples/<id>/`, holding its
-  `config.yaml`, its saved output files, and a `metadata.json` with its
-  name, description, and class. Every file there is app-owned: a newer
-  bundle replaces a file whose content differs, and removes one it no
-  longer ships.
-- **Studies.** One read-only Study per class that has at least one
-  seeded example, with the fixed id `study-examples-<class-id>` and the
-  class title as its name; a child class is its own Study, named
-  "Parent — Child".
-- **Experiment.** One read-only Experiment, `experiment-examples`, named
-  "Examples", holding those Studies in class order.
-
-An example with no saved result yet (its outputs were never committed)
-gets **no** run directory and appears in no Study. Home lists a Study's
-members only when each has a readable `manifest.json` (`fim.gui.app.
-_recent_run_at_directory`), and `groups.is_run_read_only` reads that
-same manifest, so a directory without one would be invisible in the tree
-yet editable and deletable on disk: the least surprising choice is to
-seed nothing until there is something to show. The Examples dialog still
-lists such an example, and can load it into Configure.
-
-Seeding is idempotent: a second call with the same bundle writes nothing.
-It never touches anything outside its own items: the `results/examples/`
-directories it creates (a directory there holding any file seeding did
-not write is left alone), the `study-examples-*` Studies, and
-`experiment-examples`. The Study and Experiment manifests are written
-through `groups.write_read_only_study`/`write_read_only_experiment`, the
-one write path that may create read-only groupings.
+Examples with saved output are copied under `results/examples/` and grouped
+into read-only Studies by class and a read-only Examples Experiment. Entries
+without saved output remain available in the Examples dialog but are not
+seeded as runs. Seeding is idempotent and only updates files and groupings
+owned by the bundled examples.
 
 <a id="fim.examples.seed.BundledClass"></a>
 
@@ -9596,19 +9028,12 @@ the recorded positions.
 
 # fim.group\_lifecycle
 
-Close and reopen Studies and Experiments, and summarize their Runs.
+Validate Study and Experiment lifecycle operations and summaries.
 
-Run lifecycle design §6.3 (`20261006-gpt-6.1-sol-run-lifecycle-and-
-checkpoint-design.md`, `selby/restricted`). A group never has an
-execution state machine of its own: its summary is derived on every
-read from the lifecycle records of the distinct Run objects it reaches,
-plus the sweep points that have no Run object yet. A Run shared by two
-Studies of one Experiment counts once in the Experiment's summary.
-
-Closing a group (`fim.persistence.groups.ClosedGroupError`) freezes its
-organization only. It is refused while any Run the group reaches is
-active, so a group never reads closed while work still lands in it, and
-it never stops, pauses, or freezes a Run.
+Group summaries are derived from the lifecycle records of the Run objects
+and sweep points they reference. Closing a group freezes membership; it does
+not stop or pause runs. A group cannot be closed while referenced work is
+active.
 
 <a id="fim.group_lifecycle.LEGACY_STATE"></a>
 
@@ -9781,49 +9206,20 @@ cannot be read is left out rather than guessed at.
 
 # fim.gui
 
-Desktop GUI front end: a pywebview consumer of the existing simulator engine.
+Desktop user interface for the finite island model simulator.
 
-Six screens, rendered as a static local `webui/` page (plain HTML/CSS/
-JS) driven entirely through `fim.gui.app.Api` — the JS side's only way
-into Python. Every screen calls `fim.engine.simulate_params`, `fim.viz.scatter`, and
-`fim.model.params.SimulationParams` — the same public API `fim.cli`
-already uses — and never re-implements validation, statistics, or run
-orchestration (`doc/developer.md`'s architecture table: "GUI: call
-`fim.engine.simulate_params`; do not duplicate model logic."). See `doc/
-fim-gui-test-plan.md` for how this package's own test suite is
-organized, and `doc/developer.md`'s own architecture table for where
-this package sits relative to the rest of the project.
+The pywebview interface uses the shared model, engine, statistics, and
+persistence APIs. Its page assets are stored in `webui/`.
 
 <a id="fim.gui.animation"></a>
 
 # fim.gui.animation
 
-Sample animation frames from a persisted trajectory as raw scatter
-coordinates, not rendered images (`doc/fim-gui-design.md` §8).
+Select and prepare animation frames from a persisted trajectory.
 
-A converged run can persist hundreds or thousands of generations, and
-turning every one of them into a separate frame is both slow and
-unnecessary for a human watching a scatter drift. This module samples at
-most `GUI_ANIMATION_MAX_FRAMES` generations, evenly spaced across the
-run's persisted range, always including generation 0 and the final
-generation — unchanged from an earlier, Tk-era revision of this module
-— but each sampled generation now produces a plain coordinate array
-(`fim.viz.scatter.frequency_points`), not a rendered `Figure`:
-pywebview's own scrubber ships the whole sampled set to the page once
-and drives play/pause/scrub entirely with client-side Canvas redraws
-(`doc/fim-gui-design.md` §5.2, §8), so nothing here needs to render
-anything at all. This also makes pre-computation itself cheaper, not
-just playback: building `max_frames` coordinate arrays costs a
-fraction of what building `max_frames` Matplotlib figures did, since
-no rasterization happens on this path.
-
-Reached only after the trajectory's integrity has already been
-verified — the unified run view's `completed` state, reached either by
-a run that just finished (its manifest was just written, never edited)
-or by opening a persisted run (`fim.reanalyze.reanalyze_trajectory`
-itself calls `fim.persistence.manifest.verify_trajectory_integrity`
-first). This module therefore reads the trajectory directly, trusting
-the caller, rather than re-verifying it a second time.
+The module samples at most `GUI_ANIMATION_MAX_FRAMES` generations, including
+the first and final generations, and returns scatter coordinates for the web
+interface to render. Callers verify trajectory integrity before reading it.
 
 <a id="fim.gui.animation.AnimationFrame"></a>
 
@@ -9981,35 +9377,12 @@ Return at most `max_frames` generation numbers, evenly spaced.
 
 # fim.gui.app
 
-pywebview bootstrap and `Api` bridge — the GUI's own entry point
-(`doc/fim-gui-design.md` §4).
+Desktop application entry point and Python bridge for the pywebview UI.
 
-`fim.launcher` dispatches here for the zero-argument and `--graphical`
-paths, exactly as it dispatched to the Tk build's own `fim.gui.app:main`
-before the pywebview migration (`doc/fim-gui-design.md` §2) — the
-entry point name and shape are stable across the toolkit swap:
-`fim.launcher` itself did not change at all.
-
-`create_window` and `main` are deliberately separate: `main` blocks
-(`webview.start()` runs the GUI's own event loop until the window
-closes), so no test calls it directly. Every headless test instead calls
-`create_window()` itself, then drives the result with its own
-`webview.start(callback)`, confirmed directly against this window/bridge
-before writing this
-module (see `test/gui/test_app.py`): `window.evaluate_js(...)` returns
-the raw value of whatever JS expression it evaluates, not the resolved
-value of a Promise that expression happens to produce — a `js_api` call
-like `window.pywebview.api.ping()` returns a Promise to JS, so a direct
-`evaluate_js("window.pywebview.api.ping()")` reads back `{}` (Chromium's
-own JSON view of an unresolved Promise object), not `"pong"`. Every real
-call into the bridge — from a test, and from `webui/*.js` alike —
-therefore goes through a small `async` JS wrapper that `await`s the
-`js_api` call and writes its result into the DOM (or, for a test, a
-`window`-scoped variable), read back with a second, separate
-`evaluate_js` call. This is not a workaround bolted on for testing: it is
-also the correct, natural shape for a real UI event handler, which never
-needs to return a value to Python either — only update its own screen
-after the `await` resolves.
+`main` starts the application event loop. `create_window` constructs the
+window and its `Api` bridge separately for headless tests and other callers.
+The web interface calls the same simulation, analysis, and persistence
+modules used by the command-line interface.
 
 <a id="fim.gui.app.format_statistic"></a>
 
@@ -13997,45 +13370,12 @@ at all.
 
 # fim.gui.batch\_runner
 
-Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
+Background orchestration for multi-replicate GUI runs.
 
-Under `engine_backend="lineal"`, runs a multi-replicate batch in
-parallel, as real OS processes, via `fim.engine.simulate_params(..., max_workers=N,
-store_factory=...)` — the same call shape `cli._command_run_batch`'s own
-default (non-`--sequential`) path already makes. This reverses the
-Tk-era design's "sequential-only, deliberately" decision: that
-constraint belonged to `GuiProgressStore`'s in-process
-`threading.Event`/callback pair, which cannot cross a process boundary —
-not to the engine, which has supported real parallel replicate execution
-since before any GUI existed. Under any other `engine_backend`,
-`max_workers` is never passed (there is no process pool for it to size);
-`store_factory` alone drives every backend's own batch execution now
-(`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
-`selby/restricted`).
-
-Progress and cancellation for this parallel path are entirely
-file-mediated (`fim.gui.store.LiveProgressStore`), not posted through
-`message_queue` per generation the way the Tk-era sequential runner did:
-a lightweight poller elsewhere (the pywebview bridge, not yet built)
-discovers progress by reading each in-flight replicate's own `.progress`
-sidecar, and requests cancellation by creating one shared file every
-worker's `LiveProgressStore` checks before each write. `message_queue`
-still carries the batch's terminal outcome — done, cancelled, or error —
-exactly as before, since those remain discrete events worth queueing;
-only per-generation progress moved off the queue and onto the filesystem.
-
-Writes the same artifacts `cli._command_run_batch`'s own default
-(parallel) path does, including the same orphan-replicate-directory
-pruning `fim.persistence.saved_run.prune_orphan_replicate_directories` performs: under
-`max_workers`, an adaptive early stop is applied only
-after a whole concurrent worker batch completes
-(`fim.engine.lineal.run_batch_parallel`), so a worker beyond the replicate that
-triggered the stop can still have fully written its own `replicate-NNN/`
-directory even though its result is discarded, never appearing in the
-tuple `fim` returns. Without pruning, `fim.paths.atomic_directory` would
-publish that orphan directory verbatim — a bug class the Tk-era sequential
-runner could never hit (sequential execution never overshoots), mirrored
-here now that real parallelism reopens it for the GUI too.
+For the lineal backend, replicate workers run in separate processes. Progress
+and cancellation use `LiveProgressStore` sidecar files; the message queue
+carries terminal results. The runner writes the same artifacts as the CLI and
+removes output from replicates discarded by an adaptive early stop.
 
 <a id="fim.gui.batch_runner.default_max_workers"></a>
 
@@ -14119,36 +13459,13 @@ Resolve targets, guard the existing target, and start the worker thread.
 
 # fim.gui.config\_form
 
-Marshal `SimulationParams` to and from the tabbed model-input screen.
+Convert between model parameters and GUI configuration form values.
 
-Every function here is a pure, Tk-free transformation between three
-shapes: a `SimulationParams` instance, a `dict[str, str]` of one string
-per form field (what `screens.input_screen.InputScreen` reads from and
-writes to its widgets), and a `dict[str, object]` payload ready for
-`fim.model.params.SimulationParams.from_mapping` — the identical
-validator `fim.cli` already uses (`doc/fim-gui-design.md` §6.1).
-Nothing here duplicates a validation rule `from_mapping` already
-enforces: a malformed string is only ever coerced to the right Python
-type before being handed to that one validator, never re-checked
-against a second, GUI-local copy of a rule.
-
-`TABS` groups fields the same way
-[configuration.md](../../doc/configuration.md)'s own section
-headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
-decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
-sized fields do (a comma-separated text field faithfully represents
-either); a `d`-by-`d` migration matrix, a `loci` list with custom
-`locus_id`s, and a `d`-by-locus explicit `p_0` now do too, each edited
-cell by cell (botanist GUI design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4 —
-`m_to_payload`/`m_from_params`'s own `"matrix"` mode,
-`loci_to_payload`/`loci_from_params`'s own `"custom"` mode, and
-`initial_conditions_to_payload`/`initial_conditions_from_params`'s own
-`"explicit_p0"` mode, respectively); a genuinely per-locus `mu` still
-does not, and instead raises a clear `ValueError` from
-`params_to_form_values` (the same "edit the YAML file directly" pattern
-this form has always used for a construct it cannot represent at all)
-— see `doc/fim-gui-design.md` §6.2.
+The module maps `SimulationParams` to and from form dictionaries and
+payloads validated by `SimulationParams.from_mapping`. Supported inputs
+include per-deme and per-locus lists, migration matrices, custom loci, and
+explicit initial-frequency tables. Per-locus mutation rates are not
+represented by the form; configurations using them must be edited as YAML.
 
 <a id="fim.gui.config_form.PLOIDY_REQUIRED_MESSAGE"></a>
 
@@ -15330,20 +14647,11 @@ Return pairwise identity decay by migration-graph distance, pooled.
 
 # fim.gui.object\_bridge
 
-Saved runs ("Save for later") for the GUI: the logic behind `Api`'s methods.
+GUI operations for creating and managing saved Run objects.
 
-A saved run is a Run object (`fim.persistence.run_objects`): a configuration
-the botanist saved to start, pause, and resume later, which may be a Draft
-that is not yet valid. `fim.gui.app.Api` stays a thin bridge over these
-functions, which are plain enough to test without a window.
-
-A Draft's configuration file records what was entered (fields that do not
-parse keep their text), but cannot always be turned back into form values,
-because the form has modes and selectors the configuration does not. So
-each save also writes the form's own values to `gui-form.json` in the
-object directory, next to a digest of the configuration it was saved with.
-Reopening uses those values while the digest still matches; after an edit
-made elsewhere (`fim object edit`), the configuration itself is converted.
+The bridge delegates lifecycle operations to `fim.run_service` and
+`fim.persistence.run_objects`. Drafts retain entered form values in
+`gui-form.json` so configurations that are not yet valid can be reopened.
 
 <a id="fim.gui.object_bridge.cancel"></a>
 
@@ -15571,21 +14879,11 @@ Save the form as a new saved run, or over an existing Draft or Planned one.
 
 # fim.gui.object\_runner
 
-Background-thread execution of a saved Run object for the GUI.
+Background execution for saved Run objects in the desktop interface.
 
-The counterpart to `fim.gui.runner` for a Run saved with "Save for later"
-(`fim.persistence.run_objects`). Execution goes through the same lifecycle
-service the CLI's `fim object start/resume` uses
-(`fim.run_service.execute_run_object`), so the GUI never applies lifecycle
-rules of its own. Pause and Cancel are durable requests recorded in the
-object's `run.json` (`request_pause`, `cancel_run_object`); the worker
-honors them at its next safe point.
-
-The worker posts the same `runner.RunMessage` shapes `fim.gui.runner`
-does, plus `("paused", generation)`, so `fim.gui.app._drain_run_messages`
-draws both kinds of run identically. Only one run is in flight at a time,
-and each run has its own queue, so a message from an earlier attempt can
-never reach a later attempt's view.
+Execution and lifecycle transitions use the same services as `fim object
+start` and `fim object resume`. The worker reports progress and responds to
+pause and cancellation requests at safe points.
 
 <a id="fim.gui.object_runner.start_object_run"></a>
 
@@ -15631,96 +14929,13 @@ exits.
 
 # fim.gui.preferences
 
-Versioned, atomic GUI-preferences store (P1 item 4, design doc
-`20260907-claude-sonnet-5-gui-preferences-persistence-design.md`).
+Versioned storage for persistent desktop-application preferences.
 
-Persists exactly the two things the remediation item names as confirmed
-gaps — the View menu's display precision and the model-input form's
-last successfully submitted values (including the Batch tab's own
-`max_workers` field, which is already one of those values;
-`start_run`'s own docstring: "the Batch tab's own `max_workers`
-field... parsed here directly") — never a run's own scientific
-configuration, which already has a permanent, replayable record in its
-own `manifest.json` (`fim.persistence.manifest`). Both fields are
-optional (`None` means "no saved preference yet"); a caller merges a
-loaded `GuiPreferences` with its own hardcoded default rather than this
-module carrying a second copy of it (`fim.gui.app`'s own `_DEFAULT_
-DISPLAY_SIGNIFICANT_DIGITS` stays the single source of truth there).
-
-A third, optional field — `named_presets` — was added later (botanist
-GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §12:
-"User-saved presets... live in the same preferences store, alongside...
-the last-submitted form snapshot"), a user's own named form-value
-snapshots, distinct from the built-in worked-example presets `fim.gui.
-presets` reads from the bundled usage guide — those are read-only and
-ship with the app; these are created, renamed by overwrite, and deleted
-entirely by the user, at any time, with no relationship to any run's
-own scientific record either. Purely additive to the on-disk shape
-(schema_version does not change): an older file with no `"presets"` key
-loads exactly as it already did, with `named_presets` simply `None`.
-
-A fourth, optional field — `dark_mode_override` — follows the same §12
-precedent again: "Dark-mode override (§11.2), when the user has
-explicitly chosen one rather than following the OS, is a new, small
-addition to that same preferences file — one more scalar value,
-following the exact precedent... `significant_digits`." `None` means
-"follow the OS," the app's own default (§11.2: "the app follows the
-OS-level light/dark preference by default"), not merely "unset" —
-there is no third stored value for "system" distinct from absence, the
-same way `significant_digits: None` already means "use the hardcoded
-default," not a fourth digit count. Purely additive again: an older
-file with no `"dark_mode_override"` key loads exactly as it already
-did, with the field simply `None`.
-
-A fifth GUI field — `startup_behavior` — chooses whether a fresh launch
-restores the last valid submitted form (`"restore"`, the default and
-the historic behavior) or restarts from the built-in starter form
-(`"restart"`). It affects only the next launch's initial form values,
-never any saved run artifact.
-
-A sixth field — `default_run_settings` — is the Settings dialog's own
-"execution/convergence-selection defaults" (`engine_backend`,
-`n_replicates`, `convergence_statistic`/`convergence_combinator`/
-`precision`), a real, reported request
-to move fields the user judged "applicable pretty universally" out of
-the per-run Configure form and into one global-default home, while an
-individual run's own Configure form can still override any of them for
-that one run. Deliberately the same `dict[str, str]` shape and
-validation precedent `form_values` already established (a partial
-`config_form.form_values_to_payload`-compatible mapping, re-validated
-on load by merging it over the true starter values rather than trying
-to validate a subset in isolation — `config_form.starter_form_values`'s
-own `overrides` parameter), not a sixth pair of narrowly-typed scalar
-fields: `track_expensive_statistics` is left out of this set, which
-follows `shown_statistics` instead (`Api._merge_default_run_settings`), and
-any future addition or removal from that set only ever changes
-`config_form.DEFAULT_RUN_SETTING_FIELD_NAMES`, never this store's own
-shape. `None` means "nothing saved yet"
-— `Api.get_default_run_settings` falls back to the starter values for
-exactly this field set in that case, the identical "no saved value yet"
-fallback `significant_digits`/`dark_mode_override` already have their
-own callers apply.
-
-Deliberately excludes a "default deme pair for the next run": `Api.
-_start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
-at the start of every run on purpose ("a fresh run never inherits a
-previous run's own live pair selection... never left showing stale
-state from whichever screen used it last") — persisting a value that
-would then need to override that reset contradicts a documented,
-deliberate design choice already in `app.py`, not an oversight this
-store should paper over.
-
-The on-disk shape is one small JSON document,
-`{"schema_version": 2, "gui": {...}, "form": {...}}`, written with the
-same mkstemp-then-`os.replace` atomic idiom `fim.gui.store.
-write_progress_sidecar` already uses — this module is that idiom's
-second caller, not a second implementation of it. A file this module
-cannot parse, or whose `schema_version` it does not recognize, is never
-silently ignored or partially trusted: it is renamed aside with a
-timestamp (never deleted — always a recoverable copy) and `load_
-preferences` returns fresh defaults plus a human-readable warning the
-caller is expected to actually show, not just log
-(`fim.gui.app.Api.get_startup_warnings`).
+Preferences include display settings, form values, named presets, startup
+behavior, and default run settings. The version 2 JSON document is written
+atomically; callers supply defaults for optional values. Version 1 settings
+are migrated where needed. Corrupt or unsupported files are preserved under
+a timestamped name, and loading returns defaults with a warning.
 
 <a id="fim.gui.preferences.RUN_GRAPH_KEYS"></a>
 
@@ -16195,27 +15410,10 @@ previous complete file or the new one, never a torn write.
 
 # fim.gui.presets
 
-Read the bundled examples catalog for the Examples dialog and presets.
+Read bundled examples for the Examples dialog and configuration form.
 
-Every `doc/examples/<id>/` directory is one example.
-`dev/bin/build-examples-catalog` writes them, with the class tree from
-`doc/examples/classes.yaml`, into `webui/examples/catalog.json` at commit
-time (design doc
-`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
-§4.1, `selby/restricted`). `packaging/fim.spec` bundles the whole
-`webui/` tree into every packaged executable, so the catalog exists both
-in a development checkout and inside a frozen application, while
-`doc/examples/` itself is not bundled.
-
-An example's configuration may carry labels (`name`, `description`,
-`class`) and internal attributes (`_read_only` and any other key that
-starts with `_`). `split_configuration` separates them from the model
-keys, so a loaded example reaches the Configure form as an ordinary,
-editable configuration (design §1, "Consequence").
-
-`list_presets` and `get_preset` are the older, flat view of the same
-catalog, kept as thin aliases until their callers (the File menu's
-"Load example…" picker) move to the Examples dialog (design §5).
+The packaged catalog contains example metadata and configuration files.
+Legacy preset lookup functions provide a flat view of the same catalog.
 
 <a id="fim.gui.presets.ExampleClass"></a>
 
@@ -16483,19 +15681,10 @@ stay, since `fim run` records them as the new run's name.
 
 # fim.gui.recent\_runs
 
-Scan `results/` for recently completed runs, scalar and batch
-(`doc/fim-gui-design.md` §9).
+Find recent scalar and batch runs in the results directory.
 
-The recent-runs picker is populated by scanning
-`fim.paths.results_directory()` for `*/manifest.json`, reading each with
-`fim.persistence.manifest.read_manifest` (scalar) or
-`fim.persistence.manifest.read_batch_manifest` (batch) — the same files
-`fim stats` and `fim run`'s own batch summary default to. A batch's
-manifest is listed but labeled distinctly (e.g. "batch (14/20)") rather
-than treated as something the picker can open directly: "Open
-replicate" on a batch's own results table is the path to any one
-replicate's trajectory, since a batch-level manifest has no single
-trajectory of its own to verify or re-analyze.
+Run manifests provide the list entries. Scalar runs can be opened directly;
+for a batch, the interface opens an individual replicate.
 
 <a id="fim.gui.recent_runs.RecentRun"></a>
 
@@ -16562,34 +15751,11 @@ Return every run under `results_directory`, newest first.
 
 # fim.gui.runner
 
-Background-thread scalar-run orchestration (`doc/fim-gui-design.md` §7.1).
+Background-thread orchestration for scalar GUI runs.
 
-`fim.engine.simulate_params` is a single blocking call; a multi-thousand-generation
-run would freeze the Tk main thread for its whole duration. `start_run`
-runs it on a `threading.Thread` instead, and gets progress and
-cancellation for free from `fim.gui.store.GuiProgressStore` — no change
-to `fim.engine` at all.
-
-The worker does its work inside `fim.paths.atomic_directory`, the exact
-context manager `cli._command_run_scalar` already uses (`fim.paths` was
-extracted from the CLI for precisely this shared use — §12): every
-write lands in a
-hidden temporary sibling of `output_directory`, published with one
-atomic rename only if the `with` block exits normally. A cancelled run
-raises `RunCancelledError` out of that block; an unexpected engine error
-raises one of `_EXPECTED_ENGINE_ERRORS`. Either way, `atomic_directory`'s
-own `except BaseException` clause discards the temporary directory and
-`output_directory` is never created — no GUI-specific cleanup code is
-needed for either outcome.
-
-Writes the same four artifacts, in the same order, as
-`fim.persistence.artifacts.write_run_artifacts`: `trajectory.tlog` streamed
-generation-by-generation by the `TrajectoryStore` passed into `fim`,
-then `report.json` and `scatter.png` once the run finishes, then —
-last, and only once both are flushed — `manifest.json`, augmented with
-each artifact's SHA-256 digest, the record
-`fim.persistence.manifest.verify_trajectory_integrity` later checks
-against.
+The worker runs the shared simulation engine, reports progress through
+`GuiProgressStore`, and writes the same run artifacts as the command-line
+interface. Output is published atomically only after a successful run.
 
 <a id="fim.gui.runner.ProgressThrottle"></a>
 
@@ -16730,37 +15896,12 @@ Resolve targets, guard the existing target, and start the worker thread.
 
 # fim.gui.store
 
-Progress reporting and cancellation for a background run (§7 of the GUI design doc).
+Progress reporting and cancellation support for background runs.
 
-`fim.persistence.store.TrajectoryStore` is a `Protocol` (structural
-typing, not an ABC), and `fim.engine.lineal.run_one`'s generation loop already
-calls `store.write_generation(...)` unconditionally, every generation,
-with no `try`/`except` around it — a clean, pre-existing extension point
-`GuiProgressStore`/`LiveProgressStore` decorate rather than a change to
-`fim.engine` itself.
-
-Named `RunCancelledError`, not an earlier prototype's `RunCancelled` —
-ruff's `N818` (exception names end in `Error`) is part of this
-project's lint gate (`doc/fim-gui-design.md` §2).
-
-Two decorators live here, for two execution shapes (`doc/
-fim-gui-design.md` §7.1, §7.2):
-
-- `GuiProgressStore` — a scalar run, one in-process background thread.
-  Holds a `threading.Event` and a callback closure; both are real
-  Python objects the calling thread can read/write directly, because
-  nothing here ever crosses a process boundary.
-- `LiveProgressStore` — a batch replicate, running inside its own
-  `ProcessPoolExecutor` worker process. A `threading.Event` and a
-  closure cannot be pickled across that boundary, so this decorator
-  holds only plain, picklable `Path`s instead: it *writes* a small
-  progress sidecar file after each generation and *checks* a shared
-  cancellation file before each write, rather than calling back into
-  the parent process directly (which nothing here could safely do).
-  The parent discovers progress by polling the sidecar, and requests
-  cancellation by creating the cancellation file — both plain
-  filesystem operations, needing no cross-process synchronization
-  primitive at all.
+`GuiProgressStore` reports scalar-run progress through an in-process callback.
+`LiveProgressStore` reports worker-process progress through sidecar files and
+checks a shared cancellation file. Both implement the trajectory-store
+interface used by the simulation engine.
 
 <a id="fim.gui.store.LIVE_BLOCK_SECONDS"></a>
 
@@ -17179,11 +16320,11 @@ generation still being written.
 
 # fim.gui.sweep\_bridge
 
-JSON-shaped payloads for the sweep bridge calls (`fim.gui.app.Api`).
+Convert between web-interface requests and parameter-sweep data.
 
-Pure functions turning a page request into a `SweepSpec` and turning a
-plan, a Study or its results back into plain dictionaries the page can
-draw. Nothing here touches a window or starts a run; `Api` owns that.
+Pure functions in this module build sweep specifications and serialize plans,
+studies, and results as dictionaries for the page. Window management and
+execution are handled by `fim.gui.app.Api`.
 
 <a id="fim.gui.sweep_bridge.sweepable_keys_payload"></a>
 
@@ -17321,26 +16462,11 @@ Describe a sweep Study's finished points and their statistics.
 
 # fim.gui.trajectory\_history
 
-Sample a full statistic-vs-generation history from a persisted
-trajectory, for the Compare workspace's own trajectory-overlay panel
-(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-redesign.md` §8: "overlay their trajectory plots on one set of axes,
-one color per run").
+Sample statistic histories from persisted trajectories.
 
-`fim.reanalyze.reanalyze_trajectory` already recomputes statistics for
-one chosen generation of a persisted run; this module does the same
-underlying work — verify the trajectory's own integrity, group its rows
-by generation, rebuild a `ModelState` and call `report_for_state` — but
-for a whole, evenly-spaced sample of generations at once, not just one,
-so a full curve can be drawn for a run that was never watched live.
-
-Reuses `fim.gui.animation.select_sample_generations`/`GUI_ANIMATION_
-MAX_FRAMES` exactly as already established for the animation screen's
-own frame sampler, rather than inventing a second, independent sampling
-density: a run that persisted hundreds or thousands of generations
-should not turn into hundreds or thousands of `report_for_state` calls
-here any more than it turns into that many rendered animation frames,
-for the identical reason (`fim.gui.animation`'s own module docstring).
+The module verifies a trajectory, recomputes statistics for evenly spaced
+generations, and returns data for comparison plots. Sampling uses the same
+maximum frame count as the trajectory animation.
 
 <a id="fim.gui.trajectory_history.TrajectoryHistory"></a>
 
@@ -17511,26 +16637,12 @@ launched it, rather than blocking until the app window is closed.
 
 # fim.logging\_setup
 
-Central logging configuration for both front ends (`doc/fim-logging-
-design.md` §3.2).
+Configure logging for the command-line interface and desktop application.
 
-Every module under `fim` logs via `logging.getLogger(__name__)` alone
-and never touches handler or level configuration itself (`fim/__init__.
-py`'s own `NullHandler` is what keeps that safe by default). This is
-the one place that configuration actually happens — called once, with
-already-parsed values, by each of the three real entry points:
-`fim.cli.main` (from its own `-l`/`-L` arguments), `fim.launcher.main`
-and `fim.gui.app.main` (from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`).
-`configure` is idempotent: calling it more than once replaces the
-`fim` logger's own handlers rather than accumulating them, so a test
-(or a future caller) that calls it twice never sees doubled output.
-
-`apply_logging_config_file`, below, is each entry point's alternative
-to `configure` — not a layer on top of it — for the one thing `-l`/`-L`
-cannot express at all: a full, reusable, multiple-handler logging
-configuration read from an external YAML file (`--logging-config`/
-`FIM_LOGGING_CONFIG`, `20260918-claude-sonnet-5-configurable-storage-
-root-design.md`, `selby/restricted`, §9).
+`configure` applies the standard stream and file handlers from parsed options.
+`apply_logging_config_file` loads a complete `logging.config.dictConfig`
+configuration from YAML. Application entry points select one configuration
+path; the module does not configure loggers during import.
 
 <a id="fim.logging_setup.resolve_level"></a>
 
@@ -17794,8 +16906,7 @@ class AlleleRegistry()
 
 Allocate globally unique identities for alleles created by mutation.
 
-The infinite-alleles model's allocator (see this module's own
-docstring, above): every call to `next_id` returns an integer that
+In the infinite-alleles model, every call to `next_id` returns an integer that
 has never been returned before, from this registry or from
 `founding_allele_ids`, so a mutant allele's ID alone is always
 enough to tell it apart from every founding allele and from every
@@ -17880,22 +16991,8 @@ def next_k_ids(k: int) -> np.ndarray
 
 Reserve ``k`` consecutive, never-before-returned allele identities.
 
-The vectorized counterpart to `next_id`, designed but never
-built in `20260829-claude-sonnet-5-fim-vector-design.md` §5.2 —
-built here for `20260901-claude-sonnet-5-fim-engine-backend-
-factory-design.md` §10 item 10e's own stage 3 (batching
-`mutate`'s own infinite-alleles minting across a whole
-generation instead of one `next_id()` call per event). The
-correctness guarantee `next_id`'s own docstring states —
-"every call returns something no earlier call ever returned" —
-constrains only the *reservation*, a single, genuinely
-sequential integer read-modify-write, not how the reserved
-block of `k` identities gets constructed afterward: `k`
-sequential `next_id()` calls and one `next_k_ids(k)` call return
-bit-identical values, in the same order, since both are exactly
-``base, base + 1, ..., base + k - 1`` — the only difference is
-that this method pays the sequential counter's own cost once,
-not `k` times.
+Values match `k` consecutive `next_id()` calls: the returned
+sequence is ``base, base + 1, ..., base + k - 1``.
 
 **Arguments**:
 
@@ -17914,18 +17011,12 @@ not `k` times.
 
 - `ValueError` - If `k` is negative.
 
-  Noted, not fixed (this project's own multi-model engine review,
-  2026-09-04, `FIM-20`/finding Kimi-FIM-20, calls this "minor
-  (theoretical)" and prescribes no fix): `base + np.arange(k,
-  dtype=np.int64)` computes in fixed-width `int64`, which silently
-  wraps around to a negative identity on overflow rather than
-  raising, unlike `self._next` itself (a plain Python `int`, never
-  fixed-width). Reaching it needs roughly `2**63` calls to `next_
-  id`/`next_k_ids` combined over one run's own lifetime — an
-  allele-minting rate no realistic configuration this project
-  validates for could approach before every other resource
-  (wall-clock time not least) already made the run practically
-  impossible to finish.
+
+**Notes**:
+
+  The returned array uses `int64`; an identity above the
+  signed `int64` range would wrap. The internal counter is an
+  arbitrary-precision Python integer.
 
 <a id="fim.model.allele.FiniteAlleleSpace"></a>
 
@@ -17948,15 +17039,10 @@ The full state space is never materialized, even when astronomically
 large: a target is decided as "one specific already-minted state" or
 "any not-yet-minted state" via a single float probability, computed as
 plain Python division rather than a fixed-width integer draw, so it
-never overflows regardless of ``capacity``. For a large enough
-``capacity`` relative to how many states have actually been minted so
-far, that probability underflows all the way to an exact ``0.0`` and
-every mutation mints fresh, indistinguishable from the infinite-alleles
-model — recovering it in the limit, as the differentiation-measures
-guide's own approximation argument predicts. At the more moderate
-capacities where this model actually changes anything, the same
-computation instead gives a real, honestly nonzero recurrence
-probability.
+never overflows regardless of ``capacity``.
+When `capacity` is large relative to the number of minted states,
+the recurrence probability can underflow to zero, and mutations
+mint fresh states as in the infinite-alleles limit.
 
 <a id="fim.model.allele.FiniteAlleleSpace.__init__"></a>
 
@@ -18116,9 +17202,8 @@ mutates this space's own internal state as a side effect.
   entries holding every minted state, in minting order.
 - `minted_count` - How many of `minted_list`'s own entries are
   valid.
-- `next_unminted` - Inert since `FIM-46`'s fix (`to_arrays`'s own
-  docstring) — stored back verbatim, never read for a
-  mint decision.
+- `next_unminted` - Stored verbatim for compatibility; mint
+  decisions do not use this value.
 
 <a id="fim.model.allele.FiniteAlleleSpace.mutate_target"></a>
 
@@ -18138,43 +17223,11 @@ Return one state other than ``current``, uniformly at random.
 
 **Returns**:
 
-  A state drawn uniformly from the ``capacity - 1`` others: an
-  already-minted one (a recurrence), chosen uniformly among the
-  tracked minted set excluding ``current``, or a fresh one,
-  chosen uniformly among every not-yet-minted state — not
-  merely the smallest one.
-
-  **Corrected 2026-09-05** (this project's own multi-model
-  engine review, 2026-09-04, `FIM-46`/finding C-05/finding
-  P1.1/finding P1-5, independently found by three of four
-- `reviewers)` - the mint branch below used to always return
-  ``self._next_unminted``, the smallest not-yet-minted state,
-  deterministically — a specific unminted state other than
-  that one had probability exactly zero of ever being this
-  call's own return value, contradicting this docstring's own
-  "uniformly at random" claim and this class's own module
-  docstring. `_mutate_targets_batched` (`fim.model.vectorized`
-  and `fim.model.operators`, kept as duplicate implementations
-  for a documented circular-import reason) shared the
-  identical defect and is fixed the same way, so cross-backend
-  parity tests could never have caught this on their own —
-  they validate agreement between two implementations of the
-  same wrong distribution. A new, independent target-identity
-  oracle test (`test_mutate_target_mint_branch_is_uniform_
-  over_every_unminted_state`, `test/model/test_allele.py`)
-  checks the actual distribution directly, not merely
-  cross-backend agreement.
-
-  Uniform rejection sampling over ``0 .. capacity - 1``,
-  retrying only on an already-minted draw: correct regardless
-  of ``capacity``'s own magnitude, and cheap in the regime this
-  class exists for (`capacity` far larger than ``minted_
-  count`` — this class's own module docstring), since the
-  rejection probability is exactly ``minted_count / capacity``.
-  Never materializes a ``capacity``-sized structure, matching
-  this class's own documented "the full state space is never
-  materialized" contract, even at an astronomical ``capacity``
-  no array could hold at all.
+  A state drawn uniformly from the other ``capacity - 1``
+  states. Previously minted states excluding ``current`` are
+  selected uniformly as recurrences. Fresh states are sampled
+  uniformly from all unminted states using rejection sampling;
+  the full state space is not materialized.
 
 
 **Raises**:
@@ -18279,28 +17332,11 @@ decide eligibility) and `to_arrays`/`restore_from_arrays`
 
 # fim.model.identifiers
 
-Shared identifier and frequency parsing for config, state, and row layers.
+Parse integer-like identifiers and bounded trajectory frequencies.
 
-Several different parts of this project read the same two small value
-shapes back out of loosely typed data (a YAML config file, a JSON
-trajectory row, or a `dict` built by hand in a test): an "integer-like
-identifier" (an allele ID or a deme index — always a whole number, but
-one that might have arrived as a string, since mapping keys are always
-strings under both JSON and YAML) and a "trajectory-row-style
-probability" (an allele frequency, always strictly greater than zero
-and at most one — see `fim.model.state.ModelState.from_rows` and
-`fim.persistence.store` for why a persisted row's own frequency can
-never legitimately be zero). This module is the single place both
-value shapes are parsed, so every caller enforces exactly the same
-rules on exactly the same kind of value.
-
-Regression fix for S5/S6: before this module existed, three call sites
-parsed the same two value shapes independently, and had already
-drifted apart once (`fim.model.params`'s config parser rejected a
-truncated float or a negative identifier that `fim.model.state.
-ModelState`'s own constructor and `from_rows` silently accepted). One
-shared rule, used everywhere the same value shape is parsed, cannot
-drift piecemeal the way three separately maintained copies did.
+The shared parsers apply consistent validation to configuration, model-state,
+and persisted trajectory data. Frequencies in trajectory rows are in ``(0, 1]``;
+explicit initial frequencies may also be zero before normalization.
 
 <a id="fim.model.identifiers.parse_bounded_frequency"></a>
 
@@ -18380,31 +17416,14 @@ ID from a deme ID from the message text.
 
 # fim.model.initial
 
-Seeded initial-condition strategies.
+Generate initial population states from supported initial-condition models.
 
-Before a simulation can run at all, every deme needs a starting set of
-allele frequencies at generation zero — this module is where that
-starting point comes from. Three strategies are provided, all reachable
-through `generate_initial_state`: `DirichletInitialCondition` (the
-default) draws a random starting frequency for each deme/locus from a
-symmetric Dirichlet distribution (a standard way of picking a random
-set of proportions that add up to 1, used throughout population
-genetics for exactly this purpose); `ExplicitInitialCondition` instead
-uses a frequency table the caller supplied directly in
-`SimulationParams` (``p_0`` in a config file), for reproducing a
-specific known starting condition rather than a random one;
-`EquilibriumSplitInitialCondition` instead simulates one ancestral
-population to mutation-drift equilibrium and founds every deme by
-sampling from it (see that class's own docstring).
-
-Every strategy but the last shares one contract, stated precisely by
-`DirichletInitialCondition`'s own docstring: generation zero is a
-*continuous belief*, not yet a sampled population — `fim.model.
-operators.drift`'s first application is what turns it into the model's
-first actual `N`-gene-copy realization. `EquilibriumSplitInitialCondition`
-does not fit that contract, and its own docstring explains why not: its
-generation zero is already sampled, finite, and real by the time it is
-returned.
+`DirichletInitialCondition` draws starting frequencies from a symmetric
+Dirichlet distribution. `ExplicitInitialCondition` uses configured `p_0`
+frequencies. `EquilibriumSplitInitialCondition` simulates an ancestral
+population to mutation-drift equilibrium and samples its demes. The Dirichlet
+and explicit models return frequencies before the first finite-population
+drift step; the equilibrium split returns sampled gene copies.
 
 <a id="fim.model.initial.InitialConditionGenerator"></a>
 
@@ -18931,35 +17950,13 @@ Return the finite-alleles model's state-space size at a locus.
 
 # fim.model.operators
 
-Pure migration, mutation, drift, and generation-pipeline operators.
+Implement migration, drift, mutation, and the generation update.
 
-This module implements the three biological processes every generation
-of the simulation actually goes through, plus `step`, which chains all
-three together in the standard order:
-
-- `migrate` — a fraction of each deme's gene copies are replaced by a
-  weighted average of every other deme's own allele frequencies (the
-  "migrant pool"), modeling individuals moving between sub-populations.
-- `drift` — the full population of `N` gene copies is re-sampled from
-  the current frequencies, the same way flipping a weighted coin `N`
-  times only approximately reproduces the coin's own true weighting;
-  this is what makes a finite population's allele frequencies wander
-  randomly from one generation to the next, purely from chance, even
-  with no migration or mutation happening at all.
-- `mutate` — each of those newly drawn gene copies independently
-  switches, with probability `mu`, to a different, new-or-existing
-  allele, modeling a real mutation event.
-
-Every function here is "pure" in the sense that none of them mutate
-their `ModelState` argument in place — each one returns a brand-new
-state representing the *result* of applying that one process, leaving
-the state it was given untouched (see `fim.model.state.ModelState`'s
-own docstring for why that immutability matters). `step`, at the
-bottom of this file, is what `fim.engine`'s run loop actually calls
-once per generation: it runs migration, then drift, then mutation, in
-that fixed order — the textbook Wright-Fisher island model, in which
-the new generation's gene copies are drawn from the post-migration
-parental pool and each copy then mutates on its own.
+The operators return new `ModelState` instances without modifying their
+inputs. `step` applies migration, then Wright-Fisher drift, then mutation to
+produce the next generation. Migration forms each deme's parental pool from
+the configured migration weights; drift samples gene copies from that pool,
+and mutation changes copies with the configured per-copy rate.
 
 <a id="fim.model.operators.drift"></a>
 
@@ -18975,41 +17972,12 @@ def drift(state: ModelState,
 
 Resample ``N`` gene copies per deme and locus.
 
-"Genetic drift" is the random change in allele frequencies from one
-generation to the next that happens purely because a real
-population is finite — even with no selection, migration, or
-mutation at all, a fair coin flipped 10 times does not always come
-up exactly 5 heads, and a deme's `N` gene copies are exactly that
-kind of finite, random draw from the previous generation's own
-frequencies. This function is what actually performs that draw: for
-every deme and locus, it treats the current frequency map as the
-probabilities of a multinomial draw of size `N` (multinomial being
-the many-outcomes generalization of the familiar two-outcome
-binomial coin flip), then converts the drawn integer counts back
-into frequencies — which, unlike migration's or mutation's smooth,
-continuous frequency changes, always land exactly on the ``1 / N``
-grid (a frequency of, say, `3/50`, never `3.2/50`), since they came
-from literally counting whole gene copies.
-
-**Not `rng.multinomial` itself, deliberately, as of Stage F8**
-(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§5.4): both branches below decompose the multinomial draw into
-sequential conditional-binomial draws via `_inversion_binomial`
-(`_multinomial_via_inversion_binomial` for `jit=False`,
-`_drift_counts_batched` for `jit=True`), visiting categories in
-ascending allele-id order rather than `frequency_map`'s own
-insertion order — the one shared algorithm, in the one canonical
-order, this project's array-native Backend V (`fim.model.
-vectorized`) also uses, which is what makes cross-backend numerical
-agreement possible at all (`_inversion_binomial`'s own docstring
-has the full argument for why `rng.multinomial`/`rng.binomial`
-themselves cannot give this property). No longer bit-identical to
-`rng.multinomial`'s own output for the same seed — an accepted,
-deliberate cost, not an oversight (§5.4's own "the real cost, named
-plainly"; `_multinomial_via_binomial`, this module's own earlier,
-still-correct-and-tested building block, is what stayed
-bit-identical to `rng.multinomial`, and is kept for that reason,
-just no longer what this function calls).
+For each deme and locus, draw ``N`` gene copies from the current
+allele-frequency distribution and convert the counts to frequencies
+on the ``1 / N`` grid. The multinomial draw is decomposed into
+sequential conditional-binomial draws over allele IDs in ascending
+order. Consequently, the result for a seed can differ from
+``rng.multinomial``.
 
 **Arguments**:
 
@@ -19018,23 +17986,9 @@ just no longer what this function calls).
 - `rng` - The run's explicitly threaded random generator.
 - `jit` - When `True`, draw every (deme, locus) pair's own counts in
   one Numba-JIT-compiled, `nogil=True` call
-  (`_jit_drift_counts_batched`) instead of one call per pair
-  — bit-identical output either way (both branches now share
-  the identical primitive and visiting order, not merely
-  happen to agree — see `_drift_counts_batched`'s own
-  docstring), and free of GIL-release concerns during the
-  compiled call itself. Measured honestly, this is not yet a
-  clear standalone win for `drift`: it fixes a real,
-  separately measured regression an earlier per-pair-call
-  version had, but the compiled draw was never `drift`'s own
-  dominant cost at this project's reference scale — the
-  Python-level marshaling to and from `ModelState`'s own
-  sparse representation is, and `jit=True` does not remove
-  that (see `_drift_counts_batched`'s own docstring for the
-  full, measured picture). `False` (the default) is every
-  prior release's own behavior *shape*, unchanged, though no
-  longer its own exact numeric output (see above) — needs
-  `numba` installed only when `True`.
+  (`_jit_drift_counts_batched`) instead of one call per pair.
+  Both branches produce identical results for the same seed.
+  Numba is required only when this option is enabled.
 
 
 **Returns**:
@@ -21389,165 +20343,13 @@ object is created per row.
 
 # fim.model.vectorized
 
-Bounded-K (finite-alleles), array-native migrate/mutate/drift.
+Legacy dense-array operators for finite-alleles simulations.
 
-**Superseded.** `fim.engine.VectorizedAdvancer` no longer calls anything
-in this module: Backend V now runs both mutation models on
-`fim.model.vector_block.VectorBlock` and the compiled kernels in
-`fim.model.vector_kernels`, which reproduce `fim.model.operators` bit for
-bit (stage-major across loci, the same migration arithmetic, the same
-K-allele target draws). This module is kept, with its operator-level tests
-(`test/model/test_vectorized.py`), as the per-locus reference
-implementation the statistical-parity history below describes; everything
-below describes this module as it was designed, and its statements about
-Backend V's reproducibility ("statistical, not bit-identical", the
-multi-locus and BLAS divergences) are **historical**: they no longer
-describe the engine's Backend V.
-
-
-Scope, deliberately: the finite-alleles mutation model only (bounded
-`K = finite_allele_capacity(length)` per locus — see `fim.model.locus`).
-Infinite alleles is out of scope here, matching the vector design's own
-"V2 before V1" recommendation: under finite alleles, every allele
-identity at a locus is already a fixed integer in `0 .. K - 1` for the
-whole run, so a dense `(d, K)` array can be allocated once and reused
-generation after generation with no reindexing at all — the genuinely
-hard problem (an unbounded, per-generation-ragged identity space) that
-infinite alleles would require simply does not arise here. Deterministic
-("continuous") migration only — `SimulationParams.migrant_sampling ==
-"stochastic"` is not supported by this path yet, the same kind of
-documented, deliberate scope boundary `fim.model.operators.step`'s own
-`jit` argument already draws around `migrate`/`mutate`.
-
-`ModelState`'s own public shape is untouched by anything in this module:
-`VectorizedState`, below, is a compute-only, internal representation.
-`migrate_vectorized`, `mutate_vectorized`, and `drift_vectorized` all
-operate on this same dense representation in sequence within one
-generation, with no `ModelState` round-trip between them — the first
-real test of `20260901-claude-sonnet-5-fim-engine-backend-factory-
-design.md` §11's "fusing migrate -> mutate -> drift across stage
-boundaries" open question. `fim.engine.VectorizedAdvancer`, the one
-caller, originally converted to and from `ModelState` once *every*
-generation regardless (`ReplicaLane.state` was `ModelState`-typed
-across the whole batch driving loop) — a real, separately measured
-secondary cost this module's own within-generation fusion did nothing
-about, since it sat entirely outside `step_vectorized`. Fixed since:
-`fim.engine.ReplicaLane.vectorized_state` now caches the live
-`VectorizedState` itself across generations, and `VectorizedAdvancer`
-reads convergence statistics straight off it
-(`_convergence_values_vectorized`), so `vectorized_state_to_model_
-state` (below) is only ever called once per lane, when it actually
-stops — not once per generation.
-
-That within-generation fusion alone was not enough to make the whole
-pipeline competitive with the dict-based backends once actually
-benchmarked end to end, though: the real, measured dominant cost turned
-out to be neither the random draw nor that per-generation round-trip,
-but a *third* thing — `mutate_vectorized`/`drift_vectorized`'s own
-shared multinomial-decomposition helper issuing one array-valued
-`rng.binomial` call per allele-id category, `capacity - 1` times per
-invocation, each call vectorized only across `d` demes at a time. With
-`d` typically far smaller than `capacity`, per-call NumPy dispatch
-overhead dominated the actual compute — profiled directly, not assumed,
-the same "tested, not just reasoned about" discipline this project's
-own JIT work already established for `drift`'s dict-based path. Fixed
-by JIT-compiling that helper into one call covering the entire `(d,
-capacity)` grid at once (`_jit_multinomial_rows_batched`, below) — the
-exact same "batch every unit of work into one call, don't call once per
-small unit of it" lesson `fim.model.operators`'s own `_drift_counts_
-batched` already had to learn, rediscovered here independently on a
-second function before being generalized.
-
-Statistical, not bit-identical, parity with the dict-based operators in
-`fim.model.operators` was this module's own original correctness bar
-throughout (vector design §6) — every function below names, in its own
-docstring, exactly where and why its own random-draw sequence diverges
-from the dict-based original. **`migrate_vectorized`, `drift_vectorized`,
-and `mutate_vectorized` all clear a materially higher bar, as of Stage
-F8** (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§5.4): each now draws via the identical `_inversion_binomial`-based
-algorithm, in the identical order, that `fim.model.operators`'s own
-dict-based path uses (`migrate_vectorized` was always exact — no
-randomness at all in "continuous" mode) — checked directly, given an
-identical starting state and an identically seeded `rng`, across many
-seeds and a deliberately non-saturated capacity
-(`test_drift_vectorized_matches_dict_based_drift_exactly*`,
-`test_mutate_vectorized_matches_dict_based_mutate_exactly`,
-`test/model/test_vectorized.py`).
-
-**That per-operator proof alone was not enough to make a full,
-multi-generation `fim.engine` run agree with the dict-based backends
-either — a second, separate, more serious bug sat between "every
-operator is exact in isolation" and "a real run produces the same
-trajectory," found only by actually running one end to end, not
-inferred from the operator-level tests.** `build_vectorized_state`,
-below, used to re-derive each locus's own finite-alleles minted
-bookkeeping (`minted_mask`/`minted_list`/`minted_count`/`next_
-unminted`) from scratch every time it was called, using only whichever
-allele ids were currently present in the `ModelState` handed to it —
-and `fim.engine.VectorizedAdvancer` calls it once *every generation*
-(`ReplicaLane`'s own docstring). Any allele minted and then driven to
-extinction — including within the very generation it was minted in,
-the ordinary fate of a brand-new mutant sitting at `1/N` frequency, not
-a rare one — was silently forgotten, letting this backend re-mint an
-identity `FiniteAlleleSpace`'s own dict-based bookkeeping had already
-permanently retired, and systematically undercounting `minted_count`
-(hence biasing `_mutate_targets_batched`'s own `recurrence_probability`
-low). Measured directly: one real generation of a real run left the
-dict-based path's own `next_unminted` at `12` while re-deriving it from
-that generation's own output alone gave `2`. Fixed by carrying that
-bookkeeping forward across generations instead of re-deriving it
-(`build_vectorized_state`'s own `previous_locus_states` argument has
-the full mechanism, still used for a lane's first generation);
-`fim.engine.ReplicaLane.vectorized_state` is the persistence point —
-every generation after the first reuses that cached `VectorizedState`
-directly, via `step_vectorized`, so `build_vectorized_state` is not
-even called again for the rest of that lane's own run.
-
-With that fixed, a full **single-locus** run *is* bit-identical to
-`LinealBackend` when migration is off
-(`test_generational_vector_backend_matches_lineal_exactly_without_
-migration`, `test/engine/test_engine.py`) — but not in general with
-migration active, and not at all with **two or more loci**, migration
-on or off: `step_vectorized` fuses `migrate`/`drift`/`mutate` per
-locus, one whole locus's own dense `(deme, capacity)` array per call,
-while `operators.step` runs each stage across every tracked locus
-first — `drift`/`mutate`'s own dict-based loops are deme-major,
-locus-minor, so the two draw from the shared RNG stream in a genuinely
-different order the instant a run tracks more than one locus, migration
-active or not. Reconciling the two would mean flattening deme and
-locus together inside the batched RNG kernels themselves (drawing
-deme-major across every locus, one flat index space, in place of one
-call per locus) — a substantially larger change to this module's own
-one-locus-per-array design, for a benefit (cross-backend bit-identity)
-with no scientific value beyond test convenience: each backend's own
-per-locus output is already independently correct regardless of draw
-order (this project's own multi-model engine review, 2026-09-04,
-`FIM-09`/finding C-01/finding P1-1). A genuine multi-locus config
-instead gets the same *statistical* parity guarantee the
-migration-active single-locus case already has, below
-(`test_generational_vector_matches_lineal_statistically_multi_locus`,
-`test/engine/test_engine.py`). With
-migration active (any locus count): `migrate_vectorized`'s own dense
-matmul and `fim.model.operators.migrate`'s own dict-based blend are
-two different, both fully deterministic, floating-point reduction
-orders for the identical computation (BLAS's own summation order is
-not obligated to match a hand-written sequential one), and that
-sub-ULP disagreement occasionally sits close enough to a discrete
-draw's own decision boundary to flip it — measured directly, 23 of 30
-seeds with migration active diverged from `LinealBackend` within the
-first three generations. This is the honest limit `20260901-...-
-design.md` §5.4 names explicitly ("agreeing to within floating-point
-tolerance... not full bit-identity end to end") and not eliminable
-without giving up the vectorized/BLAS performance this backend exists
-for. What actually matters, and what makes the divergence acceptable
-rather than a defect, is that it carries no directional bias — checked
-directly, not assumed, by comparing each backend's own mean `D`/`G_ST`
-across many independently seeded replicates
-(`test_generational_vector_backend_matches_lineal_statistically`): a
-small sample can show a borderline gap, but it narrows back to noise
-as the sample grows, which is what an unbiased alternate realization
-looks like and a real bias would not.
+This module provides array-based migration, mutation, and drift operations.
+It remains available for direct use and testing; the active vector engine
+uses `fim.model.vector_block` and `fim.model.vector_kernels`. The operations
+support finite-alleles mutation and deterministic migration. `VectorizedState`
+is a compute representation and does not change the public `ModelState` shape.
 
 <a id="fim.model.vectorized.VectorizedLocusState"></a>
 
@@ -21987,54 +20789,13 @@ matrix ever built, the common case
 
 # fim.paths
 
-Project-root, results-directory, and atomic-publish logic, shared by
-every front end.
+Resolve project, results, and log locations and publish output atomically.
 
-This is where every part of `fim` (the command line, the desktop app,
-every test) goes to answer four small but easy-to-get-wrong questions,
-so each one is answered exactly once, the same way everywhere, rather
-than reinvented slightly differently in each front end:
-
-1. "Where does this project actually live on disk?" (`project_root`) —
-   needed to find a sensible default place to write output, without
-   requiring every command to be told an explicit path every time.
-2. "Where should a run's output go if the user did not name a specific
-   folder?" (`default_output_directory`, `results_directory`) — a
-   single, predictable `results/` folder under the project root, with
-   each unnamed run getting its own timestamped subfolder so two runs
-   never collide by writing into the same place.
-3. "How do we write a whole folder's worth of output files without ever
-   leaving a half-written, broken folder behind if something goes wrong
-   partway through?" (`atomic_directory`) — see that function's own
-   docstring for the answer.
-4. "Where does this program's own operational log go, if nobody said
-   otherwise?" (`log_directory`, `default_log_file`) — a `logs/` folder
-   beside `results/`, under the same resolved project root
-   (`doc/fim-logging-design.md` §6).
-
-Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
-run orchestration resolves the exact same `project-root/results/`
-layout, timestamped default folder naming, and atomic-publish-or-nothing
-guarantee as `fim run`, rather than a second, independently maintained
-copy of this logic. `project_root` is anchored on
-the `fim` package's own `__init__.py` (`fim.__file__`), not the calling
-module's `__file__`: every caller under `src/fim/`, regardless of how deep
-it sits (`fim/cli.py`, `fim/gui/runner.py`, ...), resolves the identical
-root this way, where anchoring on each caller's own `__file__` would need a
-different `parents[N]` depth per caller and silently break the moment a new
-caller sat at a different depth.
-
-`project_root`/`results_directory`/`log_directory` are each
-independently, explicitly overridable — `set_root_override`/`set_
-results_directory_override`/`set_log_directory_override`, and the
-matching `FIM_HOME`/`FIM_RESULTS_DIRECTORY`/`FIM_LOG_DIRECTORY`
-environment variables — for a user (or a test) who wants results, logs,
-or both somewhere other than the default, without a per-invocation
-flag on every single command (`fim run -o <path>`/`-L file=<path>`
-already exist for that narrower, one-off case). See each function's
-own docstring for the exact precedence, and `20260918-claude-sonnet-5-
-configurable-storage-root-design.md` (`selby/restricted`) for the full
-design.
+The default results and log directories are relative to the project root.
+Environment variables and explicit overrides can select other locations.
+`atomic_directory` stages a complete output tree before publishing it so an
+incomplete run directory is not exposed. See `doc/configuration.md` for path
+configuration.
 
 <a id="fim.paths.set_root_override"></a>
 
@@ -22220,69 +20981,14 @@ The owner lock `atomic_directory` holds inside its staging directory.
 def atomic_directory(target: Path) -> Iterator[Path]
 ```
 
-Build a directory's contents in a hidden temporary sibling, then
-publish it at `target` with one atomic rename.
+Build a directory in a hidden sibling, then publish it atomically.
 
-The problem this solves: a simulation run writes several files
-(trajectory data, a report, a plot, a manifest) into its own output
-folder over the course of running, which can take anywhere from a
-second to hours. If that run is interrupted partway through — the
-process crashes, the computer loses power, or a person simply
-presses Ctrl-C — writing those files *directly* into the final
-folder would leave behind a folder that looks like a real,
-completed run's output (it exists, it has some files in it) but is
-actually missing whatever had not been written yet. Nothing about
-that folder's own name or existence would reveal it was actually
-incomplete — a real bug found in `cli.py` before this function was
-extracted from it, and one this function exists specifically to
-prevent.
-
-The fix follows the same idea a careful editor uses when saving a
-long document: write the whole new version to a *different* file
-first, and only once it is completely finished, replace the old file
-with the new one in a single step — never leaving a moment where the
-file exists but is only half-written. Concretely: every write inside
-the `with` block happens in a hidden temporary folder next to
-`target` (a dot-prefixed sibling, created directly inside
-`target.parent`, on the very same filesystem — required so the
-final step below can be one atomic rename rather than a slower,
-interruptible copy). "Atomic" here means the same thing it means in
-everyday English: indivisible — from the perspective of anything
-else looking at the filesystem, that rename either has not happened
-yet (nothing at `target`) or has completely finished (everything at
-`target`); there is no in-between moment where `target` exists but
-only holds some of the files. If the code inside the `with` block
-raises anything at all — an ordinary exception, or `^C` from the
-keyboard — the temporary folder is discarded and `target` is left
-completely untouched, never created in a broken state. `target`
-therefore either does not exist yet or exists fully complete; there
-is no third, partial state ever observable from outside this
-function.
-
-A process that is *killed* is different: SIGKILL, or a SIGTERM with no
-handler installed, ends Python without running the cleanup below
-(`fim run` turns its first SIGTERM into `SystemExit` precisely so the
-cleanup does run; see `fim.termination`). `target` is still never
-half-written, but the hidden temporary sibling is left behind.
-`fim.persistence.staging.find_orphan_staging` reports such orphans,
-and reclaims those whose builder is provably gone (run lifecycle design
-`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
-`selby/restricted`, sections 2, 5 and 11).
-
-This guarantee is about the *rename* being all-or-nothing, not about
-surviving a total loss of power (a separate, harder guarantee this
-function does not attempt — internal tracking reference S11): nothing
-here calls `fsync` (the low-level operation that would force every
-written byte all the way out to physical disk before continuing), so
-on an actual, unclean power loss, the operating system and disk are
-still free to have recorded the rename itself before every byte
-written into the temporary folder had physically reached the disk —
-meaning a `target` that survives such an event can exist, look
-complete, and still contain corrupted or truncated file content in
-that specific, narrow scenario. Read this function's guarantee as
-"no half-written folder is ever visible to look at," not "every
-folder this function ever produced is guaranteed to have survived a
-power failure with perfect data integrity."
+The staging directory is created beside `target` on the same
+filesystem. Successful exit renames it to `target`; an exception in
+the context body removes the staging directory. Termination without
+cleanup may leave staging behind. The rename prevents readers from
+seeing a partially populated target, but no `fsync` is performed,
+so this does not guarantee data durability after power loss.
 
 **Arguments**:
 
@@ -22561,30 +21267,10 @@ Return the directory holding every `ExperimentManifest` JSON file.
 
 # fim.persistence
 
-Incremental trajectory and manifest persistence.
+Public interfaces for trajectory storage and run manifests.
 
-This package is where a run's results actually get written to (and
-read back from) disk. A run persists two kinds of file:
-
-- A "trajectory" — every generation's own allele frequencies, written
-  one generation at a time as it happens (`fim.persistence.
-  binary_store.BinaryLogStore`, a compact binary log; see
-  `doc/trajectory-log.md`), so a run's history survives even if it is
-  interrupted partway through and so it can later be re-analyzed at
-  any earlier generation (see `fim.reanalyze`). `fim.persistence.store`
-  defines the row schema and store interface both the real file-backed
-  store and an in-memory test double implement.
-- A "manifest" — the run's own bookkeeping recorded once, at
-  completion: its parameters, how it stopped, and a checksum of its
-  trajectory file (`fim.persistence.manifest`), used to detect if the
-  trajectory file has since been edited, corrupted, or replaced.
-
-`fim.persistence.report` holds a small helper, `write_report`, for
-writing other JSON result files (`report.json`, a batch's own
-`summary.json`) in the same deterministic, byte-reproducible format as
-the manifest — not itself re-exported here, since it is used directly
-by `fim.engine` and `fim.cli` rather than through this package's own
-top-level API.
+The package exports the binary and in-memory trajectory stores, the row schema
+and store protocol, and helpers for reading and writing run manifests.
 
 <a id="fim.persistence.artifacts"></a>
 
@@ -23485,75 +22171,13 @@ once in Python; Backend V builds its frame with a compiled call
 
 # fim.persistence.groups
 
-Study and Experiment: named groupings of Runs, and of Studies.
+Store and manage Study and Experiment groupings.
 
-Full design: `20260917-claude-sonnet-5-run-study-experiment-hierarchy-
-design.md` (`selby/restricted`). Three layers exist after this module:
-a **Run** (unchanged — one scalar run or replicate batch, `fim.
-persistence.manifest`), a **Study** (a named list of Run directories
-pursuing one research question), and an **Experiment** (a named list of
-Study ids pursuing a longer-running research goal). A Study/Experiment
-never duplicates or moves anything it references — `StudyManifest.
-run_directories` names existing run directories exactly the way
-`fim.persistence.manifest.BatchManifest.replicate_run_ids` already
-names existing replicate directories one level down, and
-`ExperimentManifest.study_ids` does the same one level further up.
-
-`StudyManifest`/`ExperimentManifest` are deliberately two separate,
-structurally parallel dataclasses (a "twin," like `fim.persistence.
-manifest`'s own `RunManifest`/`BatchManifest`) rather than one generic
-type parameterized over the member field name — this project's own
-established convention prefers a small explicit copy over a shared
-generic (`fim.persistence.manifest.read_manifest`/`read_batch_manifest`
-are byte-identical copy-paste-adapts of each other for the same reason).
-
-Deleting a Study deletes every Run it references; deleting an
-Experiment deletes every Study it references (and, transitively, every
-Run those Studies reference) — a deliberate, explicit product decision
-overriding this design document's own original, more conservative
-leaning ("deleting an organizational grouping should never be a
-data-destroying operation"), confirmed directly by the project owner
-when this module was implemented. `delete_study`/`delete_experiment`
-both accept an escape hatch (`delete_runs=False`/`delete_studies=False`)
-for a caller that genuinely only wants the grouping gone.
-
-**Read-only items** (read-only examples design, 2026-10-05, section 3).
-A Study or Experiment whose manifest has `read_only: true`, and a Run
-whose manifest parameters have `_read_only: true` (`is_run_read_only`),
-are shipped examples that every function here refuses to edit, raising
-`ReadOnlyError` (a `ValueError`, so every existing caller that reports
-a `ValueError` reports this one too):
-
-- a read-only Study or Experiment cannot be renamed, described,
-  documented, deleted, emptied, or gain or lose members;
-- a read-only Run is never deleted; its link can be removed from an
-  editable Study, but never from a read-only Study. A
-  Study or Experiment being deleted or emptied skips its read-only
-  members rather than failing, so a user's own grouping that happens to
-  hold an example stays fully manageable, and the example survives.
-
-Viewing and copying stay allowed; a copy (`copy_study`/
-`copy_experiment`) is always an ordinary, editable grouping. Only the
-examples seeding code writes read-only manifests, through
-`write_read_only_study`/`write_read_only_experiment`, which bypass the
-checks. `read_only` is written to JSON only when true, with no schema
-bump: an older fim ignores the key when reading, but an older fim that
-rewrites such a manifest drops it, so re-seeding restores it.
-
-**Open and closed groups** (run lifecycle design §6.3). A Study or
-Experiment is open by default; a manifest written before `closed`
-existed reads back open. Closing a group freezes its organization:
-a closed Study cannot gain, lose, or be emptied of Runs, a closed
-Experiment cannot gain Studies, and neither can be deleted, raising
-`ClosedGroupError` (a `ValueError`) until it is reopened. Closing never
-freezes the Runs themselves: a shared Run can still be deleted from
-elsewhere, which removes its link here too, and a bit-identical
-recomputation (`supersede_run`) still replaces the link. Renaming and
-documenting stay allowed, because notes on what a group found are
-written after it is closed. The default Study and Experiment always
-stay open, so every new run has a home. `fim.group_lifecycle`
-validates active work before closing and derives each group's
-execution summary.
+A Study references Run directories; an Experiment references Study IDs.
+Manifests store membership and descriptive metadata without copying the
+referenced data. The module provides CRUD, copy, read-only protection, and
+closed-group checks. Deleting a grouping also deletes referenced data by
+default; callers can disable that behavior explicitly.
 
 <a id="fim.persistence.groups.ClosedGroupError"></a>
 
@@ -24771,22 +23395,12 @@ every Study that held it now holds the new one.
 
 # fim.persistence.manifest
 
-Replayable, verifiable run-manifest representation and JSON I/O.
+Represent and verify run and batch manifests.
 
-A "manifest" is a run's own receipt: a small JSON file
-(`manifest.json`) written once a run finishes, recording everything
-needed to identify it (its `run_id`), reproduce it exactly (its full
-`SimulationParams`, via `RunManifest.params`), and know why it stopped
-(`stop_reason`, `converged`). It also records a cryptographic
-fingerprint of every other durable output file the run produced (a
-SHA-256 digest and byte count, via `hash_file`, below) — the run's own
-way of proving, later, that those files have not been silently edited,
-truncated, or replaced since the run completed (`verify_trajectory_
-integrity`, below, is what actually performs that check).
-
-`RunManifest` describes one scalar run; `BatchManifest`, further down,
-is the parallel structure for a whole replicate batch — see each
-class's own docstring for the details specific to it.
+A run manifest records parameters, run identity, stop status, and digests of
+persisted artifacts. A batch manifest describes a replicate batch. Readers
+and writers validate these versioned JSON records; integrity checks verify
+artifact bytes against the recorded digests.
 
 <a id="fim.persistence.manifest.ArtifactDigest"></a>
 
@@ -24844,67 +23458,28 @@ class RunManifest()
 
 Capture everything needed to identify, verify, and replay a run.
 
-`artifacts` is `None` for a manifest as the engine constructs it —
-`fim.engine.lineal.run_one` returns a `RunResult` without ever writing to
-disk, so it cannot yet know a durable file's content digest. A
-manifest actually persisted to disk (`artifacts.write_run_artifacts`)
-is written only once every other artifact (`trajectory.tlog`,
-`report.json`, `scatter.png`) is fully flushed, with `artifacts`
-populated from their real on-disk digests — so `artifacts is not
-None` on a *read* manifest doubles as "every sibling artifact this
-manifest names existed, complete, at the moment this manifest was
-written." `fim stats` (this module's own `verify_trajectory_integrity`)
-uses that digest to refuse a trajectory that was edited, truncated,
-or replaced after the fact.
+`artifacts` is `None` for an in-memory result. Persisted manifests
+contain digests for completed sibling artifacts; these digests
+support integrity checks when files are read later.
 
-`engine_backend`/`jit` record which of `fim.engine`'s own engine
-implementations, and JIT setting, actually produced this run —
-`None` for a manifest built by anything that predates this field
-(an older stored manifest, or a caller building `RunManifest`
-directly without them). Both stay `str | None` here rather than the
-engine's own `Literal` types (`EngineBackendChoice`/`JitOption`):
-this module has no import-time dependency on `fim.engine` today,
-and a manifest is meant to remain readable even if a future engine
-version renames or retires a choice this one recorded — a plain
-string degrades gracefully where a `Literal` reconstruction would
-not. `engine_backend` always records the *resolved* choice: for a
-run built with `engine_backend="auto"`, this is whichever of
-`"generational"`/`"generational-vector"` `"auto"` actually picked,
-never the literal string `"auto"` itself — the whole reason this
-field exists is so a runtime-data-dependent choice is not lost
-(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§7.4).
+`engine_backend` and `jit` record the resolved engine settings, or
+`None` if the manifest predates these fields. They are stored as
+strings so manifests can be read without importing the engine and
+remain readable if an engine option is renamed. For
+`engine_backend="auto"`, the manifest records the selected backend,
+not `"auto"`.
 
-`initial_condition_mode`/`equilibrium_generation_count`/
-`equilibrium_final_heterozygosity` record which strategy
-(`fim.model.initial`) actually produced this run's own generation
-zero, and — for `"equilibrium_split"` only — the ancestral phase's
-own runtime outcome (`20260907-claude-sonnet-5-equilibrium-split-
-design.md`, decision 5). `initial_condition_mode` is deliberately a
-plain string, not a stricter type, for the identical reason
-`engine_backend`/`jit` already are: it always records the
-*resolved* strategy a caller actually got, and a manifest should
-stay readable even if a future strategy's own name is not one this
-module has ever heard of. All three are `None` for a manifest
-written before this field existed, or whenever the run used
-`"dirichlet"`/`"explicit"` instead — the two equilibrium-specific
-fields have no meaning outside `"equilibrium_split"` and are never
-populated for either of the other two.
+`initial_condition_mode` records the resolved initialization
+strategy. `equilibrium_generation_count` and
+`equilibrium_final_heterozygosity` are populated only for
+`"equilibrium_split"`. These fields are `None` for older manifests
+and for other initial-condition modes.
 
-`auto_derived`/`relaxation_time` record whether this run's own
-`convergence_burn_in`/`max_generations` were auto-derived from the
-model's own relaxation time rather than given explicitly
-(`SimulationParams._resolve_convergence_defaults`'s own identically
-named fields, copied here at manifest-construction time) --
-`parameters` above only ever holds the *resolved* concrete integers
-either way (`SimulationParams.to_dict`'s own documented contract:
-reconstructing from it must reproduce an equal `SimulationParams`,
-and `auto_derived`/`relaxation_time` deliberately take no part in
-that equality), so without a dedicated field of its own here, a
-reopened run could never tell a `convergence_burn_in` the botanist
-typed from one this project chose on its own. `auto_derived` is
-empty (not `None`) whenever both were given explicitly; `None` for
-either field only means a manifest written before they existed.
+`auto_derived` and `relaxation_time` record whether convergence
+settings were derived from the model's relaxation time.
+`parameters` contains the resolved integer settings; `auto_derived`
+is empty when both settings were supplied explicitly. `None` in
+these fields indicates a manifest written before they were added.
 
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 
@@ -25009,25 +23584,11 @@ def verify_trajectory_integrity(trajectory_path: Path,
                                 artifact: str = "trajectory") -> None
 ```
 
-Refuse to analyze a trajectory that no longer matches its manifest.
+Raise `ValueError` if a file does not match its recorded digest.
 
-Called by `fim.reanalyze.reanalyze_trajectory` before it trusts
-anything else about the file: recomputes `trajectory_path`'s own
-current SHA-256 digest (via `hash_file`, above) and compares it
-against the digest the run itself recorded, in its own manifest, at
-the moment it finished writing that file durably. A mismatch means
-the file has changed in some way since — accidentally, through
-corruption, or deliberately — and this raises rather than letting
-re-analysis silently produce numbers for a file that is no longer
-what the run actually produced.
-
-Regression fix (`cli.py`'s own history, predating this
-extraction): an edited or truncated trajectory used to re-analyze
-silently under `fim stats`. The run that wrote `trajectory_path`
-also recorded its exact SHA-256 digest and byte count in
-`manifest.json` at the moment the run finished writing it durably;
-recomputing that digest now and comparing catches any edit,
-truncation, or replacement since.
+The manifest's SHA-256 digest and byte count are compared with the
+current file. A missing digest or a mismatch prevents analysis from
+proceeding with an unverified artifact.
 
 **Arguments**:
 
@@ -25040,9 +23601,8 @@ truncation, or replacement since.
 
 **Raises**:
 
-- `ValueError` - If the manifest has no recorded trajectory digest
-  (written before this check existed), or the file no longer
-  matches the digest it does have.
+- `ValueError` - If the manifest has no digest for `artifact`, or the
+  file does not match its recorded digest.
 
 <a id="fim.persistence.manifest.BatchManifest"></a>
 
@@ -25055,13 +23615,9 @@ class BatchManifest()
 
 Capture everything needed to identify and verify a replicate batch.
 
-Parallel to `RunManifest`, but describes a whole batch rather than
-one replicate: `replicate_run_ids` names every published
-`replicate-NNN/` subdirectory, and `artifacts` — populated the same
-way as `RunManifest.artifacts`, only once every sibling artifact is
-flushed — digests `summary.json` and each replicate's own
-`manifest.json`, so an edited, truncated, or replaced batch-level
-artifact is detectable the same way a scalar run's is.
+`replicate_run_ids` lists the published `replicate-NNN/`
+subdirectories. Persisted artifact digests cover `summary.json` and
+each replicate's `manifest.json`.
 
 <a id="fim.persistence.manifest.BatchManifest.__post_init__"></a>
 
@@ -25387,30 +23943,10 @@ Return one pair's saved value, or `None` if the file has none.
 
 # fim.persistence.report
 
-Deterministic JSON writing for run-level report and summary artifacts.
+Write deterministic JSON reports and JSON Lines rows.
 
-A run's own results — its final statistics, or a batch's across-
-replicate summary — need to end up in a `.json` file a human can open
-directly or another program can read back reliably; `write_report`,
-below, is the one function that actually writes such a file, in a
-fixed, reproducible format (see its own docstring for exactly what
-"deterministic" means here and why it matters).
-
-Extracted from `fim.cli`'s private `_write_json` (`doc/
-fim-gui-design.md` §12), parallel to
-`fim.persistence.manifest.write_manifest`: one shared, deterministic JSON
-writer for both `report.json` (a `fim.engine.FinalReport`, plus the CLI's
-`fim stats` re-analysis reports and `fim.gui`'s own run reports) and a
-batch's `summary.json` (`fim.engine.replicate_summary`'s across-replicate
-confidence intervals) — every caller needing byte-identical, sorted-key,
-newline-terminated JSON, not just report.json specifically.
-
-`write_jsonl_rows`, below, is the same determinism guarantee applied to
-a *sequence* of small JSON objects, one per line, rather than one large
-object — `convergence.jsonl`'s own per-generation rows, and any future
-artifact shaped the same way, share this one
-writer rather than each hand-rolling its own line-by-line `json.dumps`
-loop.
+The writers use stable key ordering, fixed indentation, and a trailing newline.
+Non-finite values are rejected so output remains valid JSON.
 
 <a id="fim.persistence.report.write_report"></a>
 
@@ -25420,22 +23956,10 @@ loop.
 def write_report(path: Path | str, value: Mapping[str, object]) -> None
 ```
 
-Write one JSON report artifact deterministically.
+Write a deterministic, indented JSON report.
 
-"Deterministically" means the exact same bytes are written every
-time for the exact same `value`: keys are always sorted
-alphabetically (``sort_keys=True``), the file always ends with
-exactly one trailing newline, and the same 2-space indentation is
-always used — so two runs with identical results produce byte-
-identical `report.json`/`summary.json` files, letting a plain
-``diff`` (or a version-control system's own diff view) show a real
-change in results, never a spurious change caused only by dict key
-ordering or formatting differing between two writes. ``allow_nan=
-False`` additionally rejects ``NaN``/``Infinity`` outright rather
-than writing them as invalid JSON that most other tools cannot
-parse back — a real bug in the reported values should be caught
-here, not silently written to a file that then fails to load
-somewhere else.
+Keys are sorted, output uses two-space indentation and ends with one
+newline. Non-finite values are rejected.
 
 **Arguments**:
 
@@ -25568,24 +24092,12 @@ Return how many generations a run that ended at `final` wrote.
 
 # fim.persistence.run\_checkpoint
 
-Durable, atomically published Run checkpoints.
+Publish and verify immutable checkpoints for resumable Run objects.
 
-A checkpoint is an immutable directory `checkpoints/<checkpoint_id>/` inside a
-Run object holding `checkpoint.json` (versioned metadata) and `arrays.npz`
-(numeric state). It becomes authoritative only when `run.json` points at it:
-publication writes the files into a hidden staging sibling, flushes them to
-disk, renames the directory into place, and only then asks the execution
-lease to record the pointer. A crash at any step leaves either the previous
-pointer (and its checkpoint, still intact) or the new one; any directory the
-pointer does not name is garbage, never an alternate truth.
-
-The reference digest is the SHA-256 of the exact `checkpoint.json` bytes, and
-that document records the SHA-256 of `arrays.npz`, so one digest verifies
-both files. The archive is written with fixed entry metadata, so identical
-state always produces identical bytes.
-
-Design: `20261011-gpt-6-luna-phase-2-trajectory-persistence-and-run-lifecycle-
-plan.md` (`selby/restricted`), "Checkpoint contents and commit protocol".
+Each checkpoint contains versioned JSON metadata and a NumPy archive. The
+lifecycle record points to the authoritative checkpoint only after the staged
+directory has been flushed and published. Digests verify both files, and
+unreferenced checkpoint directories are not authoritative.
 
 <a id="fim.persistence.run_checkpoint.CheckpointError"></a>
 
@@ -25798,35 +24310,13 @@ reference the new directory is unreferenced garbage.
 
 # fim.persistence.run\_lifecycle
 
-Versioned Run lifecycle records, the transition table, and capabilities.
+Define Run object states, lifecycle events, and action capabilities.
 
-A Run object moves through durable lifecycle states that are separate from
-its scientific outcome. This module is the single definition of those
-states, the events that move between them, and the record stored as an
-object's `run.json`. It does no I/O: `fim.persistence.run_objects` reads and
-writes records, and every frontend (CLI, GUI, sweeps) asks this module, never
-its own copy of the rules, whether an action is legal.
-
-Two states hold an editable configuration that has never run:
-
-- `draft`: the saved configuration is invalid or incomplete. It may be
-  edited, cloned, or deleted, but never started.
-- `planned`: the saved configuration is valid and complete, so it may start.
-
-Saving reclassifies the object: a save whose configuration validates moves
-it to `planned`, and a save that does not moves it to `draft`. The user
-never picks between the two directly.
-
-The remaining states follow the Run lifecycle design
-(`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
-`selby/restricted`, section 4). `completed` and `cancelled` are terminal.
-Delete is removal of the object, not a state. One event, `recover-completion`,
-is added to that design: a worker that published its completion receipt
-but stopped before committing `completed` is completed by reconciliation
-once the receipt verifies. A release that predates the event cannot read a
-record whose history contains it. Phase, scientific outcome,
-execution kind, and protection are attributes of the record, never extra
-state values.
+The versioned lifecycle record distinguishes configuration readiness from
+execution outcome. Draft and planned objects hold configurations that have not
+started; running, pausing, paused, interrupted, failed, completed, and
+cancelled describe execution. This module defines transitions and validation;
+`fim.persistence.run_objects` performs storage operations.
 
 <a id="fim.persistence.run_lifecycle.CURRENT_RUN_LIFECYCLE_SCHEMA_VERSION"></a>
 
@@ -26560,36 +25050,11 @@ entry is added, but the revision advances so readers see the change.
 
 # fim.persistence.run\_metadata
 
-Optional name/description sidecar for a run, attachable at any time.
+Store editable names, descriptions, and class labels beside run manifests.
 
-A completed run's own `manifest.json` is a fixed, digest-verified
-receipt (`fim.persistence.manifest`) — rewriting it to add a name would
-either break `verify_trajectory_integrity`'s own checksum or require
-recomputing it for no scientific reason. `RunMetadata` instead lives in
-its own small sidecar file, `metadata.json`, beside `manifest.json`:
-attaching, renaming, or clearing a run's name/description never touches
-the manifest at all.
-
-A run with no `metadata.json` is not incomplete — it is exactly what
-every run produced before this file existed already is (`20260917-
-claude-sonnet-5-run-study-experiment-hierarchy-design.md`, `selby/
-restricted`, §3.1/§3.4): callers read it the same graceful-degradation
-way `fim.gui.app._read_json_object` already reads `report.json`/
-`summary.json` — missing or malformed means "no name set," never an
-error for the run itself.
-
-A run's **labels** — `name`, `description`, and `class` — may also be
-written in its configuration file. They never reach the run's
-parameters or its ID (`fim.model.params._LABEL_KEYS`): `RunLabels.
-from_config` reads them, and `fim run` writes them here, unless the run
-already has a `metadata.json` (read-only examples design, 2026-10-05,
-section 1). The class is stored under the JSON key `class` and written
-only when set, so a sidecar without one keeps its earlier shape, and an
-older fim, which ignores keys it does not know, still reads it.
-
-A read-only run (`fim.persistence.groups.is_run_read_only`) cannot be
-renamed, described, or re-classed: `replace_run_metadata` raises
-`fim.persistence.groups.ReadOnlyError` for it.
+Labels are kept in `metadata.json`, separate from the digest-verified run
+manifest and scientific parameters. Metadata is optional; runs without a
+sidecar remain valid. Read-only runs cannot be relabeled.
 
 <a id="fim.persistence.run_metadata._KeepClass"></a>
 
@@ -28383,43 +26848,12 @@ Remove every reclaimable orphan staging directory.
 
 # fim.persistence.store
 
-Backend-independent trajectory row schema and store protocol.
+Define the trajectory-row schema and storage protocol.
 
-`TrajectoryRow` is the one, single-observation record shape every
-persisted trajectory row uses (see `fim.model.state.ModelState.to_rows`
-for how a state turns into a batch of these), and `TrajectoryStore` is
-the shared interface both `fim.persistence.binary_store.
-BinaryLogStore` (the real, file-backed store) and
-`InMemoryTrajectoryStore`, below (a lighter-weight stand-in for
-library calls and tests that never need an actual file), implement —
-so `fim.engine`'s run loop can write to either without knowing which
-one it actually has.
-
-`write_generation`'s own `validate` keyword (default `True`, unchanged
-behavior for every existing caller): a real, measured cost. Profiling a
-representative Backend V run found `normalize_row` — full schema
-presence/absence checks, then a per-field `isinstance` gauntlet on
-every row of every generation — as the single largest cost center in
-the whole run, ~36% of wall clock, ahead of the actual migrate/mutate/
-drift step. That check earns its cost for a row `normalize_row` cannot
-otherwise vouch for: a hand-edited or externally-produced row, or one
-`BinaryLogStore.read` is decoding back off disk. It earns nothing
-for a row `fim.engine`'s own run loop just built, in the same
-expression, from `ModelState.to_rows`/`fim.model.vectorized.
-vectorized_state_to_rows` — both of which construct every field
-already well-typed and in-bounds by construction (a real, finite
-`float` frequency in `(0, 1]`, a positive `int` id, a nonempty `str`
-run id), from a `ModelState`/`VectorizedState` whose own construction
-already enforced those same invariants. Re-running `normalize_row` on
-such a row cannot find a defect `ModelState`'s/`VectorizedState`'s own
-construction did not already rule out — it can only re-confirm what is
-already known, on every single row, every single generation. `fim.
-engine`'s own internal call sites (including the equilibrium-split
-ancestral phase's, which writes `ModelState.to_rows` rows too) pass
-`validate=False` specifically because each one is provably in this
-position; no other
-caller in this codebase does, and a new one should not either without
-the same proof.
+`TrajectoryStore` is implemented by the binary file-backed store and the
+in-memory store. `write_generation` validates rows by default; the optional
+validation bypass is intended only for rows produced from already-validated
+model state.
 
 <a id="fim.persistence.store.TrajectoryRow"></a>
 
@@ -31111,49 +29545,30 @@ def read_persisted_convergence_history(
 ) -> tuple[list[int], dict[str, list[float]]] | None
 ```
 
-Return a run's own persisted convergence-monitor history, or `None`.
+Return the persisted convergence history, or `None` if unavailable.
 
-`convergence.jsonl` (`fim.persistence.artifacts.convergence_history_rows`/`fim.gui.
-runner._convergence_history_rows`) holds one row per generation,
-`{"generation": N, "D": ..., ...}` -- reading it back is what lets
-reopening a run restore its own trajectory-vs-generation curve
-instead of having none at all, the prior, deliberate scope boundary
-`fim.gui.app.Api.open_run`'s own docstring used to name. Reshaped
-here into the `(generations, histories)` pair `fim.gui.app`'s own
-`convergenceGenerations`/`convergenceHistories` payload keys need
--- every row written shares the identical key set (`_convergence_
-history_rows`'s own docstring: a statistic is either written for
-every row or none), so `histories[name]` is always exactly as long
-as `generations` with no further alignment check needed here.
-
-`None` (nothing to show) under the identical conditions `_cached_
-final_report`, above, treats as "recompute instead": no digest was
-ever recorded for this artifact (a manifest written before it
-existed), or the file is simply missing -- never an error, since the
-trajectory curve staying absent on an old run is not a regression,
-only unavailable extra context. A digest that *was* recorded but no
-longer matches is different, for the identical reason `_cached_
-final_report` already gives: that means the file changed since the
-run completed, and silently ignoring it would mask that.
+The sibling `convergence.jsonl` contains one row per generation,
+with a generation number and a consistent set of statistic fields.
+Rows are returned as parallel generation and history sequences. A
+missing file or absent manifest digest returns `None`; a recorded
+digest mismatch or invalid row raises `ValueError`.
 
 **Arguments**:
 
-- `trajectory_path` - The run's own `trajectory.tlog` --
-  `convergence.jsonl` is expected as its sibling.
-- `manifest` - The run's own manifest.
+- `trajectory_path` - The trajectory file; `convergence.jsonl` is
+  expected beside it.
+- `manifest` - The run manifest.
 
 
 **Returns**:
 
-  `(generations, histories)`, or `None` to signal "nothing
-  persisted to show."
+  `(generations, histories)`, or `None` if no history is available.
 
 
 **Raises**:
 
-- `ValueError` - If `convergence.jsonl` exists, a digest was
-  recorded for it, and the two no longer match, or a row's
-  own content is not the documented shape.
+- `ValueError` - If the file does not match its recorded digest, or
+  a row has an invalid shape.
 
 <a id="fim.reanalyze.reanalyze_trajectory"></a>
 
@@ -33228,83 +31643,32 @@ Require every item to be a non-empty string.
 
 # fim.statistics
 
-Pure diversity and differentiation statistics for finite-island models.
+Public diversity, differentiation, genetic-distance, and interval APIs.
 
-This package is the project's math library: every function in it takes
-plain numbers in (allele frequencies, sample counts) and returns plain
-numbers out (a diversity index, a confidence interval), with no
-dependency on the simulator itself, the GUI, or how a run happens to be
-stored on disk. That separation is deliberate — it means every formula
-used to describe a population's genetic diversity lives in exactly one
-place, reviewable and testable on its own, independently of the code
-that produces the data or the code that displays it.
-
-It is organized into three modules by subject:
-
-- `fim.statistics.differentiation` — the actual diversity and
-  differentiation formulas (`H_S`, `H_T`, `H_ST`, `G_ST`, Jost's `D`,
-  `E_ST`, `K_ST`, and the general `differentiation_q` family that ties
-  them all together). See that module's own docstring, and the
-  [differentiation-measures guide](../../doc/jost-differentiation-measures.md),
-  for the underlying population-genetics ideas.
-- `fim.statistics.genetic_distance` — pairwise genetic distance and
-  identity statistics between populations (Nei 1972 standard distance
-  `D`, geometric/arithmetic distance `D'`, normalized identity `I`,
-  cross identity `J_XY`, and founder-effect identity `I_0`).
-- `fim.statistics.pairwise` — every deme pair's Nei identities at once,
-  vectorized with numpy (the one module here that needs it), for
-  capturing all-pairs matrices at large deme counts.
-- `fim.statistics.theory` — the closed-form equilibrium predictions of each
-  reported statistic, for a configuration or a sweep point, shared by the
-  Explore screen, the sweep results card and the sweep export.
-- `fim.statistics.interval` — confidence intervals for a sample mean
-  (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
-  independent replicates. See that module's own docstring for what a
-  confidence interval is and why the Student's-t method is used.
-
-Every public name from all modules is re-exported here, so a caller
-elsewhere in the project writes ``from fim.statistics import h_s,
-jost_d, nei_d, confidence_interval`` rather than reaching into any module
-by its own name directly.
+The package re-exports functions from `differentiation`, `genetic_distance`,
+`identity_recursion`, `interval`, `pairwise`, and `theory`. See
+`doc/jost-differentiation-measures.md` for definitions of the differentiation
+measures.
 
 <a id="fim.statistics.catalog"></a>
 
 # fim.statistics.catalog
 
-The one list of every statistic fim computes, captures or shows.
+Catalog of statistics, computation policies, and display metadata.
 
-Every statistic's name used to be spelled out by hand in a dozen places:
-the engine's tracked sets, the convergence choices, the GUI's result
-list, the Compare history sampler, the statistics table's rows, the
-results tables' columns, the tooltips. Two recorded bugs came from those
-copies drifting apart (`A_CGD` missing from one list raised `KeyError`
-in Compare; `H_ST` missing from another left it with no history). This
-module is the single definition the others now derive from: one
-`StatisticSpec` per statistic, in display order.
+Each `StatisticSpec` defines a statistic's identifier, labels, scope,
+bounds, history policy, and reference anchor. The engine and desktop
+application derive their statistic lists from this catalog.
 
-Each spec answers four separate questions:
+History policies are ``"always"`` (tracked every generation),
+``"opt_in"`` (tracked when requested for display or convergence), and
+``"none"`` (computed for reports and displayed frames). Showing any
+opt-in statistic requests per-generation tracking of all five opt-in
+statistics; hiding them does not suppress a statistic watched for
+convergence.
 
-- **What is it?** `key`, the labels, `description`, `help`.
-- **What does it describe?** `scope`: one value per generation
-  (``"global"``) or one value per pair of demes (``"pair"``).
-- **When is it computed?** `history`: tracked every generation always
-  (``"always"``), every generation only when
-  `SimulationParams.track_expensive_statistics` opts in or the run
-  watches it (``"opt_in"``: the expensive ones, each a real extra cost
-  every generation), or not tracked per generation (``"none"``: computed
-  for each report, each displayed frame and each saved result instead).
-- **Is it shown by default?** `default_shown`. What a researcher
-  actually sees is their own choice (the GUI's "Statistics shown"
-  setting); this is only the starting point. For every statistic but
-  the ``"opt_in"`` ones, showing or hiding it changes only the screen.
-  The desktop app opts a run in exactly when one of the ``"opt_in"``
-  statistics is shown (`expensive_statistics_requested`), so showing one
-  makes its per-generation history real and hiding them all avoids the
-  cost; none of them is shown by default, so a fresh install's runs cost
-  what they always did.
-
-This module imports nothing from the simulator or the GUI. It sits in
-`fim.statistics` beside the formulas it describes.
+The [statistics reference](../../doc/statistics.md) links displayed
+values to mathematical definitions, API entries, and implementations.
 
 <a id="fim.statistics.catalog.StatisticSpec"></a>
 
@@ -33340,6 +31704,7 @@ One statistic's identity, scope, cost and presentation.
 - `help` - Longer explanation for Settings and Help, or ``""``.
 - `nei` - For the Nei family, ``(measure, denominator, locus_rule)``;
   ``None`` otherwise.
+- `help_anchor` - Heading anchor in the bundled statistics reference.
 
 <a id="fim.statistics.catalog.nei_key"></a>
 
@@ -33495,52 +31860,14 @@ its rows, columns, checkboxes and tooltips from it.
 
 # fim.statistics.differentiation
 
-Allele-frequency diversity and differentiation statistics.
+Compute diversity and differentiation statistics from allele frequencies.
 
-This is where the actual mathematics behind this project's own named
-statistics (`D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`) lives —
-every one of the formulas the
-[differentiation-measures guide](../../doc/jost-differentiation-measures.md)
-explains in depth, implemented here exactly as that guide (and the
-paper it summarizes, Jost et al. 2018) defines them. Reading that guide
-first is strongly recommended before this file — it explains, from
-zero, *why* there is more than one way to measure "how different are
-these populations," what each measure actually answers, and why they
-can disagree about the very same data; this file only ever computes,
-never explains, and the brief summaries in each function's own
-docstring below assume the guide's own vocabulary rather than
-re-deriving it every time.
-
-The one-paragraph version, for orientation: every measure here starts
-from **expected heterozygosity** (`heterozygosity`, `h_s`, `h_t`,
-below) — the chance that two gene copies drawn at random are different
-alleles — computed once *within* each deme (`H_S`) and once for all
-demes *pooled together* (`H_T`). Since pooling different demes can only
-add variation, `H_T` is always at least as large as `H_S`; every
-differentiation measure in this file is some way of asking "how much
-bigger is `H_T` than `H_S`, relative to some baseline" — and the
-different measures (`G_ST`, `D`, `E_ST`, `K_ST`) are, precisely, the
-different reasonable choices for what that baseline should be. None of
-them is simply "more correct" than the others; each answers a
-genuinely different question, which is exactly why this project reports
-several side by side rather than picking one.
-
-All functions operate on normalized allele-frequency tables and are
-independent of model state, persistence, and the engine — pure
-mathematics, with no idea that a "finite island model" or a "run" even
-exists; anything with allele frequencies to compare could use this
-module. "Normalized" means each deme's own frequencies already sum to
-exactly 1 (a complete accounting of that deme's own gene pool);
-"table" means a plain sequence with one entry per deme, each entry
-itself a mapping from an allele's identity to its frequency in that
-deme; allele identifiers must be integer-like (whole numbers, or
-values that behave like them) purely as a bookkeeping convention — the
-actual identity of an allele is never mathematically meaningful here,
-only whether two entries share the same identity or not. A frequency
-itself must be an ordinary number — a `float`, or an `int` where that
-reads more naturally (`{0: 1}` for a deme fixed on one allele); see
-`FrequencyTable`'s own comment, below, for exactly what the type
-annotation does and does not promise about either half.
+The module implements expected heterozygosity and measures including Jost's
+D, Nei's G_ST, E_ST, K_ST, H_S, H_T, and H_ST. Within-deme and pooled
+heterozygosity provide the basis for these measures, which use different
+normalizations and are not interchangeable. Inputs are normalized frequency
+tables with integer-like allele identifiers and real-valued frequencies. See
+`doc/jost-differentiation-measures.md` for definitions and comparisons.
 
 <a id="fim.statistics.differentiation.DifferentiationReport"></a>
 
@@ -35227,88 +33554,30 @@ def statistics_report(
         statistics: Collection[str] | None = None) -> DifferentiationReport
 ```
 
-Return the scalar statistics block consumed by an engine report.
+Compute the statistics report for one normalized frequency table.
 
-The one function that computes every reported statistic for one
-frequency table at once — everywhere this project reports "the
-statistics" for a single locus, this is the function that produced
-them (see `fim.engine.report_for_state`, which calls this once per
-locus and then averages each field across every locus a run
-tracks).
-
-``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, and ``K_ST`` use equal
-deme weighting as specified by their definitions. ``deme_weights`` is
-applied only to ``E_ST``; pass relative deme sizes to request its native
-size-weighted form.
-
-Validates `table` exactly once (unless `validate=False`, see below),
-then computes every field from that one `demes` tuple directly, via
-each statistic's own private `_..._from_demes` core — not by calling
-the public `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which
-would each independently re-validate (and, for `g_st`/`jost_d`,
-re-derive `H_S`/`H_T` a second time) the identical data this
-function already validated at its own top. Measured, not assumed, to
-be a real cost: profiling `_convergence_values_vectorized`'s own
-reference-scale hot path found roughly eleven full validation passes
-over the same table per call before this fix (`20260903-claude-
-sonnet-5-fim-vg-performance-campaign-design.md` §6.1 item 3) — one
-here, plus one inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/
-`k_st`, plus a further two apiece inside `g_st`/`jost_d`'s own
-internal `h_s`/`h_t` calls. Every public statistic function's own
-standalone behavior for a caller who invokes it directly, with
-genuinely unvalidated input, is unchanged by this — only the
-redundant re-validation *through this function* is gone.
+``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``, ``A_CGD``,
+``Gs``, and ``Gd`` use equal deme treatment. ``deme_weights`` applies
+only to ``E_ST``, ``Delta``, and ``MI``; the engine supplies population
+sizes when ``deme_weighting`` is ``"size"``.
 
 **Arguments**:
 
-- `table` - Every deme's own allele-frequency mapping.
-- `deme_weights` - See above.
-- `validate` - Whether `table` is run through `_validate_table`
-  (`True`, the default — always safe, unchanged behavior for
-  every existing caller) or trusted as already exactly
-  `Sequence[dict[int, float]]`, each deme already summing to
-  1, with `False` — an opt-in fast path for a caller that
-  already knows this, the same reasoning and the same
-  measured payoff as `fim.persistence.store.write_generation`'s
-  own `validate` keyword (that module's own top docstring has
-  the general argument). `fim.engine._statistics_for_locus_
-  vectorized` is the one caller that passes `False`: its own
-  `table` is built fresh, in the same expression, directly off
-  a `VectorizedState`'s own dense array (already-normalized by
-  construction, every key already a genuine `int`, every value
-  already a genuine `float`) — re-validating it here cannot
-  find a defect that construction did not already rule out,
-  only re-confirm one, on every locus, every generation.
-- `statistics` - `None` (the default — every existing caller,
-  unaffected) computes every field, exactly as before. Given a
-  collection of field names instead, `E_ST`/`K_ST`/`A_CGD`/
-  `Delta`/`MI`/`Gs`/`Gd` are each computed only when its own
-  name appears in
-  `statistics`; the rest hold `math.nan` (see
-  `DifferentiationReport`'s own docstring for the placeholder
-  contract this relies on). `H_S`/`H_T`/`H_ST`/`G_ST`/`D` are
-  always computed regardless of `statistics` — each is either
-  the shared input every other field derives from (`H_S`,
-  `H_T`) or an O(1) arithmetic step once those two are known
-  (`H_ST`, `G_ST`, `D`), so excluding them would save nothing.
-  `E_ST` (an `_entropy` pass over the pooled table plus one
-  more per deme) and `K_ST` (a set union across every deme's
-  own alleles) are each a real, independent O(total allele
-  entries) pass over `table` in their own right — this
-  parameter exists specifically to skip those two when a
-  caller already knows neither is wanted (Phase 7 item 4,
-  `FIM-24`/`FIM-32`, `dev/doc/apps/selby/jost-finite-island-
-  model/20260904-claude-sonnet-5-fim-engine-review-
-  remediations.md` — this project's own multi-model engine
-  review, 2026-09-04: every generation's own convergence check
-  computed all nine fields even though a run typically watches
-  only `D`). `Gs`/`Gd` are cheap (each an O(1) step off
-  `within`/`total`) but are never watchable for convergence at
-  all (`fim.model.params._CONVERGENCE_STATISTICS`), so the one
-  caller that ever passes `statistics` never asks for them
-  either — gated for the same reason as `E_ST`/`K_ST`, not
-  because computing them costs anything worth avoiding on its
-  own.
+- `table` - One allele-frequency mapping per deme.
+- `deme_weights` - Optional relative deme weights for the weighted
+  statistics listed above.
+- `validate` - Validate the table before calculation. Set to ``False``
+  only when the table is already normalized and has integer
+  allele IDs and floating-point frequencies.
+- `statistics` - Optional field names to calculate. ``None`` requests
+  all fields. The base fields ``H_S``, ``H_T``, ``H_ST``,
+  ``G_ST``, and ``D`` are always computed; unrequested optional
+  fields are set to ``math.nan``.
+
+
+**Returns**:
+
+  A ``DifferentiationReport`` containing one value per statistic.
 
 <a id="fim.statistics.genetic_distance"></a>
 
@@ -35849,49 +34118,14 @@ See `nei_all_demes_identity`: the geometric form can be negative.
 
 # fim.statistics.identity\_recursion
 
-Expected trajectory of the identity-based statistics, in closed form.
+Compute expected identity-based statistics through time.
 
-`equilibrium_d` and `equilibrium_g_st` say where `D` and `G_ST` settle.
-This module says how they get there: the deterministic (expected) value of
-each statistic at every generation, from a chosen starting state.
-
-Why this is exact for the engine's own model: every quantity here is a
-function of two expected identities,
-
-- `within` = `E[sum_k x_k^2]`, two gene copies drawn from one deme, and
-- `between` = `E[sum_k x_k y_k]`, one copy drawn from each of two demes,
-
-and one generation of the engine (migrate, drift, mutate) maps that pair to
-a new pair by an *affine* rule, `x' = A x + c` with a 2 by 2 matrix `A`. The
-derivation is in the design document `20260911-claude-sonnet-5-derived-
-differentiation-trajectory-design.md` (approach B, iterate the verified
-recursion), and `test/validation/test_simulator_equilibrium.py` carries an
-independent implementation of the same recursion as the engine's oracle.
-
-An affine map has a closed-form solution. With fixed point `x*` and
-eigenpairs `(lambda_k, v_k)` of `A`,
-
-    x_t = x* + sum_k c_k lambda_k^t v_k,   c = V^-1 (x_0 - x*),
-
-so the value at any generation costs a few multiplications, however
-large the generation number is. `IdentityRecursion` holds `x*`, `lambda`, `V`
-and `V^-1` (the "ingredients"), which is exactly what the GUI receives and
-evaluates in the page.
-
-Two solvers share the same recursion:
-
-- `identity_recursion` is the fast 2 by 2 form for `d` equal demes of `N`
-  gene copies with symmetric island migration `m` and one mutation
-  probability. It needs only the run's own `H_S` and `H_T` to start.
-- `matrix_identity_trajectory` keeps the whole `d` by `d` identity matrix,
-  so it handles unequal deme sizes and any migration matrix (a hub, a
-  ring). The price is the state: it starts from the full matrix of
-  identities, `identity_matrix_from_frequencies`, not two averages.
-
-Scope: one shared mutation probability. Expected values are exact for those
-assumptions; a single run scatters around them by drift, and a
-multi-locus run whose `locus_aggregation` is `mean_of_ratios` differs from
-the ratio-of-means form used here by a small amount.
+The recursion evolves within- and between-deme identity expectations with an
+affine transition. `identity_recursion` provides a two-variable solution for
+symmetric island models; `matrix_identity_trajectory` supports unequal deme
+sizes and arbitrary migration matrices. Both use a shared mutation
+probability. Results are expected values; individual trajectories vary due to
+drift. See `doc/finite-island-model-introduction.md` for model context.
 
 <a id="fim.statistics.identity_recursion.IdentityRecursion"></a>
 
@@ -36133,49 +34367,13 @@ equal deme weights, as the engine's reports do.
 
 # fim.statistics.interval
 
-Confidence intervals for across-replicate sample means.
+Compute confidence intervals for means across independent replicates.
 
-A **confidence interval** is a range around a measured average that
-expresses how much uncertainty is left after averaging only a limited
-number of independent measurements — the same idea a poll reports as
-"52% ± 3%" rather than a single bare number, where the "± 3%" is exactly
-this kind of interval. See `fim.engine.reports_summary`'s own docstring
-for the fuller explanation of what problem this solves in this project
-specifically: each independently seeded replicate run contributes one
-scalar draw (its own final ``D``, ``G_ST``, and so on), and this module
-is what turns a handful of those draws into a mean plus a defensible
-range around it.
-
-The confidence interval of the mean of several such draws is a standard
-Student's-t interval on the sample mean, exactly as for any other
-independent, identically distributed sample — no bootstrap or other
-resampling scheme is needed on top of draws that are already independent
-by construction. "Student's-t" is the standard statistical method for
-exactly this situation: a small number of independent measurements whose
-own true variability is not known in advance and must itself be
-estimated from the measurements at hand (as opposed to the simpler,
-better-known bell-curve method, which assumes that variability is
-already known) — the correction it applies matters most for a handful of
-replicates and fades away as more are added, which is why the "degrees
-of freedom" (one less than the number of values being averaged — see
-`confidence_interval`'s own docstring) appears throughout this file.
-
-The critical value (how many standard errors wide the interval needs to
-be, for the requested confidence level and sample size) comes from a
-standard published Student's-t table (linear interpolation in ``1/df``
-between listed degrees of freedom, the conventional way to read an
-unlisted row off a printed table) rather than an inverse regularized-
-incomplete-beta computation (a more general but numerically delicate way
-of computing the identical values from first principles): every tabled
-degrees of freedom below 120 matches a printed statistics table exactly,
-needs no dependency beyond the standard library, and avoids hand-rolling
-a numerically delicate special function in the one area of this project
-under direct outside statistical review. Above the table's tail, the
-exact standard-normal quantile is used (a t-distribution's
-``degrees_of_freedom -> infinity`` limit — with enough replicates, the
-small-sample correction becomes negligible and the ordinary bell-curve
-answer is exact), computed by the standard library's `statistics.
-NormalDist`, not another approximate table row.
+`confidence_interval` uses the Student's t distribution for finite samples.
+Critical values are read from a published table, with linear interpolation in
+``1/df`` for unlisted degrees of freedom; above the table range, the standard
+normal quantile is used as the limiting value. See `fim.engine.reports_summary`
+for the batch-summary context.
 
 <a id="fim.statistics.interval.ConfidenceInterval"></a>
 
@@ -36719,30 +34917,12 @@ Open a saved run.
 
 # fim.sweep
 
-Parameter sweeps: what varies, which points result, and which are valid.
+Define parameter sweeps and enumerate validated configuration points.
 
-A sweep is a Study generated from a specification instead of assembled by
-hand (`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`). This module is the pure half: it turns a
-`SweepSpec` (a complete base configuration plus the axes that vary) into
-an ordered list of validated points, each a whole configuration with a
-deterministic `run_id`. Nothing here runs a simulation, touches disk, or
-imports the GUI, so the command line, the desktop app and any future
-service share it.
-
-Three ideas carry the design:
-
-- **Plan before running.** `enumerate_points` builds and validates every
-  point up front. A combination that cannot be run (a torus whose
-  `rows * columns` differs from `d`) is reported with its reason, never
-  discovered at point 47.
-- **Points are content-addressed.** A point's `run_id` is the hash of its
-  whole configuration (`fim.engine.deterministic_run_id`), so a resumed or
-  overlapping sweep can recognize a point it already computed.
-- **`N` counts individuals.** `N` means individuals per deme in the base
-  configuration and on an axis alike, the number the botanist sees
-  everywhere else in the app; the base's required `ploidy` turns it into
-  gene copies when a point is built (`SimulationParams.from_mapping`).
+A `SweepSpec` combines a base configuration with parameter axes.
+`enumerate_points` validates each combination before execution and assigns a
+deterministic run ID from its complete configuration. This module performs no
+simulation or filesystem operations.
 
 <a id="fim.sweep.SWEEP_SPEC_VERSION"></a>
 
@@ -38090,31 +36270,13 @@ writes them, and a number with no unit is bytes.
 
 # fim.sweep\_run
 
-Running a sweep: create its Study, run the points, resume, and report status.
+Create, execute, resume, and inspect parameter-sweep Studies.
 
-The execution half of `fim.sweep`
-(`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`, sections 3 and 4).
-
-- `create_sweep_study` stores the specification and the plan in a new
-  Study's `sweep_spec` *before* any point runs, so an interrupted sweep
-  resumes from what is stored.
-- `run_sweep` walks the stored points. Each point is skipped if the Study
-  already holds a run with its `run_id`, attached if such a run exists
-  anywhere under `results/`, and computed otherwise. Resuming is the same
-  operation as running.
-- Point status is *derived* (a point is done if a member run has its id),
-  never stored, so a manifest cannot disagree with the run directories.
-  Only failures and each point's Run object link are recorded, in a small
-  file beside the Study index.
-- A point dispatched by `LocalPointRunner` or `ProcessPointRunner` is a
-  resumable Run object (`fim.run_service`), created lazily when the point
-  first runs. Cancelling a sweep pauses its points in flight, and the next
-  run resumes them from their checkpoints instead of starting over. Only a
-  completed object is ever counted as a finished point.
-- Points run one after another. A batch already spreads its replicates
-  over the cores; running several batches at once would oversubscribe
-  them. `PointRunner` is the seam a cluster would implement instead.
+Sweep specifications and plans are stored with a Study before execution.
+Completed points are identified from their run IDs; pending points can be
+resumed, and point failures and Run object links are stored separately.
+Execution is sequential across sweep points; batch replicates may use their
+own worker processes.
 
 <a id="fim.sweep_run.PointState"></a>
 
@@ -39845,27 +38007,11 @@ Record the first SIGTERM within the block as a stop request.
 
 # fim.update
 
-Explicit, opt-in release-check logic shared by every front end.
+Check GitHub for a newer release when explicitly requested.
 
-This is the code behind "Check for updates": it asks GitHub whether a
-newer version of `fim` has been released than the one currently
-installed, and if so, reports the new version's own name and the web
-page describing it — it never downloads or installs anything itself,
-only checks and reports. It is also, deliberately, the *only* code
-anywhere in this entire project that ever makes a network connection to
-anywhere at all (see `SECURITY.md`'s own threat model) — every other
-part of `fim` runs entirely offline, with no network access needed or
-attempted. That single network call happens only when a person
-explicitly asks for it (the command line's own `fim update --check`, or
-the desktop app's own "Check for updates" menu item) — nothing here ever
-runs automatically in the background, on a timer, or as a side effect of
-an ordinary simulation run.
-
-Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
-"Check for updates" action performs exactly the same GitHub Releases
-lookup and version comparison as `fim update --check`, rather than a
-second implementation of the one network operation `SECURITY.md`'s
-threat model permits.
+The update check reports the latest release and its page; it does not download
+or install software. Network access occurs only in response to the command-line
+or desktop update action, not during ordinary simulation or analysis.
 
 <a id="fim.update.compare_versions"></a>
 

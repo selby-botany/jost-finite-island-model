@@ -251,48 +251,12 @@ def run_batch_parallel(
 ) -> tuple[RunResult, ...]:
     """Run replicates in parallel worker-process batches of `max_workers`.
 
-    This is `fim`'s own `max_workers` path — see that function's
-    docstring for why real, separate operating-system processes are used
-    at all here rather than something lighter-weight. This function's
-    own job is just the bookkeeping around that: hand out replicates
-    `max_workers` at a time to a pool of worker processes
-    (`ProcessPoolExecutor`, from Python's own standard library), collect
-    each one's result as it finishes, and — if an adaptive replicate
-    stop is configured (`monitor`; see this module's own docstring,
-    above) — decide after each whole batch of workers finishes whether
-    enough replicates have now run to stop early.
-
-    Replicates run in these fixed-size batches, rather than all being
-    submitted to the worker pool at once, specifically so that adaptive
-    stopping decision stays meaningful: the decision is always applied
-    strictly in ascending replicate order (replicate 1's result seen
-    before replicate 2's, and so on), the exact same order the
-    sequential (non-parallel) loop already uses, so parallelizing the
-    *computation* never reorders which replicate's own values actually
-    fed the stopping decision. The one real trade-off for that
-    guarantee: a batch can overshoot the exact minimal replicate count
-    by up to ``max_workers - 1`` extra replicates, since the whole batch
-    a stopping replicate happened to fall in has already been started by
-    the time the decision is made.
-
-    That overshoot's own compute is unavoidable — every future in the
-    current batch was submitted to a pool sized exactly `max_workers`,
-    so by the time a stop is decided, the rest have almost always
-    already started running, and `Future.cancel()` cannot interrupt a
-    worker process once it has (this project's own multi-model engine
-    review, 2026-09-04, `FIM-50`/finding P2-1 case 2, confirms the
-    compute cost is already documented and accepted). What is not
-    accepted: `store_factory`, when given, makes each overshoot
-    replicate's own worker write a real, persistent trajectory — those
-    artifacts used to be left behind with no `RunResult` in this
-    function's own return value to account for them, discoverable only
-    by a reader of the store noticing a `run_id` that does not belong to
-    any of the results actually returned. Now: `cancel()` is still tried
-    first (a genuine, if rare, win for a future that has not started
-    yet), then each overshoot future is waited on and, if `store_
-    factory` is real, its own artifacts are discarded — never left
-    orphaned regardless of whether the worker itself succeeded, raised,
-    or was actually cancelled in time.
+    Replicates are submitted in batches, and results are processed in
+    ascending replicate order. If adaptive stopping is enabled, the
+    stopping decision is evaluated after each batch; the final batch can
+    therefore include up to ``max_workers - 1`` replicates beyond the
+    stopping point. When `store_factory` is provided, artifacts from
+    replicates beyond the accepted result prefix are discarded.
     """
     results: list[RunResult] = []
     replicate_index = 0

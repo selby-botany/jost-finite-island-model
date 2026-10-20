@@ -17,31 +17,24 @@ differentiation statistics against that known history.
 ## What this simulates
 
 `fim` implements the **finite island model**, not the classic infinite-source
-version of Wright's original island model. The distinction answers the two
-questions a first-time reader usually has:
+version of Wright's original island model:
 
-- **Where do migrants come from?** From the *other islands themselves* —
-  their actual, currently drifting allele frequencies — not from a fixed,
-  infinite external reservoir with a composition that never changes. That is
-  what "finite" refers to: the whole set of islands is a closed system, with
-  no outside population to draw on.
-- **Is migration a random draw of individuals?** By default, no. Migration
+- **Migrant source.** Migrants come from the other islands at their current
+  allele frequencies, not from a fixed external reservoir. The finite set
+  of islands forms a closed system.
+- **Migration and randomness.** By default, migration deterministically
   blends each island's frequencies with a weighted average of the other
-  islands' current frequencies, a deterministic step given that generation's
-  frequencies. The randomness is downstream, in drift: each island's next
-  generation is formed by resampling its gene copies at random from its own
-  post-migration frequencies. An optional third step, mutation, then lets
-  each of those newly drawn gene copies, independently, become a different
-  allele with probability μ (a genuinely novel one, by default). An opt-in `migrant_sampling: stochastic` setting adds a
-  fourth random process — how many gene copies migrate, not just how many
-  drift or mutate — for studies that want that source of variation counted
-  explicitly; see the [configuration reference](doc/configuration.md#migrant_sampling).
+  islands' frequencies. Drift then resamples each island's gene copies from
+  its post-migration frequencies. Mutation independently changes each new
+  copy with probability μ, assigning a novel allele by default.
+  `migrant_sampling: stochastic` also samples the number of migrating gene
+  copies; see the
+  [configuration reference](doc/configuration.md#migrant_sampling).
 
 The [finite island model introduction](doc/finite-island-model-introduction.md)
-is the full plain-language walkthrough — no genetics, statistics, or
-programming background assumed — including how this differs from the
-stepping-stone (spatial) variant and how it connects to Jost's
-differentiation statistics.
+explains the model without assuming genetics, statistics, or programming
+knowledge. It also covers the stepping-stone (spatial) variant and the
+connection to Jost's differentiation statistics.
 
 ## Quick start
 
@@ -102,12 +95,10 @@ macOS Gatekeeper may warn that this unsigned research application is from an
 unidentified developer; verify the checksum, then allow it via **System
 Settings → Privacy & Security**.
 
-The first launch after installing can take noticeably longer than every
-launch after it — macOS validates every file in the (unsigned) app bundle
-before running it, and the graphical toolkit builds a one-time system font
-index. Both results are cached, so if the window opens blank at first, leave
-it open rather than force-quitting; it fills in once that one-time work
-finishes.
+The first launch can take longer while macOS validates the unsigned app
+bundle and the graphical toolkit builds its font index. These results are
+cached. If the window initially appears blank, leave it open until
+initialization finishes.
 
 ### Linux release
 
@@ -149,10 +140,9 @@ See [installation alternatives](install/README.md) and the
 
 ## Outputs
 
-A run you do not configure (the default, `n_replicates: 200`) is a batch of
-independent replicates that stops once the confidence interval across them is
-as narrow as `precision`, usually after a few more than the minimum of 10. It
-writes a directory with:
+By default, `n_replicates: 200` sets an upper limit of 200 independent
+replicates. With early stopping enabled, the batch stops when the confidence
+interval meets `precision`, after at least 10 replicates. It writes:
 
 | File | Purpose |
 |---|---|
@@ -167,7 +157,7 @@ subdirectory. Open a replicate in the desktop app to see it as a single run.
 | File | Purpose |
 |---|---|
 | `trajectory.tlog` | Every nonzero `(generation, deme, locus, allele)` frequency, as a compact binary log |
-| `equilibrium_trajectory.tlog` | The ancestral phase's own trajectory; written only by an equilibrium-split run |
+| `equilibrium_trajectory.tlog` | The ancestral-phase trajectory; written only by an equilibrium-split run |
 | `convergence.jsonl` | One row per generation of each watched convergence statistic |
 | `manifest.json` | Replayable parameters, seed, version, timestamps, and stop outcome |
 | `report.json` | Final `H_S`, `H_T`, `G_ST`, Jost's `D`, `E_ST`, and `K_ST` |
@@ -183,21 +173,22 @@ files.
 
 ## Model contract
 
-- `N` is the **gene-copy count per deme**, not an individual count. For a
-  diploid autosomal locus, pass twice the census number of individuals.
+- YAML `N` is the **individual count per deme**. Required `ploidy`
+  determines the gene-copy count: `N: 225` with `ploidy: diploid` gives
+  450 gene copies. The engine and analytic formulas use gene-copy counts.
 - Every run uses one explicitly seeded NumPy `PCG64` generator.
 - A generation applies migration, then drift (drawing the new gene copies),
   then mutation (each new copy mutates independently with probability `mu`):
   the textbook Wright-Fisher island model.
 - Generation 0 is a continuous Dirichlet prior (or an explicit `p_0`),
   not a state the model's `N` gene copies could themselves produce.
-  Generation 1, the first `drift` application, is the first generation
-  on that `1/N` lattice — treat a generation-0 statistic as describing
+  Generation 1, after the first `drift` application, is the first generation
+  on that `1/N` lattice. Treat a generation-0 statistic as describing
   the prior, not a sampled population.
 - A run burns in, then averages, and has converged when the average of each
   watched statistic is known to the requested precision (its standard error
   over the evidence window is small enough). Reaching the hard cap is a valid,
-  non-converged result, reported with the precision actually reached.
+  non-converged result, reported with the achieved precision.
 - Founding alleles use locus-relative IDs. By default (the infinite-alleles
   model), every mutation receives a globally unique ID; the opt-in
   finite-alleles model instead bounds each locus to `4 ** length` states
@@ -205,15 +196,12 @@ files.
   run.
 - `mu` (the mutation probability) can be a shared scalar, an explicit
   per-locus list, or derived per locus from a single per-base rate
-  (`mu_b`) and each locus's own `length`, so loci of different lengths
-  need not mutate at an identical, hand-picked rate.
+  (`mu_b`) and each locus's `length`.
 - `n_replicates` runs that many independently seeded replicates, and
   defaults to `200`, not `1` — set it explicitly to `1` for a single,
-  ordinary run with no batching. With `stop_batch_early` on (the default,
-  at the `precision` of `0.01`), a batch stops as soon as every watched
-  statistic's across-replicate confidence interval is tight enough,
-  rather than requiring a hand-guessed replicate count in advance, or
-  running the full `n_replicates` every time.
+  run with no batching. With `stop_batch_early` on (the default,
+  at `precision: 0.01`), a batch stops when every watched statistic's
+  across-replicate confidence interval meets the requested precision.
 - `engine_backend` chooses how fast a run goes, not what it computes:
   `lineal` (the reference), `generational` and `generational-vector` (an
   array engine that needs the optional `numba`, `pip install fim[jit]`)
@@ -233,6 +221,7 @@ defines the complete scientific and architectural contract.
 - [Command, workflow, and output reference](doc/usage.md)
 - [Saved runs: pause, resume, and recover](doc/run-lifecycle.md)
 - [Configuration reference](doc/configuration.md)
+- [Statistics reference: definitions, interpretation, and implementation](doc/statistics.md)
 - [Convergence defaults](doc/convergence.md)
 - [Worked examples](doc/examples/README.md)
 - [Installation alternatives](install/README.md)
@@ -247,10 +236,10 @@ defines the complete scientific and architectural contract.
 - [Nei distances in fim](doc/nei-distances.md): the two denominators, pair
   and all-demes forms, and how to read a negative value
 - [Simulator design](doc/fim-simulator-design.md)
-- [Test plan](doc/fim-simulator-test-plan.md) — how this project knows
-  its own numbers are trustworthy, written for a non-programmer
+- [Test plan](doc/fim-simulator-test-plan.md) — scientific validation
+  methods and evidence, without requiring programming knowledge
 - [Migration and identity conventions](doc/migration-conventions.md) —
-  mapping this project's own conventions onto cited papers, for anyone
+  mapping the simulator's conventions onto cited papers, for anyone
   comparing `fim`'s output against the literature
 
 ### Maintaining or extending the application

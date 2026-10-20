@@ -346,7 +346,8 @@ def test_completed_run_consolidates_its_messages_into_one_area(
     assert info_two["text"].startswith("Convergence: window ")
     assert warning["className"] == "run-message run-message-warning"
     assert "within-deme diversity" in warning["text"]
-    assert "Jost's D does not have this artifact" in warning["text"]
+    assert "limits the maximum possible G_ST" in warning["text"]
+    assert "Jost's D equals one when demes share no alleles" in warning["text"]
 
 
 def test_differently_scaled_statistics_start_off_the_trajectory_panel(

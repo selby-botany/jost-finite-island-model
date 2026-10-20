@@ -1,23 +1,8 @@
-"""Sample a full statistic-vs-generation history from a persisted
-trajectory, for the Compare workspace's own trajectory-overlay panel
-(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-redesign.md` §8: "overlay their trajectory plots on one set of axes,
-one color per run").
+"""Sample statistic histories from persisted trajectories.
 
-`fim.reanalyze.reanalyze_trajectory` already recomputes statistics for
-one chosen generation of a persisted run; this module does the same
-underlying work — verify the trajectory's own integrity, group its rows
-by generation, rebuild a `ModelState` and call `report_for_state` — but
-for a whole, evenly-spaced sample of generations at once, not just one,
-so a full curve can be drawn for a run that was never watched live.
-
-Reuses `fim.gui.animation.select_sample_generations`/`GUI_ANIMATION_
-MAX_FRAMES` exactly as already established for the animation screen's
-own frame sampler, rather than inventing a second, independent sampling
-density: a run that persisted hundreds or thousands of generations
-should not turn into hundreds or thousands of `report_for_state` calls
-here any more than it turns into that many rendered animation frames,
-for the identical reason (`fim.gui.animation`'s own module docstring).
+The module verifies a trajectory, recomputes statistics for evenly spaced
+generations, and returns data for comparison plots. Sampling uses the same
+maximum frame count as the trajectory animation.
 """
 
 from __future__ import annotations

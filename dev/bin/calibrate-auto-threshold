@@ -1,57 +1,11 @@
 #!/usr/bin/env python3
-"""Measure this machine's own `auto_vector_min_d` crossover, locally.
+"""Measure the local performance threshold for automatic vector-backend selection.
 
-`engine_backend="auto"` picks `"generational-vector"` over
-`"generational"` once a run's own deme count (`d`) clears
-`auto_vector_min_d` (`fim.config.defaults.DEFAULT_AUTO_VECTOR_MIN_D`,
-shipped default `35`). That default was measured once, on one specific
-machine, before Stage F8's own RNG-unification work changed
-`"generational"`'s own real-world performance materially (design doc
-`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` S11) --
-a same-session re-measurement (`dev/bin/benchmark-engines`) already
-found the shipped `35` is very likely stale evidence. This script is
-the "measure it locally, on the machine that is actually going to run
-it" answer, matching `dev/bin/calibrate-statistical-bands`'s own
-established precedent (a real, versioned measurement procedure, not a
-one-off, unretained pass) -- applied to a performance threshold instead
-of a statistical tolerance band.
-
-**What "the crossover" means, precisely, and why this script may not
-find one.** At each swept `d`, this script measures `"generational"`
-(`jit="off"`, matching what `engine_backend="auto"` actually builds --
-`"auto"` never sets `jit` on your behalf) against `"generational-
-vector"`, both at the same batch size. The *sustained* crossover is the
-smallest swept `d` at or above which `"generational-vector"` wins at
-every larger swept `d` too -- a single flip is not enough, since this
-project's own benchmark history already found run-to-run noise real
-enough to produce one. **If `"generational-vector"` wins at every `d`
-tested, there is no crossover to report in that range** -- this
-project's own d-sweep and N-sweep evidence (design doc S10 item 10b)
-already found exactly this on one machine, at every tested `d` from 4
-to 80. This script reports that honestly (a null threshold, with the
-raw ratios, not a fabricated number) rather than picking the smallest
-tested value and calling it a measurement. Locus length/allele-space
-capacity is a real, separate, *not* handled by this script's own
-`d`-only sweep: the same S10 item 10b found a genuine crossover on that
-axis instead, one `engine_backend="auto"` does not currently account
-for at all (it reads only `d`) -- recorded as a real gap, not silently
-folded into this tool's own scope.
-
-This script never writes anything `fim()` itself reads automatically --
-`auto_vector_min_d` is a real `SimulationParams` field now
-(`doc/configuration.md`), so applying a calibrated value means adding
-`auto_vector_min_d: <measured value>` to your own YAML config, or
-passing it to `fim()` directly; there is no separate cache-loading
-wiring to build or maintain, and no cache-staleness question to design
-around (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-S11's own "not scoped" note on this is resolved by simply not needing
-one).
-
-Usage:
-    dev/bin/calibrate-auto-threshold \\
-        --d-values 4,10,20,30,40,60,80,120 --replicates 16 \\
-        --generations 100 --trials 3 \\
-        --output /tmp/auto-vector-min-d-evidence.json
+Compares the generational and generational-vector backends across the supplied
+deme counts with matched configurations and batch sizes. Reports the smallest
+sustained crossover in the tested range, or no threshold when none is found,
+along with raw measurements. The command reports evidence but does not change
+configuration defaults.
 """
 
 from __future__ import annotations

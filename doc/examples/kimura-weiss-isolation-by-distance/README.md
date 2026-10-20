@@ -22,11 +22,11 @@ The configuration sets `precision: 0.05`, five times the default. Twenty demes
 on a ring mix slowly, so a single locus's `D` wanders for a long time, and the
 window each replicate averages over grows as one over the square of the
 precision: at the default 0.01 the batch would need about 25 times as much
-simulation (hours). The point of this example is the isolation-by-distance
-pattern, which appears at any of these precisions, so it trades precision in
+simulation (hours). The example focuses on the isolation-by-distance
+pattern, which appears across these precision values, so it trades precision in
 `D` (known to about ±0.03 rather than ±0.01) for a batch that finishes in
-minutes. Lower the precision in your own copy when you need a more precise
-value.
+minutes. For a narrower target interval, reduce `precision` in a copy of the
+configuration.
 
 ## Related literature
 

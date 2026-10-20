@@ -49,77 +49,21 @@ def run_batch(
 ) -> tuple[RunResult, ...]:
     """Run every replicate `params` describes, generation-first.
 
-    The generation-first counterpart to `LinealBackend`'s own
-    replica-first dispatch: every currently-active lane's own generation
-    *g* is advanced before any of them moves on to generation *g + 1*
-    (via `advancer.advance`), rather than one replica's entire trajectory
-    running to completion before the next starts.
+    Each active lane advances one generation per call to
+    `advancer.advance`. Adaptive stopping is evaluated on the accepted
+    replicate prefix: the cross-replicate monitor receives results in
+    ascending replicate order, regardless of lane completion order.
+    This preserves the stopping decision and accepted replicate set
+    relative to `LinealBackend` for the same seed. Lanes continue
+    advancing while a lower-numbered replicate is unfinished; completed
+    results are held until they join the prefix. Lanes beyond a stopping
+    point are discarded, including their stored trajectory rows.
 
-    An adaptive early stop (`SimulationParams.
-    stop_batch_early`; see `replicate_monitor`) is judged on an
-    *accepted prefix*, in replicate order, exactly as `LinealBackend`'s
-    own sequential loop judges it: replicate *i* is fed to the cross-
-    replica monitor only once it and every lower-numbered replicate have
-    finished, so the monitor sees replicates 1, 2, 3, ... in that order
-    regardless of which lane happened to converge first. The stop fires
-    at the same replicate, on the same values, as `LinealBackend` for
-    the same seed, so both backends keep the same replicates and report
-    the same summary. Feeding the monitor in finishing order instead
-    (this function's own behavior through 2026-10-06) kept whichever
-    replicates converged soonest; convergence time correlates with the
-    statistics being estimated (in the adaptive worked example, the
-    replicates that converge earliest have lower `D`), so that order
-    biased the batch's own estimate rather than merely reordering it.
-
-    Waiting for a slow, low-numbered replicate costs only time, never
-    correctness: every lane keeps advancing, generation by generation,
-    while the prefix waits. A lane that finishes ahead of the prefix is
-    finalized immediately (its `RunResult` held until the prefix reaches
-    it, the same memory every kept replicate already uses) and its
-    window slot (`max_concurrent_replicates`) is reused at once. Once the
-    stop fires, every lane past the stopping replicate — still running,
-    or finished but not yet admitted — is discarded, exactly as
-    `LinealBackend` never runs, and `run_batch_parallel` discards,
-    replicates past its own stopping point.
-
-    Every lane owns its own, never-shared `np.random.Generator` and its
-    own `AlleleRegistry` — nothing here ever reads or writes another
-    lane's state, which is what makes the traversal order above safe:
-    reordering *when* one lane's generation is computed relative to
-    another's never changes that lane's own result, and the accepted-
-    prefix rule above means it never changes *which* lanes are kept.
-
-    An adaptive stop's own discarded lanes have their own rows discarded
-    from `store` before returning, not left behind as orphaned data no
-    returned `RunResult` accounts for (this project's own multi-model
-    engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
-    1). `build_replica_lane` already wrote each lane's own generation
-    zero eagerly, before this loop ever runs, so even a lane the
-    generation-first loop below never advances past that point still
-    has rows to discard, not merely lanes that got partway through.
-
-    At most `params.max_concurrent_replicates` lanes are ever alive at
-    once — `None` (the default) means every requested replicate, exactly
-    every prior release's own behavior, since `min(window_size,
-    n_replicates)` below then equals `n_replicates` itself and every
-    lane is built up front as before. A smaller window instead builds
-    lanes lazily: only the window's own worth exist up front, and a
-    lane is constructed for replicate index *i* only once some earlier
-    lane's own slot frees up, immediately before advancing past that
-    point — never merely reserved. This is `FIM-45`/`P-04`/`P2-7`'s own
-    fix (a replicate `run_batch` never gets to before an adaptive stop
-    now never pays for that replicate's own setup either, on any
-    `Advancer`) and, for `VectorizedAdvancer` specifically,
-    `FIM-48`'s own fix too: that advancer's cached `VectorBlock`
-    (`ReplicaLane.vectorized_state`, released immediately once a lane
-    finalizes — see `finalize_replica_lane`) is held by every
-    concurrently active lane at once, so bounding how many lanes are
-    ever active at once directly bounds this backend's own steady-state
-    memory, independent of `n_replicates` itself. A replacement lane is
-    built only *after* confirming the cross-replica monitor has not
-    just decided to stop — building one first and discarding it a line
-    later would reintroduce exactly the wasted setup this fix exists to
-    remove.
+    At most `params.max_concurrent_replicates` lanes are active
+    simultaneously. When set, additional lanes are constructed as slots
+    become available; no new lane is built after the adaptive monitor
+    stops. Limiting active lanes bounds per-lane state and vectorized
+    buffers independently of the total replicate count.
     """
     window_size = params.max_concurrent_replicates or params.n_replicates
     next_unbuilt_index = min(window_size, params.n_replicates)

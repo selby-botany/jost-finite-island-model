@@ -1,93 +1,10 @@
-"""Versioned, atomic GUI-preferences store (P1 item 4, design doc
-`20260907-claude-sonnet-5-gui-preferences-persistence-design.md`).
+"""Versioned storage for persistent desktop-application preferences.
 
-Persists exactly the two things the remediation item names as confirmed
-gaps — the View menu's display precision and the model-input form's
-last successfully submitted values (including the Batch tab's own
-`max_workers` field, which is already one of those values;
-`start_run`'s own docstring: "the Batch tab's own `max_workers`
-field... parsed here directly") — never a run's own scientific
-configuration, which already has a permanent, replayable record in its
-own `manifest.json` (`fim.persistence.manifest`). Both fields are
-optional (`None` means "no saved preference yet"); a caller merges a
-loaded `GuiPreferences` with its own hardcoded default rather than this
-module carrying a second copy of it (`fim.gui.app`'s own `_DEFAULT_
-DISPLAY_SIGNIFICANT_DIGITS` stays the single source of truth there).
-
-A third, optional field — `named_presets` — was added later (botanist
-GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §12:
-"User-saved presets... live in the same preferences store, alongside...
-the last-submitted form snapshot"), a user's own named form-value
-snapshots, distinct from the built-in worked-example presets `fim.gui.
-presets` reads from the bundled usage guide — those are read-only and
-ship with the app; these are created, renamed by overwrite, and deleted
-entirely by the user, at any time, with no relationship to any run's
-own scientific record either. Purely additive to the on-disk shape
-(schema_version does not change): an older file with no `"presets"` key
-loads exactly as it already did, with `named_presets` simply `None`.
-
-A fourth, optional field — `dark_mode_override` — follows the same §12
-precedent again: "Dark-mode override (§11.2), when the user has
-explicitly chosen one rather than following the OS, is a new, small
-addition to that same preferences file — one more scalar value,
-following the exact precedent... `significant_digits`." `None` means
-"follow the OS," the app's own default (§11.2: "the app follows the
-OS-level light/dark preference by default"), not merely "unset" —
-there is no third stored value for "system" distinct from absence, the
-same way `significant_digits: None` already means "use the hardcoded
-default," not a fourth digit count. Purely additive again: an older
-file with no `"dark_mode_override"` key loads exactly as it already
-did, with the field simply `None`.
-
-A fifth GUI field — `startup_behavior` — chooses whether a fresh launch
-restores the last valid submitted form (`"restore"`, the default and
-the historic behavior) or restarts from the built-in starter form
-(`"restart"`). It affects only the next launch's initial form values,
-never any saved run artifact.
-
-A sixth field — `default_run_settings` — is the Settings dialog's own
-"execution/convergence-selection defaults" (`engine_backend`,
-`n_replicates`, `convergence_statistic`/`convergence_combinator`/
-`precision`), a real, reported request
-to move fields the user judged "applicable pretty universally" out of
-the per-run Configure form and into one global-default home, while an
-individual run's own Configure form can still override any of them for
-that one run. Deliberately the same `dict[str, str]` shape and
-validation precedent `form_values` already established (a partial
-`config_form.form_values_to_payload`-compatible mapping, re-validated
-on load by merging it over the true starter values rather than trying
-to validate a subset in isolation — `config_form.starter_form_values`'s
-own `overrides` parameter), not a sixth pair of narrowly-typed scalar
-fields: `track_expensive_statistics` is left out of this set, which
-follows `shown_statistics` instead (`Api._merge_default_run_settings`), and
-any future addition or removal from that set only ever changes
-`config_form.DEFAULT_RUN_SETTING_FIELD_NAMES`, never this store's own
-shape. `None` means "nothing saved yet"
-— `Api.get_default_run_settings` falls back to the starter values for
-exactly this field set in that case, the identical "no saved value yet"
-fallback `significant_digits`/`dark_mode_override` already have their
-own callers apply.
-
-Deliberately excludes a "default deme pair for the next run": `Api.
-_start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
-at the start of every run on purpose ("a fresh run never inherits a
-previous run's own live pair selection... never left showing stale
-state from whichever screen used it last") — persisting a value that
-would then need to override that reset contradicts a documented,
-deliberate design choice already in `app.py`, not an oversight this
-store should paper over.
-
-The on-disk shape is one small JSON document,
-`{"schema_version": 2, "gui": {...}, "form": {...}}`, written with the
-same mkstemp-then-`os.replace` atomic idiom `fim.gui.store.
-write_progress_sidecar` already uses — this module is that idiom's
-second caller, not a second implementation of it. A file this module
-cannot parse, or whose `schema_version` it does not recognize, is never
-silently ignored or partially trusted: it is renamed aside with a
-timestamp (never deleted — always a recoverable copy) and `load_
-preferences` returns fresh defaults plus a human-readable warning the
-caller is expected to actually show, not just log
-(`fim.gui.app.Api.get_startup_warnings`).
+Preferences include display settings, form values, named presets, startup
+behavior, and default run settings. The version 2 JSON document is written
+atomically; callers supply defaults for optional values. Version 1 settings
+are migrated where needed. Corrupt or unsupported files are preserved under
+a timestamped name, and loading returns defaults with a warning.
 """
 
 from __future__ import annotations

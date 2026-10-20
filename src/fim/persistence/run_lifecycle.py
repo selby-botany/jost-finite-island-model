@@ -1,32 +1,10 @@
-"""Versioned Run lifecycle records, the transition table, and capabilities.
+"""Define Run object states, lifecycle events, and action capabilities.
 
-A Run object moves through durable lifecycle states that are separate from
-its scientific outcome. This module is the single definition of those
-states, the events that move between them, and the record stored as an
-object's `run.json`. It does no I/O: `fim.persistence.run_objects` reads and
-writes records, and every frontend (CLI, GUI, sweeps) asks this module, never
-its own copy of the rules, whether an action is legal.
-
-Two states hold an editable configuration that has never run:
-
-- `draft`: the saved configuration is invalid or incomplete. It may be
-  edited, cloned, or deleted, but never started.
-- `planned`: the saved configuration is valid and complete, so it may start.
-
-Saving reclassifies the object: a save whose configuration validates moves
-it to `planned`, and a save that does not moves it to `draft`. The user
-never picks between the two directly.
-
-The remaining states follow the Run lifecycle design
-(`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
-`selby/restricted`, section 4). `completed` and `cancelled` are terminal.
-Delete is removal of the object, not a state. One event, `recover-completion`,
-is added to that design: a worker that published its completion receipt
-but stopped before committing `completed` is completed by reconciliation
-once the receipt verifies. A release that predates the event cannot read a
-record whose history contains it. Phase, scientific outcome,
-execution kind, and protection are attributes of the record, never extra
-state values.
+The versioned lifecycle record distinguishes configuration readiness from
+execution outcome. Draft and planned objects hold configurations that have not
+started; running, pausing, paused, interrupted, failed, completed, and
+cancelled describe execution. This module defines transitions and validation;
+`fim.persistence.run_objects` performs storage operations.
 """
 
 from __future__ import annotations

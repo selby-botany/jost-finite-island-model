@@ -12,14 +12,14 @@ package and fails on one that is not on its short allow list.
 
 - **Derivable.** Follows from mathematics, from IEEE double precision, or
   from other settings. Named and documented, never adjustable: changing it
-  would make the code wrong, not different.
+  would violate the defining mathematical or representation constraint.
 - **Numerical guard.** A threshold that keeps a computation finite and well
   conditioned. Derivable in principle from double precision; an internal
   constant, not a setting.
 - **Convention.** Fixed by a published convention (Geweke's 10% and 50%
   segments). Named and documented, not adjustable.
-- **Policy.** A choice a careful person could make differently. Documented
-  with its evidence, and a regular setting or an Expert Setting.
+- **Policy.** A configurable modeling, execution, or display choice.
+  Documented with its evidence and exposed as a regular or expert setting.
 
 ## Modules
 
@@ -32,6 +32,11 @@ package and fails on one that is not on its short allow list.
 | `display.py` | Limits that shape what the app draws |
 | `statistics.py` | How a statistic is estimated from a run (the expected-value form) |
 | `expert.py` | `ExpertSettings`: the policy constants a run's configuration may change in its `expert:` mapping |
+| `storage.py` | Trajectory retention, block sizes, synchronization, and checkpoint cadence |
+
+See the [configuration reference](../../../doc/configuration.md) for user
+settings, [convergence reference](../../../doc/convergence.md) for stopping
+equations, and [API reference](../API.md) for module definitions.
 
 ## Constants
 
@@ -58,8 +63,8 @@ package and fails on one that is not on its short allow list.
 | `MAXIMUM_RECURSION_DEMES` | `limits.py` | policy (run time) | Largest `d` for which the `d² by d²` eigenvalue route is used. |
 | `MINIMUM_EQUILIBRIUM_DEMES` | `limits.py` | numerical guard | Smallest deme count the closed-form equilibrium formulas accept. |
 | `MINIMUM_EQUILIBRIUM_N` | `limits.py` | numerical guard | Smallest population size the closed-form equilibrium formulas accept. |
-| `MAXIMUM_LAG1_CORRELATION` | `numerics.py` | numerical guard | A lag-1 correlation this close to 1 makes `tau_int` (below) blow up numerically for a reason that is ... |
-| `MINIMUM_WINDOW_VALUES` | `numerics.py` | derivable | `window_statistics` needs at least this many values to define a lag-1 correlation at all (two ... |
+| `MAXIMUM_LAG1_CORRELATION` | `numerics.py` | numerical guard | Upper clamp on lag-1 correlation to keep the estimated error finite when the window has not decorrelated. |
+| `MINIMUM_WINDOW_VALUES` | `numerics.py` | derivable | Minimum values needed for lag-1 correlation: two consecutive-pair terms and a variance. |
 | `MINIMUM_CRITERION_WINDOW` | `numerics.py` | derivable | `MINIMUM_CRITERION_WINDOW`. |
 | `MINIMUM_REPLICATE_COUNT` | `numerics.py` | derivable | `MINIMUM_REPLICATE_COUNT`. |
 | `EXACT_SCALE_BITS` | `numerics.py` | derivable (IEEE 754) | Every finite double is an integer multiple of `2 ** -1074`. |
@@ -67,15 +72,15 @@ package and fails on one that is not on its short allow list.
 | `DEGENERACY_TOLERANCE` | `numerics.py` | numerical guard | Eigenvalues closer than this (relative to the larger) make the 2 by 2 eigenvector matrix numerically singular. |
 | `SINGULAR_FIXED_POINT` | `numerics.py` | numerical guard | Below these, the fixed-point system or the eigenvector matrix is singular to double precision. |
 | `SINGULAR_EIGENVECTORS` | `numerics.py` | numerical guard | `SINGULAR_EIGENVECTORS`. |
-| `MAXIMUM_CONDITION` | `numerics.py` | numerical guard | The eigenvector matrix is trusted only while it is this well conditioned and reproduces the operator to ... |
+| `MAXIMUM_CONDITION` | `numerics.py` | numerical guard | Maximum accepted condition number for the eigenvector matrix. |
 | `RECONSTRUCTION_TOLERANCE` | `numerics.py` | numerical guard | `RECONSTRUCTION_TOLERANCE`. |
 | `MINIMUM_SAMPLE_GENE_COPIES` | `numerics.py` | derivable | `MINIMUM_SAMPLE_GENE_COPIES`. |
 | `DIFFERENTIATION_TOLERANCE` | `numerics.py` | numerical guard | `DIFFERENTIATION_TOLERANCE`. |
-| `EULER_GAMMA` | `numerics.py` | derivable (a mathematical constant) | Euler-Mascheroni constant gamma = -psi(1), to full double precision (Abramowitz & Stegun 1972, table 1.1) ... |
-| `DIGAMMA_ASYMPTOTIC_THRESHOLD` | `numerics.py` | numerical guard, derivable | Threshold above which `_digamma`'s asymptotic series (Abramowitz & Stegun 1972, formula 6.3.18 -- the same ... |
+| `EULER_GAMMA` | `numerics.py` | derivable (a mathematical constant) | Euler–Mascheroni constant, `gamma = -psi(1)`, used by equilibrium Shannon-entropy formulas (Abramowitz & Stegun 1972, table 1.1). |
+| `DIGAMMA_ASYMPTOTIC_THRESHOLD` | `numerics.py` | numerical guard, derivable | Argument threshold for the digamma asymptotic series; smaller arguments are shifted by recurrence (Abramowitz & Stegun 1972, formula 6.3.18). |
 | `DEFAULT_LOCUS_LENGTH` | `defaults.py` | policy; a regular setting | `DEFAULT_LOCUS_LENGTH`. |
-| `DEFAULT_AUTO_VECTOR_MIN_D` | `defaults.py` | policy; already an Expert Setting | `"auto"`'s own default deme-count cutover, below which it never picks `"generational-vector"` even when ... |
-| `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` | `defaults.py` | policy; already an Expert Setting | `"auto"`'s own default per-locus capacity ceiling for `"generational- vector"` — above it, `"auto"` picks ... |
+| `DEFAULT_AUTO_VECTOR_MIN_D` | `defaults.py` | policy; an expert setting | Minimum deme count for automatic selection of `"generational-vector"`. |
+| `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` | `defaults.py` | policy; an expert setting | Per-locus capacity ceiling for automatic selection of `"generational-vector"`. |
 | `DEFAULT_N_REPLICATES` | `defaults.py` | policy; a regular setting | How many independently seeded replicates a run tries by default. |
 | `DEFAULT_PRECISION` | `defaults.py` | policy; a regular setting | Default `precision`: plus or minus this much, in each statistic's units. |
 | `DEFAULT_PAIRWISE_MAX_DEMES` | `defaults.py` | policy; a regular setting | Largest deme count whose full all-pairs matrices are saved by default. |

@@ -101,16 +101,16 @@ engine_backend: auto   # recommended choice; the library default is lineal
 - **Required:** yes
 - **Meaning:** individuals per deme
 
-`N` counts the individuals on each island, the number a field botanist counts.
-The simulator counts gene copies, so it multiplies `N` by [`ploidy`](#ploidy):
+`N` counts individuals per deme. The simulator multiplies it by
+[`ploidy`](#ploidy) to obtain the gene-copy count:
 `N: 225` with `ploidy: diploid` is 450 gene copies per deme. That conversion
 happens once, when the configuration is read; everything after it, including
 every statistic and the analytic formulas, works in gene copies.
 
 Per-deme lists model unequal island sizes: every stage of the update
-pipeline (`migrate`, `mutate`, `drift`), the founding-allele-count bound
+pipeline (`migrate`, `drift`, `mutate`), the founding-allele-count bound
 (checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
-each deme's own gene-copy count.
+each deme's gene-copy count.
 
 ```yaml
 N: [120, 450, 60]   # three demes, unequal individual counts
@@ -127,12 +127,10 @@ prefer the scalar form when every deme is the same size.
 - **Required:** yes
 - **Meaning:** gene copies per individual (1, 2, 3 or 4)
 
-Says how many gene copies each individual carries, so the simulator can turn
-`N` (individuals) into gene copies. Say it in words; a number is refused. The
-words exist for a reason: files written when `N` counted gene copies say
-`N: 450` with `ploidy: 2`, and reading that under today's rule would silently
-give 900 gene copies. Refusing the number makes such a file fail with an
-instruction instead: write `N: 225` with `ploidy: diploid`.
+Specifies gene copies per individual. Use a named value, not a number.
+For example, `N: 225` with `ploidy: diploid` represents 450 gene copies.
+Numeric ploidy values are rejected to prevent ambiguous interpretation of
+configurations that use `N` as a gene-copy count.
 
 ```yaml
 N: 225            # individuals per deme
@@ -141,12 +139,12 @@ ploidy: diploid   # 2 gene copies each, so 450 gene copies per deme
 
 Literature configurations that state haploid reproductive individuals, such as
 Jost (2008) Part VI and the Dear-Nolan scenarios, say `ploidy: haploid`, so
-their `N` is exactly the gene-copy count the source gives.
+their individual and gene-copy counts are equal.
 
 Because it is part of the recorded configuration, two runs that differ only
 in `ploidy` get different auto-generated run ids, even when their gene-copy
 counts are equal: 450 haploid and 225 diploid individuals are the same
-process with two records.
+genetic process but different recorded population descriptions.
 
 ### `d`
 
@@ -165,50 +163,44 @@ its frequency vector and receives `m` from the size-weighted average of all
 other demes. Matrix rows must each sum to 1.
 
 A full matrix models asymmetric migration — row `k` gives destination deme
-`k`'s exact source weights, and row `k`'s weights need not equal row `j`'s.
+`k`'s source weights, and row `k`'s weights need not equal row `j`'s.
 Every row is independently configurable, including rows that are not
 symmetric with any other row.
 
 ```yaml
 m:
-  - [0.90, 0.05, 0.05]   # deme 1 retains most of its own frequency
+  - [0.90, 0.05, 0.05]   # deme 1 retains 90% and receives 5% from each neighbor
   - [0.10, 0.80, 0.10]   # deme 2 blends evenly with both neighbors
   - [0.00, 0.20, 0.80]   # deme 3 exchanges only with deme 2
 d: 3
 ```
 
-Two things worth being precise about, because both differ from the scalar
-case:
+Matrix and scalar forms have the following relationship:
 
 - **A matrix's rows are the authoritative weights — they are not scaled by
   `N`.** The scalar path automatically derives a size-weighted migrant pool
-  from each deme's own gene-copy count; a matrix already states each
-  destination's exact source mix, so `N` (scalar or per-deme) has nothing
-  left to contribute to migration and does not change the result. If unequal
+  from each deme's gene-copy count; a matrix directly specifies the
+  destination's source mix, so `N` does not alter that blend. If unequal
   deme sizes should also drive migration weighting, build that weighting into
   the matrix itself. (This describes the default `migrant_sampling:
   continuous` blend. Under the opt-in migrant_sampling: stochastic, below,
   `N` re-enters the picture — not to change the mean, but to set how much a
-  given generation's actual migrant count can vary around it.)
+  generation's migrant count can vary around it.)
 - **The scalar form is the matrix's symmetric special case, not a different
   mechanism.** For equal-size demes, a scalar rate `m` is numerically
   identical to the full matrix with `1 - m` on the diagonal and `m / (d - 1)`
-  on every off-diagonal entry — prefer the scalar form when migration truly
-  is symmetric and every deme is the same size; reach for a matrix only when
-  it is not.
+  on every off-diagonal entry. Prefer the scalar form for equal-size demes
+  with symmetric migration.
 
 #### Sparse and spatial (stepping-stone) migration
 
-Writing out a `d` by `d` matrix by hand stops being realistic once `d` grows
-past a handful of demes, and it is actively the wrong shape for a spatial
-topology, where almost every entry is `0` — each deme migrates only with a
-couple of neighbors, not the whole population. Two compact alternatives to
-the dense matrix cover this:
+Sparse migration graphs can be specified without writing every zero in a
+dense matrix. Two compact forms are available:
 
 **A sparse neighbor map.** Give only the nonzero off-diagonal weights, keyed
 by deme (one-based) and neighbor (one-based); each deme's self-retention is
-implied as `1` minus its listed weights, exactly like the scalar case. A
-deme absent from the map migrates with nobody.
+implied as `1` minus its listed weights. A deme absent from the map has
+no incoming migration.
 
 ```yaml
 m:
@@ -219,15 +211,14 @@ m:
 d: 4
 ```
 
-This is fully general — weights need not be symmetric, and this is the
-right form for any irregular adjacency (real geography, an arbitrary graph),
-not only the two named topologies below.
+Weights need not be symmetric. Use this form for irregular adjacency
+graphs as well as regular topologies.
 
-**Named topology sugar**, for the common stepping-stone cases: a compact
+**Named topologies**, for common stepping-stone cases: a compact
 `{topology, rate}` mapping (plus `rows` and `columns` for a torus) that
 expands to the sparse form above.
 `rate` is every deme's total outgoing migration fraction, split evenly among
-its actual neighbors — the same meaning `m` already has as a scalar, applied
+its neighbors — the same meaning `m` has as a scalar, applied
 locally instead of globally.
 
 ```yaml
@@ -259,26 +250,26 @@ d: 100
   d: 100
   ```
 
-Both the sparse map and the topology sugar are config-file conveniences:
+Both sparse maps and named topologies are configuration-file shorthand:
 they expand to the ordinary dense matrix at load time (visible as such in
-`report.json`/`manifest.json` and in to_dict()), so nothing downstream —
-`migrate()`, statistics, persistence — needs to know a sparse form was ever
-involved. Building a `SimulationParams` directly in Python (bypassing
-from_mapping) still needs an already-dense matrix; call
-fim.model.topology.stepping_stone_neighbors and
-fim.model.topology.dense_matrix_from_neighbors yourself to get one.
+`manifest.json` and `to_dict()`). Operators, statistics, and persistence
+receive the expanded matrix. A `SimulationParams` constructed directly in
+Python requires a dense matrix; use
+`fim.model.topology.stepping_stone_neighbors` and
+`fim.model.topology.dense_matrix_from_neighbors` to construct one.
+See the [topology API](fim-simulator-functional-api.md#3-fimmodeltopology--build-a-migration-matrix).
 
 Migration topologies that no fixed matrix can express — neighbor
 selection that changes over a run — are outside the current configuration
-surface. It has a named landing spot in the design document (§9.2, §11);
-it is not silently missing. (A plain bounded 2D lattice is expressible
-today as a sparse neighbor map; the `torus` sugar covers the wrapped
-case.)
+surface. A bounded 2D lattice can be expressed as a sparse neighbor map;
+`torus` covers the wrapped case. See the
+[migration conventions](migration-conventions.md) for matrix orientation
+and comparisons with the literature.
 
 ### `mu`
 
 - **Type:** number in `[0, 1]`, or a list of exactly one rate per locus
-- **Required:** yes, unless μ<sub>b</sub> (`μ<sub>b</sub>`) is given instead (the
+- **Required:** yes, unless `mu_b` is given instead (the
   two are mutually
   exclusive)
 - **Meaning:** per-gene-copy mutation probability per generation: after
@@ -287,7 +278,7 @@ case.)
 
 A scalar applies identically to every locus, regardless of `length`, and
 is the right choice whenever every locus should mutate at the same rate.
-A list gives each locus its own explicit rate, positionally matched to
+A list gives each locus a rate, positionally matched to
 `loci`:
 
 ```yaml
@@ -301,17 +292,10 @@ loci:
 
 #### Deriving `mu` from a per-base rate
 
-Configuring `mu` directly means picking one number per locus by hand, with
-no built-in relationship to that locus's `length` — nothing stops two
-loci of very different lengths from sharing an identical `mu`, which
-contradicts the model's own reasoning for why longer loci should mutate
-more often (more sites for a copying error to land on).
-
-μ<sub>b</sub> (`μ<sub>b</sub>`) is the alternative: a single per-base-pair mutation
-probability,
-from which each locus's own rate is derived using its own `length`,
-following the differentiation-measures guide's Eq. 5 relation exactly
-(not its linear `μ<sub>b</sub> * length` approximation):
+`mu` specifies per-locus probabilities independently of length.
+Alternatively, `mu_b` specifies a shared per-base-pair mutation probability.
+Each locus's probability is then derived from its `length` using the
+[differentiation-measures guide](jost-differentiation-measures.md), Eq. 5:
 
 ```math
 \mathit{mu} = 1 - (1 - \mathit{mu\_b})^{\mathit{length}}
@@ -326,11 +310,9 @@ loci:
     length: 8000      # mu ≈ 0.216 here — the same mu_b, a much higher mu
 ```
 
-μ<sub>b</sub> is a config-file convenience, expanded to an explicit per-locus
-`mu` at load time — like every other shorthand in this reference (the
-compact n<sub>loci</sub>/locus_lengths locus form, the migration sparse map,
-the stepping-stone topology mapping), to_dict()/`manifest.json` always
-record the expanded `mu`, never μ<sub>b</sub> itself.
+This uses the full probability relation, not the linear approximation
+`mu_b * length`. At load time, `mu_b` expands to a per-locus `mu` list.
+`to_dict()` and `manifest.json` record that list, not `mu_b`.
 
 By default, every mutation produces a globally novel allele identity; see
 [mutation_model](#mutation_model) below for the opt-in alternative.
@@ -341,8 +323,7 @@ By default, every mutation produces a globally novel allele identity; see
 - **Required:** yes; there is no default
 - **Meaning:** seed for the run's NumPy `PCG64` generator
 
-A negative seed is rejected: `PCG64` has no equivalent upper bound to
-reject against in turn, so non-negativity is the entire legal range.
+Negative seeds are rejected; there is no upper bound.
 
 ## Loci
 
@@ -391,23 +372,21 @@ locus_lengths: [50, 8000]
 Controls what a mutation event turns an allele *into*, independently of
 `mu` (which controls how *often* one happens).
 
-- infinite_alleles (the default): every mutation event produces a label
-  never seen before, anywhere, ever. A good approximation once a locus
+- infinite_alleles (the default): each mutation produces a globally unique
+  label. This approximates mutation at a locus that
   spans many base pairs — see
   [the differentiation-measures guide](jost-differentiation-measures.md#distance-between-alleles-is-a-different-model) —
   but increasingly unrealistic for a short locus, where the same state
   can plausibly arise more than once by chance (a *recurrence*).
 - finite_alleles: each locus gets a bounded state space of exactly
-  4<sup>length</sup> possible states (the differentiation-measures guide's own
-  worked reasoning: "a single-character locus admits at most four
-  alleles"). A mutation event's target is drawn uniformly from the other
-  `capacity - 1` states — never its own current state, but possibly one
+  4<sup>length</sup> possible states, corresponding to four bases per sequence
+  position. A mutation target is drawn uniformly from the other
+  `capacity - 1` states — never its current state, but possibly one
   already present elsewhere in the run. This still imposes no ordering or
   distance between alleles; it only gives the label space a ceiling. See
   [the simulator design, §3.2 and §9](fim-simulator-design.md#32-alleles-loci-and-identity)
-  for the full reasoning, including why this is a *different*, and
-  deliberately not chosen, direction from a stepwise (microsatellite)
-  mutation model.
+  for the assumptions and the distinction from a stepwise (microsatellite)
+  mutation model, which is not implemented.
 
 ```yaml
 mutation_model: finite_alleles
@@ -419,11 +398,9 @@ loci:
 finite_alleles interacts with `length`, initial_allele_count, and
 p_0: every locus's starting allele IDs — the founding range
 0 .. initial_allele_count - 1, or an explicit p_0's specific IDs —
-must fit inside that locus's own 4<sup>length</sup> capacity, checked
-independently per locus. A locus this short with the library default
-initial_allele_count: 2 always fits (capacity is at least 4); it is
-easiest to violate by combining a short `length` with an explicit p_0
-using IDs that were only ever meant for a longer locus.
+must fit inside that locus's 4<sup>length</sup> capacity, checked
+independently per locus. The default `initial_allele_count: 2` fits any
+positive length; explicit `p_0` IDs must also satisfy the capacity bound.
 
 ## Initial conditions
 
@@ -475,27 +452,21 @@ p_0:
 
 Together these select the **equilibrium-split** starting condition instead
 of the Dirichlet draw above. Set all three, or none of them: a partial
-configuration is rejected rather than guessed at.
+configuration is rejected.
 
-Equilibrium-split founds your demes from a real ancestral population rather
-than from a prior. It runs in two phases. First it simulates *one* population
-holding the same total number of gene copies your whole run will have (the sum
-of every deme's `N`, all in one deme), applying drift and mutation generation
-after generation — there is nothing to migrate between with only one deme —
-until that population has reached mutation-drift equilibrium. Then it splits
-that finished population into
-your `d` demes, each drawing its own `N` gene copies from the shared pool
-without replacement, so every deme gets a different sample. That sampling is a
-genuine founder effect: your demes already differ a little at generation 0,
-from the chance of which copies each one happened to receive.
+Equilibrium-split derives starting frequencies from a simulated ancestral
+population. First, one population holds the sum of all demes' gene-copy
+counts and undergoes drift and mutation without migration. After its
+model-derived equilibration period, it splits into `d` demes by sampling
+without replacement, allocating each deme its configured gene-copy count.
+This sampling introduces founder variation at generation 0.
 
-How long the first phase lasts is worked out from the model, not watched for.
-A single population at equilibrium does not sit still: its diversity
+The first-phase duration is derived from the model, not detected from a
+flat trajectory. At equilibrium, population diversity
 (H<sub>S</sub>, which equals H<sub>T</sub> when there is only one deme) keeps
-wandering around its expected value by drift, so waiting for it to stop
-changing would never end. What the model does say is how fast the population
-forgets where it started. The ancestral population holds N gene copies (the
-sum of your demes' `N`) and mutates at rate μ, so it forgets its start on a
+fluctuates around its expectation. The model describes the rate at which
+dependence on the initial state decays. With N ancestral gene copies and
+mutation rate μ, this decay has a
 time scale of about 1/(2μ + 1/N) generations, its relaxation time (the same
 idea as [Convergence defaults](convergence.md), for one deme). The first phase
 runs until the population's expected diversity, from any starting frequencies,
@@ -506,28 +477,26 @@ several loci, the locus with the smallest μ decides.
 The three keys control only the first phase:
 
 - **equilibrium_convergence_tolerance** — how close to equilibrium the
-  ancestral population must be, in H<sub>S</sub>'s own units: the largest
+  ancestral population must be, in H<sub>S</sub> units: the largest
   expected difference between its diversity and the equilibrium value. It
   sets how long the first phase runs; 0.01 means about 4.6 relaxation times,
   0.05 about 3. It must be greater than 0.
 - **equilibrium_convergence_window** — the fewest generations the first phase
-  runs, however quickly the model says it equilibrates. It is deliberately
+  runs, even if the derived duration is shorter. It is
   separate from the main run's burn-in, because this phase runs at a different
-  population size than your real run. It cannot exceed
+  population size than the main run. It cannot exceed
   equilibrium_max_generations.
 - **equilibrium_max_generations** — the safety limit on the first phase.
 
-One important difference from max_generations: a first phase that needs more
-than equilibrium_max_generations is an **error**, not an ordinary result. A
-run founded from a population that had not reached equilibrium would defeat
-the only thing this mode exists to provide, so `fim` stops before the first
-phase starts, with a message saying how many generations it needs.
+Unlike the main `max_generations` cap, an ancestral duration exceeding
+`equilibrium_max_generations` is an error. The run stops before the phase
+begins and reports the required generation count.
 
 For example, three demes of 200 haploid individuals (N = 600) with μ = 0.001
 relax in about 273 generations, so a tolerance of 0.01 needs 1,256
 generations, and the example below (tolerance 0.005) needs 1,445.
 
-The run saves every generation of the first phase in its own
+The run saves every generation of the first phase in
 [`equilibrium_trajectory.tlog`](usage.md#equilibrium_trajectorytlog),
 beside `trajectory.tlog`. Its generations are numbered from 0 within the
 first phase, separately from the main run's, and the manifest records how
@@ -535,7 +504,7 @@ many there were (`equilibrium_generation_count`) and the diversity at the
 split (`equilibrium_final_heterozygosity`).
 
 Equilibrium-split cannot be combined with an explicit p_0 — a run cannot both
-fix its starting frequencies and derive them — and it uses its own random
+fix its starting frequencies and derive them — and it uses a separate random
 number stream, derived from `seed`, so the same `seed` always reproduces the
 same founding populations.
 
@@ -578,7 +547,7 @@ family) cannot share one absolute precision with the proportions, so its target
 is relative: `precision * max(1, |window mean|)`, a relative precision with an
 absolute floor. statistic_precision overrides it.
 
-A list watches several statistics at once — each keeps its own independent
+A list watches several statistics at once — each keeps an independent
 history, judged over the same burn-in and evidence window against the same
 precision — combined by convergence_combinator. A name may
 not repeat.
@@ -594,7 +563,7 @@ convergence_combinator: any   # stop once either statistic settles
 - **Default:** none (every statistic uses `precision`, or the relative
   precision above)
 
-Gives one watched statistic its own plus-or-minus, in that statistic's own
+Gives one watched statistic a precision target in that statistic's
 units, replacing `precision` for it. The name must be a watched statistic and
 the value non-negative.
 
@@ -615,9 +584,9 @@ statistic_precision:
 
 Only meaningful when convergence_statistic is a list: `all` requires every
 watched statistic to be simultaneously stable before stopping (a strict
-reading of "several statistics need to agree"); `any` stops as soon as one
-of them is. With a single statistic — the default — the two are the same
-value by construction, so this key has no effect and needs no attention.
+criterion); `any` stops as soon as one settles. With a single watched
+statistic, the two settings are equivalent. The default watched set
+contains `D` and `G_ST`.
 
 Under `any`, the statistics that did not trigger the stop may still be
 imprecise when the run ends: their reported window means are not converged
@@ -656,10 +625,10 @@ give it explicitly.
 
 For example, five demes of 100 gene copies with `m: 0.0001` and `mu: 0.000001`
 have `tau` of about 19,700 generations, so at the default precision the burn-in
-is about 104,000 generations and the cap about 399,000. A run that finishes in a
-hundred generations there would be a warning sign, not good news.
+is about 104,000 generations and the cap about 399,000. A run ending after
+100 generations cannot provide an equilibrium estimate for that configuration.
 
-Choose your own whole number to override. Too short a burn-in starts averaging
+Choose a positive integer to override. Too short a burn-in starts averaging
 inside the transient and biases the average. Why the formula has this form,
 and how its numbers were chosen, is in [Convergence](convergence.md).
 
@@ -674,7 +643,7 @@ that are functions of the heterozygosities `H_S` and `H_T`:
 
 | Value | Estimate | Use it for |
 |---|---|---|
-| `mean_of_values` (default) | The average of the statistic's own values over the evidence window | Comparing with published replicate means |
+| `mean_of_values` (default) | The average of statistic values over the evidence window | Comparing with published replicate means |
 | `value_of_means` | The statistic computed from the window's averaged `H_S` and `H_T` | Checking the simulator against the closed form |
 | `auto` | `value_of_means` when the statistic is undefined in any window generation, or its denominator is tiny in too many of them; otherwise `mean_of_values` | Runs near fixation |
 
@@ -690,7 +659,7 @@ thresholds are the Expert Settings `estimate_auto_denominator` and
 `estimate_auto_fraction`.
 
 In the app this is a Settings default (Settings, Convergence: "expected
-value"); a loaded configuration keeps its own.
+value"); a loaded configuration retains its value.
 
 ```yaml
 convergence_estimate: mean_of_values   # or value_of_means, or auto
@@ -702,8 +671,8 @@ convergence_estimate: mean_of_values   # or value_of_means, or auto
 - **Default:** `0.01`
 
 How precisely to estimate each watched statistic: plus or minus this amount,
-in the statistic's own units, at the `confidence` level. One number answers
-"how precise?" for a single run and a batch alike.
+in the statistic's units, at the `confidence` level. The same target
+applies to single runs and batches.
 
 - A single run burns in and then averages each watched statistic over a
   growing window until the average's standard error is at most
@@ -732,22 +701,16 @@ are always tracked and available for display regardless of this setting
 and regardless of convergence_statistic — each is either the shared
 H<sub>S</sub>/H<sub>T</sub> input every other statistic derives from, or an
 O(1) step once those are known, so computing them costs nothing extra.
-E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, Delta, and MI are
-different: each is a genuine, independent pass over every locus's own
-frequency table, repeated every single generation of the run (not merely
-once, for a final report). A performance investigation (commit
-`b12679b`, issues FIM-24/FIM-32) measured skipping E<sub>ST</sub>/
-K<sub>ST</sub> alone, when neither was watched, at roughly a **38%
-reduction** in per-generation convergence-check cost at a many-alleles
-reference configuration — enabling this setting pays that same cost
-back for all five, deliberately, in exchange for a real, continuously
-updated value in a GUI trajectory panel or live statistics table
-instead of "not known this generation." A statistic already named in
-convergence_statistic is always computed regardless of this setting —
-it has to be, for the run to detect it converging.
+E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, Delta, and MI each require
+an additional pass over frequency tables. Enabling this setting computes
+all five every generation for live plots and tables, increasing runtime.
+The cost grows with deme and allele counts; omitting E<sub>ST</sub> and
+K<sub>ST</sub> reduced convergence-check time by about 38% in a
+many-allele reference configuration.
 
-Leave this `false` (the default) unless the display value is actually worth
-the recurring per-generation cost for your own configuration.
+Statistics named in `convergence_statistic` are always computed, regardless
+of this setting. Leave it `false` unless supplementary live histories are
+needed. See the [statistics reference](statistics.md) for definitions.
 
 ```yaml
 track_expensive_statistics: true
@@ -763,7 +726,7 @@ for a few demes and grows with the deme count (in one measurement, about a
 fifth more at 100 demes and two thirds more at 500). None of the five is
 shown on a fresh install. A value in a loaded YAML file, preset or reopened
 run is replaced by the Settings choice when the app runs it; `fim run`
-and `fim sweep` use the file's own value, as written.
+and `fim sweep` use the file's value.
 
 ### max_generations
 
@@ -774,7 +737,7 @@ This safety cap always ends a run. Reaching it is reported as a valid
 outcome that did not reach the requested precision, with the average and error
 bar the run has. `auto` derives it as `max(200000, burn_in + ceil(15 tau))`, at
 most 10,000,000 (at least 200,000, so a single locus has room to average its
-own noise down to the configured precision — see [How precise is the reported
+variation down to the configured precision — see [How precise is the reported
 value?](convergence.md#how-precise-is-the-reported-value)); see
 [convergence_burn_in](#convergence_burn_in). A cap at or below the burn-in ends
 the run before any averaging, and the run logs a warning. Setting only a
@@ -815,12 +778,11 @@ trajectory_stride: 20
 - **Type:** mapping of Expert Setting names to values
 - **Default:** empty (every Expert Setting at its default)
 
-The policy constants of the convergence rule that a careful person could
-choose differently. Leave it out unless you know why you want to change one:
-the defaults are the measured, documented choices (see
-[Convergence](convergence.md)). Only settings that differ from their default
-are written to `manifest.json`, so the manifest says exactly what ran, and a
-run that changes one is a different run (its auto-generated `run_id` changes).
+Overrides for convergence and storage policy constants. The defaults and
+their calibration are documented in [Convergence](convergence.md).
+Only nondefault values are written to `manifest.json`.
+Convergence-policy overrides affect run identity; storage-policy overrides
+do not. See [run identity](python-api.md#what-decides-a-runs-identity).
 
 | Setting | Default | Range | Controls |
 |---|---|---|---|
@@ -859,7 +821,7 @@ An unknown name or a value outside its range is refused by name.
 In the desktop app, Settings has a collapsed "Expert settings" section with one
 row per setting: its value, its default and range, what it does, and a Reset
 button; a changed row is marked. Save keeps them with the other run defaults,
-so they apply to every new run; a loaded configuration keeps its own `expert:`
+so they apply to every new run; a loaded configuration keeps its `expert:`
 mapping for its run, and the notice that lists how its run settings differ from
 yours lists the expert ones too.
 
@@ -870,11 +832,15 @@ yours lists the expert ones too.
 - **Type:** `size` or `equal`
 - **Default:** `equal`
 
-This setting controls E<sub>ST</sub>. Jost's `D` and K<sub>ST</sub> use equal deme weighting by
-definition, and `equal` is the default so E<sub>ST</sub> follows the same
-convention unless you ask otherwise. Choose `size` to weight each deme by its
-own gene-copy count. When every deme is the same size, both settings produce
-the same E<sub>ST</sub>.
+This setting controls E<sub>ST</sub>, δ<sub>G</sub> (`Delta`), and mutual
+information (`MI`). Choose `size` to weight each deme by its gene-copy count;
+`equal` gives every deme the same weight. The settings agree when all demes
+have the same size.
+
+Other reported measures use equal deme treatment, including
+H<sub>S</sub>, H<sub>T</sub>, G<sub>ST</sub>, Jost's `D`, and K<sub>ST</sub>.
+See the [statistics reference](statistics.md) for definitions and
+implementation links.
 
 ### locus_aggregation
 
@@ -891,23 +857,18 @@ linear mean across loci, with no such ambiguity to resolve.
   matches what the exact gene-identity recursion predicts and avoids a
   small-denominator instability a per-locus ratio can have.
 - `mean_of_ratios`: compute `D`/G<sub>ST</sub> at each locus independently,
-  then average those — this project's own original behavior, kept
-  available for comparability with literature or prior analyses that
-  used it, not because it is the better estimator. Measured against the
-  exact gene-identity recursion at this project's own reference scale,
-  `ratio_of_means` landed within 0.25% of the recursion's own
-  prediction where `mean_of_ratios` was off by 1.88% (up to 4.84% of
-  `D` alone in the worst individually measured scenario) — see
-  `CHANGELOG.md`'s own entry for this change for the full comparison.
+  then average the ratios. Use this when matching an analysis or publication
+  that applies this estimator. The mean of ratios generally differs from
+  the ratio of means; see
+  [differentiation measures](jost-differentiation-measures.md) for formulas.
 
-The convergence monitor's watched `D`/G<sub>ST</sub> (when either is the
-convergence_statistic) respects this same setting, so a run never
-watches a different estimator than the one its own final report shows.
+The convergence monitor uses the same locus-aggregation setting for watched
+`D`/G<sub>ST</sub> as the final report.
 
 ```yaml
 n_loci: 2
 locus_lengths: [50, 500]
-locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
+locus_aggregation: mean_of_ratios   # average per-locus ratios
 ```
 
 ### n_replicates
@@ -920,12 +881,10 @@ n_replicates runs that many independently seeded scalar runs — replicate
 (`fim.engine.simulate_params`, returning one `RunResult` per replicate) and the CLI
 (`fim run`, writing one `replicate-NNN/` subdirectory per replicate; see
 [Using `fim`](usage.md#run-a-simulation)). This is a hard cap, not a
-target: stop_batch_early (below) is on by default, so an
-unconfigured run stops well short of `200` for most configurations,
-adaptively, once its own confidence interval is tight enough — set
-n_replicates: `1` explicitly for a single, ordinary scalar run with no
-batching at all (stop_batch_early is a no-op at n_replicates `1`
-either way).
+target. With `stop_batch_early` enabled (the default), a batch can stop
+before this cap when its interval meets the requested precision.
+Set `n_replicates: 1` for a single run; `stop_batch_early` has no effect
+in that case.
 
 ### stop_batch_early
 
@@ -935,24 +894,22 @@ either way).
 Early stopping for a replicate batch (n_replicates greater than one):
 once at least replicate_minimum replicates have run, stop as soon as
 every statistic named in convergence_statistic has an across-replicate
-Student's-t confidence interval (mean of each replicate's own window mean
+Student's-t confidence interval (mean of per-replicate window means
 of that statistic, over the replicates so far) with a half-width at most
 precision — combined
-across several watched statistics by convergence_combinator, exactly like
+across several watched statistics by convergence_combinator, as for
 within-run convergence. n_replicates is still the hard cap:
 reaching it without tightening ends the batch anyway, a valid,
-non-adaptively-stopped result. This is the mechanism that answers "how many
-replicate runs are needed for a confidence interval" without guessing a
-fixed count in advance — see each statistic's realized interval in
-`summary.json` (CLI) or fim.engine.replicate_summary (library).
+cap-limited result. See each statistic's achieved interval in
+`summary.json` (CLI) or `fim.engine.replicate_summary` (library).
 
 Replicates are considered in replicate order — replicate 1, then 2, then
 3, and so on — on every engine_backend, never in the order they happen
 to finish. A `generational` batch advances many replicates at once, and
 one that converges quickly can finish before a lower-numbered one; it
 waits until every lower-numbered replicate has finished before it
-counts. How quickly a replicate converges is related to its own
-statistics, so keeping whichever replicates finish first would bias the
+counts. How quickly a replicate converges is related to its
+statistics, so selecting the first replicates to finish would bias the
 result. Because of this rule, the same configuration and seed keep the
 same replicates and write the same `summary.json` under `lineal` and
 `generational`.
@@ -978,7 +935,7 @@ stop_batch_early: false    # always run all 16
 
 How many generations each replicate of a batch averages, after its burn-in.
 A replicate of a batch burns in, averages for its window, and stops; it has
-no precision check of its own, because the batch reaches the precision across
+no within-replicate precision check, because the batch reaches precision across
 replicates. Each replicate contributes its window mean to the interval, in
 the form `convergence_estimate` selects.
 
@@ -1007,7 +964,7 @@ replicate.
 A single run (`n_replicates: 1`) ignores `auto` and judges itself by the
 within-run rule. A single run with a positive number is a *fixed-window run*:
 it burns in, averages that many generations, and stops, with no precision
-check. Each replicate of a batch records its own window in its parameters, so
+check. Each replicate records its window in its parameters, so
 the replicate's manifest reproduces it exactly.
 
 ```yaml
@@ -1029,7 +986,7 @@ choose the number of replicates, the engine chooses how long each one averages.
 It needs n_replicates of at least 2.
 
 In the app, precision_method and replicate_averaging_window are Settings
-defaults (Settings, Convergence); a loaded configuration keeps its own.
+defaults (Settings, Convergence); a loaded configuration retains its values.
 
 ```yaml
 n_replicates: 16
@@ -1041,23 +998,18 @@ precision_method: planned_replicates   # 16 replicates, each long enough for +/-
 - **Type:** integer at least 2
 - **Default:** `10`
 
-The fewest replicates before the batch may stop early — the
-replicate-layer analog of the within-run first check, guarding against a
-lucky-early-tight fluke from too small a sample. Only meaningful when
-stop_batch_early is on. A value larger than n_replicates is
-silently capped at n_replicates rather than rejected — setting
-n_replicates to something small without separately thinking about
-replicate_minimum is an ordinary, common thing to do, not a mistake
-worth an error for.
+Minimum replicates before an early-stop check. This reduces the risk of
+stopping on an artificially narrow interval from a small sample.
+Applies only when `stop_batch_early` is enabled. Values above
+`n_replicates` are capped at `n_replicates`.
 
 ### confidence
 
 - **Type:** `0.90`, `0.95`, or `0.99`
 - **Default:** `0.95`
 
-How sure the plus-or-minus of precision is: the two-tailed confidence level of
-the batch's stopping interval and of the intervals `summary.json` and
-replicate_summary report.
+Two-tailed confidence level used for precision targets and the intervals in
+`summary.json` and `replicate_summary`.
 
 ### migrant_sampling
 
@@ -1078,7 +1030,7 @@ which `m` shape is configured above.
   exactly the deterministic, weighted pool average. Requires a concrete
   `N` (always true for a CLI run; a direct `fim.model.operators.migrate`
   call needs population_size). Every `engine_backend` runs it, with the
-  same numbers: `generational-vector` draws the migrant counts inside
+  same results: `generational-vector` draws migrant counts inside
   its compiled step, in the same order as `lineal`, so a stochastic run
   matches the other two exactly for the same seed.
 
@@ -1088,7 +1040,7 @@ migrant_sampling: stochastic
 
 This is the finite island model variant described in
 [the finite island model introduction, §3.2](finite-island-model-introduction.md#32-one-generation-in-two-steps):
-sampling the actual migrant count instead of treating migration as an
+sampling migrant counts instead of treating migration as an
 idealized continuous fraction. It adds one random process to the pipeline
 (how many migrate) without duplicating the one already there (`drift`
 still resamples every gene copy exactly once per generation) — see
@@ -1097,43 +1049,35 @@ for why the two don't compound.
 
 ## Engine backend and JIT
 
-Everything above this section is a **science** setting — it changes what
-gets computed. `engine_backend`, `jit`, `auto_vector_min_d`,
-`auto_vector_max_capacity`, and `max_concurrent_replicates` are
-different: they change *how* the computation runs, not what it
-computes. Every `SimulationParams` field above is still validated and
-honored exactly the same way regardless of which engine backend
-actually executes it — changing these five never
-changes what a run converges to, only how long getting there takes.
+Backend, JIT, and automatic-selection thresholds control execution without
+changing simulated results on the same platform. Resource use and runtime
+can differ. `max_concurrent_replicates` also determines the first-wave
+width of adaptive batches and can therefore affect their averaging windows
+and results; see its entry below.
 
 ### engine_backend
 
 - **Type:** `lineal`, `generational`, `generational-vector`, or `auto`
 - **Default:** `lineal`
 
-Which of three interchangeable engine implementations actually drives
-the run:
+Selects the engine implementation:
 
-- `lineal` (the default): the straightforward, reference
-  implementation. Every replicate runs on its own, one after another
-  (or in separate worker processes if you ask for that — see
-  [n_replicates](#n_replicates) above).
+- `lineal` (the default): the reference
+  implementation. Replicates run sequentially or in separate worker
+  processes; see
+  [n_replicates](#n_replicates).
 - `generational`: the same computation, restructured to advance every
   replicate one generation at a time together, spread across threads
   instead of processes. Produces bit-for-bit identical results to
   `lineal` for the same inputs.
-- `generational-vector`: the same computation again, this time done
-  with whole-array math and one compiled step per generation instead of
-  one calculation per deme — by far the fastest option, from a handful
-  of demes up. It runs both mutation models (`infinite_alleles` and
+- `generational-vector`: array-based state and one compiled step per
+  generation. It runs both mutation models (`infinite_alleles` and
   `finite_alleles`), a scalar or full-matrix `m`, and either
-  migrant_sampling setting (see those settings above). Needs an extra, optional piece of software
-  (`numba`) that a plain `pip install fim` does not include — install
-  `fim[jit]` instead to add it. Matches `lineal` and `generational`
-  exactly: for the same seed on the same machine, every trajectory row
-  (allele identity and frequency, bit for bit), the report, the final
-  state and the manifest (apart from the `engine_backend` field that
-  names it) are identical, under both mutation models, with or without
+  migrant_sampling setting. Requires the optional `numba` dependency;
+  install `fim[jit]` to add it. For the same seed on the same machine,
+  it matches `lineal` and `generational`: every trajectory row
+  (allele identity and frequency, bit for bit), the report, and the final
+  state are identical, under both mutation models, with or without
   migration, for any number of loci. (The compiled arithmetic is checked
   against Python's only on the development platform, so across machines
   results agree statistically, as they already do for `jit: numba`.) It
@@ -1144,26 +1088,23 @@ the run:
   remedies. The ceiling is 2 GiB per replicate, and the
   `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable (a number of
   bytes) raises or lowers it. With several replicates running at once
-  each holds its own table; `max_concurrent_replicates` bounds how many.
+  each holds a table; `max_concurrent_replicates` bounds how many.
 - `auto`: picks `generational` or `generational-vector` automatically —
-  never `lineal`. It picks `generational-vector` when migration is
-  continuous, `jit` is `off`, `numba` is installed, `d` is at least
+  never `lineal`. It picks `generational-vector` when
+  `jit` is `off`, `numba` is installed, `d` is at least
   `auto_vector_min_d` and, under `mutation_model: finite_alleles` only,
   every locus fits under `auto_vector_max_capacity` (both below).
   Otherwise it picks `generational`. Because both give identical
   results, the choice changes how fast a run finishes, nothing else, and
-  a computer without `numba` quietly gets `generational` instead of an
+  a computer without `numba` uses `generational` instead of an
   error.
 
-**Why you might care:** if a run is taking uncomfortably long —
-especially one with a large number of demes (`d`) or loci — that
-slowness is a property of the chosen engine, not of the science being
-simulated; the same configuration can run meaningfully faster under a
-different engine choice. `generational-vector` is the one worth
-reaching for first (for example 30 to 300 times faster than `lineal` on
-the infinite-alleles worked examples); see [the simulator design's own section on choosing an
-engine backend](fim-simulator-design.md#46-choosing-an-engine-backend)
-for the full decision guide and the measured evidence behind it.
+Performance depends on deme count, locus capacity, and hardware.
+The vector engine measured 30–300 times faster than `lineal` on the
+infinite-alleles worked examples. See the
+[backend selection guide](fim-simulator-design.md#46-choosing-an-engine-backend)
+and [benchmark results](fim-engine-backend-benchmarks.md) for workloads,
+measurements, and limits.
 
 ```yaml
 engine_backend: generational-vector
@@ -1171,46 +1112,26 @@ mutation_model: infinite_alleles
 migrant_sampling: continuous
 ```
 
-**In the desktop app:** you will find it as **execution engine** in the
-Settings dialog (top-right of the top menu bar), offering the same four
-values in the order `lineal`, `auto`, `generational`,
-`generational-vector`, as the *default* every new configuration starts
-from — change it there once, and every fresh form picks it up from then
-on. Configure itself has no separate control for this field: it
-describes how the computation runs, not what experiment it asks, so it
-lives in Settings only, alongside `n_replicates` and the rest of this
-section's execution-flavored fields. The app's own built-in starting
-point for that default is `auto`, the recommended choice: it picks
-whichever engine measured fastest for your configuration, and the run
-records the engine it actually chose, so the run stays exactly as
-reproducible as one where you named an engine yourself. Loading a
-configuration file that names a different engine (`generational` or
-`generational-vector`, say) runs with that file's own value; it does
-not change what a *fresh* configuration starts from.
+**In the desktop app:** **Execution engine** in Settings supplies the
+default for new configurations; its initial value is `auto`.
+**Run settings...** on Configure changes the backend for the pending run.
+Loading a configuration uses its backend without changing saved Settings.
+The manifest records the resolved backend, not the literal `auto`.
 
-**In `fim init`'s starter config:** the file the CLI writes for a
-first-time user makes the same recommendation as the desktop app's
-fresh form — its `engine_backend: auto` line is explicit, not merely
-the field's absence falling through to the `lineal` default above. Delete
-the line (or set it to `lineal` yourself) to opt back into the reference
-implementation.
+**In `fim init`'s starter configuration:** `engine_backend: auto` is
+explicit. Set it to `lineal`, or omit it, to use the reference backend.
 
 If the app or checkout you are using does not have the optional `numba`
-software installed, the two options that need it (`auto` and
-`generational-vector`) say so in their own labels. They stay selectable
-so a configuration file naming either one still loads and saves
-faithfully — but a run using them will report that `numba` is missing.
-Packaged beta downloads include `numba` already.
+dependency installed, a direct `generational-vector` request reports that
+it is missing. `auto` falls back to `generational`.
+Packaged beta downloads include `numba`.
 
 `jit`, `auto_vector_min_d`, and `auto_vector_max_capacity` also have
-their own Settings-dialog fields — expert-level defaults, not
-Configure-side per-run fields, since they are machine-specific tuning
-values meant to be re-measured rather than typed in on a per-run basis.
-Each appears in Settings only "where apropos": `jit` only when
-Settings' own execution engine is set to `generational` (`lineal` never
-accepts anything but `off`; `generational-vector` always requires
-`numba` regardless of this setting), and `auto_vector_min_d`/`auto_
-vector_max_capacity` only when it is set to `auto`, the one engine
+Settings fields. `jit` appears when the
+Settings execution engine is `generational` (`lineal`
+accepts only `off`; `generational-vector` always requires
+`numba` regardless of this setting). `auto_vector_min_d` and
+`auto_vector_max_capacity` appear only when it is set to `auto`, the engine
 either threshold affects.
 
 ### jit
@@ -1218,15 +1139,13 @@ either threshold affects.
 - **Type:** `off` or `numba`
 - **Default:** `off`
 
-Whether the chosen engine_backend should additionally JIT-compile its
-own random draws, via the same optional `numba` dependency
+Whether the chosen engine_backend should JIT-compile
+random draws using the optional `numba` dependency
 `generational-vector` always needs. Meaningful only under
-`engine_backend: generational` (speeds up part of that engine's own
-work, though marshaling cost elsewhere in the pipeline currently
-dominates more than the draw itself); `lineal` never accepts anything
-but `off`, permanently; `generational-vector` always requires `numba`
-regardless of this setting, so it too only accepts `off` here (there is
-no separate toggle to turn off what it already needs unconditionally).
+`engine_backend: generational` (speeds up part of that engine's
+work, although marshaling elsewhere can dominate runtime); `lineal` accepts
+only `off`; `generational-vector` always requires `numba`
+regardless of this setting and accepts only `off` here.
 Under `engine_backend: auto`, `jit: numba` selects `generational` (the
 one engine that offers the toggle) rather than `generational-vector`.
 
@@ -1237,19 +1156,14 @@ one engine that offers the toggle) rather than `generational-vector`.
 
 The deme-count threshold `engine_backend: auto` uses to choose
 `generational-vector` over `generational`. Ignored under every other
-`engine_backend` value. Re-measured 2026-09-05 on a joint `d` x
-locus-length grid (104 points, real hardware, finite alleles):
-`generational-vector` never lost to `generational` at any tested `d`
-within `auto_vector_max_capacity`'s own default ceiling, and the
-infinite-alleles kernel measured 5 to 300 times faster than
-`generational` from `d = 2` up (2026-10-08), so this threshold is
-set to the smallest `d` a config can have at all — see [the simulator
-design's own section on choosing an engine
-backend](fim-simulator-design.md#46-choosing-an-engine-backend) for the
-full joint result, including the narrower, `d`-dependent region above
-that capacity ceiling this single threshold cannot reach, and
-`dev/bin/benchmark-engines` (a maintainer tool, see `dev/bin/README.md`)
-for how to re-measure either threshold on your own hardware.
+`engine_backend` value. The default covers all supported deme counts.
+In a 104-point finite-alleles grid, the vector engine won at every tested
+`d` within the default capacity ceiling. Infinite-alleles measurements
+found a 5–300-fold advantage over `generational` from `d = 2`.
+See the [backend selection guide](fim-simulator-design.md#46-choosing-an-engine-backend)
+for measurements, including regions above the capacity ceiling, and
+[`benchmark-engines`](../dev/bin/README.md#benchmark-engines) to recalibrate
+on the target hardware.
 
 ### auto_vector_max_capacity
 
@@ -1258,14 +1172,14 @@ for how to re-measure either threshold on your own hardware.
 
 The per-locus capacity ceiling `engine_backend: auto` uses alongside
 `auto_vector_min_d`, **under `mutation_model: finite_alleles` only** —
-`generational-vector` is only chosen when `d` clears its own threshold
-*and* every locus's own capacity (4<sup>length</sup>) is at most this
+`generational-vector` is chosen only when `d` meets its threshold
+and every locus's capacity (4<sup>length</sup>) is at most this
 value; a single locus above it falls back to `generational` regardless
 of `d`. A finite-alleles table is `capacity` columns wide however few
 states are in use, which is why it needs a ceiling; an infinite-alleles
 table is as wide as the alleles alive at once, so `auto` does not apply
 this ceiling there. Ignored under every other `engine_backend` value.
-Re-measured alongside `auto_vector_min_d` on the same joint grid: the
+Measured alongside `auto_vector_min_d` on the joint grid: the
 largest capacity at which `generational-vector` won at every tested
 `d` — the same `dev/bin/benchmark-engines` maintainer tool re-measures
 this axis too (`--sweep loci-length`).
@@ -1275,27 +1189,20 @@ this axis too (`--sweep loci-length`).
 - **Type:** integer at least 1, or omitted
 - **Default:** unset (every replicate advances together)
 
-Caps how many replicate lanes `engine_backend: generational` or
-`generational-vector` advance at once. Unset (the default) advances
-every requested replicate together, exactly like every prior release —
-every replicate lane is built up front, before the first generation
-runs. A smaller value instead builds lanes lazily: only this many exist
-at once, and a finished lane's own slot goes to the next
-not-yet-started replicate rather than every replicate starting
-simultaneously. Ignored under `engine_backend: lineal`, which never
-uses this windowed batching at all.
+Caps active replicate lanes for `generational` and `generational-vector`.
+When unset, every lane is built before the first generation. With a cap,
+lanes are built as slots become available.
+The `lineal` backend uses worker processes rather than this lane window.
 
 This matters most under `generational-vector`: that backend keeps a
 dense, per-locus array cached for every currently active replicate at
-once, so an unbounded batch's own memory use scales directly with
+once, so an unbounded batch's memory use scales directly with
 `n_replicates` — a run that comfortably fits at `n_replicates: 10` can
 run out of memory at `n_replicates: 200` on the identical configuration
 otherwise. Setting `max_concurrent_replicates` to a small number (`4`,
 say) bounds that memory use to a small, fixed multiple regardless of
-how many replicates the batch as a whole is asked to run. A value
-larger than `n_replicates` is silently capped at `n_replicates` rather
-than rejected, the same reasoning `replicate_minimum` (above) already
-uses.
+the total requested replicate count. Values above `n_replicates` are
+capped at `n_replicates`.
 
 ```yaml
 n_replicates: 200
@@ -1305,15 +1212,12 @@ mutation_model: infinite_alleles
 migrant_sampling: continuous
 ```
 
-Windowing changes only *when* a replicate's own lane is built and
-advanced relative to another — never what any replicate itself
-computes, so a batch's own results are identical with or without a
-window, aside from `run_id` itself: an auto-generated `run_id` is a
-hash of a run's *entire* configuration, this field included, so two
-otherwise-identical configs that differ only in
-`max_concurrent_replicates` get different auto-generated run ids (the
-same is already true of `engine_backend`, `jit`, and every other field
-on this page).
+For adaptive averaging, this value also determines the first-wave width
+used to size later replicate windows. It can therefore change results and
+is part of run identity. Unlike backend, JIT, and storage settings, it is
+not solely an execution choice. See
+[`replicate_averaging_window`](#replicate_averaging_window) and
+[Python run identity](python-api.md#what-decides-a-runs-identity).
 
 **On the command line:** `fim run --max-concurrent-replicates N`
 overrides this field for one invocation, without editing the config
@@ -1326,7 +1230,7 @@ execution-flavored defaults.
 
 A label describes a run without being part of it. The three label keys,
 `name`, `description`, and `class`, are all optional. They are **not** part
-of the run's ID: the ID is a hash of the model keys only, so changing a
+of the run's ID: labels are excluded from the identity mapping, so changing a
 run's name, description, or class never turns it into a different run.
 The labels are kept in the run's `metadata.json` file, beside
 `manifest.json`, never in the manifest's parameters.
@@ -1396,11 +1300,10 @@ configuration. Each worked example's `config.yaml` carries
 `_read_only: true`.
 
 Because `_read_only: true` is part of the run's ID, a shipped example and
-your own run of the same model are different runs. When you load an example
-into Configure, every `_` key is dropped, so the run you make from it is an
+an editable run of the same model have different identities. Loading an
+example into Configure drops every `_` key, so the resulting run is an
 ordinary run that you can edit. A configuration without `_read_only`, or
-with `_read_only: false`, has the same ID it had before this attribute
-existed.
+with `_read_only: false`, uses the ordinary editable-run identity.
 
 ## Validation summary
 

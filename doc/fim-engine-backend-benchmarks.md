@@ -3,16 +3,12 @@
 The [simulator design document](fim-simulator-design.md)'s
 [§4.6](fim-simulator-design.md#46-choosing-an-engine-backend) and
 [§9.1](fim-simulator-design.md#91-variations-reachable-from-configuration)
-describe what the measured evidence *shows*, in present tense, without
-embedding the raw numbers in flowing prose — those numbers live here
-instead, each table stamped with the one thing worth dating: the exact
-commit and hardware that produced it. A benchmark result is only
-meaningful alongside that provenance; without it, a number from a
-different day and a different machine looks like today's own current
-behavior and is not. Produced by `dev/bin/benchmark-engines` (its own
-module docstring has the full methodology — median of 3 independent,
-freshly built runs per point, not a re-timed warm cache); reproduce any
-table below with the exact command shown above it.
+summarize measured backend behavior. This document records the
+corresponding benchmark tables and provenance: commit, hardware, operating
+system, and run date. Results are specific to the recorded workload and
+environment. `dev/bin/benchmark-engines` reports the median of three
+independent runs per point after building the engines. Reproduce a table
+with the command shown in its section.
 
 ## Contents
 
@@ -22,51 +18,47 @@ table below with the exact command shown above it.
 - [B.3 Locus length (capacity) sweep](#b3-locus-length-capacity-sweep)
 - [B.4 `d` sweep extended to `d=500`](#b4-d-sweep-extended-to-d500)
 - [B.5 Joint `d` × locus-length sweep (heatmap)](#b5-joint-d--locus-length-sweep-heatmap)
-- [B.6 Joint `d` × locus-length sweep, post-Phase-7 (2026-09-05)](#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05)
+- [B.6 Joint `d` × locus-length sweep (2026-09-05)](#b6-joint-d--locus-length-sweep-2026-09-05)
 - [B.7 Replicate lane window (`max_concurrent_replicates`) sweep (2026-10-14)](#b7-replicate-lane-window-max_concurrent_replicates-sweep-2026-10-14)
 - [B.8 Batch size (`n_replicates`) sweep (2026-10-14)](#b8-batch-size-n_replicates-sweep-2026-10-14)
-- [Known gaps: axes not yet measured](#known-gaps-axes-not-yet-measured)
+- [Unmeasured benchmark dimensions](#unmeasured-benchmark-dimensions)
 
 ## Reading the tables
 
-Every table sweeps exactly one `SimulationParams` field, holding every
-other one fixed at this project's own reference values (stated with each
-table below). Every number in a row is a wall-clock median of 3
+Every table sweeps exactly one `SimulationParams` field, holding all other
+parameters at the reference values stated in its setup. Every number in a row
+is a wall-clock median of three
 independent runs at that one swept value:
 
 - **`L_1`** — a single-replicate `"lineal"` run (`n_replicates=1`),
   the reference implementation running once, with no batching of any
-  kind. Not itself an engine choice worth reaching for; it exists
-  purely as the divisor every `/L1` column is a ratio to, so that a
+  kind. It is a normalization baseline for every `/L1` column, so that a
   number stays comparable across different machines and sessions —
-  "how many single-lineage-run-equivalents does this batch cost,"
+  the number of single-run equivalents represented by a batch,
   independent of how fast or slow the underlying hardware happens to
   be.
 - **`L_b`** — `"lineal"` run at the *same batch size* (same
-  `n_replicates`) as every other engine in that row: the real fourth
-  data series, showing how the reference engine itself scales, not
-  left implicit inside what the other three get divided by.
+  `n_replicates`) as every other engine in that row: a fourth data series
+  showing how the reference engine scales.
 - **`G-off`** / **`G-jit`** — `"generational"` (`ThreadedAdvancer`,
   `max_workers=` every logical CPU the benchmark host has) with
   `jit="off"` and `jit="numba"` respectively.
 - **`V`** — `"generational-vector"` (always effectively JIT-compiled;
   it has no `jit="off"` mode).
 - **`fastest`** — which of `L_b`/`G-off`/`G-jit`/`V` had the lowest
-  raw wall-clock time at that row's own swept value.
+  raw wall-clock time at the row's swept value.
 
-**Fixed across B.1 and B.3** (both produced by `dev/bin/benchmark-
-engines`): `n_replicates=16`, `max_generations=100`,
+**Fixed across B.1 and B.3** (both produced by `dev/bin/benchmark-engines`):
+`n_replicates=16`, `max_generations=100`,
 `mutation_model="finite_alleles"`, `migrant_sampling="continuous"`
-(the combination these sweeps were run with, before `"generational-vector"`
-ran the other mutation model and stochastic sampling — see
+(the combination used for these sweeps; see
 [the design document's §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)),
-`stop_batch_early=False` (every replicate runs to the full
-generation count, never stopped early, so what gets timed does not
-itself vary run to run). **B.2 is a separate, standalone script, not
-`benchmark-engines`** — it uses the project's own *default*
-`mutation_model="infinite_alleles"`, which `"generational-vector"`
-cannot run at all, so B.2's own table has no `V` column; its own fixed
-parameters are stated with it, below.
+`stop_batch_early=False` (every replicate runs to the full generation
+count, so simulation duration is fixed across runs). **B.2 uses a separate
+standalone script rather than `benchmark-engines`**. Its default
+`mutation_model="infinite_alleles"` is unsupported by
+`"generational-vector"`, so B.2 has no `V` column. Its fixed parameters are
+listed in the section below.
 
 ### B.1 `d` (deme count) sweep
 
@@ -120,11 +112,11 @@ dev/bin/benchmark-engines --sweep d --values 4,10,20,35,50,80,120 \
 
 #### Summary
 
-`V` (`"generational-vector"`) is the fastest column at every point in both
-tables — the full measured range is `d=2` through `d=120`, with no lower
-crossover found yet. <code>G<sub>off</sub>(s)</code>'s own
-<code>G<sub>off</sub>/L<sub>1</sub></code> ratio stays roughly flat (16-22x)
-across the whole range; <code>G<sub>jit</sub>(s)</code>'s own ratio falls as `d` grows (26x at `d=2`
+`V` (`"generational-vector"`) has the lowest median runtime at every point in
+both tables across the measured range, `d=2` through `d=120`. No lower
+crossover was observed. The
+<code>G<sub>off</sub>/L<sub>1</sub></code> ratio stays roughly flat (16–22×)
+across the range; the <code>G<sub>jit</sub>/L<sub>1</sub></code> ratio falls as `d` grows (26× at `d=2`
 down to 9x at `d=120`).
 
 ![Time and L₁ normalized time by Deme Size (d)](img/fim-benchmark-b1-deme-sweep-graph.png)
@@ -148,9 +140,9 @@ down to 9x at `d=120`).
   - `jit ∈ {"off", "numba"}`
   - `trials=3`
 
-Scheduled against a real core budget rather than run either fully
-serial or fully concurrent (concurrent same-worker-count trials
-would corrupt each other's own timing).
+Trials were scheduled against the host's core budget rather than run
+fully serial or concurrently. Concurrent trials with the same worker
+count could contend for CPU resources and affect timings.
 
 #### Command
 
@@ -171,9 +163,10 @@ Not captured.
 
 #### Summary
 
-`jit="off"` shows no real speedup at any worker count. `jit="numba"` shows a
-real, consistent ~1.7-2.1x speedup that is already fully present at `workers=1`
-and does not grow with more workers.
+`jit="off"` shows no speedup as worker count increases. `jit="numba"` has
+a 1.7–2.1× runtime ratio relative to the single-worker `jit="off"` baseline;
+the ratio is already present at `workers=1` and does not increase with worker
+count.
 
 ### B.3 Locus length (capacity) sweep
 
@@ -190,8 +183,8 @@ and does not grow with more workers.
   - `mu=0.001`
   - `replicates=16`
   - `generations=100`
-  - `lengths ∈ {2,4,5,6,7,8}` (Capacity is `4 ** length`; §3.2's own
-finite-alleles state space)
+  - `lengths ∈ {2,4,5,6,7,8}` (capacity is `4 ** length`; see §3.2's
+    finite-alleles state space)
   - `trials=3`
 
 #### Command
@@ -216,13 +209,12 @@ dev/bin/benchmark-engines --sweep loci-length --values 2,4,5,6,7,8 \
 
 #### Summary
 
-`"generational-vector"` wins through capacity 16384, then loses to
-`"generational"` with `jit="numba"` at capacity 65536 — the crossover sits
-somewhere in that interval, not yet narrowed further. That is a materially
-larger range than the capacity-4096 crossover this project's own earlier sweep
-found (backend-factory design §10 item 10b) — commits `fbb8107` and `a2a9159`
-change V's own capacity scaling, not only its `d` scaling, which is the most
-likely explanation for the difference.
+`"generational-vector"` had the lowest median runtime through capacity
+16384. `"generational"` with `jit="numba"` had the lowest median at
+capacity 65536. The crossover lies between these two measured capacities.
+An earlier sweep in the backend-factory design (§10 item 10b) recorded a
+crossover at capacity 4096; the measurements used different commits and
+should not be treated as directly comparable.
 
 ### B.4 `d` sweep extended to `d=500`
 
@@ -244,9 +236,9 @@ likely explanation for the difference.
   - `generations=100`
   - `trials=3`
 
-`dev/bin/benchmark-engines`'s own default fixed baseline, identical to B.1's;
-run with no `--config` override, so the exact values are the tool's own
-`DEFAULT_N`/`DEFAULT_M`/`DEFAULT_MU`/`DEFAULT_LOCUS_ LENGTH`.
+The default fixed baseline in `dev/bin/benchmark-engines` is identical to
+B.1's. The command uses no `--config` override; its values are defined by
+`DEFAULT_N`, `DEFAULT_M`, `DEFAULT_MU`, and `DEFAULT_LOCUS_LENGTH`.
 
 #### Command
 
@@ -268,9 +260,9 @@ First run, isolated (no other benchmark work sharing the host at the time):
 
 ![Time and L₁ normalized time by Deme Size (d)](img/fim-benchmark-b4-1-deme-sweep-graph.png)
 
-Second run, the same sweep repeated a few hours later, **overlapping the
-first ~5 minutes of the B.5 heatmap queue's own 4-concurrent-job start**
-(§B.5, below) for roughly the last 40 of its own ~47-minute run:
+Second run, a repeat of the same sweep a few hours later. It overlapped the
+first five minutes of the four-job B.5 heatmap queue (§B.5) and ran
+concurrently with that queue for about 40 of its 47 minutes:
 
 | `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
@@ -283,23 +275,13 @@ first ~5 minutes of the B.5 heatmap queue's own 4-concurrent-job start**
 
 #### Summary
 
-`V` still wins at every `d`, in both runs, extending B.1's own finding to
-`d=500` with no crossover found yet. **The two runs' own `V`-over-`G-jit`
-margins visibly differ (1.86-2.03x vs. 1.24-1.68x) despite functionally
-identical code** — recorded honestly as an open, unexplained-by-code-change
-discrepancy rather than folded into one table as if the two agreed: initially
-read as evidence that this session's persistence/statistics validation-skip
-fixes (`53afe81`/`d354608`) narrowed `V`'s advantage more than `G`'s, that
-reading does not survive checking `git reflog` on the benchmark host —
-both runs already had both fixes applied, so no code change separates
-them at all. The second run's own timing sits inside a window that
-started shortly before, and
-mostly overlapped, four other concurrent `benchmark-engines` jobs on the same
-22-thread host (§B.5's own heatmap queue) — real host contention, not a code
-effect, is the far more likely explanation, and this pair of runs should not be
-read as a controlled A/B comparison of anything. A genuine re-measurement of
-whether those two fixes changed `V`-vs-`G` scaling would need to hold the commit
-fixed and vary only isolation.
+`V` had the lowest median runtime at every measured `d` through 500 in
+both runs. The `V`-to-`G-jit` runtime ratios differ between the runs
+(1.86–2.03 versus 1.24–1.68) despite functionally identical simulation
+code. The second run overlapped with four other benchmark jobs on the same
+22-thread host, so host contention is a potential confound. The results
+are retained separately; they do not constitute a controlled comparison
+of the two runs.
 
 Combining all deme size timing runs:
 
@@ -318,12 +300,12 @@ Combining all deme size timing runs:
   - `m=0.05`
   - `mu=0.001`
 
-This sweeps `d` and locus length together, to check whether the
-two axes' own crossovers move independently of each other or interact. Run via
+This sweeps `d` and locus length together to measure whether the
+two axes interact. Run via
 `dev/bin/generate-heatmap-queue` (one `benchmark-queue` job per locus length,
 each internally sweeping `d`, all four dispatched concurrently) and rendered
-with `dev/bin/ render-heatmap`; length 8 (capacity 65536) exceeded the queue's
-own 4-hour per-job timeout and produced no data — consistent with B.3's own
+with `dev/bin/render-heatmap`; length 8 (capacity 65536) exceeded the
+four-hour per-job timeout and produced no data, consistent with B.3's
 finding that cost rises sharply somewhere between capacity 16384 and 65536.
 
 #### Command
@@ -393,20 +375,18 @@ lengths:
 
 #### Summary
 
-The `V`/`G` boundary this reveals is **diagonal, not rectangular**: `V`'s own
-advantage shrinks steadily as locus length grows at fixed `d`, and grows as `d`
-grows at fixed length — the two axes trade off against each other rather than
-either one alone deciding the winner. At length 7 specifically, `V` only wins
-once `d >= 120`; at length 5 it wins at every `d` sampled. The current
-`auto_vector_min_d`/`auto_vector_max_capacity` cutover (two independent scalar
-thresholds, `"auto"` requiring both to clear before choosing `V`) cannot express
-a diagonal boundary — a config near one axis's own threshold but comfortably
-inside the other's could still land on the wrong side of this data. Not yet
-acted on: the current defaults still come from B.1/B.3's own single-axis sweeps,
-and changing the cutover shape itself (not just its two threshold values) is a
-real design question, not a parameter tweak.
+The measured `V`/`G`-jit boundary depends on both deme count and locus length.
+At length 7, `V` had the lower median runtime at `d >= 120`; at length 5, it
+had the lower median at every sampled `d`. The automatic backend thresholds
+documented for this benchmark use independent scalar conditions. Such
+thresholds cannot represent a diagonal boundary exactly, so configurations
+near the boundary may be routed to a backend with a higher measured runtime.
+The [simulator design document](fim-simulator-design.md) describes the
+automatic-selection policy.
 
-### B.6 Joint `d` × locus-length sweep, post-Phase-7 (2026-09-05)
+<a id="b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05"></a>
+
+### B.6 Joint `d` × locus-length sweep (2026-09-05)
 
 #### Setup
 
@@ -419,13 +399,10 @@ real design question, not a parameter tweak.
   - `m=0.05`
   - `mu=0.001`
 
-Re-runs B.5's own joint grid — wider and denser this time (13 `d`
-values from `2` through `500`, all 8 locus lengths, `capacity 4` through
-`65536`, 104 points total) — after every Phase 1-7 correctness/performance fix
-landed (`20260904-claude-sonnet-5-fim-engine-review-remediations.md`), not just
-Stage F8: `FIM-52`'s own re-measurement of `auto_vector_min_d`/
-`auto_vector_max_capacity`, done as a joint sweep rather than two single-axis
-ones specifically because B.5 already showed the two axes interact.
+This joint sweep covers 13 `d` values from `2` through `500` and all eight
+locus lengths, for capacities from `4` through `65536` and 104 measured
+points. The grid varies `d` and capacity together to characterize their
+joint relationship to backend runtime.
 
 #### Command
 
@@ -440,11 +417,10 @@ dev/bin/benchmark-queue /tmp/fim-heatmap-v2/queue.json \
 dev/bin/render-heatmap /tmp/fim-heatmap-v2
 ```
 
-Every job used `--resume` (`generate-heatmap-queue`'s own new default — see the
-commit that added it) and `--measure-rss`; the whole grid ran as one queue, 8
+Every job used `--resume` and `--measure-rss`; the whole grid ran as one queue, 8
 jobs in parallel (one per locus length, each internally sweeping all 13 `d`
 values), and took just under 11 hours wall-clock, dominated by the
-largest-`d`/largest-capacity cells (`benchmark-queue`'s own per-job timings:
+largest-`d`/largest-capacity cells (`benchmark-queue` per-job timings:
 length 1 finished in 2412s, length 8 in 39350s).
 
 #### Results
@@ -491,65 +467,39 @@ Note: *Below 1.0 means V is still ahead.*
 
 #### Summary
 
-Three findings:
+The grid yields the following backend-runtime patterns:
 
-1. **Through capacity 4096 (length 6), `V` wins at every tested `d`, with no
-   exception.** This is the load-bearing result: it confirms, at 13 `d` values
-   instead of B.5's 5, that the diagonal-boundary risk B.5 itself raised does
-   not actually reach this capacity range on current code — Phase 7's own
-   capacity-scaling fixes (`FIM-53`, `FIM-54`, `FIM-27`/`FIM-28`) moved the
-   boundary that B.5 found starting at capacity 4096 (length 6, `d<=35` losing
-   to G-jit) up to capacity 16384 (length 7) instead.
-   `auto_vector_max_capacity=4096` and `auto_vector_min_d=2` (both changed in
-   this commit — see each constant's own docstring in `src/fim/model/params.py`)
-   are the direct consequence: the largest rectangle this data supports without
-   ever misrouting a config to the slower engine.
-1. **The diagonal region still exists, just further out.** At capacity 16384
-   (length 7), G-jit wins for `16 <= d <= 70`; `V` regains the lead at
-   `d >= 100`. At capacity 65536 (length 8), G-jit wins through `d=250`; `V`
-   only recovers at `d >= 350`. Both regions sit entirely above the new
-   `auto_vector_max_capacity`, so `"auto"` never enters them — but a caller who
-   overrides `auto_vector_max_capacity` upward by hand should know a real,
-   `d`-dependent losing region starts immediately above `4096`, not a clean win.
-1. **`"lineal"` — never a candidate for `"auto"` at all — outright wins at the
-   smallest scale in two places**: `d=2` at length `1` (capacity `4`) and `d<=8`
-   at length `7` (capacity `16384`). §4.6's own table already flagged this as an
-   open question ("never `"lineal"`, since no benchmark data yet characterizes
-   that boundary") — this is the first real data point toward answering it, not
-   a full characterization; `"auto"`'s own resolution is unchanged by this
-   finding.
+- Through capacity 4096 (length 6), `V` has the lowest median runtime at
+  every tested `d`.
+- At capacity 16384 (length 7), `G-jit` has the lowest median runtime for
+  `16 <= d <= 70`; `V` has the lowest median for `d >= 100`.
+- At capacity 65536 (length 8), `G-jit` has the lowest median through
+  `d=250`; `V` has the lowest median at `d >= 350`.
+- `"lineal"` has the lowest median at `d=2`, length 1 (capacity 4), and at
+  `d <= 8`, length 7 (capacity 16384). The `"auto"` policy does not select
+  `"lineal"`; see §4.6 of the [simulator design document](fim-simulator-design.md).
 
-A discrepancy worth recording rather than quietly overwriting: B.3 (commit
-`883c41e`, also fixed `d=60`) found `V` narrowly *winning* at length 7
-(`29.629s` vs `30.135s`, ratio `0.98`) — this sweep's own nearest points
-(`d=50`/`d=70` at length 7) both find G-jit winning by a wider margin (ratios
-`1.32`/`1.39`). B.3's own margin was close enough to call it noise rather than a
-real regression between the two measurements — this sweep's own larger grid (13
-`d` values, corroborated by the single-axis re-measurement in the immediately
-preceding commit, which agrees with this one and not with B.3) is treated as the
-more reliable reading, not B.3's, but the disagreement itself is real and left
-visible here rather than silently resolved in one direction.
+B.3 measured `V` at length 7 and `d=60` with a median of 29.629 s, compared
+with 30.135 s for `G-jit` (ratio 0.98). In this joint sweep, the nearest
+measured points at length 7 (`d=50` and `d=70`) favor `G-jit` by ratios
+1.32 and 1.39. The results differ; the measurements do not establish whether
+the difference reflects run variability, workload details, or other factors.
 
 `--measure-rss` produced a `V`/G-off/G-jit/`L` peak-RSS ratio of exactly `1.00`
-at every single point in this grid — not a finding about engine memory behavior,
-a limitation of the measurement at this benchmark's own scale:
-`InMemoryTrajectoryStore` retains every generation's full state for the whole
-run, and at up to 75 generations and `d=500`/capacity `65536`, that accumulated
-trajectory dwarfs any transient difference between the four engines' own
-internal working sets, so the four backends' peak RSS is dominated by the store,
-not the engine. A future RSS characterization aimed at engine-internal memory
-behavior specifically (rather than whole-run memory behavior, which this grid
-does answer, just uninformatively across backends) would need either a
-null/discarding store or a much shorter run.
+at every measured point in this grid. This is a limitation of the measurement
+at this workload scale: `InMemoryTrajectoryStore` retains every generation's
+full state for the whole run. At up to 75 generations and `d=500`/capacity
+`65536`, trajectory storage can dominate transient differences between the
+engines' internal working sets. A measurement intended to isolate engine
+memory use would require a null/discarding store or a shorter run.
 
-**Correction (2026-10-14).** That explanation is probably not the whole story,
-and may not be the story at all. On Linux `ru_maxrss` is inherited across
-`exec`, so each memory-measuring worker reported its parent's peak, not its own
-(B.7 measured this directly: four backends reading `3366.4 MiB` alike with a
-discarding store in place, then `119`–`207 MiB` and distinct once the worker
-read `VmHWM` instead). An identical `1.00` ratio at every point is exactly what
-that artifact produces. Treat every peak-RSS figure recorded on Linux before
-B.7 as unreliable.
+**Measurement correction (2026-10-14).** On Linux, `ru_maxrss` is inherited
+across `exec`; each memory-measuring worker therefore reported its parent's
+peak. In B.7, four backends reported `3366.4 MiB` with a discarding store, then
+reported distinct values of `119`–`207 MiB` when the worker read `VmHWM`.
+Identical `1.00` ratios across this grid are consistent with the inherited
+peak artifact. Peak-RSS measurements recorded on Linux before B.7 are
+unreliable.
 
 ### B.7 Replicate lane window (`max_concurrent_replicates`) sweep (2026-10-14)
 
@@ -618,14 +568,16 @@ one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
 
 #### Summary
 
-- **Latency.** `V` does not care about the window: `13.3`–`13.8` s, within the
+- **Latency.** `V` runtime is similar across the tested window sizes:
+  `13.3`–`13.8` s, within the
   run-to-run spread the `lineal` control shows (<code>L<sub>x</sub>/L<sub>1</sub></code>
   `61`–`65`). <code>G<sub>jit</sub></code> is faster with a small window
   (<code>G<sub>jit</sub>/L<sub>1</sub></code> `26`–`27` at windows 1 and 2, `42`–`43`
   from 16 up); <code>G<sub>off</sub></code> slows about 6% as the window opens.
-- **Memory.** The window buys little. `V` grows `1.55` to `1.68` times
+- **Memory.** In this workload, the window has a small effect. `V` grows from
+  `1.55` to `1.68` times
   <code>L<sub>1</sub></code> from window 1 to unbounded (+8%), <code>G<sub>off</sub></code>
-  `1.12` to `1.42`. <code>L<sub>x</sub></code> is flat at `1.10`, as it must be.
+  `1.12` to `1.42`. <code>L<sub>x</sub></code> remains near `1.10`.
 - At this scale (`d=60`, capacity `256`) every working set is tens of MiB. A
   window should matter where a lane's cached state is large (high `d` with a
   large capacity), which this table does not reach. Leave
@@ -699,18 +651,16 @@ one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
   (<code>L<sub>x</sub></code>) and `1.44` (`V`) times <code>L<sub>1</sub></code> at one
   replicate to `1.19` and `1.93` at 128, about `0.15` to `0.8` MiB per replicate.
 
-## Known gaps: axes not yet measured
+## Unmeasured benchmark dimensions
 
-Recorded here, named, rather than left as a silent absence someone has to
-notice by reading the table of contents and inferring what is missing. Each
-of these needs real hardware time on an idle machine — hours, for the
-larger ones — which is why none is closed by code alone; none is blocked on
-a design decision.
+The following dimensions have no recorded measurements. They require
+additional hardware runs; the larger workloads may require several hours.
 
 ### Replicate concurrency and batch size: measured at one scale
 
-B.7 (`max_concurrent_replicates`) and B.8 (`n_replicates`) now record both axes
-at `d=60`, capacity `256`. What they do not cover: a configuration whose per-lane state is large (high `d` with a large
-capacity), where a lane window is expected to matter for memory, and any
-engine's behavior beyond `128` replicates. The recommendation in B.7 (leave the
-window unset at this scale) says nothing about that regime.
+B.7 (`max_concurrent_replicates`) and B.8 (`n_replicates`) measure both axes
+at `d=60`, capacity `256`. They do not cover configurations with large
+per-lane state (high `d` and large capacity), where the lane window may affect
+memory use, or engine behavior beyond `128` replicates. The B.7
+recommendation to leave the window unset at the measured scale does not apply
+to those unmeasured regimes.

@@ -1243,9 +1243,9 @@
           </button>
           <div id="explore-sweep-panel" hidden>
             <p class="hint">
-              Pick the values to run for real, on the parameters this view
-              shows. The points are listed and drawn as you edit, and the count
-              comes from the plan a sweep would make.
+              Select simulation values for the parameters displayed here.
+              The preview lists and plots the selected points and shows
+              the planned sweep size.
             </p>
             <div id="explore-sweep-axes"></div>
             <div class="field">
@@ -1598,8 +1598,9 @@
           <div class="field" id="initial-conditions-equilibrium-fields" hidden>
             <p class="hint">
               Simulates one ancestral population of size N&times;d forward
-              (no migration) until its own heterozygosity stabilizes, then
-              splits it into d demes. Can take real time for a large N or d.
+              (no migration) until the equilibrium criterion is met, then
+              splits it into d demes. Larger populations can require
+              longer simulations.
             </p>
             <label for="field-equilibrium_convergence_window">convergence window</label>
             <input type="text" id="field-equilibrium_convergence_window" name="equilibrium_convergence_window" form="input-form">
@@ -1621,7 +1622,7 @@
             <p class="hint">
               Each cell is one deme's starting allele frequencies at one
               locus, written as <code>alleleId:frequency</code> pairs
-              (e.g. <code>0:0.6,1:0.4</code>); each cell's own frequencies
+              (e.g. <code>0:0.6,1:0.4</code>); each cell's frequencies
               must sum to 1.
             </p>
             <div id="p0-grid" class="p0-grid"></div>
@@ -2278,8 +2279,8 @@
         <option value="4">Tetraploid (4)</option>
       </select>
       <p class="hint">
-        The ploidy a new configuration starts on, diploid unless you change
-        it. Choose "Ask me each time" to pick for every configuration.
+        Default ploidy for new configurations. Choose "Ask me each time"
+        to select it separately for each configuration.
       </p>
     </div>
 
@@ -2306,17 +2307,17 @@
     <div class="field">
       <label for="settings-scatter-style">Scatter plot points</label>
       <select id="settings-scatter-style">
-        <option value="color-badge">Colour for count, origin as a badge (recommended)</option>
-        <option value="color">Colour for count</option>
+        <option value="color-badge">Color for count, origin as a badge (recommended)</option>
+        <option value="color">Color for count</option>
         <option value="badge">Circles, origin as a badge</option>
         <option value="density">Density map</option>
         <option value="dots">Translucent dots</option>
         <option value="trail">Circles with a trail of earlier generations</option>
-        <option value="circles">Circles that grow with count (original)</option>
+        <option value="circles">Circles sized by count</option>
       </select>
       <p class="hint">
-        Alleles at the same spot are counted together. Different styles show
-        that count differently; try each on a real run.
+        Alleles at the same coordinates are counted together. The selected
+        style encodes that count using color, size, or density.
       </p>
     </div>
 
@@ -2328,17 +2329,18 @@
     <fieldset class="settings-statistics" id="settings-statistics">
       <legend>Statistics shown</legend>
       <p class="hint">
-        Choose the statistics the statistics panel, the results tables, the
-        trajectory chart and the sweep charts show. Hidden statistics are
-        still saved with every run's results, so you can show them later,
-        even for runs you have already made.
+        Select statistics for the statistics panel, results tables,
+        trajectory chart, and sweep charts. Final results include hidden
+        statistics. Select an underlined statistic name in a table to open
+        its definition, formula, and implementation links.
       </p>
       <p class="hint" id="settings-statistics-expensive-note">
         E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, &delta;<sub>G</sub>
-        and I are expensive. While any of them is shown, every new run
-        computes all five every generation, so you can follow them on the
-        trajectory, and runs take longer (most at large deme counts). Hide
-        all five to avoid the cost; the final results still include them.
+        and I require additional computation. Showing any of them enables
+        per-generation tracking of all five for new runs. This increases
+        runtime, especially with many demes. Hiding all five disables that
+        tracking unless a statistic is watched for convergence; final
+        results still include them.
       </p>
       <div class="settings-statistics-presets">
         <button type="button" data-statistics-preset="essentials">Essentials</button>
@@ -2462,8 +2464,8 @@
     <fieldset class="composite">
       <legend>Convergence</legend>
       <p class="hint">
-        How precisely a run estimates each statistic it watches -- not which
-        statistics it watches (Configure's own per-run, experimental choice).
+        Set estimation precision for watched statistics. Choose which
+        statistics to watch separately in Configure.
       </p>
       <div class="field">
         <label for="settings-convergence_burn_in" data-field-help="convergence_burn_in">convergence burn-in</label>
@@ -2497,8 +2499,7 @@
     <fieldset class="composite">
       <legend>Expert: engine tuning</legend>
       <p class="hint">
-        Rarely need changing. Each field below only appears once the
-        execution engine above is set to the one it tunes.
+        Tuning options for the selected execution engine.
       </p>
       <div class="field" id="settings-jit-field" hidden>
         <label for="settings-jit" data-field-help="jit">JIT</label>
@@ -2526,9 +2527,10 @@
     <fieldset class="composite">
       <legend>Storage</legend>
       <p class="hint">
-        The trajectory file of a long run can be very large. Thinning keeps
-        every generation until the run has been averaging for a while, then
-        one in every <em>stride</em>; nothing else changes.
+        Thinning reduces trajectory storage after the configured start
+        generation, retaining one in every <em>stride</em> generations and
+        required boundary frames. Statistical tracking is unchanged;
+        scrubbing and reanalysis use only retained frames.
       </p>
       <div class="field">
         <label for="settings-trajectory_retention" data-field-help="trajectory_retention">trajectory retention</label>
@@ -2558,8 +2560,9 @@
     <details class="composite" id="settings-expert-details">
       <summary>Expert settings</summary>
       <p class="hint">
-        Defaults are measured choices (see the convergence guide in Help).
-        A run whose expert settings differ is a different run, and says so.
+        These settings control convergence, statistical calculations, and
+        storage. Their values are recorded in the manifest and contribute
+        to the run's identity.
       </p>
       <div id="settings-expert-fields"></div>
       <button type="button" id="settings-expert-reset-all" tabindex="0">

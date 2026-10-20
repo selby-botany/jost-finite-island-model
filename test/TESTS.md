@@ -21027,6 +21027,18 @@ The one genuinely new interaction Help adds relative to every other
 screen's own fixed-target "Back" button: recording
 *whichever* screen was showing, not always the same one.
 
+<a id="gui.test_help_screen.test_statistic_name_opens_its_definition_without_toggling_the_plot"></a>
+
+#### test\_statistic\_name\_opens\_its\_definition\_without\_toggling\_the\_plot
+
+```python
+@pytest.mark.parametrize("label_source", ["row", "column"])
+def test_statistic_name_opens_its_definition_without_toggling_the_plot(
+        window: webview.Window, label_source: str) -> None
+```
+
+Statistic help preserves plot visibility and returns to the same screen.
+
 <a id="gui.test_home_hierarchy_screen"></a>
 
 # gui.test\_home\_hierarchy\_screen
@@ -39747,6 +39759,16 @@ def test_payload_is_json_and_ordered() -> None
 
 The bridge payload round-trips through JSON in catalog order.
 
+<a id="statistics.test_catalog.CatalogTests.test_descriptions_distinguish_partitioning_and_distance"></a>
+
+#### test\_descriptions\_distinguish\_partitioning\_and\_distance
+
+```python
+def test_descriptions_distinguish_partitioning_and_distance() -> None
+```
+
+Hover descriptions identify the formulas used by the implementation.
+
 <a id="statistics.test_differentiation"></a>
 
 # statistics.test\_differentiation
@@ -43064,6 +43086,37 @@ def test_generated_help_is_current_and_local_links_resolve(
 ```
 
 Committed Help matches the generator and every local jump has a target.
+
+<a id="validation.test_help_html.test_every_statistic_has_a_bundled_definition_and_implementation_link"></a>
+
+#### test\_every\_statistic\_has\_a\_bundled\_definition\_and\_implementation\_link
+
+```python
+def test_every_statistic_has_a_bundled_definition_and_implementation_link(
+) -> None
+```
+
+Every catalog row links to math, an API symbol, and source.
+
+<a id="validation.test_help_html.test_derived_display_rows_have_bundled_definitions"></a>
+
+#### test\_derived\_display\_rows\_have\_bundled\_definitions
+
+```python
+def test_derived_display_rows_have_bundled_definitions() -> None
+```
+
+Non-catalog predictions and effective counts also resolve offline.
+
+<a id="validation.test_help_html.test_statistics_reference_is_regenerated_by_the_commit_hook"></a>
+
+#### test\_statistics\_reference\_is\_regenerated\_by\_the\_commit\_hook
+
+```python
+def test_statistics_reference_is_regenerated_by_the_commit_hook() -> None
+```
+
+A reference-only edit refreshes the bundled page before committing.
 
 <a id="validation.test_identity_recursion_trajectory"></a>
 

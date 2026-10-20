@@ -1,0 +1,282 @@
+<h1 id="statistics-reference">Statistics reference</h1>
+<p>Select a statistic's underlined name in a desktop statistics table to open
+its definition here. The value and its full-precision tooltip remain in
+the table; the color swatch controls whether its trajectory is plotted.
+This reference is available in the application without a network connection.
+Links to the longer mathematical guides, Python API, and source open in
+your browser and require access to the repository.</p>
+<p>Each entry gives the reported identifier, interpretation, formula, and
+implementation. For a scripted analysis, start with the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md#statistics-and-errors">Python guide</a>. For interpretation of
+diversity and differentiation, see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">differentiation measures guide</a>.</p>
+<h2 id="notation-and-aggregation">Notation and aggregation</h2>
+<p>For one locus, <code>p_ia</code> is the frequency of allele <code>a</code> in deme <code>i</code>, <code>d</code> is
+the number of demes, and <code>w_i</code> is a normalized deme weight. Frequencies
+sum to 1 within each deme. The pooled frequency is
+<code>p_a = sum_i(w_i * p_ia)</code>. Unless stated otherwise, formulas below use
+equal deme weights, <code>w_i = 1/d</code>, as the simulator's reports do.
+The <code>deme_weighting</code> setting applies only to <code>E_ST</code>, <code>Delta</code>, and <code>MI</code>;
+<code>size</code> weights these measures by deme size. It does not change the
+weighting of the other reported measures.</p>
+<p>The formulas define statistics of population frequencies, not
+finite-sample estimators. <code>N</code> in the model's mathematics denotes gene
+copies; the desktop population field counts individuals and applies the
+selected ploidy.</p>
+<p>Locus and time aggregation are separate operations. In the default
+multilocus report, <code>D</code> and <code>G_ST</code> use ratios of mean heterozygosities;
+averaging per-locus ratios is a different estimand. The other measures
+follow their documented aggregation rules. A convergence estimate may
+also average over generations, and a batch summary averages across
+replicates. Consult the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.engine.report.report_for_state">report API</a>,
+<a href="#" data-fim-help="usage" data-fim-anchor="output-schemas">output schemas</a>, and
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">convergence reference</a> before comparing these quantities.
+An undefined value is not evidence of zero differentiation.</p>
+<h2 id="d"><code>D</code></h2>
+<p>Jost's frequency-weighted allelic differentiation:
+<code>D = d/(d-1) * (H_T-H_S)/(1-H_S)</code>.
+With equal deme weights, 0 denotes identical allele frequencies and 1
+denotes disjoint allele sets. <code>D</code> is not a measure of nearness to fixation.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.jost_d">Python API: jost_d</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="g_st"><code>G_ST</code></h2>
+<p>Nei's heterozygosity ratio: <code>G_ST = (H_T-H_S)/H_T</code>.
+Its interpretation depends on within-deme diversity; high allelic
+differentiation need not imply high <code>G_ST</code>. The statistic is undefined
+when <code>H_T = 0</code>, including fixation for the same allele in every deme.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.g_st">Python API: g_st</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="h_s"><code>H_S</code></h2>
+<p>Mean within-deme expected heterozygosity:
+<code>H_S = sum_i(w_i * (1-sum_a(p_ia^2)))</code>.
+It is the probability that two independent gene copies drawn within a
+deme carry different alleles, averaged over demes.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.h_s">Python API: h_s</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="h_t"><code>H_T</code></h2>
+<p>Expected heterozygosity of the pooled allele-frequency distribution:
+<code>H_T = 1-sum_a(p_a^2)</code>. Pooling includes both within- and between-deme
+variation; it is not the mean of the individual deme heterozygosities.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.h_t">Python API: h_t</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="h_st"><code>H_ST</code></h2>
+<p>Partitioned between-deme heterozygosity:
+<code>H_ST = (H_T-H_S)/(1-H_S)</code>.
+It satisfies <code>H_T = H_S + H_ST - H_S*H_ST</code>. With equal weights,
+<code>D = d/(d-1) * H_ST</code>. This is not Hedrick's standardized <code>G'_ST</code>.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.h_st">Python API: h_st</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="e_st"><code>E_ST</code></h2>
+<p>Entropy differentiation: <code>E_ST = (S_T-S_S)/S_w</code>, where
+<code>S_w = -sum_i(w_i * ln(w_i))</code>. With equal weights, <code>S_w = ln(d)</code>.
+Entropy weights rare alleles more strongly than heterozygosity does.
+The <code>deme_weighting</code> setting controls the weights for this measure.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.e_st">Python API: e_st</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="k_st"><code>K_ST</code></h2>
+<p>Allele-number differentiation:
+<code>K_ST = (A_T/A_S-1)/(d-1)</code>, where here <code>A_T</code> is the number of distinct
+alleles in the pooled population and <code>A_S</code> is the mean number present
+per deme. Presence means strictly positive frequency. These are
+order-zero allele counts, not the effective counts displayed below.
+Equal deme weights are required.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.k_st">Python API: k_st</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="a_cgd"><code>A_CGD</code></h2>
+<p>Caballero-Garcia-Dorado allelic distance. For a pair of demes, count
+alleles present in exactly one deme and divide by 2; <code>A_CGD</code> is the
+mean over distinct unordered pairs. Frequencies affect presence but
+do not otherwise weight the distance. This is a count, not a proportion.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.allelic_distance">Python API: allelic_distance</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="delta"><code>Delta</code></h2>
+<p>Gregorius's distance-oriented differentiation, displayed as delta with
+subscript G. Compare each deme's frequency vector with the weighted
+mixture of all remaining demes using total variation distance
+<code>0.5 * sum_a(abs(p_ia-p_rest,a))</code>, then average over demes.
+The mixture and outer average use the configured deme weights.
+For two equally weighted demes, this is their total variation distance.
+For more than two, it is not the average of all pairwise distances.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.gregorius_delta">Python API: gregorius_delta</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="mi"><code>MI</code></h2>
+<p>Allele-by-deme mutual information, displayed as <code>I</code>:
+<code>MI = S_T-S_S</code>, in nats. It measures the statistical association between
+allele identity and deme membership. Dividing by deme-weight entropy
+gives <code>E_ST</code>; <code>MI</code> itself is not normalized to the unit interval.
+The entropies in this calculation use the configured deme weights.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.mutual_information">Python API: mutual_information</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="gs"><code>Gs</code></h2>
+<p>Within-deme gene identity: <code>Gs = 1-H_S</code>. Sampling is with replacement.
+Identity here means identity in allelic state, not a recorded pedigree
+relationship.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.gs">Python API: gs</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="gd"><code>Gd</code></h2>
+<p>Mean between-deme gene identity. With equal weights,
+<code>Gd = (d*(1-H_T)-(1-H_S))/(d-1)</code>.
+It is the mean probability of an allelic match between gene copies
+drawn from distinct demes.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.gd">Python API: gd</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="d_m"><code>D_m</code></h2>
+<p>Nei's mean pairwise between-deme gene diversity:
+<code>D_m = d/(d-1) * (H_T-H_S)</code>. Unlike <code>D</code>, it does not divide by within-deme
+identity. Equal deme weights are required.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.d_m">Python API: d_m</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="r_st"><code>R_ST</code></h2>
+<p>Nei's relative between-deme diversity: <code>R_ST = D_m/H_S</code>.
+It is undefined when <code>H_S = 0</code>. This identifier denotes Nei's diversity
+ratio, not the similarly named microsatellite statistic based on
+allele-size variance.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.r_st">Python API: r_st</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="g_st_nei_log"><code>G_ST_NEI_LOG</code></h2>
+<p>Nei's logarithmic <code>G'_ST</code>:
+<code>ln(J_S/J_T)/(-ln(J_T))</code>, with <code>J_S = 1-H_S</code> and <code>J_T = 1-H_T</code>.
+This is distinct from Hedrick's standardized statistic despite their
+shared notation. The reported value is undefined at <code>H_T = 0</code> or
+<code>H_S = 1</code>.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.g_st_log">Python API: g_st_log</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="g_st_hedrick"><code>G_ST_HEDRICK</code></h2>
+<p>Hedrick's standardized <code>G'_ST = G_ST/G_ST(max)</code>, where
+<code>G_ST(max) = (d-1)*(1-H_S)/(d-1+H_S)</code>.
+It rescales <code>G_ST</code> by its maximum at the given within-deme diversity
+and deme count. The report returns an undefined value when <code>G_ST</code>
+is undefined.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.g_st_prime">Python API: g_st_prime</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="f_st"><code>F_ST</code></h2>
+<p>Overall coancestry-based fixation index:
+<code>F_ST = (Gs-Gd)/(1-Gd)</code>.
+The report uses equal deme weights and pooled heterozygosities across
+loci. It returns an undefined value when <code>Gd = 1</code>.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.derived_differentiation">Python API: derived_differentiation</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="f_st_pair"><code>F_ST_PAIR</code></h2>
+<p>Pairwise coancestry-based fixation index for the selected demes:
+<code>F_ST_PAIR = ((J_X+J_Y)/2-J_XY)/(1-J_XY)</code>, with
+<code>J_X = sum_a(p_Xa^2)</code> and <code>J_XY = sum_a(p_Xa*p_Ya)</code>.
+Only the selected pair contributes. The implementation returns 0
+when both demes are fixed for the same allele.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.pairwise_f_st">Python API: pairwise_f_st</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="nei-distances">Nei distances</h2>
+<p>The <code>NEI_I_*</code> identifiers report normalized gene identity, <code>I</code>;
+<code>NEI_D_*</code> report distance, <code>-ln(I)</code>. These distances are distinct from
+Jost's <code>D</code>. Each identifier specifies three choices:</p>
+<table>
+<thead>
+<tr>
+<th>Identifier part</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PAIR</code></td>
+<td>The two demes selected for the scatter plot</td>
+</tr>
+<tr>
+<td><code>ALL</code></td>
+<td>All demes, with equal weight</td>
+</tr>
+<tr>
+<td><code>GEO</code></td>
+<td>Geometric mean of within-deme identities in the denominator</td>
+</tr>
+<tr>
+<td><code>ARITH</code></td>
+<td>Arithmetic mean in the denominator</td>
+</tr>
+<tr>
+<td>No suffix</td>
+<td>Average identities over loci, then compute the ratio</td>
+</tr>
+<tr>
+<td><code>LOCUS_MEAN</code></td>
+<td>Average per-locus distances; the corresponding identity is their geometric mean</td>
+</tr>
+</tbody>
+</table>
+<p>For a pair, <code>I = J_XY/sqrt(J_X*J_Y)</code> under <code>GEO</code>, or
+<code>I = J_XY/((J_X+J_Y)/2)</code> under <code>ARITH</code>. The all-demes forms use mean
+between-deme identity in the numerator and the specified mean of all
+within-deme identities in the denominator.</p>
+<p>No shared alleles gives <code>I = 0</code> and infinite distance. With <code>LOCUS_MEAN</code>,
+one locus with zero shared identity makes the mean distance infinite.
+For more than two demes, the geometric normalization can produce
+<code>I &gt; 1</code> and negative distance when deme diversities differ. These values
+are properties of that normalization, not negative evolutionary time.
+Saved JSON represents non-finite distances as <code>null</code>; the desktop
+displays infinity explicitly.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/nei-distances.md">Mathematical derivation and worked examples</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.genetic_distance.nei_family_from_identities">Python API: nei_family_from_identities</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/genetic_distance.py">Source</a></p>
+<h2 id="effective-allele-counts">Effective allele counts</h2>
+<p>The displayed <sup>H</sup>D<sub>S</sub> and
+<sup>H</sup>D<sub>T</sub> are inverse-concentration effective
+allele counts: <code>1/(1-H_S)</code> and <code>1/(1-H_T)</code>, respectively.
+Explore uses <code>A_S</code> and <code>A_T</code> for these predicted counts. They give the
+number of equally frequent alleles with the same heterozygosity, not
+the number of distinct allele labels and not effective population size.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.effective_allele_count">Python API: effective_allele_count</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="entropy">Entropy</h2>
+<p>Explore's <code>S_S</code> is mean within-deme Shannon entropy and <code>S_T</code> is pooled
+Shannon entropy. For frequencies <code>p_a</code>, entropy is
+<code>-sum_a(p_a * ln(p_a))</code>, omitting zero-frequency terms. Units are nats.
+Explore shows theoretical predictions under the assumptions stated in
+its model description, not measurements from a saved trajectory.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">Mathematical guide</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.theory.theory_for_configuration">Python API: theory_for_configuration</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/theory.py">Source</a></p>
+<h2 id="identity-recovery">Identity recovery</h2>
+<p>Explore's retention rate, equilibrium identity, and half-life describe
+the mutation-negligible identity-recovery approximation. The retention
+rate controls the exponential approach to the predicted identity;
+the half-life is the generations required to halve the departure from
+that equilibrium. These are theoretical predictions, not fitted
+convergence times.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Model assumptions</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.identity_recovery_trajectory">Python API</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="mutation-negligible-equilibrium">Mutation negligible equilibrium</h2>
+<p>Explore's indicator tests whether mutation is negligible relative to
+migration in the equilibrium approximation. It is a regime check,
+not a measured statistic or proof that mutation has no effect.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Model assumptions</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.mutation_negligible_equilibrium">Python API</a> ·
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/differentiation.py">Source</a></p>
+<h2 id="related-references">Related references</h2>
+<ul>
+<li><a href="#" data-fim-help="usage" data-fim-anchor="">Command reference and desktop workflow</a></li>
+<li><a href="#" data-fim-help="configuration" data-fim-anchor="">Configuration reference</a></li>
+<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence and uncertainty</a></li>
+<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md">Python scripting guide</a></li>
+<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md">Generated Python API</a></li>
+<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/catalog.py">Statistic catalog source</a></li>
+</ul>

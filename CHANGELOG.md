@@ -8,6 +8,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Bundled statistics reference with formulas, interpretation, and links to
+  mathematical guides, Python API entries, and source. Statistic names in
+  desktop tables and the Help menu open this reference without a network
+  connection. Help navigation preserves trajectory visibility.
+
+- Neutral, current-state documentation and help text across scientific
+  guides, operational references, worked examples, and command-line help.
+
 - **Retry failed and Recompute all on Home.** A study that holds a sweep shows
   **Retry failed (N)** while any point has failed, and **Recompute all…**
   (after a confirmation) once it has results. They are the desktop app's

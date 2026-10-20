@@ -1,28 +1,10 @@
-"""Running a sweep: create its Study, run the points, resume, and report status.
+"""Create, execute, resume, and inspect parameter-sweep Studies.
 
-The execution half of `fim.sweep`
-(`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`, sections 3 and 4).
-
-- `create_sweep_study` stores the specification and the plan in a new
-  Study's `sweep_spec` *before* any point runs, so an interrupted sweep
-  resumes from what is stored.
-- `run_sweep` walks the stored points. Each point is skipped if the Study
-  already holds a run with its `run_id`, attached if such a run exists
-  anywhere under `results/`, and computed otherwise. Resuming is the same
-  operation as running.
-- Point status is *derived* (a point is done if a member run has its id),
-  never stored, so a manifest cannot disagree with the run directories.
-  Only failures and each point's Run object link are recorded, in a small
-  file beside the Study index.
-- A point dispatched by `LocalPointRunner` or `ProcessPointRunner` is a
-  resumable Run object (`fim.run_service`), created lazily when the point
-  first runs. Cancelling a sweep pauses its points in flight, and the next
-  run resumes them from their checkpoints instead of starting over. Only a
-  completed object is ever counted as a finished point.
-- Points run one after another. A batch already spreads its replicates
-  over the cores; running several batches at once would oversubscribe
-  them. `PointRunner` is the seam a cluster would implement instead.
+Sweep specifications and plans are stored with a Study before execution.
+Completed points are identified from their run IDs; pending points can be
+resumed, and point failures and Run object links are stored separately.
+Execution is sequential across sweep points; batch replicates may use their
+own worker processes.
 """
 
 from __future__ import annotations

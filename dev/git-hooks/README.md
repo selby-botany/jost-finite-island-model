@@ -21,11 +21,10 @@ integration remains authoritative.
 
 The `pre-push` hook also runs [`dev/bin/validate-repository`](../bin/README.md),
 which lints Markdown, YAML, shell, and the desktop GUI's JavaScript, CSS, and
-HTML, and scans the commit history for leaked credentials. Local is the right
-place for it: the pinned Docker images are already warm on your machine, so
-the check costs seconds, while the same work on a CI runner starts cold and
-only reports back after the push. CI re-runs it on `staging` and `main` as a
-backstop, where passing should be a formality.
+HTML, and scans the commit history for leaked credentials. Local checks report
+problems before a push and reuse cached, pinned Docker images. CI repeats
+repository validation on `staging` and `main` to cover pushes made without
+local checks.
 
 Set `PRE_PUSH_SKIP_VALIDATE=true` to skip it; it also skips automatically,
 with a message, when no Docker daemon is running.

@@ -1,32 +1,9 @@
-"""pywebview bootstrap and `Api` bridge — the GUI's own entry point
-(`doc/fim-gui-design.md` §4).
+"""Desktop application entry point and Python bridge for the pywebview UI.
 
-`fim.launcher` dispatches here for the zero-argument and `--graphical`
-paths, exactly as it dispatched to the Tk build's own `fim.gui.app:main`
-before the pywebview migration (`doc/fim-gui-design.md` §2) — the
-entry point name and shape are stable across the toolkit swap:
-`fim.launcher` itself did not change at all.
-
-`create_window` and `main` are deliberately separate: `main` blocks
-(`webview.start()` runs the GUI's own event loop until the window
-closes), so no test calls it directly. Every headless test instead calls
-`create_window()` itself, then drives the result with its own
-`webview.start(callback)`, confirmed directly against this window/bridge
-before writing this
-module (see `test/gui/test_app.py`): `window.evaluate_js(...)` returns
-the raw value of whatever JS expression it evaluates, not the resolved
-value of a Promise that expression happens to produce — a `js_api` call
-like `window.pywebview.api.ping()` returns a Promise to JS, so a direct
-`evaluate_js("window.pywebview.api.ping()")` reads back `{}` (Chromium's
-own JSON view of an unresolved Promise object), not `"pong"`. Every real
-call into the bridge — from a test, and from `webui/*.js` alike —
-therefore goes through a small `async` JS wrapper that `await`s the
-`js_api` call and writes its result into the DOM (or, for a test, a
-`window`-scoped variable), read back with a second, separate
-`evaluate_js` call. This is not a workaround bolted on for testing: it is
-also the correct, natural shape for a real UI event handler, which never
-needs to return a value to Python either — only update its own screen
-after the `await` resolves.
+`main` starts the application event loop. `create_window` constructs the
+window and its `Api` bridge separately for headless tests and other callers.
+The web interface calls the same simulation, analysis, and persistence
+modules used by the command-line interface.
 """
 
 from __future__ import annotations
@@ -9084,6 +9061,7 @@ def _build_menu(
             MenuAction(
                 "Configuration reference", dispatch("fim.menu.help('configuration')")
             ),
+            MenuAction("Statistics reference", dispatch("fim.menu.help('statistics')")),
             MenuSeparator(),
             MenuAction(
                 "Documentation on GitHub",

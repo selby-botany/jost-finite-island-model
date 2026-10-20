@@ -71,15 +71,14 @@ function fillRunSettingsNotice(notice) {
     body.replaceChildren();
     if (runSettingsAdopted) {
         summary.textContent =
-            "Done. Your Settings now match this run, and new configurations will use them.";
+            "Settings saved. New configurations use this run's settings.";
         table.hidden = true;
         adoptButton.hidden = true;
         return;
     }
     summary.textContent =
-        "This configuration comes with its own run settings. They are used for " +
-        "this run only, and your Settings have not changed. These differ from " +
-        "your Settings:";
+        "This configuration uses the run settings listed below. Saved " +
+        "Settings are unchanged. Differences:";
     table.hidden = false;
     adoptButton.hidden = false;
     for (const difference of runSettingDifferenceRows) {
@@ -117,7 +116,7 @@ function renderRunSettingsNotice() {
     runSettingsStripItem.hidden = !differs;
     const count = runSettingDifferenceRows.length;
     runSettingsStripValue.textContent = differs
-        ? `this run's own (${count} differ${count === 1 ? "s" : ""})`
+        ? `run settings (${count} differ${count === 1 ? "s" : ""})`
         : "";
 }
 

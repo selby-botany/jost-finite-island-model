@@ -1,36 +1,10 @@
 #!/usr/bin/env python3
-"""Measure the burn-in-then-average convergence rule against known answers.
+"""Calibrate the burn-in and averaging convergence rule against reference values.
 
-Two measurements, both with fixed seeds, so a commit always gives the same
-numbers (design `20261005-claude-opus-5-5-simplified-convergence-rule-
-design.md`, sections 6.12 and 14):
-
-`rule REGIME`
-    Run many seeded single runs of the rule at a loose precision and count
-    how often the reported average misses its target. Form 1 (mean of the
-    per-generation values) is compared with the mean over the seeds; form 2
-    (value of the means, the delta method) is compared with the analytic D
-    of the identity recursion. Two counts per form: runs whose average
-    misses by more than `precision`, and runs whose average misses by more
-    than `z` of the run's own standard error. The second count is the error
-    bar's coverage: at confidence 0.95 about one run in twenty should miss.
-
-`spectrum REGIME`
-    Measure how fast the allele-spectrum statistics (`K_ST`, `A_CGD`,
-    `Delta`, `MI`, `E_ST`) forget the starting state, in relaxation times,
-    next to `D` and `G_ST`. The burn-in is derived for identity statistics;
-    this shows whether the allele-spectrum statistics need a longer one
-    (`spectrum_burn_in_multiplier`).
-
-Usage:
-    dev/bin/calibrate-convergence-defaults rule REGIME [--seeds N]
-        [--first-seed S] [--loci L] [--precision P] [--jobs J]
-    dev/bin/calibrate-convergence-defaults spectrum REGIME [--jobs J]
-    dev/bin/calibrate-convergence-defaults --list
-
-Prints one JSON object with the per-run rows and the verdict. The
-versioned results are in
-`test/validation/convergence-rule-calibration-evidence.json`.
+The `rule` mode measures the coverage of reported averages across seeded
+runs. The `spectrum` mode compares how quickly allele-spectrum statistics
+settle relative to identity statistics. Results are emitted as JSON; use
+`--list` to show supported regimes.
 """
 
 from __future__ import annotations

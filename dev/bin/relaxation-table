@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
-"""Print the relaxation-time table used in the convergence design, Appendix A.5.
+"""Print relaxation-time estimates for reference configurations.
 
-For each reference configuration this compares three estimates of the time
-`tau` a run needs to forget its starting state:
-
-- the true value, from the slowest mode of the identity recursion
-  (`fim.convergence.defaults.recursion_relaxation_time`),
-- the closed form for the symmetric island model, and
-- the migration matrix's spectral gap alone, `1 / gap`, which the design
-  rejects because it ignores the time two gene copies need to meet.
-
-The unit tests in `test/convergence/test_defaults.py` re-run the island
-cases and fail if the closed form drifts from the recursion by more than 5%,
-so the design appendix cannot silently disagree with the code.
-
-Usage: dev/bin/relaxation-table
+Compares the identity-recursion estimate with the symmetric-island closed
+form and the migration-matrix spectral-gap estimate. The table is intended
+for checking the model-based convergence defaults.
 """
 
 from __future__ import annotations
