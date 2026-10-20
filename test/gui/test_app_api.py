@@ -3127,6 +3127,64 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     assert literature_visuals["frequencySpectrum"] is not None
 
 
+def test_summary_batch_progress_uses_sidecars_without_reading_trajectories(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Summary polling reports sidecar progress without opening a trajectory."""
+    params = replace(tiny_params, n_replicates=2)
+    run_id = "batch-summary"
+    replicate_run_id = f"{run_id}-r001"
+    directory = replicate_output_directory(tmp_path, run_id, replicate_run_id)
+    directory.mkdir(parents=True)
+    store = LiveProgressStore(
+        BinaryLogStore(
+            directory / "trajectory.tlog", background=False, block_generations=1
+        ),
+        progress_path=directory / ".progress",
+        cancel_path=tmp_path / "cancel",
+    )
+    state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.25, AlleleId(1): 0.75},),
+        ),
+        generation=7,
+    )
+    store.write_generation(replicate_run_id, 7, state.to_rows(replicate_run_id))
+    store.close()
+
+    def fail_on_trajectory_read(*args: object, **kwargs: object) -> None:
+        raise AssertionError("summary polling must not read trajectory logs")
+
+    monkeypatch.setattr(app_module, "read_live_state", fail_on_trajectory_read)
+    window = _FakeWindow()
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window,
+        params,
+        run_id,
+        tmp_path,
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+        view_level=lambda: "summary",
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
+
+    payload = _one_call_payload(window, "onBatchProgress")
+    assert payload == {
+        "state": "running",
+        "replicateCount": 2,
+        "reportedReplicateCount": 1,
+        "maxGenerations": params.max_generations,
+        "statistics": {},
+        "meanReportedGeneration": 7,
+    }
+
+
 def test_push_batch_progress_includes_a_generation_zero_baseline(
     tmp_path: Path,
     tiny_params: SimulationParams,
@@ -3359,6 +3417,66 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     assert pair_panel["x_label"] == "Deme 1"
     assert pair_panel["y_label"] == "Deme 3"
     assert progress_payload["literatureVisuals"] == visuals
+
+
+def test_drain_run_messages_keeps_summary_progress_payload_compact() -> None:
+    """A summary `"progress"` push omits visualization and pair data."""
+    state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.25, AlleleId(1): 0.75},),
+        ),
+    )
+    params = SimulationParams(
+        gene_copies=20,
+        m=0.1,
+        mu=0.01,
+        d=2,
+        seed=20260814,
+        loci=(LocusSpec(1, 200),),
+        precision=1.0,
+        max_generations=10,
+        n_replicates=1,
+        stop_batch_early=False,
+    )
+    message_queue: queue.Queue[runner_module.RunMessage] = queue.Queue()
+    message_queue.put(
+        runner_module.progress_message(
+            state,
+            3,
+            params,
+            run_id="run-1",
+            view_level="summary",
+        )
+    )
+    message_queue.put(("cancelled", 3))
+    window = _FakeWindow()
+    publisher = Publisher()
+
+    app_module._drain_run_messages(
+        window,
+        message_queue,
+        max_generations=10,
+        deme_count=2,
+        output_directory=Path("/unused"),
+        live_deme_pair=lambda: (1, 2),
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
+
+    progress_payload = json.loads(window.scripts[0][len("fim.onRunProgress(") : -1])
+    assert progress_payload["state"] == "running"
+    assert progress_payload["generation"] == 3
+    assert progress_payload["statistics"]
+    assert not {
+        "panels",
+        "literatureVisuals",
+        "pairPanel",
+        "pairStatistics",
+    }.intersection(progress_payload)
 
 
 def test_statistics_catalog_starts_on_the_catalog_defaults(tmp_path: Path) -> None:

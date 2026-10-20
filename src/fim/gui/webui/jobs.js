@@ -4,10 +4,10 @@
  * §7.3): `fim.onJobEvent({jobId, sequence, type, payload})`, one such push
  * per real event, numbered by one sequence per job that never resets while
  * that job is claimed (`fim.gui.jobs.JobAdmission`/`fim.gui.app._push_job_
- * event`). This script only tracks that sequence -- de-duplicating,
- * detecting a gap, and resyncing from a snapshot after one -- it does not
- * yet drive any screen (that starts at A9, once a document exists to
- * receive it). The existing named pushes (`fim.onRunProgress`,
+ * event`). This script tracks the sequence, de-duplicates events, and
+ * retains the latest snapshot after a gap or view change. It does not yet
+ * drive any screen (that starts at A9, once a document exists to receive
+ * it). The existing named pushes (`fim.onRunProgress`,
  * `fim.onBatchDone`, `fim.onSweepEvent`, ...) are untouched and keep
  * driving the page exactly as before; `onJobEvent` is a second, additive
  * channel, not a replacement.
@@ -33,6 +33,8 @@ const lastJobEventSequence = new Map();
 // to remember more than the latest.
 const appliedJobEventCount = new Map();
 const latestAppliedJobEventPayload = new Map();
+const latestJobSnapshot = new Map();
+const jobViewLevel = new Map();
 
 window.fim = window.fim || {};
 window.fim.jobs = window.fim.jobs || {};
@@ -48,14 +50,48 @@ window.fim.jobs = window.fim.jobs || {};
  * @param {string} jobId
  */
 function requestJobSnapshot(jobId) {
-    window.pywebview.api.get_job_snapshot(jobId).then((snapshot) => {
-        if (snapshot && snapshot.ok && typeof snapshot.sequence === "number") {
-            lastJobEventSequence.set(jobId, snapshot.sequence);
-        }
+    return window.pywebview.api.get_job_snapshot(jobId).then((snapshot) => {
+        applyJobSnapshot(jobId, snapshot);
+        return snapshot;
     });
 }
 
+function applyJobSnapshot(jobId, snapshot) {
+    if (
+        !snapshot ||
+        !snapshot.ok ||
+        snapshot.jobId !== jobId ||
+        !Number.isInteger(snapshot.sequence)
+    ) {
+        return false;
+    }
+    const last = lastJobEventSequence.has(jobId)
+        ? lastJobEventSequence.get(jobId)
+        : -1;
+    if (snapshot.sequence < last) {
+        return false;
+    }
+    lastJobEventSequence.set(jobId, snapshot.sequence);
+    if (snapshot.viewLevel === "full" || snapshot.viewLevel === "summary") {
+        jobViewLevel.set(jobId, snapshot.viewLevel);
+    }
+    if (snapshot.snapshot) {
+        latestJobSnapshot.set(jobId, snapshot.snapshot);
+        latestAppliedJobEventPayload.set(
+            jobId,
+            snapshot.snapshot.payload
+        );
+    }
+    return true;
+}
+
 window.fim.jobs.requestSnapshot = requestJobSnapshot;
+window.fim.jobs.setView = function setView(jobId, level) {
+    return window.pywebview.api.set_job_view(jobId, level).then((snapshot) => {
+        applyJobSnapshot(jobId, snapshot);
+        return snapshot;
+    });
+};
 
 /**
  * Receive one addressed job push, in the order the publisher attempted it.
@@ -89,6 +125,7 @@ window.fim.onJobEvent = function onJobEvent(event) {
     lastJobEventSequence.set(jobId, sequence);
     appliedJobEventCount.set(jobId, (appliedJobEventCount.get(jobId) || 0) + 1);
     latestAppliedJobEventPayload.set(jobId, payload);
+    latestJobSnapshot.set(jobId, { sequence, type, payload });
 };
 
 // Test-only introspection -- no production caller reads these.
@@ -102,4 +139,10 @@ window.fim.jobs.latestAppliedFor = function latestAppliedFor(jobId) {
     return latestAppliedJobEventPayload.has(jobId)
         ? latestAppliedJobEventPayload.get(jobId)
         : null;
+};
+window.fim.jobs.snapshotFor = function snapshotFor(jobId) {
+    return latestJobSnapshot.has(jobId) ? latestJobSnapshot.get(jobId) : null;
+};
+window.fim.jobs.viewLevelFor = function viewLevelFor(jobId) {
+    return jobViewLevel.has(jobId) ? jobViewLevel.get(jobId) : null;
 };

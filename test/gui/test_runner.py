@@ -18,6 +18,7 @@ integration test, lives in its own commit and is not part of this file.
 
 from __future__ import annotations
 
+import json
 import queue
 import threading
 from dataclasses import replace
@@ -125,6 +126,7 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
         assert message[0] == "progress"
         if message[0] == "progress":
             panels = message[2]
+            assert panels is not None
             assert len(panels) == 1
             assert panels[0]["points"]
             # `points` (the live "Compare demes directly"
@@ -133,6 +135,7 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
             # not-yet-reduced array `panels` was itself built from, one
             # column per deme.
             points = message[3]
+            assert points is not None
             assert points.shape[1] == 2
             # `report` (the running-state view's live stats-table field):
             # the same six named statistics `report_for_state` computes
@@ -142,10 +145,85 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
             report = message[4]
             assert {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"} <= report.keys()
             visuals = message[5]
+            assert visuals is not None
             assert "alleleComposition" in visuals
             assert "frequencySpectrum" in visuals
             checked += 1
     assert checked == len(progress_messages)
+
+
+def test_summary_view_skips_visuals_without_changing_seeded_artifacts(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Summary progress omits plots; its run artifacts match the full view."""
+
+    def unexpected_visualization(*args: object, **kwargs: object) -> object:
+        raise AssertionError("summary progress must not build visualizations")
+
+    monkeypatch.setattr(runner, "frequency_points", unexpected_visualization)
+    monkeypatch.setattr(runner, "panels_from_points", unexpected_visualization)
+    monkeypatch.setattr(runner, "allele_composition_payload", unexpected_visualization)
+    monkeypatch.setattr(runner, "frequency_spectrum_payload", unexpected_visualization)
+
+    summary_directory = tmp_path / "summary"
+    summary_messages: queue.Queue[runner.RunMessage] = queue.Queue()
+    summary_thread = runner.start_run(
+        tiny_params,
+        summary_directory,
+        summary_messages,
+        threading.Event(),
+        view_level=lambda: "summary",
+    )
+    join_or_fail(summary_thread, "summary-view run")
+    summary_items = _drain(summary_messages)
+    summary_progress = [item for item in summary_items if item[0] == "progress"]
+    assert summary_progress
+    for message in summary_progress:
+        assert message[0] == "progress"
+        if message[0] == "progress":
+            assert message[2] is None
+            assert message[3] is None
+            assert message[5] is None
+
+    monkeypatch.undo()
+    full_directory = tmp_path / "full"
+    full_messages: queue.Queue[runner.RunMessage] = queue.Queue()
+    full_thread = runner.start_run(
+        tiny_params,
+        full_directory,
+        full_messages,
+        threading.Event(),
+        view_level=lambda: "full",
+    )
+    join_or_fail(full_thread, "full-view run")
+    assert _drain(full_messages)[-1][0] == "done"
+
+    expected_files = {
+        "trajectory.tlog",
+        "manifest.json",
+        "report.json",
+        "scatter.png",
+        "convergence.jsonl",
+        "pairwise.json",
+    }
+    assert {path.name for path in summary_directory.iterdir()} == expected_files
+    assert {path.name for path in full_directory.iterdir()} == expected_files
+    artifact_files = expected_files - {"manifest.json"}
+    assert {name: hash_file(summary_directory / name) for name in artifact_files} == {
+        name: hash_file(full_directory / name) for name in artifact_files
+    }
+    summary_manifest = json.loads(
+        (summary_directory / "manifest.json").read_text(encoding="utf-8")
+    )
+    full_manifest = json.loads(
+        (full_directory / "manifest.json").read_text(encoding="utf-8")
+    )
+    for manifest in (summary_manifest, full_manifest):
+        manifest.pop("started_at")
+        manifest.pop("ended_at")
+    assert summary_manifest == full_manifest
 
 
 def test_start_run_leaves_no_trajectory_file_open(

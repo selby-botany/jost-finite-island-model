@@ -2452,18 +2452,7 @@ class Api:
 
     @_log_bridge_call
     def get_job_snapshot(self, job_id: str) -> dict[str, Any]:
-        """Return `job_id`'s latest delivered sequence, for `webui/jobs.js` to resync.
-
-        This commit's own, deliberately minimal snapshot (design doc
-        §7.3's "asks for a snapshot after a gap"): just enough for the
-        page to re-align its own sequence tracking, nothing about the
-        job's own state beyond that. A fuller snapshot -- enough to
-        repaint a document's own view after a gap, not only resync its
-        sequence counter -- is a later commit's own job (job view
-        levels and snapshots, A7; a document's own state, A9 onward);
-        this makes no promise about a job once its own claim is
-        released, since nothing here retains anything about it past
-        that point.
+        """Return the active job's view level and latest addressed event.
 
         Args:
             job_id: A job this process currently has claimed
@@ -2474,20 +2463,28 @@ class Api:
                 about one once it ends.
 
         Returns:
-            `{"ok": True, "jobId": job_id, "sequence": N}`, `N` being
-            the latest sequence `job_id` has been assigned (`-1` if it
-            has not pushed anything yet); `{"ok": False, "message":
-            ...}` if `job_id` names no job this process currently has
-            claimed.
+            The current view level, sequence, and latest event snapshot;
+            a refusal if `job_id` is not currently claimed.
         """
-        if job_id != self._job_id:
+        snapshot = self._jobs.snapshot(job_id)
+        if job_id != self._job_id or snapshot is None:
             return {"ok": False, "message": "no such job"}
-        sequence = self._jobs.latest_sequence(job_id)
         return {
             "ok": True,
             "jobId": job_id,
-            "sequence": -1 if sequence is None else sequence,
+            **snapshot,
         }
+
+    @_log_bridge_call
+    def set_job_view(self, job_id: str, level: str) -> dict[str, Any]:
+        """Set an active job's rendering level and return its latest snapshot."""
+        if level not in ("full", "summary"):
+            return {"ok": False, "message": "view level must be full or summary"}
+        if job_id != self._job_id:
+            return {"ok": False, "message": "no such job"}
+        if not self._jobs.set_view_level(job_id, cast("jobs.ViewLevel", level)):
+            return {"ok": False, "message": "no such job"}
+        return self.get_job_snapshot(job_id)
 
     def _start_scalar_run(
         self,
@@ -2508,6 +2505,8 @@ class Api:
             return {"ok": False, "message": "no active window"}
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
         cancel_event = threading.Event()
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_run` always mints it first
         try:
             self._run_worker = runner.start_run(
                 params,
@@ -2515,6 +2514,7 @@ class Api:
                 message_queue,
                 cancel_event,
                 pairwise_max_demes=self._preferences.pairwise_max_demes,
+                view_level=lambda: self._jobs.view_level(job_id),
             )
         except FileExistsError as error:
             logger.warning("scalar run failed to start: %s", error)
@@ -2545,8 +2545,6 @@ class Api:
         closed_form = _closed_form_trajectory_payload(params)
         self._run_in_flight = True
         self._comparison_target = (output_directory, window)
-        job_id = self._job_id
-        assert job_id is not None  # `_claim_run` always mints it first
         self._drain_thread = threading.Thread(
             target=self._drain_then_release,
             args=(
@@ -2677,6 +2675,7 @@ class Api:
                 "publisher": self._publisher,
                 "job_admission": self._jobs,
                 "job_id": job_id,
+                "view_level": lambda: self._jobs.view_level(job_id),
             },
             daemon=True,
         )
@@ -2866,6 +2865,7 @@ class Api:
                 object_id,
                 batch_queue,
                 pairwise_max_demes=self._preferences.pairwise_max_demes,
+                view_level=lambda: self._jobs.view_level(job_id),
             )
             logger.info("saved batch run starting: %s", object_id)
             run_id = run_object.record.scientific_run_id or deterministic_run_id(params)
@@ -2887,6 +2887,7 @@ class Api:
                     "publisher": self._publisher,
                     "job_admission": self._jobs,
                     "job_id": job_id,
+                    "view_level": lambda: self._jobs.view_level(job_id),
                 },
                 daemon=True,
             )
@@ -2907,6 +2908,7 @@ class Api:
             object_id,
             message_queue,
             pairwise_max_demes=self._preferences.pairwise_max_demes,
+            view_level=lambda: self._jobs.view_level(job_id),
         )
         logger.info("saved run starting: %s", object_id)
         equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
@@ -7862,10 +7864,12 @@ def _attach_live_pair(
         # not an error (`deme_pair_panel`'s own docstring), so it never
         # reaches this `suppress`; only the genuinely out-of-range case
         # does.
-        with contextlib.suppress(ValueError):
-            progress_payload["pairPanel"] = deme_pair_panel(
-                message[3], first_deme - 1, second_deme - 1
-            )
+        points = message[3]
+        if points is not None:
+            with contextlib.suppress(ValueError):
+                progress_payload["pairPanel"] = deme_pair_panel(
+                    points, first_deme - 1, second_deme - 1
+                )
 
 
 def _notify_on_delivery[MessageT](
@@ -7953,10 +7957,9 @@ def _push_job_event(
     Additive, never a replacement: every call site here sits right
     beside the existing `fim.onRun*`/`fim.onBatch*`/`fim.onSweep*` push
     that already carries this same event to the page's one document
-    (`20261019-claude-opus-5-5-fim-gui-tabs-design.md` §7.3) --
-    `webui/jobs.js` tracks this channel's own sequence, but nothing
-    yet reads it to drive the page (that starts at A9, once a document
-    exists to receive it).
+    (`20261019-claude-opus-5-5-fim-gui-tabs-design.md` §7.3).
+    `webui/jobs.js` tracks the sequence and retains the latest event
+    snapshot; document rendering starts at A9.
 
     `event_type` is `"progress"`, `"status"`, or `"terminal"` for this
     commit; `"annotation"` and `"finished"` are a later commit's own
@@ -7971,8 +7974,8 @@ def _push_job_event(
     Args:
         window: Where the push lands.
         publisher: Queues it, same as every other push in this module.
-        job_admission: `Api._jobs`, read for `job_id`'s own next
-            sequence number (`fim.gui.jobs.JobAdmission.next_sequence`).
+        job_admission: `Api._jobs`, which assigns the sequence and
+            retains this event for `get_job_snapshot`.
         job_id: The job this event belongs to.
         event_type: As above.
         payload: Whatever shape `event_type` carries -- never
@@ -7985,7 +7988,7 @@ def _push_job_event(
             (queued unconditionally, in order), matching the legacy
             push it accompanies.
     """
-    sequence = job_admission.next_sequence(job_id)
+    sequence = job_admission.record_event(job_id, event_type, payload)
     envelope = {
         "jobId": job_id,
         "sequence": sequence,
@@ -8098,10 +8101,8 @@ def _drain_run_messages(
         message = message_queue.get()
         if message[0] == "progress":
             progress_payload: dict[str, object] = {
+                "state": "running",
                 "generation": message[1],
-                "maxGenerations": max_generations,
-                "panels": message[2],
-                "demeCount": deme_count,
                 # The six named statistics for this tick's own state
                 # (`runner.py`'s `on_generation`, `message[4]`) — keeps
                 # the running-state stats table live and populated
@@ -8112,11 +8113,19 @@ def _drain_run_messages(
                     )
                     for name in _RESULT_STATISTIC_NAMES
                 },
-                "literatureVisuals": message[5],
             }
-            _attach_live_pair(
-                progress_payload, message, live_deme_pair(), deme_count, digits
-            )
+            if (
+                message[2] is not None
+                and message[3] is not None
+                and message[5] is not None
+            ):
+                progress_payload["maxGenerations"] = max_generations
+                progress_payload["demeCount"] = deme_count
+                progress_payload["panels"] = message[2]
+                progress_payload["literatureVisuals"] = message[5]
+                _attach_live_pair(
+                    progress_payload, message, live_deme_pair(), deme_count, digits
+                )
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug("run progress: generation=%s", message[1])
             publisher.publish(
@@ -8349,6 +8358,33 @@ def _parse_differentiation_orders(text: str) -> tuple[float, ...]:
         ) from error
 
 
+def _summary_batch_progress_payload(
+    params: SimulationParams,
+    run_id: str,
+    working_directory: Path,
+) -> dict[str, object]:
+    """Build compact batch progress from sidecars without reading trajectories."""
+    generations: list[int] = []
+    for index in range(1, params.n_replicates + 1):
+        replicate_run_id = f"{run_id}-r{index:03}"
+        directory = replicate_output_directory(
+            working_directory, run_id, replicate_run_id
+        )
+        sidecar = read_progress_sidecar(directory / ".progress")
+        if sidecar is not None:
+            generations.append(sidecar["generation"])
+    payload: dict[str, object] = {
+        "state": "running",
+        "replicateCount": params.n_replicates,
+        "reportedReplicateCount": len(generations),
+        "maxGenerations": params.max_generations,
+        "statistics": {},
+    }
+    if generations:
+        payload["meanReportedGeneration"] = round(sum(generations) / len(generations))
+    return payload
+
+
 def _push_batch_progress(
     window: _EvaluatesJs,
     params: SimulationParams,
@@ -8362,6 +8398,7 @@ def _push_batch_progress(
     publisher: Publisher,
     job_admission: jobs.JobAdmission,
     job_id: str,
+    view_level: Callable[[], jobs.ViewLevel] = lambda: "full",
 ) -> None:
     """Read every currently-reporting replicate's live state, push a pooled scatter.
 
@@ -8447,9 +8484,32 @@ def _push_batch_progress(
         job_admission: `Api._jobs`, for this tick's own addressed
             companion push (`_push_job_event`).
         job_id: This batch's own job id.
+        view_level: Read on every poll; summary uses sidecars without
+            opening any replicate trajectory logs.
     """
     if initial_states is None:
         initial_states = {}
+    if view_level() == "summary":
+        summary_payload = _summary_batch_progress_payload(
+            params, run_id, working_directory
+        )
+        publisher.publish(
+            window,
+            f"fim.onBatchProgress({json.dumps(summary_payload)})",
+            coalesce_key=("batch-progress", working_directory),
+            label="batch progress",
+            on_delivered=_notify_on_delivery(on_progress, summary_payload),
+        )
+        _push_job_event(
+            window,
+            publisher,
+            job_admission,
+            job_id,
+            "progress",
+            summary_payload,
+            coalesce_key=("job-event-progress", job_id),
+        )
+        return
     states: list[ModelState] = []
     for index in range(1, params.n_replicates + 1):
         replicate_run_id = f"{run_id}-r{index:03}"
@@ -9008,6 +9068,7 @@ def _drain_batch_messages(
     publisher: Publisher,
     job_admission: jobs.JobAdmission,
     job_id: str,
+    view_level: Callable[[], jobs.ViewLevel] = lambda: "full",
 ) -> None:
     """Push every `batch_runner.BatchMessage`, polling live progress between them.
 
@@ -9081,6 +9142,7 @@ def _drain_batch_messages(
                 publisher=publisher,
                 job_admission=job_admission,
                 job_id=job_id,
+                view_level=view_level,
             )
             continue
         if message[0] == "status":

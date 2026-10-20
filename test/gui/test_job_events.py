@@ -1,20 +1,17 @@
 """Addressed job events (`fim.onJobEvent`): sequencing, dedup, gaps, snapshots.
 
-Commit A5 of `20261019-claude-opus-5-5-fim-gui-tabs-design.md`'s own
-Release A schedule adds a second, additive push channel alongside every
-existing named one (`fim.onRunProgress`, `fim.onBatchDone`, `fim.
-onSweepEvent`, ...): `fim.onJobEvent({jobId, sequence, type, payload})`,
-one sequence per job, covering every event that job ever pushes
-(`fim.gui.jobs.JobAdmission.next_sequence`, `fim.gui.app._push_job_
-event`). `webui/jobs.js` is the page side -- it tracks that sequence
-alone; nothing yet reads it to drive a screen (that starts at A9, once a
-document exists to receive it).
+Commits A5 and A7 of `20261019-claude-opus-5-5-fim-gui-tabs-design.md`'s
+Release A schedule add an addressed push channel alongside each existing
+named one (`fim.onRunProgress`, `fim.onBatchDone`, `fim.onSweepEvent`,
+...): `fim.onJobEvent({jobId, sequence, type, payload})`, one sequence
+per job. The job registry retains the active job's view level and latest
+event snapshot; `webui/jobs.js` adopts snapshots after a gap or view
+change, but does not yet render document state (that starts at A9).
 
 Three groups of tests:
 
-- Backend, no window: `JobAdmission`'s own sequence bookkeeping, and
-  `Api._claim_run`/`_claim_sweep` minting a job id, `Api.get_job_snapshot`
-  answering from it.
+- Backend, no window: `JobAdmission`'s sequence and snapshot bookkeeping,
+  and `Api`'s claim, view-change, and snapshot behavior.
 - Backend, a fake window: a real `_drain_run_messages` call proves the
   legacy push and its addressed companion both land, in order.
 - The real page, no real run: synthetic `window.fim.onJobEvent(...)`
@@ -148,7 +145,13 @@ def test_get_job_snapshot_before_any_push(tmp_path: Path) -> None:
     job_id = api._job_id
     assert job_id is not None
     snapshot = api.get_job_snapshot(job_id)
-    assert snapshot == {"ok": True, "jobId": job_id, "sequence": -1}
+    assert snapshot == {
+        "ok": True,
+        "jobId": job_id,
+        "viewLevel": "full",
+        "sequence": -1,
+        "snapshot": None,
+    }
 
 
 def test_get_job_snapshot_reports_the_latest_assigned_sequence(
@@ -165,8 +168,47 @@ def test_get_job_snapshot_reports_the_latest_assigned_sequence(
     assert api.get_job_snapshot(job_id) == {
         "ok": True,
         "jobId": job_id,
+        "viewLevel": "full",
         "sequence": 2,
+        "snapshot": None,
     }
+
+
+def test_set_job_view_returns_latest_event_snapshot(tmp_path: Path) -> None:
+    """Changing the active job's view level returns its current event snapshot."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    assert api._claim_run() is None
+    job_id = api._job_id
+    assert job_id is not None
+    api._jobs.record_event(job_id, "progress", {"generation": 12})
+
+    snapshot = api.set_job_view(job_id, "summary")
+
+    assert snapshot == {
+        "ok": True,
+        "jobId": job_id,
+        "viewLevel": "summary",
+        "sequence": 0,
+        "snapshot": {
+            "sequence": 0,
+            "type": "progress",
+            "payload": {"generation": 12},
+        },
+    }
+
+
+def test_set_job_view_refuses_invalid_level(tmp_path: Path) -> None:
+    """A bad view level is rejected without changing the active job."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    assert api._claim_run() is None
+    job_id = api._job_id
+    assert job_id is not None
+
+    assert api.set_job_view(job_id, "compact") == {
+        "ok": False,
+        "message": "view level must be full or summary",
+    }
+    assert api.get_job_snapshot(job_id)["viewLevel"] == "full"
 
 
 def test_get_job_snapshot_refuses_an_unknown_job_id(tmp_path: Path) -> None:
@@ -181,12 +223,7 @@ def test_get_job_snapshot_refuses_an_unknown_job_id(tmp_path: Path) -> None:
 def test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released(
     tmp_path: Path,
 ) -> None:
-    """A job this process once ran, but no longer has claimed, is "no such job".
-
-    Nothing is retained about a finished job past its own claim's
-    release in this commit (`Api.get_job_snapshot`'s own docstring) --
-    a fuller, persistent snapshot is a later commit's job.
-    """
+    """A released claim's view and snapshot are not active job state."""
     api = Api(preferences_path=tmp_path / "preferences.json")
     assert api._claim_run() is None
     job_id = api._job_id
@@ -466,7 +503,17 @@ def test_a_snapshot_resyncs_the_tracked_sequence() -> None:
                 """
                 window.pywebview.api.get_job_snapshot = function (jobId) {
                     return Promise.resolve(
-                        {ok: true, jobId: jobId, sequence: 42});
+                        {
+                            ok: true,
+                            jobId: jobId,
+                            sequence: 42,
+                            viewLevel: "summary",
+                            snapshot: {
+                                sequence: 42,
+                                type: "progress",
+                                payload: {generation: 42}
+                            }
+                        });
                 };
                 window.fim.onJobEvent(
                     {jobId: "job-a", sequence: 0, type: "status", payload: "s0"});
@@ -477,7 +524,17 @@ def test_a_snapshot_resyncs_the_tracked_sequence() -> None:
             # A separate round trip: the snapshot's own `.then(...)`
             # resolves on the microtask queue, which drains between
             # `evaluate_js` calls, not within the one above.
-            outcome.put(window.evaluate_js(_read_job_state("job-a")))
+            outcome.put(
+                {
+                    "state": window.evaluate_js(_read_job_state("job-a")),
+                    "snapshot": window.evaluate_js(
+                        'window.fim.jobs.snapshotFor("job-a")'
+                    ),
+                    "viewLevel": window.evaluate_js(
+                        'window.fim.jobs.viewLevelFor("job-a")'
+                    ),
+                }
+            )
         finally:
             window.destroy()
 
@@ -485,4 +542,69 @@ def test_a_snapshot_resyncs_the_tracked_sequence() -> None:
     state = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert state is not None
-    assert state["lastSequence"] == 42
+    assert state["state"]["lastSequence"] == 42
+    assert state["viewLevel"] == "summary"
+    assert state["snapshot"] == {
+        "sequence": 42,
+        "type": "progress",
+        "payload": {"generation": 42},
+    }
+
+
+@pytest.mark.gui
+def test_a_late_snapshot_does_not_overwrite_a_newer_event() -> None:
+    """A delayed snapshot cannot move event tracking backward."""
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(
+                """
+                window.pywebview.api.get_job_snapshot = function () {
+                    return new Promise((resolve) => {
+                        window.__resolveJobSnapshot = resolve;
+                    });
+                };
+                window.fim.jobs.requestSnapshot("job-a");
+                window.fim.onJobEvent(
+                    {jobId: "job-a", sequence: 2, type: "progress", payload: "new"});
+                window.__resolveJobSnapshot({
+                    ok: true,
+                    jobId: "job-a",
+                    sequence: 1,
+                    viewLevel: "summary",
+                    snapshot: {
+                        sequence: 1,
+                        type: "progress",
+                        payload: "stale"
+                    }
+                });
+                """
+            )
+            outcome.put(
+                {
+                    "state": window.evaluate_js(_read_job_state("job-a")),
+                    "snapshot": window.evaluate_js(
+                        'window.fim.jobs.snapshotFor("job-a")'
+                    ),
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    state = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert state is not None
+    assert state["state"] == {
+        "lastSequence": 2,
+        "appliedCount": 1,
+        "latest": "new",
+    }
+    assert state["snapshot"] == {
+        "sequence": 2,
+        "type": "progress",
+        "payload": "new",
+    }

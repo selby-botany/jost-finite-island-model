@@ -15740,6 +15740,18 @@ directory is never created at all, the "has not started yet" case
 `_push_batch_progress`'s own docstring names as normal, not an
 error.
 
+<a id="gui.test_app_api.test_summary_batch_progress_uses_sidecars_without_reading_trajectories"></a>
+
+#### test\_summary\_batch\_progress\_uses\_sidecars\_without\_reading\_trajectories
+
+```python
+def test_summary_batch_progress_uses_sidecars_without_reading_trajectories(
+        tmp_path: Path, tiny_params: SimulationParams,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Summary polling reports sidecar progress without opening a trajectory.
+
 <a id="gui.test_app_api.test_push_batch_progress_includes_a_generation_zero_baseline"></a>
 
 #### test\_push\_batch\_progress\_includes\_a\_generation\_zero\_baseline
@@ -15808,6 +15820,16 @@ No test calls `_drain_run_messages` directly elsewhere in this file
 it via `_start_scalar_run`'s own thread) — this is the first, added
 specifically to prove the new `live_deme_pair` parameter without
 needing a real background thread or a `gui` marker.
+
+<a id="gui.test_app_api.test_drain_run_messages_keeps_summary_progress_payload_compact"></a>
+
+#### test\_drain\_run\_messages\_keeps\_summary\_progress\_payload\_compact
+
+```python
+def test_drain_run_messages_keeps_summary_progress_payload_compact() -> None
+```
+
+A summary `"progress"` push omits visualization and pair data.
 
 <a id="gui.test_app_api.test_statistics_catalog_starts_on_the_catalog_defaults"></a>
 
@@ -21973,21 +21995,18 @@ The optional per-statistic precision is part of the submitted form values.
 
 Addressed job events (`fim.onJobEvent`): sequencing, dedup, gaps, snapshots.
 
-Commit A5 of `20261019-claude-opus-5-5-fim-gui-tabs-design.md`'s own
-Release A schedule adds a second, additive push channel alongside every
-existing named one (`fim.onRunProgress`, `fim.onBatchDone`, `fim.
-onSweepEvent`, ...): `fim.onJobEvent({jobId, sequence, type, payload})`,
-one sequence per job, covering every event that job ever pushes
-(`fim.gui.jobs.JobAdmission.next_sequence`, `fim.gui.app._push_job_
-event`). `webui/jobs.js` is the page side -- it tracks that sequence
-alone; nothing yet reads it to drive a screen (that starts at A9, once a
-document exists to receive it).
+Commits A5 and A7 of `20261019-claude-opus-5-5-fim-gui-tabs-design.md`'s
+Release A schedule add an addressed push channel alongside each existing
+named one (`fim.onRunProgress`, `fim.onBatchDone`, `fim.onSweepEvent`,
+...): `fim.onJobEvent({jobId, sequence, type, payload})`, one sequence
+per job. The job registry retains the active job's view level and latest
+event snapshot; `webui/jobs.js` adopts snapshots after a gap or view
+change, but does not yet render document state (that starts at A9).
 
 Three groups of tests:
 
-- Backend, no window: `JobAdmission`'s own sequence bookkeeping, and
-  `Api._claim_run`/`_claim_sweep` minting a job id, `Api.get_job_snapshot`
-  answering from it.
+- Backend, no window: `JobAdmission`'s sequence and snapshot bookkeeping,
+  and `Api`'s claim, view-change, and snapshot behavior.
 - Backend, a fake window: a real `_drain_run_messages` call proves the
   legacy push and its addressed companion both land, in order.
 - The real page, no real run: synthetic `window.fim.onJobEvent(...)`
@@ -22088,6 +22107,26 @@ def test_get_job_snapshot_reports_the_latest_assigned_sequence(
 
 A snapshot reflects however many pushes `next_sequence` has already given out.
 
+<a id="gui.test_job_events.test_set_job_view_returns_latest_event_snapshot"></a>
+
+#### test\_set\_job\_view\_returns\_latest\_event\_snapshot
+
+```python
+def test_set_job_view_returns_latest_event_snapshot(tmp_path: Path) -> None
+```
+
+Changing the active job's view level returns its current event snapshot.
+
+<a id="gui.test_job_events.test_set_job_view_refuses_invalid_level"></a>
+
+#### test\_set\_job\_view\_refuses\_invalid\_level
+
+```python
+def test_set_job_view_refuses_invalid_level(tmp_path: Path) -> None
+```
+
+A bad view level is rejected without changing the active job.
+
 <a id="gui.test_job_events.test_get_job_snapshot_refuses_an_unknown_job_id"></a>
 
 #### test\_get\_job\_snapshot\_refuses\_an\_unknown\_job\_id
@@ -22107,11 +22146,7 @@ def test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released(
         tmp_path: Path) -> None
 ```
 
-A job this process once ran, but no longer has claimed, is "no such job".
-
-Nothing is retained about a finished job past its own claim's
-release in this commit (`Api.get_job_snapshot`'s own docstring) --
-a fuller, persistent snapshot is a later commit's job.
+A released claim's view and snapshot are not active job state.
 
 <a id="gui.test_job_events.test_the_addressed_push_rides_alongside_the_legacy_push_in_order"></a>
 
@@ -22206,6 +22241,17 @@ Once a snapshot resolves, its own reported sequence is adopted.
 `window.pywebview.api.get_job_snapshot` is stubbed here with no real
 job in flight -- the same "no real run" shape this module's own
 docstring describes.
+
+<a id="gui.test_job_events.test_a_late_snapshot_does_not_overwrite_a_newer_event"></a>
+
+#### test\_a\_late\_snapshot\_does\_not\_overwrite\_a\_newer\_event
+
+```python
+@pytest.mark.gui
+def test_a_late_snapshot_does_not_overwrite_a_newer_event() -> None
+```
+
+A delayed snapshot cannot move event tracking backward.
 
 <a id="gui.test_literature_visuals"></a>
 
@@ -26195,6 +26241,18 @@ def test_start_run_writes_the_six_documented_artifacts_on_success(
 ```
 
 A real, uncancelled run produces the same six artifacts `fim run` does.
+
+<a id="gui.test_runner.test_summary_view_skips_visuals_without_changing_seeded_artifacts"></a>
+
+#### test\_summary\_view\_skips\_visuals\_without\_changing\_seeded\_artifacts
+
+```python
+def test_summary_view_skips_visuals_without_changing_seeded_artifacts(
+        tmp_path: Path, tiny_params: SimulationParams,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Summary progress omits plots; its run artifacts match the full view.
 
 <a id="gui.test_runner.test_start_run_leaves_no_trajectory_file_open"></a>
 

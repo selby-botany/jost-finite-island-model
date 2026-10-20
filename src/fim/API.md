@@ -393,6 +393,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [start\_run](#fim.gui.app.Api.start_run)
     * [can\_start\_run](#fim.gui.app.Api.can_start_run)
     * [get\_job\_snapshot](#fim.gui.app.Api.get_job_snapshot)
+    * [set\_job\_view](#fim.gui.app.Api.set_job_view)
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
     * [pause\_run](#fim.gui.app.Api.pause_run)
     * [save\_run\_object](#fim.gui.app.Api.save_run_object)
@@ -568,6 +569,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.jobs](#fim.gui.jobs)
   * [JobAdmission](#fim.gui.jobs.JobAdmission)
     * [new\_job\_id](#fim.gui.jobs.JobAdmission.new_job_id)
+    * [view\_level](#fim.gui.jobs.JobAdmission.view_level)
+    * [set\_view\_level](#fim.gui.jobs.JobAdmission.set_view_level)
+    * [record\_event](#fim.gui.jobs.JobAdmission.record_event)
+    * [snapshot](#fim.gui.jobs.JobAdmission.snapshot)
     * [next\_sequence](#fim.gui.jobs.JobAdmission.next_sequence)
     * [latest\_sequence](#fim.gui.jobs.JobAdmission.latest_sequence)
     * [forget](#fim.gui.jobs.JobAdmission.forget)
@@ -10421,18 +10426,7 @@ then refused would wipe the view of the run still in flight.
 def get_job_snapshot(job_id: str) -> dict[str, Any]
 ```
 
-Return `job_id`'s latest delivered sequence, for `webui/jobs.js` to resync.
-
-This commit's own, deliberately minimal snapshot (design doc
-§7.3's "asks for a snapshot after a gap"): just enough for the
-page to re-align its own sequence tracking, nothing about the
-job's own state beyond that. A fuller snapshot -- enough to
-repaint a document's own view after a gap, not only resync its
-sequence counter -- is a later commit's own job (job view
-levels and snapshots, A7; a document's own state, A9 onward);
-this makes no promise about a job once its own claim is
-released, since nothing here retains anything about it past
-that point.
+Return the active job's view level and latest addressed event.
 
 **Arguments**:
 
@@ -10446,11 +10440,19 @@ that point.
 
 **Returns**:
 
-- ``{"ok"` - True, "jobId": job_id, "sequence": N}`, `N` being
-  the latest sequence `job_id` has been assigned (`-1` if it
-  has not pushed anything yet); `{"ok": False, "message":
-  ...}` if `job_id` names no job this process currently has
-  claimed.
+  The current view level, sequence, and latest event snapshot;
+  a refusal if `job_id` is not currently claimed.
+
+<a id="fim.gui.app.Api.set_job_view"></a>
+
+#### set\_job\_view
+
+```python
+@_log_bridge_call
+def set_job_view(job_id: str, level: str) -> dict[str, Any]
+```
+
+Set an active job's rendering level and return its latest snapshot.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
@@ -15280,23 +15282,15 @@ their own release counterparts) can never both see a free slot for the
 same instant.
 
 Commit A5 of that same schedule ("addressed job events and controls")
-adds the one other piece of state every job push now needs: a `jobId`,
-minted the instant a claim succeeds, and a sequence number, one per
-`jobId`, that every one of that job's own pushes (`fim.gui.app._push_
-job_event`) counts up from zero. `Api._job_id` (set by `_claim_run`/
-`_claim_sweep`, cleared by their own release counterparts) is the one
-currently-claimed job's id, carried as a plain argument into whichever
-drain/push function needs to tag its own pushes with it -- exactly how
-`output_directory` already is -- never read back live from `Api` by a
-background thread, which could by then be tagging a *different* job's
-pushes with a stale id.
+adds a `jobId` and one sequence per job to every addressed push. Commit
+A7 adds the active job's view level and latest event snapshot, so a page
+can switch between full and summary rendering and recover after a gap.
+`Api._job_id` is carried as a plain argument into each drain/push
+function; background threads never read a later claim's id from `Api`.
 
-A fuller job registry -- one record per running job, independent of
-whether it is a run, a saved run, or a sweep, holding enough to answer
-`list_jobs`/`set_job_view`/`get_job_snapshot` in full -- is a later
-commit's own job (`20261019-claude-opus-5-5-fim-gui-tabs-design.md`
-§7.1-§7.3, commit A7 onward); this module only mints the id and counts
-the sequence, in the file that work will eventually grow into.
+This Release A registry still admits only one active job. Its retained
+snapshot is discarded when that job's claim is released; multi-job
+records and per-document retention belong to later commits.
 
 <a id="fim.gui.jobs.JobAdmission"></a>
 
@@ -15338,6 +15332,49 @@ key` for a Run-object job" -- that constraint is this module's
 own later problem to satisfy, not a reason to constrain this id
 now.
 
+<a id="fim.gui.jobs.JobAdmission.view_level"></a>
+
+#### view\_level
+
+```python
+def view_level(job_id: str) -> ViewLevel
+```
+
+Return the job's current rendering level.
+
+A released job has no retained view state; callers that outlive a
+claim receive the full level rather than failing during shutdown.
+
+<a id="fim.gui.jobs.JobAdmission.set_view_level"></a>
+
+#### set\_view\_level
+
+```python
+def set_view_level(job_id: str, level: ViewLevel) -> bool
+```
+
+Set a claimed job's rendering level; return false if it is unknown.
+
+<a id="fim.gui.jobs.JobAdmission.record_event"></a>
+
+#### record\_event
+
+```python
+def record_event(job_id: str, event_type: str, payload: Any) -> int
+```
+
+Assign an event sequence and retain its payload for snapshots.
+
+<a id="fim.gui.jobs.JobAdmission.snapshot"></a>
+
+#### snapshot
+
+```python
+def snapshot(job_id: str) -> dict[str, Any] | None
+```
+
+Return the current view level and latest event for a claimed job.
+
 <a id="fim.gui.jobs.JobAdmission.next_sequence"></a>
 
 #### next\_sequence
@@ -15349,13 +15386,12 @@ def next_sequence(job_id: str) -> int
 Return `job_id`'s next sequence number, starting at 0.
 
 Every call for the same `job_id` returns one more than the
-last, forever (not reset by anything here) -- `forget` only
-drops the bookkeeping once a job is done with it; a stray,
-late call for an already-forgotten id simply starts again at 0,
-indistinguishable on the wire from a fresh job's own first
-event, since the two can never be confused (`forget` is only
-ever called once a job's own claim is released, and a `job_id`
-is never reused across two different claims).
+last, including sequences assigned through `record_event` --
+`forget` drops the bookkeeping once a job is done with it. A
+stray late call for an already-forgotten id simply starts again
+at 0, indistinguishable on the wire from a fresh job's first
+event, since `forget` is only called after release and a `job_id`
+is never reused across different claims.
 
 <a id="fim.gui.jobs.JobAdmission.latest_sequence"></a>
 
@@ -15367,10 +15403,10 @@ def latest_sequence(job_id: str) -> int | None
 
 Return the most recently assigned sequence for `job_id`, or `None`.
 
-`None` means `job_id` has never had `next_sequence` called for
-it at all (including: never claimed, or claimed but not yet
-pushed anything) -- `Api.get_job_snapshot`'s own "nothing yet"
-case, distinct from a real sequence of `0`.
+`None` means `job_id` has never had a sequence assigned through
+`next_sequence` or `record_event` (including: never claimed, or
+claimed but not yet pushed anything) -- `Api.get_job_snapshot`'s
+own "nothing yet" case, distinct from a real sequence of `0`.
 
 <a id="fim.gui.jobs.JobAdmission.forget"></a>
 
@@ -15380,7 +15416,7 @@ case, distinct from a real sequence of `0`.
 def forget(job_id: str) -> None
 ```
 
-Drop `job_id`'s own sequence bookkeeping once its claim is released.
+Drop `job_id`'s sequence, view, and snapshot when its claim is released.
 
 Keeps this dict from growing for the life of the process, one
 entry per job ever claimed -- harmless at any one point, but
@@ -15938,6 +15974,7 @@ def start_object_run(
         cadence: CheckpointCadence | None = None,
         clock: Callable[[], float] = time.monotonic,
         pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        view_level: Callable[[], Literal["full", "summary"]] = lambda: "full",
         observer: Callable[[Session], None] | None = None) -> threading.Thread
 ```
 
@@ -15957,6 +15994,8 @@ exits.
 - `clock` - Injectable wall clock for the progress throttle.
 - `pairwise_max_demes` - Largest deme count whose `pairwise.json` is
   written when the run completes.
+- `view_level` - Read on each progress tick; summary avoids building
+  visualization payloads for background jobs.
 - `observer` - Test-only hook, called with the session at every
   control point, after its progress tick.
 
@@ -17140,14 +17179,21 @@ Return the status line shown while large `pairwise.json` files are saved.
 #### progress\_message
 
 ```python
-def progress_message(state: ModelState, generation: int,
-                     params: SimulationParams, run_id: str) -> ProgressMessage
+def progress_message(
+        state: ModelState,
+        generation: int,
+        params: SimulationParams,
+        run_id: str,
+        *,
+        view_level: Literal["full", "summary"] = "full") -> ProgressMessage
 ```
 
-Build the `"progress"` message the Run card draws one tick from.
+Build a full or compact progress message for the current job view.
 
 Shared by this module's worker and `fim.gui.object_runner`, so a
-saved Run and an ordinary one draw identical ticks.
+saved Run and an ordinary one draw identical ticks. Summary messages
+retain the generation, statistic estimates, and state while omitting
+panels, points, and literature visuals.
 
 **Arguments**:
 
@@ -17167,13 +17213,14 @@ saved Run and an ordinary one draw identical ticks.
 
 ```python
 def start_run(
-        params: SimulationParams,
-        output_directory: Path,
-        message_queue: queue.Queue[RunMessage],
-        cancel_event: threading.Event,
-        *,
-        clock: Callable[[], float] = time.monotonic,
-        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
+    params: SimulationParams,
+    output_directory: Path,
+    message_queue: queue.Queue[RunMessage],
+    cancel_event: threading.Event,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+    view_level: Callable[[], Literal["full", "summary"]] = lambda: "full"
 ) -> threading.Thread
 ```
 
@@ -17195,6 +17242,8 @@ Resolve targets, guard the existing target, and start the worker thread.
 - `cancel_event` - Set by the UI's Cancel button; checked before
   every generation write.
 - `clock` - Injectable wall clock for `ProgressThrottle`, for tests.
+- `view_level` - Read on each reported generation; summary avoids
+  building visualization payloads for background jobs.
 
 
 **Returns**:

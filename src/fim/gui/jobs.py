@@ -21,29 +21,24 @@ their own release counterparts) can never both see a free slot for the
 same instant.
 
 Commit A5 of that same schedule ("addressed job events and controls")
-adds the one other piece of state every job push now needs: a `jobId`,
-minted the instant a claim succeeds, and a sequence number, one per
-`jobId`, that every one of that job's own pushes (`fim.gui.app._push_
-job_event`) counts up from zero. `Api._job_id` (set by `_claim_run`/
-`_claim_sweep`, cleared by their own release counterparts) is the one
-currently-claimed job's id, carried as a plain argument into whichever
-drain/push function needs to tag its own pushes with it -- exactly how
-`output_directory` already is -- never read back live from `Api` by a
-background thread, which could by then be tagging a *different* job's
-pushes with a stale id.
+adds a `jobId` and one sequence per job to every addressed push. Commit
+A7 adds the active job's view level and latest event snapshot, so a page
+can switch between full and summary rendering and recover after a gap.
+`Api._job_id` is carried as a plain argument into each drain/push
+function; background threads never read a later claim's id from `Api`.
 
-A fuller job registry -- one record per running job, independent of
-whether it is a run, a saved run, or a sweep, holding enough to answer
-`list_jobs`/`set_job_view`/`get_job_snapshot` in full -- is a later
-commit's own job (`20261019-claude-opus-5-5-fim-gui-tabs-design.md`
-§7.1-§7.3, commit A7 onward); this module only mints the id and counts
-the sequence, in the file that work will eventually grow into.
+This Release A registry still admits only one active job. Its retained
+snapshot is discarded when that job's claim is released; multi-job
+records and per-document retention belong to later commits.
 """
 
 from __future__ import annotations
 
 import threading
 import uuid
+from typing import Any, Literal
+
+ViewLevel = Literal["full", "summary"]
 
 
 class JobAdmission:
@@ -63,6 +58,8 @@ class JobAdmission:
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self._next_sequence: dict[str, int] = {}
+        self._view_levels: dict[str, ViewLevel] = {}
+        self._latest_events: dict[str, dict[str, Any]] = {}
 
     def new_job_id(self) -> str:
         """Mint a fresh id for one claim, never reused.
@@ -77,19 +74,62 @@ class JobAdmission:
         own later problem to satisfy, not a reason to constrain this id
         now.
         """
-        return uuid.uuid4().hex
+        job_id = uuid.uuid4().hex
+        self._view_levels[job_id] = "full"
+        return job_id
+
+    def view_level(self, job_id: str) -> ViewLevel:
+        """Return the job's current rendering level.
+
+        A released job has no retained view state; callers that outlive a
+        claim receive the full level rather than failing during shutdown.
+        """
+        with self.lock:
+            return self._view_levels.get(job_id, "full")
+
+    def set_view_level(self, job_id: str, level: ViewLevel) -> bool:
+        """Set a claimed job's rendering level; return false if it is unknown."""
+        with self.lock:
+            if job_id not in self._view_levels:
+                return False
+            self._view_levels[job_id] = level
+            return True
+
+    def record_event(self, job_id: str, event_type: str, payload: Any) -> int:
+        """Assign an event sequence and retain its payload for snapshots."""
+        with self.lock:
+            sequence = self._next_sequence.get(job_id, 0)
+            self._next_sequence[job_id] = sequence + 1
+            self._latest_events[job_id] = {
+                "sequence": sequence,
+                "type": event_type,
+                "payload": payload,
+            }
+            return sequence
+
+    def snapshot(self, job_id: str) -> dict[str, Any] | None:
+        """Return the current view level and latest event for a claimed job."""
+        with self.lock:
+            if job_id not in self._view_levels:
+                return None
+            assigned = self._next_sequence.get(job_id, 0)
+            event = self._latest_events.get(job_id)
+            return {
+                "viewLevel": self._view_levels[job_id],
+                "sequence": assigned - 1,
+                "snapshot": None if event is None else dict(event),
+            }
 
     def next_sequence(self, job_id: str) -> int:
         """Return `job_id`'s next sequence number, starting at 0.
 
         Every call for the same `job_id` returns one more than the
-        last, forever (not reset by anything here) -- `forget` only
-        drops the bookkeeping once a job is done with it; a stray,
-        late call for an already-forgotten id simply starts again at 0,
-        indistinguishable on the wire from a fresh job's own first
-        event, since the two can never be confused (`forget` is only
-        ever called once a job's own claim is released, and a `job_id`
-        is never reused across two different claims).
+        last, including sequences assigned through `record_event` --
+        `forget` drops the bookkeeping once a job is done with it. A
+        stray late call for an already-forgotten id simply starts again
+        at 0, indistinguishable on the wire from a fresh job's first
+        event, since `forget` is only called after release and a `job_id`
+        is never reused across different claims.
         """
         with self.lock:
             sequence = self._next_sequence.get(job_id, 0)
@@ -99,17 +139,17 @@ class JobAdmission:
     def latest_sequence(self, job_id: str) -> int | None:
         """Return the most recently assigned sequence for `job_id`, or `None`.
 
-        `None` means `job_id` has never had `next_sequence` called for
-        it at all (including: never claimed, or claimed but not yet
-        pushed anything) -- `Api.get_job_snapshot`'s own "nothing yet"
-        case, distinct from a real sequence of `0`.
+        `None` means `job_id` has never had a sequence assigned through
+        `next_sequence` or `record_event` (including: never claimed, or
+        claimed but not yet pushed anything) -- `Api.get_job_snapshot`'s
+        own "nothing yet" case, distinct from a real sequence of `0`.
         """
         with self.lock:
             assigned = self._next_sequence.get(job_id)
             return None if assigned is None else assigned - 1
 
     def forget(self, job_id: str) -> None:
-        """Drop `job_id`'s own sequence bookkeeping once its claim is released.
+        """Drop `job_id`'s sequence, view, and snapshot when its claim is released.
 
         Keeps this dict from growing for the life of the process, one
         entry per job ever claimed -- harmless at any one point, but
@@ -119,3 +159,5 @@ class JobAdmission:
         """
         with self.lock:
             self._next_sequence.pop(job_id, None)
+            self._view_levels.pop(job_id, None)
+            self._latest_events.pop(job_id, None)
