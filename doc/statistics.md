@@ -413,6 +413,17 @@ the half-life is the generations required to halve the departure from
 that equilibrium. These are theoretical predictions, not fitted
 convergence times.
 
+The Run card's trajectory graph offers the same approximation as an
+opt-in overlay: `f₀`, drawn from a founder event (identity by descent
+starting at 1) recovering toward equilibrium under migration alone, at
+this configuration's own `N` and `m`. Off by default (the "f₀ (identity
+recovery)" checkbox beside the graph; `set_show_identity_recovery_
+trajectory`), because — like Explore's own numbers above — it is a
+closed-form reference computed from the configuration alone, not a
+measurement of the run it is drawn beside: it assumes zero mutation and
+a single common ancestor at generation zero, neither of which a typical
+run's own settings need match.
+
 [Model assumptions](finite-island-model-introduction.md) ·
 [Python API](../src/fim/API.md#fim.statistics.differentiation.identity_recovery_trajectory)
 

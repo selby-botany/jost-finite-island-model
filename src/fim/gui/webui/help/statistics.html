@@ -256,6 +256,15 @@ rate controls the exponential approach to the predicted identity;
 the half-life is the generations required to halve the departure from
 that equilibrium. These are theoretical predictions, not fitted
 convergence times.</p>
+<p>The Run card's trajectory graph offers the same approximation as an
+opt-in overlay: <code>f₀</code>, drawn from a founder event (identity by descent
+starting at 1) recovering toward equilibrium under migration alone, at
+this configuration's own <code>N</code> and <code>m</code>. Off by default (the &quot;f₀ (identity
+recovery)&quot; checkbox beside the graph; <code>set_show_identity_recovery_ trajectory</code>), because — like Explore's own numbers above — it is a
+closed-form reference computed from the configuration alone, not a
+measurement of the run it is drawn beside: it assumes zero mutation and
+a single common ancestor at generation zero, neither of which a typical
+run's own settings need match.</p>
 <p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Model assumptions</a> ·
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.identity_recovery_trajectory">Python API</a></p>
 <h2 id="mutation-negligible-equilibrium">Mutation negligible equilibrium</h2>

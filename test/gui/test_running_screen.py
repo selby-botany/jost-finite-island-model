@@ -453,10 +453,7 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
             "stat-name",
             "stat-value",
         ]
-    assert settled["overlayLegendNames"] == [
-        "expected trajectory (closed form)",
-        "f₀ (identity recovery, theoretical founder event)",
-    ]
+    assert settled["overlayLegendNames"] == ["expected trajectory (closed form)"]
 
 
 def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
@@ -904,10 +901,7 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going(
         "K_ST",
         "MI",
     ]
-    assert settled["overlayLegendNames"] == [
-        "expected trajectory (closed form)",
-        "f₀ (identity recovery, theoretical founder event)",
-    ]
+    assert settled["overlayLegendNames"] == ["expected trajectory (closed form)"]
 
 
 def test_live_run_updates_scrubber_and_supplemental_panels(

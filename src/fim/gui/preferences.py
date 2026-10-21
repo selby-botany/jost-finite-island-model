@@ -237,6 +237,15 @@ class GuiPreferences:
         scatter_style: One of `SCATTER_STYLES`.
         trajectory_display: One of `TRAJECTORY_DISPLAYS`.
         trajectory_band_width: One of `TRAJECTORY_BAND_WIDTHS`.
+        show_identity_recovery_trajectory: Whether the trajectory graph
+            draws Whitlock's (1992) theoretical identity-recovery curve,
+            `f_0` after a founder event — off by default. Unlike `shown_
+            statistics`, this is not a catalog entry: the curve is a
+            closed-form reference computed from `N`/`m` alone, not a
+            measurement this run's own report carries, so it is a Run-
+            card display choice (like `trajectory_display`) rather than
+            a statistic to show or hide (`doc/statistics.md`, "Identity
+            recovery").
         shown_statistics: The statistics shown (Settings, "Statistics
             shown"), as catalog keys in catalog order, or `None` for the
             catalog's own defaults. Every statistic is saved in each
@@ -271,6 +280,7 @@ class GuiPreferences:
     scatter_style: str = DEFAULT_SCATTER_STYLE
     trajectory_display: str = DEFAULT_TRAJECTORY_DISPLAY
     trajectory_band_width: int = DEFAULT_TRAJECTORY_BAND_WIDTH
+    show_identity_recovery_trajectory: bool = False
     shown_statistics: tuple[str, ...] | None = None
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
 
@@ -287,6 +297,8 @@ class GuiPreferences:
             result["trajectory_display"] = self.trajectory_display
         if self.trajectory_band_width != DEFAULT_TRAJECTORY_BAND_WIDTH:
             result["trajectory_band_width"] = self.trajectory_band_width
+        if self.show_identity_recovery_trajectory:
+            result["show_identity_recovery_trajectory"] = True
         if self.shown_statistics is not None:
             result["shown_statistics"] = list(self.shown_statistics)
         if self.pairwise_max_demes != DEFAULT_PAIRWISE_MAX_DEMES:
@@ -426,6 +438,9 @@ class GuiPreferences:
                 TRAJECTORY_DISPLAYS,
             ),
             trajectory_band_width=_parse_band_width(gui),
+            show_identity_recovery_trajectory=bool(
+                gui.get("show_identity_recovery_trajectory", False)
+            ),
             shown_statistics=_parse_shown_statistics(gui),
             pairwise_max_demes=_parse_pairwise_max_demes(gui),
         )
@@ -537,12 +552,13 @@ class GuiPreferences:
         scatter_style: str | None = None,
         trajectory_display: str | None = None,
         trajectory_band_width: int | None = None,
+        show_identity_recovery_trajectory: bool | None = None,
     ) -> GuiPreferences:
         """Return a copy with any of the Run card's display choices replaced.
 
-        The `Api.set_run_*`/`set_scatter_style`/`set_trajectory_display`
-        bridge methods' own update:
-        each argument left `None` keeps the current value.
+        The `Api.set_run_*`/`set_scatter_style`/`set_trajectory_display`/
+        `set_show_identity_recovery_trajectory` bridge methods' own
+        update: each argument left `None` keeps the current value.
         """
         return replace(
             self,
@@ -564,6 +580,11 @@ class GuiPreferences:
                 self.trajectory_band_width
                 if trajectory_band_width is None
                 else trajectory_band_width
+            ),
+            show_identity_recovery_trajectory=(
+                self.show_identity_recovery_trajectory
+                if show_identity_recovery_trajectory is None
+                else show_identity_recovery_trajectory
             ),
         )
 

@@ -530,6 +530,22 @@
                   <option value="2" selected>±2</option>
                 </select>
               </label>
+              <!-- Opt-in, off by default: Whitlock's (1992) theoretical
+                   f0 identity-recovery curve after a founder event is a
+                   closed-form reference from this configuration's N and
+                   m alone, not a measurement of this run (doc/
+                   statistics.md, "Identity recovery"). Hidden when the
+                   configuration has no scalar N/m for the closed form to
+                   use, or there is nothing else to plot it against
+                   (`identityRecovery` itself, forwarded unconditionally
+                   either way). Remembered across sessions
+                   (`set_show_identity_recovery_trajectory`). -->
+              <label id="run-trajectory-identity-recovery-control"
+                     class="run-trajectory-display" hidden
+                     title="Whitlock's (1992) theoretical identity-by-descent recovery after a founder event, from this configuration's N and m alone — not a measurement from this run.">
+                <input type="checkbox" id="run-trajectory-show-identity-recovery">
+                f₀ (identity recovery)
+              </label>
               </div>
               <canvas id="run-trajectory-canvas"></canvas>
               <div id="run-trajectory-legend" class="run-trajectory-legend"></div>

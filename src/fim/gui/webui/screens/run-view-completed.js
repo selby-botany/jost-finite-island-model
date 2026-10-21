@@ -897,6 +897,12 @@ const runTrajectoryBandWidthControl = document.getElementById(
     "run-trajectory-band-width-control"
 );
 const runTrajectoryBandWidth = document.getElementById("run-trajectory-band-width");
+const runTrajectoryIdentityRecoveryControl = document.getElementById(
+    "run-trajectory-identity-recovery-control"
+);
+const runTrajectoryShowIdentityRecovery = document.getElementById(
+    "run-trajectory-show-identity-recovery"
+);
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
 const resultsDifferentiationQCanvas = document.getElementById(
     "results-differentiation-q-canvas"
@@ -2050,6 +2056,33 @@ window.fim.setTrajectoryBandWidth = function setTrajectoryBandWidth(width) {
     repaintTrajectory();
 };
 
+// Whether the trajectory graph draws Whitlock's (1992) theoretical f0
+// identity-recovery curve: an opt-in Run-card display choice (like
+// trajectoryDisplay/trajectoryBandWidth above), off by default, rather
+// than a `statistics-catalog.js` entry -- the curve is a closed-form
+// reference computed from this configuration's N and m alone, not a
+// measurement this run's own report carries. A bare top-level `let`, not
+// state on any one document: non-module scripts share one global scope,
+// and `run-view-running.js`'s own identityRecovery argument (passed to
+// the same shared `renderTrajectory`, below) relies on reading it
+// directly. Loaded from preferences by `run-graph-stage.js`'s own
+// `loadRunCardLayout`.
+let showIdentityRecoveryTrajectory = false;
+
+/**
+ * Apply whether the f0 overlay is drawn, and repaint the graph with it.
+ *
+ * @param {boolean} shown
+ * @returns {void}
+ */
+window.fim.setShowIdentityRecoveryTrajectory = function setShowIdentityRecoveryTrajectory(
+    shown
+) {
+    showIdentityRecoveryTrajectory = Boolean(shown);
+    runTrajectoryShowIdentityRecovery.checked = showIdentityRecoveryTrajectory;
+    repaintTrajectory();
+};
+
 /**
  * Whether the run can be drawn averaged: it needs a recorded curve and a
  * convergence window to average over.
@@ -2120,6 +2153,17 @@ runTrajectoryBandWidth.addEventListener("change", async () => {
     );
     window.fim.setTrajectoryBandWidth(
         result.ok ? result.width : activeCompletedViewState.trajectoryBandWidth
+    );
+});
+
+runTrajectoryShowIdentityRecovery.addEventListener("change", async () => {
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_show_identity_recovery_trajectory(
+            runTrajectoryShowIdentityRecovery.checked
+        )
+    );
+    window.fim.setShowIdentityRecoveryTrajectory(
+        result.ok ? result.shown : showIdentityRecoveryTrajectory
     );
 });
 
@@ -3174,6 +3218,10 @@ function renderTrajectory(
     const hasCurve = generations && histories && generations.length > 0;
     runTrajectoryDisplayControl.hidden = !canAverage(hasCurve, averaging);
     runTrajectoryBandWidthControl.hidden = !(hasCurve || sigmaBand);
+    runTrajectoryIdentityRecoveryControl.hidden = !(
+        (hasCurve || sigmaBand) &&
+        identityRecovery
+    );
     if (!hasCurve && !sigmaBand) {
         activeCompletedViewState.activeTrajectoryRenderMode = null;
         setTrajectoryFrameHidden(true);
@@ -3181,6 +3229,13 @@ function renderTrajectory(
         return;
     }
     activeCompletedViewState.activeTrajectoryRenderMode = "scalar";
+    // Opt-in (`showIdentityRecoveryTrajectory`, off by default): `identity
+    // Recovery` itself only says whether this configuration's N/m support
+    // the closed form at all, not whether the botanist has asked to see
+    // it drawn.
+    const shownIdentityRecovery = showIdentityRecoveryTrajectory
+        ? identityRecovery
+        : null;
     const effectiveGenerations = hasCurve
         ? generations
         : [Math.max(0, generationCount - sigmaBand.window), generationCount];
@@ -3329,7 +3384,7 @@ function renderTrajectory(
         drawnHistories,
         shownSigmaBand,
         visiblePlottableEquilibrium,
-        identityRecovery,
+        shownIdentityRecovery,
         drawnClosedForm,
         scrubGeneration,
         bands,
@@ -3373,8 +3428,10 @@ function renderTrajectory(
     // against (`effectiveGenerations` always exists at this point, the
     // early-return above already guaranteed that), not scoped to any one
     // statistic the way the equilibrium entries above are, since this
-    // curve is not any one of the six report statistics.
-    if (identityRecovery) {
+    // curve is not any one of the six report statistics. Opt-in
+    // (`shownIdentityRecovery`): off by default, unlike every other entry
+    // in this legend.
+    if (shownIdentityRecovery) {
         const item = document.createElement("span");
         item.className = "legend-item";
         const swatch = document.createElement("span");
@@ -3616,9 +3673,12 @@ function renderBatchTrajectory(pooledConvergenceHistories, scrubGeneration) {
         pooledConvergenceHistories || null;
     activeCompletedViewState.batchScrubGeneration = scrubGeneration ?? null;
     // A batch draws its own across-replicate band; the per-run display
-    // choice does not apply.
+    // choice does not apply, and a batch never carries an identity-
+    // recovery reference (`renderBatchTrajectory`'s own callers never
+    // pass one; `drawBatchTrajectoryCurve` has no such parameter).
     runTrajectoryDisplayControl.hidden = true;
     runTrajectoryBandWidthControl.hidden = true;
+    runTrajectoryIdentityRecoveryControl.hidden = true;
     const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
     if (names.length === 0) {
         activeCompletedViewState.activeTrajectoryRenderMode = null;

@@ -149,6 +149,7 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
         "scatterStyle": "color-badge",
         "trajectoryDisplay": "every_generation",
         "bandWidth": 2,
+        "showIdentityRecoveryTrajectory": False,
     }
     assert api.set_run_graphs(["trajectory", "alleleComposition", "nope"]) == {
         "ok": True,
@@ -165,6 +166,10 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
         "display": "trailing_mean",
     }
     assert api.set_trajectory_band_width(1) == {"ok": True, "width": 1}
+    assert api.set_show_identity_recovery_trajectory(True) == {
+        "ok": True,
+        "shown": True,
+    }
 
     assert Api(preferences_path=path).get_run_card_layout() == {
         "graphs": ["trajectory", "alleleComposition"],
@@ -172,6 +177,7 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
         "scatterStyle": "dots",
         "trajectoryDisplay": "trailing_mean",
         "bandWidth": 1,
+        "showIdentityRecoveryTrajectory": True,
     }
 
 
@@ -188,9 +194,11 @@ def test_run_card_layout_rejects_bad_input_and_saves_nothing(tmp_path: Path) -> 
     assert api.set_trajectory_band_width(3)["ok"] is False
     assert api.set_trajectory_band_width(0)["ok"] is False
     assert api.set_trajectory_band_width(True)["ok"] is False
+    assert api.set_show_identity_recovery_trajectory("true")["ok"] is False
     assert api.get_run_card_layout()["bandWidth"] == 2
     assert api.get_run_card_layout()["graphs"] == ["scatter", "trajectory"]
     assert api.get_run_card_layout()["trajectoryDisplay"] == "every_generation"
+    assert api.get_run_card_layout()["showIdentityRecoveryTrajectory"] is False
 
 
 def test_default_ploidy_seeds_a_fresh_form_and_makes_it_submittable(

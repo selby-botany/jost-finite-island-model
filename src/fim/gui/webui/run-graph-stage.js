@@ -960,6 +960,11 @@ async function loadRunCardLayout() {
         if (typeof window.fim.setTrajectoryBandWidth === "function") {
             window.fim.setTrajectoryBandWidth(layout.bandWidth);
         }
+        if (typeof window.fim.setShowIdentityRecoveryTrajectory === "function") {
+            window.fim.setShowIdentityRecoveryTrajectory(
+                layout.showIdentityRecoveryTrajectory
+            );
+        }
         activeGraphStage = state;
         syncRunGraphStage();
     }

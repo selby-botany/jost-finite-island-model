@@ -3559,10 +3559,14 @@ class Api:
 
         Returns:
             `{"graphs": [...], "columns": int, "scatterStyle": str,
-            "trajectoryDisplay": str}`: the graph keys the user wants
-            shown together (`DEFAULT_RUN_GRAPHS` until they choose), how
-            many columns they are laid out in, how the scatter plot draws
-            its points, and how the trajectory graph draws each statistic.
+            "trajectoryDisplay": str, "bandWidth": int,
+            "showIdentityRecoveryTrajectory": bool}`: the graph keys the
+            user wants shown together (`DEFAULT_RUN_GRAPHS` until they
+            choose), how many columns they are laid out in, how the
+            scatter plot draws its points, how the trajectory graph draws
+            each statistic, and whether it also draws the opt-in f_0
+            identity-recovery overlay (`set_show_identity_recovery_
+            trajectory`).
         """
         preferences = self._preferences
         return {
@@ -3571,6 +3575,9 @@ class Api:
             "scatterStyle": preferences.scatter_style,
             "trajectoryDisplay": preferences.trajectory_display,
             "bandWidth": preferences.trajectory_band_width,
+            "showIdentityRecoveryTrajectory": (
+                preferences.show_identity_recovery_trajectory
+            ),
         }
 
     @_log_bridge_call
@@ -3683,6 +3690,32 @@ class Api:
         )
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True, "width": width}
+
+    @_log_bridge_call
+    def set_show_identity_recovery_trajectory(self, shown: Any) -> dict[str, Any]:
+        """Choose whether the trajectory graph draws the f_0 overlay.
+
+        Display only, and off by default: Whitlock's (1992) theoretical
+        identity-recovery curve after a founder event (`doc/statistics.md`,
+        "Identity recovery") is a closed-form reference computed from this
+        configuration's `N` and `m` alone, not a measurement of this run,
+        so unlike `set_shown_statistics` it never changes what a run
+        tracks or saves.
+
+        Args:
+            shown: Whether to draw the overlay.
+
+        Returns:
+            `{"ok": True, "shown": shown}`, or `{"ok": False, "message":
+            ...}` if `shown` is not a plain boolean.
+        """
+        if not isinstance(shown, bool):
+            return {"ok": False, "message": f"shown must be a boolean: {shown!r}"}
+        self._preferences = self._preferences.with_run_card_layout(
+            show_identity_recovery_trajectory=shown
+        )
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "shown": shown}
 
     @_log_bridge_call
     def get_default_ploidy(self) -> str:
