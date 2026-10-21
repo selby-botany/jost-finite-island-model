@@ -2219,13 +2219,13 @@ class Api:
         refusal = self._claim_run()
         if refusal is not None:
             return {"ok": False, "message": refusal}
+        job_id = self._job_id
+        assert job_id is not None
         started = False
         try:
             result = self._start_claimed_run(values, study_id, run_details)
             started = bool(result["ok"]) and not result.get("reused", False)
             if result["ok"] and not result.get("reused", False):
-                job_id = self._job_id
-                assert job_id is not None
                 result["jobId"] = job_id
             return result
         finally:
@@ -2266,49 +2266,60 @@ class Api:
         # store's own (`fim.gui.preferences`'s own top docstring).
         self._preferences = self._preferences.with_form_values(values)
         save_preferences(self._preferences_path, self._preferences)
-        # A run is a pure function of its configuration (`deterministic_
-        # run_id` hashes all of it, the seed included) within one software
-        # version, so a configuration already computed by this version is
-        # not computed again: the existing run is attached to the chosen
-        # Study, exactly as a sweep point is, and shown as it is. A run of
-        # the same configuration from another version is not reused: the
-        # configuration is recomputed and compared with it when it
-        # finishes, so a break in bit-for-bit reproducibility is reported.
+        # Completed Run objects are the reusable GUI result now. Resolve
+        # those before legacy result directories so reopening preserves the
+        # lifecycle record and its pause/resume history.
         is_batch = params.n_replicates > 1
         run_id = deterministic_run_id(params)
-        existing = groups.find_run_directories(run_id, software_version=fim_version)
+        existing_object = object_bridge.find_completed_run(run_id, fim_version)
+        existing = (
+            [existing_object.directory]
+            if existing_object is not None
+            else groups.find_run_directories(run_id, software_version=fim_version)
+        )
         if existing:
-            _attach_finished_run_to_study(study_id, existing[0], run_details)
-            return {
+            directory = existing[0]
+            _attach_finished_run_to_study(study_id, directory, run_details)
+            reused = {
                 "ok": True,
                 "reused": True,
                 "isBatch": is_batch,
-                "directory": str(existing[0]),
-                "resourceKey": _run_resource_key(existing[0]),
+                "directory": str(directory),
+                "resourceKey": _run_resource_key(directory),
             }
+            if existing_object is not None:
+                reused["objectId"] = existing_object.object_id
+            return reused
         self._previous_version_run = next(
             iter(groups.find_stale_run_directories(run_id, fim_version)), None
         )
+        if _active_window() is None:
+            return {"ok": False, "message": "no active window"}
         try:
-            output_directory, reservation = paths.allocate_output_directory()
-        except FileExistsError as error:
-            return {"ok": False, "message": str(error)}
-        self._output_reservation = reservation
-        is_batch = params.n_replicates > 1
-        result = (
-            self._start_batch_run(
-                params, output_directory, values, study_id, run_details
+            saved, problem = object_bridge.save(
+                values,
+                name=run_details.name or "",
+                description=run_details.description or "",
+                study_id=study_id,
             )
-            if is_batch
-            else self._start_scalar_run(params, output_directory, study_id, run_details)
+        except (LifecycleError, OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        if problem is not None:
+            return {"ok": False, "message": problem}
+        result = self._start_claimed_run_object(
+            saved.object_id,
+            study_id=study_id,
+            run_details=run_details,
         )
-        # `n_replicates` is no longer a field Configure's own `<form>`
-        # submits (moved to Settings) -- `run-view-controls.js`'s own
-        # `onRunClicked` can no longer infer "batch or scalar" from the
-        # values it already has in hand before this call, so the real,
-        # validated `params.n_replicates` this method computed is
-        # reported back explicitly instead.
-        result["isBatch"] = is_batch
+        if not result["ok"]:
+            try:
+                object_bridge.delete(saved.object_id)
+            except (LifecycleError, OSError) as error:
+                logger.warning(
+                    "could not remove an unstarted Run object %s: %s",
+                    saved.object_id,
+                    error,
+                )
         return result
 
     def _claim_run(self) -> str | None:
@@ -2863,11 +2874,19 @@ class Api:
             if not started:
                 self._release_run_claim()
 
-    def _start_claimed_run_object(self, object_id: str) -> dict[str, Any]:
+    def _start_claimed_run_object(
+        self,
+        object_id: str,
+        *,
+        study_id: str | None = None,
+        run_details: RunDetails | None = None,
+    ) -> dict[str, Any]:
         """Do the work of `start_run_object` once it holds the run claim.
 
         Args:
             object_id: The saved run.
+            study_id: Study to receive the completed run, if supplied.
+            run_details: Optional details to write when it completes.
 
         Returns:
             `start_run_object`'s result.
@@ -2877,15 +2896,25 @@ class Api:
             return {"ok": False, "message": "no active window"}
         try:
             run_object, params = object_bridge.prepare_start(object_id)
+            effective_study_id = (
+                study_id
+                if study_id is not None
+                else object_bridge.study_id_for(object_id)
+            )
         except (LifecycleError, ValueError) as error:
             return {"ok": False, "message": str(error)}
+        if run_details is None:
+            self._previous_version_run = None
+            run_details = RunDetails(
+                run_object.labels.name or None,
+                run_object.labels.description or None,
+            )
+        self._comparison_target = (run_object.directory, window)
         is_batch = params.n_replicates > 1
         self._cancel_event = None
         self._active_object_id = object_id
         self._run_in_flight = True
         self._live_deme_pair = None
-        if self._on_run_started is not None:
-            self._on_run_started()
         job_id = self._job_id
         assert job_id is not None  # `_claim_run` always mints it first
 
@@ -2918,15 +2947,20 @@ class Api:
                     "job_admission": self._jobs,
                     "job_id": job_id,
                     "view_level": lambda: self._jobs.view_level(job_id),
+                    "study_id": effective_study_id,
+                    "run_details": run_details,
                 },
                 daemon=True,
             )
             self._drain_thread.start()
+            if self._on_run_started is not None:
+                self._on_run_started()
             return {
                 "ok": True,
                 "isBatch": True,
                 "jobId": job_id,
                 "objectId": object_id,
+                "resourceKey": _run_resource_key(run_object.directory),
                 "name": run_object.labels.name,
                 "equilibrium": None,
                 "identityRecovery": None,
@@ -2935,6 +2969,9 @@ class Api:
             }
 
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
+        equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
+        identity_recovery = _identity_recovery_reference_payload(params)
+        closed_form = _closed_form_trajectory_payload(params)
         self._object_worker = object_runner.start_object_run(
             object_id,
             message_queue,
@@ -2942,9 +2979,6 @@ class Api:
             view_level=lambda: self._jobs.view_level(job_id),
         )
         logger.info("saved run starting: %s", object_id)
-        equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
-        identity_recovery = _identity_recovery_reference_payload(params)
-        closed_form = _closed_form_trajectory_payload(params)
         self._drain_thread = threading.Thread(
             target=self._drain_then_release,
             args=(
@@ -2965,15 +2999,20 @@ class Api:
                 "publisher": self._publisher,
                 "job_admission": self._jobs,
                 "job_id": job_id,
+                "study_id": effective_study_id,
+                "run_details": run_details,
             },
             daemon=True,
         )
         self._drain_thread.start()
+        if self._on_run_started is not None:
+            self._on_run_started()
         return {
             "ok": True,
             "isBatch": False,
             "jobId": job_id,
             "objectId": object_id,
+            "resourceKey": _run_resource_key(run_object.directory),
             "name": run_object.labels.name,
             "equilibrium": equilibrium,
             "identityRecovery": identity_recovery,

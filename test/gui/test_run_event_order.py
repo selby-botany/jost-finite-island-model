@@ -74,16 +74,16 @@ class _OrderWindow:
     def __init__(
         self,
         read_claim: Callable[[], bool],
-        read_reservation: Callable[[], bool] = lambda: False,
+        read_object_claim: Callable[[], bool] = lambda: False,
     ) -> None:
         self._read_claim = read_claim
-        self._read_reservation = read_reservation
+        self._read_object_claim = read_object_claim
         self.observations: list[tuple[str, bool, bool, str]] = []
 
     def evaluate_js(self, script: str) -> Any:
         name = script.split("(", 1)[0]
         self.observations.append(
-            (name, self._read_claim(), self._read_reservation(), script)
+            (name, self._read_claim(), self._read_object_claim(), script)
         )
         return None
 
@@ -95,13 +95,6 @@ class _OrderWindow:
         for observed_name, claim_held, _, _ in self.observations:
             if observed_name == name:
                 return claim_held
-        raise AssertionError(f"{name!r} was never pushed; saw {self.names()}")
-
-    def reservation_held_when(self, name: str) -> bool:
-        """Return whether the output reservation existed at a push."""
-        for observed_name, _, reservation_held, _ in self.observations:
-            if observed_name == name:
-                return reservation_held
         raise AssertionError(f"{name!r} was never pushed; saw {self.names()}")
 
     def scripts(self) -> list[str]:
@@ -161,7 +154,7 @@ def test_a_stale_version_annotation_and_finished_follow_the_done_push(
     api = _api_with_settings(tmp_path, _FAST_SETTINGS)
     window = _OrderWindow(
         lambda: api._run_in_flight,
-        lambda: api._output_reservation is not None,
+        lambda: api._active_object_id is not None,
     )
     monkeypatch.setattr(app_module, "_active_window", lambda: window)
     study = groups.create_study("Runs")
@@ -211,7 +204,7 @@ def test_a_stale_version_annotation_and_finished_follow_the_done_push(
     assert window.observations[finished_index][1] is True
     assert window.observations[finished_index][2] is True
     assert api._run_in_flight is False
-    assert api._output_reservation is None
+    assert api._active_object_id is None
     assert api.get_job_snapshot(events[-1]["jobId"])["snapshot"]["type"] == "finished"
 
 

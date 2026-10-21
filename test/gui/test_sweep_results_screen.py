@@ -362,7 +362,7 @@ _GROUP_BUTTONS = (
 )
 
 
-def _planned_sweep(name: str) -> tuple[SweepSpec, Any]:
+def _planned_sweep(name: str, *, seed: int = 7) -> tuple[SweepSpec, Any]:
     """A two-point sweep study, returned with its plan."""
     spec = SweepSpec(
         base={
@@ -371,7 +371,7 @@ def _planned_sweep(name: str) -> tuple[SweepSpec, Any]:
             "d": 2,
             "m": 0.1,
             "mu": 0.01,
-            "seed": 7,
+            "seed": seed,
             "n_replicates": 1,
             "max_generations": 10,
         },
@@ -385,7 +385,7 @@ def test_home_offers_retry_failed_and_recompute_all_only_where_they_apply(
 ) -> None:
     _, finished = _planned_sweep("Finished sweep")
     run_sweep(finished.study_id, LocalPointRunner(), lambda _e: None, threading.Event())
-    _, broken = _planned_sweep("Broken sweep")
+    _, broken = _planned_sweep("Broken sweep", seed=8)
     run_sweep(
         broken.study_id,
         _FailingRunner(),

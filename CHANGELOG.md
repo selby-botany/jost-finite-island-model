@@ -8,6 +8,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **GUI runs are resumable Run objects.** Starting from **Run simulation**
+  creates a saved Run object, associates completed results with the selected
+  Study, and exposes pause/resume from the same document. Matching completed
+  Run objects are reused rather than recomputed.
 - **Source-line links in generated references.** API and test-suite headings
   now link modules, classes, functions, methods, tests, and documented data
   to their Python declarations on GitHub, preserving section anchors.

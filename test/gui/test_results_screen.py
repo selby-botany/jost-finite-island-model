@@ -196,7 +196,7 @@ def test_a_completed_run_renders_the_run_view(
     )
 
     assert settled["runViewState"] == "completed"
-    assert settled["runId"].startswith("run-")
+    assert settled["runId"].startswith("obj-")
     assert "generation" in settled["outcome"]
     # The stats-table row places the full-precision value in the row's own
     # `title` attribute (hover tooltip). For `buildPointMeter`, the title
@@ -998,25 +998,20 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
     assert settled["revertedMatchesDefault"] is True
 
 
-def test_running_simulation_again_from_completed_starts_a_new_run(
+def test_running_simulation_again_with_changed_config_starts_a_new_run_object(
     fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
-    """ "Run simulation," clicked again from `completed`, starts a genuinely new run.
+    """ "Run simulation" with changed settings creates a separate Run object.
 
     The unified run view's own `completed → initial → running`
     transition: a fresh "Run simulation" click reuses the current form
     values with no separate "New run"/reset step needed (the shared
     controls are always present, so the same
     button that started the first run is already right there). Proven
-    by the *output directory* changing between the two completed views,
+    by the object directory changing between the two completed views,
     not just by `completed` being reached again — a stale DOM left over
     from the first run would otherwise look identical to a real second
-    one. The run id itself is `deterministic_run_id(params)` (see
-    `src/fim/engine.py`) — deliberately the *same* string for two runs
-    of identical form values, so it cannot serve as this test's proof;
-    the output directory embeds a wall-clock timestamp and so genuinely
-    differs between the two invocations even though the run id does
-    not.
+    one.
 
     Drives the window directly (not via the `drive` fixture): this test
     needs two sequential trigger-then-poll stages against the *same*
@@ -1091,12 +1086,8 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
     webview.start(_drive)
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
-    assert settled["firstRunId"].startswith("run-")
-    assert settled["secondRunId"].startswith("run-")
-    # Same form values -> the deterministic run id is legitimately
-    # identical both times; the output directory (a wall-clock
-    # timestamp embedded in the path) is what actually distinguishes
-    # a genuine second run from a stale first-run DOM.
+    assert settled["firstRunId"].startswith("obj-")
+    assert settled["secondRunId"].startswith("obj-")
     assert settled["firstOutputDirectory"]
     assert settled["secondOutputDirectory"]
     assert settled["secondOutputDirectory"] != settled["firstOutputDirectory"]

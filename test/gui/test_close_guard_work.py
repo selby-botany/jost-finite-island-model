@@ -143,21 +143,22 @@ def _wait_until_idle(api: Api) -> None:
     )
 
 
-def test_closing_cancels_a_running_scalar_run_and_leaves_no_thread(
+def test_closing_pauses_a_running_scalar_run_and_leaves_no_thread(
     api: Api, window: _FakeWindow
 ) -> None:
     before = _non_daemon_threads()
     started = api.start_run(_form())
     assert started["ok"] is True
     _wait_for_progress(window)
-    assert api.close_requirements()["run"] is True
+    assert api.close_requirements()["savedRun"] is True
 
     api.stop_active_work(COMPLETION_BACKSTOP_SECONDS)
     _wait_until_idle(api)
 
-    assert window.calls("onRunCancelled")
-    assert api._run_worker is not None
-    assert not api._run_worker.is_alive()
+    assert window.calls("onRunPaused")
+    assert read_run_object(started["objectId"]).record.state is RunState.PAUSED
+    assert api._object_worker is not None
+    assert not api._object_worker.is_alive()
     assert _non_daemon_threads() - before == set()
 
 
@@ -179,7 +180,7 @@ def test_closing_pauses_a_running_saved_run_at_a_checkpoint(
     assert _non_daemon_threads() - before == set()
 
 
-def test_closing_cancels_a_running_batch_and_leaves_no_worker_process(
+def test_closing_pauses_a_running_batch_and_leaves_no_worker_process(
     api: Api, window: _FakeWindow
 ) -> None:
     defaults = {**api.get_default_run_settings(), **_UNREACHABLE}
@@ -198,9 +199,9 @@ def test_closing_cancels_a_running_batch_and_leaves_no_worker_process(
     api.stop_active_work(COMPLETION_BACKSTOP_SECONDS)
     _wait_until_idle(api)
 
-    assert window.calls("onBatchCancelled")
-    assert api._run_worker is not None
-    assert not api._run_worker.is_alive()
+    assert window.calls("onRunPaused")
+    assert api._object_worker is not None
+    assert not api._object_worker.is_alive()
     assert _non_daemon_threads() - before == set()
     # `ProcessPoolExecutor` workers are children of this process; a worker
     # abandoned by an early exit would still be listed.

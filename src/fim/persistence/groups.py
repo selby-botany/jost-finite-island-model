@@ -1786,7 +1786,11 @@ def _run_identities(results: Path) -> list[tuple[Path, tuple[str, str]]]:
     if not results.is_dir():
         return []
     found = []
-    for manifest_path in sorted(results.glob("*/manifest.json")):
+    manifest_paths = {
+        *results.glob("*/manifest.json"),
+        *results.glob("objects/*/manifest.json"),
+    }
+    for manifest_path in sorted(manifest_paths):
         identity = _manifest_identity(manifest_path)
         if identity is not None:
             found.append((manifest_path.parent.resolve(), identity))

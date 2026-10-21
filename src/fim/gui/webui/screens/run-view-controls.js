@@ -61,9 +61,18 @@ function restoreRunControls() {
     runStudyNewNameInput.value = state.newStudyName;
     runStudyNewDescriptionInput.value = state.newStudyDescription;
     renderedRunControlsTabId = window.fim.workspace.selectedId();
+    window.fim.refreshRunButton();
     syncRunStudySelectTooltip();
     syncRunStudyNewRowVisibility();
 }
+
+window.fim.refreshRunButton = function refreshRunButton() {
+    const state = window.fim.workspace.get(
+        window.fim.workspace.selectedId()
+    );
+    runButton.textContent =
+        state?.runObjectState === "paused" ? "Resume run" : "Run simulation";
+};
 
 window.fim.workspace.onSelectionChange(restoreRunControls);
 restoreRunControls();
@@ -186,12 +195,20 @@ function clearPendingRunStart(startingDocument, documentState) {
  */
 async function onRunClicked() {
     const tabId = window.fim.workspace.selectedId();
+    const state = window.fim.workspace.get(tabId);
+    if (
+        state?.runObjectState === "paused" &&
+        typeof window.fim.resumeRunObjectFromTab === "function"
+    ) {
+        await window.fim.resumeRunObjectFromTab(tabId);
+        return;
+    }
     await startRunExclusively(
         () => startConfiguredRun(tabId),
         (message) => showStartRefusal(tabId, message),
         {
             tabId,
-            jobKind: window.fim.isSweepEnabled(tabId) ? "sweep" : "run",
+            jobKind: window.fim.isSweepEnabled(tabId) ? "sweep" : "saved-run",
         }
     );
 }
@@ -335,7 +352,7 @@ async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
     );
     const documentState = window.fim.workspace.get(tabId);
     if (documentState) {
-        documentState.jobKind = "run";
+        documentState.jobKind = "saved-run";
         documentState.jobState = "starting";
         documentState.startRefusal = null;
         window.fim.workspace.notifyChange();
@@ -404,8 +421,27 @@ async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
         return;
     }
     if (documentState && started.jobId) {
-        documentState.jobState = "running";
-        window.fim.workspace.attachJob(tabId, started.jobId);
+        if (
+            documentState.jobState !== "finished" &&
+            documentState.jobState !== "terminal"
+        ) {
+            documentState.jobState = "running";
+            window.fim.workspace.attachJob(tabId, started.jobId);
+        }
+    }
+    if (documentState && started.objectId) {
+        const alreadyFinished =
+            documentState.jobState === "finished" ||
+            documentState.jobState === "terminal";
+        if (!alreadyFinished) {
+            documentState.kind = "saved-run";
+        }
+        documentState.runObjectId = started.objectId;
+        documentState.runObjectState = alreadyFinished ? "finished" : "running";
+        if (started.resourceKey) {
+            window.fim.workspace.setResourceKey(tabId, started.resourceKey);
+        }
+        window.fim.activateRunObjectForDocument(tabId, started.objectId);
     }
     if (documentState?.closeAfterStart) {
         documentState.closeAfterStart = false;

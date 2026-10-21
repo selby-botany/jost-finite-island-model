@@ -1672,9 +1672,9 @@ When you close the window, `fim` asks first if closing would lose something.
 This happens when:
 
 - The Configure form has changes you have not saved.
-- A saved run is in progress.
-- A run, batch, or sweep that you started with **Run simulation** or
-  **Sweep** is in progress.
+- A saved run is in progress. This includes runs started with
+  **Run simulation**; the desktop app saves those as Run objects.
+- A sweep is in progress.
 
 The dialog lists every unsaved document by name, including documents that
 are not currently open on screen. It also identifies the run or sweep that
@@ -1684,13 +1684,13 @@ will be paused or stopped. The dialog offers these choices:
 |---|---|
 | **Save and close** | Keeps the configuration under **Saved runs** on Home, then closes. A configuration that is not complete yet is saved as a Draft. A configuration that is ready to run is saved as Planned. |
 | **Close without saving** | Closes and drops the unsaved changes. |
-| **Pause and close** | Shown when only a saved run is in progress. The run stops at a checkpoint, and you resume it from **Saved runs** on Home. |
-| **Stop and close** | Shown when only a run or sweep that cannot be resumed is in progress. Closing stops it. |
+| **Pause and close** | Shown when only a saved run is in progress. The run stops at a checkpoint, and you can resume it from the same document's Run button or from **Saved runs** on Home. |
+| **Stop and close** | Shown when only a sweep is in progress. Closing stops it. |
 | **Keep working** | Leaves the window open. |
 
 Choosing **Save and close** or **Close without saving** also pauses a running
-saved run, or stops any other running work. If the save fails, the dialog
-stays open and shows the reason, so nothing is lost.
+saved run or stops a running sweep. If the save fails, the dialog stays open
+and shows the reason, so nothing is lost.
 
 If nothing would be lost, the window closes at once.
 
@@ -1705,7 +1705,8 @@ fim: shutdown did not complete within 20s; forcing exit
 
 Completed results remain on disk. A saved run resumes from its latest
 committed checkpoint; work since that checkpoint may need to be repeated.
-Unsaved runs stopped before publication do not produce a completed result.
+Command-line runs stopped before publication do not produce a completed
+result.
 
 A diagnostic report is written at the same time, to `logs/fim.log` as well
 as to the terminal, including when launched without a terminal.

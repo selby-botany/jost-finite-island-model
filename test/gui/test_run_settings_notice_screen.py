@@ -36,10 +36,13 @@ import yaml
 from conftest import poll_or_fail
 
 from fim.gui import app as app_module
+from fim.gui import object_bridge
 from fim.gui import presets as presets_module
 from fim.gui.app import Api, await_bridge_threads
 from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.model.params import SimulationParams
+
+from .test_sweep_api import results  # noqa: F401
 
 pytestmark = pytest.mark.gui
 
@@ -214,19 +217,24 @@ def test_run_settings_can_be_edited_restored_and_replaced_with_defaults(
     _isolate_gui_preferences: Path,
     window: webview.Window,
     monkeypatch: pytest.MonkeyPatch,
+    results: Path,
 ) -> None:
     """Edits reach Run, cancel is inert, and defaults and originals stay separate."""
+    del results
     _auto_200_settings(_isolate_gui_preferences)
     captured: list[SimulationParams] = []
 
-    def capture(
-        self: Api, params: SimulationParams, *_args: Any, **_kwargs: Any
-    ) -> dict[str, Any]:
+    def capture(self: Api, object_id: str, **_options: Any) -> dict[str, Any]:
         """Record the submitted configuration without starting a simulation."""
+        run_object = object_bridge.reconcile_run_object(object_id)
+        model, _labels = presets_module.split_configuration(
+            yaml.safe_load(run_object.config_text)
+        )
+        params = SimulationParams.from_mapping(model)
         captured.append(params)
         return {"ok": False, "message": _REFUSED}
 
-    monkeypatch.setattr(Api, "_start_scalar_run", capture)
+    monkeypatch.setattr(Api, "_start_claimed_run_object", capture)
 
     def steps(wait: Callable[..., Any]) -> dict[str, Any]:
         _load_example(window, wait)
@@ -387,25 +395,30 @@ def test_loading_a_lineal_example_runs_it_without_changing_settings(
     _isolate_gui_preferences: Path,
     window: webview.Window,
     monkeypatch: pytest.MonkeyPatch,
+    results: Path,
 ) -> None:
     """Notice lists the differences; the run uses the example; Settings stay.
 
     Settings are the automatic engine with 200 replicates; the example
-    is lineal with one replicate. The run itself is intercepted where a
-    scalar run would start (`Api._start_scalar_run`), so the test sees
-    the exact parameters the Run button produced without running them.
+    is lineal with one replicate. The object start is intercepted after
+    its saved configuration is resolved, so the test sees the exact
+    parameters the Run button produced without running them.
     """
+    del results
     _auto_200_settings(_isolate_gui_preferences)
     captured: list[SimulationParams] = []
 
-    def capture(
-        self: Api, params: SimulationParams, *_args: Any, **_kwargs: Any
-    ) -> dict[str, Any]:
+    def capture(self: Api, object_id: str, **_options: Any) -> dict[str, Any]:
         """Record the run's parameters and decline to start it."""
+        run_object = object_bridge.reconcile_run_object(object_id)
+        model, _labels = presets_module.split_configuration(
+            yaml.safe_load(run_object.config_text)
+        )
+        params = SimulationParams.from_mapping(model)
         captured.append(params)
         return {"ok": False, "message": _REFUSED}
 
-    monkeypatch.setattr(Api, "_start_scalar_run", capture)
+    monkeypatch.setattr(Api, "_start_claimed_run_object", capture)
 
     def steps(wait: Callable[..., Any]) -> dict[str, Any]:
         _load_example(window, wait)

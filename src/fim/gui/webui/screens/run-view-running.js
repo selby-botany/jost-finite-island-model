@@ -83,6 +83,7 @@ function createLiveRunState() {
         liveIdentityRecoveryReference: null,
         liveClosedForm: null,
         liveConvergence: null,
+        lastRenderedFrame: null,
         lastProgressSequence: -1,
         isBatch: false,
     };
@@ -343,6 +344,7 @@ window.fim.setLiveEquilibriumReference = function setLiveEquilibriumReference(
     const state = liveRunStateFor(tabId);
     if (state) {
         state.liveEquilibriumReference = equilibrium ?? null;
+        redrawCurrentLiveFrame(state);
     }
 };
 
@@ -361,6 +363,7 @@ window.fim.setLiveIdentityRecoveryReference = function setLiveIdentityRecoveryRe
     const state = liveRunStateFor(tabId);
     if (state) {
         state.liveIdentityRecoveryReference = identityRecovery ?? null;
+        redrawCurrentLiveFrame(state);
     }
 };
 
@@ -379,6 +382,7 @@ window.fim.setLiveClosedForm = function setLiveClosedForm(
     const state = liveRunStateFor(tabId);
     if (state) {
         state.liveClosedForm = closedForm ?? null;
+        redrawCurrentLiveFrame(state);
     }
 };
 
@@ -398,10 +402,11 @@ window.fim.setLiveConvergence = function setLiveConvergence(
         state.liveConvergence = convergence ?? null;
     }
     window.fim.setWatchedStatistics(
-        activeLiveRunState.liveConvergence
-            ? activeLiveRunState.liveConvergence.statistics
-            : []
+        state?.liveConvergence ? state.liveConvergence.statistics : []
     );
+    if (state) {
+        redrawCurrentLiveFrame(state);
+    }
 };
 
 function drawProgressPanels(state, payload) {
@@ -511,6 +516,33 @@ function renderLiveStatistics(state, statistics, generation) {
         if (typeof decorateTrajectoryStatisticRow === "function") {
             decorateTrajectoryStatisticRow(element, name);
         }
+    }
+}
+
+function redrawCurrentLiveFrame(state) {
+    const current = state.lastRenderedFrame;
+    if (!current) {
+        return;
+    }
+    renderLiveStatistics(state, current.statistics, current.generation);
+    if (typeof renderTrajectory === "function") {
+        renderTrajectory(
+            state.liveTrajectoryGenerations,
+            state.liveTrajectoryHistories,
+            undefined,
+            undefined,
+            state.liveEquilibriumReference,
+            state.liveIdentityRecoveryReference,
+            state.liveClosedForm,
+            current.isLiveHead ? null : current.generation,
+            state.liveConvergence
+                ? {
+                      window: state.liveConvergence.window,
+                      burnIn: state.liveConvergence.burnIn,
+                      anchors: {},
+                  }
+                : null
+        );
     }
 }
 
@@ -678,6 +710,11 @@ function renderRunProgress(state, payload) {
     };
 
     window.fim.appendLiveFrame(liveFrame, (f, _index, isLiveHead) => {
+        state.lastRenderedFrame = {
+            generation: f.generation,
+            statistics: f.statistics,
+            isLiveHead,
+        };
         renderLiveStatistics(state, f.statistics, f.generation);
         renderPairStatistics(f.pairStatistics);
         if (typeof renderTrajectory === "function") {

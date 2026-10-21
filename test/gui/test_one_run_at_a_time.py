@@ -11,11 +11,11 @@ run slot under a lock (`Api._claim_run`), shared by `start_run` and
 `start_run_object`, and the page asks `Api.can_start_run` before it
 changes anything on screen (`startRunExclusively`).
 
-No run here simulates anything: `fim.gui.runner.start_run` is replaced
-by `_HeldRuns.start_run`, whose run waits until the test releases it and
-then reports a cancellation. A run therefore stays in flight for exactly
-as long as a test needs, whatever the machine, and its drain thread
-pushes nothing to the page until it is released.
+No run here simulates anything: `fim.gui.object_runner.start_object_run`
+is replaced by `_HeldRuns.start_object_run`, whose run waits until the
+test releases it and then reports a cancellation. A run therefore stays
+in flight for exactly as long as a test needs, whatever the machine, and
+its drain thread pushes nothing to the page until it is released.
 """
 
 from __future__ import annotations
@@ -30,11 +30,10 @@ import pytest
 from conftest import poll_or_fail, wait_or_fail
 
 from fim.gui import app as app_module
-from fim.gui import runner
+from fim.gui import object_runner
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
-from fim.model.params import SimulationParams
 
 from .test_sweep_api import (  # noqa: F401
     _IDLE_POLL_SECONDS,
@@ -62,41 +61,35 @@ _RUN_CARD_STATE = """({
 
 
 class _HeldRuns:
-    """Stands in for `fim.gui.runner.start_run`: each run waits to be released.
+    """Stand in for `fim.gui.object_runner.start_object_run`.
 
-    A released run reports `("cancelled", 0)`, the one terminal message
-    that needs no result, so its drain thread pushes `fim.onRunCancelled`
-    and then releases the run claim (`Api._drain_then_release`).
+    A released run reports `("cancelled", 0)`, the terminal message needed
+    by this scalar-run test, so the drain thread releases the run claim.
     """
 
     def __init__(self) -> None:
-        self.started: list[Path] = []
+        self.started: list[str] = []
         self._releases: list[threading.Event] = []
 
-    def start_run(
+    def start_object_run(
         self,
-        params: SimulationParams,
-        output_directory: Path,
-        message_queue: queue.Queue[RunMessage],
-        cancel_event: threading.Event,
+        object_id: str,
+        message_queue: queue.Queue[RunMessage | BatchMessage],
         **_options: Any,
     ) -> threading.Thread:
         """Start a worker thread that waits for `release_all`.
 
         Args:
-            params: Unused; the run never simulates.
-            output_directory: Recorded, so a test can count starts.
+            object_id: Recorded, so a test can count starts.
             message_queue: Where the run's terminal message goes.
-            cancel_event: Unused; only the test ends a held run.
             **_options: The real runner's keyword options, unused.
 
         Returns:
             The started, not yet released, worker thread.
         """
-        del params, cancel_event
         release = threading.Event()
         self._releases.append(release)
-        self.started.append(output_directory)
+        self.started.append(object_id)
 
         def work() -> None:
             release.wait()
@@ -114,9 +107,9 @@ class _HeldRuns:
 
 @pytest.fixture
 def held_runs(monkeypatch: pytest.MonkeyPatch) -> Iterator[_HeldRuns]:
-    """Replace the scalar runner with held runs, and release them all at the end."""
+    """Replace the object runner with held runs, then release them all."""
     held = _HeldRuns()
-    monkeypatch.setattr(runner, "start_run", held.start_run)
+    monkeypatch.setattr(object_runner, "start_object_run", held.start_object_run)
     try:
         yield held
     finally:
@@ -147,10 +140,9 @@ def test_a_second_run_is_refused_while_the_first_is_in_flight(
     del window
     first = api.start_run(_form())
     assert first["ok"] is True, first.get("message")
-    reservation = held_runs.started[0].parent / (
-        f".reserve-{held_runs.started[0].name}"
-    )
-    assert reservation.is_dir()
+    first_object_id = held_runs.started[0]
+    assert first["objectId"] == first_object_id
+    assert api._active_object_id == first_object_id
 
     second = api.start_run(_form())
 
@@ -160,7 +152,7 @@ def test_a_second_run_is_refused_while_the_first_is_in_flight(
 
     held_runs.release_all()
     _wait_until_no_run(api)
-    assert not reservation.exists()
+    assert api._active_object_id is None
     assert api.can_start_run() == {"ok": True}
     third = api.start_run(_form())
     assert third["ok"] is True, third.get("message")
@@ -345,6 +337,7 @@ def test_the_check_and_the_claim_happen_under_one_lock(
 def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     fast_scalar_run_settings: Path,
     held_runs: _HeldRuns,
+    results: Path,
 ) -> None:
     """Run and the Run menu, clicked during a run, are refused on the page.
 
@@ -355,11 +348,15 @@ def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     so the page is never polled while a drain thread is pushing to it.
     """
     del fast_scalar_run_settings
+    del results
     run_starts = [threading.Event(), threading.Event()]
     cancellations = [threading.Event(), threading.Event()]
+    run_started_count = 0
 
     def on_run_started() -> None:
-        run_starts[len(held_runs.started) - 1].set()
+        nonlocal run_started_count
+        run_starts[run_started_count].set()
+        run_started_count += 1
 
     def on_message(message: RunMessage | BatchMessage) -> None:
         if message[0] == "cancelled":

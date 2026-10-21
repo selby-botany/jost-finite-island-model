@@ -41,6 +41,7 @@ from fim.engine import (
 from fim.engine import backends as engine_backends
 from fim.engine import simulate_params as engine_fim
 from fim.gui import app as app_module
+from fim.gui import object_bridge
 from fim.gui import jobs as jobs_module
 from fim.gui import presets as presets_module
 from fim.gui import recent_runs as recent_runs_module
@@ -1008,14 +1009,19 @@ def test_start_run_after_a_load_uses_the_loaded_run_settings(
     """`start_run` builds the run from the loaded run settings, not from Settings."""
     captured: list[SimulationParams] = []
 
-    def capture(
-        self: Api, params: SimulationParams, *_args: Any, **_kwargs: Any
-    ) -> dict[str, Any]:
-        """Record the parameters a scalar run would start with, instead of running."""
+    def capture(self: Api, object_id: str, **_options: Any) -> dict[str, Any]:
+        """Record the saved object's parameters instead of starting the run."""
+        _, params = object_bridge.prepare_start(object_id)
         captured.append(params)
-        return {"ok": True}
+        return {
+            "ok": True,
+            "isBatch": False,
+            "objectId": object_id,
+            "resourceKey": f"run-object:{object_id}",
+        }
 
-    monkeypatch.setattr(Api, "_start_scalar_run", capture)
+    monkeypatch.setattr(Api, "_start_claimed_run_object", capture)
+    monkeypatch.setattr(app_module, "_active_window", lambda: object())
     api = Api()
     assert api.set_default_run_settings(
         {**api.get_default_run_settings(), "engine_backend": "lineal"}
@@ -1031,6 +1037,32 @@ def test_start_run_after_a_load_uses_the_loaded_run_settings(
     assert (params.engine_backend, params.n_replicates) == ("auto", 1)
     settings = api.get_default_run_settings()
     assert (settings["engine_backend"], settings["n_replicates"]) == ("lineal", "200")
+    api._release_run_claim()
+
+
+def test_start_run_returns_claimed_job_id_when_worker_finishes_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A terminal worker may release the claim before `start_run` returns."""
+    claimed_job_ids: list[str] = []
+
+    def finish_immediately(
+        self: Api, *_args: Any, **_kwargs: Any
+    ) -> dict[str, Any]:
+        """Simulate a worker drain releasing its job before the bridge returns."""
+        job_id = self._job_id
+        assert job_id is not None
+        claimed_job_ids.append(job_id)
+        self._release_run_claim()
+        return {"ok": True, "isBatch": False}
+
+    monkeypatch.setattr(Api, "_start_claimed_run", finish_immediately)
+    api = Api()
+
+    started = api.start_run({})
+
+    assert started["ok"] is True
+    assert started["jobId"] == claimed_job_ids[0]
 
 
 def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
@@ -3356,8 +3388,8 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     """A `"progress"` push includes `pairPanel` once a live pair is selected.
 
     No test calls `_drain_run_messages` directly elsewhere in this file
-    (its own docstring already notes why: production only ever reaches
-    it via `_start_scalar_run`'s own thread) — this is the first, added
+    (its own docstring already notes why: production reaches it from a
+    run worker's own thread) — this is the first, added
     specifically to prove the new `live_deme_pair` parameter without
     needing a real background thread or a `gui` marker.
     """

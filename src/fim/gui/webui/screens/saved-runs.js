@@ -9,8 +9,8 @@
  *   and fixed later; a valid one is saved as Planned. Saving again while
  *   a saved run is being edited updates that run, so a run moves between
  *   Draft and Planned as its form is broken or fixed.
- * - Home's "Saved runs" table lists every saved run with only the actions
- *   its state allows (`Api.list_run_objects`).
+ * - Home's "Saved runs" table keeps unfinished saved runs. Completed runs
+ *   are listed with results rather than duplicated here.
  * - "Pause" (Run toolbar, shown only while a saved run executes) asks the
  *   run to write a checkpoint and stop; Resume continues it exactly.
  *
@@ -86,11 +86,19 @@ function endActiveSavedRun() {
     for (const tabId of window.fim.workspace.ids()) {
         const state = savedRunStateFor(tabId);
         if (state) {
+            if (state.activeSavedRunId !== null) {
+                const documentState = window.fim.workspace.get(tabId);
+                if (documentState) {
+                    documentState.runObjectId = state.activeSavedRunId;
+                    documentState.runObjectState = "finished";
+                }
+            }
             state.activeSavedRunId = null;
             state.pausePending = false;
         }
     }
     renderPauseRunButton();
+    window.fim.refreshRunButton?.();
 }
 
 function clearEditingObject(objectId) {
@@ -149,9 +157,10 @@ async function refreshSavedRuns() {
         showSavedRunsBanner(listing.message);
         return;
     }
-    savedRunsBody.replaceChildren(...listing.runs.map(buildSavedRunRow));
-    savedRunsTable.hidden = listing.runs.length === 0;
-    savedRunsEmpty.hidden = listing.runs.length > 0;
+    const unfinished = listing.runs.filter((run) => run.state !== "completed");
+    savedRunsBody.replaceChildren(...unfinished.map(buildSavedRunRow));
+    savedRunsTable.hidden = unfinished.length === 0;
+    savedRunsEmpty.hidden = unfinished.length > 0;
     if (listing.unreadable.length > 0) {
         showSavedRunsBanner(`Some saved runs cannot be read: ${listing.unreadable.join("; ")}`);
     }
@@ -321,6 +330,57 @@ async function startSavedRun(run) {
 }
 
 /**
+ * Associate a running or finished Run object with its workspace document.
+ * @param {string} tabId The owning workspace document.
+ * @param {string} objectId The Run object identifier.
+ */
+window.fim.activateRunObjectForDocument = function activateRunObjectForDocument(
+    tabId,
+    objectId
+) {
+    const state = savedRunStateFor(tabId);
+    const documentState = window.fim.workspace.get(tabId);
+    if (!state || !documentState) {
+        return;
+    }
+    state.activeSavedRunId = objectId;
+    documentState.runObjectId = objectId;
+    if (
+        documentState.jobState !== "finished" &&
+        documentState.jobState !== "terminal"
+    ) {
+        documentState.runObjectState = "running";
+    } else {
+        documentState.runObjectState = "finished";
+    }
+    renderPauseRunButton();
+    window.fim.refreshRunButton?.();
+};
+
+window.fim.resumeRunObjectFromTab = async function resumeRunObjectFromTab(tabId) {
+    const documentState = window.fim.workspace.get(tabId);
+    const objectId = documentState?.runObjectId;
+    if (!documentState || !objectId) {
+        return;
+    }
+    const run = {
+        objectId,
+        name: documentState.runTitle?.state?.runName || documentState.label || "",
+    };
+    await window.fim.startRunExclusively(
+        () => beginSavedRun(run, tabId),
+        (message) => {
+            documentState.startRefusal = `${run.name || objectId}: ${message}`;
+            window.fim.workspace.notifyChange();
+            if (window.fim.workspace.selectedId() === tabId) {
+                window.fim.showRunBanner(documentState.startRefusal);
+            }
+        },
+        { tabId, jobKind: "saved-run" }
+    );
+};
+
+/**
  * Show the running view and start `run`, once `startSavedRun` knows that
  * no other run is starting or in flight.
  * @param {object} run The row's saved run.
@@ -344,6 +404,8 @@ async function beginSavedRun(run, tabId = window.fim.workspace.selectedId()) {
     if (documentState) {
         documentState.jobKind = "saved-run";
         documentState.jobState = "starting";
+        documentState.runObjectId = run.objectId;
+        documentState.runObjectState = "running";
         window.fim.workspace.notifyChange();
     }
     if (selected) {
@@ -379,6 +441,9 @@ async function beginSavedRun(run, tabId = window.fim.workspace.selectedId()) {
     if (documentState && started.jobId) {
         documentState.jobState = "running";
         window.fim.workspace.attachJob(tabId, started.jobId);
+    }
+    if (documentState && started.resourceKey) {
+        window.fim.workspace.setResourceKey(tabId, started.resourceKey);
     }
     if (documentState?.closeAfterStart) {
         documentState.closeAfterStart = false;
@@ -486,11 +551,23 @@ function wrapFimFunction(name, after) {
 }
 
 window.fim.onRunPaused = function onRunPaused(generation) {
+    for (const tabId of window.fim.workspace.ids()) {
+        const state = savedRunStateFor(tabId);
+        const documentState = window.fim.workspace.get(tabId);
+        if (state?.activeSavedRunId && documentState) {
+            documentState.runObjectId = state.activeSavedRunId;
+            documentState.runObjectState = "paused";
+            state.activeSavedRunId = null;
+            state.pausePending = false;
+            break;
+        }
+    }
     endActiveSavedRun();
     cancelButton.disabled = true;
     window.fim.showRunBanner(
-        `Paused at generation ${generation}. Resume it from Saved runs on Home.`
+        `Paused at generation ${generation}. Resume it with the Run button.`
     );
+    window.fim.refreshRunButton?.();
 };
 
 window.fim.getEditingObjectId = function getEditingObjectId() {
