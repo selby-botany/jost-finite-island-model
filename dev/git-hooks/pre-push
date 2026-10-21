@@ -145,7 +145,33 @@ if [[ "${PRE_PUSH_SKIP_VALIDATE:-false}" != true ]]; then
         && command -v docker >/dev/null 2>&1 \
         && docker info >/dev/null 2>&1
     then
-        dev/bin/validate-repository
+        # Git supplies the exact ref updates on stdin. Scan their union,
+        # excluding ancestry already present on the destination remote.
+        scan_revisions=
+        saw_updates=false
+        while read -r local_ref local_oid _remote_ref remote_oid; do
+            saw_updates=true
+            [[ "${local_oid}" =~ ^0+$ ]] && continue
+            local_commit=$(git rev-parse --verify "${local_oid}^{commit}")
+            scan_revisions="${scan_revisions} ${local_commit}"
+            if [[ ! "${remote_oid}" =~ ^0+$ ]]; then
+                if remote_commit=$(git rev-parse --verify "${remote_oid}^{commit}" 2>/dev/null); then
+                    scan_revisions="${scan_revisions} ^${remote_commit}"
+                else
+                    printf 'pre-push: remote base %s unavailable; scanning full ancestry of %s\n' \
+                        "${remote_oid}" "${local_ref}" >&2
+                fi
+            fi
+        done
+        if [[ -n "${scan_revisions}" ]]; then
+            dev/bin/validate-repository --gitleaks-log-opts "${scan_revisions# }"
+        elif [[ "${saw_updates}" == true ]]; then
+            printf 'pre-push: deletion-only push; scanning no new commits\n'
+            dev/bin/validate-repository --gitleaks-log-opts 'HEAD ^HEAD'
+        else
+            # Manual invocation has no push context: retain the full audit.
+            dev/bin/validate-repository
+        fi
     else
         printf 'pre-push: Docker unavailable; repository validation skipped\n'
     fi

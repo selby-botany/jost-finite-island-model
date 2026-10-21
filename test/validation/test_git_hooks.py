@@ -42,6 +42,7 @@ def _run_hook(
     name: str,
     *args: str,
     env: dict[str, str] | None = None,
+    input_text: str = "",
 ) -> subprocess.CompletedProcess[str]:
     """Run one project hook against a fixture repository."""
     return subprocess.run(
@@ -51,6 +52,7 @@ def _run_hook(
         check=False,
         capture_output=True,
         text=True,
+        input=input_text,
     )
 
 
@@ -407,6 +409,130 @@ def test_pre_push_runs_the_docker_backed_repository_validation() -> None:
         "the validation gate must probe the Docker daemon, not just the "
         "docker binary, so a stopped daemon skips rather than fails"
     )
+
+
+@pytest.mark.parametrize(
+    "update",
+    ["existing", "new", "delete", "missing-base", "multiple", "force", "manual"],
+)
+def test_pre_push_scopes_secret_scan_to_outgoing_history(
+    tmp_path: Path, update: str
+) -> None:
+    """Push refs exclude remote ancestry without relying on tracking refs."""
+    _initialize_repo(tmp_path)
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "--quiet", "-m", "test: base")
+    base = _git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    (tmp_path / "change").write_text("new\n", encoding="utf-8")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "--quiet", "-m", "test: outgoing")
+    tip = _git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    zero = "0" * 40
+    missing = "1" * 40
+    updates = {
+        "existing": f"refs/heads/dev {tip} refs/heads/dev {base}\n",
+        "new": f"refs/heads/new {tip} refs/heads/new {zero}\n",
+        "delete": f"(delete) {zero} refs/heads/old {base}\n",
+        "missing-base": f"refs/heads/dev {tip} refs/heads/dev {missing}\n",
+        "multiple": (
+            f"refs/heads/dev {tip} refs/heads/dev {base}\n"
+            f"refs/heads/new {tip} refs/heads/new {zero}\n"
+        ),
+        "force": f"refs/heads/dev {base} refs/heads/dev {tip}\n",
+        "manual": "",
+    }
+    expected = {
+        "existing": f"{tip} ^{base}",
+        "new": tip,
+        "delete": "HEAD ^HEAD",
+        "missing-base": tip,
+        "multiple": f"{tip} ^{base} {tip}",
+        "force": f"{base} ^{tip}",
+    }
+    tools = tmp_path / "tools"
+    path = _tool_path(tools, "bash", "git", "mkdir", "rm", "cat")
+    docker = tools / "docker"
+    docker.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    docker.chmod(0o755)
+    validator = tmp_path / "dev" / "bin" / "validate-repository"
+    validator.parent.mkdir(parents=True)
+    validator.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > validation-args\n',
+        encoding="utf-8",
+    )
+    validator.chmod(0o755)
+    result = _run_hook(
+        tmp_path,
+        "pre-push",
+        "origin",
+        "unused",
+        input_text=updates[update],
+        env={
+            **os.environ,
+            "PATH": path,
+            "PRE_PUSH_SKIP_LINT": "true",
+            "PRE_PUSH_SKIP_TYPE": "true",
+            "PRE_PUSH_SKIP_DOCS": "true",
+            "PRE_PUSH_SKIP_TEST": "true",
+            "PRE_PUSH_SKIP_VALIDATE": "false",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    arguments = (tmp_path / "validation-args").read_text(encoding="utf-8")
+    if update == "manual":
+        assert arguments == "\n"
+    else:
+        assert arguments == f"--gitleaks-log-opts\n{expected[update]}\n"
+    if update == "missing-base":
+        assert "scanning full ancestry" in result.stderr
+
+
+@pytest.mark.parametrize("scoped", [False, True])
+@pytest.mark.parametrize("scanner_status", [0, 1])
+def test_repository_validation_preserves_secret_scan_scope_and_failure(
+    tmp_path: Path, scoped: bool, scanner_status: int
+) -> None:
+    """The scanner receives exact revision arguments and failures block pushes."""
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    for name in (
+        "shellcheck",
+        "yamllint",
+        "markdownlint",
+        "eslint",
+        "stylelint",
+        "htmlhint",
+    ):
+        tool = tools / name
+        tool.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        tool.chmod(0o755)
+    scanner = tools / "gitleaks"
+    scanner.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > scanner-args\n'
+        f"exit {scanner_status}\n",
+        encoding="utf-8",
+    )
+    scanner.chmod(0o755)
+    validator = tmp_path / "dev" / "bin" / "validate-repository"
+    validator.parent.mkdir(parents=True)
+    shutil.copy2(PROJECT_ROOT / "dev" / "bin" / "validate-repository", validator)
+    revisions = "a" * 40 + " ^" + "b" * 40
+    result = subprocess.run(
+        [str(validator), *(["--gitleaks-log-opts", revisions] if scoped else [])],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == scanner_status, result.stderr
+    assert (tmp_path / "scanner-args").read_text(encoding="utf-8").splitlines() == [
+        "git",
+        ".",
+        "--no-banner",
+        "--redact",
+        "--log-opts",
+        f"--full-history {revisions if scoped else '--all'}",
+    ]
 
 
 def test_pre_push_detects_stale_generated_api(tmp_path: Path) -> None:

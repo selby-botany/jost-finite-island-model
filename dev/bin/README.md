@@ -589,10 +589,19 @@ Runs pinned Docker-backed tools across the repository:
 dev/bin/validate-repository
 ```
 
-Takes no arguments and requires a running Docker daemon. Images are
+Requires a running Docker daemon. Images are
 downloaded on first use and cached. No host linter installation is required.
 This command is separate from `./build`, which does not require Docker.
 The Docker-free [`check-webui-assets`](#check-webui-assets) runs in the build.
+
+By default, credential scanning audits all Git refs, including local agent
+checkpoints. The pre-push hook supplies `--gitleaks-log-opts` with outgoing
+commit revisions so an ordinary push does not rescan unrelated history.
+Other repository checks still cover the full checkout. For an explicit range:
+
+```console
+dev/bin/validate-repository --gitleaks-log-opts 'origin/dev..HEAD'
+```
 
 | Automatic execution | Conditions |
 |---|---|

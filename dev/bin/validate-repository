@@ -9,7 +9,7 @@ set -o pipefail
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     cat <<'EOF'
-Usage: dev/bin/validate-repository
+Usage: dev/bin/validate-repository [--gitleaks-log-opts REVISION_OPTIONS]
 
 Run repository-wide checks for shell scripts, YAML, Markdown, GUI
 JavaScript, CSS, HTML, and likely secrets. The checks use the wrappers in
@@ -19,10 +19,30 @@ JavaScript, CSS, HTML, and likely secrets. The checks use the wrappers in
 references and runs as part of `./build`.
 
 Options:
+  --gitleaks-log-opts REVISION_OPTIONS
+                Scan these Git revisions instead of all history.
   -h, --help    Show this help message and exit.
 EOF
     exit 0
 fi
+
+gitleaks_log_opts=--all
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --gitleaks-log-opts)
+            if [[ $# -lt 2 || -z "$2" ]]; then
+                printf 'validate-repository: --gitleaks-log-opts requires a value\n' >&2
+                exit 2
+            fi
+            gitleaks_log_opts=$2
+            shift 2
+            ;;
+        *)
+            printf 'validate-repository: unknown option: %s\n' "$1" >&2
+            exit 2
+            ;;
+    esac
+done
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 cd -- "${root}"
@@ -112,7 +132,10 @@ stylelint "src/fim/gui/webui/**/*.css"
 # top of `.htmlhintrc-fragment`.
 htmlhint src/fim/gui/webui/index.html
 htmlhint --config .htmlhintrc-fragment "src/fim/gui/webui/help/*.html"
-# Every commit in the repository's own history (`gitleaks git`), which
+# By default, every commit in the repository's history (`gitleaks git`).
+# The pre-push hook supplies outgoing revisions instead of scanning
+# unrelated refs, including local agent checkpoints, on every push.
+# Committed history is
 # is exactly the content that can actually leak: a secret becomes a
 # disclosure by being committed and pushed, so committed history is the
 # thing worth gating on. The separate `.github/workflows/gitleaks-ci.yml`
@@ -132,4 +155,5 @@ htmlhint --config .htmlhintrc-fragment "src/fim/gui/webui/help/*.html"
 # `--redact` prints only enough of any match to identify it, never the
 # full secret value, so a finding shown in this command's own output
 # never becomes a second place the same secret is exposed.
-gitleaks git . --no-banner --redact
+printf 'validate-repository: scanning Git revisions: %s\n' "${gitleaks_log_opts}"
+gitleaks git . --no-banner --redact --log-opts "--full-history ${gitleaks_log_opts}"

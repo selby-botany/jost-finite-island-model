@@ -43031,7 +43031,7 @@ Behavioral tests for repository-managed Git hooks.
 
 <a id="validation.test_git_hooks.test_commit_msg_accepts_supported_subjects"></a>
 
-#### [test\_commit\_msg\_accepts\_supported\_subjects](./validation/test_git_hooks.py#L82)
+#### [test\_commit\_msg\_accepts\_supported\_subjects](./validation/test_git_hooks.py#L84)
 
 ```python
 @pytest.mark.parametrize(
@@ -43053,7 +43053,7 @@ Documented Conventional Commit and Git-generated forms pass.
 
 <a id="validation.test_git_hooks.test_commit_msg_rejects_malformed_subjects"></a>
 
-#### [test\_commit\_msg\_rejects\_malformed\_subjects](./validation/test_git_hooks.py#L99)
+#### [test\_commit\_msg\_rejects\_malformed\_subjects](./validation/test_git_hooks.py#L101)
 
 ```python
 @pytest.mark.parametrize(
@@ -43068,7 +43068,7 @@ Malformed commit subjects fail with the expected format.
 
 <a id="validation.test_git_hooks.test_pre_commit_formats_and_restages_python_with_spaces"></a>
 
-#### [test\_pre\_commit\_formats\_and\_restages\_python\_with\_spaces](./validation/test_git_hooks.py#L113)
+#### [test\_pre\_commit\_formats\_and\_restages\_python\_with\_spaces](./validation/test_git_hooks.py#L115)
 
 ```python
 def test_pre_commit_formats_and_restages_python_with_spaces(
@@ -43079,7 +43079,7 @@ Staged Python is formatted and re-staged without splitting paths.
 
 <a id="validation.test_git_hooks.test_pre_commit_rejects_partially_staged_python_without_changing_the_index"></a>
 
-#### [test\_pre\_commit\_rejects\_partially\_staged\_python\_without\_changing\_the\_index](./validation/test_git_hooks.py#L133)
+#### [test\_pre\_commit\_rejects\_partially\_staged\_python\_without\_changing\_the\_index](./validation/test_git_hooks.py#L135)
 
 ```python
 def test_pre_commit_rejects_partially_staged_python_without_changing_the_index(
@@ -43090,7 +43090,7 @@ A formatter must not stage an author's deliberately unstaged hunk.
 
 <a id="validation.test_git_hooks.test_pre_commit_refreshes_api_only_for_staged_python"></a>
 
-#### [test\_pre\_commit\_refreshes\_api\_only\_for\_staged\_python](./validation/test_git_hooks.py#L154)
+#### [test\_pre\_commit\_refreshes\_api\_only\_for\_staged\_python](./validation/test_git_hooks.py#L156)
 
 ```python
 def test_pre_commit_refreshes_api_only_for_staged_python(
@@ -43101,7 +43101,7 @@ API generation runs for Python changes but not docs-only changes.
 
 <a id="validation.test_git_hooks.test_pre_commit_refreshes_test_docs_only_for_staged_test_files"></a>
 
-#### [test\_pre\_commit\_refreshes\_test\_docs\_only\_for\_staged\_test\_files](./validation/test_git_hooks.py#L201)
+#### [test\_pre\_commit\_refreshes\_test\_docs\_only\_for\_staged\_test\_files](./validation/test_git_hooks.py#L203)
 
 ```python
 def test_pre_commit_refreshes_test_docs_only_for_staged_test_files(
@@ -43115,7 +43115,7 @@ change at all, `generate-test-docs` has nothing to regenerate for a
 
 <a id="validation.test_git_hooks.test_pre_commit_rebuilds_the_examples_catalog_only_for_example_changes"></a>
 
-#### [test\_pre\_commit\_rebuilds\_the\_examples\_catalog\_only\_for\_example\_changes](./validation/test_git_hooks.py#L254)
+#### [test\_pre\_commit\_rebuilds\_the\_examples\_catalog\_only\_for\_example\_changes](./validation/test_git_hooks.py#L256)
 
 ```python
 def test_pre_commit_rebuilds_the_examples_catalog_only_for_example_changes(
@@ -43131,7 +43131,7 @@ proves the hook stages deletions inside the bundle. A change outside
 
 <a id="validation.test_git_hooks.test_pre_commit_rejects_new_non_ascii_filename"></a>
 
-#### [test\_pre\_commit\_rejects\_new\_non\_ascii\_filename](./validation/test_git_hooks.py#L312)
+#### [test\_pre\_commit\_rejects\_new\_non\_ascii\_filename](./validation/test_git_hooks.py#L314)
 
 ```python
 def test_pre_commit_rejects_new_non_ascii_filename(tmp_path: Path) -> None
@@ -43141,7 +43141,7 @@ A newly added filename outside ASCII fails before commit.
 
 <a id="validation.test_git_hooks.test_pre_commit_skips_unavailable_python_tools"></a>
 
-#### [test\_pre\_commit\_skips\_unavailable\_python\_tools](./validation/test_git_hooks.py#L325)
+#### [test\_pre\_commit\_skips\_unavailable\_python\_tools](./validation/test_git_hooks.py#L327)
 
 ```python
 def test_pre_commit_skips_unavailable_python_tools(tmp_path: Path) -> None
@@ -43151,7 +43151,7 @@ Missing developer tools produce diagnostics without blocking a commit.
 
 <a id="validation.test_git_hooks.test_python_hooks_skip_when_pyproject_is_absent"></a>
 
-#### [test\_python\_hooks\_skip\_when\_pyproject\_is\_absent](./validation/test_git_hooks.py#L346)
+#### [test\_python\_hooks\_skip\_when\_pyproject\_is\_absent](./validation/test_git_hooks.py#L348)
 
 ```python
 @pytest.mark.parametrize("name", ["pre-commit", "pre-push"])
@@ -43163,7 +43163,7 @@ A pre-Python fixture repository is not blocked by either hook.
 
 <a id="validation.test_git_hooks.test_pre_push_skips_unavailable_python_tools"></a>
 
-#### [test\_pre\_push\_skips\_unavailable\_python\_tools](./validation/test_git_hooks.py#L359)
+#### [test\_pre\_push\_skips\_unavailable\_python\_tools](./validation/test_git_hooks.py#L361)
 
 ```python
 def test_pre_push_skips_unavailable_python_tools(tmp_path: Path) -> None
@@ -43173,7 +43173,7 @@ Missing local gates are reported without blocking a push.
 
 <a id="validation.test_git_hooks.test_pre_push_runs_the_docker_backed_repository_validation"></a>
 
-#### [test\_pre\_push\_runs\_the\_docker\_backed\_repository\_validation](./validation/test_git_hooks.py#L381)
+#### [test\_pre\_push\_runs\_the\_docker\_backed\_repository\_validation](./validation/test_git_hooks.py#L383)
 
 ```python
 def test_pre_push_runs_the_docker_backed_repository_validation() -> None
@@ -43189,9 +43189,40 @@ script on `staging`/`main`, precisely because this hook is the real
 gate -- if that CI job is ever the thing that fails, this hook was
 bypassed.
 
+<a id="validation.test_git_hooks.test_pre_push_scopes_secret_scan_to_outgoing_history"></a>
+
+#### [test\_pre\_push\_scopes\_secret\_scan\_to\_outgoing\_history](./validation/test_git_hooks.py#L418)
+
+```python
+@pytest.mark.parametrize(
+    "update",
+    [
+        "existing", "new", "delete", "missing-base", "multiple", "force",
+        "manual"
+    ],
+)
+def test_pre_push_scopes_secret_scan_to_outgoing_history(
+        tmp_path: Path, update: str) -> None
+```
+
+Push refs exclude remote ancestry without relying on tracking refs.
+
+<a id="validation.test_git_hooks.test_repository_validation_preserves_secret_scan_scope_and_failure"></a>
+
+#### [test\_repository\_validation\_preserves\_secret\_scan\_scope\_and\_failure](./validation/test_git_hooks.py#L492)
+
+```python
+@pytest.mark.parametrize("scoped", [False, True])
+@pytest.mark.parametrize("scanner_status", [0, 1])
+def test_repository_validation_preserves_secret_scan_scope_and_failure(
+        tmp_path: Path, scoped: bool, scanner_status: int) -> None
+```
+
+The scanner receives exact revision arguments and failures block pushes.
+
 <a id="validation.test_git_hooks.test_pre_push_detects_stale_generated_api"></a>
 
-#### [test\_pre\_push\_detects\_stale\_generated\_api](./validation/test_git_hooks.py#L412)
+#### [test\_pre\_push\_detects\_stale\_generated\_api](./validation/test_git_hooks.py#L538)
 
 ```python
 def test_pre_push_detects_stale_generated_api(tmp_path: Path) -> None
@@ -43201,7 +43232,7 @@ The pre-push docs gate fails until generated API content is current.
 
 <a id="validation.test_git_hooks.test_pre_push_refuses_a_second_concurrent_run"></a>
 
-#### [test\_pre\_push\_refuses\_a\_second\_concurrent\_run](./validation/test_git_hooks.py#L462)
+#### [test\_pre\_push\_refuses\_a\_second\_concurrent\_run](./validation/test_git_hooks.py#L588)
 
 ```python
 def test_pre_push_refuses_a_second_concurrent_run(tmp_path: Path) -> None
@@ -43220,7 +43251,7 @@ flaky contention into an immediate, clear refusal instead.
 
 <a id="validation.test_git_hooks.test_pre_push_reclaims_a_stale_lock"></a>
 
-#### [test\_pre\_push\_reclaims\_a\_stale\_lock](./validation/test_git_hooks.py#L495)
+#### [test\_pre\_push\_reclaims\_a\_stale\_lock](./validation/test_git_hooks.py#L621)
 
 ```python
 def test_pre_push_reclaims_a_stale_lock(tmp_path: Path) -> None
@@ -43230,7 +43261,7 @@ A lock left by a process that is no longer running does not block a push.
 
 <a id="validation.test_git_hooks.test_installer_links_all_repository_hooks"></a>
 
-#### [test\_installer\_links\_all\_repository\_hooks](./validation/test_git_hooks.py#L516)
+#### [test\_installer\_links\_all\_repository\_hooks](./validation/test_git_hooks.py#L642)
 
 ```python
 def test_installer_links_all_repository_hooks(tmp_path: Path) -> None
