@@ -73,6 +73,23 @@
     font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
 }
 
+.help-content .math-display {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+    padding: 0.5rem 0;
+}
+
+.help-content .math-display math {
+    flex: 1;
+}
+
+.help-content .equation-tag {
+    white-space: nowrap;
+}
+
 .help-content a {
     color: var(--fim-accent);
 }

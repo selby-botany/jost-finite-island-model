@@ -14,6 +14,11 @@ precedes copyediting, typesetting, and proofreading. A short note near the
 end of this document records the handful of places where recomputing the
 paper's own numbers turned up a discrepancy from the printed text.
 
+For definitions, reporting conventions, and API links for all statistics
+supported by the simulator, use the [statistics reference](statistics.md).
+This guide explains the cited literature rather than serving as the
+simulator's statistic catalog.
+
 Mathematical symbols and formulas use $\TeX$; literal API identifiers,
 result keys, and sequence labels use backticks. Displayed equations in
 this guide have unique tags beginning with $\text{J}$. These local tags

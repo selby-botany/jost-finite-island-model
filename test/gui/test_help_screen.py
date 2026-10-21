@@ -228,6 +228,20 @@ def test_statistic_name_opens_its_definition_without_toggling_the_plot(
                 "hasApi: document.querySelector("
                 "'#help-content [data-fim-external*=\"API.md#fim.statistics\"]') "
                 "!== null,"
+                "hasMath: document.querySelector("
+                "'#help-content math[display=\"block\"] mfrac') !== null,"
+                "hasEquationTag: Array.from(document.querySelectorAll("
+                "'#help-content .equation-tag')).some("
+                "element => element.textContent === '(S.2)'),"
+                "nativeMath: (() => {"
+                "const fraction = document.querySelector("
+                "'#help-content math[display=\"block\"] mfrac');"
+                "if (!fraction) return false;"
+                "const numerator = fraction.children[0].getBoundingClientRect();"
+                "const denominator = fraction.children[1].getBoundingClientRect();"
+                "return numerator.height > 0 && "
+                "denominator.top >= numerator.bottom;"
+                "})(),"
                 "toggles: window.__plotToggles,"
                 "plotUnchanged: window.__plotPressed === "
                 "window.__helpRow.getAttribute('aria-pressed')"
@@ -251,6 +265,9 @@ def test_statistic_name_opens_its_definition_without_toggling_the_plot(
         "helpVisible": True,
         "hasDefinition": True,
         "hasApi": True,
+        "hasMath": True,
+        "hasEquationTag": True,
+        "nativeMath": True,
         "toggles": 0,
         "plotUnchanged": True,
         "back": True,

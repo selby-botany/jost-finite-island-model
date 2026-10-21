@@ -383,6 +383,13 @@ Edit the Markdown sources, not generated HTML. The pre-commit hook refreshes
 help when either guide changes; the pre-push hook and `./build --ci` check
 freshness.
 
+Inline TeX and fenced `math` equations are converted to native MathML by
+the pinned development dependency `latex2mathml`. Equation tags appear
+beside display equations. The bundled pages need no network connection,
+JavaScript math library, or separately downloaded fonts. Unsupported
+TeX commands stop generation instead of appearing as raw markup.
+Statistic-key headings remain unchanged so desktop help links keep working.
+
 ## `regenerate-example-outputs`
 
 Runs examples with `config.yaml` under `doc/examples/`, then replaces

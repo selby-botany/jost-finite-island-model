@@ -43096,7 +43096,18 @@ def test_every_statistic_has_a_bundled_definition_and_implementation_link(
 ) -> None
 ```
 
-Every catalog row links to math, an API symbol, and source.
+Every catalog row has a bundled definition and a resolvable API link.
+
+<a id="validation.test_help_html.test_statistics_api_links_resolve_without_redundant_guide_or_source_links"></a>
+
+#### test\_statistics\_api\_links\_resolve\_without\_redundant\_guide\_or\_source\_links
+
+```python
+def test_statistics_api_links_resolve_without_redundant_guide_or_source_links(
+) -> None
+```
+
+The reference owns statistic definitions; API sections link to source.
 
 <a id="validation.test_help_html.test_derived_display_rows_have_bundled_definitions"></a>
 
@@ -43117,6 +43128,59 @@ def test_statistics_reference_is_regenerated_by_the_commit_hook() -> None
 ```
 
 A reference-only edit refreshes the bundled page before committing.
+
+<a id="validation.test_help_html.test_help_renders_tex_as_native_mathml"></a>
+
+#### test\_help\_renders\_tex\_as\_native\_mathml
+
+```python
+@pytest.mark.parametrize(
+    ("expression", "element"),
+    [
+        (r"\frac{H_T-H_S}{1-H_S}", "mfrac"),
+        (r"\sum_{i=1}^{d}w_i p_{i,a}", "munderover"),
+        (r"\sqrt{J_XJ_Y}", "msqrt"),
+        (r"{}^{H}D_S", "msup"),
+        (r"\operatorname{TV}(p_i,p_{\mathrm{rest},i})", "msub"),
+        (r"\TeX", "mpadded"),
+    ],
+)
+def test_help_renders_tex_as_native_mathml(expression: str,
+                                           element: str) -> None
+```
+
+Fractions, sums, roots, and scripts are real math, not raw TeX.
+
+<a id="validation.test_help_html.test_statistics_equations_have_unique_visible_tags_and_no_raw_tex"></a>
+
+#### test\_statistics\_equations\_have\_unique\_visible\_tags\_and\_no\_raw\_tex
+
+```python
+def test_statistics_equations_have_unique_visible_tags_and_no_raw_tex(
+) -> None
+```
+
+Every tagged source equation survives generation as offline display math.
+
+<a id="validation.test_help_html.test_help_math_preserves_code_examples_and_literal_identifiers"></a>
+
+#### test\_help\_math\_preserves\_code\_examples\_and\_literal\_identifiers
+
+```python
+def test_help_math_preserves_code_examples_and_literal_identifiers() -> None
+```
+
+Math conversion never interprets the contents of code spans or fences.
+
+<a id="validation.test_help_html.test_help_rejects_unsupported_tex_commands"></a>
+
+#### test\_help\_rejects\_unsupported\_tex\_commands
+
+```python
+def test_help_rejects_unsupported_tex_commands() -> None
+```
+
+A new macro cannot silently degrade to visible backslash text.
 
 <a id="validation.test_identity_recursion_trajectory"></a>
 

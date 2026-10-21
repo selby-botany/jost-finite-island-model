@@ -7,7 +7,8 @@ offline. Links between bundled pages stay in the application; links
 to other documentation and source open in the system browser.
 
 Edit the Markdown sources, then regenerate the committed HTML.
-The renderer supports simple inline math, not general LaTeX.
+TeX math is converted to native MathML at build time, without runtime
+scripts, fonts, or network requests.
 
 Usage:
     dev/bin/generate-help-html
@@ -26,8 +27,10 @@ import os
 import re
 import sys
 from collections import Counter
+from collections.abc import Sequence
 from pathlib import Path
 from re import Match
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -91,6 +94,10 @@ def _ensure_project_interpreter() -> None:
 _ensure_project_interpreter()
 
 import markdown_it  # noqa: E402 -- must follow the interpreter bootstrap above
+from latex2mathml.converter import convert  # noqa: E402
+from markdown_it.renderer import RendererHTML  # noqa: E402
+from markdown_it.token import Token  # noqa: E402
+from markdown_it.utils import EnvType, OptionsDict  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "dev" / "lib"))
 from docslug import (  # noqa: E402 -- must follow the sys.path insert above
@@ -154,9 +161,7 @@ _GUI_REFRAME_NOTE: dict[str, str] = {
 
 
 # ---------------------------------------------------------------------------
-# Math: a purpose-built inline handler (design §4.2), not a LaTeX engine --
-# no doc in `EMBEDDED_DOCS` contains `\frac`, `\sum`, or any other macro
-# needing one (design §2.3).
+# Math: preserve legacy identifiers, convert TeX to offline native MathML.
 # ---------------------------------------------------------------------------
 
 _FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
@@ -173,11 +178,29 @@ _BARE_IDENTIFIER_PATTERN = re.compile(rf"^{_IDENTIFIER}$")
 # both embedded docs before choosing this rule, not assumed.
 _SUBSCRIPTED_IDENTIFIER_PATTERN = re.compile(rf"^({_IDENTIFIER})_\{{(\w+)\}}$")
 
-# The one LaTeX macro that actually recurs across `EMBEDDED_DOCS` (`usage.md`
-# alone uses `\sim` four times, e.g. "$D \\sim 0.100$") -- a small, explicit
-# lookup table, not a general macro interpreter; every other backslash
-# sequence renders verbatim (escaped), never guessed at.
-_MATH_SYMBOL_REPLACEMENTS: dict[str, str] = {r"\sim": "≈"}
+_EQUATION_TAG_PATTERN = re.compile(r"\\tag\{([^{}]+)\}\s*$")
+
+
+def render_tex(expr: str, *, display: bool = False) -> str:
+    """Convert TeX to MathML; reject unsupported commands rather than print them."""
+    markup = convert(expr, display="block" if display else "inline")
+    root = ElementTree.fromstring(markup)
+    if any("\\" in text for text in root.itertext()):
+        raise ValueError(f"Unsupported TeX command in help equation: {expr}")
+    return markup
+
+
+def render_display_math(expr: str) -> str:
+    """Render a math fence and its optional trailing equation tag separately."""
+    tag = _EQUATION_TAG_PATTERN.search(expr)
+    equation = expr if tag is None else expr[: tag.start()]
+    markup = render_tex(equation.strip(), display=True)
+    label = (
+        ""
+        if tag is None
+        else f'<span class="equation-tag">({html.escape(tag.group(1))})</span>'
+    )
+    return f'<div class="math-display">{markup}{label}</div>\n'
 
 
 def render_math(expr: str) -> str:
@@ -185,14 +208,8 @@ def render_math(expr: str) -> str:
 
     A bare identifier (`$N$`) becomes `<var>N</var>`; an identifier with
     one subscript (`$N_i$`, `$N_{i}$`) becomes `<var>N</var><sub>i</sub>`.
-    Everything else -- comparisons (`$d < 2$`), arithmetic
-    (`$max_generations + 1$`), snake_case identifiers with more than one
-    underscore (`$initial_allele_count$`) that a subscript-hungry regex
-    would otherwise mangle -- renders verbatim, escaped, inside a
-    `<code class="math-expr">` span: correct and safe is preferred here
-    over clever and wrong for content this varied (confirmed by grepping
-    every real `$expr$` in both embedded docs before writing this, not
-    assumed from the smaller sample the design doc itself worked from).
+    Legacy identifiers retain their existing HTML representation.
+    Expressions and TeX commands use native MathML.
     """
     stripped = expr.strip()
     subscripted = _SUBSCRIPTED_IDENTIFIER_PATTERN.fullmatch(stripped)
@@ -201,10 +218,7 @@ def render_math(expr: str) -> str:
         return f"<var>{html.escape(base)}</var><sub>{html.escape(subscript)}</sub>"
     if _BARE_IDENTIFIER_PATTERN.fullmatch(stripped):
         return f"<var>{html.escape(stripped)}</var>"
-    text = stripped
-    for macro, replacement in _MATH_SYMBOL_REPLACEMENTS.items():
-        text = text.replace(macro, replacement)
-    return f'<code class="math-expr">{html.escape(text)}</code>'
+    return render_tex(stripped)
 
 
 def _apply_math_outside_code_spans(segment: str) -> str:
@@ -329,6 +343,21 @@ def render_doc(filename: str) -> str:
     source = (DOC_DIR / filename).read_text(encoding="utf-8")
     source = render_inline_math(source)
     renderer = markdown_it.MarkdownIt("gfm-like", {"html": True}).disable("linkify")
+
+    def render_fence(
+        html_renderer: RendererHTML,
+        tokens: Sequence[Token],
+        index: int,
+        options: OptionsDict,
+        env: EnvType,
+    ) -> str:
+        """Convert math fences, leaving programming examples unchanged."""
+        token = tokens[index]
+        if token.info.strip() == "math":
+            return render_display_math(token.content)
+        return html_renderer.fence(tokens, index, options, env)
+
+    renderer.add_render_rule("fence", render_fence)
     rendered = renderer.render(source)
     rendered = inject_header_ids(rendered)
     rendered = rewrite_links(rendered)

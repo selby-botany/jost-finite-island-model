@@ -6,8 +6,10 @@ import re
 import runpy
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
+from xml.etree import ElementTree
 
 import markdown_it
 import pytest
@@ -90,7 +92,7 @@ def test_generated_help_is_current_and_local_links_resolve(tmp_path: Path) -> No
 
 
 def test_every_statistic_has_a_bundled_definition_and_implementation_link() -> None:
-    """Every catalog row links to math, an API symbol, and source."""
+    """Every catalog row has a bundled definition and a resolvable API link."""
     namespace = runpy.run_path(str(GENERATOR))
     text = namespace["render_doc"]("statistics.md")
     sections = dict(
@@ -101,8 +103,18 @@ def test_every_statistic_has_a_bundled_definition_and_implementation_link() -> N
         section = sections[entry.help_anchor]
         assert "data-fim-external=" in section, entry.key
         assert "/src/fim/API.md#fim.statistics." in section, entry.key
-        assert "/src/fim/statistics/" in section and ".py" in section, entry.key
-        assert re.search(r'data-fim-external="[^"]+/doc/[^"]+\.md', section), entry.key
+
+
+def test_statistics_api_links_resolve_without_redundant_guide_or_source_links() -> None:
+    """The reference owns statistic definitions; API sections link to source."""
+    source = (PROJECT_ROOT / "doc/statistics.md").read_text(encoding="utf-8")
+    api = (PROJECT_ROOT / "src/fim/API.md").read_text(encoding="utf-8")
+    anchors = re.findall(r"\]\(\.\./src/fim/API\.md#([^)]+)\)", source)
+    assert anchors
+    for anchor in anchors:
+        assert f'<a id="{anchor}"></a>' in api, anchor
+    assert "jost-differentiation-measures.md" not in source
+    assert "[Source](" not in source
 
 
 def test_derived_display_rows_have_bundled_definitions() -> None:
@@ -128,3 +140,57 @@ def test_statistics_reference_is_regenerated_by_the_commit_hook() -> None:
         'if "${help_sources_staged}"', 1
     )[0]
     assert "doc/statistics.md" in help_cases
+
+
+@pytest.mark.parametrize(
+    ("expression", "element"),
+    [
+        (r"\frac{H_T-H_S}{1-H_S}", "mfrac"),
+        (r"\sum_{i=1}^{d}w_i p_{i,a}", "munderover"),
+        (r"\sqrt{J_XJ_Y}", "msqrt"),
+        (r"{}^{H}D_S", "msup"),
+        (r"\operatorname{TV}(p_i,p_{\mathrm{rest},i})", "msub"),
+        (r"\TeX", "mpadded"),
+    ],
+)
+def test_help_renders_tex_as_native_mathml(expression: str, element: str) -> None:
+    """Fractions, sums, roots, and scripts are real math, not raw TeX."""
+    namespace = runpy.run_path(str(GENERATOR))
+    rendered = namespace["render_tex"](expression, display=True)
+    root = ElementTree.fromstring(rendered)
+    assert root.attrib["display"] == "block"
+    assert root.find(f".//{{http://www.w3.org/1998/Math/MathML}}{element}") is not None
+    assert "\\" not in "".join(root.itertext())
+
+
+def test_statistics_equations_have_unique_visible_tags_and_no_raw_tex() -> None:
+    """Every tagged source equation survives generation as offline display math."""
+    namespace = runpy.run_path(str(GENERATOR))
+    source = (PROJECT_ROOT / "doc/statistics.md").read_text(encoding="utf-8")
+    tags = re.findall(r"\\tag\{([^}]+)\}", source)
+    assert tags
+    assert len(tags) == len(set(tags))
+    rendered = namespace["render_doc"]("statistics.md")
+    labels = re.findall(r'<span class="equation-tag">\(([^<]+)\)</span>', rendered)
+    assert Counter(labels) == Counter(tags)
+    assert rendered.count('display="block"') == len(tags)
+    assert "language-math" not in rendered
+    assert "\\" not in rendered
+    assert "<script" not in rendered
+
+
+def test_help_math_preserves_code_examples_and_literal_identifiers() -> None:
+    """Math conversion never interprets the contents of code spans or fences."""
+    namespace = runpy.run_path(str(GENERATOR))
+    source = "`$H_T$`\n\n```python\nvalue = '$H_T$'\n```\n\n$H_{ST}$"
+    rendered = namespace["render_inline_math"](source)
+    assert "`$H_T$`" in rendered
+    assert "```python\nvalue = '$H_T$'\n```" in rendered
+    assert "<var>H</var><sub>ST</sub>" in rendered
+
+
+def test_help_rejects_unsupported_tex_commands() -> None:
+    """A new macro cannot silently degrade to visible backslash text."""
+    namespace = runpy.run_path(str(GENERATOR))
+    with pytest.raises(ValueError, match="Unsupported TeX command"):
+        namespace["render_tex"](r"\unsupportedcommand{x}")
