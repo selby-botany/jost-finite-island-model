@@ -68,10 +68,10 @@ def _worker_environment() -> dict[str, str]:
 
 
 def test_job_worker_uses_the_requested_priority_before_engine_imports() -> None:
-    """The worker lowers priority before it imports modules that load NumPy."""
+    """The worker applies its selected priority before importing the engine."""
     source = inspect.getsource(job_worker.main)
 
-    assert source.index("_lower_process_priority()") < source.index(
+    assert source.index("_apply_process_priority(") < source.index(
         "from fim.gui.object_runner"
     )
     module = ast.parse(inspect.getsource(job_worker))

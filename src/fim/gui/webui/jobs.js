@@ -36,6 +36,7 @@ const appliedJobEventCount = new Map();
 const latestAppliedJobEventPayload = new Map();
 const latestJobSnapshot = new Map();
 const jobViewLevel = new Map();
+const jobPriority = new Map();
 const closedJobIds = new Set();
 const closingJobDocuments = new Map();
 
@@ -79,6 +80,15 @@ function applyJobSnapshot(jobId, snapshot) {
     if (snapshot.viewLevel === "full" || snapshot.viewLevel === "summary") {
         jobViewLevel.set(jobId, snapshot.viewLevel);
     }
+    if (["normal", "lower", "lowest"].includes(snapshot.priority)) {
+        jobPriority.set(jobId, snapshot.priority);
+        const tabId = window.fim.workspace?.documentForJob(jobId);
+        const state = tabId ? window.fim.workspace.get(tabId) : null;
+        if (state) {
+            state.effectivePriority = snapshot.priority;
+            window.fim.workspace.notifyChange();
+        }
+    }
     if (snapshot.snapshot) {
         latestJobSnapshot.set(jobId, snapshot.snapshot);
         latestAppliedJobEventPayload.set(
@@ -116,6 +126,7 @@ window.fim.jobs.closeDocument = function closeDocument(jobId) {
         latestAppliedJobEventPayload.delete(jobId);
         latestJobSnapshot.delete(jobId);
         jobViewLevel.delete(jobId);
+        jobPriority.delete(jobId);
         return result;
     }).catch((error) => {
         closedJobIds.delete(jobId);
@@ -209,4 +220,7 @@ window.fim.jobs.snapshotFor = function snapshotFor(jobId) {
 };
 window.fim.jobs.viewLevelFor = function viewLevelFor(jobId) {
     return jobViewLevel.has(jobId) ? jobViewLevel.get(jobId) : null;
+};
+window.fim.jobs.priorityFor = function priorityFor(jobId) {
+    return jobPriority.has(jobId) ? jobPriority.get(jobId) : null;
 };

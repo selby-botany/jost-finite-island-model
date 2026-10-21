@@ -3601,6 +3601,59 @@ def test_set_pairwise_max_demes_validates_and_persists(tmp_path: Path) -> None:
         assert api.set_pairwise_max_demes(bad)["ok"] is False  # type: ignore[arg-type]
 
 
+def test_background_work_settings_persist_and_apply_to_new_jobs_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Admitted jobs retain priority while saved settings affect later jobs."""
+    path = tmp_path / "preferences.json"
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 5)
+    api = Api(preferences_path=path)
+
+    assert api.get_background_work_settings() == {
+        "runPriority": "lower",
+        "reserveMode": "cores",
+        "reserveValue": 0,
+        "usableCores": 5,
+        "reservedCores": 0,
+        "workerBudget": 5,
+    }
+    first, refusal = api._admit_run()
+    assert refusal is None
+    assert first is not None
+
+    updated = api.set_background_work_settings("lowest", "percent", 34)
+
+    assert updated == {
+        "ok": True,
+        "runPriority": "lowest",
+        "reserveMode": "percent",
+        "reserveValue": 34,
+        "usableCores": 5,
+        "reservedCores": 2,
+        "workerBudget": 3,
+    }
+    assert first.priority == "lower"
+    api._release_run_claim(first.job_id)
+
+    second, refusal = api._admit_run()
+    assert refusal is None
+    assert second is not None
+    assert second.priority == "lowest"
+    assert second.cores <= updated["workerBudget"]
+    assert Api(preferences_path=path).get_background_work_settings() == {
+        key: value for key, value in updated.items() if key != "ok"
+    }
+
+    for bad in (
+        ("urgent", "cores", 0),
+        ("lower", "cores", -1),
+        ("lower", "percent", 101),
+        ("lower", "invalid", 0),
+    ):
+        result = api.set_background_work_settings(*bad)  # type: ignore[arg-type]
+        assert result["ok"] is False
+
+
 def test_the_shown_set_never_reaches_computation_or_saved_results() -> None:
     """Showing or hiding a statistic is display only.
 

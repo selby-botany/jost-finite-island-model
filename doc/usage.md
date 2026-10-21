@@ -1791,6 +1791,10 @@ and the last submitted configuration between launches:
   `null` theme follows the operating system.
 - Whether the welcome panel has been dismissed.
 - Startup configuration policy and execution/convergence defaults.
+- Background-work priority and CPU reserve. A percentage reserve rounds
+  up to whole logical cores; the worker budget is derived from the cores
+  left, with at least one worker. Changes affect jobs started afterward,
+  and each job's effective priority appears in its document tab.
 - The configuration last submitted with **Run simulation**.
 
 **Restore the last submitted configuration** opens that configuration at

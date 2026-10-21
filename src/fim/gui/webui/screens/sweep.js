@@ -1322,7 +1322,7 @@ window.fim.runConfiguredSweep = async function runConfiguredSweep(
     documentState.jobState = "running";
     documentState.sweepStudyId = result.studyId;
     if (result.jobId) {
-        window.fim.workspace.attachJob(tabId, result.jobId);
+        window.fim.workspace.attachJob(tabId, result.jobId, result.priority);
     }
     if (documentState.closeAfterStart) {
         documentState.closeAfterStart = false;

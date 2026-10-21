@@ -100,6 +100,7 @@ const workspace = (() => {
             resourceKey: initialState.resourceKey ?? null,
             readOnly: initialState.readOnly ?? false,
             capabilities: initialState.capabilities ?? {},
+            effectivePriority: initialState.effectivePriority ?? null,
             completedOutputDirectory:
                 initialState.completedOutputDirectory ?? null,
             completedTrajectoryPath:
@@ -231,7 +232,7 @@ const workspace = (() => {
         }
     }
 
-    function attachJob(tabId, jobId) {
+    function attachJob(tabId, jobId, priority = null) {
         const state = documentFor(tabId);
         const existingId = documentByJob.get(jobId);
         if (jobId !== null && existingId !== undefined && existingId !== tabId) {
@@ -241,6 +242,8 @@ const workspace = (() => {
             documentByJob.delete(state.attachedJobId);
         }
         state.attachedJobId = jobId;
+        state.effectivePriority =
+            priority || window.fim.jobs?.priorityFor?.(jobId) || null;
         if (jobId !== null) {
             documentByJob.set(jobId, tabId);
             const snapshot = window.fim.jobs?.snapshotFor(jobId);
@@ -256,7 +259,10 @@ const workspace = (() => {
                     window.fim.requestCloseDocument(tabId);
                 }
             }
+        } else {
+            state.effectivePriority = null;
         }
+        notifyChange();
     }
 
     function settle(tabId, name, value) {

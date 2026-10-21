@@ -27,7 +27,7 @@ from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message, join_or_fail
 
 from fim import __version__, paths
 from fim import sweep_run as sweep_run_module
-from fim.execution_priority import initialize_pool_worker
+from fim.execution_priority import Priority, initialize_pool_worker
 from fim.gui.sweep_bridge import status_payload
 from fim.model.params import SimulationParams
 from fim.persistence import groups
@@ -1255,18 +1255,28 @@ def test_pool_priority_initializer_is_gui_only_and_survives_replacement(
     )
     monkeypatch.setattr(sweep_run_module, "ProcessPoolExecutor", create_executor)
     results = Path("/tmp/test-sweep-results")
-    for lower_priority in (False, True):
+    priorities: tuple[tuple[Priority, bool], ...] = (
+        ("normal", False),
+        ("lower", True),
+        ("lowest", False),
+    )
+    for priority, lower_priority in priorities:
         start = len(created)
-        runner = ProcessPointRunner(2, lower_priority=lower_priority, results=results)
+        runner = ProcessPointRunner(
+            2,
+            lower_priority=lower_priority,
+            priority=priority,
+            results=results,
+        )
         assert runner._results_directory == results
         first_pool = instances[-1]
         runner._replace(first_pool)
         replacement_pool = instances[-1]
         runner.close()
         pools = created[start:]
-        expected = initialize_pool_worker if lower_priority else None
         assert len(pools) == 2
-        assert all(pool["initializer"] is expected for pool in pools)
+        assert all(pool["initializer"] is initialize_pool_worker for pool in pools)
+        assert all(pool["initargs"] == (priority,) for pool in pools)
         assert all(pool["mp_context"] is context for pool in pools)
         assert first_pool.shut_down
         assert replacement_pool.shut_down

@@ -10,6 +10,11 @@ const scatterStyleSelect = document.getElementById("settings-scatter-style");
 const statisticsList = document.getElementById("settings-statistics-list");
 const statisticsFilter = document.getElementById("settings-statistics-filter");
 const pairwiseMaxDemesInput = document.getElementById("settings-pairwise-max-demes");
+const runPrioritySelect = document.getElementById("settings-run-priority");
+const reserveModeSelect = document.getElementById("settings-reserve-mode");
+const reserveValueInput = document.getElementById("settings-reserve-value");
+const reserveValueLabel = document.getElementById("settings-reserve-value-label");
+const workerBudgetHint = document.getElementById("settings-worker-budget");
 
 // The preset buttons. Each returns the keys it shows; a preset replaces
 // the current choice rather than adding to it.
@@ -295,6 +300,50 @@ async function loadSettingsResultsLocation() {
     settingsResultsLocationOverriddenHint.hidden = location.editable;
 }
 
+function applyBackgroundWorkSettings(settings) {
+    runPrioritySelect.value = settings.runPriority;
+    reserveModeSelect.value = settings.reserveMode;
+    reserveValueInput.value = String(settings.reserveValue);
+    const percentage = settings.reserveMode === "percent";
+    reserveValueLabel.textContent = percentage
+        ? "Percentage to keep free"
+        : "Cores to keep free";
+    reserveValueInput.max = percentage ? "100" : "";
+    workerBudgetHint.textContent =
+        `${settings.usableCores} logical cores available; ` +
+        `${settings.reservedCores} reserved; ` +
+        `${settings.workerBudget} worker(s) available.`;
+}
+
+async function loadBackgroundWorkSettings() {
+    applyBackgroundWorkSettings(
+        await window.pywebview.api.get_background_work_settings()
+    );
+}
+
+async function saveBackgroundWorkSettings() {
+    const reserveValue = reserveValueInput.valueAsNumber;
+    if (!Number.isInteger(reserveValue) || reserveValue < 0) {
+        showSettingsBanner("The CPU reserve must be a non-negative whole number.");
+        await loadBackgroundWorkSettings();
+        return;
+    }
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_background_work_settings(
+            runPrioritySelect.value,
+            reserveModeSelect.value,
+            reserveValue
+        )
+    );
+    if (!result.ok) {
+        showSettingsBanner(result.message);
+        await loadBackgroundWorkSettings();
+        return;
+    }
+    showSettingsBanner("");
+    applyBackgroundWorkSettings(result);
+}
+
 settingsResultsLocationChangeButton.addEventListener("click", async () => {
     const picked = await window.pywebview.api.browse_for_results_location();
     if (!picked.ok) {
@@ -328,6 +377,7 @@ async function loadSettingsDialog() {
     pairwiseMaxDemesInput.value = String(
         await window.pywebview.api.get_pairwise_max_demes()
     );
+    await loadBackgroundWorkSettings();
     await loadSettingsResultsLocation();
     window.__fimSettingsLoaded = true;
 }
@@ -482,6 +532,16 @@ pairwiseMaxDemesInput.addEventListener("change", async () => {
     );
     showSettingsBanner(result.ok ? "" : result.message);
 });
+
+runPrioritySelect.addEventListener("change", saveBackgroundWorkSettings);
+reserveModeSelect.addEventListener("change", async () => {
+    const nextMode = reserveModeSelect.value;
+    if (nextMode === "percent" && reserveValueInput.valueAsNumber > 100) {
+        reserveValueInput.value = "100";
+    }
+    await saveBackgroundWorkSettings();
+});
+reserveValueInput.addEventListener("change", saveBackgroundWorkSettings);
 
 /**
  * Open Settings scrolled to "Statistics shown" (the statistics panel's

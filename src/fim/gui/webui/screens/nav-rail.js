@@ -94,7 +94,10 @@ function documentSwitcherLabel(state) {
         (state.label === "Untitled" ? "New configuration" : state.label);
     const phase = state.runTitle?.state?.phase;
     const status = phase && phase !== "initial" ? phase : state.kind;
-    return `${name} - ${status}${state.formDirty ? " *" : ""}`;
+    const priority = state.effectivePriority
+        ? ` (${state.effectivePriority[0].toUpperCase()}${state.effectivePriority.slice(1)} priority)`
+        : "";
+    return `${name} - ${status}${priority}${state.formDirty ? " *" : ""}`;
 }
 
 /** Select an existing document without starting or stopping its job. */

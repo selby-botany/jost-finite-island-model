@@ -637,6 +637,79 @@ def test_reserved_cores_rejects_invalid_values(value: object) -> None:
             GuiPreferences().with_reserved_cores(value)
 
 
+def test_background_work_settings_round_trip(tmp_path: Path) -> None:
+    """Priority and percentage reserve persist and clear the alternate mode."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences().with_background_work_settings(
+        run_priority="lowest",
+        reserve_mode="percent",
+        reserve_value=34,
+    )
+    save_preferences(path, original)
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded == original
+    assert loaded.run_priority == "lowest"
+    assert loaded.reserved_cores == 0
+    assert loaded.reserved_cores_percent == 34
+    assert "run_priority" in loaded.to_dict()["gui"]
+    assert "reserved_cores" not in loaded.to_dict()["gui"]
+
+    whole_cores = loaded.with_background_work_settings(
+        run_priority="normal",
+        reserve_mode="cores",
+        reserve_value=2,
+    )
+    assert whole_cores.reserved_cores == 2
+    assert whole_cores.reserved_cores_percent is None
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("reserved_cores_percent", -1),
+        ("reserved_cores_percent", 101),
+        ("reserved_cores_percent", True),
+        ("run_priority", "urgent"),
+        ("run_priority", 1),
+    ],
+)
+def test_background_work_preferences_reject_invalid_values(
+    key: str, value: object
+) -> None:
+    """Malformed persisted priority and reserve values are rejected."""
+    with pytest.raises(ValueError):
+        GuiPreferences.from_dict(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {key: value},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("priority", "mode", "reserve"),
+    [
+        ("urgent", "cores", 0),
+        ("lower", "invalid", 0),
+        ("lower", "percent", 101),
+        ("lower", "percent", True),
+    ],
+)
+def test_background_work_settings_reject_invalid_updates(
+    priority: str, mode: str, reserve: object
+) -> None:
+    """Interactive setting updates validate the complete setting tuple."""
+    with pytest.raises(ValueError):
+        GuiPreferences().with_background_work_settings(
+            run_priority=priority,
+            reserve_mode=mode,
+            reserve_value=reserve,  # type: ignore[arg-type]
+        )
+
+
 def test_run_card_layout_round_trips_through_save_and_load(tmp_path: Path) -> None:
     """Chosen graphs, columns, scatter style and trajectory display survive a reload."""
     path = tmp_path / "preferences.json"

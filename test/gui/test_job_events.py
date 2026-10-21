@@ -96,6 +96,39 @@ def test_worker_capacity_rejects_invalid_inputs() -> None:
         jobs_module.worker_capacity(2, -1)
 
 
+@pytest.mark.parametrize(
+    ("usable_cores", "reserved_percent", "expected"),
+    [(3, 34, 2), (8, 25, 2), (8, 0, 0), (8, 100, 8)],
+)
+def test_percentage_reserve_rounds_up_to_whole_cores(
+    usable_cores: int, reserved_percent: int, expected: int
+) -> None:
+    """A fractional core reserve always rounds upward."""
+    assert (
+        jobs_module.reserved_core_count(usable_cores, reserved_percent=reserved_percent)
+        == expected
+    )
+
+
+def test_admission_retains_effective_priority_in_job_snapshots() -> None:
+    """Changing preferences cannot change the priority of an admitted job."""
+    admission = jobs_module.JobAdmission()
+    record, _remaining = admission.admit("run", cores=1, capacity=2, priority="lowest")
+
+    assert record is not None
+    assert record.priority == "lowest"
+    assert admission.snapshot(record.job_id) == {
+        "viewLevel": "full",
+        "priority": "lowest",
+        "sequence": -1,
+        "snapshot": None,
+    }
+    admission.release(record.job_id)
+    retained = admission.snapshot(record.job_id)
+    assert retained is not None
+    assert retained["priority"] == "lowest"
+
+
 def test_admission_never_reserves_more_than_available_capacity() -> None:
     """A refused reservation leaves the existing job and remaining budget intact."""
     admission = jobs_module.JobAdmission()
@@ -208,6 +241,7 @@ def test_a_finished_job_snapshot_survives_claim_release(tmp_path: Path) -> None:
         "ok": True,
         "jobId": job_id,
         "viewLevel": "full",
+        "priority": "lower",
         "sequence": 0,
         "snapshot": {
             "sequence": 0,
@@ -257,6 +291,7 @@ def test_get_job_snapshot_before_any_push(tmp_path: Path) -> None:
         "ok": True,
         "jobId": job_id,
         "viewLevel": "full",
+        "priority": "lower",
         "sequence": -1,
         "snapshot": None,
     }
@@ -277,6 +312,7 @@ def test_get_job_snapshot_reports_the_latest_assigned_sequence(
         "ok": True,
         "jobId": job_id,
         "viewLevel": "full",
+        "priority": "lower",
         "sequence": 2,
         "snapshot": None,
     }
@@ -296,6 +332,7 @@ def test_set_job_view_returns_latest_event_snapshot(tmp_path: Path) -> None:
         "ok": True,
         "jobId": job_id,
         "viewLevel": "summary",
+        "priority": "lower",
         "sequence": 0,
         "snapshot": {
             "sequence": 0,

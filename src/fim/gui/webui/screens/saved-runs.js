@@ -440,7 +440,11 @@ async function beginSavedRun(run, tabId = window.fim.workspace.selectedId()) {
     }
     if (documentState && started.jobId) {
         documentState.jobState = "running";
-        window.fim.workspace.attachJob(tabId, started.jobId);
+        window.fim.workspace.attachJob(
+            tabId,
+            started.jobId,
+            started.priority
+        );
     }
     if (documentState && started.resourceKey) {
         window.fim.workspace.setResourceKey(tabId, started.resourceKey);

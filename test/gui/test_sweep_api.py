@@ -26,6 +26,7 @@ from conftest import join_or_fail, poll_or_fail
 
 from fim import paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.execution_priority import Priority
 from fim.gui import app as app_module
 from fim.gui.app import Api
 from fim.gui.config_form import DEFAULT_RUN_SETTING_FIELD_NAMES, starter_form_values
@@ -46,9 +47,10 @@ class _InlineProcessPointRunner(LocalPointRunner):
         *,
         pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
         lower_priority: bool = False,
+        priority: Priority | None = None,
         results: Path | None = None,
     ) -> None:
-        del lower_priority, results
+        del lower_priority, priority, results
         _PROCESS_COUNTS.append(processes)
         super().__init__(max_workers, pairwise_max_demes=pairwise_max_demes)
 
@@ -669,7 +671,7 @@ def test_gui_one_point_sweep_uses_process_runner_and_half_core_budget(
 
     assert started["ok"] is True
     assert captured["process_points"] is True
-    assert captured["lower_priority"] is True
+    assert captured["priority"] == "lower"
     assert captured["cores"] == 8
     assert _PROCESS_COUNTS == [1]
     assert window.finished.is_set()

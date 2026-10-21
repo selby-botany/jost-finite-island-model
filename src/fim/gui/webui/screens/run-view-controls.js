@@ -445,7 +445,11 @@ async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
             documentState.jobState !== "terminal"
         ) {
             documentState.jobState = "running";
-            window.fim.workspace.attachJob(tabId, started.jobId);
+            window.fim.workspace.attachJob(
+                tabId,
+                started.jobId,
+                started.priority
+            );
         }
     }
     if (documentState && started.objectId) {

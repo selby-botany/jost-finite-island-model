@@ -2229,6 +2229,7 @@ class Api:
             started = bool(result["ok"]) and not result.get("reused", False)
             if result["ok"] and not result.get("reused", False):
                 result["jobId"] = job_id
+                result["priority"] = job.priority
             return result
         finally:
             # Nothing started means no drain thread will ever release the
@@ -2331,7 +2332,9 @@ class Api:
     def _worker_budget(self) -> int:
         """Return the user-adjusted worker budget for newly admitted jobs."""
         return jobs.worker_capacity(
-            jobs.usable_core_count(), self._preferences.reserved_cores
+            jobs.usable_core_count(),
+            self._preferences.reserved_cores,
+            self._preferences.reserved_cores_percent,
         )
 
     def _remaining_worker_cores(self) -> int:
@@ -2355,7 +2358,13 @@ class Api:
                     "a run is in progress; wait for it to finish or cancel it first",
                 )
         capacity = self._worker_budget()
-        record, remaining = self._jobs.admit(kind, cores, capacity, object_id=object_id)
+        record, remaining = self._jobs.admit(
+            kind,
+            cores,
+            capacity,
+            object_id=object_id,
+            priority=self._preferences.run_priority,
+        )
         if record is not None:
             self._refresh_legacy_job_state()
             return record, None
@@ -2400,7 +2409,9 @@ class Api:
             if self._run_in_flight:
                 return None, "a run is in progress; wait for it to finish first"
         capacity = self._worker_budget()
-        record, remaining = self._jobs.admit("sweep", cores, capacity)
+        record, remaining = self._jobs.admit(
+            "sweep", cores, capacity, priority=self._preferences.run_priority
+        )
         if record is not None:
             record.cancel_event = threading.Event()
             self._refresh_legacy_job_state()
@@ -3067,6 +3078,7 @@ class Api:
                 "ok": True,
                 "isBatch": True,
                 "jobId": job_id,
+                "priority": job.priority,
                 "objectId": object_id,
                 "resourceKey": _run_resource_key(run_object.directory),
                 "name": run_object.labels.name,
@@ -3126,6 +3138,7 @@ class Api:
             "ok": True,
             "isBatch": False,
             "jobId": job_id,
+            "priority": job.priority,
             "objectId": object_id,
             "resourceKey": _run_resource_key(run_object.directory),
             "name": run_object.labels.name,
@@ -3146,13 +3159,14 @@ class Api:
         results: Path,
     ) -> None:
         """Start and supervise one saved-run child process."""
+        record = self._jobs.active_job(job_id)
+        assert record is not None
         child = jobs.start_child_job(
             object_id,
             results=results,
             pairwise_max_demes=self._preferences.pairwise_max_demes,
+            priority=record.priority,
         )
-        record = self._jobs.active_job(job_id)
-        assert record is not None
         record.child = child
         self._object_worker = child
 
@@ -5448,6 +5462,50 @@ class Api:
         return self._preferences.pairwise_max_demes
 
     @_log_bridge_call
+    def get_background_work_settings(self) -> dict[str, Any]:
+        """Return saved background-work settings and the derived CPU budget."""
+        usable_cores = jobs.usable_core_count()
+        reserved_cores = jobs.reserved_core_count(
+            usable_cores,
+            self._preferences.reserved_cores,
+            self._preferences.reserved_cores_percent,
+        )
+        reserve_mode = (
+            "percent"
+            if self._preferences.reserved_cores_percent is not None
+            else "cores"
+        )
+        reserve_value = (
+            self._preferences.reserved_cores_percent
+            if reserve_mode == "percent"
+            else self._preferences.reserved_cores
+        )
+        return {
+            "runPriority": self._preferences.run_priority,
+            "reserveMode": reserve_mode,
+            "reserveValue": reserve_value,
+            "usableCores": usable_cores,
+            "reservedCores": reserved_cores,
+            "workerBudget": self._worker_budget(),
+        }
+
+    @_log_bridge_call
+    def set_background_work_settings(
+        self, run_priority: str, reserve_mode: str, reserve_value: int
+    ) -> dict[str, Any]:
+        """Save priority and CPU reserve for jobs admitted from this point on."""
+        try:
+            self._preferences = self._preferences.with_background_work_settings(
+                run_priority=run_priority,
+                reserve_mode=reserve_mode,
+                reserve_value=reserve_value,
+            )
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, **self.get_background_work_settings()}
+
+    @_log_bridge_call
     def set_pairwise_max_demes(self, max_demes: int) -> dict[str, Any]:
         """Set the largest deme count whose runs save every pair's statistics.
 
@@ -6394,6 +6452,7 @@ class Api:
                 "studyId": study.study_id,
                 "total": len(plan.points),
                 "jobId": job.job_id,
+                "priority": job.priority,
             }
         finally:
             # Nothing started means no sweep thread will ever release the
@@ -6498,7 +6557,12 @@ class Api:
                 cores=execution_cores,
             )
             started = True
-            return {"ok": True, "studyId": study_id, "jobId": job.job_id}
+            return {
+                "ok": True,
+                "studyId": study_id,
+                "jobId": job.job_id,
+                "priority": job.priority,
+            }
         finally:
             if not started and job is not None:
                 self._release_sweep_claim(job.job_id)
@@ -6880,7 +6944,7 @@ class Api:
                     max_workers=max_workers,
                     cores=cores,
                     process_points=True,
-                    lower_priority=True,
+                    priority=record.priority,
                     max_attempts=DEFAULT_SWEEP_MAX_ATTEMPTS,
                 )
             except Exception as error:

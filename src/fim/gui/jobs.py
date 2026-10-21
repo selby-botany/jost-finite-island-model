@@ -25,6 +25,8 @@ from typing import IO, Any, Literal, Protocol
 
 ViewLevel = Literal["full", "summary"]
 JobKind = Literal["run", "saved-run", "sweep"]
+JobPriority = Literal["normal", "lower", "lowest"]
+MAX_RESERVED_PERCENT = 100
 
 
 class WindowEvaluator(Protocol):
@@ -41,13 +43,39 @@ def usable_core_count() -> int:
     return max(1, count or os.cpu_count() or 1)
 
 
-def worker_capacity(usable_cores: int, reserved_cores: int) -> int:
-    """Return the worker budget after the user reserve, with one slot minimum."""
+def reserved_core_count(
+    usable_cores: int,
+    reserved_cores: int = 0,
+    reserved_percent: int | None = None,
+) -> int:
+    """Resolve the configured whole-core or percentage reserve."""
     if usable_cores < 1:
         raise ValueError("usable_cores must be at least one")
+    if isinstance(reserved_cores, bool) or not isinstance(reserved_cores, int):
+        raise ValueError("reserved_cores must be an integer")
     if reserved_cores < 0:
         raise ValueError("reserved_cores cannot be negative")
-    return max(1, usable_cores - reserved_cores)
+    if reserved_percent is not None and (
+        isinstance(reserved_percent, bool)
+        or not isinstance(reserved_percent, int)
+        or not 0 <= reserved_percent <= MAX_RESERVED_PERCENT
+    ):
+        raise ValueError("reserved_percent must be between zero and one hundred")
+    if reserved_percent is not None:
+        return (usable_cores * reserved_percent + MAX_RESERVED_PERCENT - 1) // (
+            MAX_RESERVED_PERCENT
+        )
+    return reserved_cores
+
+
+def worker_capacity(
+    usable_cores: int,
+    reserved_cores: int = 0,
+    reserved_percent: int | None = None,
+) -> int:
+    """Return the worker budget after the user reserve, with one slot minimum."""
+    reserved = reserved_core_count(usable_cores, reserved_cores, reserved_percent)
+    return max(1, usable_cores - reserved)
 
 
 @dataclass(slots=True)
@@ -96,6 +124,7 @@ class JobRecord:
     job_id: str
     kind: JobKind
     cores: int
+    priority: JobPriority = "lower"
     request: dict[str, Any] = field(default_factory=dict)
     cancel_event: threading.Event | None = None
     output_reservation: Path | None = None
@@ -115,6 +144,7 @@ def start_child_job(
     *,
     results: Path | None,
     pairwise_max_demes: int,
+    priority: JobPriority = "lower",
     command: Sequence[str] | None = None,
 ) -> ChildJob:
     """Start a worker executable and return its authenticated message channel."""
@@ -137,6 +167,7 @@ def start_child_job(
     if results is not None:
         worker_command.extend(("--results-directory", str(results)))
     worker_command.extend(("--pairwise-max-demes", str(pairwise_max_demes)))
+    worker_command.extend(("--priority", priority))
     try:
         process = subprocess.Popen(
             worker_command,
@@ -260,6 +291,7 @@ class JobAdmission:
         self.lock = threading.Lock()
         self._next_sequence: dict[str, int] = {}
         self._view_levels: dict[str, ViewLevel] = {}
+        self._job_priorities: dict[str, JobPriority] = {}
         self._latest_events: dict[str, dict[str, Any]] = {}
         self._active_jobs: dict[str, JobRecord] = {}
 
@@ -270,6 +302,7 @@ class JobAdmission:
         capacity: int,
         *,
         object_id: str | None = None,
+        priority: JobPriority = "lower",
     ) -> tuple[JobRecord | None, int]:
         """Atomically reserve worker capacity and create an active job.
 
@@ -278,6 +311,8 @@ class JobAdmission:
         """
         if cores < 1:
             raise ValueError("a job must reserve at least one core")
+        if priority not in ("normal", "lower", "lowest"):
+            raise ValueError(f"unsupported job priority: {priority!r}")
         with self.lock:
             remaining = max(
                 0, capacity - sum(job.cores for job in self._active_jobs.values())
@@ -291,10 +326,11 @@ class JobAdmission:
             ):
                 return None, remaining
             job_id = self.new_job_id()
-            record = JobRecord(job_id, kind, cores)
+            record = JobRecord(job_id, kind, cores, priority=priority)
             if object_id is not None:
                 record.request["object_id"] = object_id
             self._active_jobs[job_id] = record
+            self._job_priorities[job_id] = priority
             return record, remaining - cores
 
     def active_job(self, job_id: str) -> JobRecord | None:
@@ -333,6 +369,7 @@ class JobAdmission:
         """
         job_id = uuid.uuid4().hex
         self._view_levels[job_id] = "full"
+        self._job_priorities[job_id] = "lower"
         return job_id
 
     def view_level(self, job_id: str) -> ViewLevel:
@@ -373,6 +410,7 @@ class JobAdmission:
             event = self._latest_events.get(job_id)
             return {
                 "viewLevel": self._view_levels[job_id],
+                "priority": self._job_priorities[job_id],
                 "sequence": assigned - 1,
                 "snapshot": None if event is None else dict(event),
             }
@@ -417,4 +455,5 @@ class JobAdmission:
             self._active_jobs.pop(job_id, None)
             self._next_sequence.pop(job_id, None)
             self._view_levels.pop(job_id, None)
+            self._job_priorities.pop(job_id, None)
             self._latest_events.pop(job_id, None)

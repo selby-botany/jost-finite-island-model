@@ -24,6 +24,7 @@ def main() -> int:
     parser.add_argument("--finish-release")
     parser.add_argument("--results-directory", type=Path)
     parser.add_argument("--pairwise-max-demes", type=int, default=1000)
+    parser.add_argument("--priority", choices=("normal", "lower", "lowest"))
     arguments = parser.parse_args()
 
     from fim.gui.jobs import connect_message_channel  # noqa: PLC0415

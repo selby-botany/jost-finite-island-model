@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
 
-from fim.execution_priority import apply_lower_priority
+from fim.execution_priority import Priority, apply_priority
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +45,9 @@ class _ProcessMessageSink:
             self._connected = False
 
 
-def _lower_process_priority() -> None:
-    """Lower this process before importing the simulation engine or starting threads."""
-    apply_lower_priority()
+def _apply_process_priority(priority: Priority) -> None:
+    """Apply this child process's priority before importing the engine."""
+    apply_priority(priority)
 
 
 def _watch_lifeline(stop_requested: threading.Event) -> threading.Thread:
@@ -73,16 +73,18 @@ def _watch_lifeline(stop_requested: threading.Event) -> threading.Thread:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Execute one Run object until it completes, pauses, or is cancelled."""
-    _lower_process_priority()
-
     parser = argparse.ArgumentParser(prog="fim --gui-job", add_help=False)
     parser.add_argument("object_id")
     parser.add_argument("--results-directory", type=Path)
     parser.add_argument("--pairwise-max-demes", type=int)
+    parser.add_argument(
+        "--priority", choices=("normal", "lower", "lowest"), default="lower"
+    )
     parser.add_argument("--view-level", choices=("full", "summary"), default="full")
     arguments = parser.parse_args(sys.argv[1:] if argv is None else list(argv))
     if arguments.pairwise_max_demes is not None and arguments.pairwise_max_demes < 1:
         parser.error("--pairwise-max-demes must be at least 1")
+    _apply_process_priority(cast("Priority", arguments.priority))
 
     from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES  # noqa: PLC0415
     from fim.gui.job_results import GuiRunResult  # noqa: PLC0415

@@ -32,7 +32,7 @@ from fim import __version__, paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.errors import StoreError
 from fim.execution import UnsupportedSessionError
-from fim.execution_priority import initialize_pool_worker
+from fim.execution_priority import Priority, initialize_pool_worker
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
@@ -570,6 +570,7 @@ class ProcessPointRunner:
         pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
         executor_factory: Callable[[int], Executor] | None = None,
         lower_priority: bool = False,
+        priority: Priority | None = None,
         results: Path | None = None,
     ) -> None:
         context = multiprocessing.get_context("spawn")
@@ -578,11 +579,15 @@ class ProcessPointRunner:
         self._results_directory = (
             results if results is not None else paths.results_directory()
         )
+        worker_priority: Priority = priority or (
+            "lower" if lower_priority else "normal"
+        )
         self._factory: Callable[[int], Executor] = executor_factory or (
             lambda count: ProcessPoolExecutor(
                 count,
                 mp_context=context,
-                initializer=initialize_pool_worker if lower_priority else None,
+                initializer=initialize_pool_worker,
+                initargs=(worker_priority,),
             )
         )
         self._lock = threading.Lock()
@@ -1272,6 +1277,7 @@ def run_sweep(
     cores: int | None = None,
     process_points: bool = False,
     lower_priority: bool = False,
+    priority: Priority | None = None,
     clock: Callable[[], float] = time.monotonic,
     results: Path | None = None,
 ) -> SweepOutcome:
@@ -1375,6 +1381,7 @@ def run_sweep(
                 cores=cores,
                 process_points=process_points,
                 lower_priority=lower_priority,
+                priority=priority,
                 clock=clock,
                 results=results,
             )
@@ -1426,6 +1433,7 @@ def _run_sweep_locked(
     cores: int | None = None,
     process_points: bool = False,
     lower_priority: bool = False,
+    priority: Priority | None = None,
     clock: Callable[[], float] = time.monotonic,
     results: Path | None = None,
 ) -> SweepOutcome:
@@ -1481,6 +1489,7 @@ def _run_sweep_locked(
             runner.max_workers,
             pairwise_max_demes=runner.pairwise_max_demes,
             lower_priority=lower_priority,
+            priority=priority,
             results=results,
         )
         effective_runner = process_runner

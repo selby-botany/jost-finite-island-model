@@ -1657,6 +1657,10 @@ of all five each generation; see
 <code>null</code> theme follows the operating system.</li>
 <li>Whether the welcome panel has been dismissed.</li>
 <li>Startup configuration policy and execution/convergence defaults.</li>
+<li>Background-work priority and CPU reserve. A percentage reserve rounds
+up to whole logical cores; the worker budget is derived from the cores
+left, with at least one worker. Changes affect jobs started afterward,
+and each job's effective priority appears in its document tab.</li>
 <li>The configuration last submitted with <strong>Run simulation</strong>.</li>
 </ul>
 <p><strong>Restore the last submitted configuration</strong> opens that configuration at

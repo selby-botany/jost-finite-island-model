@@ -17,9 +17,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.gui.jobs import MAX_RESERVED_PERCENT, JobPriority
 from fim.paths import write_text_atomically
 from fim.statistics.catalog import CATALOG
 
@@ -142,6 +143,47 @@ def _parse_reserved_cores(gui: Mapping[str, Any]) -> int:
             "preferences 'gui.reserved_cores' must be a non-negative integer"
         )
     return value
+
+
+def _parse_reserved_cores_percent(gui: Mapping[str, Any]) -> int | None:
+    """Read `gui.reserved_cores_percent`: an optional percentage from 0 to 100."""
+    value = gui.get("reserved_cores_percent")
+    if value is None:
+        return None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not 0 <= value <= MAX_RESERVED_PERCENT
+    ):
+        raise ValueError(
+            "preferences 'gui.reserved_cores_percent' must be an integer "
+            f"from 0 to {MAX_RESERVED_PERCENT}"
+        )
+    return value
+
+
+def _parse_run_priority(gui: Mapping[str, Any]) -> JobPriority:
+    """Read `gui.run_priority`: a supported child-worker priority."""
+    value = gui.get("run_priority", "lower")
+    if not isinstance(value, str) or value not in ("normal", "lower", "lowest"):
+        raise ValueError(
+            "preferences 'gui.run_priority' must be 'normal', 'lower', or 'lowest'"
+        )
+    return cast("JobPriority", value)
+
+
+def _parse_background_work_settings(
+    gui: Mapping[str, Any],
+) -> tuple[int, int | None, JobPriority]:
+    """Read and validate priority and mutually exclusive CPU reserve modes."""
+    reserved_cores = _parse_reserved_cores(gui)
+    reserved_cores_percent = _parse_reserved_cores_percent(gui)
+    if reserved_cores and reserved_cores_percent is not None:
+        raise ValueError(
+            "preferences 'gui.reserved_cores' and "
+            "'gui.reserved_cores_percent' cannot both be set"
+        )
+    return reserved_cores, reserved_cores_percent, _parse_run_priority(gui)
 
 
 def _parse_run_graphs(gui: Mapping[str, Any]) -> tuple[str, ...] | None:
@@ -284,6 +326,8 @@ class GuiPreferences:
     shown_statistics: tuple[str, ...] | None = None
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
     reserved_cores: int = 0
+    reserved_cores_percent: int | None = None
+    run_priority: JobPriority = "lower"
 
     def _run_card_dict(self) -> dict[str, Any]:
         """The Run card display choices that differ from their defaults."""
@@ -319,6 +363,10 @@ class GuiPreferences:
             gui["results_location_override"] = self.results_location_override
         if self.reserved_cores != 0:
             gui["reserved_cores"] = self.reserved_cores
+        if self.reserved_cores_percent is not None:
+            gui["reserved_cores_percent"] = self.reserved_cores_percent
+        if self.run_priority != "lower":
+            gui["run_priority"] = self.run_priority
         # Written whenever it differs from the default, including the blank
         # "Ask me each time" choice, which would otherwise be lost and read
         # back as diploid.
@@ -417,6 +465,9 @@ class GuiPreferences:
                     "str->str object"
                 )
             default_run_settings = dict(default_run_settings)
+        reserved_cores, reserved_cores_percent, run_priority = (
+            _parse_background_work_settings(gui)
+        )
         return GuiPreferences(
             significant_digits=gui.get("significant_digits"),
             form_values=form_values,
@@ -441,7 +492,9 @@ class GuiPreferences:
             trajectory_band_width=_parse_band_width(gui),
             shown_statistics=_parse_shown_statistics(gui),
             pairwise_max_demes=_parse_pairwise_max_demes(gui),
-            reserved_cores=_parse_reserved_cores(gui),
+            reserved_cores=reserved_cores,
+            reserved_cores_percent=reserved_cores_percent,
+            run_priority=run_priority,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -597,7 +650,37 @@ class GuiPreferences:
             or reserved_cores < 0
         ):
             raise ValueError("reserved_cores must be a non-negative integer")
-        return replace(self, reserved_cores=reserved_cores)
+        return replace(self, reserved_cores=reserved_cores, reserved_cores_percent=None)
+
+    def with_background_work_settings(
+        self,
+        *,
+        run_priority: str,
+        reserve_mode: str,
+        reserve_value: int,
+    ) -> GuiPreferences:
+        """Return a copy with validated background-work settings replaced."""
+        if run_priority not in ("normal", "lower", "lowest"):
+            raise ValueError("run_priority must be normal, lower, or lowest")
+        if reserve_mode not in ("cores", "percent"):
+            raise ValueError("reserve_mode must be cores or percent")
+        if isinstance(reserve_value, bool) or not isinstance(reserve_value, int):
+            raise ValueError("reserve_value must be an integer")
+        if reserve_value < 0 or (
+            reserve_mode == "percent" and reserve_value > MAX_RESERVED_PERCENT
+        ):
+            raise ValueError(
+                "reserve_value must be non-negative and a percentage cannot "
+                f"exceed {MAX_RESERVED_PERCENT}"
+            )
+        return replace(
+            self,
+            run_priority=cast("JobPriority", run_priority),
+            reserved_cores=reserve_value if reserve_mode == "cores" else 0,
+            reserved_cores_percent=(
+                reserve_value if reserve_mode == "percent" else None
+            ),
+        )
 
     def with_default_ploidy(self, default_ploidy: str) -> GuiPreferences:
         """Return a copy with `default_ploidy` replaced.
