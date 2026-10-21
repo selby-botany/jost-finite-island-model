@@ -19,18 +19,42 @@ from collections.abc import Iterator
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from conftest import join_or_fail, poll_or_fail
 
 from fim import paths
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.gui import app as app_module
 from fim.gui.app import Api
 from fim.gui.config_form import DEFAULT_RUN_SETTING_FIELD_NAMES, starter_form_values
 from fim.persistence import groups
-from fim.sweep_run import LocalPointRunner
+from fim.sweep_run import LocalPointRunner, SweepOutcome, run_sweep
 
 _IDLE_POLL_SECONDS = 0.05
+_PROCESS_COUNTS: list[int] = []
+
+
+class _InlineProcessPointRunner(LocalPointRunner):
+    """Use the local point runner while preserving the process-runner API."""
+
+    def __init__(
+        self,
+        processes: int,
+        max_workers: int | None = None,
+        *,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        lower_priority: bool = False,
+        results: Path | None = None,
+    ) -> None:
+        del lower_priority, results
+        _PROCESS_COUNTS.append(processes)
+        super().__init__(max_workers, pairwise_max_demes=pairwise_max_demes)
+
+    def close(self) -> None:
+        """Match the process runner lifecycle without starting a pool."""
+        return None
 
 
 class _FakeWindow:
@@ -260,6 +284,7 @@ def test_cancelling_stops_the_sweep_and_resume_finishes_it(
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(LocalPointRunner, "run_object_point", cancel_after_first)
+    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", _InlineProcessPointRunner)
     try:
         started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
         _wait_until_idle(api)
@@ -509,6 +534,7 @@ def test_a_sweep_runs_each_batch_point_as_one_in_process_run_object(
 
     monkeypatch.setattr(LocalPointRunner, "run_object_point", recording)
     monkeypatch.setattr(LocalPointRunner, "run_point", legacy_recording)
+    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", _InlineProcessPointRunner)
     api.set_default_run_settings(
         {
             **api.get_default_run_settings(),
@@ -595,8 +621,9 @@ def _finished_sweep(api: Api, window: _FakeWindow) -> str:
     concurrency starts child interpreters and their engine imports, which
     exceeded the completion backstop under the full slow-suite load.
     """
-    started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
-    _wait_until_idle(api)
+    with patch("fim.sweep_run.ProcessPointRunner", _InlineProcessPointRunner):
+        started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
+        _wait_until_idle(api)
     assert window.finished.is_set()
     job_events = [
         json.loads(script[len("fim.onJobEvent(") : -1])
@@ -610,16 +637,68 @@ def _finished_sweep(api: Api, window: _FakeWindow) -> str:
 
 
 def test_finished_sweep_helper_does_not_spawn_point_processes(
-    api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
+    api: Api, window: _FakeWindow
 ) -> None:
     """Metadata fixtures must not depend on concurrent child-process startup."""
 
-    def unexpected_process_pool(*args: Any, **kwargs: Any) -> None:
-        pytest.fail("the metadata helper must run its points serially")
-
-    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", unexpected_process_pool)
+    _PROCESS_COUNTS.clear()
     study_id = _finished_sweep(api, window)
     assert groups.get_study(study_id).run_count == 2
+    assert _PROCESS_COUNTS == [1]
+
+
+def test_gui_one_point_sweep_uses_process_runner_and_half_core_budget(
+    api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GUI execution uses the reduced core budget even for one point at once."""
+    _PROCESS_COUNTS.clear()
+    monkeypatch.setattr(app_module.os, "cpu_count", lambda: 8)
+    original_run_sweep = run_sweep
+    captured: dict[str, Any] = {}
+
+    def capture_run_sweep(*args: Any, **kwargs: Any) -> SweepOutcome:
+        captured.update(kwargs)
+        return original_run_sweep(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "run_sweep", capture_run_sweep)
+    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", _InlineProcessPointRunner)
+
+    started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
+    _wait_until_idle(api)
+
+    assert started["ok"] is True
+    assert captured["process_points"] is True
+    assert captured["lower_priority"] is True
+    assert captured["cores"] == 4
+    assert _PROCESS_COUNTS == [1]
+    assert window.finished.is_set()
+
+
+def test_automatic_gui_sweep_preview_reserves_half_the_cores(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The preview and eventual execution use the same reduced budget."""
+    monkeypatch.setattr(app_module.os, "cpu_count", lambda: 10)
+    monkeypatch.setattr(app_module.os, "process_cpu_count", lambda: None, raising=False)
+
+    payload = api.plan_sweep(
+        _form(),
+        _request({"key": "N", "values": [16, 20, 24, 28, 32, 36, 40, 44, 48, 52]}),
+    )
+
+    assert payload["ok"] is True
+    assert payload["concurrency"]["cores"] == 5
+    assert payload["concurrency"]["pointsAtOnce"] == 5
+
+
+def test_gui_sweep_budget_prefers_process_cpu_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use the process-visible CPU count when the Python runtime exposes it."""
+    monkeypatch.setattr(app_module.os, "cpu_count", lambda: 12)
+    monkeypatch.setattr(app_module.os, "process_cpu_count", lambda: 6, raising=False)
+
+    assert app_module._gui_sweep_core_budget() == 3
 
 
 def test_export_sweep_table_writes_the_table_and_its_sidecar(

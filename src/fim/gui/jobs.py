@@ -46,7 +46,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from multiprocessing.connection import Client, Connection, Listener
 from pathlib import Path
-from typing import Any, BinaryIO, Literal
+from typing import IO, Any, Literal
 
 ViewLevel = Literal["full", "summary"]
 
@@ -57,7 +57,7 @@ class ChildJob:
 
     process: subprocess.Popen[bytes]
     messages: Listener
-    lifeline: BinaryIO | None
+    lifeline: IO[bytes] | None
     _lifeline_lock: threading.Lock = field(
         default_factory=threading.Lock, init=False, repr=False
     )

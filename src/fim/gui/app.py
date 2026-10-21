@@ -62,7 +62,6 @@ from fim.engine import (
     deterministic_run_id,
     history_free_statistic_values,
     pair_statistic_values,
-    pooled_convergence_histories,
     pooled_convergence_histories_from_pairs,
     report_for_state,
     reports_summary,
@@ -6069,11 +6068,13 @@ class Api:
     ) -> dict[str, Any]:
         """Describe how the sweep would spread its points over the machine."""
         at_once, max_workers = self._sweep_run_options(values, request)
+        params = SimulationParams.from_mapping(point_params)
         chosen = resolve_concurrency(
             points=points,
-            params=SimulationParams.from_mapping(point_params),
+            params=params,
             requested=at_once,
             max_workers=max_workers,
+            cores=_gui_sweep_core_budget(),
         )
         return {
             "pointsAtOnce": chosen.points_at_once,
@@ -6573,6 +6574,9 @@ class Api:
                     rerun=rerun,
                     points_at_once=points_at_once,
                     max_workers=max_workers,
+                    cores=_gui_sweep_core_budget(),
+                    process_points=True,
+                    lower_priority=True,
                     max_attempts=DEFAULT_SWEEP_MAX_ATTEMPTS,
                 )
             except Exception as error:
@@ -8565,6 +8569,13 @@ def _parse_max_workers(value: str) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def _gui_sweep_core_budget() -> int:
+    """Return the GUI sweep budget, leaving half the cores for other work."""
+    process_cpu_count = getattr(os, "process_cpu_count", None)
+    cpu_count = process_cpu_count() if process_cpu_count is not None else None
+    return max(1, (cpu_count or os.cpu_count() or 1) // 2)
+
+
 def _parse_generation(mode: str, generation_text: str) -> int | None:
     """Parse Screen 6's "final"/"choose" generation selector.
 
@@ -8962,7 +8973,12 @@ def _batch_done_payload(
     pooling `panels`, just above, already applies to the scatter panel.
     """
     try:
-        raw_pooled_histories = pooled_convergence_histories(results)
+        raw_pooled_histories = pooled_convergence_histories_from_pairs(
+            [
+                (result.convergence_generations, result.convergence_histories)
+                for result in results
+            ]
+        )
     except ValueError:
         raw_pooled_histories = {}
     pooled_convergence_histories_payload = _pooled_histories_payload(

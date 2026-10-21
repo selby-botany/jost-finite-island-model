@@ -21,6 +21,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_example_support`](#test.test_example_support)
   - [`test_examples_catalog`](#test.test_examples_catalog)
   - [`test_examples_seed`](#test.test_examples_seed)
+  - [`test_execution_priority`](#test.test_execution_priority)
   - [`test_expert_info`](#test.test_expert_info)
   - [`test_group_lifecycle`](#test.test_group_lifecycle)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
@@ -1804,6 +1805,45 @@ def test_the_committed_bundle_seeds_cleanly(results: Path) -> None
 ```
 
 The app's own `webui/examples/` bundle reads and seeds without error.
+
+<a id="test.test_execution_priority"></a>
+
+# [test.test\_execution\_priority](./test_execution_priority.py#L1)
+
+Tests for lowered priority on GUI worker processes.
+
+<a id="test.test_execution_priority.test_linux_priority_is_applied_to_each_existing_thread"></a>
+
+#### [test\_linux\_priority\_is\_applied\_to\_each\_existing\_thread](./test_execution_priority.py#L14)
+
+```python
+def test_linux_priority_is_applied_to_each_existing_thread(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Linux niceness is per thread, so enumerate the process task IDs.
+
+<a id="test.test_execution_priority.test_macos_priority_targets_the_current_process"></a>
+
+#### [test\_macos\_priority\_targets\_the\_current\_process](./test_execution_priority.py#L41)
+
+```python
+def test_macos_priority_targets_the_current_process(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Platforms with process-scoped niceness lower the current process.
+
+<a id="test.test_execution_priority.test_windows_priority_uses_below_normal_class"></a>
+
+#### [test\_windows\_priority\_uses\_below\_normal\_class](./test_execution_priority.py#L60)
+
+```python
+def test_windows_priority_uses_below_normal_class(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Windows child jobs use the below-normal process priority class.
 
 <a id="test.test_expert_info"></a>
 
@@ -4767,7 +4807,7 @@ generations), so the run ids, manifests and attachments are the real ones.
 
 <a id="test.test_sweep_run.results"></a>
 
-#### [results](./test_sweep_run.py#L83)
+#### [results](./test_sweep_run.py#L86)
 
 ```python
 @pytest.fixture
@@ -4778,7 +4818,7 @@ Point the results directory at a temporary one for the test.
 
 <a id="test.test_sweep_run.test_local_point_runner_releases_its_reservation"></a>
 
-#### [test\_local\_point\_runner\_releases\_its\_reservation](./test_sweep_run.py#L725)
+#### [test\_local\_point\_runner\_releases\_its\_reservation](./test_sweep_run.py#L728)
 
 ```python
 @pytest.mark.parametrize("fails", [False, True], ids=["published", "failed"])
@@ -4790,7 +4830,7 @@ A point releases its marker after publishing or when its run fails.
 
 <a id="test.test_sweep_run.test_each_point_run_is_named_after_its_study_and_coordinates"></a>
 
-#### [test\_each\_point\_run\_is\_named\_after\_its\_study\_and\_coordinates](./test_sweep_run.py#L780)
+#### [test\_each\_point\_run\_is\_named\_after\_its\_study\_and\_coordinates](./test_sweep_run.py#L783)
 
 ```python
 def test_each_point_run_is_named_after_its_study_and_coordinates(
@@ -4801,7 +4841,7 @@ A sweep's runs say which sweep and which point they are.
 
 <a id="test.test_sweep_run.test_a_reused_run_keeps_the_name_it_already_has"></a>
 
-#### [test\_a\_reused\_run\_keeps\_the\_name\_it\_already\_has](./test_sweep_run.py#L800)
+#### [test\_a\_reused\_run\_keeps\_the\_name\_it\_already\_has](./test_sweep_run.py#L803)
 
 ```python
 def test_a_reused_run_keeps_the_name_it_already_has(results: Path) -> None
@@ -4811,7 +4851,7 @@ A second sweep reusing a point does not rename the first sweep's run.
 
 <a id="test.test_sweep_run.test_a_reused_run_without_a_name_is_named_by_the_sweep"></a>
 
-#### [test\_a\_reused\_run\_without\_a\_name\_is\_named\_by\_the\_sweep](./test_sweep_run.py#L816)
+#### [test\_a\_reused\_run\_without\_a\_name\_is\_named\_by\_the\_sweep](./test_sweep_run.py#L819)
 
 ```python
 def test_a_reused_run_without_a_name_is_named_by_the_sweep(
@@ -4822,7 +4862,7 @@ A reused run nobody named (an ordinary single run) gets the sweep's name.
 
 <a id="test.test_sweep_run.test_a_read_only_point_run_keeps_its_own_labels_and_the_sweep_succeeds"></a>
 
-#### [test\_a\_read\_only\_point\_run\_keeps\_its\_own\_labels\_and\_the\_sweep\_succeeds](./test_sweep_run.py#L837)
+#### [test\_a\_read\_only\_point\_run\_keeps\_its\_own\_labels\_and\_the\_sweep\_succeeds](./test_sweep_run.py#L840)
 
 ```python
 def test_a_read_only_point_run_keeps_its_own_labels_and_the_sweep_succeeds(
@@ -4833,7 +4873,7 @@ Naming a read-only run is refused; the sweep logs that and carries on.
 
 <a id="test.test_sweep_run.test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run"></a>
 
-#### [test\_a\_matching\_recompute\_of\_a\_read\_only\_run\_keeps\_the\_old\_run](./test_sweep_run.py#L851)
+#### [test\_a\_matching\_recompute\_of\_a\_read\_only\_run\_keeps\_the\_old\_run](./test_sweep_run.py#L854)
 
 ```python
 def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
@@ -4842,9 +4882,20 @@ def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
 
 A read-only run is never superseded: both runs stay, the sweep succeeds.
 
+<a id="test.test_sweep_run.test_pool_priority_initializer_is_gui_only_and_survives_replacement"></a>
+
+#### [test\_pool\_priority\_initializer\_is\_gui\_only\_and\_survives\_replacement](./test_sweep_run.py#L1226)
+
+```python
+def test_pool_priority_initializer_is_gui_only_and_survives_replacement(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Only GUI sweep pools lower priority, including replacement pools.
+
 <a id="test.test_sweep_run.test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs"></a>
 
-#### [test\_a\_sweep\_stored\_under\_old\_ids\_is\_repaired\_and\_then\_runs](./test_sweep_run.py#L1538)
+#### [test\_a\_sweep\_stored\_under\_old\_ids\_is\_repaired\_and\_then\_runs](./test_sweep_run.py#L1590)
 
 ```python
 def test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs(
@@ -28502,9 +28553,29 @@ result depend on what else the machine was doing. Only
 `conftest.COMPLETION_BACKSTOP_SECONDS`, a hang backstop far above any
 load-dependent duration, bounds the wait, failing with a named message.
 
+<a id="gui.test_sweep_api._InlineProcessPointRunner"></a>
+
+## [\_InlineProcessPointRunner Objects](./gui/test_sweep_api.py#L39)
+
+```python
+class _InlineProcessPointRunner(LocalPointRunner)
+```
+
+Use the local point runner while preserving the process-runner API.
+
+<a id="gui.test_sweep_api._InlineProcessPointRunner.close"></a>
+
+#### [close](./gui/test_sweep_api.py#L55)
+
+```python
+def close() -> None
+```
+
+Match the process runner lifecycle without starting a pool.
+
 <a id="gui.test_sweep_api.results"></a>
 
-#### [results](./gui/test_sweep_api.py#L59)
+#### [results](./gui/test_sweep_api.py#L83)
 
 ```python
 @pytest.fixture
@@ -28515,7 +28586,7 @@ Isolate the results directory for the test.
 
 <a id="gui.test_sweep_api.window"></a>
 
-#### [window](./gui/test_sweep_api.py#L71)
+#### [window](./gui/test_sweep_api.py#L95)
 
 ```python
 @pytest.fixture
@@ -28526,7 +28597,7 @@ Provide a fake active window.
 
 <a id="gui.test_sweep_api.api"></a>
 
-#### [api](./gui/test_sweep_api.py#L79)
+#### [api](./gui/test_sweep_api.py#L103)
 
 ```python
 @pytest.fixture
@@ -28537,19 +28608,52 @@ An `Api` whose defaults make every point a tiny single run.
 
 <a id="gui.test_sweep_api.test_finished_sweep_helper_does_not_spawn_point_processes"></a>
 
-#### [test\_finished\_sweep\_helper\_does\_not\_spawn\_point\_processes](./gui/test_sweep_api.py#L612)
+#### [test\_finished\_sweep\_helper\_does\_not\_spawn\_point\_processes](./gui/test_sweep_api.py#L639)
 
 ```python
 def test_finished_sweep_helper_does_not_spawn_point_processes(
-        api: Api, window: _FakeWindow,
-        monkeypatch: pytest.MonkeyPatch) -> None
+        api: Api, window: _FakeWindow) -> None
 ```
 
 Metadata fixtures must not depend on concurrent child-process startup.
 
+<a id="gui.test_sweep_api.test_gui_one_point_sweep_uses_process_runner_and_half_core_budget"></a>
+
+#### [test\_gui\_one\_point\_sweep\_uses\_process\_runner\_and\_half\_core\_budget](./gui/test_sweep_api.py#L650)
+
+```python
+def test_gui_one_point_sweep_uses_process_runner_and_half_core_budget(
+        api: Api, window: _FakeWindow,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+GUI execution uses the reduced core budget even for one point at once.
+
+<a id="gui.test_sweep_api.test_automatic_gui_sweep_preview_reserves_half_the_cores"></a>
+
+#### [test\_automatic\_gui\_sweep\_preview\_reserves\_half\_the\_cores](./gui/test_sweep_api.py#L677)
+
+```python
+def test_automatic_gui_sweep_preview_reserves_half_the_cores(
+        api: Api, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The preview and eventual execution use the same reduced budget.
+
+<a id="gui.test_sweep_api.test_gui_sweep_budget_prefers_process_cpu_count"></a>
+
+#### [test\_gui\_sweep\_budget\_prefers\_process\_cpu\_count](./gui/test_sweep_api.py#L694)
+
+```python
+def test_gui_sweep_budget_prefers_process_cpu_count(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Use the process-visible CPU count when the Python runtime exposes it.
+
 <a id="gui.test_sweep_api.test_a_plan_marks_the_points_a_finished_sweep_already_computed"></a>
 
-#### [test\_a\_plan\_marks\_the\_points\_a\_finished\_sweep\_already\_computed](./gui/test_sweep_api.py#L957)
+#### [test\_a\_plan\_marks\_the\_points\_a\_finished\_sweep\_already\_computed](./gui/test_sweep_api.py#L1036)
 
 ```python
 def test_a_plan_marks_the_points_a_finished_sweep_already_computed(

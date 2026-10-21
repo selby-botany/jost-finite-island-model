@@ -32,6 +32,7 @@ from fim import __version__, paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.errors import StoreError
 from fim.execution import UnsupportedSessionError
+from fim.execution_priority import initialize_pool_worker
 from fim.model.params import SimulationParams
 from fim.persistence import groups
 from fim.persistence.groups import StudyManifest
@@ -557,6 +558,8 @@ class ProcessPointRunner:
         executor_factory: Builds the pool from a process count. The default
             starts spawned worker processes; a test passes a fake that
             breaks on demand.
+        lower_priority: Lower spawned workers' operating-system priority.
+        results: Results directory shared with the sweep caller.
     """
 
     def __init__(
@@ -566,12 +569,21 @@ class ProcessPointRunner:
         *,
         pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
         executor_factory: Callable[[int], Executor] | None = None,
+        lower_priority: bool = False,
+        results: Path | None = None,
     ) -> None:
         context = multiprocessing.get_context("spawn")
         self._manager = context.Manager()
         self._processes = processes
+        self._results_directory = (
+            results if results is not None else paths.results_directory()
+        )
         self._factory: Callable[[int], Executor] = executor_factory or (
-            lambda count: ProcessPoolExecutor(count, mp_context=context)
+            lambda count: ProcessPoolExecutor(
+                count,
+                mp_context=context,
+                initializer=initialize_pool_worker if lower_priority else None,
+            )
         )
         self._lock = threading.Lock()
         self._executor = self._factory(processes)
@@ -673,7 +685,7 @@ class ProcessPointRunner:
             _run_point_in_process,
             (
                 params,
-                str(paths.results_directory()),
+                str(self._results_directory),
                 max_workers if max_workers is not None else self.max_workers,
                 shared_cancel,
             ),
@@ -695,7 +707,7 @@ class ProcessPointRunner:
             _run_object_in_process,
             (
                 object_id,
-                str(paths.results_directory()),
+                str(self._results_directory),
                 self.pairwise_max_demes,
                 shared_cancel,
             ),
@@ -1243,6 +1255,9 @@ def run_sweep(
     costliest_first: bool = True,
     only: Collection[str] | None = None,
     budget: SweepBudget | None = None,
+    cores: int | None = None,
+    process_points: bool = False,
+    lower_priority: bool = False,
     clock: Callable[[], float] = time.monotonic,
     results: Path | None = None,
 ) -> SweepOutcome:
@@ -1301,6 +1316,12 @@ def run_sweep(
             where it can, emits `sweep_budget_reached`, and returns with
             `SweepOutcome.budget_reached` set; it is not a cancel, and what
             was not started stays waiting.
+        cores: Core budget available for this sweep, or the machine count
+            when `None`.
+        process_points: Force each local point to execute in a child process,
+            even when only one point runs at a time.
+        lower_priority: Lower child processes' priority, intended for GUI
+            sweeps while command-line behavior remains unchanged.
         clock: Seconds, from a clock that never goes backwards; each finished
             point's duration is reported in its event, and the time budget is
             measured on it. A test seam.
@@ -1337,6 +1358,9 @@ def run_sweep(
                 costliest_first=costliest_first,
                 only=only,
                 budget=budget,
+                cores=cores,
+                process_points=process_points,
+                lower_priority=lower_priority,
                 clock=clock,
                 results=results,
             )
@@ -1385,6 +1409,9 @@ def _run_sweep_locked(
     costliest_first: bool = True,
     only: Collection[str] | None = None,
     budget: SweepBudget | None = None,
+    cores: int | None = None,
+    process_points: bool = False,
+    lower_priority: bool = False,
     clock: Callable[[], float] = time.monotonic,
     results: Path | None = None,
 ) -> SweepOutcome:
@@ -1444,15 +1471,20 @@ def _run_sweep_locked(
         params=first_params,
         requested=points_at_once,
         max_workers=max_workers,
+        cores=cores,
         in_process_batches=uses_objects,
     )
     process_runner: ProcessPointRunner | None = None
     effective_runner: PointRunner = runner
-    if concurrency.points_at_once > 1 and isinstance(runner, LocalPointRunner):
+    if (process_points or concurrency.points_at_once > 1) and isinstance(
+        runner, LocalPointRunner
+    ):
         process_runner = ProcessPointRunner(
             concurrency.points_at_once,
             runner.max_workers,
             pairwise_max_demes=runner.pairwise_max_demes,
+            lower_priority=lower_priority,
+            results=results,
         )
         effective_runner = process_runner
     stop: threading.Event = _LinkedEvent(cancel_event)

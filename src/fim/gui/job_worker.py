@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import ctypes
 import logging
 import os
 import queue
@@ -12,6 +11,8 @@ import threading
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
+
+from fim.execution_priority import apply_lower_priority
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +47,7 @@ class _ProcessMessageSink:
 
 def _lower_process_priority() -> None:
     """Lower this process before importing the simulation engine or starting threads."""
-    try:
-        if sys.platform == "win32":
-            kernel32 = ctypes.windll.kernel32
-            process = kernel32.GetCurrentProcess()
-            if not kernel32.SetPriorityClass(process, 0x00004000):
-                raise OSError(ctypes.get_last_error(), "SetPriorityClass failed")
-        elif hasattr(os, "setpriority") and hasattr(os, "PRIO_PROCESS"):
-            os.setpriority(os.PRIO_PROCESS, 0, 10)
-    except OSError as error:
-        logger.debug("could not lower GUI job priority: %s", error)
+    apply_lower_priority()
 
 
 def _watch_lifeline(stop_requested: threading.Event) -> threading.Thread:
