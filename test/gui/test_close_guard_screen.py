@@ -141,6 +141,23 @@ def test_unsaved_edits_are_aggregated_across_documents() -> None:
     _drive(steps)
 
 
+def test_closing_a_hidden_dirty_document_updates_the_aggregate() -> None:
+    """Removing the last dirty document cannot leave a stale window-close veto."""
+
+    def steps(window: webview.Window, api: Api) -> None:
+        first = window.evaluate_js("window.fim.workspace.selectedId()")
+        window.evaluate_js(_EDIT_DEMES)
+        _wait_for_unsaved(api, True)
+        window.evaluate_js(
+            "window.fim.workspace.createDocument();window.fim.markFormClean(); true;"
+        )
+        _wait_for_unsaved(api, True)
+        window.evaluate_js(f"window.fim.workspace.closeDocument('{first}'); true;")
+        _wait_for_unsaved(api, False)
+
+    _drive(steps)
+
+
 def test_a_close_with_no_edits_goes_straight_through() -> None:
     def steps(window: webview.Window, api: Api) -> None:
         assert _start_close(window) is False

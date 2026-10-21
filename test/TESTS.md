@@ -18270,6 +18270,16 @@ platform's native close handler makes (`test_shutdown_deadman.py` uses the
 same one), so the test runs the same way on every CI platform. Every wait is
 on a page flag or a Python-side state the code under test sets, never a delay.
 
+<a id="gui.test_close_guard_screen.test_closing_a_hidden_dirty_document_updates_the_aggregate"></a>
+
+#### test\_closing\_a\_hidden\_dirty\_document\_updates\_the\_aggregate
+
+```python
+def test_closing_a_hidden_dirty_document_updates_the_aggregate() -> None
+```
+
+Removing the last dirty document cannot leave a stale window-close veto.
+
 <a id="gui.test_close_guard_work"></a>
 
 # gui.test\_close\_guard\_work
@@ -28884,6 +28894,39 @@ read race the save it was meant to observe.
 # gui.test\_workspace
 
 Tests for the browser document store and its compatibility signals.
+
+<a id="gui.test_workspace.test_document_switcher_is_opt_in_and_has_toolbar_semantics"></a>
+
+#### test\_document\_switcher\_is\_opt\_in\_and\_has\_toolbar\_semantics
+
+```python
+def test_document_switcher_is_opt_in_and_has_toolbar_semantics(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Development-only controls expose stable names and separate close buttons.
+
+<a id="gui.test_workspace.test_document_switcher_keyboard_focus_and_selection_are_separate"></a>
+
+#### test\_document\_switcher\_keyboard\_focus\_and\_selection\_are\_separate
+
+```python
+def test_document_switcher_keyboard_focus_and_selection_are_separate(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Arrows/Home/End rove; Enter and Space alone activate the focused document.
+
+<a id="gui.test_workspace.test_document_switcher_reaches_overflow_without_starting_or_stopping_jobs"></a>
+
+#### test\_document\_switcher\_reaches\_overflow\_without\_starting\_or\_stopping\_jobs
+
+```python
+def test_document_switcher_reaches_overflow_without_starting_or_stopping_jobs(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The last overflowing document is visible on activation; jobs are untouched.
 
 <a id="gui.test_workspace.test_workspace_registers_every_existing_global_flag"></a>
 

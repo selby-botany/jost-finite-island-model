@@ -13,6 +13,186 @@ import webview
 pytestmark = pytest.mark.gui
 
 
+def test_document_switcher_is_opt_in_and_has_toolbar_semantics(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Development-only controls expose stable names and separate close buttons."""
+    state = drive(
+        window,
+        ready="window.__fimRunViewReady === true",
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const toolbar = document.getElementById("document-switcher");
+            const hiddenBefore = toolbar.hidden;
+            const first = workspace.selectedId();
+            workspace.get(first).label = "Same name";
+            const second = workspace.createDocument(
+                {label: "Same name"}, {select: false}
+            );
+            workspace.setDocumentTabsEnabled(true);
+            const buttons = [...toolbar.querySelectorAll(".document-select")];
+            const closes = [...toolbar.querySelectorAll(".document-close")];
+            const result = {
+                hiddenBefore,
+                hiddenAfter: toolbar.hidden,
+                role: toolbar.getAttribute("role"),
+                name: toolbar.getAttribute("aria-label"),
+                ids: buttons.map(button => button.id),
+                labels: buttons.map(button => button.textContent),
+                current: buttons.map(button => button.getAttribute("aria-current")),
+                tabIndexes: buttons.map(button => button.tabIndex),
+                closeNames: closes.map(button => button.getAttribute("aria-label")),
+                nestedCloses: toolbar.querySelectorAll("button button").length,
+                guarded: closes.every(button => button.disabled),
+            };
+            workspace.setDocumentTabsEnabled(false);
+            result.hiddenAgain = toolbar.hidden;
+            return result;
+        })();""",
+        read="window.__fimTestResult",
+    )
+    assert state["hiddenBefore"] is True
+    assert state["hiddenAfter"] is False
+    assert state["hiddenAgain"] is True
+    assert state["role"] == "toolbar"
+    assert state["name"] == "Open documents"
+    assert state["ids"] == [
+        "document-select-document-1",
+        "document-select-document-2",
+    ]
+    assert state["labels"] == [
+        "Same name - draft (document-1)",
+        "Same name - draft (document-2)",
+    ]
+    assert state["current"] == ["true", "false"]
+    assert state["tabIndexes"] == [0, -1]
+    assert state["closeNames"] == [f"Close {label}" for label in state["labels"]]
+    assert state["nestedCloses"] == 0
+    assert state["guarded"] is True
+
+
+def test_document_switcher_keyboard_focus_and_selection_are_separate(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Arrows/Home/End rove; Enter and Space alone activate the focused document."""
+    state = drive(
+        window,
+        ready="window.__fimRunViewReady === true",
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const first = workspace.selectedId();
+            const second = workspace.createDocument({}, {select: false});
+            const third = workspace.createDocument({}, {select: false});
+            workspace.setDocumentTabsEnabled(true);
+            document.getElementById(`document-select-${first}`).focus();
+            function key(value) {
+                document.activeElement.dispatchEvent(new KeyboardEvent(
+                    "keydown", {key: value, bubbles: true, cancelable: true}
+                ));
+                return document.activeElement.id;
+            }
+            const right = key("ArrowRight");
+            const selectionAfterArrow = workspace.selectedId();
+            key("Enter");
+            const selectionAfterEnter = workspace.selectedId();
+            const end = key("End");
+            key(" ");
+            const selectionAfterSpace = workspace.selectedId();
+            const home = key("Home");
+            const wrapLeft = key("ArrowLeft");
+            const wrapRight = key("ArrowRight");
+            return {
+                right, selectionAfterArrow, selectionAfterEnter, end,
+                selectionAfterSpace, home, wrapLeft, wrapRight,
+                roving: document.querySelectorAll(
+                    "#document-switcher .document-select[tabindex='0']"
+                ).length,
+                selected: [first, second, third],
+                shown: document.querySelector(".screen:not([hidden])").id,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+    first, second, third = state["selected"]
+    assert state["right"] == f"document-select-{second}"
+    assert state["selectionAfterArrow"] == first
+    assert state["selectionAfterEnter"] == second
+    assert state["end"] == f"document-select-{third}"
+    assert state["selectionAfterSpace"] == third
+    assert state["home"] == f"document-select-{first}"
+    assert state["wrapLeft"] == f"document-select-{third}"
+    assert state["wrapRight"] == f"document-select-{first}"
+    assert state["roving"] == 1
+    assert state["shown"] == "screen-configure"
+
+
+def test_document_switcher_reaches_overflow_without_starting_or_stopping_jobs(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The last overflowing document is visible on activation; jobs are untouched."""
+    state = drive(
+        window,
+        ready="window.__fimRunViewReady === true",
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const first = workspace.selectedId();
+            workspace.attachJob(first, "test-job");
+            const untouched = [];
+            const methods = ["start_run", "cancel_run", "pause_run_object",
+                "start_sweep", "cancel_sweep"];
+            const originals = methods.map(name => window.pywebview.api[name]);
+            methods.forEach(name => {
+                window.pywebview.api[name] = () => { untouched.push(name); };
+            });
+            try {
+                for (let i = 0; i < 18; i += 1) {
+                    workspace.createDocument(
+                        {label: `Configuration ${i}`}, {select: false}
+                    );
+                }
+                workspace.setDocumentTabsEnabled(true);
+                const toolbar = document.getElementById("document-switcher");
+                toolbar.style.width = "300px";
+                const lastId = workspace.ids().at(-1);
+                const button = document.getElementById(`document-select-${lastId}`);
+                const stableButton = document.getElementById(
+                    `document-select-${first}`
+                );
+                button.click();
+                const outer = toolbar.getBoundingClientRect();
+                const inner = button.getBoundingClientRect();
+                const reachable = inner.left >= outer.left - 1 &&
+                    inner.right <= outer.right + 1;
+                const selectedLast = workspace.selectedId();
+                stableButton.click();
+                workspace.closeDocument(lastId);
+                return {
+                    overflow: toolbar.scrollWidth > toolbar.clientWidth,
+                    reachable, selectedLast, lastId, untouched,
+                    selectedFirst: workspace.selectedId() === first,
+                    jobOwner: workspace.documentForJob("test-job"),
+                    first,
+                    stable: document.getElementById(stableButton.id) === stableButton,
+                    removed: document.getElementById(button.id) === null,
+                };
+            } finally {
+                methods.forEach((name, index) => {
+                    window.pywebview.api[name] = originals[index];
+                });
+            }
+        })();""",
+        read="window.__fimTestResult",
+    )
+    assert state["overflow"] is True
+    assert state["reachable"] is True
+    assert state["selectedLast"] == state["lastId"]
+    assert state["selectedFirst"] is True
+    assert state["untouched"] == []
+    assert state["jobOwner"] == state["first"]
+    assert state["stable"] is True
+    assert state["removed"] is True
+
+
 def test_workspace_registers_every_existing_global_flag() -> None:
     """All legacy browser flags route through the document-local store."""
     webui = Path(__file__).parents[2] / "src/fim/gui/webui"

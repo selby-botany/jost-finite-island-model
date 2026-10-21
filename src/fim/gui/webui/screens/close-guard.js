@@ -91,16 +91,23 @@ function sweepSnapshot(tabId) {
 /** Recompute document dirty state and tell Python when the aggregate flips. */
 function reportUnsavedEdits() {
     let unsaved = false;
+    let changed = false;
     for (const tabId of window.fim.workspace.ids()) {
         const state = window.fim.workspace.get(tabId);
+        const wasDirty = state.formDirty === true;
         if (state.cleanFormSnapshot === null || state.cleanFormSnapshot === undefined) {
             state.formDirty = false;
+            changed ||= wasDirty;
             continue;
         }
         state.formDirty =
             formSnapshot(tabId) !== state.cleanFormSnapshot ||
             sweepSnapshot(tabId) !== state.cleanSweepSnapshot;
+        changed ||= wasDirty !== state.formDirty;
         unsaved ||= state.formDirty;
+    }
+    if (changed) {
+        window.fim.workspace.notifyChange();
     }
     if (unsaved === reportedUnsavedEdits) {
         return;
@@ -128,6 +135,7 @@ window.fim.markFormClean = function markFormClean(
     }
     state.formDirty = false;
     reportUnsavedEdits();
+    window.fim.workspace.notifyChange();
     // For the tests (and nothing else): the first snapshot exists.
     if (window.fim.workspace.selectedId() === tabId) {
         window.__fimCloseGuardReady = true;
@@ -286,7 +294,7 @@ function wireCloseGuard() {
     };
     document.addEventListener("input", reportRelevantEdit);
     document.addEventListener("change", reportRelevantEdit);
-    window.fim.workspace.onSelectionChange(() => reportUnsavedEdits());
+    window.fim.workspace.onChange(reportUnsavedEdits);
 }
 
 whenApiReady(wireCloseGuard);

@@ -6,8 +6,16 @@ const workspace = (() => {
     const documentByJob = new Map();
     const documentByResource = new Map();
     const selectionListeners = new Set();
+    const changeListeners = new Set();
+    let documentTabsEnabled = false;
     let selectedId = null;
     let nextId = 1;
+
+    function notifyChange() {
+        for (const listener of changeListeners) {
+            listener();
+        }
+    }
 
     function notifySelectionChange(previousId) {
         if (previousId === selectedId) {
@@ -16,6 +24,7 @@ const workspace = (() => {
         for (const listener of selectionListeners) {
             listener(selectedId, previousId);
         }
+        notifyChange();
     }
 
     // Existing screens use these globals until each call site migrates.
@@ -120,6 +129,8 @@ const workspace = (() => {
         if (options.select !== false) {
             selectedId = tabId;
             notifySelectionChange(previousId);
+        } else {
+            notifyChange();
         }
         return tabId;
     }
@@ -138,6 +149,8 @@ const workspace = (() => {
         if (selectedId === tabId) {
             selectedId = orderedIds[Math.min(index, orderedIds.length - 1)] ?? null;
             notifySelectionChange(tabId);
+        } else {
+            notifyChange();
         }
     }
 
@@ -151,6 +164,17 @@ const workspace = (() => {
     function onSelectionChange(listener) {
         selectionListeners.add(listener);
         return () => selectionListeners.delete(listener);
+    }
+
+    function onChange(listener) {
+        changeListeners.add(listener);
+        return () => changeListeners.delete(listener);
+    }
+
+    /** Enable the development-only document switcher until Release A is complete. */
+    function setDocumentTabsEnabled(enabled) {
+        documentTabsEnabled = enabled === true;
+        notifyChange();
     }
 
     function setResourceKey(tabId, resourceKey) {
@@ -230,6 +254,10 @@ const workspace = (() => {
         closeDocument,
         select,
         onSelectionChange,
+        onChange,
+        notifyChange,
+        setDocumentTabsEnabled,
+        documentTabsEnabled: () => documentTabsEnabled,
         selectedId: () => selectedId,
         selected: () => (selectedId === null ? null : documentFor(selectedId)),
         get: (tabId) => documents.get(tabId) ?? null,

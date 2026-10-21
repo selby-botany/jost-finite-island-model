@@ -87,6 +87,26 @@ No tool or environment file is loaded from another checkout. Native Windows
 development is not supported. The self-contained Windows executable is built
 and smoke-tested by the tag-driven GitHub Actions release workflow.
 
+### Document switcher development preview
+
+The GUI's document switcher is disabled by default while Release A is under
+development. Enable it for the current page from the browser console:
+
+```javascript
+window.fim.workspace.setDocumentTabsEnabled(true);
+```
+
+Disable it with the same call and `false`, or reload the page. This is not
+a saved preference. The preview does not add document-opening actions;
+development tests create documents through `workspace.createDocument()`.
+Guarded close actions are not implemented in this preview, so the separate
+close buttons are disabled.
+
+The switcher is an **Open documents** toolbar, not an ARIA tablist. Left,
+Right, Home, and End move focus without changing documents. Enter or Space
+shows the focused document; overflowing buttons scroll into view. Switching
+does not start or stop a job.
+
 ## Generation pipeline
 
 `fim.model.operators.step` composes:

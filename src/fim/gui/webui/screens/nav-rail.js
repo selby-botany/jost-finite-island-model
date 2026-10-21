@@ -45,6 +45,126 @@ const STATIC_DESTINATION_TO_SCREEN = {
 const railButtons = document.querySelectorAll(".rail-item");
 const configureBackButton = document.getElementById("configure-back-button");
 const configureBanner = document.getElementById("configure-banner");
+const documentSwitcher = document.getElementById("document-switcher");
+let documentSwitcherFocusId = null;
+
+/** Describe a document without treating its label as an identity. */
+function documentSwitcherLabel(state) {
+    const name =
+        state.runControls?.runName?.trim() ||
+        state.runTitle?.state?.runName ||
+        (state.label === "Untitled" ? "New configuration" : state.label);
+    const phase = state.runTitle?.state?.phase;
+    const status = phase && phase !== "initial" ? phase : state.kind;
+    return `${name} - ${status}${state.formDirty ? " *" : ""}`;
+}
+
+/** Select an existing document without starting or stopping its job. */
+function activateWorkspaceDocument(tabId) {
+    const workspace = window.fim.workspace;
+    workspace.select(tabId);
+    const state = workspace.get(tabId);
+    const destination = state.history[state.historyIndex];
+    window.fim.showScreen(
+        ["screen-configure", "screen-run", "screen-sweep"].includes(destination)
+            ? destination
+            : state.kind === "draft" ? "screen-configure" : "screen-run",
+        { recordHistory: false }
+    );
+    document.getElementById(`document-select-${tabId}`).scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+    });
+}
+
+/** Render keyed buttons so model updates never discard keyboard focus. */
+function renderDocumentSwitcher() {
+    const workspace = window.fim.workspace;
+    documentSwitcher.hidden = !workspace.documentTabsEnabled();
+    if (documentSwitcher.hidden) {
+        return;
+    }
+    const ids = workspace.ids();
+    if (
+        !ids.includes(documentSwitcherFocusId) ||
+        !documentSwitcher.contains(document.activeElement)
+    ) {
+        documentSwitcherFocusId = workspace.selectedId() ?? ids[0] ?? null;
+    }
+    for (const item of [...documentSwitcher.children]) {
+        if (!ids.includes(item.dataset.tabId)) {
+            item.remove();
+        }
+    }
+    const labels = ids.map((tabId) => documentSwitcherLabel(workspace.get(tabId)));
+    ids.forEach((tabId, index) => {
+        let item = document.getElementById(`document-item-${tabId}`);
+        if (!item) {
+            item = document.createElement("div");
+            item.id = `document-item-${tabId}`;
+            item.className = "document-switcher-item";
+            item.dataset.tabId = tabId;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.id = `document-select-${tabId}`;
+            button.className = "document-select";
+            button.addEventListener("click", () => {
+                documentSwitcherFocusId = tabId;
+                activateWorkspaceDocument(tabId);
+                button.focus();
+            });
+            const close = document.createElement("button");
+            close.type = "button";
+            close.className = "document-close";
+            close.textContent = "\u00d7";
+            // Guarded close actions arrive in A18; never discard a draft here.
+            close.disabled = true;
+            close.title = "Closing documents is not available in this development preview";
+            item.append(button, close);
+            documentSwitcher.append(item);
+        }
+        const state = workspace.get(tabId);
+        const label = labels.filter((value) => value === labels[index]).length > 1
+            ? `${labels[index]} (${tabId})`
+            : labels[index];
+        const button = item.querySelector(".document-select");
+        button.textContent = label;
+        button.title = `${label}${state.resourceKey ? `\n${state.resourceKey}` : ""}`;
+        button.setAttribute("aria-current", String(workspace.selectedId() === tabId));
+        button.tabIndex = tabId === documentSwitcherFocusId ? 0 : -1;
+        item.querySelector(".document-close").setAttribute("aria-label", `Close ${label}`);
+    });
+}
+
+/** Rove focus without changing selection; native Enter/Space activate buttons. */
+function onDocumentSwitcherKeydown(event) {
+    const button = event.target.closest(".document-select");
+    if (!button || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+    }
+    const ids = window.fim.workspace.ids();
+    const index = ids.indexOf(button.parentElement.dataset.tabId);
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        button.click();
+        return;
+    }
+    const targets = {
+        ArrowLeft: (index + ids.length - 1) % ids.length,
+        ArrowRight: (index + 1) % ids.length,
+        Home: 0,
+        End: ids.length - 1,
+    };
+    if (!Object.hasOwn(targets, event.key)) {
+        return;
+    }
+    event.preventDefault();
+    documentSwitcherFocusId = ids[targets[event.key]];
+    renderDocumentSwitcher();
+    const target = document.getElementById(`document-select-${documentSwitcherFocusId}`);
+    target.focus();
+    target.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
 
 /**
  * Show (or, given a falsy `message`, hide) Configure's own banner --
@@ -259,6 +379,17 @@ window.fim.showConfigureScreen = showConfigureScreen;
  * destination's own open/refresh behavior a second time.
  */
 function wireNavRail() {
+    documentSwitcher.addEventListener("keydown", onDocumentSwitcherKeydown);
+    documentSwitcher.addEventListener("focusin", (event) => {
+        const button = event.target.closest(".document-select");
+        if (button) {
+            documentSwitcherFocusId = button.parentElement.dataset.tabId;
+            renderDocumentSwitcher();
+        }
+    });
+    runNameInput.addEventListener("input", renderDocumentSwitcher);
+    window.fim.workspace.onChange(renderDocumentSwitcher);
+    renderDocumentSwitcher();
     for (const button of railButtons) {
         button.addEventListener("click", () => {
             switch (button.dataset.destination) {

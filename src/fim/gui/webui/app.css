@@ -314,6 +314,53 @@ textarea::placeholder {
     background: var(--fim-canvas);
 }
 
+#document-switcher {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.35rem;
+    padding: 0.5rem 1rem;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--fim-border);
+    background: var(--fim-background);
+}
+
+.document-switcher-item {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    max-width: 22rem;
+    border: 1px solid var(--fim-border);
+    border-radius: 6px;
+}
+
+.document-select,
+.document-close {
+    color: var(--fim-foreground);
+    background: none;
+    border: none;
+    font: inherit;
+    padding: 0.5rem;
+    border-radius: 5px;
+}
+
+.document-select {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.document-select[aria-current="true"] {
+    color: var(--fim-accent);
+    background: var(--fim-accent-soft);
+}
+
+.document-select:focus-visible,
+.document-close:focus-visible {
+    outline: 2px solid var(--fim-accent);
+    outline-offset: 1px;
+}
+
 /* Read-only, always-current N/d/m/mu (design §3.2) -- each value is its
  * own button so clicking it jumps straight to Configure (`nav-rail.js`),
  * styled to read as text with a click affordance rather than as a form

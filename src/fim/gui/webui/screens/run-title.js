@@ -70,6 +70,7 @@ window.fim.setRunCardTitle = function setRunCardTitle(state) {
     }
     title.state = { ...state };
     renderRunTitle();
+    window.fim.workspace.notifyChange();
     refreshRunTitleContext(tabId);
 };
 
