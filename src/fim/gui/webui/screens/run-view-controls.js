@@ -30,6 +30,43 @@ const runDescriptionInput = document.getElementById("run-description-input");
 // Every Study `refreshRunStudySelectOptions` last listed, by id, so the
 // select's tooltip can show the chosen Study's description.
 let runStudiesById = new Map();
+let renderedRunControlsTabId = null;
+
+function runControlsState(tabId = window.fim.workspace.selectedId()) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.runControls) {
+        documentState.runControls = {
+            runName: "",
+            runDescription: "",
+            studySelection: "",
+            newStudyName: "",
+            newStudyDescription: "",
+            newStudyExperimentId: "",
+        };
+    }
+    return documentState.runControls;
+}
+
+function restoreRunControls() {
+    const state = runControlsState();
+    if (!state) {
+        return;
+    }
+    runNameInput.value = state.runName;
+    runDescriptionInput.value = state.runDescription;
+    runStudySelect.value = state.studySelection;
+    runStudyNewNameInput.value = state.newStudyName;
+    runStudyNewDescriptionInput.value = state.newStudyDescription;
+    renderedRunControlsTabId = window.fim.workspace.selectedId();
+    syncRunStudySelectTooltip();
+    syncRunStudyNewRowVisibility();
+}
+
+window.fim.workspace.onSelectionChange(restoreRunControls);
+restoreRunControls();
 
 // True while a run start is being decided (`startRunExclusively`), so a
 // second request meanwhile -- a double click, the Run menu, Configure's
@@ -64,14 +101,36 @@ function showRunBanner(message) {
  *     Python says a run can start now.
  * @param {(message: string) => void} [showRefusal] Shows why not, where
  *     the request came from (default: the Run card's banner).
+ * @param {{tabId: string, jobKind: string}|null} [startingDocument]
+ *     The document whose start is waiting for admission.
  * @returns {Promise<void>}
  */
-async function startRunExclusively(start, showRefusal = showRunBanner) {
+async function startRunExclusively(
+    start,
+    showRefusal = showRunBanner,
+    startingDocument = null
+) {
     if (runStartPending) {
         return;
     }
     runStartPending = true;
-    window.__fimRunStartSettled = false;
+    if (
+        startingDocument &&
+        window.fim.workspace.get(startingDocument.tabId)
+    ) {
+        window.fim.workspace.settle(startingDocument.tabId, "runStart", false);
+    } else {
+        window.__fimRunStartSettled = false;
+    }
+    const documentState = startingDocument
+        ? window.fim.workspace.get(startingDocument.tabId)
+        : null;
+    if (documentState) {
+        documentState.jobKind = startingDocument.jobKind;
+        documentState.jobState = "starting";
+        documentState.startRefusal = null;
+        window.fim.workspace.notifyChange();
+    }
     try {
         const allowed = await window.pywebview.api.can_start_run();
         // `null` once the window is committed to closing: start nothing.
@@ -79,13 +138,41 @@ async function startRunExclusively(start, showRefusal = showRunBanner) {
             return;
         }
         if (!allowed.ok) {
+            clearPendingRunStart(startingDocument, documentState);
             showRefusal(allowed.message);
             return;
         }
         await start();
     } finally {
+        clearPendingRunStart(startingDocument, documentState);
         runStartPending = false;
-        window.__fimRunStartSettled = true;
+        if (
+            startingDocument &&
+            window.fim.workspace.get(startingDocument.tabId)
+        ) {
+            window.fim.workspace.settle(
+                startingDocument.tabId,
+                "runStart",
+                true
+            );
+        } else {
+            window.__fimRunStartSettled = true;
+        }
+    }
+}
+
+function clearPendingRunStart(startingDocument, documentState) {
+    if (!startingDocument || !documentState) {
+        return;
+    }
+    if (documentState.jobState === "starting") {
+        documentState.jobKind = null;
+        documentState.jobState = null;
+        window.fim.workspace.notifyChange();
+    }
+    if (documentState.closeAfterStart) {
+        documentState.closeAfterStart = false;
+        window.fim.requestCloseDocument(startingDocument.tabId);
     }
 }
 
@@ -98,34 +185,81 @@ async function startRunExclusively(start, showRefusal = showRunBanner) {
  * (`startRunExclusively`).
  */
 async function onRunClicked() {
-    await startRunExclusively(startConfiguredRun);
+    const tabId = window.fim.workspace.selectedId();
+    await startRunExclusively(
+        () => startConfiguredRun(tabId),
+        (message) => showStartRefusal(tabId, message),
+        {
+            tabId,
+            jobKind: window.fim.isSweepEnabled(tabId) ? "sweep" : "run",
+        }
+    );
+}
+
+function showStartRefusal(tabId, message) {
+    const state = window.fim.workspace.get(tabId);
+    if (!state) {
+        return;
+    }
+    const label =
+        runControlsState(tabId)?.runName?.trim() ||
+        state.runTitle?.state?.runName ||
+        state.label ||
+        "Configuration";
+    state.startRefusal = `${label}: ${message}`;
+    window.fim.workspace.notifyChange();
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner(state.startRefusal);
+    }
+    if (state.closeAfterStart) {
+        state.closeAfterStart = false;
+        window.fim.requestCloseDocument(tabId);
+    }
 }
 
 /**
- * Start the run Configure describes, once `onRunClicked` knows that no
- * other run is starting or in flight.
+ * Start the document's configuration after admission.
+ * @param {string} [tabId]
+ * @returns {Promise<void>}
  */
-async function startConfiguredRun() {
+async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
+    const controls = runControlsState(tabId);
+    if (!controls) {
+        return;
+    }
+    const selected = window.fim.workspace.selectedId() === tabId;
+    if (selected) {
+        controls.runName = runNameInput.value;
+        controls.runDescription = runDescriptionInput.value;
+        controls.studySelection = runStudySelect.value;
+    }
+    const studyId = controls.studySelection || null;
+    const runName = controls.runName.trim();
+    const runDescription = controls.runDescription.trim();
     // "New study…" selected but never actually created (or cancelled)
     // -- `Api.start_run` would otherwise reject this as an unknown
     // study id, a confusing failure mode for a botanist who simply
     // has not finished the inline row yet. Checked before `revalidate`
     // below so this reads as its own, more specific message rather
     // than piggybacking on the form's own field-level errors.
-    if (runStudySelect.value === "__new__") {
-        showRunBanner("create or cancel the new study first");
-        runStudyNewNameInput.focus();
+    if (studyId === "__new__") {
+        if (selected) {
+            showRunBanner("create or cancel the new study first");
+            runStudyNewNameInput.focus();
+        }
         return;
     }
-    const result = await revalidate();
+    const result = await revalidate(tabId);
     if (!result.ok) {
-        window.fim.focusInvalidField(result.field);
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.focusInvalidField(result.field);
+        }
         return;
     }
     // Configure's Sweep box: Run means Run, so with it on this same button
     // starts the sweep (`sweep.js`) into the same study choice.
-    if (window.fim.isSweepEnabled()) {
-        await window.fim.runConfiguredSweep(runStudySelect.value || null);
+    if (window.fim.isSweepEnabled(tabId)) {
+        await window.fim.runConfiguredSweep(studyId || null, tabId);
         return;
     }
     // Design §3.1: "clicking 'Run simulation' anywhere in Configure
@@ -151,8 +285,10 @@ async function startConfiguredRun() {
     // uniform backstop for any draw path that still lands on a hidden
     // section (an opened run's own `enterCompletedState` draws before
     // its own `showScreen`).
-    window.fim.showScreen("screen-run");
-    const values = collectFormValues();
+    if (window.fim.workspace.selectedId() === tabId) {
+        window.fim.showScreen("screen-run");
+    }
+    const values = collectFormValues(tabId);
     // Enter `running` now, synchronously, before awaiting the bridge
     // call -- not after it resolves. `Api.start_run` starts the run
     // and returns as soon as the worker thread is launched, so for a
@@ -166,7 +302,9 @@ async function startConfiguredRun() {
     // "the state a click causes has to be visible before its own
     // bridge round-trip, not after" fix already needed for Cancel's
     // button-enable timing.
-    showRunBanner("");
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner("");
+    }
     // `n_replicates` is a Settings-only default now (Configure's own
     // `<form>` never submits it), so `values` alone cannot say whether
     // this is a batch -- entering a provisional scalar-shaped `running`
@@ -178,7 +316,7 @@ async function startConfiguredRun() {
     // already established server-side (`Api._start_batch_run`'s own
     // dispatch), reported back explicitly since this caller can no
     // longer compute it locally.
-    window.fim.enterRunningState(false);
+    window.fim.enterRunningState(false, tabId);
     // `run-study-select`'s own current value (Run/Study/Experiment
     // workflow-ergonomics design `20260917-claude-sonnet-5-run-study-
     // experiment-workflow-ergonomics.md`, `selby/restricted`, item 3)
@@ -189,12 +327,19 @@ async function startConfiguredRun() {
     // study" default option) becomes `null`, `Api.start_run`'s own
     // "attach nothing" case -- identical to a plain `fim run` with no
     // `--study` flag at the CLI layer.
-    const studyId = runStudySelect.value || null;
     // The run's own optional name and description: shown in the Run
     // card's title while it runs, then stored with it once it finishes.
-    const runName = runNameInput.value.trim();
-    const runDescription = runDescriptionInput.value.trim();
-    window.fim.setRunCardTitle({ phase: "running", runName: runName || null });
+    window.fim.setRunCardTitle(
+        { phase: "running", runName: runName || null },
+        tabId
+    );
+    const documentState = window.fim.workspace.get(tabId);
+    if (documentState) {
+        documentState.jobKind = "run";
+        documentState.jobState = "starting";
+        documentState.startRefusal = null;
+        window.fim.workspace.notifyChange();
+    }
     const started = await window.pywebview.api.start_run(
         values,
         studyId,
@@ -207,25 +352,64 @@ async function startConfiguredRun() {
         // revert to `initial` so the form stays editable and the
         // error is visible, matching the pre-Phase-E behavior of
         // never leaving the input screen on a failed start.
-        window.fim.enterInitialState();
-        showRunBanner(started.message);
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.enterInitialState();
+        }
+        if (documentState) {
+            documentState.jobKind = null;
+            documentState.jobState = null;
+            window.fim.workspace.notifyChange();
+        }
+        showStartRefusal(tabId, started.message);
         return;
     }
     // Started (or reused): the name belonged to this run, not the next.
-    runNameInput.value = "";
-    runDescriptionInput.value = "";
+    const currentControls = runControlsState(tabId);
+    if (currentControls) {
+        currentControls.runName = "";
+        currentControls.runDescription = "";
+    }
+    if (window.fim.workspace.selectedId() === tabId) {
+        runNameInput.value = "";
+        runDescriptionInput.value = "";
+    }
     // The configuration now belongs to a run, so it is nothing left to save.
-    window.fim.markFormClean();
+    window.fim.markFormClean(tabId);
     if (started.reused) {
+        if (documentState) {
+            documentState.jobKind = null;
+            documentState.jobState = null;
+        }
         // Already computed: nothing was started. Show the existing run the
         // way Home opens it, and say so.
-        window.fim.enterInitialState();
-        await window.fim.openComputedRun(started.directory, Boolean(started.isBatch));
-        showRunBanner(
-            "This configuration was already computed, so nothing was run. " +
-                "Showing the existing result."
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.enterInitialState();
+        }
+        await window.fim.openComputedRun(
+            started.directory,
+            Boolean(started.isBatch),
+            tabId,
+            started.resourceKey
         );
+        if (window.fim.workspace.selectedId() === tabId) {
+            showRunBanner(
+                "This configuration was already computed, so nothing was run. " +
+                    "Showing the existing result."
+            );
+        }
+        if (documentState?.closeAfterStart) {
+            documentState.closeAfterStart = false;
+            window.fim.requestCloseDocument(tabId);
+        }
         return;
+    }
+    if (documentState && started.jobId) {
+        documentState.jobState = "running";
+        window.fim.workspace.attachJob(tabId, started.jobId);
+    }
+    if (documentState?.closeAfterStart) {
+        documentState.closeAfterStart = false;
+        window.fim.requestCloseDocument(tabId);
     }
     // Only the run-kind-dependent panels, not the whole running state:
     // the run has been going since `start_run` executed server-side, so
@@ -234,6 +418,9 @@ async function startConfiguredRun() {
     // would throw those away -- see `applyRunKind`'s own comment
     // (`run-view-running.js`) for the list, and for the intermittent CI
     // failure that surfaced it.
+    if (window.fim.workspace.selectedId() !== tabId) {
+        return;
+    }
     window.fim.applyRunKind(Boolean(started.isBatch));
     // The live trajectory panel's own predicted-equilibrium reference
     // line (design §6.2) -- `started.equilibrium` is `undefined` for a
@@ -242,44 +429,59 @@ async function startConfiguredRun() {
     // `setLiveEquilibriumReference` treats both the same as "nothing to
     // overlay," matching `renderTrajectory`'s own "nothing to show,
     // don't draw anything" discipline.
-    window.fim.setLiveEquilibriumReference(started.equilibrium);
+    window.fim.setLiveEquilibriumReference(started.equilibrium, tabId);
     // The live trajectory panel's own identity-recovery curve overlay
     // (design §6.2) -- same reasoning and the same `undefined`-for-a-
     // batch/`null`-for-a-non-scalar-configuration shape as `started.
     // equilibrium` immediately above.
-    window.fim.setLiveIdentityRecoveryReference(started.identityRecovery);
-    window.fim.setLiveClosedForm(started.closedForm);
-    window.fim.setLiveConvergence(started.convergence);
+    window.fim.setLiveIdentityRecoveryReference(started.identityRecovery, tabId);
+    window.fim.setLiveClosedForm(started.closedForm, tabId);
+    window.fim.setLiveConvergence(started.convergence, tabId);
 }
 
 async function onLoadYamlClicked() {
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
     const result = await window.pywebview.api.load_yaml();
+    if (window.fim.workspace.get(tabId) !== documentState) {
+        showRunBanner("The document was closed before the configuration loaded.");
+        return;
+    }
     if (!result.ok) {
-        if (result.message) {
+        if (result.message && window.fim.workspace.selectedId() === tabId) {
             showRunBanner(result.message);
         }
         return;
     }
-    showRunBanner("");
-    applyFormValues(result.values);
+    const selected = window.fim.workspace.selectedId() === tabId;
+    if (selected) {
+        showRunBanner("");
+    }
+    applyFormValues(result.values, { tabId, render: selected });
     // The file's run settings apply to this run only
     // (`run-settings-notice.js`).
-    window.fim.applyLoadedRunSettings(result);
-    await revalidate();
+    window.fim.applyLoadedRunSettings(result, tabId);
+    if (selected) {
+        await revalidate(tabId);
+    }
 }
 
 async function onSaveYamlClicked() {
-    const values = collectFormValues();
+    const tabId = window.fim.workspace.selectedId();
+    const values = collectFormValues(tabId);
     const result = await window.pywebview.api.save_yaml(values);
     if (!result.ok) {
-        if (result.message) {
+        if (result.message && window.fim.workspace.selectedId() === tabId) {
             showRunBanner(result.message);
         }
         return;
     }
-    showRunBanner("");
-    runReason.textContent = `Saved to ${result.path}`;
-    window.fim.markFormClean();
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner("");
+        runReason.textContent = `Saved to ${result.path}`;
+    }
+    window.fim.markFormClean(tabId);
 }
 
 window.fim.openConfiguration = async function openConfiguration() {
@@ -331,6 +533,7 @@ async function onOpenFolderClicked() {
 // not a hypothetical one -- confirmed live, driving Configure this
 // same way a fraction of a second after launch.
 let runStudyRefreshToken = 0;
+let runStudyNewExperimentRefreshToken = 0;
 
 /**
  * Repopulate `run-study-select` from `Api.list_studies()` -- called once
@@ -339,13 +542,11 @@ let runStudyRefreshToken = 0;
  * so a Study created since app launch appears with no restart needed,
  * the same "never trust a stale fetch across visits" precedent `screens/
  * open-run.js`'s own `refreshHomeExampleOptions` already established.
- * Preserves the currently selected study, if it still exists after the
- * refetch, rather than silently resetting to "Default study" underneath a
- * choice the botanist already made this session.
+ * Preserves each document's selected Study, rather than silently resetting
+ * to "Default study" underneath a choice the botanist already made.
  */
 async function refreshRunStudySelectOptions() {
     const token = ++runStudyRefreshToken;
-    const previousValue = runStudySelect.value;
     const studies = await window.pywebview.api.list_studies();
     if (token !== runStudyRefreshToken) {
         return;
@@ -372,10 +573,19 @@ async function refreshRunStudySelectOptions() {
         runStudySelect.appendChild(option);
     }
     runStudiesById = new Map(editable.map((study) => [study.studyId, study]));
-    if (previousValue === "study-default") {
-        runStudySelect.value = "";
-    } else if (editable.some((study) => study.studyId === previousValue)) {
-        runStudySelect.value = previousValue;
+    const controls = runControlsState();
+    if (controls) {
+        if (
+            controls.studySelection === "study-default" ||
+            (controls.studySelection &&
+                controls.studySelection !== "__new__" &&
+                !editable.some(
+                    (study) => study.studyId === controls.studySelection
+                ))
+        ) {
+            controls.studySelection = "";
+        }
+        runStudySelect.value = controls.studySelection;
     }
     syncRunStudySelectTooltip();
     // A refresh mid-creation (rare -- Configure is only re-shown by
@@ -395,9 +605,29 @@ window.fim.refreshRunStudySelectOptions = refreshRunStudySelectOptions;
  * (`screens/run-title.js`) names that Study's Experiment.
  * @returns {string|null}
  */
-window.fim.getSelectedRunStudyId = function getSelectedRunStudyId() {
-    const value = runStudySelect.value;
+window.fim.getSelectedRunStudyId = function getSelectedRunStudyId(tabId) {
+    const selectedId = tabId ?? window.fim.workspace.selectedId();
+    const controls = runControlsState(selectedId);
+    if (
+        controls &&
+        selectedId === window.fim.workspace.selectedId() &&
+        renderedRunControlsTabId === selectedId
+    ) {
+        controls.studySelection = runStudySelect.value;
+    }
+    const value = controls?.studySelection ?? "";
     return value && value !== "__new__" ? value : null;
+};
+
+window.fim.setRunDetails = function setRunDetails(name, description) {
+    const controls = runControlsState();
+    if (!controls) {
+        return;
+    }
+    controls.runName = name || "";
+    controls.runDescription = description || "";
+    runNameInput.value = controls.runName;
+    runDescriptionInput.value = controls.runDescription;
 };
 
 /** Give `run-study-select` the chosen Study's description as its tooltip. */
@@ -430,8 +660,20 @@ function syncRunStudyNewRowVisibility() {
  * exists. A study is placed in an experiment when it is created.
  */
 async function populateRunStudyNewExperiments() {
+    const tabId = window.fim.workspace.selectedId();
+    const token = ++runStudyNewExperimentRefreshToken;
     const experiments = await window.pywebview.api.list_experiments();
-    const previous = runStudyNewExperimentSelect.value;
+    if (
+        token !== runStudyNewExperimentRefreshToken ||
+        window.fim.workspace.selectedId() !== tabId ||
+        runStudyNewRow.hidden
+    ) {
+        return;
+    }
+    const controls = runControlsState(tabId);
+    if (!controls) {
+        return;
+    }
     runStudyNewExperimentSelect.replaceChildren();
     const none = document.createElement("option");
     none.value = "";
@@ -443,12 +685,23 @@ async function populateRunStudyNewExperiments() {
         option.textContent = experiment.name;
         runStudyNewExperimentSelect.appendChild(option);
     }
-    if (experiments.some((experiment) => experiment.experimentId === previous)) {
-        runStudyNewExperimentSelect.value = previous;
+    if (
+        experiments.some(
+            (experiment) =>
+                experiment.experimentId === controls.newStudyExperimentId
+        )
+    ) {
+        runStudyNewExperimentSelect.value = controls.newStudyExperimentId;
+    } else {
+        controls.newStudyExperimentId = "";
     }
 }
 
 runStudySelect.addEventListener("change", () => {
+    const controls = runControlsState();
+    if (controls) {
+        controls.studySelection = runStudySelect.value;
+    }
     syncRunStudyNewRowVisibility();
     syncRunStudySelectTooltip();
     // The title names the chosen Study's Experiment until a run finishes.
@@ -466,33 +719,59 @@ runStudySelect.addEventListener("change", () => {
  * scoped to Configure's own footer rather than a Home card (§1 Option B).
  */
 async function onRunStudyNewCreateClicked() {
+    const tabId = window.fim.workspace.selectedId();
+    const controls = runControlsState(tabId);
     const name = runStudyNewNameInput.value.trim();
     if (!name) {
         showRunBanner("a study needs a name");
         return;
     }
+    if (controls) {
+        controls.newStudyName = name;
+        controls.newStudyDescription = runStudyNewDescriptionInput.value.trim();
+        controls.newStudyExperimentId = runStudyNewExperimentSelect.value;
+    }
     const result = await window.pywebview.api.create_study(
         name,
-        runStudyNewDescriptionInput.value.trim(),
-        runStudyNewExperimentSelect.value || null
+        controls?.newStudyDescription ?? "",
+        controls?.newStudyExperimentId || null
     );
     if (!result.ok) {
-        showRunBanner(result.message);
+        if (window.fim.workspace.selectedId() === tabId) {
+            showRunBanner(result.message);
+        }
         return;
     }
-    showRunBanner("");
-    runStudyNewNameInput.value = "";
-    runStudyNewDescriptionInput.value = "";
+    if (controls) {
+        controls.newStudyName = "";
+        controls.newStudyDescription = "";
+        controls.newStudyExperimentId = "";
+        controls.studySelection = result.studyId;
+    }
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner("");
+        runStudyNewNameInput.value = "";
+        runStudyNewDescriptionInput.value = "";
+    }
     await refreshRunStudySelectOptions();
     // Not covered by `refreshRunStudySelectOptions`'s own previous-value
     // preservation (that logic matches `"__new__"` against nothing,
     // §"refreshRunStudySelectOptions" above) -- the freshly created
     // study's own id is only known here, after this call resolves.
-    runStudySelect.value = result.studyId;
-    syncRunStudyNewRowVisibility();
+    if (window.fim.workspace.selectedId() === tabId) {
+        runStudySelect.value = result.studyId;
+        syncRunStudyNewRowVisibility();
+    }
 }
 
 function onRunStudyNewCancelClicked() {
+    const controls = runControlsState();
+    if (controls) {
+        controls.newStudyName = "";
+        controls.newStudyDescription = "";
+        controls.newStudyExperimentId = "";
+        controls.studySelection = "";
+    }
     runStudyNewNameInput.value = "";
     runStudyNewDescriptionInput.value = "";
     runStudySelect.value = "";
@@ -511,6 +790,10 @@ runStudyNewCancelButton.addEventListener("click", onRunStudyNewCancelClicked);
  * file's own private `<select>` reference directly.
  */
 window.fim.preselectNewStudy = function preselectNewStudy() {
+    const controls = runControlsState();
+    if (controls) {
+        controls.studySelection = "__new__";
+    }
     runStudySelect.value = "__new__";
     syncRunStudyNewRowVisibility();
     runStudyNewNameInput.focus();
@@ -527,7 +810,12 @@ window.fim.preselectNewStudy = function preselectNewStudy() {
  * @param {string} studyId
  */
 window.fim.selectStudyForNewRun = function selectStudyForNewRun(studyId) {
-    runStudySelect.value = studyId === "study-default" ? "" : studyId;
+    const value = studyId === "study-default" ? "" : studyId;
+    const controls = runControlsState();
+    if (controls) {
+        controls.studySelection = value;
+    }
+    runStudySelect.value = value;
     syncRunStudyNewRowVisibility();
     syncRunStudySelectTooltip();
 };
@@ -540,6 +828,36 @@ function wireRunViewControls() {
     if (sweepBox !== null) {
         sweepBox.addEventListener("change", syncRunDetailsRowVisibility);
     }
+    runNameInput.addEventListener("input", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.runName = runNameInput.value;
+        }
+    });
+    runDescriptionInput.addEventListener("input", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.runDescription = runDescriptionInput.value;
+        }
+    });
+    runStudyNewNameInput.addEventListener("input", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.newStudyName = runStudyNewNameInput.value;
+        }
+    });
+    runStudyNewDescriptionInput.addEventListener("input", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.newStudyDescription = runStudyNewDescriptionInput.value;
+        }
+    });
+    runStudyNewExperimentSelect.addEventListener("change", () => {
+        const controls = runControlsState();
+        if (controls) {
+            controls.newStudyExperimentId = runStudyNewExperimentSelect.value;
+        }
+    });
     syncRunDetailsRowVisibility();
     refreshRunStudySelectOptions();
 }
@@ -557,14 +875,18 @@ window.fim.startRunExclusively = startRunExclusively;
 whenApiReady(wireRunViewControls);
 
 /**
- * Report the result of comparing a recomputed run with the same
- * configuration from another software version (`Api._check_reproducibility`).
+ * Report a reproducibility annotation for an open job's document
+ * (`Api._check_reproducibility`).
  * The simulator guarantees bit-for-bit reproducibility, so a difference is
  * a warning, not a detail.
+ * @param {string} jobId
  * @param {{identical: boolean, oldVersion: string, newVersion: string,
  *     differences: Array<{label: string, old: *, new: *}>}} comparison
  */
-window.fim.onReproducibilityChecked = function onReproducibilityChecked(comparison) {
+window.fim.onJobAnnotation = function onJobAnnotation(jobId, comparison) {
+    if (window.fim.jobs.isDocumentClosed(jobId)) {
+        return;
+    }
     if (comparison.identical) {
         showRunBanner(
             `Recomputed with version ${comparison.newVersion}: the earlier result ` +

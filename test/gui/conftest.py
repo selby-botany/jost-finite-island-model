@@ -150,6 +150,7 @@ decide which of the two investigations above it continues.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import queue
 import signal
@@ -238,6 +239,41 @@ def poll_page(
         lambda: target_window.evaluate_js(script),
         is_done,
         what or _describe_script(script),
+        interval=interval,
+    )
+
+
+def poll_document_signal(
+    target_window: Any,
+    tab_id: str,
+    name: str,
+    is_done: Callable[[Any], bool] = bool,
+    *,
+    what: str | None = None,
+    interval: float = _POLL_INTERVAL_SECONDS,
+) -> Any:
+    """Wait for one document's workspace settle signal.
+
+    Args:
+        target_window: The window containing the workspace.
+        tab_id: The document whose signal is read.
+        name: The document-local signal name.
+        is_done: Whether a value means the signal has settled.
+        what: Optional name for a failed wait.
+        interval: Delay between reads, not an attempt limit.
+
+    Returns:
+        The first signal value accepted by `is_done`.
+
+    Raises:
+        AssertionError: If the signal does not settle by the backstop.
+    """
+    script = f"window.fim.workspace.settled({json.dumps(tab_id)}, {json.dumps(name)})"
+    return poll_page(
+        target_window,
+        script,
+        is_done,
+        what=what or f"document {tab_id!r} signal {name!r}",
         interval=interval,
     )
 

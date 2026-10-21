@@ -53,7 +53,7 @@ const ibdCanvas = document.getElementById("ibd-canvas");
 const ibdNote = document.getElementById("ibd-note");
 
 function clearRunCanvas() {
-    _currentPanel = null;
+    window.fim.clearScatterPanel();
     runCanvas.getContext("2d").clearRect(0, 0, runCanvas.width, runCanvas.height);
 }
 
@@ -520,6 +520,10 @@ window.fim.enterInitialState = enterInitialState;
  * shows the new value.
  */
 window.fim.menu.newConfiguration = async function newConfiguration() {
+    const workspace = window.fim.workspace;
+    if (workspace.documentTabsEnabled()) {
+        workspace.createDocument({ kind: "draft", label: "Untitled" });
+    }
     window.fim.showScreen("screen-run");
     window.__fimRunViewReady = false;
     // The reset below supplies the values for the preview. Starting one

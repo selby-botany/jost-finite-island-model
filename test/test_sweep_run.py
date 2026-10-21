@@ -711,14 +711,54 @@ def test_processes_run_the_points_of_a_sweep_and_the_runs_match_the_serial_ones(
 def test_run_directories_are_reserved_so_two_points_never_share_a_name(
     results: Path,
 ) -> None:
-    from fim.sweep_run import _allocate_output_directory  # noqa: PLC0415
-
-    first, first_marker = _allocate_output_directory()
-    second, second_marker = _allocate_output_directory()
+    first, first_marker = paths.allocate_output_directory()
+    second, second_marker = paths.allocate_output_directory()
 
     assert first != second
     assert first_marker.is_dir() and second_marker.is_dir()
     assert first.parent == results
+    first_marker.rmdir()
+    second_marker.rmdir()
+
+
+@pytest.mark.parametrize("fails", [False, True], ids=["published", "failed"])
+def test_local_point_runner_releases_its_reservation(
+    results: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fails: bool,
+) -> None:
+    """A point releases its marker after publishing or when its run fails."""
+    del results
+    runner = LocalPointRunner()
+    output_directories: list[Path] = []
+
+    def run(
+        _self: LocalPointRunner,
+        _params: SimulationParams,
+        output_directory: Path,
+        _cancel_event: threading.Event,
+        _on_message: Callable[[object], None] | None,
+        _max_workers: int | None,
+    ) -> Path:
+        """Publish a directory or raise after observing its reservation."""
+        reservation = output_directory.parent / f".reserve-{output_directory.name}"
+        assert reservation.is_dir()
+        output_directories.append(output_directory)
+        if fails:
+            raise RuntimeError("point failed")
+        output_directory.mkdir()
+        return output_directory
+
+    monkeypatch.setattr(LocalPointRunner, "_run", run)
+    if fails:
+        with pytest.raises(RuntimeError, match="point failed"):
+            runner.run_point(_params(), threading.Event())
+    else:
+        assert runner.run_point(_params(), threading.Event()) == output_directories[0]
+
+    assert len(output_directories) == 1
+    output_directory = output_directories[0]
+    assert not (output_directory.parent / f".reserve-{output_directory.name}").exists()
 
 
 def _names_by_coordinate(study_id: str) -> dict[int, tuple[str | None, str | None]]:

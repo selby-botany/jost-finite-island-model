@@ -293,27 +293,6 @@ class ObjectPointRunner(Protocol):
         ...
 
 
-def _allocate_output_directory() -> tuple[Path, Path]:
-    """Return `(directory, reservation)` for a new run no other point holds.
-
-    `paths.default_output_directory` names a directory by the microsecond
-    and checks it does not exist yet, but the directory is only created when
-    a run publishes, so two points allocating at once could be handed one
-    name. A reservation (a hidden marker directory, made atomically) closes
-    that window between threads and between processes. The caller removes
-    the reservation when the run has published or failed.
-    """
-    for _ in range(1000):
-        candidate = paths.default_output_directory()
-        reservation = candidate.parent / f".reserve-{candidate.name}"
-        try:
-            reservation.mkdir(parents=True)
-        except FileExistsError:
-            continue
-        return candidate, reservation
-    raise FileExistsError("could not allocate a unique run directory")
-
-
 class LocalPointRunner:
     """Runs a point in this process's own scalar or batch machinery.
 
@@ -350,7 +329,7 @@ class LocalPointRunner:
         # package, which a plain `import fim.sweep_run` should not.
 
         try:
-            output_directory, reservation = _allocate_output_directory()
+            output_directory, reservation = paths.allocate_output_directory()
         except FileExistsError as error:
             return PointFailure(str(error), classify_failure(error))
         try:

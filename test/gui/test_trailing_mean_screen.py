@@ -596,7 +596,7 @@ def test_the_band_width_selector_applies_and_is_remembered(
         "select.dispatchEvent(new Event('change', {bubbles: true}));"
         + AWAIT_SETTINGS_SAVES
         + "window.__bandResult = {"
-        "width: trajectoryBandWidth, "
+        "width: window.fim.workspace.selected().completedView.trajectoryBandWidth, "
         "select: select.value, "
         "saved: (await window.pywebview.api.get_run_card_layout()).bandWidth};"
         "})();"

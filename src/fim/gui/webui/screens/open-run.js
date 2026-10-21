@@ -42,14 +42,20 @@ const deleteSelectedButton = document.getElementById(
 const selectionCountLabel = document.getElementById("open-run-selection-count");
 const compareSelectedButton = document.getElementById("open-run-compare-selected-button");
 
-let selectedTrajectoryPath = null;
-// A batch row's own counterpart to `selectedTrajectoryPath` -- a batch
-// has no single trajectory of its own to select (`run.trajectoryPath`
-// is `null` for one), so it needs its own directory-shaped selection
-// instead. The two are mutually exclusive by construction
-// (`setSelectedTrajectory`/`setSelectedBatch` each clear the other),
-// never both non-null at once.
-let selectedBatchDirectory = null;
+function selectedOpenRunSelection() {
+    const state = window.fim.workspace.selected();
+    if (!state) {
+        return null;
+    }
+    if (!state.openRunSelection) {
+        state.openRunSelection = {
+            trajectoryPath: null,
+            batchDirectory: null,
+            resourceKey: null,
+        };
+    }
+    return state.openRunSelection;
+}
 
 // Every run/Study/Experiment fetched for this visit (`refreshRecentRuns`),
 // unfiltered and ungrouped -- `renderRecentRuns` derives the actual
@@ -433,22 +439,29 @@ function showOpenRunBanner(message) {
     openRunBanner.textContent = message;
 }
 
-function setSelectedTrajectory(path) {
-    selectedTrajectoryPath = path;
-    selectedBatchDirectory = null;
+function setSelectedTrajectory(path, resourceKey = null) {
+    const selection = selectedOpenRunSelection();
+    if (selection) {
+        selection.trajectoryPath = path;
+        selection.batchDirectory = null;
+        selection.resourceKey = resourceKey;
+    }
     openButton.disabled = path === null;
 }
 
 /**
  * A batch row's own counterpart to `setSelectedTrajectory` -- see
- * `selectedBatchDirectory`'s own comment for why a batch needs a
- * separate, directory-shaped selection rather than reusing the same
- * variable a trajectory path already occupies.
+ * `openRunSelection`'s two mutually exclusive fields: a batch has no
+ * single trajectory path, so its selection is its directory instead.
  * @param {string | null} directory
  */
-function setSelectedBatch(directory) {
-    selectedBatchDirectory = directory;
-    selectedTrajectoryPath = null;
+function setSelectedBatch(directory, resourceKey = null) {
+    const selection = selectedOpenRunSelection();
+    if (selection) {
+        selection.batchDirectory = directory;
+        selection.trajectoryPath = null;
+        selection.resourceKey = resourceKey;
+    }
     openButton.disabled = directory === null;
 }
 
@@ -948,10 +961,10 @@ function buildRunRow(run, showRunId = true, nested = false, study = null) {
         // row instead, is unchanged and still the way to open one
         // specific replicate's own scalar result.
         if (run.isBatch) {
-            setSelectedBatch(run.directory);
+            setSelectedBatch(run.directory, run.resourceKey);
             return;
         }
-        setSelectedTrajectory(run.trajectoryPath);
+        setSelectedTrajectory(run.trajectoryPath, run.resourceKey);
     });
     // Double-clicking a run row opens it directly (item 5) -- final
     // generation, no differentiation-q sweep, exactly what the "Open"
@@ -961,10 +974,10 @@ function buildRunRow(run, showRunId = true, nested = false, study = null) {
     // else about this handler's own shape changes.
     row.addEventListener("dblclick", async () => {
         if (run.isBatch) {
-            await openBatch(run.directory);
+            await openBatch(run.directory, null, run.resourceKey);
             return;
         }
-        await openTrajectory(run.trajectoryPath);
+        await openTrajectory(run.trajectoryPath, null, run.resourceKey);
     });
     return row;
 }
@@ -1879,6 +1892,50 @@ async function withOpenRunBusy(label, work) {
     }
 }
 
+function openRunResourceKey(directory) {
+    return `run:${String(directory).replace(/[\\/]+$/, "")}`;
+}
+
+function prepareRunResource(directory, sourceTabId = null, resourceKey = null) {
+    if (!window.fim.workspace.documentTabsEnabled()) {
+        return { tabId: window.fim.workspace.selectedId(), created: false };
+    }
+    const stableResourceKey = resourceKey || openRunResourceKey(directory);
+    const existingId = window.fim.workspace.documentForResource(stableResourceKey);
+    if (existingId !== null) {
+        if (sourceTabId !== null && sourceTabId !== existingId) {
+            const source = window.fim.workspace.get(sourceTabId);
+            if (source) {
+                source.linkedResourceKey = stableResourceKey;
+                window.fim.markFormClean(sourceTabId);
+            }
+        }
+        activateWorkspaceDocument(existingId);
+        return {
+            tabId: existingId,
+            created: false,
+            reused: sourceTabId !== existingId,
+        };
+    }
+    if (sourceTabId !== null && window.fim.workspace.get(sourceTabId)) {
+        window.fim.workspace.setResourceKey(sourceTabId, stableResourceKey);
+        const source = window.fim.workspace.get(sourceTabId);
+        source.kind = "result";
+        source.readOnly = true;
+        source.label = String(directory).replace(/[\\/]+$/, "").split(/[\\/]/).pop();
+        window.fim.showScreen("screen-run");
+        return { tabId: sourceTabId, created: false, source: true };
+    }
+    const opened = window.fim.workspace.openResource(stableResourceKey, {
+        kind: "result",
+        label: String(directory).replace(/[\\/]+$/, "").split(/[\\/]/).pop(),
+        readOnly: true,
+        history: ["screen-run"],
+    });
+    window.fim.showScreen("screen-run");
+    return { ...opened, source: false };
+}
+
 /**
  * Open `trajectoryPath` at its final generation, no differentiation-q
  * sweep, landing on the unified run view's own `completed` state --
@@ -1892,14 +1949,53 @@ async function withOpenRunBusy(label, work) {
  * @param {string} trajectoryPath
  * @returns {Promise<void>}
  */
-async function openTrajectory(trajectoryPath) {
+async function openTrajectory(trajectoryPath, sourceTabId = null, resourceKey = null) {
+    const directory = String(trajectoryPath).replace(/[\\/][^\\/]+$/, "");
+    const resource = prepareRunResource(directory, sourceTabId, resourceKey);
+    if (resource.reused) {
+        return;
+    }
+    const documentState =
+        resource.tabId === null ? null : window.fim.workspace.get(resource.tabId);
     await withOpenRunBusy("Opening run\u2026", async () => {
         const result = await window.pywebview.api.open_run({ trajectoryPath });
         if (!result.ok) {
             showOpenRunBanner(result.message);
+            if (
+                resource.created &&
+                window.fim.workspace.get(resource.tabId) === documentState
+            ) {
+                window.fim.workspace.closeDocument(resource.tabId);
+            } else if (
+                resource.source &&
+                documentState &&
+                window.fim.workspace.get(resource.tabId) === documentState
+            ) {
+                window.fim.workspace.setResourceKey(resource.tabId, null);
+                documentState.kind = "draft";
+                documentState.readOnly = false;
+            }
             return;
         }
         showOpenRunBanner("");
+        if (
+            window.fim.workspace.documentTabsEnabled() &&
+            documentState &&
+            window.fim.workspace.get(resource.tabId) === documentState
+        ) {
+            const resourceKey =
+                result.resourceKey || openRunResourceKey(result.outputDirectory);
+            if (documentState.resourceKey !== resourceKey) {
+                window.fim.workspace.setResourceKey(resource.tabId, resourceKey);
+            }
+            documentState.readOnly = Boolean(result.readOnly);
+            documentState.kind = "result";
+            documentState.completedPayload = { result, isBatch: false };
+            window.fim.workspace.notifyChange();
+            if (window.fim.workspace.selectedId() !== resource.tabId) {
+                return;
+            }
+        }
         window.fim.resetTrajectoryLegendVisibility();
         window.fim.enterCompletedState(result, false);
     });
@@ -1912,11 +2008,20 @@ async function openTrajectory(trajectoryPath) {
  * @param {string} directory
  * @param {boolean} isBatch
  */
-window.fim.openComputedRun = async function openComputedRun(directory, isBatch) {
+window.fim.openComputedRun = async function openComputedRun(
+    directory,
+    isBatch,
+    sourceTabId = null,
+    resourceKey = null
+) {
     if (isBatch) {
-        await openBatch(directory);
+        await openBatch(directory, sourceTabId, resourceKey);
     } else {
-        await openTrajectory(`${directory}/trajectory.tlog`);
+        await openTrajectory(
+            `${directory}/trajectory.tlog`,
+            sourceTabId,
+            resourceKey
+        );
     }
 };
 
@@ -1930,14 +2035,52 @@ window.fim.openComputedRun = async function openComputedRun(directory, isBatch) 
  * already does for a batch that just finished live.
  * @param {string} directory
  */
-async function openBatch(directory) {
+async function openBatch(directory, sourceTabId = null, resourceKey = null) {
+    const resource = prepareRunResource(directory, sourceTabId, resourceKey);
+    if (resource.reused) {
+        return;
+    }
+    const documentState =
+        resource.tabId === null ? null : window.fim.workspace.get(resource.tabId);
     await withOpenRunBusy("Opening batch\u2026", async () => {
         const result = await window.pywebview.api.open_batch(directory);
         if (!result.ok) {
             showOpenRunBanner(result.message);
+            if (
+                resource.created &&
+                window.fim.workspace.get(resource.tabId) === documentState
+            ) {
+                window.fim.workspace.closeDocument(resource.tabId);
+            } else if (
+                resource.source &&
+                documentState &&
+                window.fim.workspace.get(resource.tabId) === documentState
+            ) {
+                window.fim.workspace.setResourceKey(resource.tabId, null);
+                documentState.kind = "draft";
+                documentState.readOnly = false;
+            }
             return;
         }
         showOpenRunBanner("");
+        if (
+            window.fim.workspace.documentTabsEnabled() &&
+            documentState &&
+            window.fim.workspace.get(resource.tabId) === documentState
+        ) {
+            const resourceKey =
+                result.resourceKey || openRunResourceKey(result.outputDirectory);
+            if (documentState.resourceKey !== resourceKey) {
+                window.fim.workspace.setResourceKey(resource.tabId, resourceKey);
+            }
+            documentState.readOnly = Boolean(result.readOnly);
+            documentState.kind = "result";
+            documentState.completedPayload = { result, isBatch: true };
+            window.fim.workspace.notifyChange();
+            if (window.fim.workspace.selectedId() !== resource.tabId) {
+                return;
+            }
+        }
         window.fim.resetTrajectoryLegendVisibility();
         window.fim.enterCompletedState(result, true);
     });
@@ -2091,15 +2234,24 @@ function buildRecomputeAllButton(group) {
 }
 
 openButton.addEventListener("click", async () => {
-    if (selectedBatchDirectory !== null) {
-        await openBatch(selectedBatchDirectory);
+    const selection = selectedOpenRunSelection();
+    if (selection?.batchDirectory !== null && selection?.batchDirectory !== undefined) {
+        await openBatch(
+            selection.batchDirectory,
+            null,
+            selection.resourceKey
+        );
         return;
     }
-    if (selectedTrajectoryPath === null) {
+    if (!selection || selection.trajectoryPath === null) {
         showOpenRunBanner("no trajectory selected");
         return;
     }
-    await openTrajectory(selectedTrajectoryPath);
+    await openTrajectory(
+        selection.trajectoryPath,
+        null,
+        selection.resourceKey
+    );
 });
 
 window.fim.showOpenRunScreen = async function showOpenRunScreen() {
@@ -2126,6 +2278,13 @@ window.fim.showOpenRunScreen = async function showOpenRunScreen() {
     await refreshRecentRuns();
     await window.fim.refreshSavedRuns();
 };
+
+window.fim.workspace.onSelectionChange(() => {
+    const selection = selectedOpenRunSelection();
+    openButton.disabled =
+        !selection ||
+        (selection.trajectoryPath === null && selection.batchDirectory === null);
+});
 
 // A rename or new description saved anywhere (`screens/details.js`) shows
 // in the tree at once. Only while Home is showing: it refetches on every

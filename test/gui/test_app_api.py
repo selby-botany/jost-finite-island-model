@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 import webview
 import yaml
-from conftest import FAST_EXPERT_SETTINGS
+from conftest import COMPLETION_BACKSTOP_SECONDS, FAST_EXPERT_SETTINGS
 from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
@@ -41,6 +41,7 @@ from fim.engine import (
 from fim.engine import backends as engine_backends
 from fim.engine import simulate_params as engine_fim
 from fim.gui import app as app_module
+from fim.gui import jobs as jobs_module
 from fim.gui import presets as presets_module
 from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
@@ -58,6 +59,7 @@ from fim.gui.preferences import (
     preferences_file_override,
     save_preferences,
 )
+from fim.gui.publisher import Publisher
 from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
 from fim.gui.trajectory_history import sampled_statistic_history
@@ -3031,14 +3033,30 @@ class _FakeWindow:
 
 
 def _one_call_payload(window: _FakeWindow, function_name: str) -> dict[str, object]:
-    """Extract and parse the one JSON argument `evaluate_js` was called with."""
-    assert len(window.scripts) == 1
-    script = window.scripts[0]
+    """Extract and parse the one `function_name` call's own JSON argument.
+
+    Every `_drain_run_messages`/`_push_batch_progress` push now rides
+    alongside its own addressed `fim.onJobEvent` companion (`_push_job_
+    event`, commit A5) -- `window.scripts` therefore no longer holds
+    exactly one entry overall, so this picks out the one call matching
+    `function_name` specifically, tolerating whatever else landed
+    beside it.
+    """
     prefix = f"fim.{function_name}("
-    assert script.startswith(prefix)
+    matches = [script for script in window.scripts if script.startswith(prefix)]
+    assert len(matches) == 1
+    script = matches[0]
     assert script.endswith(")")
     result: dict[str, object] = json.loads(script[len(prefix) : -1])
     return result
+
+
+# A fixed job id and a fresh `JobAdmission` for every direct `_drain_run_
+# messages`/`_push_batch_progress` call below -- these functions now
+# require both (commit A5), but no test here exercises the addressed
+# channel's own sequencing; `job_admission.next_sequence` is never
+# otherwise read, so one id, claimed by nothing, is enough.
+_TEST_JOB_ID = "test-job"
 
 
 def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
@@ -3077,7 +3095,17 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     store.write_generation(replicate_run_id, 0, state.to_rows(replicate_run_id))
     window = _FakeWindow()
 
-    app_module._push_batch_progress(window, params, run_id, tmp_path)
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window,
+        params,
+        run_id,
+        tmp_path,
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     payload = _one_call_payload(window, "onBatchProgress")
     assert payload["replicateCount"] == 2
@@ -3097,6 +3125,64 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     assert isinstance(literature_visuals, dict)
     assert literature_visuals["alleleComposition"] is not None
     assert literature_visuals["frequencySpectrum"] is not None
+
+
+def test_summary_batch_progress_uses_sidecars_without_reading_trajectories(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Summary polling reports sidecar progress without opening a trajectory."""
+    params = replace(tiny_params, n_replicates=2)
+    run_id = "batch-summary"
+    replicate_run_id = f"{run_id}-r001"
+    directory = replicate_output_directory(tmp_path, run_id, replicate_run_id)
+    directory.mkdir(parents=True)
+    store = LiveProgressStore(
+        BinaryLogStore(
+            directory / "trajectory.tlog", background=False, block_generations=1
+        ),
+        progress_path=directory / ".progress",
+        cancel_path=tmp_path / "cancel",
+    )
+    state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.25, AlleleId(1): 0.75},),
+        ),
+        generation=7,
+    )
+    store.write_generation(replicate_run_id, 7, state.to_rows(replicate_run_id))
+    store.close()
+
+    def fail_on_trajectory_read(*args: object, **kwargs: object) -> None:
+        raise AssertionError("summary polling must not read trajectory logs")
+
+    monkeypatch.setattr(app_module, "read_live_state", fail_on_trajectory_read)
+    window = _FakeWindow()
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window,
+        params,
+        run_id,
+        tmp_path,
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+        view_level=lambda: "summary",
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
+
+    payload = _one_call_payload(window, "onBatchProgress")
+    assert payload == {
+        "state": "running",
+        "replicateCount": 2,
+        "reportedReplicateCount": 1,
+        "maxGenerations": params.max_generations,
+        "statistics": {},
+        "meanReportedGeneration": 7,
+    }
 
 
 def test_push_batch_progress_includes_a_generation_zero_baseline(
@@ -3157,7 +3243,17 @@ def test_push_batch_progress_includes_a_generation_zero_baseline(
         )
     window = _FakeWindow()
 
-    app_module._push_batch_progress(window, params, run_id, tmp_path)
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window,
+        params,
+        run_id,
+        tmp_path,
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     payload = _one_call_payload(window, "onBatchProgress")
     assert payload["meanReportedGeneration"] == 2
@@ -3182,7 +3278,17 @@ def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
     params = replace(tiny_params, n_replicates=2)
     window = _FakeWindow()
 
-    app_module._push_batch_progress(window, params, "batch-run-1", tmp_path)
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window,
+        params,
+        "batch-run-1",
+        tmp_path,
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     payload = _one_call_payload(window, "onBatchProgress")
     assert payload["replicateCount"] == 2
@@ -3226,7 +3332,18 @@ def test_push_batch_progress_includes_a_live_deme_pair_panel_when_selected(
     store.write_generation(replicate_run_id, 0, state.to_rows(replicate_run_id))
     window = _FakeWindow()
 
-    app_module._push_batch_progress(window, params, run_id, tmp_path, lambda: (1, 2))
+    publisher = Publisher()
+    app_module._push_batch_progress(
+        window,
+        params,
+        run_id,
+        tmp_path,
+        lambda: (1, 2),
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     payload = _one_call_payload(window, "onBatchProgress")
     pair_panel = payload["pairPanel"]
@@ -3281,6 +3398,7 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     message_queue.put(("cancelled", 3))
     window = _FakeWindow()
 
+    publisher = Publisher()
     app_module._drain_run_messages(
         window,
         message_queue,
@@ -3288,13 +3406,77 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
         deme_count=3,
         output_directory=Path("/unused"),
         live_deme_pair=lambda: (1, 3),
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
     )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     progress_payload = json.loads(window.scripts[0][len("fim.onRunProgress(") : -1])
     pair_panel = progress_payload["pairPanel"]
     assert pair_panel["x_label"] == "Deme 1"
     assert pair_panel["y_label"] == "Deme 3"
     assert progress_payload["literatureVisuals"] == visuals
+
+
+def test_drain_run_messages_keeps_summary_progress_payload_compact() -> None:
+    """A summary `"progress"` push omits visualization and pair data."""
+    state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.25, AlleleId(1): 0.75},),
+        ),
+    )
+    params = SimulationParams(
+        gene_copies=20,
+        m=0.1,
+        mu=0.01,
+        d=2,
+        seed=20260814,
+        loci=(LocusSpec(1, 200),),
+        precision=1.0,
+        max_generations=10,
+        n_replicates=1,
+        stop_batch_early=False,
+    )
+    message_queue: queue.Queue[runner_module.RunMessage] = queue.Queue()
+    message_queue.put(
+        runner_module.progress_message(
+            state,
+            3,
+            params,
+            run_id="run-1",
+            view_level="summary",
+        )
+    )
+    message_queue.put(("cancelled", 3))
+    window = _FakeWindow()
+    publisher = Publisher()
+
+    app_module._drain_run_messages(
+        window,
+        message_queue,
+        max_generations=10,
+        deme_count=2,
+        output_directory=Path("/unused"),
+        live_deme_pair=lambda: (1, 2),
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
+
+    progress_payload = json.loads(window.scripts[0][len("fim.onRunProgress(") : -1])
+    assert progress_payload["state"] == "running"
+    assert progress_payload["generation"] == 3
+    assert progress_payload["statistics"]
+    assert not {
+        "panels",
+        "literatureVisuals",
+        "pairPanel",
+        "pairStatistics",
+    }.intersection(progress_payload)
 
 
 def test_statistics_catalog_starts_on_the_catalog_defaults(tmp_path: Path) -> None:
@@ -3413,17 +3595,30 @@ def test_drain_run_messages_forwards_a_status_note_and_keeps_draining() -> None:
     message_queue.put(("cancelled", 3))
     window = _FakeWindow()
 
+    publisher = Publisher()
     app_module._drain_run_messages(
         window,
         message_queue,
         max_generations=10,
         deme_count=300,
         output_directory=Path("/unused"),
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
     )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
-    assert window.scripts[0].startswith("fim.onRunStatus(")
-    assert "44,850 pairs of 300 demes" in window.scripts[0]
-    assert window.scripts[1].startswith("fim.onRunCancelled(")
+    # `_push_job_event`'s own addressed companion (commit A5) now rides
+    # alongside each of these, so positional indices into `window.scripts`
+    # no longer hold -- matched by prefix instead, as `_one_call_payload`
+    # already does for a single push.
+    status_scripts = [s for s in window.scripts if s.startswith("fim.onRunStatus(")]
+    cancelled_scripts = [
+        s for s in window.scripts if s.startswith("fim.onRunCancelled(")
+    ]
+    assert len(status_scripts) == 1
+    assert "44,850 pairs of 300 demes" in status_scripts[0]
+    assert len(cancelled_scripts) == 1
 
 
 def test_pairwise_status_text_names_pairs_and_replicates() -> None:
@@ -3559,6 +3754,7 @@ def test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict(
             "runId": "run-1",
             "directoryName": "run-1",
             "directory": str(tmp_path / "run-1"),
+            "resourceKey": f"run:{(tmp_path / 'run-1').resolve()}",
             "trajectoryPath": str(tmp_path / "run-1" / "trajectory.tlog"),
             "endedAt": "2026-08-22T00:00:00Z",
             "label": "statistic converged",
@@ -3568,6 +3764,7 @@ def test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict(
             "runId": "run-2",
             "directoryName": "run-2",
             "directory": str(tmp_path / "run-2"),
+            "resourceKey": f"run:{(tmp_path / 'run-2').resolve()}",
             "trajectoryPath": None,
             "endedAt": "2026-08-21T00:00:00Z",
             "label": "batch (14/20)",
@@ -4978,8 +5175,11 @@ class _FakeMenuWindow:
     for bridge logic that does not actually touch a live window.
     """
 
-    def evaluate_js(self, script: str) -> None:  # noqa: ARG002 - duck-typed stand-in
-        return None
+    def __init__(self) -> None:
+        self.scripts: list[str] = []
+
+    def evaluate_js(self, script: str) -> None:
+        self.scripts.append(script)
 
     def destroy(self) -> None:
         return None
@@ -5005,6 +5205,11 @@ def test_build_menu_has_exactly_file_run_and_help() -> None:
     file_items = [item.title for item in menus[0].items if hasattr(item, "title")]
     assert file_items == [
         "New configuration",
+        "Close tab",
+        "Next tab",
+        "Previous tab",
+        "Close other tabs",
+        "Close all results",
         "Open configuration…",
         "Save configuration…",
         "Load example…",
@@ -5026,6 +5231,37 @@ def test_build_menu_has_exactly_file_run_and_help() -> None:
         "Documentation on GitHub",
         "Check for updates",
         "About fim",
+    ]
+
+
+def test_build_menu_dispatches_document_actions_to_workspace() -> None:
+    """Native document menu items dispatch through the workspace API."""
+    window = _FakeMenuWindow()
+    menus = app_module._build_menu(window)  # type: ignore[arg-type]
+    actions = {
+        item.title: item
+        for item in menus[0].items
+        if hasattr(item, "title")
+        and item.title
+        in {
+            "New configuration",
+            "Close tab",
+            "Next tab",
+            "Previous tab",
+            "Close other tabs",
+            "Close all results",
+        }
+    }
+    for action in actions.values():
+        action.function()
+
+    assert window.scripts == [
+        "setTimeout(() => { fim.menu.newConfiguration() }, 0);",
+        "setTimeout(() => { fim.workspace.requestCloseSelected() }, 0);",
+        "setTimeout(() => { fim.workspace.selectRelative(1) }, 0);",
+        "setTimeout(() => { fim.workspace.selectRelative(-1) }, 0);",
+        "setTimeout(() => { fim.closeOtherDocuments() }, 0);",
+        "setTimeout(() => { fim.closeAllResultDocuments() }, 0);",
     ]
 
 

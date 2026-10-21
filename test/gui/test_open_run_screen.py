@@ -265,6 +265,25 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
                     f"document.querySelector({_REAL_ROW_SELECTOR}).click();"
                 )
                 window.evaluate_js(
+                    "(() => {"
+                    "const workspace = window.fim.workspace;"
+                    "const first = workspace.selectedId();"
+                    "const trajectoryPath = "
+                    "workspace.get(first).openRunSelection.trajectoryPath;"
+                    "const second = workspace.createDocument();"
+                    "const secondDisabled = "
+                    "document.getElementById('open-run-open-button').disabled;"
+                    "workspace.select(first);"
+                    "const result = {"
+                    "trajectoryPath, secondDisabled, "
+                    "firstEnabled: "
+                    "!document.getElementById('open-run-open-button').disabled"
+                    "};"
+                    "window.__fimSelectionProbe = result;"
+                    "return result;"
+                    "})()"
+                )
+                window.evaluate_js(
                     "document.getElementById('open-run-open-button').click();"
                 )
                 settled = poll_page(
@@ -274,7 +293,8 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
                     "runId: "
                     "document.getElementById('results-run-id').textContent, "
                     "trajectoryFrameHidden: "
-                    "document.getElementById('run-trajectory-frame').hidden"
+                    "document.getElementById('run-trajectory-frame').hidden, "
+                    "selection: window.__fimSelectionProbe"
                     "})",
                     lambda value: (
                         value is not None and value.get("runViewState") == "completed"
@@ -290,6 +310,9 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     assert settled is not None, "`completed` was never reached after opening the run"
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
+    assert settled["selection"]["trajectoryPath"] == str(output / "trajectory.tlog")
+    assert settled["selection"]["secondDisabled"] is True
+    assert settled["selection"]["firstEnabled"] is True
     assert output.exists()
     # `Api.open_run`'s own payload now carries `convergenceGenerations`/
     # `convergenceHistories`, read back from the run's own persisted

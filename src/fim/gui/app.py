@@ -27,7 +27,7 @@ import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from math import isfinite
@@ -72,6 +72,7 @@ from fim.examples import seed
 from fim.examples.artifacts import materialize_outputs
 from fim.gui import (
     batch_runner,
+    jobs,
     object_bridge,
     object_runner,
     presets,
@@ -116,6 +117,7 @@ from fim.gui.preferences import (
     save_preferences,
     set_preferences_file_override,
 )
+from fim.gui.publisher import Publisher
 from fim.gui.store import read_live_state, read_progress_sidecar
 from fim.gui.trajectory_history import sampled_statistic_history
 from fim.model.initial import generate_initial_state
@@ -333,11 +335,14 @@ class _CloseGate:
       directly. From then on the page's bridge calls are declined.
     - `unsaved_edits`: the Configure form differs from what was last loaded
       or saved, as the page last reported (`Api.report_unsaved_edits`).
+    - `dirty_documents`: the page's current per-document labels for drafts
+      that would be lost on close.
     """
 
     def __init__(self) -> None:
         self.closing = False
         self.unsaved_edits = False
+        self.dirty_documents: list[dict[str, str]] = []
 
 
 def _log_bridge_call[ApiMethod: Callable[..., Any]](method: ApiMethod) -> ApiMethod:
@@ -1398,6 +1403,7 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
         # finding the folder "Open output folder" would reveal.
         "directoryName": run.directory.name,
         "directory": str(run.directory),
+        "resourceKey": _run_resource_key(run.directory),
         "trajectoryPath": (
             None if run.is_batch else str(run.directory / TRAJECTORY_LOG_FILENAME)
         ),
@@ -1914,6 +1920,11 @@ def _reveal_in_file_browser(directory: Path) -> None:
         subprocess.run(["xdg-open", str(directory)], check=False)
 
 
+def _run_resource_key(directory: str | Path) -> str:
+    """Return the stable identity shared by a saved run and its result path."""
+    return f"run:{Path(directory).resolve()}"
+
+
 class Api:
     """The `window.pywebview.api` surface every `webui/*.js` screen calls into.
 
@@ -1995,15 +2006,28 @@ class Api:
                 collides with — a real user's saved preferences.
         """
         self._cancel_event: threading.Event | None = None
-        # One active thing at a time: two runs, or a run and a sweep,
-        # cannot overlap (`start_run`, `start_run_object`, `start_sweep`).
-        # A run start claims `_run_in_flight` under `_run_claim_lock`
-        # (`_claim_run`), so two starts that arrive together cannot both
-        # pass the check; the run's own drain thread clears it once it
-        # reports a terminal message. `_sweep_cancel_event` is non-`None`
-        # for exactly as long as a sweep's own thread is running.
+        # One active thing at a time: two runs, a run and a sweep, or two
+        # sweeps, cannot overlap (`start_run`, `start_run_object`, `start_
+        # sweep`). A run start claims `_run_in_flight`, and a sweep start
+        # claims `_sweep_cancel_event`, under `self._jobs`'s one shared
+        # lock (`_claim_run`/`_claim_sweep`, `fim.gui.jobs.JobAdmission`'s
+        # own docstring), so two starts of any kind that arrive together
+        # cannot both pass their own check. The run's own drain thread
+        # clears `_run_in_flight`, and the sweep's own thread clears
+        # `_sweep_cancel_event`, once each reports its own terminal
+        # outcome.
         self._run_in_flight = False
-        self._run_claim_lock = threading.Lock()
+        self._jobs = jobs.JobAdmission()
+        self._output_reservation: Path | None = None
+        # The one currently-claimed job's own id, minted by `_claim_run`/
+        # `_claim_sweep` the instant their claim succeeds, and cleared by
+        # their own release counterparts -- `fim.gui.jobs`'s own module
+        # docstring (commit A5). Carried into whichever drain/push
+        # function needs to tag its own `fim.onJobEvent` pushes with it,
+        # as a plain argument, exactly like `output_directory` -- never
+        # read back live from a background thread, which could by then
+        # be tagging a different job's pushes with a stale id.
+        self._job_id: str | None = None
         # The saved run (`start_run_object`) now executing, if any, and its
         # worker thread; Pause and Cancel are routed to it.
         self._active_object_id: str | None = None
@@ -2019,9 +2043,34 @@ class Api:
         # run's worker is `_object_worker`, above.
         self._run_worker: threading.Thread | None = None
         self._sweep_thread: threading.Thread | None = None
+        # `_drain_then_release`'s own thread for whichever run or saved
+        # run is executing -- distinct from `_run_worker`/`_object_
+        # worker`, which only do the simulating. The sweep has no
+        # equivalent: `_sweep_thread` already does its own pushing and
+        # its own `finally` in one thread, so its terminal push is
+        # already delivered by the time that join (below) returns.
+        # Joined before the publisher is ever told to stop
+        # (`stop_active_work`): otherwise a close that races a run's own
+        # termination can tell the publisher to stop accepting before
+        # this thread has even reached its own terminal `_publish_and_
+        # wait` call, silently dropping the push that call needed to
+        # send -- found live, confirmed with `test_closing_pauses_a_
+        # running_saved_run_at_a_checkpoint` failing on `onRunPaused`
+        # roughly 7 runs in 8 once the deadlock that same race used to
+        # cause (see `Publisher.publish`'s own docstring) was fixed and
+        # stopped masking it.
+        self._drain_thread: threading.Thread | None = None
         # Replaced by `create_window` when this `Api` is attached to a
         # window; a bare `Api` (a test) has one that never closes.
         self._close_gate = _CloseGate()
+        # Every push to the page -- a run's drain thread, a batch's
+        # progress poll, a sweep's own event, the reproducibility check --
+        # goes through this one publisher, never calling `window.
+        # evaluate_js` itself (`fim.gui.publisher`'s own module docstring;
+        # `20261019-claude-opus-5-5-fim-gui-tabs-design.md` §7.4). One per
+        # `Api`, the same scope `_close_gate` already has, so two `Api`
+        # instances in one test never share a delivery thread.
+        self._publisher = Publisher()
         self._open_folder = open_folder
         self._on_run_started = on_run_started
         self._on_message = on_message
@@ -2174,6 +2223,10 @@ class Api:
         try:
             result = self._start_claimed_run(values, study_id, run_details)
             started = bool(result["ok"]) and not result.get("reused", False)
+            if result["ok"] and not result.get("reused", False):
+                job_id = self._job_id
+                assert job_id is not None
+                result["jobId"] = job_id
             return result
         finally:
             # Nothing started means no drain thread will ever release the
@@ -2231,14 +2284,16 @@ class Api:
                 "reused": True,
                 "isBatch": is_batch,
                 "directory": str(existing[0]),
+                "resourceKey": _run_resource_key(existing[0]),
             }
         self._previous_version_run = next(
             iter(groups.find_stale_run_directories(run_id, fim_version)), None
         )
         try:
-            output_directory = paths.default_output_directory()
+            output_directory, reservation = paths.allocate_output_directory()
         except FileExistsError as error:
             return {"ok": False, "message": str(error)}
+        self._output_reservation = reservation
         is_batch = params.n_replicates > 1
         result = (
             self._start_batch_run(
@@ -2259,38 +2314,103 @@ class Api:
     def _claim_run(self) -> str | None:
         """Claim the one run slot, or return why it is taken.
 
-        The check and the claim happen under `_run_claim_lock`, so two
-        starts that arrive together (a double click, or Run beside a saved
-        run's Start) cannot both see a free slot. The claim is released by
-        the run's drain thread (`_drain_then_release`), or by the starting
-        method itself when it starts nothing.
+        The check and the claim happen under `self._jobs.lock`, shared
+        with `_claim_sweep` (`fim.gui.jobs.JobAdmission`'s own
+        docstring), so two starts that arrive together -- a double
+        click, Run beside a saved run's Start, or a run racing a sweep --
+        cannot both see a free slot. The claim is released by the run's
+        drain thread (`_drain_then_release`), or by the starting method
+        itself when it starts nothing. Also mints `self._job_id`
+        (`fim.gui.jobs.JobAdmission.new_job_id`) -- the caller reads it
+        back once claimed, exactly as it already reads back `self.
+        _sweep_cancel_event` after `_claim_sweep`.
 
         Returns:
             `None` once claimed; otherwise `_run_refusal`'s message.
         """
-        with self._run_claim_lock:
+        with self._jobs.lock:
             refusal = self._run_refusal()
             if refusal is None:
                 self._run_in_flight = True
+                self._job_id = self._jobs.new_job_id()
             return refusal
 
-    def _release_run_claim(self) -> None:
+    def _release_run_claim(self, *, retain_snapshot: bool = False) -> None:
         """Release the run slot: no run, plain or saved, is in flight now.
 
         Clears the saved run first, under the same lock as `_claim_run`,
         so a run that claims the slot next never has its own saved run
-        cleared by the one that just ended.
+        cleared by the one that just ended. A completed job retains its
+        snapshot for the owning document; an unsuccessful start has no
+        document to retain and forgets its empty registry entry.
         """
-        with self._run_claim_lock:
+        with self._jobs.lock:
             self._active_object_id = None
             self._run_in_flight = False
+            job_id, self._job_id = self._job_id, None
+            reservation, self._output_reservation = self._output_reservation, None
+        if reservation is not None:
+            try:
+                reservation.rmdir()
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                logger.warning(
+                    "could not remove output directory reservation %s: %s",
+                    reservation,
+                    error,
+                )
+        if job_id is not None and not retain_snapshot:
+            self._jobs.forget(job_id)
+
+    def _claim_sweep(self) -> str | None:
+        """Claim the one sweep slot, or return why it is taken.
+
+        The check and the claim happen under `self._jobs.lock`, shared
+        with `_claim_run`, so a sweep's own admission and a run's own
+        admission can never both see a free slot for the same instant
+        (`fim.gui.jobs.JobAdmission`'s own docstring: the exact gap
+        `_busy_message` used to leave open on its own, checked with no
+        lock at all). Claiming creates and assigns the new sweep's own
+        `_sweep_cancel_event`, and mints `self._job_id`
+        (`fim.gui.jobs.JobAdmission.new_job_id`); `_start_sweep_thread`
+        reads both back rather than creating or minting its own. The
+        claim is released by `_release_sweep_claim`, called from the
+        sweep's own thread once it reports its own terminal outcome, or
+        by the starting method itself when it starts nothing.
+
+        Returns:
+            `None` once claimed; otherwise `_busy_message`'s message.
+        """
+        with self._jobs.lock:
+            busy = self._busy_message()
+            if busy is not None:
+                return busy
+            self._sweep_cancel_event = threading.Event()
+            self._job_id = self._jobs.new_job_id()
+            return None
+
+    def _release_sweep_claim(self, *, retain_snapshot: bool = False) -> None:
+        """Release the sweep slot: no sweep is in flight now.
+
+        A completed sweep retains its snapshot for the owning document;
+        an unsuccessful start has no document to retain.
+        """
+        with self._jobs.lock:
+            self._sweep_cancel_event = None
+            job_id, self._job_id = self._job_id, None
+        if job_id is not None and not retain_snapshot:
+            self._jobs.forget(job_id)
 
     def _run_refusal(self) -> str | None:
         """Return why a run cannot start now, or `None` if it can.
 
         Shared by `start_run`, `start_run_object` and `can_start_run`, so
         the page's own check before a start and the start itself always
-        give the same answer.
+        give the same answer. `can_start_run` calls this as a plain,
+        unsynchronized snapshot; `_claim_run` calls it with `self._jobs.
+        lock` already held, which is what makes *that* call atomic with
+        the claim it makes from the answer.
         """
         if self._sweep_cancel_event is not None:
             return "a sweep is running; wait for it or cancel it first"
@@ -2315,6 +2435,48 @@ class Api:
             return {"ok": False, "message": refusal}
         return {"ok": True}
 
+    @_log_bridge_call
+    def get_job_snapshot(self, job_id: str) -> dict[str, Any]:
+        """Return a retained job's view level and latest addressed event.
+
+        Args:
+            job_id: A job still retained for its open document.
+
+        Returns:
+            The current view level, sequence, and latest event snapshot;
+            a refusal if `job_id` is unknown or its document has closed.
+        """
+        snapshot = self._jobs.snapshot(job_id)
+        if snapshot is None:
+            return {"ok": False, "message": "no such job"}
+        return {
+            "ok": True,
+            "jobId": job_id,
+            **snapshot,
+        }
+
+    @_log_bridge_call
+    def close_job_document(self, job_id: str) -> dict[str, Any]:
+        """Release a finished job's snapshot after its document closes."""
+        if self._jobs.snapshot(job_id) is None:
+            return {"ok": False, "message": "no such job"}
+        with self._jobs.lock:
+            if job_id == self._job_id:
+                return {"ok": False, "message": "job is still active"}
+        self._jobs.forget(job_id)
+        return {"ok": True}
+
+    @_log_bridge_call
+    def set_job_view(self, job_id: str, level: str) -> dict[str, Any]:
+        """Set an active job's rendering level and return its latest snapshot."""
+        if level not in ("full", "summary"):
+            return {"ok": False, "message": "view level must be full or summary"}
+        if job_id != self._job_id:
+            return {"ok": False, "message": "no such job"}
+        if not self._jobs.set_view_level(job_id, cast("jobs.ViewLevel", level)):
+            return {"ok": False, "message": "no such job"}
+        return self.get_job_snapshot(job_id)
+
     def _start_scalar_run(
         self,
         params: SimulationParams,
@@ -2334,6 +2496,8 @@ class Api:
             return {"ok": False, "message": "no active window"}
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
         cancel_event = threading.Event()
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_run` always mints it first
         try:
             self._run_worker = runner.start_run(
                 params,
@@ -2341,6 +2505,7 @@ class Api:
                 message_queue,
                 cancel_event,
                 pairwise_max_demes=self._preferences.pairwise_max_demes,
+                view_level=lambda: self._jobs.view_level(job_id),
             )
         except FileExistsError as error:
             logger.warning("scalar run failed to start: %s", error)
@@ -2371,7 +2536,7 @@ class Api:
         closed_form = _closed_form_trajectory_payload(params)
         self._run_in_flight = True
         self._comparison_target = (output_directory, window)
-        threading.Thread(
+        self._drain_thread = threading.Thread(
             target=self._drain_then_release,
             args=(
                 _drain_run_messages,
@@ -2389,8 +2554,14 @@ class Api:
                 study_id,
                 run_details,
             ),
+            kwargs={
+                "publisher": self._publisher,
+                "job_admission": self._jobs,
+                "job_id": job_id,
+            },
             daemon=True,
-        ).start()
+        )
+        self._drain_thread.start()
         return {
             "ok": True,
             "equilibrium": equilibrium,
@@ -2399,25 +2570,68 @@ class Api:
             "convergence": _convergence_reference_payload(params),
         }
 
-    def _drain_then_release(self, drain: Callable[..., None], *arguments: Any) -> None:
+    def _drain_then_release(
+        self,
+        drain: Callable[..., None],
+        window: _EvaluatesJs,
+        *arguments: Any,
+        publisher: Publisher,
+        job_admission: jobs.JobAdmission,
+        job_id: str,
+        **keyword_arguments: Any,
+    ) -> None:
         """Run a run's drain function, then mark no run as in flight.
 
         The drain functions return once the run reports a terminal
         message, so this is what lets `start_sweep` know a run has ended.
+
+        `publisher`, `job_admission`, and `job_id` are shared by this
+        wrapper and the drain. Remaining keyword arguments belong to the
+        drain, such as the batch view-level callback.
         """
         previous = self._previous_version_run
         target = self._comparison_target
         self._previous_version_run = None
         try:
-            drain(*arguments)
+            drain(
+                window,
+                *arguments,
+                publisher=publisher,
+                job_admission=job_admission,
+                job_id=job_id,
+                **keyword_arguments,
+            )
             if (
                 previous is not None
                 and target is not None
                 and (target[0] / "manifest.json").is_file()
             ):
-                _check_reproducibility(target[1], target[0], previous)
+                _check_reproducibility(
+                    target[1],
+                    target[0],
+                    previous,
+                    publisher,
+                    job_admission,
+                    job_id,
+                )
         finally:
-            self._release_run_claim()
+            delivered = threading.Event()
+
+            def release_after_finished() -> None:
+                """Release the run slot after the page evaluates `finished`."""
+                self._release_run_claim(retain_snapshot=True)
+                delivered.set()
+
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "finished",
+                {},
+                on_delivered=release_after_finished,
+            )
+            delivered.wait()
 
     def _start_batch_run(
         self,
@@ -2465,7 +2679,9 @@ class Api:
             self._on_run_started()
         self._run_in_flight = True
         self._comparison_target = (output_directory, window)
-        threading.Thread(
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_run` always mints it first
+        self._drain_thread = threading.Thread(
             target=self._drain_then_release,
             args=(
                 _drain_batch_messages,
@@ -2481,8 +2697,15 @@ class Api:
                 study_id,
                 run_details,
             ),
+            kwargs={
+                "publisher": self._publisher,
+                "job_admission": self._jobs,
+                "job_id": job_id,
+                "view_level": lambda: self._jobs.view_level(job_id),
+            },
             daemon=True,
-        ).start()
+        )
+        self._drain_thread.start()
         return {"ok": True}
 
     @_log_bridge_call
@@ -2557,6 +2780,7 @@ class Api:
         return {
             "ok": True,
             "objectId": saved.object_id,
+            "resourceKey": _run_resource_key(saved.directory),
             "state": saved.record.state.value,
             "problem": problem,
         }
@@ -2573,6 +2797,8 @@ class Api:
             rows = object_bridge.list_rows()
         except (LifecycleError, OSError) as error:
             return {"ok": False, "message": str(error)}
+        for run in rows["runs"]:
+            run["resourceKey"] = _run_resource_key(run["directory"])
         return {"ok": True, **rows, "activeObjectId": self._active_object_id}
 
     @_log_bridge_call
@@ -2603,6 +2829,7 @@ class Api:
             "description": run_object.labels.description,
             "state": row["state"],
             "objectId": object_id,
+            "resourceKey": _run_resource_key(run_object.directory),
             "editable": row["actions"]["edit"],
             **self._loaded_run_settings(values),
         }
@@ -2659,6 +2886,8 @@ class Api:
         self._live_deme_pair = None
         if self._on_run_started is not None:
             self._on_run_started()
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_run` always mints it first
 
         if is_batch:
             batch_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
@@ -2666,10 +2895,11 @@ class Api:
                 object_id,
                 batch_queue,
                 pairwise_max_demes=self._preferences.pairwise_max_demes,
+                view_level=lambda: self._jobs.view_level(job_id),
             )
             logger.info("saved batch run starting: %s", object_id)
             run_id = run_object.record.scientific_run_id or deterministic_run_id(params)
-            threading.Thread(
+            self._drain_thread = threading.Thread(
                 target=self._drain_then_release,
                 args=(
                     _drain_batch_messages,
@@ -2683,11 +2913,19 @@ class Api:
                     self._on_message,
                     self._on_batch_progress,
                 ),
+                kwargs={
+                    "publisher": self._publisher,
+                    "job_admission": self._jobs,
+                    "job_id": job_id,
+                    "view_level": lambda: self._jobs.view_level(job_id),
+                },
                 daemon=True,
-            ).start()
+            )
+            self._drain_thread.start()
             return {
                 "ok": True,
                 "isBatch": True,
+                "jobId": job_id,
                 "objectId": object_id,
                 "name": run_object.labels.name,
                 "equilibrium": None,
@@ -2701,12 +2939,13 @@ class Api:
             object_id,
             message_queue,
             pairwise_max_demes=self._preferences.pairwise_max_demes,
+            view_level=lambda: self._jobs.view_level(job_id),
         )
         logger.info("saved run starting: %s", object_id)
         equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
         identity_recovery = _identity_recovery_reference_payload(params)
         closed_form = _closed_form_trajectory_payload(params)
-        threading.Thread(
+        self._drain_thread = threading.Thread(
             target=self._drain_then_release,
             args=(
                 _drain_run_messages,
@@ -2722,11 +2961,18 @@ class Api:
                 identity_recovery,
                 closed_form,
             ),
+            kwargs={
+                "publisher": self._publisher,
+                "job_admission": self._jobs,
+                "job_id": job_id,
+            },
             daemon=True,
-        ).start()
+        )
+        self._drain_thread.start()
         return {
             "ok": True,
             "isBatch": False,
+            "jobId": job_id,
             "objectId": object_id,
             "name": run_object.labels.name,
             "equilibrium": equilibrium,
@@ -2796,6 +3042,13 @@ class Api:
         sweep is cancelled. A worker that misses the bound is logged, and
         the deadman still ends the process.
 
+        `_drain_thread` is joined before the publisher is ever told to
+        stop accepting (`self._drain_thread`'s own comment in `__init__`
+        has the full reason): only once it has actually returned has its
+        own terminal push already been delivered (`_publish_and_wait`),
+        so the publisher's backlog is, by then, at most whatever a
+        sweep's own thread had already queued, never still growing.
+
         Args:
             timeout: Longest total wait for the workers, in seconds.
         """
@@ -2805,12 +3058,15 @@ class Api:
             ("saved run", self._object_worker),
             ("run", self._run_worker),
             ("sweep", self._sweep_thread),
+            ("drain", self._drain_thread),
         ):
             if worker is None:
                 continue
             worker.join(max(0.0, deadline - time.monotonic()))
             if worker.is_alive():
                 logger.warning("%s did not stop before exit", label)
+        if not self._publisher.stop(max(0.0, deadline - time.monotonic())):
+            logger.warning("publisher did not finish its backlog before exit")
 
     def on_window_closing(self, window: _EvaluatesJs) -> bool:
         """Decide a close the user started: let it go, or ask first.
@@ -2849,14 +3105,31 @@ class Api:
         """Return whether closing now would lose edits or interrupt work."""
         return any(self._close_requirements().values())
 
-    def _close_requirements(self) -> dict[str, bool]:
-        """Return what closing now would affect, by the keys the dialog reads."""
+    def _close_requirements(self) -> dict[str, Any]:
+        """Return the documents and active job affected by closing."""
         saved_run = self._active_object_id is not None
+        active_job: dict[str, str] | None = None
+        if self._sweep_cancel_event is not None:
+            active_job = {
+                "kind": "sweep",
+                "id": self._sweep_study_id or self._job_id or "unknown",
+            }
+        elif self._run_in_flight:
+            active_job = {
+                "kind": "saved run" if saved_run else "run",
+                "id": self._active_object_id or self._job_id or "unknown",
+            }
         return {
-            "unsavedEdits": self._close_gate.unsaved_edits,
+            "unsavedEdits": (
+                self._close_gate.unsaved_edits or bool(self._close_gate.dirty_documents)
+            ),
             "savedRun": saved_run,
             "run": self._run_in_flight and not saved_run,
             "sweep": self._sweep_cancel_event is not None,
+            "dirtyDocuments": [
+                dict(document) for document in self._close_gate.dirty_documents
+            ],
+            "activeJob": active_job,
         }
 
     def _ask_page_to_confirm_close(self, window: _EvaluatesJs) -> None:
@@ -2906,10 +3179,10 @@ class Api:
         """Return what closing the window now would affect, for its dialog.
 
         Returns:
-            `{"ok": True, "unsavedEdits", "savedRun", "run", "sweep"}`, each
-            a bool: the Configure form has unsaved edits, a saved run is
-            executing (it pauses and resumes later), a run or batch that
-            cannot be resumed is executing, a sweep is executing.
+            `{"ok": True, "unsavedEdits", "savedRun", "run", "sweep",
+            "dirtyDocuments", "activeJob"}`. The first four values describe
+            the close requirements; `dirtyDocuments` identifies every
+            unsaved document and `activeJob` identifies the work affected.
         """
         return {"ok": True, **self._close_requirements()}
 
@@ -2934,17 +3207,67 @@ class Api:
         return {"ok": True}
 
     @_log_bridge_call
-    def report_unsaved_edits(self, unsaved: bool) -> None:
-        """Record whether the Configure form has edits that are not saved.
+    def report_unsaved_edits(
+        self,
+        unsaved: bool,
+        dirty_documents: object | None = None,
+    ) -> dict[str, Any]:
+        """Record the page's unsaved-document summary for the close dialog.
 
-        Sent by the page only when the answer changes. Closing the window
-        consults it (`on_window_closing`).
+        The boolean remains supported for callers that report only aggregate
+        state. The web page also sends the document IDs and labels so closing
+        from Home can name every dirty document, including hidden ones.
 
         Args:
-            unsaved: Whether the form differs from what was last loaded or
+            unsaved: Whether at least one document has changes that are not
                 saved.
+            dirty_documents: Optional page-provided document summaries.
+
+        Returns:
+            `{"ok": True}` or a validation error.
         """
+        checked: list[dict[str, str]] | None = None
+        if dirty_documents is not None:
+            if not isinstance(dirty_documents, list):
+                return {
+                    "ok": False,
+                    "message": "dirty_documents must be a list",
+                }
+            validated_documents: list[dict[str, str]] = []
+            seen_ids: set[str] = set()
+            for document in dirty_documents:
+                if (
+                    not isinstance(document, dict)
+                    or set(document) != {"tabId", "label"}
+                    or not all(
+                        isinstance(document[key], str) and document[key].strip()
+                        for key in ("tabId", "label")
+                    )
+                ):
+                    return {
+                        "ok": False,
+                        "message": "each dirty document needs a tabId and label",
+                    }
+                tab_id = document["tabId"]
+                if tab_id in seen_ids:
+                    return {
+                        "ok": False,
+                        "message": "dirty document IDs must be unique",
+                    }
+                seen_ids.add(tab_id)
+                validated_documents.append(
+                    {"tabId": tab_id, "label": document["label"].strip()}
+                )
+            if bool(unsaved) != bool(validated_documents):
+                return {
+                    "ok": False,
+                    "message": "unsaved must match the dirty document list",
+                }
+            checked = validated_documents
         self._close_gate.unsaved_edits = bool(unsaved)
+        if checked is not None:
+            self._close_gate.dirty_documents = checked
+        return {"ok": True}
 
     @_log_bridge_call
     def open_output_folder(self, path: str) -> None:
@@ -4938,6 +5261,7 @@ class Api:
                 # name is the directory, not the content-hash `runId`.
                 "directoryName": run.directory.name,
                 "directory": str(run.directory),
+                "resourceKey": _run_resource_key(run.directory),
                 "trajectoryPath": (
                     None
                     if run.is_batch
@@ -5642,44 +5966,59 @@ class Api:
         at or over the size threshold, until `confirmed` is true.
 
         Returns:
-            `{"ok": True, "studyId": ..., "total": N}`; or `{"ok": False,
-            "message": ...}`, with `"needsConfirmation": True` (and
-            `"total"`) for an unconfirmed large plan.
+            `{"ok": True, "studyId": ..., "total": N, "jobId": ...}`; or
+            `{"ok": False, "message": ...}`, with `"needsConfirmation":
+            True (and `"total"`) for an unconfirmed large plan.
         """
-        busy = self._busy_message()
+        busy = self._claim_sweep()
         if busy is not None:
             return {"ok": False, "message": busy}
-        window = _active_window()
-        if window is None:
-            return {"ok": False, "message": "no active window"}
+        started = False
         try:
-            spec = self._sweep_spec(values, request)
-            plan = enumerate_points(spec)
-            if plan.needs_confirmation and not confirmed:
-                return {
-                    "ok": False,
-                    "needsConfirmation": True,
-                    "total": len(plan.points),
-                    "message": (
-                        f"this sweep has {len(plan.points)} points; "
-                        "run again to confirm"
-                    ),
-                }
-            if study_id:
-                study = attach_sweep_to_study(study_id, spec, plan)
-            else:
-                study = create_sweep_study(spec, plan, _default_sweep_name(spec))
-        except ValueError as error:
-            return {"ok": False, "message": str(error)}
-        at_once, max_workers = self._sweep_run_options(values, request)
-        self._start_sweep_thread(
-            window,
-            study.study_id,
-            retry_failed=False,
-            points_at_once=at_once,
-            max_workers=max_workers,
-        )
-        return {"ok": True, "studyId": study.study_id, "total": len(plan.points)}
+            window = _active_window()
+            if window is None:
+                return {"ok": False, "message": "no active window"}
+            try:
+                spec = self._sweep_spec(values, request)
+                plan = enumerate_points(spec)
+                if plan.needs_confirmation and not confirmed:
+                    return {
+                        "ok": False,
+                        "needsConfirmation": True,
+                        "total": len(plan.points),
+                        "message": (
+                            f"this sweep has {len(plan.points)} points; "
+                            "run again to confirm"
+                        ),
+                    }
+                if study_id:
+                    study = attach_sweep_to_study(study_id, spec, plan)
+                else:
+                    study = create_sweep_study(spec, plan, _default_sweep_name(spec))
+            except ValueError as error:
+                return {"ok": False, "message": str(error)}
+            at_once, max_workers = self._sweep_run_options(values, request)
+            job_id = self._job_id
+            assert job_id is not None
+            self._start_sweep_thread(
+                window,
+                study.study_id,
+                retry_failed=False,
+                points_at_once=at_once,
+                max_workers=max_workers,
+            )
+            started = True
+            return {
+                "ok": True,
+                "studyId": study.study_id,
+                "total": len(plan.points),
+                "jobId": job_id,
+            }
+        finally:
+            # Nothing started means no sweep thread will ever release the
+            # claim, so release it here (`start_run`'s identical pattern).
+            if not started:
+                self._release_sweep_claim()
 
     @_log_bridge_call
     def resume_sweep(
@@ -5702,31 +6041,39 @@ class Api:
                 is recorded as the sweep's verification.
 
         Returns:
-            `{"ok": True, "studyId": ...}`, or `{"ok": False, "message":
-            ...}` if a run or another sweep is in progress or the Study is
-            not a sweep.
+            `{"ok": True, "studyId": ..., "jobId": ...}`, or `{"ok":
+            False, "message": ...}` if a run or another sweep is in
+            progress or the Study is not a sweep.
         """
-        busy = self._busy_message()
+        busy = self._claim_sweep()
         if busy is not None:
             return {"ok": False, "message": busy}
-        window = _active_window()
-        if window is None:
-            return {"ok": False, "message": "no active window"}
+        started = False
         try:
-            study = groups.get_study(study_id)
-            sweep_bridge.status_payload(study)
-        except ValueError as error:
-            return {"ok": False, "message": str(error)}
-        saved = self._merge_default_run_settings({})
-        self._start_sweep_thread(
-            window,
-            study_id,
-            retry_failed=retry_failed,
-            rerun=rerun,
-            points_at_once=points_at_once,
-            max_workers=_parse_max_workers(saved.get("max_workers", "")),
-        )
-        return {"ok": True, "studyId": study_id}
+            window = _active_window()
+            if window is None:
+                return {"ok": False, "message": "no active window"}
+            try:
+                study = groups.get_study(study_id)
+                sweep_bridge.status_payload(study)
+            except ValueError as error:
+                return {"ok": False, "message": str(error)}
+            saved = self._merge_default_run_settings({})
+            job_id = self._job_id
+            assert job_id is not None
+            self._start_sweep_thread(
+                window,
+                study_id,
+                retry_failed=retry_failed,
+                rerun=rerun,
+                points_at_once=points_at_once,
+                max_workers=_parse_max_workers(saved.get("max_workers", "")),
+            )
+            started = True
+            return {"ok": True, "studyId": study_id, "jobId": job_id}
+        finally:
+            if not started:
+                self._release_sweep_claim()
 
     @_log_bridge_call
     def cancel_sweep(self) -> None:
@@ -6029,7 +6376,13 @@ class Api:
         return {"ok": True, "path": str(target), "sidecar": str(sidecar)}
 
     def _busy_message(self) -> str | None:
-        """Return why a sweep cannot start now, or `None` if it can."""
+        """Return why a sweep cannot start now, or `None` if it can.
+
+        Called only from `_claim_sweep`, with `self._jobs.lock` already
+        held -- the check and the claim this answer feeds into must
+        happen atomically, so no caller outside `_claim_sweep` should
+        call this directly.
+        """
         if self._sweep_cancel_event is not None:
             return "a sweep is already running"
         if self._run_in_flight:
@@ -6052,13 +6405,23 @@ class Api:
         points_at_once: int | None = None,
         max_workers: int | None = None,
     ) -> None:
-        """Run `study_id`'s sweep on a daemon thread, pushing each event."""
-        cancel_event = threading.Event()
-        self._sweep_cancel_event = cancel_event
+        """Run `study_id`'s sweep on a daemon thread, pushing each event.
+
+        `self._sweep_cancel_event` is already set, by `_claim_sweep`, to
+        the exact event this run must watch and `cancel_sweep` must set --
+        read back here, not recreated, or `cancel_sweep`'s own call would
+        set a different event than the one `run_sweep` is actually
+        watching. `self._job_id`, likewise minted by `_claim_sweep`, is
+        read back the same way.
+        """
+        cancel_event = self._sweep_cancel_event
+        assert cancel_event is not None  # `_claim_sweep` always sets it first
+        job_id = self._job_id
+        assert job_id is not None  # `_claim_sweep` always mints it first
         self._sweep_study_id = study_id
 
         def push(event: SweepEvent) -> None:
-            _push_sweep_event(window, event)
+            _push_sweep_event(window, event, self._publisher, self._jobs, job_id)
 
         pairwise_max_demes = self._preferences.pairwise_max_demes
 
@@ -6079,9 +6442,31 @@ class Api:
                 # A thread that dies silently leaves the page showing a sweep
                 # that never finishes, so every failure becomes an error event.
                 logger.exception("sweep %s failed", study_id)
-                _push_sweep_error(window, str(error) or type(error).__name__)
+                _push_sweep_error(
+                    window,
+                    str(error) or type(error).__name__,
+                    self._publisher,
+                    self._jobs,
+                    job_id,
+                )
             finally:
-                self._sweep_cancel_event = None
+                delivered = threading.Event()
+
+                def release_after_finished() -> None:
+                    """Release the sweep slot after the page evaluates `finished`."""
+                    self._release_sweep_claim(retain_snapshot=True)
+                    delivered.set()
+
+                _push_job_event(
+                    window,
+                    self._publisher,
+                    self._jobs,
+                    job_id,
+                    "finished",
+                    {},
+                    on_delivered=release_after_finished,
+                )
+                delivered.wait()
 
         self._sweep_thread = threading.Thread(target=work, daemon=True)
         self._sweep_thread.start()
@@ -6448,6 +6833,7 @@ class Api:
         report = reanalyzed.report
         return {
             "ok": True,
+            "resourceKey": _run_resource_key(trajectory_path.parent),
             "runId": reanalyzed.manifest.run_id,
             "directoryName": trajectory_path.parent.name,
             "configSummary": _run_config_summary(reanalyzed.params),
@@ -6637,7 +7023,11 @@ class Api:
             ),
             convergence_note=convergence_note,
         )
-        return {"ok": True, **payload}
+        return {
+            "ok": True,
+            "resourceKey": _run_resource_key(batch_directory),
+            **payload,
+        }
 
     @_log_bridge_call
     def open_study(self, study_id: str) -> dict[str, Any]:
@@ -7296,7 +7686,12 @@ class Api:
 
 
 def _check_reproducibility(
-    window: _EvaluatesJs, recomputed: Path, previous: Path
+    window: _EvaluatesJs,
+    recomputed: Path,
+    previous: Path,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
 ) -> None:
     """Compare a recomputed run with the same configuration from another version.
 
@@ -7304,8 +7699,9 @@ def _check_reproducibility(
     it holds the recomputed one and the old directory is removed. Different:
     both are kept, the difference is recorded beside the new run, and the
     page is told, since the simulator guarantees bit-for-bit reproducibility
-    and a difference is a break of that guarantee. Either way the page hears
-    of it through `fim.onReproducibilityChecked`.
+    and a difference is a break of that guarantee. Either way, the page
+    hears of it as an addressed `"annotation"` event after the terminal
+    event. The publisher does not coalesce or reorder it.
     """
     try:
         comparison = compare_runs(previous, recomputed)
@@ -7330,10 +7726,14 @@ def _check_reproducibility(
             [item.label for item in comparison.differences],
         )
         write_reproducibility_note(recomputed, payload)
-    try:
-        window.evaluate_js(f"fim.onReproducibilityChecked({json.dumps(payload)})")
-    except Exception:
-        logger.debug("could not push a reproducibility result", exc_info=True)
+    _push_job_event(
+        window,
+        publisher,
+        job_admission,
+        job_id,
+        "annotation",
+        payload,
+    )
 
 
 def _default_sweep_name(spec: SweepSpec) -> str:
@@ -7363,8 +7763,53 @@ def _sweep_point_count(study: groups.StudyManifest) -> int | None:
     return count if isinstance(count, int) else None
 
 
-def _push_sweep_event(window: _EvaluatesJs, event: SweepEvent) -> None:
-    """Push one sweep event to the page; a page that is gone is not an error."""
+# Emitted once, directly from `run_sweep`'s own tail, never from inside
+# `_Context.emit`'s own lock -- the only `SweepEvent` kinds `_push_sweep_
+# event` may ever block delivery for; see that function's own docstring.
+_WHOLE_SWEEP_EVENT_KINDS: Final = frozenset(
+    {"sweep_done", "sweep_cancelled", "sweep_budget_reached"}
+)
+
+
+def _push_sweep_event(
+    window: _EvaluatesJs,
+    event: SweepEvent,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
+) -> None:
+    """Push one sweep event to the page; a page that is gone is not an error.
+
+    `_Context.emit` (`fim.sweep_run`) calls this while holding its own
+    context lock, for every point thread's progress and outcome alike —
+    this must never itself block on `evaluate_js`, or a page slow to
+    answer stalls every other point thread waiting on that same lock
+    (`20261019-claude-opus-5-5-fim-gui-tabs-design-review.md`, finding
+    M4), so every `"point_*"` kind only ever queues through `publisher`,
+    never waiting for delivery. `"point_progress"` is the one kind that
+    fires repeatedly for a still-running point — coalesced per point
+    (`event.run_id`; several points can run at once, so a progress tick
+    for one must never replace another's). Every other point kind,
+    including a point's own one-off outcome, is queued unconditionally,
+    in order, but still without waiting.
+
+    The three kinds in `_WHOLE_SWEEP_EVENT_KINDS` are different: `run_
+    sweep` emits exactly one of them, once, outside any lock, right
+    before `_start_sweep_thread`'s own `work()` clears `Api._sweep_
+    cancel_event` in its `finally` — a second sweep's own "a sweep is
+    running" refusal depends on that happening only once this exact
+    push has landed, so these three alone wait for delivery
+    (`_publish_and_wait`), the same way a run's or batch's own terminal
+    push already does.
+
+    Also pushes this same event, addressed, through `_push_job_event`
+    (`job_admission`/`job_id`: the one sweep job this process now has
+    claimed) -- additive, alongside the legacy push above, never
+    waiting for delivery regardless of `event.kind` (unlike the legacy
+    push's own three-kind exception: nothing yet depends on the
+    addressed channel's own delivery, so there is no equivalent reason
+    to block here for any kind).
+    """
     detail = event.detail if isinstance(event.detail, str | dict) else None
     payload = {
         "kind": event.kind,
@@ -7374,18 +7819,64 @@ def _push_sweep_event(window: _EvaluatesJs, event: SweepEvent) -> None:
         "total": event.total,
         "detail": detail,
     }
-    try:
-        window.evaluate_js(f"fim.onSweepEvent({json.dumps(payload)})")
-    except Exception:
-        logger.debug("could not push a sweep event", exc_info=True)
+    script = f"fim.onSweepEvent({json.dumps(payload)})"
+    if event.kind in _WHOLE_SWEEP_EVENT_KINDS:
+        _publish_and_wait(publisher, window, script, label="a sweep event")
+        _push_job_event(window, publisher, job_admission, job_id, "terminal", payload)
+        return
+    if event.kind == "point_progress":
+        coalesce_key: Hashable | None = ("sweep-point-progress", event.run_id)
+        event_type = "progress"
+    else:
+        coalesce_key = None
+        event_type = "status"
+    publisher.publish(window, script, coalesce_key=coalesce_key, label="a sweep event")
+    job_coalesce_key = (
+        ("job-event-progress", job_id, event.run_id)
+        if event_type == "progress"
+        else None
+    )
+    _push_job_event(
+        window,
+        publisher,
+        job_admission,
+        job_id,
+        event_type,
+        payload,
+        coalesce_key=job_coalesce_key,
+    )
 
 
-def _push_sweep_error(window: _EvaluatesJs, message: str) -> None:
-    """Tell the page a sweep could not start or continue."""
-    try:
-        window.evaluate_js(f"fim.onSweepError({json.dumps(message)})")
-    except Exception:
-        logger.debug("could not push a sweep error", exc_info=True)
+def _push_sweep_error(
+    window: _EvaluatesJs,
+    message: str,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
+) -> None:
+    """Tell the page a sweep could not start or continue.
+
+    Called from `work()`'s own top-level `except`, with no lock held —
+    like `_WHOLE_SWEEP_EVENT_KINDS`, right before the same `finally`
+    clears `Api._sweep_cancel_event`, so this waits for delivery too.
+    Also pushes the addressed companion (`_push_job_event`, type
+    `"terminal"`), same as `_push_sweep_event`'s own three whole-sweep
+    kinds -- never waited for, for the same reason given there.
+    """
+    _publish_and_wait(
+        publisher,
+        window,
+        f"fim.onSweepError({json.dumps(message)})",
+        label="a sweep error",
+    )
+    _push_job_event(
+        window,
+        publisher,
+        job_admission,
+        job_id,
+        "terminal",
+        {"kind": "error", "value": message},
+    )
 
 
 class RunDetails(NamedTuple):
@@ -7505,10 +7996,139 @@ def _attach_live_pair(
         # not an error (`deme_pair_panel`'s own docstring), so it never
         # reaches this `suppress`; only the genuinely out-of-range case
         # does.
-        with contextlib.suppress(ValueError):
-            progress_payload["pairPanel"] = deme_pair_panel(
-                message[3], first_deme - 1, second_deme - 1
-            )
+        points = message[3]
+        if points is not None:
+            with contextlib.suppress(ValueError):
+                progress_payload["pairPanel"] = deme_pair_panel(
+                    points, first_deme - 1, second_deme - 1
+                )
+
+
+def _notify_on_delivery[MessageT](
+    on_message: Callable[[MessageT], None] | None, message: MessageT
+) -> Callable[[], None] | None:
+    """Return a push's own `on_delivered` callback for `message`, or `None`.
+
+    Every drain's own "call `on_message` once this exact message's own
+    push has actually been attempted" site (`_drain_run_messages`,
+    `_drain_batch_messages`) shares this one, fully typed closure,
+    passed as `Publisher.publish`'s own `on_delivered` — a bare `lambda
+    message=message: ...` default-argument capture works identically at
+    runtime, but mypy cannot infer its parameter's type from a default
+    value alone, and this also means `message` is captured once, by
+    value, at the moment this function is called, not by reference into
+    whatever the enclosing loop's own `message` happens to be rebound to
+    by the time delivery actually runs.
+    """
+    if on_message is None:
+        return None
+
+    def notify() -> None:
+        on_message(message)
+
+    return notify
+
+
+def _publish_and_wait(
+    publisher: Publisher,
+    window: _EvaluatesJs,
+    script: str,
+    *,
+    label: str | None = None,
+    on_delivered: Callable[[], None] | None = None,
+) -> None:
+    """Publish one push through `publisher`, but block until it is delivered.
+
+    For a terminal outcome -- a run's or batch's "done"/"cancelled"/
+    "paused"/error, the reproducibility result, a sweep's own final
+    event or error -- code right after this call still assumes, exactly
+    as it did before `Publisher` existed, that the push has already
+    reached the page: `Api._drain_then_release`'s own claim release and
+    `_start_sweep_thread`'s own `finally: self._sweep_cancel_event =
+    None` both let a second job start the instant they run, so neither
+    may run early. Safe to block on here specifically because nothing
+    that calls this holds a lock another producer needs — the one
+    thing finding M4 (`20261019-claude-opus-5-5-fim-gui-tabs-design-
+    review.md`) requires staying off of is a *per-point* sweep event,
+    emitted from inside `fim.sweep_run._Context.emit`'s own lock, which
+    is why `_push_sweep_event` never routes a `"point_*"` kind through
+    this function.
+
+    Args:
+        publisher: Where to publish.
+        window: Where `script` will be delivered.
+        script: The JavaScript to evaluate there.
+        label: As `Publisher.publish`'s own `label`.
+        on_delivered: Called once delivery is attempted, same as
+            `Publisher.publish`'s own `on_delivered` — this function's
+            own wait is layered underneath it, not a replacement for it.
+    """
+    delivered = threading.Event()
+
+    def mark_delivered() -> None:
+        delivered.set()
+        if on_delivered is not None:
+            on_delivered()
+
+    publisher.publish(window, script, label=label, on_delivered=mark_delivered)
+    delivered.wait()
+
+
+def _push_job_event(
+    window: _EvaluatesJs,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
+    event_type: str,
+    payload: Any,
+    *,
+    coalesce_key: Hashable | None = None,
+    on_delivered: Callable[[], None] | None = None,
+) -> None:
+    """Publish one addressed `fim.onJobEvent`, alongside whichever legacy push.
+
+    Progress, status, and terminal events accompany the existing
+    `fim.onRun*`/`fim.onBatch*`/`fim.onSweep*` pushes. Annotations and
+    `finished` are addressed-only events. `webui/jobs.js` tracks the
+    sequence and retains the latest event snapshot; document rendering
+    starts at A9.
+
+    Event types include `"progress"`, `"status"`, `"terminal"`,
+    `"annotation"`, and `"finished"`. A delivery callback is used for
+    `"finished"` so claim and output-reservation release cannot precede
+    the final addressed event.
+
+    Args:
+        window: Where the push lands.
+        publisher: Queues it, same as every other push in this module.
+        job_admission: `Api._jobs`, which assigns the sequence and
+            retains this event for `get_job_snapshot`.
+        job_id: The job this event belongs to.
+        event_type: As above.
+        payload: Whatever shape `event_type` carries -- never
+            re-validated here, the same "trust the caller" the legacy
+            pushes beside each call site already give their own
+            payload.
+        coalesce_key: As `Publisher.publish`'s own parameter -- a
+            `"progress"` push is always coalesced per job (and, for a
+            sweep, per point too); every other type is `None`
+            (queued unconditionally, in order), matching the legacy
+            push it accompanies.
+    """
+    sequence = job_admission.record_event(job_id, event_type, payload)
+    envelope = {
+        "jobId": job_id,
+        "sequence": sequence,
+        "type": event_type,
+        "payload": payload,
+    }
+    publisher.publish(
+        window,
+        f"fim.onJobEvent({json.dumps(envelope)})",
+        coalesce_key=coalesce_key,
+        label=f"a {event_type} job event",
+        on_delivered=on_delivered,
+    )
 
 
 def _drain_run_messages(
@@ -7525,6 +8145,10 @@ def _drain_run_messages(
     closed_form: dict[str, Any] | None = None,
     study_id: str | None = None,
     run_details: RunDetails | None = None,
+    *,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
 
@@ -7541,11 +8165,14 @@ def _drain_run_messages(
     watching several replicates' sidecar files at once.
 
     `on_message`, if given (test-only — see `Api.__init__`'s own
-    docstring), is called *after* each message's own `window.
-    evaluate_js` push has already returned, never concurrently with it:
-    this thread is still the only one calling `evaluate_js` at that
-    point, so a test's own hook firing here never becomes a second
-    concurrent caller the way a test-side polling loop would.
+    docstring), fires as each message's own push is actually attempted —
+    not here, but from inside `publisher`'s own single delivery thread,
+    via that push's `on_delivered` hook (`fim.gui.publisher.Publisher.
+    publish`), so a test's own hook still only ever fires once the real
+    `evaluate_js` call for that exact message has returned (or raised),
+    never concurrently with another push to the same window. A
+    coalesced-away progress tick's own `on_message` call never fires at
+    all, matching what actually reached the page.
 
     `deme_count` rides along for both the `"done"` payload's own
     `demeCount` field (`results.js`'s large-`d` deme-pair selector) and
@@ -7583,6 +8210,11 @@ def _drain_run_messages(
     once the run has actually published successfully" ordering — never
     for a `"cancelled"` or error outcome, which publish nothing to
     attach in the first place.
+
+    `job_admission`/`job_id` (`Api._jobs`/`Api._job_id` at the moment
+    this thread was started) tag every push above with its own addressed
+    `fim.onJobEvent` companion (`_push_job_event`) — additive, never
+    replacing the push beside it.
     """
     logger.debug("run message-drain thread started: %s", output_directory)
     while True:
@@ -7597,10 +8229,8 @@ def _drain_run_messages(
         message = message_queue.get()
         if message[0] == "progress":
             progress_payload: dict[str, object] = {
+                "state": "running",
                 "generation": message[1],
-                "maxGenerations": max_generations,
-                "panels": message[2],
-                "demeCount": deme_count,
                 # The six named statistics for this tick's own state
                 # (`runner.py`'s `on_generation`, `message[4]`) — keeps
                 # the running-state stats table live and populated
@@ -7611,16 +8241,37 @@ def _drain_run_messages(
                     )
                     for name in _RESULT_STATISTIC_NAMES
                 },
-                "literatureVisuals": message[5],
             }
-            _attach_live_pair(
-                progress_payload, message, live_deme_pair(), deme_count, digits
-            )
+            if (
+                message[2] is not None
+                and message[3] is not None
+                and message[5] is not None
+            ):
+                progress_payload["maxGenerations"] = max_generations
+                progress_payload["demeCount"] = deme_count
+                progress_payload["panels"] = message[2]
+                progress_payload["literatureVisuals"] = message[5]
+                _attach_live_pair(
+                    progress_payload, message, live_deme_pair(), deme_count, digits
+                )
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug("run progress: generation=%s", message[1])
-            window.evaluate_js(f"fim.onRunProgress({json.dumps(progress_payload)})")
-            if on_message is not None:
-                on_message(message)
+            publisher.publish(
+                window,
+                f"fim.onRunProgress({json.dumps(progress_payload)})",
+                coalesce_key=("run-progress", output_directory),
+                label="run progress",
+                on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "progress",
+                progress_payload,
+                coalesce_key=("job-event-progress", job_id),
+            )
         elif message[0] == "done":
             result = message[1]
             payload = {
@@ -7690,28 +8341,72 @@ def _drain_run_messages(
             }
             _attach_finished_run_to_study(study_id, output_directory, run_details)
             logger.info("run done: %s", output_directory)
-            window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")
-            if on_message is not None:
-                on_message(message)
+            _publish_and_wait(
+                publisher,
+                window,
+                f"fim.onRunDone({json.dumps(payload)})",
+                label="run done",
+                on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "done", "value": payload},
+            )
             return
         elif message[0] == "status":
             # Not terminal: a note such as "saving every deme pair's
             # statistics" while a large run's artifacts are written.
-            window.evaluate_js(f"fim.onRunStatus({json.dumps(message[1])})")
+            publisher.publish(
+                window,
+                f"fim.onRunStatus({json.dumps(message[1])})",
+                coalesce_key=("run-status", output_directory),
+                label="run status",
+            )
+            _push_job_event(
+                window, publisher, job_admission, job_id, "status", message[1]
+            )
         elif message[0] in ("cancelled", "paused"):
             # Only a saved Run (`fim.gui.object_runner`) pauses; its
             # checkpoint is durable, so it resumes from Saved runs.
             handler = "onRunCancelled" if message[0] == "cancelled" else "onRunPaused"
             logger.info("run %s: %s", message[0], output_directory)
-            window.evaluate_js(f"fim.{handler}({json.dumps(message[1])})")
-            if on_message is not None:
-                on_message(message)
+            _publish_and_wait(
+                publisher,
+                window,
+                f"fim.{handler}({json.dumps(message[1])})",
+                label=f"run {message[0]}",
+                on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": message[0], "value": message[1]},
+            )
             return
         else:
             logger.warning("run error: %s", message[1])
-            window.evaluate_js(f"fim.onRunError({json.dumps(message[1])})")
-            if on_message is not None:
-                on_message(message)
+            _publish_and_wait(
+                publisher,
+                window,
+                f"fim.onRunError({json.dumps(message[1])})",
+                label="run error",
+                on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "error", "value": message[1]},
+            )
             return
 
 
@@ -7791,6 +8486,33 @@ def _parse_differentiation_orders(text: str) -> tuple[float, ...]:
         ) from error
 
 
+def _summary_batch_progress_payload(
+    params: SimulationParams,
+    run_id: str,
+    working_directory: Path,
+) -> dict[str, object]:
+    """Build compact batch progress from sidecars without reading trajectories."""
+    generations: list[int] = []
+    for index in range(1, params.n_replicates + 1):
+        replicate_run_id = f"{run_id}-r{index:03}"
+        directory = replicate_output_directory(
+            working_directory, run_id, replicate_run_id
+        )
+        sidecar = read_progress_sidecar(directory / ".progress")
+        if sidecar is not None:
+            generations.append(sidecar["generation"])
+    payload: dict[str, object] = {
+        "state": "running",
+        "replicateCount": params.n_replicates,
+        "reportedReplicateCount": len(generations),
+        "maxGenerations": params.max_generations,
+        "statistics": {},
+    }
+    if generations:
+        payload["meanReportedGeneration"] = round(sum(generations) / len(generations))
+    return payload
+
+
 def _push_batch_progress(
     window: _EvaluatesJs,
     params: SimulationParams,
@@ -7800,6 +8522,11 @@ def _push_batch_progress(
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
     initial_states: dict[str, ModelState] | None = None,
     on_progress: Callable[[dict[str, object]], None] | None = None,
+    *,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
+    view_level: Callable[[], jobs.ViewLevel] = lambda: "full",
 ) -> None:
     """Read every currently-reporting replicate's live state, push a pooled scatter.
 
@@ -7872,11 +8599,45 @@ def _push_batch_progress(
             generation-0 read cost again on every call, such as a test
             exercising a single tick in isolation.
         on_progress: Test-only hook, called with this tick's own
-            `progress_payload` right after it is pushed to the page —
-            see `Api.__init__`'s own docstring for what it is for.
+            `progress_payload` once this tick's own push has actually
+            been attempted (`publisher`'s own `on_delivered`, via
+            `_notify_on_delivery`) — see `Api.__init__`'s own docstring
+            for what it is for. A coalesced-away tick's own call never
+            fires at all.
+        publisher: Queues this tick's push instead of calling `window.
+            evaluate_js` directly (`fim.gui.publisher`'s own module
+            docstring) — coalesced per `working_directory`, so a batch
+            whose page is briefly behind never backs up more than one
+            undelivered tick.
+        job_admission: `Api._jobs`, for this tick's own addressed
+            companion push (`_push_job_event`).
+        job_id: This batch's own job id.
+        view_level: Read on every poll; summary uses sidecars without
+            opening any replicate trajectory logs.
     """
     if initial_states is None:
         initial_states = {}
+    if view_level() == "summary":
+        summary_payload = _summary_batch_progress_payload(
+            params, run_id, working_directory
+        )
+        publisher.publish(
+            window,
+            f"fim.onBatchProgress({json.dumps(summary_payload)})",
+            coalesce_key=("batch-progress", working_directory),
+            label="batch progress",
+            on_delivered=_notify_on_delivery(on_progress, summary_payload),
+        )
+        _push_job_event(
+            window,
+            publisher,
+            job_admission,
+            job_id,
+            "progress",
+            summary_payload,
+            coalesce_key=("job-event-progress", job_id),
+        )
+        return
     states: list[ModelState] = []
     for index in range(1, params.n_replicates + 1):
         replicate_run_id = f"{run_id}-r{index:03}"
@@ -7973,9 +8734,22 @@ def _push_batch_progress(
             progress_payload["pairPanel"] = deme_pair_panel(
                 pooled_points, first_deme - 1, second_deme - 1
             )
-    window.evaluate_js(f"fim.onBatchProgress({json.dumps(progress_payload)})")
-    if on_progress is not None:
-        on_progress(progress_payload)
+    publisher.publish(
+        window,
+        f"fim.onBatchProgress({json.dumps(progress_payload)})",
+        coalesce_key=("batch-progress", working_directory),
+        label="batch progress",
+        on_delivered=_notify_on_delivery(on_progress, progress_payload),
+    )
+    _push_job_event(
+        window,
+        publisher,
+        job_admission,
+        job_id,
+        "progress",
+        progress_payload,
+        coalesce_key=("job-event-progress", job_id),
+    )
 
 
 def _batch_done_payload(
@@ -8418,6 +9192,11 @@ def _drain_batch_messages(
     on_progress: Callable[[dict[str, object]], None] | None = None,
     study_id: str | None = None,
     run_details: RunDetails | None = None,
+    *,
+    publisher: Publisher,
+    job_admission: jobs.JobAdmission,
+    job_id: str,
+    view_level: Callable[[], jobs.ViewLevel] = lambda: "full",
 ) -> None:
     """Push every `batch_runner.BatchMessage`, polling live progress between them.
 
@@ -8451,6 +9230,11 @@ def _drain_batch_messages(
     attached to `output_directory` only once the batch's own `"done"`
     message arrives, exactly mirroring `_drain_run_messages`'s own
     identical ordering one level down.
+
+    `job_admission`/`job_id`, as `_drain_run_messages`'s own identical
+    parameters: forwarded to `_push_batch_progress` and this function's
+    own pushes alike, so every one of this batch's addressed `fim.
+    onJobEvent` pushes shares the one job id and sequence.
     """
     started = message_queue.get()
     if started[0] != "started":
@@ -8483,12 +9267,24 @@ def _drain_batch_messages(
                 digits,
                 initial_states,
                 on_progress,
+                publisher=publisher,
+                job_admission=job_admission,
+                job_id=job_id,
+                view_level=view_level,
             )
             continue
         if message[0] == "status":
             # Not terminal (`batch_runner.StatusMessage`): show it and
             # keep draining.
-            window.evaluate_js(f"fim.onRunStatus({json.dumps(message[1])})")
+            publisher.publish(
+                window,
+                f"fim.onRunStatus({json.dumps(message[1])})",
+                coalesce_key=("batch-status", output_directory),
+                label="batch status",
+            )
+            _push_job_event(
+                window, publisher, job_admission, job_id, "status", message[1]
+            )
             continue
         if message[0] == "done":
             payload = _batch_done_payload(
@@ -8496,22 +9292,79 @@ def _drain_batch_messages(
             )
             _attach_finished_run_to_study(study_id, output_directory, run_details)
             logger.info("batch done: %s", output_directory)
-            window.evaluate_js(f"fim.onBatchDone({json.dumps(payload)})")
+            _publish_and_wait(
+                publisher,
+                window,
+                f"fim.onBatchDone({json.dumps(payload)})",
+                label="batch done",
+                on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "done", "value": payload},
+            )
+            return
         elif message[0] == "paused":
             logger.info(
                 "batch paused: %s at generation %s", output_directory, message[1]
             )
-            window.evaluate_js(f"fim.onRunPaused({message[1]})")
+            _publish_and_wait(
+                publisher,
+                window,
+                f"fim.onRunPaused({message[1]})",
+                label="batch paused",
+                on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "paused", "value": message[1]},
+            )
+            return
         elif message[0] == "cancelled":
             cancelled_payload = {"replicateIndex": message[1], "generation": message[2]}
             logger.info("batch cancelled: %s", output_directory)
-            window.evaluate_js(f"fim.onBatchCancelled({json.dumps(cancelled_payload)})")
+            _publish_and_wait(
+                publisher,
+                window,
+                f"fim.onBatchCancelled({json.dumps(cancelled_payload)})",
+                label="batch cancelled",
+                on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "cancelled", "value": cancelled_payload},
+            )
+            return
         else:
             logger.warning("batch error: %s", message[1])
-            window.evaluate_js(f"fim.onBatchError({json.dumps(message[1])})")
-        if on_message is not None:
-            on_message(message)
-        return
+            _publish_and_wait(
+                publisher,
+                window,
+                f"fim.onBatchError({json.dumps(message[1])})",
+                label="batch error",
+                on_delivered=_notify_on_delivery(on_message, message),
+            )
+            _push_job_event(
+                window,
+                publisher,
+                job_admission,
+                job_id,
+                "terminal",
+                {"kind": "error", "value": message[1]},
+            )
+            return
 
 
 def _worker_ping() -> str:
@@ -9037,13 +9890,14 @@ def _build_menu(
     on that same screen as an ordinary, non-form field
     (`config-modals.js`'s own `wireSignificantDigitsField`).
 
-    Every item except Quit is a thin closure calling `window.evaluate_js(
-    "fim.menu.X()")` — the identical "no-op stub, overridden by whichever
-    screen owns the real behavior" convention `app.js` already
-    established for `onRunProgress`/`onBatchDone`/etc., extended to a
-    `fim.menu` namespace so no new Python business logic exists anywhere
-    in this menu: every item reuses an `Api` method or JS-side screen
-    state a screen already tracks — a second entry point into logic
+    Every item except Quit is a thin closure calling a page action or
+    workspace operation through `window.evaluate_js` — the identical
+    "no-op stub, overridden by whichever screen owns the real behavior"
+    convention `app.js` already established for
+    `onRunProgress`/`onBatchDone`/etc., extended to a `fim.menu`
+    namespace and the document workspace. No new Python business logic
+    exists anywhere in this menu: every item reuses an `Api` method or
+    JS-side screen/workspace state — a second entry point into logic
     that already exists, not new logic. Quit alone needs no JS round
     trip — `window.destroy()` is a window-level call, not app state —
     and needs no settle wrapper of its own any more either:
@@ -9081,6 +9935,12 @@ def _build_menu(
         "File",
         [
             MenuAction("New configuration", dispatch("fim.menu.newConfiguration()")),
+            MenuAction("Close tab", dispatch("fim.workspace.requestCloseSelected()")),
+            MenuAction("Next tab", dispatch("fim.workspace.selectRelative(1)")),
+            MenuAction("Previous tab", dispatch("fim.workspace.selectRelative(-1)")),
+            MenuAction("Close other tabs", dispatch("fim.closeOtherDocuments()")),
+            MenuAction("Close all results", dispatch("fim.closeAllResultDocuments()")),
+            MenuSeparator(),
             MenuAction("Open configuration…", dispatch("fim.menu.openConfiguration()")),
             MenuAction("Save configuration…", dispatch("fim.menu.saveConfiguration()")),
             MenuAction("Load example…", dispatch("fim.menu.loadExample()")),
@@ -9635,6 +10495,7 @@ def _report_only_run_payload(directory: Path, digits: int) -> dict[str, Any]:
         }
     return {
         "ok": True,
+        "resourceKey": _run_resource_key(directory),
         "reportOnly": True,
         "readOnly": groups.is_run_read_only(directory),
         "runId": manifest.run_id,
@@ -9730,6 +10591,7 @@ def _report_only_batch_payload(
     return {
         "ok": True,
         **payload,
+        "resourceKey": _run_resource_key(directory),
         "reportOnly": True,
         "readOnly": groups.is_run_read_only(directory),
     }

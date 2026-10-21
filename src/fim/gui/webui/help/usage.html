@@ -128,6 +128,12 @@ checkpoint (1,000 generations or 60 seconds). The desktop app's
 <strong>Save for later</strong> and <strong>Saved runs</strong> use the same objects. See
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/run-lifecycle.md">saved runs: pause, resume, and recover</a> for every state,
 command, and recovery case.</p>
+<p><strong>Sweep setup is not stored with a saved run.</strong> If you edit a sweep setup,
+<strong>Save and close</strong> saves the run configuration but keeps the close dialog
+open with an explanation. Choose <strong>Keep working</strong> to retain the setup in
+the current session, or <strong>Close without saving</strong> to discard that setup.
+Saving the run configuration alone does not clear the sweep's unsaved-edit
+warning.</p>
 <h2 id="worked-examples">Worked examples</h2>
 <p>Each example below is a complete config and the command that runs it: save
 the YAML, run the command, and the reported values match those shown here,
@@ -1226,6 +1232,61 @@ system's native web view. It uses the same simulation functions and
 both <code>fim</code> and <code>fim-gui</code>. Packaged executables open the GUI with no arguments:
 double-click <code>fim-windows-x64.exe</code> or <code>fim.app</code>, or run
 <code>fim-gui</code>/<code>fim --graphical</code> on Linux.</p>
+<h3 id="open-documents">Open documents</h3>
+<p>The toolbar below the title lists open configurations, runs, and studies.
+Select a document to return to its own form, results, or sweep view. Switching
+does not stop work in another document. Opening a result that is already open
+selects its existing document; a new configuration starts as a separate
+draft. Open documents are kept in memory for this window and are not restored
+after a restart.</p>
+<p>Use the <strong>+</strong> button or <strong>File &gt; New configuration</strong> to start a draft. Use
+the <strong>×</strong> on a document, <strong>File &gt; Close tab</strong>, or <strong>Delete</strong> while a document
+button has focus to close it. Closing a dirty configuration asks whether to
+save, discard, or keep it open. Closing an active run, saved run, or sweep
+offers the appropriate stop or pause action. Closing a document does not
+delete its saved results.</p>
+<p>Right-click a document for <strong>Close other tabs</strong> and <strong>Close all results</strong>.
+The same actions are in the File menu. Close other tabs keeps the chosen
+document open; Close all results closes completed run and sweep-result
+documents, not configurations or saved runs. Dirty documents and active jobs
+use the usual close dialog one at a time. <strong>Keep</strong> skips that document and
+continues; pressing Escape cancels the remaining bulk close.</p>
+<p>When more than 12 documents are open, a notice offers <strong>Close all results</strong>.
+The limit is a reminder, not a cap; you can keep opening documents.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>macOS</th>
+<th>Windows and Linux</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New configuration</td>
+<td>Command+N</td>
+<td>Control+N</td>
+</tr>
+<tr>
+<td>Close selected tab</td>
+<td>Command+W</td>
+<td>Control+W</td>
+</tr>
+<tr>
+<td>Next tab</td>
+<td>Control+Tab or Command+Shift+]</td>
+<td>Control+Tab</td>
+</tr>
+<tr>
+<td>Previous tab</td>
+<td>Control+Shift+Tab or Command+Shift+[</td>
+<td>Control+Shift+Tab</td>
+</tr>
+</tbody>
+</table>
+<p>The File menu also has <strong>Next tab</strong>, <strong>Previous tab</strong>, <strong>Close other tabs</strong>,
+and <strong>Close all results</strong>. Quit remains an application-wide action and uses
+the separate window-close guard described below.</p>
 <p><code>n_replicates</code> selects a single run or batch; there is no separate batch-mode
 control. The run view has initial, running, and completed states.
 <strong>Run simulation</strong> starts from the current configuration, including when a
@@ -1477,7 +1538,9 @@ This happens when:</p>
 <li>A run, batch, or sweep that you started with <strong>Run simulation</strong> or
 <strong>Sweep</strong> is in progress.</li>
 </ul>
-<p>The dialog tells you what is at stake and offers these choices:</p>
+<p>The dialog lists every unsaved document by name, including documents that
+are not currently open on screen. It also identifies the run or sweep that
+will be paused or stopped. The dialog offers these choices:</p>
 <table>
 <thead>
 <tr>

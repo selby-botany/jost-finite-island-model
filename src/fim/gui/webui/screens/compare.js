@@ -22,11 +22,11 @@
  *
  * Each small-multiples panel is drawn with `drawScatterCell` directly,
  * not the shared `drawScatter` helper (`scatter.js`) -- `drawScatter`
- * sets a single, page-wide `_currentPanel` for the one main run-view
+ * sets the selected document's current panel for the main run-view
  * canvas' own `ResizeObserver` callback to redraw from; calling it once
- * per compare panel would silently repoint that shared state at
- * whichever panel was drawn last, corrupting the main run view's own
- * redraw the next time its canvas resizes. `drawScatterCell` is the
+ * per compare panel would repoint that document state at whichever panel
+ * was drawn last, corrupting the main run view's own redraw the next
+ * time its canvas resizes. `drawScatterCell` is the
  * stateless "draw this one panel into this one rect of this one
  * context" primitive `drawScatter` itself is already built on, safe to
  * call once per canvas with no shared state at all.

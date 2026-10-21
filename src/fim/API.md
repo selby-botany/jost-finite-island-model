@@ -392,6 +392,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.app.Api.__init__)
     * [start\_run](#fim.gui.app.Api.start_run)
     * [can\_start\_run](#fim.gui.app.Api.can_start_run)
+    * [get\_job\_snapshot](#fim.gui.app.Api.get_job_snapshot)
+    * [close\_job\_document](#fim.gui.app.Api.close_job_document)
+    * [set\_job\_view](#fim.gui.app.Api.set_job_view)
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
     * [pause\_run](#fim.gui.app.Api.pause_run)
     * [save\_run\_object](#fim.gui.app.Api.save_run_object)
@@ -564,6 +567,16 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [run\_setting\_differences](#fim.gui.config_form.run_setting_differences)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
+* [fim.gui.jobs](#fim.gui.jobs)
+  * [JobAdmission](#fim.gui.jobs.JobAdmission)
+    * [new\_job\_id](#fim.gui.jobs.JobAdmission.new_job_id)
+    * [view\_level](#fim.gui.jobs.JobAdmission.view_level)
+    * [set\_view\_level](#fim.gui.jobs.JobAdmission.set_view_level)
+    * [record\_event](#fim.gui.jobs.JobAdmission.record_event)
+    * [snapshot](#fim.gui.jobs.JobAdmission.snapshot)
+    * [next\_sequence](#fim.gui.jobs.JobAdmission.next_sequence)
+    * [latest\_sequence](#fim.gui.jobs.JobAdmission.latest_sequence)
+    * [forget](#fim.gui.jobs.JobAdmission.forget)
 * [fim.gui.literature\_visuals](#fim.gui.literature_visuals)
   * [LiteratureVisualPayload](#fim.gui.literature_visuals.LiteratureVisualPayload)
   * [literature\_visual\_payload](#fim.gui.literature_visuals.literature_visual_payload)
@@ -629,6 +642,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [load\_bundle\_catalog](#fim.gui.presets.load_bundle_catalog)
   * [split\_configuration](#fim.gui.presets.split_configuration)
   * [strip\_internal\_yaml\_keys](#fim.gui.presets.strip_internal_yaml_keys)
+* [fim.gui.publisher](#fim.gui.publisher)
+  * [EvaluatesJs](#fim.gui.publisher.EvaluatesJs)
+  * [Publisher](#fim.gui.publisher.Publisher)
+    * [publish](#fim.gui.publisher.Publisher.publish)
+    * [stop](#fim.gui.publisher.Publisher.stop)
 * [fim.gui.recent\_runs](#fim.gui.recent_runs)
   * [RecentRun](#fim.gui.recent_runs.RecentRun)
   * [list\_recent\_runs](#fim.gui.recent_runs.list_recent_runs)
@@ -851,6 +869,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [STAGING\_LOCK\_FILENAME](#fim.paths.STAGING_LOCK_FILENAME)
   * [atomic\_directory](#fim.paths.atomic_directory)
   * [default\_output\_directory](#fim.paths.default_output_directory)
+  * [allocate\_output\_directory](#fim.paths.allocate_output_directory)
   * [project\_root](#fim.paths.project_root)
   * [results\_directory](#fim.paths.results_directory)
   * [log\_directory](#fim.paths.log_directory)
@@ -9502,7 +9521,7 @@ modules used by the command-line interface.
 
 <a id="fim.gui.app.format_statistic"></a>
 
-#### [format\_statistic](./gui/app.py#L463)
+#### [format\_statistic](./gui/app.py#L468)
 
 ```python
 def format_statistic(value: float | None,
@@ -9526,7 +9545,7 @@ six regardless of that configurable value's own default.
 
 <a id="fim.gui.app.INFINITE_DISTANCE_TEXT"></a>
 
-#### [INFINITE\_DISTANCE\_TEXT](./gui/app.py#L484)
+#### [INFINITE\_DISTANCE\_TEXT](./gui/app.py#L489)
 
 How an infinite Nei distance (no allele shared) reaches the page.
 
@@ -9536,7 +9555,7 @@ spells "undefined".
 
 <a id="fim.gui.app.format_report_statistic"></a>
 
-#### [format\_report\_statistic](./gui/app.py#L492)
+#### [format\_report\_statistic](./gui/app.py#L497)
 
 ```python
 def format_report_statistic(values: Mapping[str, object], name: str,
@@ -9563,7 +9582,7 @@ is present but `None` is infinite and shows as `INFINITE_DISTANCE_TEXT`.
 
 <a id="fim.gui.app.FULL_PRECISION_DIGITS"></a>
 
-#### [FULL\_PRECISION\_DIGITS](./gui/app.py#L895)
+#### [FULL\_PRECISION\_DIGITS](./gui/app.py#L900)
 
 Significant digits that round-trip any float exactly through text.
 
@@ -9574,7 +9593,7 @@ would shift that difference by up to half a display digit.
 
 <a id="fim.gui.app.Api"></a>
 
-## [Api Objects](./gui/app.py#L1917)
+## [Api Objects](./gui/app.py#L1928)
 
 ```python
 class Api()
@@ -9596,7 +9615,7 @@ reimplemented here.
 
 <a id="fim.gui.app.Api.__init__"></a>
 
-#### [\_\_init\_\_](./gui/app.py#L1933)
+#### [\_\_init\_\_](./gui/app.py#L1944)
 
 ```python
 def __init__(*,
@@ -9666,7 +9685,7 @@ Start with no run in flight.
 
 <a id="fim.gui.app.Api.start_run"></a>
 
-#### [start\_run](./gui/app.py#L2082)
+#### [start\_run](./gui/app.py#L2131)
 
 ```python
 @_log_bridge_call
@@ -9754,7 +9773,7 @@ driver thread, before this method was written; see
 
 <a id="fim.gui.app.Api.can_start_run"></a>
 
-#### [can\_start\_run](./gui/app.py#L2302)
+#### [can\_start\_run](./gui/app.py#L2422)
 
 ```python
 @_log_bridge_call
@@ -9772,9 +9791,52 @@ then refused would wipe the view of the run still in flight.
 - ``{"ok"` - True}`, or `{"ok": False, "message": ...}` with the
   reason `start_run` or `start_run_object` would give.
 
+<a id="fim.gui.app.Api.get_job_snapshot"></a>
+
+#### [get\_job\_snapshot](./gui/app.py#L2439)
+
+```python
+@_log_bridge_call
+def get_job_snapshot(job_id: str) -> dict[str, Any]
+```
+
+Return a retained job's view level and latest addressed event.
+
+**Arguments**:
+
+- `job_id` - A job still retained for its open document.
+
+
+**Returns**:
+
+  The current view level, sequence, and latest event snapshot;
+  a refusal if `job_id` is unknown or its document has closed.
+
+<a id="fim.gui.app.Api.close_job_document"></a>
+
+#### [close\_job\_document](./gui/app.py#L2459)
+
+```python
+@_log_bridge_call
+def close_job_document(job_id: str) -> dict[str, Any]
+```
+
+Release a finished job's snapshot after its document closes.
+
+<a id="fim.gui.app.Api.set_job_view"></a>
+
+#### [set\_job\_view](./gui/app.py#L2470)
+
+```python
+@_log_bridge_call
+def set_job_view(job_id: str, level: str) -> dict[str, Any]
+```
+
+Set an active job's rendering level and return its latest snapshot.
+
 <a id="fim.gui.app.Api.cancel_run"></a>
 
-#### [cancel\_run](./gui/app.py#L2489)
+#### [cancel\_run](./gui/app.py#L2712)
 
 ```python
 @_log_bridge_call
@@ -9790,7 +9852,7 @@ that arrives a moment after the run already finished on its own.
 
 <a id="fim.gui.app.Api.pause_run"></a>
 
-#### [pause\_run](./gui/app.py#L2504)
+#### [pause\_run](./gui/app.py#L2727)
 
 ```python
 @_log_bridge_call
@@ -9809,7 +9871,7 @@ pushed `fim.onRunPaused(generation)`.
 
 <a id="fim.gui.app.Api.save_run_object"></a>
 
-#### [save\_run\_object](./gui/app.py#L2524)
+#### [save\_run\_object](./gui/app.py#L2747)
 
 ```python
 @_log_bridge_call
@@ -9840,7 +9902,7 @@ reopened and fixed later; a valid one is saved as Planned.
 
 <a id="fim.gui.app.Api.list_run_objects"></a>
 
-#### [list\_run\_objects](./gui/app.py#L2565)
+#### [list\_run\_objects](./gui/app.py#L2789)
 
 ```python
 @_log_bridge_call
@@ -9856,7 +9918,7 @@ Return the Saved runs panel's rows (`object_bridge.list_rows`).
 
 <a id="fim.gui.app.Api.open_run_object"></a>
 
-#### [open\_run\_object](./gui/app.py#L2579)
+#### [open\_run\_object](./gui/app.py#L2805)
 
 ```python
 @_log_bridge_call
@@ -9879,7 +9941,7 @@ Return a saved run's form values, to edit it in Configure.
 
 <a id="fim.gui.app.Api.start_run_object"></a>
 
-#### [start\_run\_object](./gui/app.py#L2611)
+#### [start\_run\_object](./gui/app.py#L2838)
 
 ```python
 @_log_bridge_call
@@ -9905,7 +9967,7 @@ its own object directory.
 
 <a id="fim.gui.app.Api.cancel_run_object"></a>
 
-#### [cancel\_run\_object](./gui/app.py#L2739)
+#### [cancel\_run\_object](./gui/app.py#L2985)
 
 ```python
 @_log_bridge_call
@@ -9925,7 +9987,7 @@ Cancel a saved run that is not executing in this window, keeping its data.
 
 <a id="fim.gui.app.Api.clone_run_object"></a>
 
-#### [clone\_run\_object](./gui/app.py#L2755)
+#### [clone\_run\_object](./gui/app.py#L3001)
 
 ```python
 @_log_bridge_call
@@ -9945,7 +10007,7 @@ Clone a saved run into a new object with the same configuration.
 
 <a id="fim.gui.app.Api.delete_run_object"></a>
 
-#### [delete\_run\_object](./gui/app.py#L2775)
+#### [delete\_run\_object](./gui/app.py#L3021)
 
 ```python
 @_log_bridge_call
@@ -9965,7 +10027,7 @@ Delete a saved run that is not executing, and all of its data.
 
 <a id="fim.gui.app.Api.stop_active_work"></a>
 
-#### [stop\_active\_work](./gui/app.py#L2790)
+#### [stop\_active\_work](./gui/app.py#L3036)
 
 ```python
 def stop_active_work(timeout: float) -> None
@@ -9979,13 +10041,20 @@ run checkpoints and pauses (and resumes later), a run, batch, or
 sweep is cancelled. A worker that misses the bound is logged, and
 the deadman still ends the process.
 
+`_drain_thread` is joined before the publisher is ever told to
+stop accepting (`self._drain_thread`'s own comment in `__init__`
+has the full reason): only once it has actually returned has its
+own terminal push already been delivered (`_publish_and_wait`),
+so the publisher's backlog is, by then, at most whatever a
+sweep's own thread had already queued, never still growing.
+
 **Arguments**:
 
 - `timeout` - Longest total wait for the workers, in seconds.
 
 <a id="fim.gui.app.Api.on_window_closing"></a>
 
-#### [on\_window\_closing](./gui/app.py#L2815)
+#### [on\_window\_closing](./gui/app.py#L3071)
 
 ```python
 def on_window_closing(window: _EvaluatesJs) -> bool
@@ -10010,7 +10079,7 @@ arrives through `finish_close`.
 
 <a id="fim.gui.app.Api.request_close"></a>
 
-#### [request\_close](./gui/app.py#L2838)
+#### [request\_close](./gui/app.py#L3094)
 
 ```python
 def request_close() -> None
@@ -10020,7 +10089,7 @@ Close the window the way its close button does (the Quit menu item).
 
 <a id="fim.gui.app.Api.close_needs_confirmation"></a>
 
-#### [close\_needs\_confirmation](./gui/app.py#L2848)
+#### [close\_needs\_confirmation](./gui/app.py#L3104)
 
 ```python
 def close_needs_confirmation() -> bool
@@ -10030,7 +10099,7 @@ Return whether closing now would lose edits or interrupt work.
 
 <a id="fim.gui.app.Api.close_requirements"></a>
 
-#### [close\_requirements](./gui/app.py#L2905)
+#### [close\_requirements](./gui/app.py#L3178)
 
 ```python
 @_log_bridge_call
@@ -10041,14 +10110,14 @@ Return what closing the window now would affect, for its dialog.
 
 **Returns**:
 
-- ``{"ok"` - True, "unsavedEdits", "savedRun", "run", "sweep"}`, each
-  a bool: the Configure form has unsaved edits, a saved run is
-  executing (it pauses and resumes later), a run or batch that
-  cannot be resumed is executing, a sweep is executing.
+- ``{"ok"` - True, "unsavedEdits", "savedRun", "run", "sweep",
+  "dirtyDocuments", "activeJob"}`. The first four values describe
+  the close requirements; `dirtyDocuments` identifies every
+  unsaved document and `activeJob` identifies the work affected.
 
 <a id="fim.gui.app.Api.finish_close"></a>
 
-#### [finish\_close](./gui/app.py#L2917)
+#### [finish\_close](./gui/app.py#L3190)
 
 ```python
 @_log_bridge_call
@@ -10067,26 +10136,35 @@ the window from a helper thread so this call can return first.
 
 <a id="fim.gui.app.Api.report_unsaved_edits"></a>
 
-#### [report\_unsaved\_edits](./gui/app.py#L2937)
+#### [report\_unsaved\_edits](./gui/app.py#L3210)
 
 ```python
 @_log_bridge_call
-def report_unsaved_edits(unsaved: bool) -> None
+def report_unsaved_edits(
+        unsaved: bool,
+        dirty_documents: object | None = None) -> dict[str, Any]
 ```
 
-Record whether the Configure form has edits that are not saved.
+Record the page's unsaved-document summary for the close dialog.
 
-Sent by the page only when the answer changes. Closing the window
-consults it (`on_window_closing`).
+The boolean remains supported for callers that report only aggregate
+state. The web page also sends the document IDs and labels so closing
+from Home can name every dirty document, including hidden ones.
 
 **Arguments**:
 
-- `unsaved` - Whether the form differs from what was last loaded or
+- `unsaved` - Whether at least one document has changes that are not
   saved.
+- `dirty_documents` - Optional page-provided document summaries.
+
+
+**Returns**:
+
+- ``{"ok"` - True}` or a validation error.
 
 <a id="fim.gui.app.Api.open_output_folder"></a>
 
-#### [open\_output\_folder](./gui/app.py#L2950)
+#### [open\_output\_folder](./gui/app.py#L3273)
 
 ```python
 @_log_bridge_call
@@ -10105,7 +10183,7 @@ Reveal a completed run's output directory in the OS file browser.
 
 <a id="fim.gui.app.Api.get_run_setting_differences"></a>
 
-#### [get\_run\_setting\_differences](./gui/app.py#L3095)
+#### [get\_run\_setting\_differences](./gui/app.py#L3418)
 
 ```python
 @_log_bridge_call
@@ -10132,7 +10210,7 @@ configuration's run settings are in use (Settings saved, or
 
 <a id="fim.gui.app.Api.get_starter_form"></a>
 
-#### [get\_starter\_form](./gui/app.py#L3115)
+#### [get\_starter\_form](./gui/app.py#L3438)
 
 ```python
 @_log_bridge_call
@@ -10154,7 +10232,7 @@ calls instead.
 
 <a id="fim.gui.app.Api.get_starter_form_with_overrides"></a>
 
-#### [get\_starter\_form\_with\_overrides](./gui/app.py#L3132)
+#### [get\_starter\_form\_with\_overrides](./gui/app.py#L3455)
 
 ```python
 @_log_bridge_call
@@ -10196,7 +10274,7 @@ caller, never hidden behind values the botanist did not ask for.
 
 <a id="fim.gui.app.Api.get_initial_form"></a>
 
-#### [get\_initial\_form](./gui/app.py#L3176)
+#### [get\_initial\_form](./gui/app.py#L3499)
 
 ```python
 @_log_bridge_call
@@ -10222,7 +10300,7 @@ competing precedence rule against this restore path.
 
 <a id="fim.gui.app.Api.get_startup_behavior"></a>
 
-#### [get\_startup\_behavior](./gui/app.py#L3206)
+#### [get\_startup\_behavior](./gui/app.py#L3529)
 
 ```python
 @_log_bridge_call
@@ -10233,7 +10311,7 @@ Return how a fresh launch chooses its initial form values.
 
 <a id="fim.gui.app.Api.set_startup_behavior"></a>
 
-#### [set\_startup\_behavior](./gui/app.py#L3211)
+#### [set\_startup\_behavior](./gui/app.py#L3534)
 
 ```python
 @_log_bridge_call
@@ -10255,7 +10333,7 @@ Set how a fresh launch chooses its initial form values.
 
 <a id="fim.gui.app.Api.get_run_card_layout"></a>
 
-#### [get\_run\_card\_layout](./gui/app.py#L3234)
+#### [get\_run\_card\_layout](./gui/app.py#L3557)
 
 ```python
 @_log_bridge_call
@@ -10274,7 +10352,7 @@ Return how the Run card shows its graphs.
 
 <a id="fim.gui.app.Api.set_run_graphs"></a>
 
-#### [set\_run\_graphs](./gui/app.py#L3254)
+#### [set\_run\_graphs](./gui/app.py#L3577)
 
 ```python
 @_log_bridge_call
@@ -10296,7 +10374,7 @@ Remember which graphs the Run card shows together.
 
 <a id="fim.gui.app.Api.set_run_graph_columns"></a>
 
-#### [set\_run\_graph\_columns](./gui/app.py#L3273)
+#### [set\_run\_graph\_columns](./gui/app.py#L3596)
 
 ```python
 @_log_bridge_call
@@ -10317,7 +10395,7 @@ Set how many columns the Run card lays its graphs out in.
 
 <a id="fim.gui.app.Api.set_scatter_style"></a>
 
-#### [set\_scatter\_style](./gui/app.py#L3299)
+#### [set\_scatter\_style](./gui/app.py#L3622)
 
 ```python
 @_log_bridge_call
@@ -10338,7 +10416,7 @@ Choose how the scatter plot draws its points.
 
 <a id="fim.gui.app.Api.set_trajectory_display"></a>
 
-#### [set\_trajectory\_display](./gui/app.py#L3316)
+#### [set\_trajectory\_display](./gui/app.py#L3639)
 
 ```python
 @_log_bridge_call
@@ -10366,7 +10444,7 @@ either way.
 
 <a id="fim.gui.app.Api.set_trajectory_band_width"></a>
 
-#### [set\_trajectory\_band\_width](./gui/app.py#L3342)
+#### [set\_trajectory\_band\_width](./gui/app.py#L3665)
 
 ```python
 @_log_bridge_call
@@ -10391,7 +10469,7 @@ window) and the standard-error band of the averaged displays.
 
 <a id="fim.gui.app.Api.get_default_ploidy"></a>
 
-#### [get\_default\_ploidy](./gui/app.py#L3365)
+#### [get\_default\_ploidy](./gui/app.py#L3688)
 
 ```python
 @_log_bridge_call
@@ -10402,7 +10480,7 @@ Return the default ploidy: `"2"` unless changed; `""` asks each time.
 
 <a id="fim.gui.app.Api.set_default_ploidy"></a>
 
-#### [set\_default\_ploidy](./gui/app.py#L3370)
+#### [set\_default\_ploidy](./gui/app.py#L3693)
 
 ```python
 @_log_bridge_call
@@ -10424,7 +10502,7 @@ Set the ploidy a fresh configuration's form starts on.
 
 <a id="fim.gui.app.Api.validate_form"></a>
 
-#### [validate\_form](./gui/app.py#L3391)
+#### [validate\_form](./gui/app.py#L3714)
 
 ```python
 @_log_bridge_call
@@ -10457,7 +10535,7 @@ Validate the form exactly as "Run simulation" would.
 
 <a id="fim.gui.app.Api.get_initial_state_panels"></a>
 
-#### [get\_initial\_state\_panels](./gui/app.py#L3428)
+#### [get\_initial\_state\_panels](./gui/app.py#L3751)
 
 ```python
 @_log_bridge_call
@@ -10489,7 +10567,7 @@ state would show at generation 0.
 
 <a id="fim.gui.app.Api.get_initial_state_deme_pair_panel"></a>
 
-#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L3480)
+#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L3803)
 
 ```python
 @_log_bridge_call
@@ -10517,7 +10595,7 @@ pair as separate panels (`d > 6`).
 
 <a id="fim.gui.app.Api.get_equilibrium_predictions"></a>
 
-#### [get\_equilibrium\_predictions](./gui/app.py#L3517)
+#### [get\_equilibrium\_predictions](./gui/app.py#L3840)
 
 ```python
 @_log_bridge_call
@@ -10562,7 +10640,7 @@ of how large `N`/`d` are.
 
 <a id="fim.gui.app.Api.get_equilibrium_grid"></a>
 
-#### [get\_equilibrium\_grid](./gui/app.py#L3567)
+#### [get\_equilibrium\_grid](./gui/app.py#L3890)
 
 ```python
 @_log_bridge_call
@@ -10610,7 +10688,7 @@ integer value, not an interpolated blur (`_grid_axis_values`).
 
 <a id="fim.gui.app.Api.get_equilibrium_curve"></a>
 
-#### [get\_equilibrium\_curve](./gui/app.py#L3654)
+#### [get\_equilibrium\_curve](./gui/app.py#L3977)
 
 ```python
 @_log_bridge_call
@@ -10639,7 +10717,7 @@ samples an interval densely and spaces its points by the response.
 
 <a id="fim.gui.app.Api.get_equilibrium_sweep"></a>
 
-#### [get\_equilibrium\_sweep](./gui/app.py#L3699)
+#### [get\_equilibrium\_sweep](./gui/app.py#L4022)
 
 ```python
 @_log_bridge_call
@@ -10699,7 +10777,7 @@ the marker moves, with no extra bridge round trip per tick.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 
-#### [load\_yaml](./gui/app.py#L3823)
+#### [load\_yaml](./gui/app.py#L4146)
 
 ```python
 @_log_bridge_call
@@ -10725,7 +10803,7 @@ changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.list_examples"></a>
 
-#### [list\_examples](./gui/app.py#L3856)
+#### [list\_examples](./gui/app.py#L4179)
 
 ```python
 @_log_bridge_call
@@ -10759,7 +10837,7 @@ example's form values once the user loads it.
 
 <a id="fim.gui.app.Api.load_example"></a>
 
-#### [load\_example](./gui/app.py#L3905)
+#### [load\_example](./gui/app.py#L4228)
 
 ```python
 @_log_bridge_call
@@ -10792,7 +10870,7 @@ saved Settings are not changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.open_saved_example"></a>
 
-#### [open\_saved\_example](./gui/app.py#L3943)
+#### [open\_saved\_example](./gui/app.py#L4266)
 
 ```python
 @_log_bridge_call
@@ -10821,7 +10899,7 @@ again first. The page then opens it like any run, which takes
 
 <a id="fim.gui.app.Api.load_run_configuration"></a>
 
-#### [load\_run\_configuration](./gui/app.py#L3987)
+#### [load\_run\_configuration](./gui/app.py#L4310)
 
 ```python
 @_log_bridge_call
@@ -10860,7 +10938,7 @@ cleared, and the name and description come from the run's
 
 <a id="fim.gui.app.Api.list_presets"></a>
 
-#### [list\_presets](./gui/app.py#L4051)
+#### [list\_presets](./gui/app.py#L4374)
 
 ```python
 @_log_bridge_call
@@ -10909,7 +10987,7 @@ only once the user actually picks it.
 
 <a id="fim.gui.app.Api.get_preset_form_values"></a>
 
-#### [get\_preset\_form\_values](./gui/app.py#L4116)
+#### [get\_preset\_form\_values](./gui/app.py#L4439)
 
 ```python
 @_log_bridge_call
@@ -10945,7 +11023,7 @@ Return one preset's own form values, ready for `applyFormValues`.
 
 <a id="fim.gui.app.Api.load_preset"></a>
 
-#### [load\_preset](./gui/app.py#L4158)
+#### [load\_preset](./gui/app.py#L4481)
 
 ```python
 @_log_bridge_call
@@ -10975,7 +11053,7 @@ user's Settings (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.get_preset_yaml"></a>
 
-#### [get\_preset\_yaml](./gui/app.py#L4183)
+#### [get\_preset\_yaml](./gui/app.py#L4506)
 
 ```python
 @_log_bridge_call
@@ -11021,7 +11099,7 @@ saved preset).
 
 <a id="fim.gui.app.Api.save_current_as_preset"></a>
 
-#### [save\_current\_as\_preset](./gui/app.py#L4247)
+#### [save\_current\_as\_preset](./gui/app.py#L4570)
 
 ```python
 @_log_bridge_call
@@ -11053,7 +11131,7 @@ Save `values` as a user preset named `name`, persisted immediately.
 
 <a id="fim.gui.app.Api.delete_user_preset"></a>
 
-#### [delete\_user\_preset](./gui/app.py#L4282)
+#### [delete\_user\_preset](./gui/app.py#L4605)
 
 ```python
 @_log_bridge_call
@@ -11068,7 +11146,7 @@ affordance only ever offers a name it just listed.
 
 <a id="fim.gui.app.Api.save_yaml"></a>
 
-#### [save\_yaml](./gui/app.py#L4294)
+#### [save\_yaml](./gui/app.py#L4617)
 
 ```python
 @_log_bridge_call
@@ -11092,7 +11170,7 @@ Validate the form, then save it as a `fim run`-compatible YAML file.
 
 <a id="fim.gui.app.Api.export_graph_image"></a>
 
-#### [export\_graph\_image](./gui/app.py#L4331)
+#### [export\_graph\_image](./gui/app.py#L4654)
 
 ```python
 @_log_bridge_call
@@ -11129,7 +11207,7 @@ gap `save_yaml`'s own config export, just above, does not cover.
 
 <a id="fim.gui.app.Api.get_default_max_workers"></a>
 
-#### [get\_default\_max\_workers](./gui/app.py#L4384)
+#### [get\_default\_max\_workers](./gui/app.py#L4707)
 
 ```python
 @_log_bridge_call
@@ -11145,7 +11223,7 @@ workers` directly rather than inventing a second default.
 
 <a id="fim.gui.app.Api.get_engine_backend_availability"></a>
 
-#### [get\_engine\_backend\_availability](./gui/app.py#L4395)
+#### [get\_engine\_backend\_availability](./gui/app.py#L4718)
 
 ```python
 @_log_bridge_call
@@ -11187,7 +11265,7 @@ bind a copy at import time and quietly defeat exactly that hook.
 
 <a id="fim.gui.app.Api.get_significant_digits"></a>
 
-#### [get\_significant\_digits](./gui/app.py#L4431)
+#### [get\_significant\_digits](./gui/app.py#L4754)
 
 ```python
 @_log_bridge_call
@@ -11206,7 +11284,7 @@ back).
 
 <a id="fim.gui.app.Api.set_significant_digits"></a>
 
-#### [set\_significant\_digits](./gui/app.py#L4445)
+#### [set\_significant\_digits](./gui/app.py#L4768)
 
 ```python
 @_log_bridge_call
@@ -11238,7 +11316,7 @@ ever about a *run's own* output, never this GUI-local setting.
 
 <a id="fim.gui.app.Api.get_dark_mode_override"></a>
 
-#### [get\_dark\_mode\_override](./gui/app.py#L4482)
+#### [get\_dark\_mode\_override](./gui/app.py#L4805)
 
 ```python
 @_log_bridge_call
@@ -11256,7 +11334,7 @@ dark_mode_override` is already the one place this value lives.
 
 <a id="fim.gui.app.Api.set_dark_mode_override"></a>
 
-#### [set\_dark\_mode\_override](./gui/app.py#L4495)
+#### [set\_dark\_mode\_override](./gui/app.py#L4818)
 
 ```python
 @_log_bridge_call
@@ -11281,7 +11359,7 @@ Change the saved dark-mode override (Configure's own field).
 
 <a id="fim.gui.app.Api.get_default_run_settings"></a>
 
-#### [get\_default\_run\_settings](./gui/app.py#L4521)
+#### [get\_default\_run\_settings](./gui/app.py#L4844)
 
 ```python
 @_log_bridge_call
@@ -11315,7 +11393,7 @@ value for that one field and reported at launch
 
 <a id="fim.gui.app.Api.get_expert_settings_info"></a>
 
-#### [get\_expert\_settings\_info](./gui/app.py#L4589)
+#### [get\_expert\_settings\_info](./gui/app.py#L4912)
 
 ```python
 @_log_bridge_call
@@ -11335,7 +11413,7 @@ Return how Settings lists the Expert Settings.
 
 <a id="fim.gui.app.Api.set_default_run_settings"></a>
 
-#### [set\_default\_run\_settings](./gui/app.py#L4603)
+#### [set\_default\_run\_settings](./gui/app.py#L4926)
 
 ```python
 @_log_bridge_call
@@ -11380,7 +11458,7 @@ form no longer submits at all.
 
 <a id="fim.gui.app.Api.get_results_location"></a>
 
-#### [get\_results\_location](./gui/app.py#L4652)
+#### [get\_results\_location](./gui/app.py#L4975)
 
 ```python
 @_log_bridge_call
@@ -11410,7 +11488,7 @@ identical field (§5, Option D4).
 
 <a id="fim.gui.app.Api.set_results_location"></a>
 
-#### [set\_results\_location](./gui/app.py#L4685)
+#### [set\_results\_location](./gui/app.py#L5008)
 
 ```python
 @_log_bridge_call
@@ -11443,7 +11521,7 @@ location_override` is what applies a saved value, once, the
 
 <a id="fim.gui.app.Api.browse_for_results_location"></a>
 
-#### [browse\_for\_results\_location](./gui/app.py#L4721)
+#### [browse\_for\_results\_location](./gui/app.py#L5044)
 
 ```python
 @_log_bridge_call
@@ -11463,7 +11541,7 @@ Browse for a results/logs directory via the OS's own native folder picker.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 
-#### [get\_welcome\_dismissed](./gui/app.py#L4741)
+#### [get\_welcome\_dismissed](./gui/app.py#L5064)
 
 ```python
 @_log_bridge_call
@@ -11479,7 +11557,7 @@ at all.
 
 <a id="fim.gui.app.Api.dismiss_welcome"></a>
 
-#### [dismiss\_welcome](./gui/app.py#L4752)
+#### [dismiss\_welcome](./gui/app.py#L5075)
 
 ```python
 @_log_bridge_call
@@ -11494,7 +11572,7 @@ actions the user picks, never un-called.
 
 <a id="fim.gui.app.Api.get_statistics_catalog"></a>
 
-#### [get\_statistics\_catalog](./gui/app.py#L4763)
+#### [get\_statistics\_catalog](./gui/app.py#L5086)
 
 ```python
 @_log_bridge_call
@@ -11516,7 +11594,7 @@ statistic is defined.
 
 <a id="fim.gui.app.Api.set_shown_statistics"></a>
 
-#### [set\_shown\_statistics](./gui/app.py#L4784)
+#### [set\_shown\_statistics](./gui/app.py#L5107)
 
 ```python
 @_log_bridge_call
@@ -11544,7 +11622,7 @@ text`). A saved run's results never change.
 
 <a id="fim.gui.app.Api.get_pairwise_max_demes"></a>
 
-#### [get\_pairwise\_max\_demes](./gui/app.py#L4815)
+#### [get\_pairwise\_max\_demes](./gui/app.py#L5138)
 
 ```python
 @_log_bridge_call
@@ -11555,7 +11633,7 @@ Return the largest deme count whose runs save `pairwise.json` in full.
 
 <a id="fim.gui.app.Api.set_pairwise_max_demes"></a>
 
-#### [set\_pairwise\_max\_demes](./gui/app.py#L4820)
+#### [set\_pairwise\_max\_demes](./gui/app.py#L5143)
 
 ```python
 @_log_bridge_call
@@ -11579,7 +11657,7 @@ Set the largest deme count whose runs save every pair's statistics.
 
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
-#### [get\_startup\_warnings](./gui/app.py#L4844)
+#### [get\_startup\_warnings](./gui/app.py#L5167)
 
 ```python
 @_log_bridge_call
@@ -11599,7 +11677,7 @@ own docstring on why this exists instead of one).
 
 <a id="fim.gui.app.Api.get_live_deme_pair"></a>
 
-#### [get\_live\_deme\_pair](./gui/app.py#L4860)
+#### [get\_live\_deme\_pair](./gui/app.py#L5183)
 
 ```python
 @_log_bridge_call
@@ -11617,7 +11695,7 @@ unlike `_significant_digits`'s own thread-start snapshot.
 
 <a id="fim.gui.app.Api.set_live_deme_pair"></a>
 
-#### [set\_live\_deme\_pair](./gui/app.py#L4873)
+#### [set\_live\_deme\_pair](./gui/app.py#L5196)
 
 ```python
 @_log_bridge_call
@@ -11667,7 +11745,7 @@ than crash the whole push).
 
 <a id="fim.gui.app.Api.list_recent_runs"></a>
 
-#### [list\_recent\_runs](./gui/app.py#L4920)
+#### [list\_recent\_runs](./gui/app.py#L5243)
 
 ```python
 @_log_bridge_call
@@ -11689,7 +11767,7 @@ no single trajectory of its own to open.
 
 <a id="fim.gui.app.Api.list_home_runs"></a>
 
-#### [list\_home\_runs](./gui/app.py#L4954)
+#### [list\_home\_runs](./gui/app.py#L5278)
 
 ```python
 @_log_bridge_call
@@ -11723,7 +11801,7 @@ asked for this heavier per-row read, so neither pays for it.
 
 <a id="fim.gui.app.Api.list_studies"></a>
 
-#### [list\_studies](./gui/app.py#L4985)
+#### [list\_studies](./gui/app.py#L5309)
 
 ```python
 @_log_bridge_call
@@ -11755,7 +11833,7 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 
 <a id="fim.gui.app.Api.list_experiments"></a>
 
-#### [list\_experiments](./gui/app.py#L5040)
+#### [list\_experiments](./gui/app.py#L5364)
 
 ```python
 @_log_bridge_call
@@ -11780,7 +11858,7 @@ List every Experiment, oldest first.
 
 <a id="fim.gui.app.Api.get_study_run_summary"></a>
 
-#### [get\_study\_run\_summary](./gui/app.py#L5079)
+#### [get\_study\_run\_summary](./gui/app.py#L5403)
 
 ```python
 @_log_bridge_call
@@ -11808,7 +11886,7 @@ its own runs' config summaries and statistics.
 
 <a id="fim.gui.app.Api.create_study"></a>
 
-#### [create\_study](./gui/app.py#L5111)
+#### [create\_study](./gui/app.py#L5435)
 
 ```python
 @_log_bridge_call
@@ -11830,7 +11908,7 @@ Blank `description`/`documentation` are stored as unset.
 
 <a id="fim.gui.app.Api.create_experiment"></a>
 
-#### [create\_experiment](./gui/app.py#L5144)
+#### [create\_experiment](./gui/app.py#L5468)
 
 ```python
 @_log_bridge_call
@@ -11843,7 +11921,7 @@ Create a new, empty Experiment. See `create_study`.
 
 <a id="fim.gui.app.Api.get_details"></a>
 
-#### [get\_details](./gui/app.py#L5159)
+#### [get\_details](./gui/app.py#L5483)
 
 ```python
 @_log_bridge_call
@@ -11870,7 +11948,7 @@ read fresh from disk each time.
 
 <a id="fim.gui.app.Api.update_study_details"></a>
 
-#### [update\_study\_details](./gui/app.py#L5198)
+#### [update\_study\_details](./gui/app.py#L5522)
 
 ```python
 @_log_bridge_call
@@ -11891,7 +11969,7 @@ The details dialog's Save (`webui/screens/details.js`). Blank
 
 <a id="fim.gui.app.Api.update_experiment_details"></a>
 
-#### [update\_experiment\_details](./gui/app.py#L5223)
+#### [update\_experiment\_details](./gui/app.py#L5547)
 
 ```python
 @_log_bridge_call
@@ -11905,7 +11983,7 @@ See `update_study_details`.
 
 <a id="fim.gui.app.Api.update_run_details"></a>
 
-#### [update\_run\_details](./gui/app.py#L5242)
+#### [update\_run\_details](./gui/app.py#L5566)
 
 ```python
 @_log_bridge_call
@@ -11926,7 +12004,7 @@ Blank text clears a field; a run may have neither. The run's own
 
 <a id="fim.gui.app.Api.get_run_context"></a>
 
-#### [get\_run\_context](./gui/app.py#L5270)
+#### [get\_run\_context](./gui/app.py#L5594)
 
 ```python
 @_log_bridge_call
@@ -11960,7 +12038,7 @@ description (`webui/screens/details.js`).
 
 <a id="fim.gui.app.Api.ensure_default_study"></a>
 
-#### [ensure\_default\_study](./gui/app.py#L5330)
+#### [ensure\_default\_study](./gui/app.py#L5654)
 
 ```python
 @_log_bridge_call
@@ -11983,7 +12061,7 @@ never gains this call at all.
 
 <a id="fim.gui.app.Api.ensure_examples"></a>
 
-#### [ensure\_examples](./gui/app.py#L5349)
+#### [ensure\_examples](./gui/app.py#L5673)
 
 ```python
 @_log_bridge_call
@@ -12007,7 +12085,7 @@ brought it up to date.
 
 <a id="fim.gui.app.Api.add_run_to_study"></a>
 
-#### [add\_run\_to\_study](./gui/app.py#L5373)
+#### [add\_run\_to\_study](./gui/app.py#L5697)
 
 ```python
 @_log_bridge_call
@@ -12023,7 +12101,7 @@ Add one existing Run directory to a Study; idempotent.
 
 <a id="fim.gui.app.Api.add_study_to_experiment"></a>
 
-#### [add\_study\_to\_experiment](./gui/app.py#L5387)
+#### [add\_study\_to\_experiment](./gui/app.py#L5711)
 
 ```python
 @_log_bridge_call
@@ -12040,7 +12118,7 @@ Add one existing Study to an Experiment; idempotent.
 
 <a id="fim.gui.app.Api.set_experiment_closed"></a>
 
-#### [set\_experiment\_closed](./gui/app.py#L5403)
+#### [set\_experiment\_closed](./gui/app.py#L5727)
 
 ```python
 @_log_bridge_call
@@ -12060,7 +12138,7 @@ Closing is refused while a Run of one of its Studies is running
 
 <a id="fim.gui.app.Api.set_study_closed"></a>
 
-#### [set\_study\_closed](./gui/app.py#L5426)
+#### [set\_study\_closed](./gui/app.py#L5750)
 
 ```python
 @_log_bridge_call
@@ -12082,7 +12160,7 @@ a Run.
 
 <a id="fim.gui.app.Api.delete_study"></a>
 
-#### [delete\_study](./gui/app.py#L5447)
+#### [delete\_study](./gui/app.py#L5771)
 
 ```python
 @_log_bridge_call
@@ -12109,7 +12187,7 @@ A read-only example Run the Study holds is kept too
 
 <a id="fim.gui.app.Api.delete_study_runs"></a>
 
-#### [delete\_study\_runs](./gui/app.py#L5484)
+#### [delete\_study\_runs](./gui/app.py#L5808)
 
 ```python
 @_log_bridge_call
@@ -12134,7 +12212,7 @@ A read-only example Run stays in the Study and counts as kept.
 
 <a id="fim.gui.app.Api.delete_experiment"></a>
 
-#### [delete\_experiment](./gui/app.py#L5513)
+#### [delete\_experiment](./gui/app.py#L5837)
 
 ```python
 @_log_bridge_call
@@ -12154,7 +12232,7 @@ A read-only Study the Experiment holds is kept
 
 <a id="fim.gui.app.Api.copy_study"></a>
 
-#### [copy\_study](./gui/app.py#L5544)
+#### [copy\_study](./gui/app.py#L5868)
 
 ```python
 @_log_bridge_call
@@ -12171,7 +12249,7 @@ Copy a Study's own run list into a new, independent Study.
 
 <a id="fim.gui.app.Api.get_sweepable_keys"></a>
 
-#### [get\_sweepable\_keys](./gui/app.py#L5559)
+#### [get\_sweepable\_keys](./gui/app.py#L5883)
 
 ```python
 @_log_bridge_call
@@ -12182,7 +12260,7 @@ Return every parameter a sweep may vary, with its axis metadata.
 
 <a id="fim.gui.app.Api.plan_sweep"></a>
 
-#### [plan\_sweep](./gui/app.py#L5564)
+#### [plan\_sweep](./gui/app.py#L5888)
 
 ```python
 @_log_bridge_call
@@ -12207,7 +12285,7 @@ Enumerate and validate a sweep without running anything.
 
 <a id="fim.gui.app.Api.start_sweep"></a>
 
-#### [start\_sweep](./gui/app.py#L5625)
+#### [start\_sweep](./gui/app.py#L5949)
 
 ```python
 @_log_bridge_call
@@ -12231,13 +12309,13 @@ at or over the size threshold, until `confirmed` is true.
 
 **Returns**:
 
-- ``{"ok"` - True, "studyId": ..., "total": N}`; or `{"ok": False,
-- `"message"` - ...}`, with `"needsConfirmation": True` (and
-  `"total"`) for an unconfirmed large plan.
+- ``{"ok"` - True, "studyId": ..., "total": N, "jobId": ...}`; or
+- ``{"ok"` - False, "message": ...}`, with `"needsConfirmation":
+  True (and `"total"`) for an unconfirmed large plan.
 
 <a id="fim.gui.app.Api.resume_sweep"></a>
 
-#### [resume\_sweep](./gui/app.py#L5685)
+#### [resume\_sweep](./gui/app.py#L6024)
 
 ```python
 @_log_bridge_call
@@ -12263,13 +12341,13 @@ Run the points of an existing sweep Study that are still missing.
 
 **Returns**:
 
-- ``{"ok"` - True, "studyId": ...}`, or `{"ok": False, "message":
-  ...}` if a run or another sweep is in progress or the Study is
-  not a sweep.
+- ``{"ok"` - True, "studyId": ..., "jobId": ...}`, or `{"ok":
+  False, "message": ...}` if a run or another sweep is in
+  progress or the Study is not a sweep.
 
 <a id="fim.gui.app.Api.cancel_sweep"></a>
 
-#### [cancel\_sweep](./gui/app.py#L5732)
+#### [cancel\_sweep](./gui/app.py#L6079)
 
 ```python
 @_log_bridge_call
@@ -12280,7 +12358,7 @@ Stop the running sweep: the current point is cancelled, the rest skipped.
 
 <a id="fim.gui.app.Api.get_sweep_status"></a>
 
-#### [get\_sweep\_status](./gui/app.py#L5738)
+#### [get\_sweep\_status](./gui/app.py#L6085)
 
 ```python
 @_log_bridge_call
@@ -12291,7 +12369,7 @@ Return a sweep Study's planned points with their derived states.
 
 <a id="fim.gui.app.Api.get_sweep_results"></a>
 
-#### [get\_sweep\_results](./gui/app.py#L5750)
+#### [get\_sweep\_results](./gui/app.py#L6097)
 
 ```python
 @_log_bridge_call
@@ -12302,7 +12380,7 @@ Return a sweep Study's finished points and their statistics.
 
 <a id="fim.gui.app.Api.estimate_sweep_cost"></a>
 
-#### [estimate\_sweep\_cost](./gui/app.py#L5758)
+#### [estimate\_sweep\_cost](./gui/app.py#L6105)
 
 ```python
 @_log_bridge_call
@@ -12332,7 +12410,7 @@ run already exists cost nothing and are left out.
 
 <a id="fim.gui.app.Api.get_sweep_eta"></a>
 
-#### [get\_sweep\_eta](./gui/app.py#L5825)
+#### [get\_sweep\_eta](./gui/app.py#L6172)
 
 ```python
 @_log_bridge_call
@@ -12352,7 +12430,7 @@ goes, and read from files, so it works while the sweep runs.
 
 <a id="fim.gui.app.Api.get_sweep_series"></a>
 
-#### [get\_sweep\_series](./gui/app.py#L5850)
+#### [get\_sweep\_series](./gui/app.py#L6197)
 
 ```python
 @_log_bridge_call
@@ -12379,7 +12457,7 @@ Return a statistic as response curves across a sweep's axes.
 
 <a id="fim.gui.app.Api.get_sweep_trajectories"></a>
 
-#### [get\_sweep\_trajectories](./gui/app.py#L5877)
+#### [get\_sweep\_trajectories](./gui/app.py#L6224)
 
 ```python
 @_log_bridge_call
@@ -12406,7 +12484,7 @@ Return how each point approached equilibrium, for the overlay chart.
 
 <a id="fim.gui.app.Api.compare_sweeps"></a>
 
-#### [compare\_sweeps](./gui/app.py#L5903)
+#### [compare\_sweeps](./gui/app.py#L6250)
 
 ```python
 @_log_bridge_call
@@ -12436,7 +12514,7 @@ Nothing is stored; the comparison is worked out on each call.
 
 <a id="fim.gui.app.Api.get_sweep_theory"></a>
 
-#### [get\_sweep\_theory](./gui/app.py#L5932)
+#### [get\_sweep\_theory](./gui/app.py#L6279)
 
 ```python
 @_log_bridge_call
@@ -12463,7 +12541,7 @@ every statistic, never an error.
 
 <a id="fim.gui.app.Api.export_sweep_table"></a>
 
-#### [export\_sweep\_table](./gui/app.py#L5958)
+#### [export\_sweep\_table](./gui/app.py#L6305)
 
 ```python
 @_log_bridge_call
@@ -12496,7 +12574,7 @@ overwritten once the researcher has chosen it.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
-#### [copy\_experiment](./gui/app.py#L6090)
+#### [copy\_experiment](./gui/app.py#L6475)
 
 ```python
 @_log_bridge_call
@@ -12513,7 +12591,7 @@ Copy an Experiment's own study list into a new, independent Experiment.
 
 <a id="fim.gui.app.Api.delete_runs"></a>
 
-#### [delete\_runs](./gui/app.py#L6105)
+#### [delete\_runs](./gui/app.py#L6490)
 
 ```python
 @_log_bridge_call
@@ -12544,7 +12622,7 @@ nothing at all is deleted and the refusal is reported.
 
 <a id="fim.gui.app.Api.delete_selected"></a>
 
-#### [delete\_selected](./gui/app.py#L6134)
+#### [delete\_selected](./gui/app.py#L6519)
 
 ```python
 @_log_bridge_call
@@ -12598,7 +12676,7 @@ policy) rather than double-counted or treated as a failure.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 
-#### [get\_batch\_replicate\_summary](./gui/app.py#L6222)
+#### [get\_batch\_replicate\_summary](./gui/app.py#L6607)
 
 ```python
 @_log_bridge_call
@@ -12640,7 +12718,7 @@ already uses — no second naming scheme.
 
 <a id="fim.gui.app.Api.get_batch_pair_statistics"></a>
 
-#### [get\_batch\_pair\_statistics](./gui/app.py#L6285)
+#### [get\_batch\_pair\_statistics](./gui/app.py#L6670)
 
 ```python
 @_log_bridge_call
@@ -12674,7 +12752,7 @@ existed, or above its deme-count limit).
 
 <a id="fim.gui.app.Api.open_run"></a>
 
-#### [open\_run](./gui/app.py#L6335)
+#### [open\_run](./gui/app.py#L6720)
 
 ```python
 @_log_bridge_call
@@ -12747,7 +12825,7 @@ reuse, not a second rendering path.
 
 <a id="fim.gui.app.Api.open_batch"></a>
 
-#### [open\_batch](./gui/app.py#L6519)
+#### [open\_batch](./gui/app.py#L6905)
 
 ```python
 @_log_bridge_call
@@ -12807,7 +12885,7 @@ Home screen's own reopen spinner (`open-run.js`'s own
 
 <a id="fim.gui.app.Api.open_study"></a>
 
-#### [open\_study](./gui/app.py#L6643)
+#### [open\_study](./gui/app.py#L7033)
 
 ```python
 @_log_bridge_call
@@ -12874,7 +12952,7 @@ refuse," not a bug).
 
 <a id="fim.gui.app.Api.compare_runs"></a>
 
-#### [compare\_runs](./gui/app.py#L6786)
+#### [compare\_runs](./gui/app.py#L7176)
 
 ```python
 @_log_bridge_call
@@ -12927,7 +13005,7 @@ animation screen's own frame sampler already computes.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 
-#### [get\_animation\_frames](./gui/app.py#L6872)
+#### [get\_animation\_frames](./gui/app.py#L7262)
 
 ```python
 @_log_bridge_call
@@ -12967,7 +13045,7 @@ any kind during playback.
 
 <a id="fim.gui.app.Api.get_animation_deme_pair_frames"></a>
 
-#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L6939)
+#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L7329)
 
 ```python
 @_log_bridge_call
@@ -13011,7 +13089,7 @@ shape the default view's own frames already arrived in.
 
 <a id="fim.gui.app.Api.get_deme_pair_panel"></a>
 
-#### [get\_deme\_pair\_panel](./gui/app.py#L7004)
+#### [get\_deme\_pair\_panel](./gui/app.py#L7394)
 
 ```python
 @_log_bridge_call
@@ -13053,7 +13131,7 @@ small `d`).
 
 <a id="fim.gui.app.Api.get_batch_deme_pair_panel"></a>
 
-#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L7050)
+#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L7440)
 
 ```python
 @_log_bridge_call
@@ -13092,7 +13170,7 @@ itself.
 
 <a id="fim.gui.app.Api.get_batch_animation_frames"></a>
 
-#### [get\_batch\_animation\_frames](./gui/app.py#L7093)
+#### [get\_batch\_animation\_frames](./gui/app.py#L7483)
 
 ```python
 @_log_bridge_call
@@ -13139,7 +13217,7 @@ recent_runs`/`open_run` already use.
 
 <a id="fim.gui.app.Api.ping"></a>
 
-#### [ping](./gui/app.py#L7165)
+#### [ping](./gui/app.py#L7555)
 
 ```python
 @_log_bridge_call
@@ -13154,7 +13232,7 @@ context, before any real screen is built on top of it.
 
 <a id="fim.gui.app.Api.ping_from_worker"></a>
 
-#### [ping\_from\_worker](./gui/app.py#L7175)
+#### [ping\_from\_worker](./gui/app.py#L7565)
 
 ```python
 @_log_bridge_call
@@ -13174,7 +13252,7 @@ inside a real batch run.
 
 <a id="fim.gui.app.Api.open_external_link"></a>
 
-#### [open\_external\_link](./gui/app.py#L7194)
+#### [open\_external\_link](./gui/app.py#L7584)
 
 ```python
 @_log_bridge_call
@@ -13193,7 +13271,7 @@ module already follows for another OS-dispatched action.
 
 <a id="fim.gui.app.Api.check_for_updates"></a>
 
-#### [check\_for\_updates](./gui/app.py#L7208)
+#### [check\_for\_updates](./gui/app.py#L7598)
 
 ```python
 @_log_bridge_call
@@ -13223,7 +13301,7 @@ own equivalent action called the same module the same way.
 
 <a id="fim.gui.app.Api.get_about_info"></a>
 
-#### [get\_about\_info](./gui/app.py#L7244)
+#### [get\_about\_info](./gui/app.py#L7634)
 
 ```python
 @_log_bridge_call
@@ -13270,7 +13348,7 @@ three-part parsing).
 
 <a id="fim.gui.app.RunDetails"></a>
 
-## [RunDetails Objects](./gui/app.py#L7391)
+## [RunDetails Objects](./gui/app.py#L7882)
 
 ```python
 class RunDetails(NamedTuple)
@@ -13280,7 +13358,7 @@ The optional name and description Configure gives a run before it starts.
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 
-#### [in\_flight\_bridge\_threads](./gui/app.py#L8602)
+#### [in\_flight\_bridge\_threads](./gui/app.py#L9455)
 
 ```python
 def in_flight_bridge_threads(
@@ -13308,7 +13386,7 @@ flakiness.
 
 <a id="fim.gui.app.await_bridge_threads"></a>
 
-#### [await\_bridge\_threads](./gui/app.py#L8637)
+#### [await\_bridge\_threads](./gui/app.py#L9490)
 
 ```python
 def await_bridge_threads(
@@ -13361,7 +13439,7 @@ seconds later.
 
 <a id="fim.gui.app.initial_window_size"></a>
 
-#### [initial\_window\_size](./gui/app.py#L8871)
+#### [initial\_window\_size](./gui/app.py#L9724)
 
 ```python
 def initial_window_size(screen_width: int,
@@ -13388,7 +13466,7 @@ edges), between `_MIN_WINDOW_SIZE` and `_MAX_WINDOW_SIZE`.
 
 <a id="fim.gui.app.create_window"></a>
 
-#### [create\_window](./gui/app.py#L8912)
+#### [create\_window](./gui/app.py#L9765)
 
 ```python
 def create_window(*,
@@ -13439,7 +13517,7 @@ pywebview's own API instead of Tk's.
 
 <a id="fim.gui.app.shutdown_timeout"></a>
 
-#### [shutdown\_timeout](./gui/app.py#L9127)
+#### [shutdown\_timeout](./gui/app.py#L9987)
 
 ```python
 def shutdown_timeout() -> float
@@ -13464,7 +13542,7 @@ outcome than the hang it guards against.
 
 <a id="fim.gui.app.main"></a>
 
-#### [main](./gui/app.py#L9439)
+#### [main](./gui/app.py#L10299)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -14510,6 +14588,174 @@ Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
   against this list drifting out of sync with a future field) is
   appended afterward rather than silently dropped.
 
+<a id="fim.gui.jobs"></a>
+
+# [fim.gui.jobs](./gui/jobs.py#L1)
+
+The one lock that admits a run, a saved run, or a sweep -- and its jobId/sequence.
+
+Before this module existed, `Api._claim_run` (plain and saved runs) and
+`Api.start_sweep`/`resume_sweep` (sweeps) each decided whether they could
+start under a *different* lock: a dedicated lock for the former, and no
+lock at all for the latter, which only ever checked `_busy_message()`
+and set `_sweep_cancel_event` as two separate, unsynchronized steps. A
+run's own claim and a sweep's own admission could therefore interleave:
+each could see the other's slot as free for one instant, and both could
+start (`20261019-claude-opus-5-5-fim-gui-tabs-design-review.md`'s own
+note on this exact gap, left for "the tabs registry's job" to close --
+commit A4 of that design's Release A schedule).
+
+`JobAdmission` is that one lock, shared by every admission decision.
+`fim.gui.app.Api` keeps its own existing, observable fields --
+`_run_in_flight`, `_active_object_id`, `_sweep_cancel_event` -- as the
+state those decisions are made from; nothing here duplicates or
+replaces them, and no bridge method's return shape changes. Only the
+synchronization moves here, so `Api._claim_run`/`_claim_sweep` (and
+their own release counterparts) can never both see a free slot for the
+same instant.
+
+Commit A5 of that same schedule ("addressed job events and controls")
+adds a `jobId` and one sequence per job to every addressed push. Commit
+A7 adds each job's view level and latest event snapshot, so a page
+can switch between full and summary rendering and recover after a gap.
+`Api._job_id` is carried as a plain argument into each drain/push
+function; background threads never read a later claim's id from `Api`.
+
+This Release A registry still admits only one active job. Completed
+snapshots remain available until the owning document closes; later
+commits add the document lifecycle that removes them.
+
+<a id="fim.gui.jobs.JobAdmission"></a>
+
+## [JobAdmission Objects](./gui/jobs.py#L44)
+
+```python
+class JobAdmission()
+```
+
+One lock, held only long enough to decide and record one claim.
+
+Never held across anything that waits on another thread or on the
+page -- every caller takes it, makes its decision, and releases it
+again within the same few lines (`Api._claim_run`/`_claim_sweep`,
+and their own release counterparts). The same lock also guards
+`_next_sequence`, below: a short enough critical section (one dict
+read and one write) that sharing it costs nothing worth a second
+lock, and `JobAdmission`'s own docstring already expects this
+module to grow into the fuller registry that will need one lock
+for all of it anyway.
+
+<a id="fim.gui.jobs.JobAdmission.new_job_id"></a>
+
+#### [new\_job\_id](./gui/jobs.py#L64)
+
+```python
+def new_job_id() -> str
+```
+
+Mint a fresh id for one claim, never reused.
+
+Called from inside `_claim_run`/`_claim_sweep`, under `self.
+lock`, the instant a claim succeeds -- not by the page (unlike
+the eventual `start_job(jobId, request)` of design doc §7.2,
+where the page mints it before this registry exists at all);
+nothing about this id's own shape is a promise to any later
+commit, including A6's "`jobId` is the lifecycle's own `command_
+key` for a Run-object job" -- that constraint is this module's
+own later problem to satisfy, not a reason to constrain this id
+now.
+
+<a id="fim.gui.jobs.JobAdmission.view_level"></a>
+
+#### [view\_level](./gui/jobs.py#L81)
+
+```python
+def view_level(job_id: str) -> ViewLevel
+```
+
+Return the job's current rendering level.
+
+A closed job has no retained view state; callers that outlive a
+document receive the full level rather than failing during shutdown.
+
+<a id="fim.gui.jobs.JobAdmission.set_view_level"></a>
+
+#### [set\_view\_level](./gui/jobs.py#L90)
+
+```python
+def set_view_level(job_id: str, level: ViewLevel) -> bool
+```
+
+Set a claimed job's rendering level; return false if it is unknown.
+
+<a id="fim.gui.jobs.JobAdmission.record_event"></a>
+
+#### [record\_event](./gui/jobs.py#L98)
+
+```python
+def record_event(job_id: str, event_type: str, payload: Any) -> int
+```
+
+Assign an event sequence and retain its payload for snapshots.
+
+<a id="fim.gui.jobs.JobAdmission.snapshot"></a>
+
+#### [snapshot](./gui/jobs.py#L110)
+
+```python
+def snapshot(job_id: str) -> dict[str, Any] | None
+```
+
+Return the current view level and latest event for a retained job.
+
+<a id="fim.gui.jobs.JobAdmission.next_sequence"></a>
+
+#### [next\_sequence](./gui/jobs.py#L123)
+
+```python
+def next_sequence(job_id: str) -> int
+```
+
+Return `job_id`'s next sequence number, starting at 0.
+
+Every call for the same `job_id` returns one more than the
+last, including sequences assigned through `record_event` --
+`forget` drops the bookkeeping once a job is done with it. A
+stray late call for an already-forgotten id simply starts again
+at 0, indistinguishable on the wire from a fresh job's first
+event, since `forget` is only called after release and a `job_id`
+is never reused across different claims.
+
+<a id="fim.gui.jobs.JobAdmission.latest_sequence"></a>
+
+#### [latest\_sequence](./gui/jobs.py#L139)
+
+```python
+def latest_sequence(job_id: str) -> int | None
+```
+
+Return the most recently assigned sequence for `job_id`, or `None`.
+
+`None` means `job_id` has never had a sequence assigned through
+`next_sequence` or `record_event` (including: never claimed, or
+claimed but not yet pushed anything) -- `Api.get_job_snapshot`'s
+own "nothing yet" case, distinct from a real sequence of `0`.
+
+<a id="fim.gui.jobs.JobAdmission.forget"></a>
+
+#### [forget](./gui/jobs.py#L151)
+
+```python
+def forget(job_id: str) -> None
+```
+
+Drop `job_id`'s sequence, view, and snapshot when its document closes.
+
+Keeps this dict from growing for the life of the process, one
+entry per job ever claimed. The owning document calls this after
+it closes; claim release alone must not discard a finished job's
+snapshot, which can still be needed to resynchronize its page.
+
 <a id="fim.gui.literature_visuals"></a>
 
 # [fim.gui.literature\_visuals](./gui/literature_visuals.py#L1)
@@ -15041,6 +15287,7 @@ def start_object_run(
         cadence: CheckpointCadence | None = None,
         clock: Callable[[], float] = time.monotonic,
         pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        view_level: Callable[[], Literal["full", "summary"]] = lambda: "full",
         observer: Callable[[Session], None] | None = None) -> threading.Thread
 ```
 
@@ -15060,6 +15307,8 @@ exits.
 - `clock` - Injectable wall clock for the progress throttle.
 - `pairwise_max_demes` - Largest deme count whose `pairwise.json` is
   written when the run completes.
+- `view_level` - Read on each progress tick; summary avoids building
+  visualization payloads for background jobs.
 - `observer` - Test-only hook, called with the session at every
   control point, after its progress tick.
 
@@ -15820,6 +16069,148 @@ stay, since `fim run` records them as the new run's name.
   The same text with each top-level `_key:` entry, and any
   indented lines belonging to it, removed.
 
+<a id="fim.gui.publisher"></a>
+
+# [fim.gui.publisher](./gui/publisher.py#L1)
+
+One thread delivers every push to the page, in order.
+
+Before this module existed, every background thread that had something
+to tell the page -- a run's drain thread, a batch's progress poller, the
+sweep's own event callback, the reproducibility check -- called `window.
+evaluate_js` directly, itself, and blocked on it
+(`20261019-claude-opus-5-5-fim-gui-tabs-design-review.md`, finding M4).
+The sweep's own callback did this while holding its own context lock
+(`fim.sweep_run._Context.emit`), so a page slow to answer one tick's
+`evaluate_js` round trip stalled every other point thread waiting on
+that same lock, not merely the page.
+
+A `Publisher` is the one place any of them has to touch `evaluate_js`
+now. `publish` only ever appends to (or, for a coalescible push, updates
+in place within) an in-memory list and returns; it never blocks on the
+page. One background thread drains that list, delivering each entry in
+turn, never while holding any lock that a producer might need to make
+progress of its own.
+
+Progress is the one kind of push that is fine to coalesce: only the
+newest tick of a given `coalesce_key` is ever worth delivering, so an
+older, still-undelivered one is simply replaced rather than queued
+again. Everything else -- a terminal outcome, an annotation such as a
+reproducibility result, a one-off status note -- is queued with no
+`coalesce_key` at all, and is always delivered, in the order it was
+published, never dropped and never reordered relative to another
+non-coalesced push for the same window.
+
+<a id="fim.gui.publisher.EvaluatesJs"></a>
+
+## [EvaluatesJs Objects](./gui/publisher.py#L40)
+
+```python
+class EvaluatesJs(Protocol)
+```
+
+Structural stand-in for the one capability a push actually needs.
+
+Matches `fim.gui.app._EvaluatesJs`: any real caller passes a real
+`webview.Window`, which already satisfies this; a test can pass a
+lightweight fake with no real window or `gui` marker needed.
+
+<a id="fim.gui.publisher.Publisher"></a>
+
+## [Publisher Objects](./gui/publisher.py#L71)
+
+```python
+class Publisher()
+```
+
+Delivers every push handed to `publish`, from one background thread.
+
+One instance belongs to one `Api` (`Api.__init__`'s own `self.
+_publisher`), the same way `_close_gate` does — never a module-level
+singleton, so tests building several `Api` instances never share a
+delivery thread or queue. The thread itself starts lazily, on the
+first call to `publish`: most `Api` instances in this suite are
+built and never push anything at all, and starting a thread only
+once one is actually needed keeps those instances just as cheap as
+they were before this module existed.
+
+<a id="fim.gui.publisher.Publisher.publish"></a>
+
+#### [publish](./gui/publisher.py#L90)
+
+```python
+def publish(window: EvaluatesJs,
+            script: str,
+            *,
+            coalesce_key: Hashable | None = None,
+            label: str | None = None,
+            on_delivered: Callable[[], None] | None = None) -> None
+```
+
+Enqueue one push; returns at once, never calling `evaluate_js` itself.
+
+**Arguments**:
+
+- `window` - Where `script` will eventually be delivered.
+- `script` - The JavaScript to evaluate there.
+- `coalesce_key` - When given, a still-undelivered entry already
+  queued for the same `window` and the same key is
+  overwritten by this one instead of being queued again --
+  the right behavior for a progress tick, where only the
+  newest is ever worth showing. `None` (the default)
+  queues unconditionally, preserving arrival order against
+  every other `None`-keyed push to the same window: the
+  shape every terminal outcome, annotation, and one-off
+  status note needs. A replaced entry's own `on_delivered`
+  is simply dropped along with it -- never called -- since
+  it never actually reached the page.
+- `label` - Named in a delivery failure's log line, in place of
+  `script`'s own handler name.
+- `on_delivered` - Called from the delivery thread, with no
+  arguments, immediately after this exact entry's own
+  `evaluate_js` attempt returns or raises -- the hook
+  `Api`'s own `on_message`/`on_run_started` test-only
+  callbacks (see `Api.__init__`'s own docstring) are built
+  from, so a test observing it still knows the real push
+  it names has actually been attempted, in order, not
+  merely accepted. Called whether or not that attempt
+- `succeeded` - every real page already has every handler
+  `fim.gui.webui` pushes to, so a failure here means the
+  window itself is gone, which no test-only hook needs to
+  distinguish from success. Called synchronously, on the
+  calling thread, right here -- never queued at all -- if
+  `stop` has already been called: `fim.gui.app._publish_
+  and_wait` blocks on exactly this callback, and a push
+  that arrives once `stop` has already won the shutdown
+  race must still release that wait, since nothing further
+  will ever be delivered to call it from.
+
+<a id="fim.gui.publisher.Publisher.stop"></a>
+
+#### [stop](./gui/publisher.py#L226)
+
+```python
+def stop(timeout: float) -> bool
+```
+
+Stop accepting new pushes, then wait for the rest to be delivered.
+
+Called once, at shutdown (`Api.stop_active_work`), inside the
+same overall deadline that already bounds joining every worker
+thread — this only waits for the publisher's own backlog, which
+in practice is empty or near it, since nothing new is being
+produced once every worker has itself been asked to stop.
+
+**Arguments**:
+
+- `timeout` - Longest wait for the queue to drain, in seconds.
+
+
+**Returns**:
+
+  Whether every already-queued push was delivered before
+  `timeout` ran out.
+
 <a id="fim.gui.recent_runs"></a>
 
 # [fim.gui.recent\_runs](./gui/recent_runs.py#L1)
@@ -15969,14 +16360,21 @@ Return the status line shown while large `pairwise.json` files are saved.
 #### [progress\_message](./gui/runner.py#L158)
 
 ```python
-def progress_message(state: ModelState, generation: int,
-                     params: SimulationParams, run_id: str) -> ProgressMessage
+def progress_message(
+        state: ModelState,
+        generation: int,
+        params: SimulationParams,
+        run_id: str,
+        *,
+        view_level: Literal["full", "summary"] = "full") -> ProgressMessage
 ```
 
-Build the `"progress"` message the Run card draws one tick from.
+Build a full or compact progress message for the current job view.
 
 Shared by this module's worker and `fim.gui.object_runner`, so a
-saved Run and an ordinary one draw identical ticks.
+saved Run and an ordinary one draw identical ticks. Summary messages
+retain the generation, statistic estimates, and state while omitting
+panels, points, and literature visuals.
 
 **Arguments**:
 
@@ -15992,17 +16390,18 @@ saved Run and an ordinary one draw identical ticks.
 
 <a id="fim.gui.runner.start_run"></a>
 
-#### [start\_run](./gui/runner.py#L195)
+#### [start\_run](./gui/runner.py#L204)
 
 ```python
 def start_run(
-        params: SimulationParams,
-        output_directory: Path,
-        message_queue: queue.Queue[RunMessage],
-        cancel_event: threading.Event,
-        *,
-        clock: Callable[[], float] = time.monotonic,
-        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
+    params: SimulationParams,
+    output_directory: Path,
+    message_queue: queue.Queue[RunMessage],
+    cancel_event: threading.Event,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+    view_level: Callable[[], Literal["full", "summary"]] = lambda: "full"
 ) -> threading.Thread
 ```
 
@@ -16024,6 +16423,8 @@ Resolve targets, guard the existing target, and start the worker thread.
 - `cancel_event` - Set by the UI's Cancel button; checked before
   every generation write.
 - `clock` - Injectable wall clock for `ProgressThrottle`, for tests.
+- `view_level` - Read on each reported generation; summary avoids
+  building visualization payloads for background jobs.
 
 
 **Returns**:
@@ -21264,9 +21665,44 @@ existing name without replacing any run data.
 
 - `FileExistsError` - If all bounded fallback names already exist.
 
+<a id="fim.paths.allocate_output_directory"></a>
+
+#### [allocate\_output\_directory](./paths.py#L355)
+
+```python
+def allocate_output_directory(
+    results: Path | None = None,
+    *,
+    clock: Clock = lambda: datetime.now(UTC)) -> tuple[Path, Path]
+```
+
+Reserve and return a unique `(output_directory, reservation)` pair.
+
+The output directory remains absent until its run is published. A
+neighboring hidden marker directory reserves its name in the meantime,
+preventing concurrent callers from receiving the same path. The caller
+must remove the reservation after publication or failure.
+
+**Arguments**:
+
+- `results` - Optional results-directory override (default:
+  `results_directory()`).
+- `clock` - Injectable UTC clock for deterministic tests.
+
+
+**Returns**:
+
+  The not-yet-created output directory and its reservation marker.
+
+
+**Raises**:
+
+- `FileExistsError` - If all bounded fallback names are already used or
+  reserved.
+
 <a id="fim.paths.project_root"></a>
 
-#### [project\_root](./paths.py#L355)
+#### [project\_root](./paths.py#L395)
 
 ```python
 def project_root() -> Path
@@ -21335,7 +21771,7 @@ more specific overrides — see each one's own docstring.
 
 <a id="fim.paths.results_directory"></a>
 
-#### [results\_directory](./paths.py#L435)
+#### [results\_directory](./paths.py#L475)
 
 ```python
 def results_directory(root: Path | None = None) -> Path
@@ -21369,7 +21805,7 @@ out the full precedence across all three location-specific chains.
 
 <a id="fim.paths.log_directory"></a>
 
-#### [log\_directory](./paths.py#L469)
+#### [log\_directory](./paths.py#L509)
 
 ```python
 def log_directory(root: Path | None = None) -> Path
@@ -21398,7 +21834,7 @@ override`, and `FIM_LOG_DIRECTORY` compose in the identical order
 
 <a id="fim.paths.default_log_file"></a>
 
-#### [default\_log\_file](./paths.py#L498)
+#### [default\_log\_file](./paths.py#L538)
 
 ```python
 def default_log_file(root: Path | None = None) -> Path
@@ -21419,7 +21855,7 @@ Return the default operational log file path.
 
 <a id="fim.paths.fim_index_directory"></a>
 
-#### [fim\_index\_directory](./paths.py#L512)
+#### [fim\_index\_directory](./paths.py#L552)
 
 ```python
 def fim_index_directory(results: Path | None = None) -> Path
@@ -21445,7 +21881,7 @@ where any individual run's own output lives.
 
 <a id="fim.paths.studies_directory"></a>
 
-#### [studies\_directory](./paths.py#L532)
+#### [studies\_directory](./paths.py#L572)
 
 ```python
 def studies_directory(results: Path | None = None) -> Path
@@ -21465,7 +21901,7 @@ Return the directory holding every `StudyManifest` JSON file.
 
 <a id="fim.paths.experiments_directory"></a>
 
-#### [experiments\_directory](./paths.py#L545)
+#### [experiments\_directory](./paths.py#L585)
 
 ```python
 def experiments_directory(results: Path | None = None) -> Path
@@ -37921,7 +38357,7 @@ A set `cancel_event` pauses the object at its next safe point.
 
 <a id="fim.sweep_run.LocalPointRunner"></a>
 
-## [LocalPointRunner Objects](./sweep_run.py#L317)
+## [LocalPointRunner Objects](./sweep_run.py#L296)
 
 ```python
 class LocalPointRunner()
@@ -37943,7 +38379,7 @@ call from several threads at once, one call per point in flight.
 
 <a id="fim.sweep_run.LocalPointRunner.run_point"></a>
 
-#### [run\_point](./sweep_run.py#L341)
+#### [run\_point](./sweep_run.py#L320)
 
 ```python
 def run_point(params: SimulationParams,
@@ -37956,7 +38392,7 @@ Run `params` synchronously; see `PointRunner.run_point`.
 
 <a id="fim.sweep_run.LocalPointRunner.run_object_point"></a>
 
-#### [run\_object\_point](./sweep_run.py#L363)
+#### [run\_object\_point](./sweep_run.py#L342)
 
 ```python
 def run_object_point(
@@ -37970,7 +38406,7 @@ Execute a point's Run object here; see `ObjectPointRunner`.
 
 <a id="fim.sweep_run.execute_point_object"></a>
 
-#### [execute\_point\_object](./sweep_run.py#L423)
+#### [execute\_point\_object](./sweep_run.py#L402)
 
 ```python
 def execute_point_object(
@@ -38006,7 +38442,7 @@ point: the checkpoint it leaves lets the next sweep resume the point.
 
 <a id="fim.sweep_run.ProcessPointRunner"></a>
 
-## [ProcessPointRunner Objects](./sweep_run.py#L557)
+## [ProcessPointRunner Objects](./sweep_run.py#L536)
 
 ```python
 class ProcessPointRunner()
@@ -38039,7 +38475,7 @@ the sweep ending on the first submit to a dead pool.
 
 <a id="fim.sweep_run.ProcessPointRunner.run_point"></a>
 
-#### [run\_point](./sweep_run.py#L683)
+#### [run\_point](./sweep_run.py#L662)
 
 ```python
 def run_point(params: SimulationParams,
@@ -38052,7 +38488,7 @@ Run `params` in a worker process; see `PointRunner.run_point`.
 
 <a id="fim.sweep_run.ProcessPointRunner.run_object_point"></a>
 
-#### [run\_object\_point](./sweep_run.py#L706)
+#### [run\_object\_point](./sweep_run.py#L685)
 
 ```python
 def run_object_point(
@@ -38066,7 +38502,7 @@ Execute a point's Run object in a worker process.
 
 <a id="fim.sweep_run.ProcessPointRunner.close"></a>
 
-#### [close](./sweep_run.py#L732)
+#### [close](./sweep_run.py#L711)
 
 ```python
 def close() -> None
@@ -38076,7 +38512,7 @@ Stop the worker processes and the shared-event server.
 
 <a id="fim.sweep_run.Concurrency"></a>
 
-## [Concurrency Objects](./sweep_run.py#L741)
+## [Concurrency Objects](./sweep_run.py#L720)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38095,7 +38531,7 @@ How a sweep spreads its points over the machine.
 
 <a id="fim.sweep_run.resolve_concurrency"></a>
 
-#### [resolve\_concurrency](./sweep_run.py#L757)
+#### [resolve\_concurrency](./sweep_run.py#L736)
 
 ```python
 def resolve_concurrency(*,
@@ -38131,7 +38567,7 @@ point's worker count and shrinks how many fit.
 
 <a id="fim.sweep_run.STORED_PLAN_LIMIT"></a>
 
-#### [STORED\_PLAN\_LIMIT](./sweep_run.py#L806)
+#### [STORED\_PLAN\_LIMIT](./sweep_run.py#L785)
 
 Points up to which a Study stores the whole plan.
 
@@ -38141,7 +38577,7 @@ the digest keeps the check that the plan still matches this version.
 
 <a id="fim.sweep_run.create_sweep_study"></a>
 
-#### [create\_sweep\_study](./sweep_run.py#L828)
+#### [create\_sweep\_study](./sweep_run.py#L807)
 
 ```python
 def create_sweep_study(spec: SweepSpec,
@@ -38178,7 +38614,7 @@ Create the Study for a sweep, its spec and plan stored before any run.
 
 <a id="fim.sweep_run.attach_sweep_to_study"></a>
 
-#### [attach\_sweep\_to\_study](./sweep_run.py#L870)
+#### [attach\_sweep\_to\_study](./sweep_run.py#L849)
 
 ```python
 def attach_sweep_to_study(study_id: str,
@@ -38201,7 +38637,7 @@ already a member counts as done. A Study holds at most one sweep.
 
 <a id="fim.sweep_run.sweep_spec_of"></a>
 
-#### [sweep\_spec\_of](./sweep_run.py#L903)
+#### [sweep\_spec\_of](./sweep_run.py#L882)
 
 ```python
 def sweep_spec_of(study: StudyManifest) -> SweepSpec
@@ -38215,7 +38651,7 @@ Rebuild the `SweepSpec` a sweep Study stored.
 
 <a id="fim.sweep_run.stored_points"></a>
 
-#### [stored\_points](./sweep_run.py#L914)
+#### [stored\_points](./sweep_run.py#L893)
 
 ```python
 def stored_points(study: StudyManifest) -> list[Mapping[str, Any]]
@@ -38229,7 +38665,7 @@ Return the planned points stored in a sweep Study.
 
 <a id="fim.sweep_run.sweep_point_statuses"></a>
 
-#### [sweep\_point\_statuses](./sweep_run.py#L934)
+#### [sweep\_point\_statuses](./sweep_run.py#L913)
 
 ```python
 def sweep_point_statuses(study: StudyManifest,
@@ -38252,7 +38688,7 @@ reported as done.
 
 <a id="fim.sweep_run.completed_run_ids"></a>
 
-#### [completed\_run\_ids](./sweep_run.py#L1036)
+#### [completed\_run\_ids](./sweep_run.py#L1015)
 
 ```python
 def completed_run_ids(*,
@@ -38266,7 +38702,7 @@ See `completed_runs`; this is only the ids.
 
 <a id="fim.sweep_run.completed_runs"></a>
 
-#### [completed\_runs](./sweep_run.py#L1046)
+#### [completed\_runs](./sweep_run.py#L1025)
 
 ```python
 def completed_runs(*,
@@ -38287,7 +38723,7 @@ so a plan can say beforehand which points are already computed.
 
 <a id="fim.sweep_run.SweepBudget"></a>
 
-## [SweepBudget Objects](./sweep_run.py#L1088)
+## [SweepBudget Objects](./sweep_run.py#L1067)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38310,7 +38746,7 @@ did not start stay waiting for `fim sweep resume`.
 
 <a id="fim.sweep_run.SweepBudget.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./sweep_run.py#L1107)
+#### [\_\_post\_init\_\_](./sweep_run.py#L1086)
 
 ```python
 def __post_init__() -> None
@@ -38320,7 +38756,7 @@ Refuse a limit that is not positive.
 
 <a id="fim.sweep_run._LinkedEvent"></a>
 
-## [\_LinkedEvent Objects](./sweep_run.py#L1115)
+## [\_LinkedEvent Objects](./sweep_run.py#L1094)
 
 ```python
 class _LinkedEvent(threading.Event)
@@ -38333,7 +38769,7 @@ mistaken for the user cancelling.
 
 <a id="fim.sweep_run._LinkedEvent.is_set"></a>
 
-#### [is\_set](./sweep_run.py#L1126)
+#### [is\_set](./sweep_run.py#L1105)
 
 ```python
 def is_set() -> bool
@@ -38343,7 +38779,7 @@ Return whether the caller cancelled or the budget stopped the sweep.
 
 <a id="fim.sweep_run._BudgetTracker"></a>
 
-## [\_BudgetTracker Objects](./sweep_run.py#L1131)
+## [\_BudgetTracker Objects](./sweep_run.py#L1110)
 
 ```python
 class _BudgetTracker()
@@ -38353,7 +38789,7 @@ Counts what a call has spent and decides when a budget is reached.
 
 <a id="fim.sweep_run._BudgetTracker.reserve"></a>
 
-#### [reserve](./sweep_run.py#L1146)
+#### [reserve](./sweep_run.py#L1125)
 
 ```python
 def reserve() -> bool
@@ -38363,7 +38799,7 @@ Claim one new point to compute; `False` once a budget is reached.
 
 <a id="fim.sweep_run._BudgetTracker.add_bytes"></a>
 
-#### [add\_bytes](./sweep_run.py#L1159)
+#### [add\_bytes](./sweep_run.py#L1138)
 
 ```python
 def add_bytes(size: int) -> None
@@ -38373,7 +38809,7 @@ Count the bytes of a finished point, then check the budget.
 
 <a id="fim.sweep_run._BudgetTracker.check"></a>
 
-#### [check](./sweep_run.py#L1165)
+#### [check](./sweep_run.py#L1144)
 
 ```python
 def check() -> None
@@ -38383,7 +38819,7 @@ Stop the sweep if the time or disk limit has been reached.
 
 <a id="fim.sweep_run._Context"></a>
 
-## [\_Context Objects](./sweep_run.py#L1205)
+## [\_Context Objects](./sweep_run.py#L1184)
 
 ```python
 @dataclass(slots=True)
@@ -38394,7 +38830,7 @@ What every point of one `run_sweep` call shares.
 
 <a id="fim.sweep_run._Context.emit"></a>
 
-#### [emit](./sweep_run.py#L1239)
+#### [emit](./sweep_run.py#L1218)
 
 ```python
 def emit(kind: EventKind,
@@ -38408,7 +38844,7 @@ Send one event; a finishing event advances the finished count.
 
 <a id="fim.sweep_run.run_sweep"></a>
 
-#### [run\_sweep](./sweep_run.py#L1252)
+#### [run\_sweep](./sweep_run.py#L1231)
 
 ```python
 def run_sweep(study_id: str,
@@ -38509,7 +38945,7 @@ falls back to the runner's `run_point`.
 
 <a id="fim.sweep_run.sweep_lock_held"></a>
 
-#### [sweep\_lock\_held](./sweep_run.py#L1371)
+#### [sweep\_lock\_held](./sweep_run.py#L1350)
 
 ```python
 def sweep_lock_held(study_id: str, *, results: Path | None = None) -> bool
@@ -38530,7 +38966,7 @@ Return whether a process is running the sweep `study_id` right now.
 
 <a id="fim.sweep_run.sweep_lock_path"></a>
 
-#### [sweep\_lock\_path](./sweep_run.py#L1385)
+#### [sweep\_lock\_path](./sweep_run.py#L1364)
 
 ```python
 def sweep_lock_path(study_id: str, *, results: Path | None = None) -> Path
@@ -38543,7 +38979,7 @@ sees it.
 
 <a id="fim.sweep_run.verification_path"></a>
 
-#### [verification\_path](./sweep_run.py#L1592)
+#### [verification\_path](./sweep_run.py#L1571)
 
 ```python
 def verification_path(study_id: str, *, results: Path | None = None) -> Path
@@ -38556,7 +38992,7 @@ see it.
 
 <a id="fim.sweep_run.read_verification"></a>
 
-#### [read\_verification](./sweep_run.py#L1603)
+#### [read\_verification](./sweep_run.py#L1582)
 
 ```python
 def read_verification(study_id: str,
@@ -38573,7 +39009,7 @@ Keys: `verified_at` (UTC text), `software_version`, `plan_digest`,
 
 <a id="fim.sweep_run.failures_path"></a>
 
-#### [failures\_path](./sweep_run.py#L1660)
+#### [failures\_path](./sweep_run.py#L1639)
 
 ```python
 def failures_path(study_id: str, *, results: Path | None = None) -> Path
@@ -38586,7 +39022,7 @@ Kept in a subdirectory of the Study index so the index's own
 
 <a id="fim.sweep_run.read_failures"></a>
 
-#### [read\_failures](./sweep_run.py#L1669)
+#### [read\_failures](./sweep_run.py#L1648)
 
 ```python
 def read_failures(study_id: str,
@@ -38598,7 +39034,7 @@ Return recorded failures by point `run_id`; empty if none or unreadable.
 
 <a id="fim.sweep_run.read_point_objects"></a>
 
-#### [read\_point\_objects](./sweep_run.py#L1677)
+#### [read\_point\_objects](./sweep_run.py#L1656)
 
 ```python
 def read_point_objects(study_id: str,
@@ -38610,7 +39046,7 @@ Return each point's linked Run object ID by point `run_id`.
 
 <a id="fim.sweep_run.Replan"></a>
 
-## [Replan Objects](./sweep_run.py#L1760)
+## [Replan Objects](./sweep_run.py#L1739)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38636,7 +39072,7 @@ What `replan_sweep` changed, or would change.
 
 <a id="fim.sweep_run.replan_sweep"></a>
 
-#### [replan\_sweep](./sweep_run.py#L1793)
+#### [replan\_sweep](./sweep_run.py#L1772)
 
 ```python
 def replan_sweep(study_id: str,
@@ -38680,7 +39116,7 @@ an ordinary run, listed in the result, and its point runs again.
 
 <a id="fim.sweep_run.write_reproducibility_note"></a>
 
-#### [write\_reproducibility\_note](./sweep_run.py#L2204)
+#### [write\_reproducibility\_note](./sweep_run.py#L2183)
 
 ```python
 def write_reproducibility_note(directory: Path,
@@ -38694,7 +39130,7 @@ the run's own record of itself is untouched.
 
 <a id="fim.sweep_run.sweep_point_results"></a>
 
-#### [sweep\_point\_results](./sweep_run.py#L2215)
+#### [sweep\_point\_results](./sweep_run.py#L2194)
 
 ```python
 def sweep_point_results(study: StudyManifest,
@@ -38715,7 +39151,7 @@ nothing.
 
 <a id="fim.sweep_run.health_cache_path"></a>
 
-#### [health\_cache\_path](./sweep_run.py#L2246)
+#### [health\_cache\_path](./sweep_run.py#L2225)
 
 ```python
 def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
@@ -38725,7 +39161,7 @@ Return the disposable cache of a sweep's point health counts.
 
 <a id="fim.sweep_run.trajectory_cache_path"></a>
 
-#### [trajectory\_cache\_path](./sweep_run.py#L2251)
+#### [trajectory\_cache\_path](./sweep_run.py#L2230)
 
 ```python
 def trajectory_cache_path(study_id: str,

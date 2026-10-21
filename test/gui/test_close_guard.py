@@ -106,7 +106,53 @@ def test_unsaved_edits_veto_the_close_and_ask_the_page(
         "savedRun": False,
         "run": False,
         "sweep": False,
+        "dirtyDocuments": [],
+        "activeJob": None,
     }
+
+
+def test_close_requirements_include_dirty_documents_and_the_active_job(
+    api: Api,
+) -> None:
+    assert api.report_unsaved_edits(
+        True,
+        [
+            {"tabId": "document-1", "label": "New configuration (draft)"},
+            {"tabId": "document-2", "label": "Saved run (planned)"},
+        ],
+    ) == {"ok": True}
+    api._run_in_flight = True
+    api._job_id = "job-123"
+
+    requirements = api.close_requirements()
+
+    assert requirements["dirtyDocuments"] == [
+        {"tabId": "document-1", "label": "New configuration (draft)"},
+        {"tabId": "document-2", "label": "Saved run (planned)"},
+    ]
+    assert requirements["activeJob"] == {"kind": "run", "id": "job-123"}
+
+
+@pytest.mark.parametrize(
+    "dirty_documents",
+    [
+        "document-1",
+        [{"tabId": "document-1"}],
+        [{"tabId": "document-1", "label": "Draft"}] * 2,
+    ],
+)
+def test_report_unsaved_edits_rejects_invalid_document_summaries(
+    api: Api, dirty_documents: Any
+) -> None:
+    api.report_unsaved_edits(True, [{"tabId": "prior", "label": "Prior draft"}])
+
+    result = api.report_unsaved_edits(True, dirty_documents)
+
+    assert result["ok"] is False
+    assert api.close_requirements()["dirtyDocuments"] == [
+        {"tabId": "prior", "label": "Prior draft"}
+    ]
+    assert api.close_requirements()["unsavedEdits"] is True
 
 
 def test_saving_the_edits_clears_the_question(api: Api, window: _FakeWindow) -> None:

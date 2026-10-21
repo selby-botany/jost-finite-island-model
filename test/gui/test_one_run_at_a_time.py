@@ -147,6 +147,10 @@ def test_a_second_run_is_refused_while_the_first_is_in_flight(
     del window
     first = api.start_run(_form())
     assert first["ok"] is True, first.get("message")
+    reservation = held_runs.started[0].parent / (
+        f".reserve-{held_runs.started[0].name}"
+    )
+    assert reservation.is_dir()
 
     second = api.start_run(_form())
 
@@ -156,12 +160,28 @@ def test_a_second_run_is_refused_while_the_first_is_in_flight(
 
     held_runs.release_all()
     _wait_until_no_run(api)
+    assert not reservation.exists()
     assert api.can_start_run() == {"ok": True}
     third = api.start_run(_form())
     assert third["ok"] is True, third.get("message")
     assert len(held_runs.started) == 2
     held_runs.release_all()
     _wait_until_no_run(api)
+
+
+def test_a_start_without_an_active_window_releases_its_reservation(
+    api: Api,  # noqa: F811
+    results: Path,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A refused start leaves no output-directory marker behind."""
+    monkeypatch.setattr(app_module, "_active_window", lambda: None)
+
+    refused = api.start_run(_form())
+
+    assert refused["ok"] is False
+    assert refused["message"] == "no active window"
+    assert not list(results.glob(".reserve-*"))
 
 
 def test_a_refused_start_leaves_the_running_saved_run_alone(
@@ -202,6 +222,28 @@ def test_a_sweep_in_flight_is_named_by_every_run_start(
         "message": _SWEEP_RUNNING,
     }
     assert api._run_in_flight is False
+
+
+def test_a_run_claim_and_a_sweep_claim_share_one_lock(
+    api: Api,  # noqa: F811
+) -> None:
+    """`_claim_run` and `_claim_sweep` can never both see a free slot.
+
+    Unlike the test above, which sets `_sweep_cancel_event` directly to
+    stand in for a running sweep, this calls `_claim_sweep` itself, so
+    it exercises the actual claim `start_sweep`/`resume_sweep` make
+    (`fim.gui.jobs.JobAdmission`'s own docstring on the race this
+    closes), not only the refusal a sweep already in flight gives.
+    """
+    assert api._claim_run() is None
+    assert api._claim_sweep() == "a run is in progress; wait for it to finish first"
+    api._release_run_claim()
+    assert api.can_start_run() == {"ok": True}
+
+    assert api._claim_sweep() is None
+    assert api._claim_run() == _SWEEP_RUNNING
+    api._release_sweep_claim()
+    assert api.can_start_run() == {"ok": True}
 
 
 @pytest.mark.parametrize(
@@ -289,7 +331,7 @@ def test_the_check_and_the_claim_happen_under_one_lock(
 
     def observed(self: Api) -> str | None:
         """Record whether the claim lock is held, then check as before."""
-        locked_during_check.append(self._run_claim_lock.locked())
+        locked_during_check.append(self._jobs.lock.locked())
         return check(self)
 
     monkeypatch.setattr(Api, "_run_refusal", observed)
@@ -359,7 +401,7 @@ def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     for state in (seen["afterClick"], seen["afterMenu"]):
         assert state["view"] == "running"
         assert state["screenRunHidden"] is False
-        assert state["banner"] == _IN_PROGRESS
+        assert state["banner"] == f"Untitled: {_IN_PROGRESS}"
         assert state["cancelDisabled"] is False
     assert seen["startsWhileRunning"] == 1
     assert len(held_runs.started) == 2

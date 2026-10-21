@@ -13,7 +13,7 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 import yaml
 
@@ -81,6 +81,7 @@ def start_object_run(
     cadence: CheckpointCadence | None = None,
     clock: Callable[[], float] = time.monotonic,
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+    view_level: Callable[[], Literal["full", "summary"]] = lambda: "full",
     observer: Callable[[Session], None] | None = None,
 ) -> threading.Thread:
     """Start or resume a saved Run object on a background thread.
@@ -98,6 +99,8 @@ def start_object_run(
         clock: Injectable wall clock for the progress throttle.
         pairwise_max_demes: Largest deme count whose `pairwise.json` is
             written when the run completes.
+        view_level: Read on each progress tick; summary avoids building
+            visualization payloads for background jobs.
         observer: Test-only hook, called with the session at every
             control point, after its progress tick.
 
@@ -112,6 +115,7 @@ def start_object_run(
             "cadence": cadence,
             "clock": clock,
             "pairwise_max_demes": pairwise_max_demes,
+            "view_level": view_level,
             "observer": observer,
         },
         name=f"fim-object-{object_id}",
@@ -166,6 +170,7 @@ def _object_worker(
     cadence: CheckpointCadence | None,
     clock: Callable[[], float],
     pairwise_max_demes: int,
+    view_level: Callable[[], Literal["full", "summary"]],
     observer: Callable[[Session], None] | None,
 ) -> None:
     """Execute one saved Run and post its outcome to `message_queue`."""
@@ -201,7 +206,11 @@ def _object_worker(
             if throttle.should_report(session.generation, lane.params.max_generations):
                 message_queue.put(
                     progress_message(
-                        lane.state, session.generation, lane.params, session.run_id
+                        lane.state,
+                        session.generation,
+                        lane.params,
+                        session.run_id,
+                        view_level=view_level(),
                     )
                 )
         if observer is not None:

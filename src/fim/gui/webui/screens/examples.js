@@ -168,6 +168,12 @@ function examplesHandleListKey(event, container, select) {
  *     it has no name of its own.
  */
 window.fim.applyLoadedExample = async function applyLoadedExample(result, fallbackName) {
+    if (window.fim.workspace.documentTabsEnabled()) {
+        window.fim.workspace.createDocument({
+            kind: "draft",
+            label: fallbackName || "Untitled",
+        });
+    }
     applyFormValues(result.values);
     // Its run settings apply to this run only (`run-settings-notice.js`);
     // set before the revalidation below so validation uses them.

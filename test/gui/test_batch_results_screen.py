@@ -26,11 +26,9 @@ uses, and waits on `Api`'s own `on_message` hook rather than polling the
 DOM for "the run view is showing `completed`" — see `test/gui/
 test_running_screen.py`'s own module docstring for why a DOM-polling
 test-driving loop, run concurrently with a real background thread's own
-`evaluate_js` pushes, is the wrong tool here. Once `done_event` fires,
-`_drain_batch_messages`'s thread has already returned (the terminal
-message is the last thing it processes), so the one verification
-`evaluate_js` call each test below makes is never concurrent with
-anything.
+`evaluate_js` pushes, is the wrong tool here. The hook marks delivery of
+the legacy terminal push; tests that start another run also wait for the
+page's start request and the addressed `finished` event to settle.
 """
 
 from __future__ import annotations
@@ -990,7 +988,8 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch(
             elif done_count == 2:
                 second_done.set()
 
-    window = create_window(api=Api(on_message=on_message), hidden=True)
+    api = Api(on_message=on_message)
+    window = create_window(api=api, hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
     def _drive() -> None:
@@ -1002,6 +1001,18 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch(
             )
             settled = None
             wait_or_fail(first_done, "first batch (done message)")
+            poll_or_fail(
+                lambda: api._run_in_flight,
+                lambda in_flight: not in_flight,
+                "first batch finished event and claim release",
+                interval=_READY_POLL_INTERVAL_SECONDS,
+            )
+            poll_or_fail(
+                lambda: window.evaluate_js("window.__fimRunStartSettled === true"),
+                bool,
+                "first run start request",
+                interval=_READY_POLL_INTERVAL_SECONDS,
+            )
             first_output_directory = window.evaluate_js(
                 "window.fim.getCompletedOutputDirectory()"
             )
@@ -1229,10 +1240,12 @@ def test_a_batch_repaint_keeps_the_scrub_position_marker(
             settled = window.evaluate_js(
                 "({"
                 "expected: window.fim.getScrubberGenerations()[0], "
-                "cached: lastBatchScrubGeneration, "
+                "cached: window.fim.workspace.selected().completedView."
+                "batchScrubGeneration, "
                 "afterRepaint: (() => {"
                 "repaintTrajectory();"
-                "return lastBatchScrubGeneration;"
+                "return window.fim.workspace.selected().completedView."
+                "batchScrubGeneration;"
                 "})()"
                 "})"
             )

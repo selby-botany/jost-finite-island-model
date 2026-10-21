@@ -54,6 +54,15 @@ const STEP_INTERVAL_MS = 150;
 // control stays disabled and there is nowhere to move to.
 const MINIMUM_FRAMES_TO_ANIMATE = 2;
 
+// A long-running job's own live frames are kept without bound otherwise
+// (`appendLiveFrame`'s own docstring on `decimateLiveFramesIfNeeded`,
+// `scrubber.js`); above this many, the older half is thinned by half
+// each time the cap is crossed again, so memory stays bounded for a run
+// of any length while the recent, most-watched history stays dense
+// (tabs design doc `20261019-claude-opus-5-5-fim-gui-tabs-design.md`
+// §8, finding B2).
+const MAX_LIVE_SCRUBBER_FRAMES = 2048;
+
 /* ---- Axis range widget ---------------------------------------------- */
 
 // Resolution of the two-thumb range slider: positions are integers in

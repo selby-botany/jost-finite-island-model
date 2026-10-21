@@ -64,7 +64,24 @@
  *   trail        the original circles, with the last few scrubber frames
  *                faded in behind them so movement is visible.
  */
-let _scatterStyle = DEFAULT_SCATTER_STYLE;
+function getScatterState(tabId = window.fim.workspace.selectedId()) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.scatter) {
+        documentState.scatter = {
+            style: DEFAULT_SCATTER_STYLE,
+            currentPanel: null,
+            zoomDomain: null,
+            lastGeometry: null,
+            dragStart: null,
+        };
+    }
+    return documentState.scatter;
+}
+
+let activeScatterState = getScatterState();
 
 /**
  * Return the ramp step (0-4) for a merged point's count.
@@ -81,13 +98,25 @@ function countStep(count) {
  *
  * @param {string} style one of `SCATTER_STYLES`; anything else is ignored.
  */
-window.fim.setScatterStyle = function setScatterStyle(style) {
+window.fim.setScatterStyle = function setScatterStyle(
+    style,
+    tabId = window.fim.workspace.selectedId()
+) {
     if (!SCATTER_STYLES.includes(style)) {
         return;
     }
-    _scatterStyle = style;
-    if (_currentPanel && typeof runCanvas !== "undefined" && runCanvas) {
-        drawScatter(runCanvas, _currentPanel);
+    const state = getScatterState(tabId);
+    if (!state) {
+        return;
+    }
+    state.style = style;
+    if (
+        tabId === window.fim.workspace.selectedId() &&
+        state.currentPanel &&
+        typeof runCanvas !== "undefined" &&
+        runCanvas
+    ) {
+        drawScatter(runCanvas, state.currentPanel);
     }
 };
 
@@ -97,28 +126,41 @@ window.fim.setScatterStyle = function setScatterStyle(style) {
  * @returns {string}
  */
 window.fim.getScatterStyle = function getScatterStyle() {
-    return _scatterStyle;
+    return activeScatterState
+        ? activeScatterState.style
+        : DEFAULT_SCATTER_STYLE;
 };
 
-// The panel most recently drawn to `runCanvas`. `syncCanvasSize`
-// reads this to redraw after a resize without a second bridge call.
-let _currentPanel = null;
+window.fim.getScatterState = function getScatterStateForSelectedDocument() {
+    return activeScatterState
+        ? {
+              style: activeScatterState.style,
+              hasZoom: activeScatterState.zoomDomain !== null,
+              panel: activeScatterState.currentPanel,
+          }
+        : null;
+};
 
-// A chosen data-space sub-rectangle to show instead of the panel's own
-// full `[0, 1]` extent, or `null` for the full extent -- set by dragging
-// a selection box on the zoomed pane (`wireScatterZoomInteraction`,
-// below), cleared by `resetScatterZoomView`. Deliberately survives a
-// scrub tick or a deme-pair change: every `"frequency"` panel shares the
-// identical `[0, 1]` domain regardless of which pair or generation is
-// showing, so a chosen sub-rectangle stays geometrically meaningful
-// across either -- only an explicit reset, a zoom-frame close, or a
-// freshly opened run should lose it.
-let _zoomDomain = null;
+window.fim.clearScatterPanel = function clearScatterPanel() {
+    if (!activeScatterState) {
+        return;
+    }
+    activeScatterState.currentPanel = null;
+    activeScatterState.lastGeometry = null;
+};
 
-// The geometry `drawScatterCell` last computed for `runCanvas` --
-// `wireScatterZoomInteraction` inverts a drag's own pixel coordinates
-// through it to compute the data-space rectangle to zoom to.
-let _lastGeometry = null;
+window.fim.workspace.onSelectionChange((selectedId) => {
+    activeScatterState =
+        selectedId === null ? null : getScatterState(selectedId);
+    if (
+        activeScatterState &&
+        activeScatterState.currentPanel &&
+        typeof runCanvas !== "undefined" &&
+        runCanvas
+    ) {
+        drawScatter(runCanvas, activeScatterState.currentPanel);
+    }
+});
 
 /**
  * Point `canvas`'s drawing buffer at its current CSS layout size.
@@ -167,8 +209,8 @@ function syncCanvasSize() {
     if (!resizeCanvasToCssSize(runCanvas)) {
         return;
     }
-    if (_currentPanel) {
-        drawScatter(runCanvas, _currentPanel);
+    if (activeScatterState && activeScatterState.currentPanel) {
+        drawScatter(runCanvas, activeScatterState.currentPanel);
     }
 }
 
@@ -187,8 +229,8 @@ window.addEventListener("load", () => {
     // no panel drawn yet the repaint below is simply a no-op.
     if (window.fim && window.fim.registerGraphDraw) {
         window.fim.registerGraphDraw("scatter", () => {
-            if (_currentPanel) {
-                drawScatter(runCanvas, _currentPanel);
+            if (activeScatterState && activeScatterState.currentPanel) {
+                drawScatter(runCanvas, activeScatterState.currentPanel);
             }
         });
         window.fim.setGraphAvailable("scatter", true);
@@ -209,12 +251,16 @@ window.addEventListener("load", () => {
  * @returns {void}
  */
 window.fim.resetScatterZoomView = function resetScatterZoomView() {
-    if (_zoomDomain === null) {
+    if (!activeScatterState || activeScatterState.zoomDomain === null) {
         return;
     }
-    _zoomDomain = null;
-    if (_currentPanel && typeof runCanvas !== "undefined" && runCanvas) {
-        drawScatter(runCanvas, _currentPanel);
+    activeScatterState.zoomDomain = null;
+    if (
+        activeScatterState.currentPanel &&
+        typeof runCanvas !== "undefined" &&
+        runCanvas
+    ) {
+        drawScatter(runCanvas, activeScatterState.currentPanel);
     }
 };
 
@@ -226,7 +272,7 @@ window.fim.resetScatterZoomView = function resetScatterZoomView() {
  * @returns {boolean}
  */
 window.fim.hasScatterZoomView = function hasScatterZoomView() {
-    return _zoomDomain !== null;
+    return activeScatterState !== null && activeScatterState.zoomDomain !== null;
 };
 
 /**
@@ -253,25 +299,26 @@ window.fim.hasScatterZoomView = function hasScatterZoomView() {
  * @returns {void}
  */
 function wireScatterZoomInteraction(canvas) {
-    let dragStart = null;
     canvas.addEventListener("mousedown", (event) => {
+        const state = activeScatterState;
         // `.graph-zoom-pane` (`openGraphZoom`, `run-graph-stage.js`) is
         // set on the pane frame -- `#run-scatter-card`, an ancestor of
         // this canvas -- not the canvas element itself.
-        if (!canvas.closest(".graph-zoom-pane") || _lastGeometry === null) {
+        if (!state || !canvas.closest(".graph-zoom-pane") || state.lastGeometry === null) {
             return;
         }
-        if (!_currentPanel || _currentPanel.kind === "pca") {
+        if (!state.currentPanel || state.currentPanel.kind === "pca") {
             return;
         }
         const box = canvas.getBoundingClientRect();
-        dragStart = {
+        state.dragStart = {
             x: ((event.clientX - box.left) / box.width) * canvas.width,
             y: ((event.clientY - box.top) / box.height) * canvas.height,
         };
     });
     canvas.addEventListener("mousemove", (event) => {
-        if (dragStart === null) {
+        const state = activeScatterState;
+        if (!state || state.dragStart === null) {
             return;
         }
         const box = canvas.getBoundingClientRect();
@@ -279,26 +326,27 @@ function wireScatterZoomInteraction(canvas) {
             x: ((event.clientX - box.left) / box.width) * canvas.width,
             y: ((event.clientY - box.top) / box.height) * canvas.height,
         };
-        drawScatter(canvas, _currentPanel);
+        drawScatter(canvas, state.currentPanel);
         const context = canvas.getContext("2d");
         context.save();
         context.strokeStyle = SCATTER_ZOOM_BOX_STROKE;
         context.fillStyle = SCATTER_ZOOM_BOX_FILL;
         context.lineWidth = SCATTER_ZOOM_BOX_LINE_WIDTH;
-        const x = Math.min(dragStart.x, current.x);
-        const y = Math.min(dragStart.y, current.y);
-        const width = Math.abs(current.x - dragStart.x);
-        const height = Math.abs(current.y - dragStart.y);
+        const x = Math.min(state.dragStart.x, current.x);
+        const y = Math.min(state.dragStart.y, current.y);
+        const width = Math.abs(current.x - state.dragStart.x);
+        const height = Math.abs(current.y - state.dragStart.y);
         context.fillRect(x, y, width, height);
         context.strokeRect(x, y, width, height);
         context.restore();
     });
     window.addEventListener("mouseup", (event) => {
-        if (dragStart === null) {
+        const state = activeScatterState;
+        if (!state || state.dragStart === null) {
             return;
         }
-        const start = dragStart;
-        dragStart = null;
+        const start = state.dragStart;
+        state.dragStart = null;
         const box = canvas.getBoundingClientRect();
         const end = {
             x: ((event.clientX - box.left) / box.width) * canvas.width,
@@ -307,23 +355,28 @@ function wireScatterZoomInteraction(canvas) {
         if (
             Math.abs(end.x - start.x) < ZOOM_DRAG_MINIMUM_PX ||
             Math.abs(end.y - start.y) < ZOOM_DRAG_MINIMUM_PX ||
-            _lastGeometry === null
+            state.lastGeometry === null
         ) {
             // Too small to be a deliberate drag -- redraw plainly, erasing
             // the selection-box preview `mousemove` left on the canvas.
-            if (_currentPanel) {
-                drawScatter(canvas, _currentPanel);
+            if (state.currentPanel) {
+                drawScatter(canvas, state.currentPanel);
             }
             return;
         }
-        const { domain, originX, originY, plotSize } = _lastGeometry;
+        const { domain, originX, originY, plotSize } = state.lastGeometry;
         const toDataX = (px) => domain.xMin + ((px - originX) / plotSize) * (domain.xMax - domain.xMin);
         const toDataY = (py) => domain.yMin + ((originY - py) / plotSize) * (domain.yMax - domain.yMin);
         const xValues = [toDataX(start.x), toDataX(end.x)].sort((a, b) => a - b);
         const yValues = [toDataY(start.y), toDataY(end.y)].sort((a, b) => a - b);
-        _zoomDomain = { xMin: xValues[0], xMax: xValues[1], yMin: yValues[0], yMax: yValues[1] };
-        if (_currentPanel) {
-            drawScatter(canvas, _currentPanel);
+        state.zoomDomain = {
+            xMin: xValues[0],
+            xMax: xValues[1],
+            yMin: yValues[0],
+            yMax: yValues[1],
+        };
+        if (state.currentPanel) {
+            drawScatter(canvas, state.currentPanel);
         }
     });
 }
@@ -337,11 +390,15 @@ function wireScatterZoomInteraction(canvas) {
  *     points: Array<{x: number, y: number, count: number, common: boolean}>}} panel
  */
 function drawScatter(canvas, panel) {
-    _currentPanel = panel;
+    const state = activeScatterState;
+    if (!state) {
+        return;
+    }
+    state.currentPanel = panel;
     resizeCanvasToCssSize(canvas);
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
-    _lastGeometry = drawScatterCell(
+    state.lastGeometry = drawScatterCell(
         context,
         { x: 0, y: 0, width: canvas.width, height: canvas.height },
         panel,
@@ -349,7 +406,7 @@ function drawScatter(canvas, panel) {
             padding: SINGLE_PANEL_PADDING,
             tickFontSize: SINGLE_PANEL_TICK_FONT,
             markerScale: 1,
-            domainOverride: panel.kind !== "pca" ? _zoomDomain : null,
+            domainOverride: panel.kind !== "pca" ? state.zoomDomain : null,
         }
     );
     renderScatterKey(panel.kind !== "pca");
@@ -479,7 +536,7 @@ function drawScatterCell(context, rect, panel, opts) {
         compact
     );
 
-    const style = _scatterStyle;
+    const style = activeScatterState.style;
     const geometry = { context, toCanvasX, toCanvasY, originX, originY, plotSize, compact, opts };
     if (style === "trail" && bounded) {
         drawTrail(geometry, panel);
@@ -742,7 +799,7 @@ function renderScatterKey(bounded) {
         COLOR_COMMON,
         "Most frequent allele in either deme (ties: first)"
     );
-    if (markPointsFor(_scatterStyle, true).ramp) {
+    if (markPointsFor(activeScatterState.style, true).ramp) {
         const label = document.createElement("span");
         label.className = "scatter-key-label";
         label.textContent = "Alleles here:";

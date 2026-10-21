@@ -4,12 +4,12 @@
  *
  * Two jobs:
  *
- * 1. Know whether the Configure form has changes that are not saved. The
- *    form counts as saved after it is loaded (the initial form, a preset,
- *    an example, a saved run, a file), after "Save for later", after a run
- *    starts from it, and after "Save configuration…". Anything else that
- *    makes the form differ from that snapshot is an unsaved edit, and the
- *    page tells Python (`Api.report_unsaved_edits`) whenever the answer
+ * 1. Know whether the Configure form or sweep setup has changes that are
+ *    not saved. The form counts as saved after it is loaded (the initial
+ *    form, a preset, an example, a saved run, a file), after "Save for
+ *    later", after a run starts from it, and after "Save configuration…".
+ *    Sweep setup is tracked separately because saved runs do not keep it.
+ *    The page tells Python (`Api.report_unsaved_edits`) whenever the answer
  *    changes. Python, not the page, decides whether a close needs the
  *    dialog, so a page that fails to load can never trap the window.
  * 2. Show the dialog when Python vetoes a close (`Api.on_window_closing`)
@@ -28,13 +28,9 @@ const closePrimaryButton = document.getElementById("confirm-close-primary-button
 const closeRunNameInput = document.getElementById("run-name-input");
 const closeRunDescriptionInput = document.getElementById("run-description-input");
 
-// The form as it was when it last counted as saved, or `null` until the
-// first form has loaded (nothing can be unsaved before then).
-let savedFormSnapshot = null;
-// Set by `applyFormValues`: the next settled revalidation takes the snapshot.
-let loadedFormPending = false;
 // What Python was last told, so a bridge call is made only on a change.
 let reportedUnsavedEdits = false;
+let reportedDirtyDocuments = null;
 
 // The words for each thing a close would affect, in the order shown.
 const CLOSE_REASONS = [
@@ -58,38 +54,120 @@ const CLOSE_REASONS = [
 ];
 
 /**
- * The form and run labels as one comparable string.
- * @returns {string} A snapshot of everything "Save for later" would keep.
+ * One document's form and controls as a comparable string.
+ * @param {string} tabId
+ * @returns {string} A snapshot of what "Save for later" keeps.
  */
-function formSnapshot() {
+function formSnapshot(tabId) {
+    const state = window.fim.workspace.get(tabId);
+    if (!state) {
+        return "";
+    }
+    const controls = runControlsState(tabId) || {};
+    const values =
+        state.formValues ||
+        (window.fim.workspace.selectedId() === tabId
+            ? collectFormValues(tabId)
+            : {});
     return JSON.stringify([
-        collectFormValues(),
-        closeRunNameInput.value.trim(),
-        closeRunDescriptionInput.value.trim(),
+        values,
+        controls.runName || "",
+        controls.runDescription || "",
+        controls.studySelection || "",
+        controls.newStudyName || "",
+        controls.newStudyDescription || "",
+        controls.newStudyExperimentId || "",
     ]);
 }
 
-/** Tell Python when "has unsaved edits" flips. */
+/** Snapshot sweep setup, which is not stored with a saved run. */
+function sweepSnapshot(tabId) {
+    return JSON.stringify(
+        window.fim.getSweepDocumentSnapshot
+            ? window.fim.getSweepDocumentSnapshot(tabId)
+            : null
+    );
+}
+
+/** Recompute document dirty state and tell Python when the aggregate flips. */
 function reportUnsavedEdits() {
-    if (savedFormSnapshot === null) {
-        return;
+    let unsaved = false;
+    let changed = false;
+    const dirtyDocuments = [];
+    for (const tabId of window.fim.workspace.ids()) {
+        const state = window.fim.workspace.get(tabId);
+        const wasDirty = state.formDirty === true;
+        if (state.cleanFormSnapshot === null || state.cleanFormSnapshot === undefined) {
+            state.formDirty = false;
+            changed ||= wasDirty;
+            continue;
+        }
+        state.formDirty =
+            formSnapshot(tabId) !== state.cleanFormSnapshot ||
+            sweepSnapshot(tabId) !== state.cleanSweepSnapshot;
+        changed ||= wasDirty !== state.formDirty;
+        unsaved ||= state.formDirty;
+        if (state.formDirty) {
+            const controls = runControlsState(tabId) || {};
+            const label =
+                controls.runName?.trim() ||
+                state.runTitle?.state?.runName ||
+                (state.label === "Untitled" ? "New configuration" : state.label);
+            dirtyDocuments.push({
+                tabId,
+                label: `${label}${state.kind ? ` (${state.kind})` : ""}`,
+            });
+        }
     }
-    const unsaved = formSnapshot() !== savedFormSnapshot;
-    if (unsaved === reportedUnsavedEdits) {
+    if (changed) {
+        window.fim.workspace.notifyChange();
+    }
+    const dirtyDocumentsSnapshot = JSON.stringify(dirtyDocuments);
+    if (
+        unsaved === reportedUnsavedEdits &&
+        dirtyDocumentsSnapshot === reportedDirtyDocuments
+    ) {
         return;
     }
     reportedUnsavedEdits = unsaved;
-    window.pywebview.api.report_unsaved_edits(unsaved).catch(() => {
-        // Closing, or the bridge is gone: nothing left to protect.
-    });
+    reportedDirtyDocuments = dirtyDocumentsSnapshot;
+    window.pywebview.api
+        .report_unsaved_edits(unsaved, dirtyDocuments)
+        .then((result) => {
+            if (!result || !result.ok) {
+                console.error(
+                    "Could not update the close dialog's unsaved documents:",
+                    result?.message || "unknown bridge error"
+                );
+            }
+        })
+        .catch((error) => {
+            console.error("Could not update the close dialog's unsaved documents", error);
+        });
 }
 
-/** Treat the form as saved, as it is right now. */
-window.fim.markFormClean = function markFormClean() {
-    savedFormSnapshot = formSnapshot();
+/** Treat one document as saved, as it is right now. */
+window.fim.markFormClean = function markFormClean(
+    tabId = window.fim.workspace.selectedId()
+) {
+    if (tabId === null || !window.fim.workspace.get(tabId)) {
+        return;
+    }
+    if (window.fim.workspace.selectedId() === tabId) {
+        collectFormValues(tabId);
+    }
+    const state = window.fim.workspace.get(tabId);
+    state.cleanFormSnapshot = formSnapshot(tabId);
+    if (state.cleanSweepSnapshot === undefined) {
+        state.cleanSweepSnapshot = sweepSnapshot(tabId);
+    }
+    state.formDirty = false;
     reportUnsavedEdits();
+    window.fim.workspace.notifyChange();
     // For the tests (and nothing else): the first snapshot exists.
-    window.__fimCloseGuardReady = true;
+    if (window.fim.workspace.selectedId() === tabId) {
+        window.__fimCloseGuardReady = true;
+    }
 };
 
 /**
@@ -97,19 +175,32 @@ window.fim.markFormClean = function markFormClean() {
  * by the caller a moment later, so the snapshot waits for the revalidation
  * every load ends with, then for the tick after it.
  */
-window.fim.expectLoadedForm = function expectLoadedForm() {
-    loadedFormPending = true;
+window.fim.expectLoadedForm = function expectLoadedForm(
+    tabId = window.fim.workspace.selectedId()
+) {
+    const state = tabId === null ? null : window.fim.workspace.get(tabId);
+    if (state) {
+        state.loadedFormPending = true;
+    }
 };
 
 /** `revalidate` finished: take a pending snapshot, or look for edits. */
-window.fim.formRevalidated = function formRevalidated() {
-    if (loadedFormPending) {
-        loadedFormPending = false;
-        setTimeout(window.fim.markFormClean, 0);
+window.fim.formRevalidated = function formRevalidated(
+    tabId = window.fim.workspace.selectedId()
+) {
+    const state = tabId === null ? null : window.fim.workspace.get(tabId);
+    if (!state) {
+        return;
+    }
+    if (state.loadedFormPending) {
+        state.loadedFormPending = false;
+        setTimeout(() => window.fim.markFormClean(tabId), 0);
         return;
     }
     reportUnsavedEdits();
 };
+
+window.fim.refreshUnsavedEdits = reportUnsavedEdits;
 
 /**
  * Show why `needs` makes closing worth a question, and the buttons for it.
@@ -123,6 +214,30 @@ function describeClose(needs) {
             return item;
         })
     );
+    const dirtyDocumentsList = document.getElementById(
+        "confirm-close-dirty-documents"
+    );
+    const dirtyDocumentsSection = document.getElementById(
+        "confirm-close-dirty-documents-section"
+    );
+    dirtyDocumentsList.replaceChildren(
+        ...(needs.dirtyDocuments || []).map((item) => {
+            const node = document.createElement("li");
+            node.textContent = `${item.label} — ${item.tabId}`;
+            return node;
+        })
+    );
+    dirtyDocumentsSection.hidden =
+        !needs.dirtyDocuments || needs.dirtyDocuments.length === 0;
+    const activeJob = document.getElementById("confirm-close-active-job");
+    if (needs.activeJob) {
+        activeJob.textContent =
+            `Active job: ${needs.activeJob.kind} — ${needs.activeJob.id}`;
+        activeJob.hidden = false;
+    } else {
+        activeJob.textContent = "";
+        activeJob.hidden = true;
+    }
     closeDiscardButton.hidden = !needs.unsavedEdits;
     if (needs.unsavedEdits) {
         closePrimaryButton.textContent = "Save and close";
@@ -187,6 +302,19 @@ async function onClosePrimaryClicked() {
             setCloseButtonsDisabled(false);
             return;
         }
+        const tabId = window.fim.workspace.selectedId();
+        const state = tabId === null ? null : window.fim.workspace.get(tabId);
+        if (state && state.formDirty) {
+            closeError.textContent =
+                "The configuration was saved, but the sweep setup is not " +
+                "stored with saved runs. Close without saving to discard " +
+                "the sweep setup, or keep working.";
+            closeError.hidden = false;
+            setCloseButtonsDisabled(false);
+            closePrimaryButton.textContent = "Configuration saved";
+            closePrimaryButton.disabled = true;
+            return;
+        }
     }
     await finishClose();
 }
@@ -201,10 +329,24 @@ function wireCloseGuard() {
     closePrimaryButton.addEventListener("click", onClosePrimaryClicked);
     closeDiscardButton.addEventListener("click", onCloseDiscardClicked);
     closeKeepButton.addEventListener("click", () => closeDialog.close());
-    // The run name and description are part of what "Save for later" keeps.
-    for (const input of [closeRunNameInput, closeRunDescriptionInput]) {
-        input.addEventListener("input", reportUnsavedEdits);
-    }
+    const reportRelevantEdit = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        if (
+            target.form === document.getElementById("input-form") ||
+            target === closeRunNameInput ||
+            target === closeRunDescriptionInput ||
+            target.closest("#run-details-row") ||
+            target.closest("#modal-sweep")
+        ) {
+            reportUnsavedEdits();
+        }
+    };
+    document.addEventListener("input", reportRelevantEdit);
+    document.addEventListener("change", reportRelevantEdit);
+    window.fim.workspace.onChange(reportUnsavedEdits);
 }
 
 whenApiReady(wireCloseGuard);

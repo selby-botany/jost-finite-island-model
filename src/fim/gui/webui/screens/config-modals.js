@@ -41,7 +41,21 @@ function setFieldValue(name, value) {
     field.value = value;
 }
 
-function applyFormValues(values) {
+function applyFormValues(values, options = {}) {
+    const tabId = options.tabId ?? window.fim.workspace.selectedId();
+    const state = tabId === null ? null : window.fim.workspace.get(tabId);
+    if (
+        options.render === false &&
+        state &&
+        window.fim.workspace.selectedId() !== tabId
+    ) {
+        state.formValues = { ...values };
+        state.validationResult = null;
+        if (options.expectLoaded !== false) {
+            window.fim.expectLoadedForm(tabId);
+        }
+        return;
+    }
     for (const [key, value] of Object.entries(values)) {
         setFieldValue(key, value);
     }
@@ -63,12 +77,30 @@ function applyFormValues(values) {
     window.fim.rebuildP0Grid();
     window.fim.updateFixedPerDemePreview();
     syncConditionalVisibility();
-    // A loaded form is the new "nothing to save" baseline once it has
-    // settled (`screens/close-guard.js`).
-    window.fim.expectLoadedForm();
+    if (state) {
+        state.formValues = collectFormValues(tabId);
+        state.validationResult = null;
+    }
+    if (options.expectLoaded !== false) {
+        // A loaded form is the new "nothing to save" baseline once it has
+        // settled (`screens/close-guard.js`).
+        window.fim.expectLoadedForm(tabId);
+    }
 }
 
-function collectFormValues() {
+function collectFormValues(
+    tabId = window.fim.workspace.selectedId(),
+    readCurrentDom = false
+) {
+    const state = tabId === null ? null : window.fim.workspace.get(tabId);
+    if (
+        state &&
+        tabId !== window.fim.workspace.selectedId() &&
+        !readCurrentDom &&
+        state.formValues
+    ) {
+        return { ...state.formValues };
+    }
     const data = new FormData(form);
     const values = {};
     for (const [key, value] of data.entries()) {
@@ -97,7 +129,10 @@ function collectFormValues() {
     // Except after a configuration is loaded: its own run settings then
     // apply to this run, so they are submitted here and the server keeps
     // them (`screens/run-settings-notice.js`).
-    Object.assign(values, perRunSettingValues());
+    Object.assign(values, perRunSettingValues(tabId));
+    if (state) {
+        state.formValues = { ...values };
+    }
     return values;
 }
 
@@ -184,37 +219,96 @@ function markTabError(tab, field) {
  * not a flag, for the same reason as `__fimScrubberPending`: edits in
  * quick succession overlap.
  */
-async function revalidate() {
+function showValidationResult(result) {
     clearTabErrorDots();
-    const values = collectFormValues();
+    if (result.ok) {
+        runButton.disabled = false;
+        runReason.textContent = result.note || "";
+        return;
+    }
+    runButton.disabled = true;
+    const location = result.field ? ` (${result.field})` : "";
+    runReason.textContent = `${result.message}${location}`;
+    markTabError(result.tab, result.field);
+}
+
+async function revalidate(tabId = window.fim.workspace.selectedId()) {
+    if (tabId === null) {
+        return null;
+    }
+    const state = window.fim.workspace.get(tabId);
+    if (!state) {
+        return null;
+    }
+    if (window.fim.workspace.selectedId() === tabId) {
+        clearTabErrorDots();
+    }
+    const values = collectFormValues(tabId);
     // The parameter strip (design §3.2) reflects the form's own current
     // values regardless of whether they validate -- a strip that only
     // updated on a *valid* form would freeze on the last good value
     // while a user is mid-edit, exactly the "lost track of what I set"
     // complaint the strip exists to fix.
-    window.fim.updateParameterStrip(values);
-    window.__fimValidationPending = (window.__fimValidationPending || 0) + 1;
+    if (window.fim.workspace.selectedId() === tabId) {
+        window.fim.updateParameterStrip(values);
+    }
+    const pending = window.fim.workspace.settled(tabId, "validationPending") || 0;
+    window.fim.workspace.settle(tabId, "validationPending", pending + 1);
     try {
         const result = await window.pywebview.api.validate_form(values);
-        if (result.ok) {
-            runButton.disabled = false;
-            // A valid form with a derived convergence window says how long
-            // the run is expected to take, so a run of tens of thousands of
-            // generations is never a surprise; empty when both were
-            // explicit.
-            runReason.textContent = result.note || "";
-            return result;
+        if (window.fim.workspace.get(tabId) === state) {
+            state.validationResult = result;
+            if (window.fim.workspace.selectedId() === tabId) {
+                showValidationResult(result);
+            }
         }
-        runButton.disabled = true;
-        const location = result.field ? ` (${result.field})` : "";
-        runReason.textContent = `${result.message}${location}`;
-        markTabError(result.tab, result.field);
         return result;
     } finally {
-        window.__fimValidationPending -= 1;
-        window.fim.formRevalidated();
+        if (window.fim.workspace.get(tabId) === state) {
+            const remaining =
+                (window.fim.workspace.settled(tabId, "validationPending") || 1) - 1;
+            window.fim.workspace.settle(
+                tabId,
+                "validationPending",
+                Math.max(0, remaining)
+            );
+            window.fim.formRevalidated(tabId);
+        }
     }
 }
+
+window.fim.collectFormValues = collectFormValues;
+window.fim.revalidateForm = revalidate;
+
+window.fim.workspace.onSelectionChange((selectedId, previousId) => {
+    const workspace = window.fim.workspace;
+    let outgoingValues = null;
+    if (previousId !== null && workspace.get(previousId)) {
+        outgoingValues = collectFormValues(previousId, true);
+    }
+    if (selectedId === null) {
+        return;
+    }
+    const state = workspace.get(selectedId);
+    if (!state) {
+        return;
+    }
+    if (!state.readOnly && !state.formValues && outgoingValues) {
+        state.formValues = { ...outgoingValues };
+    }
+    if (!state.readOnly && state.formValues) {
+        applyFormValues(state.formValues, {
+            expectLoaded: false,
+            tabId: selectedId,
+        });
+        window.fim.updateParameterStrip(state.formValues);
+        if (state.validationResult) {
+            showValidationResult(state.validationResult);
+        } else {
+            void revalidate(selectedId);
+        }
+    }
+});
 
 /**
  * Fetch the true starter form and apply it -- `fim.menu.
@@ -236,12 +330,22 @@ async function revalidate() {
  * process-local-only gap P1 item 4 fixes.
  */
 async function resetInputForm() {
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
     const values = await window.pywebview.api.get_starter_form();
+    if (window.fim.workspace.get(tabId) !== documentState) {
+        showRunBanner("The document was closed before the configuration reset.");
+        return;
+    }
     // A new configuration uses Settings' run settings again, never a
     // previously loaded configuration's.
-    window.fim.clearLoadedRunSettings();
-    applyFormValues(values);
-    await revalidate();
+    window.fim.clearLoadedRunSettings(tabId);
+    const selected = window.fim.workspace.selectedId() === tabId;
+    applyFormValues(values, { tabId, render: selected });
+    if (selected) {
+        await revalidate(tabId);
+    }
 }
 
 /**
@@ -254,9 +358,18 @@ async function resetInputForm() {
  * comment), with its own independent seeding there.
  */
 async function loadInitialForm() {
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
     const values = await window.pywebview.api.get_initial_form();
-    applyFormValues(values);
-    await revalidate();
+    if (window.fim.workspace.get(tabId) !== documentState) {
+        return;
+    }
+    const selected = window.fim.workspace.selectedId() === tabId;
+    applyFormValues(values, { tabId, render: selected });
+    if (selected) {
+        await revalidate(tabId);
+    }
 }
 
 /**

@@ -63,19 +63,89 @@ const sweepTitle = document.getElementById("sweep-title");
 const sweepViewResultsButton = document.getElementById("sweep-view-results-button");
 
 let sweepKeys = null;
-let sweepBaseValues = {};
 let sweepPlanTimer = null;
-let sweepPlanSequence = 0;
-let sweepConfirmArmed = false;
-// The saved configuration: `{request, summary, pointCount}` once Done was
-// pressed in the dialog, else `null`.
-let sweepConfig = null;
-let sweepLastPlan = null;
+let sweepDialogTabId = null;
 let sweepEtaSequence = 0;
 let sweepLastStudyId = null;
 
 window.__fimSweepPlanReady = false;
 window.__fimSweepFinished = false;
+
+function sweepSetupFor(tabId = window.fim.workspace.selectedId()) {
+    const state = tabId === null ? null : window.fim.workspace.get(tabId);
+    if (!state) {
+        return null;
+    }
+    if (!state.sweepSetup) {
+        state.sweepSetup = {
+            enabled: false,
+            config: null,
+            draft: null,
+            baseValues: null,
+            lastPlan: null,
+            planSequence: 0,
+            confirmArmed: false,
+        };
+    }
+    return state.sweepSetup;
+}
+
+window.fim.getSweepDocumentSnapshot = function getSweepDocumentSnapshot(tabId) {
+    const setup = sweepSetupFor(tabId);
+    return setup
+        ? {
+              enabled: setup.enabled,
+              config: setup.config,
+              draft: setup.draft,
+          }
+        : null;
+};
+
+function setSweepPlanReady(tabId, value) {
+    if (!window.fim.workspace.get(tabId)) {
+        return;
+    }
+    window.fim.workspace.settle(tabId, "sweepPlanReady", value);
+    if (window.fim.workspace.selectedId() === tabId) {
+        window.__fimSweepPlanReady = value;
+    }
+}
+
+function setSweepCostReady(tabId, value) {
+    if (!window.fim.workspace.get(tabId)) {
+        return;
+    }
+    window.fim.workspace.settle(tabId, "sweepCostReady", value);
+    if (window.fim.workspace.selectedId() === tabId) {
+        window.__fimSweepCostReady = value;
+    }
+}
+
+function restoreSweepControls() {
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
+    const setup = sweepSetupFor(tabId);
+    if (!setup || !documentState) {
+        sweepProgressView.hidden = true;
+        return;
+    }
+    sweepCheckbox.checked = setup.enabled;
+    syncSweepControls(tabId);
+    if (documentState.sweepResultsData) {
+        sweepProgressView.hidden = true;
+    } else if (
+        documentState.jobKind === "sweep" &&
+        documentState.sweepStudyId
+    ) {
+        void enterSweepProgress(documentState.sweepStudyId);
+    } else {
+        sweepProgressView.hidden = true;
+    }
+}
+
+window.fim.workspace.onSelectionChange(restoreSweepControls);
+restoreSweepControls();
 
 /**
  * Show (or, given a falsy `message`, hide) this screen's banner.
@@ -387,40 +457,102 @@ function buildSweepRequest() {
     };
 }
 
+function readSweepDraft() {
+    const axes = Array.from(sweepAxesContainer.querySelectorAll(".sweep-axis")).map(
+        (row) => {
+            const key = row.querySelector(".sweep-axis-key").value;
+            const info = sweepKeyInfo(key);
+            if (info.kind === "choice") {
+                return {
+                    key,
+                    initial: {
+                        choices: Array.from(
+                            row.querySelectorAll(".sweep-axis-choices input")
+                        )
+                            .filter((input) => input.checked)
+                            .map((input) => input.value),
+                    },
+                };
+            }
+            return {
+                key,
+                initial: {
+                    mode: row.querySelector(".sweep-axis-mode").value,
+                    start: row.querySelector(".sweep-axis-start").value,
+                    stop: row.querySelector(".sweep-axis-stop").value,
+                    count: row.querySelector(".sweep-axis-count").value,
+                    scale: row.querySelector(".sweep-axis-scale").value,
+                    list: row.querySelector(".sweep-axis-list").value,
+                },
+            };
+        }
+    );
+    return {
+        axes,
+        retention: sweepKeepSelect.value,
+        keepLast: sweepKeepLastInput.value,
+        keepBurnIn: sweepKeepBurnInBox.checked,
+        history: sweepHistorySelect.value,
+        strategy: sweepStrategySelect.value,
+        seedPolicy: sweepSeedPolicySelect.value,
+        pointsAtOnce: sweepPointsAtOnceSelect.value,
+    };
+}
+
 /** Schedule a fresh plan after the user stops editing. */
 function onSweepAxesChanged() {
     sweepDoneButton.disabled = true;
-    window.__fimSweepPlanReady = false;
+    const tabId = sweepDialogTabId;
+    const setup = sweepSetupFor(tabId);
+    if (!setup) {
+        return;
+    }
+    setup.draft = readSweepDraft();
+    const sequence = (setup.planSequence += 1);
+    setSweepPlanReady(tabId, false);
     sweepAddAxisButton.disabled =
         sweepAxisKeys().length >= (sweepKeys ? sweepKeys.length : 0);
     window.clearTimeout(sweepPlanTimer);
-    sweepPlanTimer = window.setTimeout(refreshSweepPlan, SWEEP_PLAN_DEBOUNCE_MS);
+    sweepPlanTimer = window.setTimeout(
+        () => refreshSweepPlan(tabId, sequence),
+        SWEEP_PLAN_DEBOUNCE_MS
+    );
 }
 
 /**
  * Ask the bridge for the plan and draw it.
+ * @param {string} tabId The document that opened the setup dialog.
+ * @param {number} sequence This document's plan revision.
  */
-async function refreshSweepPlan() {
-    const sequence = (sweepPlanSequence += 1);
+async function refreshSweepPlan(tabId, sequence) {
+    const setup = sweepSetupFor(tabId);
+    if (!setup) {
+        showSweepBanner("The document for this sweep setup was closed.");
+        return;
+    }
     let request;
     try {
         request = buildSweepRequest();
     } catch (error) {
-        drawSweepPlanProblem(error.message);
+        drawSweepPlanProblem(error.message, tabId);
         return;
     }
-    const plan = await window.pywebview.api.plan_sweep(sweepBaseValues, request);
-    if (sequence !== sweepPlanSequence) {
+    const plan = await window.pywebview.api.plan_sweep(setup.baseValues, request);
+    if (
+        !window.fim.workspace.get(tabId) ||
+        sweepSetupFor(tabId) !== setup ||
+        setup.planSequence !== sequence
+    ) {
         return;
     }
     if (!plan.ok) {
-        drawSweepPlanProblem(plan.message);
+        drawSweepPlanProblem(plan.message, tabId);
         return;
     }
-    sweepLastPlan = plan;
+    setup.lastPlan = plan;
     drawSweepPlan(plan);
-    window.__fimSweepPlanReady = true;
-    await refreshSweepCost(sequence, request);
+    setSweepPlanReady(tabId, true);
+    await refreshSweepCost(tabId, sequence, request);
 }
 
 /**
@@ -428,21 +560,27 @@ async function refreshSweepPlan() {
  * lines. It is a separate request from the plan because the first
  * measurement of a size class takes a few seconds (it is remembered after
  * that), and the plan is redrawn on every edit; a newer plan discards it.
+ * @param {string} tabId The document that opened the setup dialog.
  * @param {number} sequence The plan this estimate is for.
  * @param {object} request The bridge request the plan was made from.
  */
-async function refreshSweepCost(sequence, request) {
-    window.__fimSweepCostReady = false;
+async function refreshSweepCost(tabId, sequence, request) {
+    setSweepCostReady(tabId, false);
     sweepCost.hidden = false;
     sweepCostTime.textContent = "Measuring the engine…";
     showSweepKeepFigures(null);
     sweepCostDisk.textContent = "";
     sweepCostProbe.textContent = "";
+    const setupBeforeRequest = sweepSetupFor(tabId);
+    if (!setupBeforeRequest) {
+        return;
+    }
     const estimate = await window.pywebview.api.estimate_sweep_cost(
-        sweepBaseValues,
+        setupBeforeRequest.baseValues,
         request
     );
-    if (sequence !== sweepPlanSequence) {
+    const setup = sweepSetupFor(tabId);
+    if (!setup || setup.planSequence !== sequence) {
         return;
     }
     if (!estimate.ok) {
@@ -453,7 +591,7 @@ async function refreshSweepCost(sequence, request) {
         sweepCostProbe.textContent = estimate.probe ?? "";
         showSweepKeepFigures(estimate.cost ? estimate.cost.levelBytes : null);
     }
-    window.__fimSweepCostReady = true;
+    setSweepCostReady(tabId, true);
 }
 
 /** Show the tapering details only when "recent generations" is chosen. */
@@ -501,10 +639,14 @@ function showSweepKeepFigures(levelBytes) {
  * Show a problem with the current axes instead of a plan.
  * @param {string} message
  */
-function drawSweepPlanProblem(message) {
-    sweepLastPlan = null;
+function drawSweepPlanProblem(message, tabId = sweepDialogTabId) {
+    const setup = sweepSetupFor(tabId);
+    if (!setup) {
+        return;
+    }
+    setup.lastPlan = null;
     sweepCost.hidden = true;
-    window.__fimSweepCostReady = true;
+    setSweepCostReady(tabId, true);
     sweepPlanSummary.textContent = message;
     sweepPlanSummary.classList.add("sweep-plan-problem");
     sweepPlanTable.hidden = true;
@@ -512,7 +654,7 @@ function drawSweepPlanProblem(message) {
     for (const span of sweepAxesContainer.querySelectorAll(".sweep-axis-values")) {
         span.textContent = "";
     }
-    window.__fimSweepPlanReady = true;
+    setSweepPlanReady(tabId, true);
 }
 
 /**
@@ -659,6 +801,12 @@ function sweepStudyDetails(status) {
  * @param {string} studyId
  */
 async function enterSweepProgress(studyId) {
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
+    if (documentState) {
+        documentState.sweepStudyId = studyId;
+    }
     sweepLastStudyId = studyId;
     window.__fimSweepFinished = false;
     sweepTitle.textContent = "Sweep running";
@@ -672,6 +820,13 @@ async function enterSweepProgress(studyId) {
     sweepViewResultsButton.hidden = true;
     document.getElementById("sweep-results").hidden = true;
     const status = await window.pywebview.api.get_sweep_status(studyId);
+    if (
+        tabId === null ||
+        window.fim.workspace.selectedId() !== tabId ||
+        window.fim.workspace.get(tabId) !== documentState
+    ) {
+        return;
+    }
     if (!status.ok) {
         showSweepBanner(status.message);
         return;
@@ -918,32 +1073,70 @@ function sweepAxisInitial(entry) {
  */
 window.fim.openSweepDialog = async function openSweepDialog(options = {}) {
     showSweepDialogBanner("");
-    window.__fimSweepPlanReady = false;
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
+    const setup = sweepSetupFor(tabId);
+    if (!setup || !documentState) {
+        return;
+    }
+    if (sweepDialog.open && sweepDialogTabId !== tabId) {
+        showRunBanner("Finish or cancel the open sweep setup before switching documents.");
+        return;
+    }
+    sweepDialogTabId = tabId;
+    setup.baseValues = { ...collectFormValues(tabId) };
+    setSweepPlanReady(tabId, false);
     if (sweepKeys === null) {
         sweepKeys = await window.pywebview.api.get_sweepable_keys();
     }
-    sweepBaseValues = collectFormValues();
-    sweepBaseSummary.textContent = sweepBaseSummaryText(sweepBaseValues);
+    if (window.fim.workspace.get(tabId) !== documentState) {
+        sweepDialogTabId = null;
+        showRunBanner("The document was closed before sweep setup opened.");
+        return;
+    }
+    sweepBaseSummary.textContent = sweepBaseSummaryText(setup.baseValues);
     sweepAxesContainer.replaceChildren();
-    let axes = options.axes;
-    if (!axes || axes.length === 0) {
-        axes =
-            sweepConfig === null
-                ? [{ key: "m" }]
-                : sweepConfig.request.axes.map(sweepAxisInitial);
+    if (!setup.draft) {
+        if (setup.config) {
+            const recording = setup.config.request.recording ?? {};
+            setup.draft = {
+                axes: setup.config.request.axes.map(sweepAxisInitial),
+                retention: recording.retention ?? "full",
+                keepLast: String(
+                    recording.keepLast ?? SWEEP_KEEP_LAST_DEFAULT
+                ),
+                keepBurnIn: Boolean(recording.keepBurnIn),
+                history: recording.history ?? "compact",
+                strategy: setup.config.request.strategy ?? "grid",
+                seedPolicy: setup.config.request.seedPolicy ?? "spaced",
+                pointsAtOnce: setup.config.request.pointsAtOnce ?? "auto",
+            };
+        } else {
+            setup.draft = {
+                axes: [{ key: "m", initial: {} }],
+                retention: "full",
+                keepLast: String(SWEEP_KEEP_LAST_DEFAULT),
+                keepBurnIn: false,
+                history: "compact",
+                strategy: "grid",
+                seedPolicy: "spaced",
+                pointsAtOnce: "auto",
+            };
+        }
     }
-    if (sweepConfig !== null) {
-        const recording = sweepConfig.request.recording ?? {};
-        sweepKeepSelect.value = recording.retention ?? "full";
-        sweepKeepLastInput.value = String(recording.keepLast ?? SWEEP_KEEP_LAST_DEFAULT);
-        sweepKeepBurnInBox.checked = Boolean(recording.keepBurnIn);
-        sweepHistorySelect.value = recording.history ?? "compact";
-        syncSweepKeepControls();
-        sweepStrategySelect.value = sweepConfig.request.strategy ?? "grid";
-        sweepSeedPolicySelect.value = sweepConfig.request.seedPolicy;
-        sweepPointsAtOnceSelect.value = sweepConfig.request.pointsAtOnce ?? "auto";
+    if (options.axes && options.axes.length > 0) {
+        setup.draft.axes = options.axes;
     }
-    for (const axis of axes) {
+    sweepKeepSelect.value = setup.draft.retention;
+    sweepKeepLastInput.value = setup.draft.keepLast;
+    sweepKeepBurnInBox.checked = setup.draft.keepBurnIn;
+    sweepHistorySelect.value = setup.draft.history;
+    sweepStrategySelect.value = setup.draft.strategy;
+    sweepSeedPolicySelect.value = setup.draft.seedPolicy;
+    sweepPointsAtOnceSelect.value = setup.draft.pointsAtOnce;
+    syncSweepKeepControls();
+    for (const axis of setup.draft.axes) {
         addSweepAxisRow(axis.key, axis.initial || {});
     }
     if (!sweepDialog.open) {
@@ -953,11 +1146,20 @@ window.fim.openSweepDialog = async function openSweepDialog(options = {}) {
 };
 
 /** Reflect the saved configuration on Configure's Sweep box and summary. */
-function syncSweepControls() {
+function syncSweepControls(tabId = window.fim.workspace.selectedId()) {
+    if (tabId === null || window.fim.workspace.selectedId() !== tabId) {
+        return;
+    }
+    const setup = sweepSetupFor(tabId);
+    if (!setup) {
+        return;
+    }
     const enabled = sweepCheckbox.checked;
+    setup.enabled = enabled;
     sweepConfigureButton.hidden = !enabled;
-    sweepConfigureSummary.hidden = !enabled || sweepConfig === null;
-    sweepConfigureSummary.textContent = sweepConfig === null ? "" : sweepConfig.summary;
+    sweepConfigureSummary.hidden = !enabled || setup.config === null;
+    sweepConfigureSummary.textContent =
+        setup.config === null ? "" : setup.config.summary;
 }
 
 /**
@@ -977,11 +1179,26 @@ function sweepSummaryText(plan) {
  * @param {{axes: object[], seedPolicy: string}} request
  * @param {object} plan Its plan, for the summary.
  */
-function saveSweepConfiguration(request, plan) {
-    sweepConfig = { request, summary: sweepSummaryText(plan), pointCount: plan.points.length };
-    sweepConfirmArmed = false;
-    sweepCheckbox.checked = true;
-    syncSweepControls();
+function saveSweepConfiguration(request, plan, tabId = sweepDialogTabId) {
+    const setup = sweepSetupFor(tabId);
+    if (!setup) {
+        return false;
+    }
+    setup.config = {
+        request,
+        summary: sweepSummaryText(plan),
+        pointCount: plan.points.length,
+    };
+    setup.lastPlan = plan;
+    setup.draft = sweepDialogTabId === tabId ? readSweepDraft() : setup.draft;
+    setup.confirmArmed = false;
+    setup.enabled = true;
+    if (window.fim.workspace.selectedId() === tabId) {
+        sweepCheckbox.checked = true;
+        syncSweepControls(tabId);
+    }
+    window.fim.refreshUnsavedEdits();
+    return true;
 }
 
 /**
@@ -991,12 +1208,34 @@ function saveSweepConfiguration(request, plan) {
  * @returns {Promise<{ok: boolean, message?: string}>}
  */
 window.fim.setSweepConfiguration = async function setSweepConfiguration(request) {
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
+    const setup = sweepSetupFor(tabId);
+    if (!setup || !documentState) {
+        return { ok: false, message: "No document is selected." };
+    }
     const full = { strategy: "grid", seedPolicy: "spaced", ...request };
-    const plan = await window.pywebview.api.plan_sweep(collectFormValues(), full);
+    const baseValues = collectFormValues(tabId);
+    const plan = await window.pywebview.api.plan_sweep(baseValues, full);
+    if (window.fim.workspace.get(tabId) !== documentState) {
+        return { ok: false, message: "The document was closed before the sweep was planned." };
+    }
     if (!plan.ok) {
         return plan;
     }
-    saveSweepConfiguration(full, plan);
+    setup.baseValues = baseValues;
+    setup.draft = {
+        axes: full.axes.map(sweepAxisInitial),
+        retention: full.recording?.retention ?? "full",
+        keepLast: String(full.recording?.keepLast ?? SWEEP_KEEP_LAST_DEFAULT),
+        keepBurnIn: Boolean(full.recording?.keepBurnIn),
+        history: full.recording?.history ?? "compact",
+        strategy: full.strategy,
+        seedPolicy: full.seedPolicy,
+        pointsAtOnce: full.pointsAtOnce ?? "auto",
+    };
+    saveSweepConfiguration(full, plan, tabId);
     return { ok: true };
 };
 
@@ -1004,8 +1243,11 @@ window.fim.setSweepConfiguration = async function setSweepConfiguration(request)
  * Whether Configure's Sweep box is on and holds a configuration.
  * @returns {boolean}
  */
-window.fim.isSweepEnabled = function isSweepEnabled() {
-    return sweepCheckbox.checked && sweepConfig !== null;
+window.fim.isSweepEnabled = function isSweepEnabled(
+    tabId = window.fim.workspace.selectedId()
+) {
+    const setup = sweepSetupFor(tabId);
+    return setup !== null && setup.enabled && setup.config !== null;
 };
 
 /**
@@ -1014,26 +1256,76 @@ window.fim.isSweepEnabled = function isSweepEnabled() {
  * @param {string|null} studyId Configure's own study choice.
  * @returns {Promise<void>}
  */
-window.fim.runConfiguredSweep = async function runConfiguredSweep(studyId) {
-    showRunBanner("");
+window.fim.runConfiguredSweep = async function runConfiguredSweep(
+    studyId,
+    tabId = window.fim.workspace.selectedId()
+) {
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
+    const setup = sweepSetupFor(tabId);
+    if (!documentState || !setup || setup.config === null) {
+        if (window.fim.workspace.selectedId() === tabId) {
+            showRunBanner("Set up a valid sweep before running it.");
+        }
+        return;
+    }
+    const values = collectFormValues(tabId);
+    const config = setup.config;
+    const confirmationArmed = setup.confirmArmed;
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner("");
+    }
+    documentState.jobKind = "sweep";
+    documentState.jobState = "starting";
+    window.fim.workspace.notifyChange();
     const result = await window.pywebview.api.start_sweep(
-        collectFormValues(),
-        sweepConfig.request,
+        values,
+        config.request,
         studyId,
-        sweepConfirmArmed
+        confirmationArmed
     );
-    if (result.needsConfirmation && !sweepConfirmArmed) {
-        sweepConfirmArmed = true;
-        showRunBanner(
-            `This sweep has ${result.total} points. Press Run again to confirm.`
-        );
+    if (window.fim.workspace.get(tabId) !== documentState) {
+        return;
+    }
+    if (result.needsConfirmation && !confirmationArmed) {
+        setup.confirmArmed = true;
+        if (window.fim.workspace.selectedId() === tabId) {
+            showRunBanner(
+                `This sweep has ${result.total} points. Press Run again to confirm.`
+            );
+        }
         return;
     }
     if (!result.ok) {
-        showRunBanner(result.message);
+        documentState.jobKind = null;
+        documentState.jobState = null;
+        window.fim.workspace.notifyChange();
+        if (window.fim.workspace.selectedId() === tabId) {
+            showRunBanner(`${documentState.label}: ${result.message}`);
+        } else {
+            documentState.startRefusal =
+                `${documentState.label}: ${result.message}`;
+            window.fim.workspace.notifyChange();
+        }
+        if (documentState.closeAfterStart) {
+            documentState.closeAfterStart = false;
+            window.fim.requestCloseDocument(tabId);
+        }
         return;
     }
-    sweepConfirmArmed = false;
+    documentState.jobState = "running";
+    documentState.sweepStudyId = result.studyId;
+    if (result.jobId) {
+        window.fim.workspace.attachJob(tabId, result.jobId);
+    }
+    if (documentState.closeAfterStart) {
+        documentState.closeAfterStart = false;
+        window.fim.requestCloseDocument(tabId);
+    }
+    setup.confirmArmed = false;
+    if (window.fim.workspace.selectedId() !== tabId) {
+        return;
+    }
     window.fim.showScreen("screen-sweep");
     document.getElementById("sweep-results").hidden = true;
     sweepProgressView.hidden = false;
@@ -1041,8 +1333,15 @@ window.fim.runConfiguredSweep = async function runConfiguredSweep(studyId) {
 };
 
 sweepCheckbox.addEventListener("change", async () => {
-    syncSweepControls();
-    if (sweepCheckbox.checked && sweepConfig === null) {
+    const tabId = window.fim.workspace.selectedId();
+    const setup = sweepSetupFor(tabId);
+    if (!setup) {
+        return;
+    }
+    setup.enabled = sweepCheckbox.checked;
+    syncSweepControls(tabId);
+    window.fim.refreshUnsavedEdits();
+    if (sweepCheckbox.checked && setup.config === null) {
         await window.fim.openSweepDialog();
     }
 });
@@ -1062,24 +1361,50 @@ for (const control of [
 sweepStrategySelect.addEventListener("change", onSweepAxesChanged);
 sweepSeedPolicySelect.addEventListener("change", onSweepAxesChanged);
 sweepPointsAtOnceSelect.addEventListener("change", onSweepAxesChanged);
-sweepDoneButton.addEventListener("click", () => sweepDialog.close("done"));
+sweepDoneButton.addEventListener("click", () => {
+    if (!sweepSetupFor(sweepDialogTabId)) {
+        showSweepDialogBanner(
+            "This document was closed. The sweep setup was not applied."
+        );
+        window.fim.refreshUnsavedEdits();
+        return;
+    }
+    sweepDialog.close("done");
+});
 sweepDialogCancelButton.addEventListener("click", () => sweepDialog.close("cancel"));
 // Any way of closing the dialog except its Cancel button (Done, Escape) keeps
 // what is on screen when it is valid: edits made in the dialog are never
 // silently thrown away, which is how a sweep once ran with fewer axes than
 // the dialog had shown.
 sweepDialog.addEventListener("close", () => {
+    const tabId = sweepDialogTabId;
+    const setup = sweepSetupFor(tabId);
+    if (!setup) {
+        if (tabId !== null) {
+            showRunBanner("The document was closed; sweep changes were not applied.");
+        }
+        sweepDialogTabId = null;
+        window.fim.refreshUnsavedEdits();
+        return;
+    }
     const keep =
         sweepDialog.returnValue !== "cancel" &&
-        sweepLastPlan !== null &&
+        setup.lastPlan !== null &&
         !sweepDoneButton.disabled;
     if (keep) {
-        saveSweepConfiguration(buildSweepRequest(), sweepLastPlan);
-    } else if (sweepConfig === null) {
-        // Nothing saved: the box is not on with nothing to run.
-        sweepCheckbox.checked = false;
-        syncSweepControls();
+        saveSweepConfiguration(buildSweepRequest(), setup.lastPlan, tabId);
+    } else {
+        setup.draft = null;
+        if (setup.config === null) {
+            setup.enabled = false;
+        }
+        if (window.fim.workspace.selectedId() === tabId) {
+            sweepCheckbox.checked = setup.enabled;
+            syncSweepControls(tabId);
+        }
     }
+    sweepDialogTabId = null;
+    window.fim.refreshUnsavedEdits();
 });
 sweepCancelButton.addEventListener("click", async () => {
     sweepCancelButton.disabled = true;

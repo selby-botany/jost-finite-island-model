@@ -448,11 +448,7 @@ def test_set_live_batch_trajectory_initial_point_updates_in_place(
     stays counted even after that replicate moves on), so calling this
     again with a larger `sampleCount` must overwrite the existing
     generation-0 point in place, not append a second one alongside it.
-    Called directly (`liveBatchTrajectory`, `setLiveBatchTrajectory
-    InitialPoint`, and `STATISTIC_NAMES` are plain globals shared
-    across every script this page loads, this file's own module
-    docstring's "one shared canvas... sharing one global scope" already
-    established) rather than through a real batch, since this is pure
+    Called directly rather than through a real batch, since this is pure
     client-side accumulator logic with no bridge call of its own to
     exercise.
     """
@@ -466,7 +462,9 @@ def test_set_live_batch_trajectory_initial_point_updates_in_place(
             "{D: {mean: '0.01', low: '-0.05', high: '0.06', sampleCount: 5}});"
         ),
         read=(
-            "({length: liveBatchTrajectory.D.length, point: liveBatchTrajectory.D[0]})"
+            "(() => { const points = window.fim.workspace.selected().liveRun"
+            ".liveBatchTrajectory.D; return {length: points.length, "
+            "point: points[0]}; })()"
         ),
         is_ready=lambda value: value is not None,
     )

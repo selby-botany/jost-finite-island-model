@@ -65,7 +65,8 @@ _D_ROW_STATE = """
     return {
         hiddenClass: row.classList.contains('stat-plot-hidden'),
         ariaPressed: row.getAttribute('aria-pressed'),
-        inHiddenSet: hiddenTrajectoryStatistics.has('D'),
+        inHiddenSet: window.fim.workspace.selected().completedView
+            .hiddenTrajectoryStatistics.has('D'),
         trajectoryHidden: isTrajectoryHidden('D'),
     };
 })()

@@ -28,15 +28,27 @@ const scrubberBackwardButton = document.getElementById("scrubber-step-backward")
 const scrubberRange = document.getElementById("scrubber-range");
 const scrubberLabel = document.getElementById("scrubber-label");
 
-let frames = [];
-let currentIndex = 0;
 let playIntervalId = null;
-// +1 while playing forward, -1 while playing backward, 0 while stopped --
-// which button (if either) is currently the active play/pause toggle.
-let playDirection = 0;
-let onFrame = null;
-let scrubberMode = "replay";
-let isLiveTracking = true;
+
+function getScrubberState(tabId = window.fim.workspace.selectedId()) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (!documentState) {
+        return null;
+    }
+    if (!documentState.scrubber) {
+        documentState.scrubber = {
+            frames: [],
+            currentIndex: 0,
+            playDirection: 0,
+            onFrame: null,
+            mode: "replay",
+            isLiveTracking: true,
+        };
+    }
+    return documentState.scrubber;
+}
+
+let activeScrubberState = getScrubberState();
 
 /**
  * Show the current generation in the readout above the slider. That readout
@@ -59,57 +71,68 @@ function stopScrubber() {
         clearInterval(playIntervalId);
         playIntervalId = null;
     }
-    playDirection = 0;
+    if (activeScrubberState) {
+        activeScrubberState.playDirection = 0;
+    }
     setButtonActive(scrubberForwardButton, false);
     setButtonActive(scrubberBackwardButton, false);
 }
 
 function showCurrentFrame(isLiveHead = false) {
-    const frame = frames[currentIndex];
+    const state = activeScrubberState;
+    if (!state) {
+        return;
+    }
+    const frame = state.frames[state.currentIndex];
     if (!frame) {
         return;
     }
-    scrubberRange.value = String(currentIndex);
+    scrubberRange.value = String(state.currentIndex);
     setGenerationText(`Generation ${frame.generation}`);
-    if (onFrame !== null) {
-        onFrame(frame, currentIndex, isLiveHead);
+    if (state.onFrame !== null) {
+        state.onFrame(frame, state.currentIndex, isLiveHead);
     }
 }
 
 function setCurrentIndex(index, userInitiated = false) {
-    if (frames.length === 0) {
+    const state = activeScrubberState;
+    if (!state || state.frames.length === 0) {
         return;
     }
-    currentIndex = Math.min(Math.max(index, 0), frames.length - 1);
-    if (userInitiated && scrubberMode === "live") {
-        isLiveTracking = currentIndex === frames.length - 1;
+    state.currentIndex = Math.min(
+        Math.max(index, 0),
+        state.frames.length - 1
+    );
+    if (userInitiated && state.mode === "live") {
+        state.isLiveTracking = state.currentIndex === state.frames.length - 1;
     }
-    showCurrentFrame(scrubberMode === "live" && isLiveTracking);
+    showCurrentFrame(state.mode === "live" && state.isLiveTracking);
 }
 
 function stepForward() {
-    if (currentIndex >= frames.length - 1) {
+    const state = activeScrubberState;
+    if (!state || state.currentIndex >= state.frames.length - 1) {
         stopScrubber();
-        if (scrubberMode === "live") {
-            isLiveTracking = true;
+        if (state && state.mode === "live") {
+            state.isLiveTracking = true;
             showCurrentFrame(true);
         }
         return;
     }
-    setCurrentIndex(currentIndex + 1, false);
-    if (scrubberMode === "live" && currentIndex === frames.length - 1) {
-        isLiveTracking = true;
+    setCurrentIndex(state.currentIndex + 1, false);
+    if (state.mode === "live" && state.currentIndex === state.frames.length - 1) {
+        state.isLiveTracking = true;
         stopScrubber();
         showCurrentFrame(true);
     }
 }
 
 function stepBackward() {
-    if (currentIndex <= 0) {
+    if (!activeScrubberState || activeScrubberState.currentIndex <= 0) {
         stopScrubber();
         return;
     }
-    setCurrentIndex(currentIndex - 1, true);
+    setCurrentIndex(activeScrubberState.currentIndex - 1, true);
 }
 
 // Each button is its own play/pause toggle for its own direction,
@@ -118,23 +141,27 @@ function stepBackward() {
 // playback: clicking a playing button stops it; clicking the other one
 // switches direction without needing a separate stop first.
 function togglePlay(direction) {
-    if (playDirection === direction) {
+    const state = activeScrubberState;
+    if (!state) {
+        return;
+    }
+    if (state.playDirection === direction) {
         stopScrubber();
         return;
     }
     stopScrubber();
-    if (direction === 1 && currentIndex >= frames.length - 1) {
+    if (direction === 1 && state.currentIndex >= state.frames.length - 1) {
         // Looping playback, same as the single "Play" button this
         // replaced: restart from the beginning rather than doing
         // nothing when already parked at the last frame.
         setCurrentIndex(0, false);
-    } else if (direction === -1 && currentIndex <= 0) {
-        setCurrentIndex(frames.length - 1, false);
+    } else if (direction === -1 && state.currentIndex <= 0) {
+        setCurrentIndex(state.frames.length - 1, false);
     }
-    if (scrubberMode === "live" && direction === 1) {
-        isLiveTracking = false;
+    if (state.mode === "live" && direction === 1) {
+        state.isLiveTracking = false;
     }
-    playDirection = direction;
+    state.playDirection = direction;
     setButtonActive(direction === 1 ? scrubberForwardButton : scrubberBackwardButton, true);
     playIntervalId = setInterval(direction === 1 ? stepForward : stepBackward, STEP_INTERVAL_MS);
 }
@@ -158,7 +185,9 @@ scrubberRange.addEventListener("input", () => {
  * @returns {Array<number>}
  */
 window.fim.getScrubberGenerations = function getScrubberGenerations() {
-    return frames.map((frame) => frame.generation);
+    return activeScrubberState
+        ? activeScrubberState.frames.map((frame) => frame.generation)
+        : [];
 };
 
 /**
@@ -175,7 +204,11 @@ window.fim.getScrubberGenerations = function getScrubberGenerations() {
  * @returns {Array<object>}
  */
 window.fim.getScrubberTrailPanels = function getScrubberTrailPanels(panel, count) {
-    const current = frames[currentIndex];
+    const state = activeScrubberState;
+    if (!state) {
+        return [];
+    }
+    const current = state.frames[state.currentIndex];
     if (!current) {
         return [];
     }
@@ -183,8 +216,8 @@ window.fim.getScrubberTrailPanels = function getScrubberTrailPanels(panel, count
     if (own !== panel && current.pairPanel !== panel) {
         return [];
     }
-    return frames
-        .slice(Math.max(0, currentIndex - count), currentIndex)
+    return state.frames
+        .slice(Math.max(0, state.currentIndex - count), state.currentIndex)
         .map((frame) => (frame.panels && frame.panels[0]) || frame.pairPanel)
         .filter(Boolean);
 };
@@ -195,11 +228,94 @@ window.fim.getScrubberTrailPanels = function getScrubberTrailPanels(panel, count
  * @param {"live"|"replay"} mode
  */
 window.fim.setScrubberMode = function setScrubberMode(mode) {
-    scrubberMode = mode;
+    if (!activeScrubberState) {
+        return;
+    }
+    activeScrubberState.mode = mode;
     if (mode === "live") {
-        isLiveTracking = true;
+        activeScrubberState.isLiveTracking = true;
     }
 };
+
+window.fim.getScrubberState = function getScrubberStateForSelectedDocument() {
+    const state = activeScrubberState;
+    return state
+        ? {
+              generations: state.frames.map((frame) => frame.generation),
+              currentIndex: state.currentIndex,
+              playDirection: state.playDirection,
+              mode: state.mode,
+              isLiveTracking: state.isLiveTracking,
+          }
+        : null;
+};
+
+/**
+ * Return the index of whichever frame's own generation is closest to
+ * `targetGeneration`, breaking a tie toward the earlier frame.
+ *
+ * Only ever called right after `decimateLiveFramesIfNeeded` has removed
+ * frames out from under `currentIndex` -- `frames` is short enough even
+ * for a very long run (bounded by `MAX_LIVE_SCRUBBER_FRAMES`) that a
+ * linear scan here costs nothing next to how rarely decimation itself
+ * runs.
+ *
+ * @param {number} targetGeneration
+ * @returns {number}
+ */
+function nearestFrameIndexForGeneration(targetGeneration) {
+    const state = activeScrubberState;
+    let nearestIndex = 0;
+    let nearestDistance = Infinity;
+    for (let index = 0; index < state.frames.length; index += 1) {
+        const distance = Math.abs(
+            state.frames[index].generation - targetGeneration
+        );
+        if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestIndex = index;
+        }
+    }
+    return nearestIndex;
+}
+
+/**
+ * Keep a live run's own frame buffer bounded, however long the run goes.
+ *
+ * `appendLiveFrame` below calls this after every push. Below `MAX_LIVE_
+ * SCRUBBER_FRAMES` it is a no-op. Once that cap is crossed, the first
+ * frame (so the run's own start is never lost) and the newer half
+ * (dense, since that is what live tracking and most scrubbing actually
+ * look at) are kept whole; the older half -- everything else -- is
+ * thinned to every other frame. Because the split point is recomputed
+ * from the *current* length every time this runs, repeated crossings
+ * thin progressively older stretches again each time they age out of
+ * the newer half, so the buffer settles into roughly half the cap full
+ * right after a thin and never grows past the cap by more than one
+ * frame. `currentIndex`, if it is not tracking the live head, is
+ * remapped to the nearest surviving generation -- indices into `frames`
+ * are not stable across a thin, only generations are.
+ */
+function decimateLiveFramesIfNeeded() {
+    const state = activeScrubberState;
+    if (!state || state.frames.length <= MAX_LIVE_SCRUBBER_FRAMES) {
+        return;
+    }
+    const trackedGeneration = state.isLiveTracking
+        ? null
+        : state.frames[state.currentIndex]
+          ? state.frames[state.currentIndex].generation
+          : null;
+    const first = state.frames[0];
+    const splitIndex = Math.floor(state.frames.length / 2);
+    const olderMiddle = state.frames.slice(1, splitIndex);
+    const newerHalf = state.frames.slice(splitIndex);
+    const thinnedOlderMiddle = olderMiddle.filter((_frame, index) => index % 2 === 0);
+    state.frames = [first, ...thinnedOlderMiddle, ...newerHalf];
+    if (trackedGeneration !== null) {
+        state.currentIndex = nearestFrameIndexForGeneration(trackedGeneration);
+    }
+}
 
 /**
  * Append one live frame during an active simulation run and update the
@@ -210,20 +326,25 @@ window.fim.setScrubberMode = function setScrubberMode(mode) {
  * @param {(frame: object, index: number, isLiveHead: boolean) => void} drawFrame
  */
 window.fim.appendLiveFrame = function appendLiveFrame(frame, drawFrame) {
-    scrubberMode = "live";
-    onFrame = drawFrame;
-    frames.push(frame);
-    const canAnimate = frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
+    const state = activeScrubberState;
+    if (!state) {
+        return;
+    }
+    state.mode = "live";
+    state.onFrame = drawFrame;
+    state.frames.push(frame);
+    decimateLiveFramesIfNeeded();
+    const canAnimate = state.frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
     scrubberForwardButton.disabled = !canAnimate;
     scrubberBackwardButton.disabled = !canAnimate;
     scrubberRange.disabled = !canAnimate;
-    scrubberRange.max = String(Math.max(frames.length - 1, 0));
-    if (isLiveTracking) {
-        currentIndex = frames.length - 1;
+    scrubberRange.max = String(Math.max(state.frames.length - 1, 0));
+    if (state.isLiveTracking) {
+        state.currentIndex = state.frames.length - 1;
         showCurrentFrame(true);
     } else {
-        scrubberRange.value = String(currentIndex);
-        const curFrame = frames[currentIndex];
+        scrubberRange.value = String(state.currentIndex);
+        const curFrame = state.frames[state.currentIndex];
         if (curFrame) {
             setGenerationText(`Generation ${curFrame.generation}`);
         }
@@ -249,22 +370,31 @@ window.fim.appendLiveFrame = function appendLiveFrame(frame, drawFrame) {
  */
 window.fim.setScrubberFrames = function setScrubberFrames(newFrames, drawFrame, startIndex = 0) {
     stopScrubber();
-    scrubberMode = "replay";
-    isLiveTracking = false;
-    onFrame = null;
-    frames = newFrames;
-    currentIndex = Math.min(Math.max(startIndex, 0), Math.max(frames.length - 1, 0));
-    const canAnimate = frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
+    const state = activeScrubberState;
+    if (!state) {
+        return;
+    }
+    state.mode = "replay";
+    state.isLiveTracking = false;
+    state.onFrame = null;
+    state.frames = newFrames;
+    state.currentIndex = Math.min(
+        Math.max(startIndex, 0),
+        Math.max(state.frames.length - 1, 0)
+    );
+    const canAnimate = state.frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
     scrubberForwardButton.disabled = !canAnimate;
     scrubberBackwardButton.disabled = !canAnimate;
     scrubberRange.disabled = !canAnimate;
-    scrubberRange.max = String(Math.max(frames.length - 1, 0));
-    scrubberRange.value = String(currentIndex);
+    scrubberRange.max = String(Math.max(state.frames.length - 1, 0));
+    scrubberRange.value = String(state.currentIndex);
     setGenerationText(
-        frames.length > 0 ? `Generation ${frames[currentIndex].generation}` : ""
+        state.frames.length > 0
+            ? `Generation ${state.frames[state.currentIndex].generation}`
+            : ""
     );
     // Only now does dragging/playback start actually drawing.
-    onFrame = drawFrame;
+    state.onFrame = drawFrame;
 };
 
 /**
@@ -275,11 +405,15 @@ window.fim.setScrubberFrames = function setScrubberFrames(newFrames, drawFrame, 
  */
 window.fim.resetScrubber = function resetScrubber() {
     stopScrubber();
-    onFrame = null;
-    frames = [];
-    currentIndex = 0;
-    scrubberMode = "replay";
-    isLiveTracking = true;
+    const state = activeScrubberState;
+    if (!state) {
+        return;
+    }
+    state.onFrame = null;
+    state.frames = [];
+    state.currentIndex = 0;
+    state.mode = "replay";
+    state.isLiveTracking = true;
     scrubberForwardButton.disabled = true;
     scrubberBackwardButton.disabled = true;
     scrubberRange.disabled = true;
@@ -287,3 +421,46 @@ window.fim.resetScrubber = function resetScrubber() {
     scrubberRange.value = "0";
     setGenerationText("");
 };
+
+function restoreScrubberForSelectedDocument() {
+    const state = activeScrubberState;
+    const canAnimate =
+        state !== null && state.frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
+    scrubberForwardButton.disabled = !canAnimate;
+    scrubberBackwardButton.disabled = !canAnimate;
+    scrubberRange.disabled = !canAnimate;
+    scrubberRange.max = String(
+        state ? Math.max(state.frames.length - 1, 0) : 0
+    );
+    if (!state) {
+        scrubberRange.value = "0";
+        setGenerationText("");
+        setButtonActive(scrubberForwardButton, false);
+        setButtonActive(scrubberBackwardButton, false);
+        return;
+    }
+    scrubberRange.value = String(state.currentIndex);
+    setButtonActive(scrubberForwardButton, state.playDirection === 1);
+    setButtonActive(scrubberBackwardButton, state.playDirection === -1);
+    showCurrentFrame(state.mode === "live" && state.isLiveTracking);
+    if (state.playDirection !== 0) {
+        playIntervalId = setInterval(
+            state.playDirection === 1 ? stepForward : stepBackward,
+            STEP_INTERVAL_MS
+        );
+    }
+}
+
+window.fim.workspace.onSelectionChange((selectedId) => {
+    if (playIntervalId !== null) {
+        clearInterval(playIntervalId);
+        playIntervalId = null;
+    }
+    setButtonActive(scrubberForwardButton, false);
+    setButtonActive(scrubberBackwardButton, false);
+    activeScrubberState =
+        selectedId === null ? null : getScrubberState(selectedId);
+    restoreScrubberForSelectedDocument();
+});
+
+restoreScrubberForSelectedDocument();

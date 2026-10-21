@@ -216,6 +216,10 @@ def test_a_large_sweep_needs_confirmation_before_anything_is_created(
     assert result["needsConfirmation"] is True
     assert groups.list_studies() == []
     assert window.pushed == []
+    # Nothing started, so the sweep slot `start_sweep` claimed on entry
+    # must be released again -- otherwise a second attempt, even a
+    # confirmed one, would be refused as "a sweep is already running".
+    assert api._sweep_cancel_event is None
 
 
 def test_a_sweep_and_a_run_cannot_overlap(api: Api, window: _FakeWindow) -> None:
@@ -430,7 +434,10 @@ def test_a_sweep_runs_into_the_study_chosen_and_keeps_its_runs(
 
     started = api.start_sweep(_form(), _request(_D_AXIS), study_id)
 
-    assert started == {"ok": True, "studyId": study_id, "total": 2}
+    assert started["ok"] is True
+    assert started["studyId"] == study_id
+    assert started["total"] == 2
+    assert isinstance(started["jobId"], str) and started["jobId"]
     _wait_until_idle(api)
     assert window.finished.is_set()
     (study,) = api.list_studies()
@@ -582,11 +589,37 @@ class _SavingWindow(_FakeWindow):
 
 
 def _finished_sweep(api: Api, window: _FakeWindow) -> str:
-    """Run the two-point sweep to its end and return its Study id."""
-    started = api.start_sweep(_form(), _request(_D_AXIS))
+    """Run two tiny points serially and return the finished Study id.
+
+    These bridge/metadata tests do not test process concurrency. Automatic
+    concurrency starts child interpreters and their engine imports, which
+    exceeded the completion backstop under the full slow-suite load.
+    """
+    started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
     _wait_until_idle(api)
     assert window.finished.is_set()
+    job_events = [
+        json.loads(script[len("fim.onJobEvent(") : -1])
+        for script in window.pushed
+        if script.startswith("fim.onJobEvent(")
+    ]
+    assert job_events[-1]["type"] == "finished"
+    snapshot = api.get_job_snapshot(job_events[-1]["jobId"])
+    assert snapshot["snapshot"]["type"] == "finished"
     return str(started["studyId"])
+
+
+def test_finished_sweep_helper_does_not_spawn_point_processes(
+    api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Metadata fixtures must not depend on concurrent child-process startup."""
+
+    def unexpected_process_pool(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("the metadata helper must run its points serially")
+
+    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", unexpected_process_pool)
+    study_id = _finished_sweep(api, window)
+    assert groups.get_study(study_id).run_count == 2
 
 
 def test_export_sweep_table_writes_the_table_and_its_sidecar(
@@ -971,7 +1004,9 @@ def test_resume_sweep_passes_the_retry_and_recompute_flags_on(
     assert api._sweep_thread is not None
     api._sweep_thread.join(30)
 
-    assert reply == {"ok": True, "studyId": study_id}
+    assert reply["ok"] is True
+    assert reply["studyId"] == study_id
+    assert isinstance(reply["jobId"], str) and reply["jobId"]
     assert len(calls) == 1
     assert (calls[0]["retry_failed"], calls[0]["rerun"]) == (retry, rerun)
 

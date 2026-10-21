@@ -46,16 +46,6 @@ const configureDuplicatePresetButton = document.getElementById(
     "configure-duplicate-preset-button"
 );
 
-// Design §4.5's own "Duplicate current configuration": the title of
-// whichever preset or example was most recently loaded into the live
-// form via the picker or the Examples dialog, or `null` before the
-// first one ever is -- `rememberLoadedPreset`, below, is the one place
-// this is set;
-// `configureDuplicatePresetButton`'s own click handler and `window.fim.
-// clearLastLoadedPreset` (called from `fim.menu.newConfiguration`) are
-// the only other places that read or clear it.
-let lastLoadedPresetTitle = null;
-
 // A real, previously-reproduced regression this flag exists to close:
 // `savePresetForm`'s own submit handler closes `modal-save-preset`
 // (synchronously) *before* the `refreshPresetsList()` call that follows
@@ -185,11 +175,22 @@ function showExampleLoadNotice(title, message) {
  * @returns {Promise<boolean>} whether the preset actually applied.
  */
 async function applyPreset(presetId, presetTitle) {
+    const originId = window.fim.workspace.selectedId();
+    const origin = window.fim.workspace.get(originId);
     const result = await window.pywebview.api.load_preset(presetId);
+    if (window.fim.workspace.get(originId) !== origin) {
+        return false;
+    }
     if (!result.ok) {
         presetsDialog.close();
         showExampleLoadNotice(presetTitle, result.message);
         return false;
+    }
+    if (window.fim.workspace.documentTabsEnabled()) {
+        window.fim.workspace.createDocument({
+            kind: "draft",
+            label: presetTitle,
+        });
     }
     applyFormValues(result.values);
     // Its run settings apply to this run only (`run-settings-notice.js`).
@@ -214,11 +215,22 @@ async function applyPreset(presetId, presetTitle) {
  * @param {string} title
  */
 function rememberLoadedPreset(title) {
-    lastLoadedPresetTitle = title;
-    configureDuplicatePresetButton.disabled = false;
+    const state = window.fim.workspace.selected();
+    if (state) {
+        state.lastLoadedPresetTitle = title;
+    }
+    renderDuplicatePresetButton();
 }
 
 window.fim.rememberLoadedPreset = rememberLoadedPreset;
+
+function renderDuplicatePresetButton() {
+    configureDuplicatePresetButton.disabled =
+        !window.fim.workspace.selected()?.lastLoadedPresetTitle;
+}
+
+window.fim.workspace.onSelectionChange(renderDuplicatePresetButton);
+renderDuplicatePresetButton();
 
 
 // Set once `showPresetYaml`'s own bridge call has settled and the
@@ -304,7 +316,11 @@ saveCurrentAsPresetButton.addEventListener("click", () => {
 // existing name (`Api.save_current_as_preset`'s own docstring), the
 // identical risk "Save current as…" already carries for any name.
 configureDuplicatePresetButton.addEventListener("click", () => {
-    savePresetNameInput.value = `${lastLoadedPresetTitle} copy`;
+    const title = window.fim.workspace.selected()?.lastLoadedPresetTitle;
+    if (!title) {
+        return;
+    }
+    savePresetNameInput.value = `${title} copy`;
     savePresetError.hidden = true;
     savePresetDialog.showModal();
     savePresetNameInput.focus();
@@ -312,8 +328,11 @@ configureDuplicatePresetButton.addEventListener("click", () => {
 });
 
 window.fim.clearLastLoadedPreset = function clearLastLoadedPreset() {
-    lastLoadedPresetTitle = null;
-    configureDuplicatePresetButton.disabled = true;
+    const state = window.fim.workspace.selected();
+    if (state) {
+        state.lastLoadedPresetTitle = null;
+    }
+    renderDuplicatePresetButton();
 };
 
 // A plain `type="button"`, not `type="submit"` -- clicking it must

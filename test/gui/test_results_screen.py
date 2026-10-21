@@ -718,7 +718,8 @@ def test_capped_run_warns_in_both_message_and_final_generation_row(
         read="""({
             state: window.fim.getRunViewState(),
             pending: window.__fimScrubberPending,
-            reason: completedReportReason,
+            reason: window.fim.workspace.selected().completedView
+                .completedReportReason,
             message: document.querySelector('#run-messages .run-message')?.textContent,
             warning: document.querySelector(
                 '#run-messages .run-message'

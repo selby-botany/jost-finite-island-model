@@ -398,3 +398,112 @@ def test_details_dialog_and_run_title_show_a_read_only_run_as_locked(
     # Two badges: the Examples Experiment (the run's non-default Study
     # names it) and the example Run itself; a Run's title names no Study.
     assert result["titleBadges"] == 2
+
+
+def test_cloning_a_read_only_result_opens_an_editable_copy_in_another_tab(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Clone keeps the source result locked and opens a separate draft."""
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    _seed_read_only_examples(results)
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+    example_row = (
+        "Array.from(document.querySelectorAll('.open-run-run-row'))"
+        ".find((row) => row.textContent.includes('Shipped example'))"
+    )
+
+    def _drive() -> None:
+        try:
+            window.evaluate_js("window.fim.workspace.setDocumentTabsEnabled(true);")
+            _open_home(window)
+            _expand_group(window, "Examples (")
+            _expand_group(window, "Getting started (")
+            poll_page(
+                window,
+                f"{example_row} !== undefined",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                f"{example_row}.dispatchEvent(new MouseEvent('dblclick',"
+                " {bubbles: true}));"
+            )
+            poll_page(
+                window,
+                "window.fim.workspace.selected().kind === 'result' && "
+                "window.fim.workspace.selected().readOnly === true && "
+                "window.fim.getRunViewState() === 'completed'",
+                lambda value: value is True,
+            )
+            result_tab_id = window.evaluate_js("window.fim.workspace.selectedId()")
+
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_group(window, "Examples (")
+            _expand_group(window, "Getting started (")
+            poll_page(
+                window,
+                f"{example_row} !== undefined",
+                lambda value: value is True,
+            )
+            document_count_before_clone = window.evaluate_js(
+                "window.fim.workspace.ids().length"
+            )
+            window.evaluate_js(
+                f"{example_row}.querySelector('.open-run-load-config-button').click();"
+            )
+            poll_page(
+                window,
+                "window.__fimHomeRunLoadSettled === true && "
+                "window.fim.workspace.selected().kind === 'draft'",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "const field = document.getElementById('field-d');"
+                "field.value = '3';"
+                "field.dispatchEvent(new Event('input', {bubbles: true}));"
+            )
+            clone = window.evaluate_js(
+                "(function(){"
+                "const source = window.fim.workspace.get("
+                f"{result_tab_id!r});"
+                "const copy = window.fim.workspace.selected();"
+                "return {"
+                "selected: window.fim.workspace.selectedId(),"
+                "sourceKind: source.kind,"
+                "sourceReadOnly: source.readOnly,"
+                "sourceResourceKey: source.resourceKey,"
+                "copyKind: copy.kind,"
+                "copyReadOnly: copy.readOnly,"
+                "copyResourceKey: copy.resourceKey,"
+                "copyDemeCount: collectFormValues().d,"
+                "};})()"
+            )
+            outcome.put(
+                {
+                    "sourceTabId": result_tab_id,
+                    "clone": clone,
+                    "documentCountBeforeClone": document_count_before_clone,
+                    "documentCount": window.evaluate_js(
+                        "window.fim.workspace.ids().length"
+                    ),
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    snapshot = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert snapshot["documentCountBeforeClone"] == 2
+    assert snapshot["documentCount"] == 3
+    clone = snapshot["clone"]
+    assert clone["sourceKind"] == "result"
+    assert clone["sourceReadOnly"] is True
+    assert clone["sourceResourceKey"] == f"run:{results / 'run-example'}"
+    assert clone["copyKind"] == "draft"
+    assert clone["copyReadOnly"] is False
+    assert clone["copyResourceKey"] is None
+    assert clone["copyDemeCount"] == "3"
+    assert clone["selected"] != snapshot["sourceTabId"]

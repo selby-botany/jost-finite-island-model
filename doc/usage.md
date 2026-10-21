@@ -155,6 +155,13 @@ checkpoint (1,000 generations or 60 seconds). The desktop app's
 [saved runs: pause, resume, and recover](run-lifecycle.md) for every state,
 command, and recovery case.
 
+**Sweep setup is not stored with a saved run.** If you edit a sweep setup,
+**Save and close** saves the run configuration but keeps the close dialog
+open with an explanation. Choose **Keep working** to retain the setup in
+the current session, or **Close without saving** to discard that setup.
+Saving the run configuration alone does not clear the sweep's unsaved-edit
+warning.
+
 ## Worked examples
 
 Each example below is a complete config and the command that runs it: save
@@ -1414,6 +1421,43 @@ both `fim` and `fim-gui`. Packaged executables open the GUI with no arguments:
 double-click `fim-windows-x64.exe` or `fim.app`, or run
 `fim-gui`/`fim --graphical` on Linux.
 
+### Open documents
+
+The toolbar below the title lists open configurations, runs, and studies.
+Select a document to return to its own form, results, or sweep view. Switching
+does not stop work in another document. Opening a result that is already open
+selects its existing document; a new configuration starts as a separate
+draft. Open documents are kept in memory for this window and are not restored
+after a restart.
+
+Use the **+** button or **File > New configuration** to start a draft. Use
+the **×** on a document, **File > Close tab**, or **Delete** while a document
+button has focus to close it. Closing a dirty configuration asks whether to
+save, discard, or keep it open. Closing an active run, saved run, or sweep
+offers the appropriate stop or pause action. Closing a document does not
+delete its saved results.
+
+Right-click a document for **Close other tabs** and **Close all results**.
+The same actions are in the File menu. Close other tabs keeps the chosen
+document open; Close all results closes completed run and sweep-result
+documents, not configurations or saved runs. Dirty documents and active jobs
+use the usual close dialog one at a time. **Keep** skips that document and
+continues; pressing Escape cancels the remaining bulk close.
+
+When more than 12 documents are open, a notice offers **Close all results**.
+The limit is a reminder, not a cap; you can keep opening documents.
+
+| Action | macOS | Windows and Linux |
+|---|---|---|
+| New configuration | Command+N | Control+N |
+| Close selected tab | Command+W | Control+W |
+| Next tab | Control+Tab or Command+Shift+] | Control+Tab |
+| Previous tab | Control+Shift+Tab or Command+Shift+[ | Control+Shift+Tab |
+
+The File menu also has **Next tab**, **Previous tab**, **Close other tabs**,
+and **Close all results**. Quit remains an application-wide action and uses
+the separate window-close guard described below.
+
 `n_replicates` selects a single run or batch; there is no separate batch-mode
 control. The run view has initial, running, and completed states.
 **Run simulation** starts from the current configuration, including when a
@@ -1632,7 +1676,9 @@ This happens when:
 - A run, batch, or sweep that you started with **Run simulation** or
   **Sweep** is in progress.
 
-The dialog tells you what is at stake and offers these choices:
+The dialog lists every unsaved document by name, including documents that
+are not currently open on screen. It also identifies the run or sweep that
+will be paused or stopped. The dialog offers these choices:
 
 | Button | What it does |
 |---|---|

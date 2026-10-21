@@ -49,7 +49,7 @@ function setAxis(row, key, list) {
 """
 _ONE_AXIS = _AXES + "setAxis(document.querySelector('.sweep-axis'), 'd', '2, 3');"
 _RESULTS_STATE = """({
-    ready: window.__fimSweepResultsReady,
+    ready: window.__fimSweepResultsReady ?? null,
     resultsHidden: document.getElementById('sweep-results').hidden,
     summary: document.getElementById('sweep-results-summary').textContent,
     statistics: Array.from(document.querySelectorAll('#sweep-results-statistic option'))

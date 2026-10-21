@@ -68,10 +68,10 @@ _EXPECTED_ENGINE_ERRORS: Final = (
 ProgressMessage = tuple[
     Literal["progress"],
     int,
-    list[dict[str, object]],
-    FloatArray,
+    list[dict[str, object]] | None,
+    FloatArray | None,
     FinalReport,
-    dict[str, Any],
+    dict[str, Any] | None,
     ModelState,
 ]
 DoneMessage = tuple[Literal["done"], RunResult]
@@ -156,12 +156,19 @@ def pairwise_status_text(deme_count: int, run_count: int) -> str:
 
 
 def progress_message(
-    state: ModelState, generation: int, params: SimulationParams, run_id: str
+    state: ModelState,
+    generation: int,
+    params: SimulationParams,
+    run_id: str,
+    *,
+    view_level: Literal["full", "summary"] = "full",
 ) -> ProgressMessage:
-    """Build the `"progress"` message the Run card draws one tick from.
+    """Build a full or compact progress message for the current job view.
 
     Shared by this module's worker and `fim.gui.object_runner`, so a
-    saved Run and an ordinary one draw identical ticks.
+    saved Run and an ordinary one draw identical ticks. Summary messages
+    retain the generation, statistic estimates, and state while omitting
+    panels, points, and literature visuals.
 
     Args:
         state: The population at `generation`.
@@ -172,12 +179,6 @@ def progress_message(
     Returns:
         The message to put on the run's queue.
     """
-    # `points` rides along raw (not only the already-reduced `panels`)
-    # so `fim.gui.app._drain_run_messages` can compute one caller-chosen
-    # deme-pair panel per tick too, for the Progress screen's live
-    # "Compare demes directly" selector.
-    points = frequency_points(state)
-    panels = panels_from_points(points, state.deme_count)
     # The six named statistics for this tick's state, the same
     # `report_for_state` call `Api.get_initial_state_panels` makes for
     # p_0. `converged`/`reason` are placeholders; nothing downstream
@@ -185,6 +186,14 @@ def progress_message(
     report = report_for_state(
         state, params, run_id=run_id, converged=False, reason="in progress"
     )
+    if view_level == "summary":
+        return ("progress", generation, None, None, report, None, state)
+    # `points` rides along raw (not only the already-reduced `panels`)
+    # so `fim.gui.app._drain_run_messages` can compute one caller-chosen
+    # deme-pair panel per tick too, for the Progress screen's live
+    # "Compare demes directly" selector.
+    points = frequency_points(state)
+    panels = panels_from_points(points, state.deme_count)
     visuals = {
         "alleleComposition": allele_composition_payload(state),
         "frequencySpectrum": frequency_spectrum_payload(state, params),
@@ -200,6 +209,7 @@ def start_run(
     *,
     clock: Callable[[], float] = time.monotonic,
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+    view_level: Callable[[], Literal["full", "summary"]] = lambda: "full",
 ) -> threading.Thread:
     """Resolve targets, guard the existing target, and start the worker thread.
 
@@ -218,6 +228,8 @@ def start_run(
         cancel_event: Set by the UI's Cancel button; checked before
             every generation write.
         clock: Injectable wall clock for `ProgressThrottle`, for tests.
+        view_level: Read on each reported generation; summary avoids
+            building visualization payloads for background jobs.
 
     Returns:
         The started (not yet joined) worker thread.
@@ -231,7 +243,10 @@ def start_run(
     thread = threading.Thread(
         target=_run_worker,
         args=(params, run_id, output_directory, message_queue, cancel_event, clock),
-        kwargs={"pairwise_max_demes": pairwise_max_demes},
+        kwargs={
+            "pairwise_max_demes": pairwise_max_demes,
+            "view_level": view_level,
+        },
     )
     thread.start()
     logger.debug("scalar run worker thread started: %s -> %s", run_id, output_directory)
@@ -247,6 +262,7 @@ def _run_worker(
     clock: Callable[[], float],
     *,
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+    view_level: Callable[[], Literal["full", "summary"]] = lambda: "full",
 ) -> None:
     """Run one scalar simulation and post its outcome to `message_queue`.
 
@@ -267,7 +283,11 @@ def _run_worker(
     def on_generation(generation: int, rows: list[Mapping[str, Any]]) -> None:
         if throttle.should_report(generation, params.max_generations):
             state = ModelState.from_rows(rows, params.loci)
-            message_queue.put(progress_message(state, generation, params, run_id))
+            message_queue.put(
+                progress_message(
+                    state, generation, params, run_id, view_level=view_level()
+                )
+            )
 
     try:
         with paths.atomic_directory(output_directory) as working_directory:
