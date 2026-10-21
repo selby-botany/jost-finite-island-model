@@ -32,9 +32,9 @@ mutation this much stronger relaxes the model about 24 times faster
 than Dear-Nolan low migration's 19,700), averaged over a
 16,017-generation window, and stopped at generation 20,259. Across the
 replicates `D` averages **0.9603 ± 0.0032** (95% confidence half-width,
-an interval of 0.9571 to 0.9635). The closed-form equilibrium is `1 / (1
-+ m / (mu (d - 1)))` = **0.96** exactly, inside the interval. `G_ST`
-averages **0.8475 ± 0.0022** (0.8453 to 0.8497); the closed-form
+an interval of 0.9571 to 0.9635). The closed-form equilibrium is
+`1 / (1 + m / (mu (d - 1)))` = **0.96** exactly, inside the interval.
+`G_ST` averages **0.8475 ± 0.0022** (0.8453 to 0.8497); the closed-form
 equilibrium (the same Crow & Aoki correction Dear-Nolan low migration
 uses, now with its mutation term no longer negligible) is **0.8466**,
 also inside the interval.
