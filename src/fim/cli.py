@@ -1133,7 +1133,11 @@ def _parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--output",
         metavar="PATH",
-        help="config path (default: project-root/results/example-run.yaml)",
+        help=(
+            "config path (default: project-root/results/example-run.yaml; "
+            "project-root is your checkout, or your current directory "
+            "otherwise)"
+        ),
     )
     init_parser.add_argument(
         "--force",
@@ -1150,7 +1154,11 @@ def _parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         metavar="DIRECTORY",
-        help="artifact directory (default: project-root/results/run-TIMESTAMP)",
+        help=(
+            "artifact directory (default: project-root/results/"
+            "run-TIMESTAMP; project-root is your checkout, or your "
+            "current directory otherwise)"
+        ),
     )
     run_parser.add_argument(
         "--quiet",

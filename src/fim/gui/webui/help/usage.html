@@ -34,8 +34,10 @@ and commands use backticks. Display equations have unique local
 <p><code>fim init</code> writes the documented development scenario. <code>N</code> is individuals
 per deme and <code>ploidy</code> says how many gene copies each carries, so <code>N: 225</code> with
 <code>ploidy: diploid</code> is 450 gene copies. Without <code>--output</code>, the path is
-<code>project-root/results/example-run.yaml</code>. Existing files are protected unless
-<code>--force</code> is present.</p>
+<code>project-root/results/example-run.yaml</code>, where <code>project-root</code> is the root
+of this checkout when you are running from one, a <code>fim</code> folder in your
+home directory for the packaged desktop app, and otherwise (a plain <code>pip install</code>, run from a terminal) your current working directory. Existing
+files are protected unless <code>--force</code> is present.</p>
 <h2 id="run-a-simulation">Run a simulation</h2>
 <pre><code class="language-console">fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
     [--workers N] [--sequential] [--max-concurrent-replicates N]

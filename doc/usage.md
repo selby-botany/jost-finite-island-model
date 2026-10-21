@@ -40,8 +40,11 @@ fim init [--output PATH] [--force]
 `fim init` writes the documented development scenario. `N` is individuals
 per deme and `ploidy` says how many gene copies each carries, so `N: 225` with
 `ploidy: diploid` is 450 gene copies. Without `--output`, the path is
-`project-root/results/example-run.yaml`. Existing files are protected unless
-`--force` is present.
+`project-root/results/example-run.yaml`, where `project-root` is the root
+of this checkout when you are running from one, a `fim` folder in your
+home directory for the packaged desktop app, and otherwise (a plain `pip
+install`, run from a terminal) your current working directory. Existing
+files are protected unless `--force` is present.
 
 ## Run a simulation
 
