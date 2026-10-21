@@ -5241,7 +5241,7 @@ def test_build_menu_dispatches_document_actions_to_workspace() -> None:
     actions = {
         item.title: item
         for item in menus[0].items
-        if hasattr(item, "title")
+        if isinstance(item, MenuAction)
         and item.title
         in {
             "New configuration",
