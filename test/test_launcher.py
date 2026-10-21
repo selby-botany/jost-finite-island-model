@@ -33,6 +33,7 @@ import pytest
 
 import fim.cli
 import fim.gui.app
+import fim.gui.job_worker
 from fim import launcher
 
 
@@ -150,6 +151,30 @@ def test_launcher_graphical_alone_launches_the_gui_in_the_foreground(
 
     assert status == 0
     assert calls == [[]]
+
+
+def test_launcher_dispatches_internal_gui_jobs_to_the_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The hidden worker flag never reaches the public CLI parser."""
+    received: list[list[str]] = []
+
+    def fake_worker_main(argv: Sequence[str] | None = None) -> int:
+        received.append(list(argv or []))
+        return 23
+
+    def fail_if_cli_called(_argv: Sequence[str] | None = None) -> int:
+        pytest.fail("cli.main was called for an internal GUI job")
+
+    monkeypatch.setattr(fim.gui.job_worker, "main", fake_worker_main)
+    monkeypatch.setattr(fim.cli, "main", fail_if_cli_called)
+
+    status = launcher.main(
+        ["--gui-job", "obj-123", "--results-directory", "/tmp/results"]
+    )
+
+    assert status == 23
+    assert received == [["obj-123", "--results-directory", "/tmp/results"]]
 
 
 @pytest.mark.parametrize(

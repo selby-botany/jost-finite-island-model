@@ -83,6 +83,7 @@ def start_object_run(
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
     view_level: Callable[[], Literal["full", "summary"]] = lambda: "full",
     observer: Callable[[Session], None] | None = None,
+    stop_requested: Callable[[], bool] | None = None,
 ) -> threading.Thread:
     """Start or resume a saved Run object on a background thread.
 
@@ -103,24 +104,34 @@ def start_object_run(
             visualization payloads for background jobs.
         observer: Test-only hook, called with the session at every
             control point, after its progress tick.
+        stop_requested: Polled at safe points; true asks the run to pause.
 
     Returns:
         The started (not yet joined) worker thread.
     """
-    thread = threading.Thread(
-        target=_object_worker,
-        args=(object_id, message_queue),
-        kwargs={
-            "results": results,
-            "cadence": cadence,
-            "clock": clock,
-            "pairwise_max_demes": pairwise_max_demes,
-            "view_level": view_level,
-            "observer": observer,
-        },
-        name=f"fim-object-{object_id}",
-    )
+    started = threading.Event()
+
+    def work() -> None:
+        """Run the worker and always release the startup handshake."""
+        try:
+            _object_worker(
+                object_id,
+                message_queue,
+                results=results,
+                cadence=cadence,
+                clock=clock,
+                pairwise_max_demes=pairwise_max_demes,
+                view_level=view_level,
+                observer=observer,
+                stop_requested=stop_requested,
+                started=started,
+            )
+        finally:
+            started.set()
+
+    thread = threading.Thread(target=work, name=f"fim-object-{object_id}")
     thread.start()
+    started.wait()
     logger.debug("saved run worker thread started: %s", object_id)
     return thread
 
@@ -172,6 +183,8 @@ def _object_worker(
     pairwise_max_demes: int,
     view_level: Callable[[], Literal["full", "summary"]],
     observer: Callable[[Session], None] | None,
+    stop_requested: Callable[[], bool] | None,
+    started: threading.Event,
 ) -> None:
     """Execute one saved Run and post its outcome to `message_queue`."""
     throttle = ProgressThrottle(clock=clock)
@@ -204,6 +217,10 @@ def _object_worker(
         elif isinstance(session, ScalarSession):
             lane = session.lane
             if throttle.should_report(session.generation, lane.params.max_generations):
+                if run_dir is not None:
+                    write_progress_sidecar(
+                        run_dir / ".progress", session.generation
+                    )
                 message_queue.put(
                     progress_message(
                         lane.state,
@@ -240,6 +257,8 @@ def _object_worker(
                 check_batch_session_support if is_batch else check_session_support
             ),
             store_factory=store_factory,
+            stop_requested=stop_requested,
+            on_started=started.set,
         )
     except DraftRunError as error:
         issues = "; ".join(issue.message for issue in error.issues)

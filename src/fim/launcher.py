@@ -85,6 +85,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     arguments = sys.argv[1:] if argv is None else list(argv)
+    if arguments and arguments[0] == "--gui-job":
+        # Internal only: GUI-owned work runs in an isolated process. Keep
+        # this dispatch ahead of the public CLI parser.
+        from fim.gui.job_worker import main as job_worker_main  # noqa: PLC0415
+
+        return job_worker_main(arguments[1:])
     if not arguments:
         logger.debug("dispatching to the GUI (zero-argument launch)")
         return launch_gui(detach=False)

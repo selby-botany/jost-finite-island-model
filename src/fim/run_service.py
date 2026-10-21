@@ -337,6 +337,7 @@ def execute_run_object(
     observer: ProgressObserver | None = None,
     check_support: Callable[[SimulationParams], object] | None = None,
     stop_requested: Callable[[], bool] | None = None,
+    on_started: Callable[[], None] | None = None,
 ) -> RunObject:
     """Start or resume a Run object and execute it until it stops.
 
@@ -361,6 +362,8 @@ def execute_run_object(
         stop_requested: Polled at each safe point; once it returns true
             the run pauses there, as `fim.termination.sigterm_requests_stop`
             arranges for SIGTERM. It must not block or take locks.
+        on_started: Called after start or resume acquires execution
+            ownership, before the simulation session opens.
 
     Returns:
         The object after this attempt stopped: `completed`, `paused`, or
@@ -399,6 +402,8 @@ def execute_run_object(
         attempt_factory=attempt_factory,
         command_key=command_key,
     )
+    if on_started is not None:
+        on_started()
     if opened.lease is None:
         return opened.run_object
     with opened.lease as lease:
