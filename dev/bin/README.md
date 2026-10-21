@@ -23,51 +23,56 @@
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These sixteen commands keep the project trustworthy: they make sure the
-documentation you read matches the code that actually runs, that a
-release's own history is recorded accurately, and that no credential or
-badly formed file ever gets committed. None of them run a simulation --
-that is what [`bin/fim` and `bin/fim-gui`](../../README.md) are for. If
-you only ever want to *run* the model, you can stop reading here; you
-will probably never need this page.
+These commands generate documentation, validate repository files, calibrate
+scientific tests, and measure engine performance. For running simulations,
+see the [command reference](../../doc/usage.md). For setup and releases, see
+the [maintainer runbook](../../CONTRIBUTING.md).
 
-You will need it if you become the one keeping this project working --
-this project is written to be handed to a successor with no other
-contact available (see the [maintainer runbook](../../CONTRIBUTING.md)),
-and you do not need a software background to use the commands below.
-Each one prints a plain-language explanation of what it does and why if
-you run it with `--help`, and every explanation here uses the same
-words: no assumed familiarity with Git, continuous integration, or
-Python packaging beyond what is spelled out as it comes up.
+Every command supports `-h`/`--help`. Run the examples from the repository
+root after sourcing `include/dot-bashrc`.
+
+## Contents
+
+- [Why generated files exist at all](#why-generated-files-exist-at-all)
+- [At a glance](#at-a-glance)
+- [`benchmark-engines`](#benchmark-engines)
+- [`benchmark-queue`](#benchmark-queue)
+- [`build-examples-catalog`](#build-examples-catalog)
+- [`calibrate-auto-threshold`](#calibrate-auto-threshold)
+- [`calibrate-convergence-defaults`](#calibrate-convergence-defaults)
+- [`calibrate-statistical-bands`](#calibrate-statistical-bands)
+- [`check-doc-links`](#check-doc-links)
+- [`check-webui-assets`](#check-webui-assets)
+- [`compare-against-hierfstat`](#compare-against-hierfstat)
+- [`extract-release-notes`](#extract-release-notes)
+- [`generate-api-docs`](#generate-api-docs)
+- [`generate-heatmap-queue`](#generate-heatmap-queue)
+- [`generate-help-html`](#generate-help-html)
+- [`regenerate-example-outputs`](#regenerate-example-outputs)
+- [`update-worked-examples`](#update-worked-examples)
+- [`render-heatmap`](#render-heatmap)
+- [`validate-repository`](#validate-repository)
+- [Related documents](#related-documents)
 
 ## Why generated files exist at all
 
-Several of the ideas below only make sense once one fact is clear: a few
-files in this repository -- `src/fim/API.md` and the two files under
-`src/fim/gui/webui/help/` -- are **generated**, not written by hand.
-Someone (a maintainer, or the desktop app's own Help screen) reads them
-as plain text, but the actual words in them are produced automatically
-from other, more authoritative sources: Python docstrings for the API
-reference, and the `doc/usage.md`/`doc/configuration.md` guides for the
-in-app help. The generated file is committed to the repository like any
-other file, so it is easy to browse without running anything -- but it
-is only ever *updated* by re-running the script that produced it, never
-by opening it and typing.
+Generated files provide browsable or bundled copies of authoritative source
+material:
 
-This matters because it means "the documentation is wrong" almost never
-means "go fix the file that shows the wrong text." It means "the real
-source changed and nobody re-ran the generator" -- and the fix is to run
-the generator, not to hand-edit words that will just be overwritten (and
-silently drift further from the truth) the next time someone does
-remember to run it. Two of the commands below (`generate-api-docs`,
-`generate-help-html`) are exactly this kind of generator; most of the
-project's ordinary editing hooks already run them for you automatically,
-so you mainly need to know they exist for the rare time one needs to be
-run by hand.
+| Generated files | Source | Generator |
+|---|---|---|
+| `src/fim/API.md` | Python docstrings | `generate-api-docs` |
+| `src/fim/gui/webui/help/` | `doc/usage.md`, `doc/configuration.md`, `doc/statistics.md` | `generate-help-html` |
+| `src/fim/gui/webui/examples/` | `doc/examples/` | `build-examples-catalog` |
+| Marked YAML blocks in `doc/usage.md` | `doc/examples/<example>/config.yaml` | `update-worked-examples` |
+
+Edit the source, then regenerate. Hand edits to generated output are
+overwritten. Freshness tests compare committed output with regenerated files;
+Git hooks refresh affected files automatically.
 
 ## At a glance
 
-| Command | What it does |
+| Command | Purpose |
 |---|---|
 | [`benchmark-engines`](#benchmark-engines) | Times how long each `engine_backend` choice takes as one setting (deme count, population size, mutation/migration rate, locus length) sweeps across a range, so a choice between them can be made from evidence instead of a guess |
 | [`benchmark-queue`](#benchmark-queue) | Runs a list of `benchmark-engines` (or any other) commands one after another, each one waiting for the machine to be quiet first, so several sweeps can be queued up and left running for hours without their own timing numbers contaminating each other |
@@ -93,19 +98,12 @@ reading now, plus its exact command-line syntax.
 
 ## `benchmark-engines`
 
-**What it does:** Runs the same simulation several times over, at
-several different values of one setting you choose (deme count by
-default; population size, mutation rate, migration rate, and locus
-length are the other options), and times four ways of running it: the
-reference engine (`"lineal"`) at the same batch size as the others,
-`"generational"` both without and with its optional speed-up switch
-turned on, and `"generational-vector"`. Every one of those is also
-reported as a ratio against `"lineal"` run with a *single* lineage at
-that same setting -- so instead of raw seconds (which depend entirely
-on whatever computer happens to run it), you also get "how many
-single-lineage-run-equivalents did this batch cost," a number that
-means roughly the same thing on a different machine, or a year from
-now on faster hardware.
+Times `lineal` at the selected batch size, `generational` with and without
+its optional speed-up setting, and `generational-vector`. Results include
+seconds and ratios relative to a single-lineage `lineal` run at the same
+setting. See [engine backends](../../doc/developer.md#engine-backends) for
+implementation details and [benchmark results](../../doc/fim-engine-backend-benchmarks.md)
+for recorded measurements.
 
 **How it relates to `fim sweep`:** The benchmark shares the sweep layer's axes
 and value checks (`fim.sweep.expand_axis`, so `--values` must be whole numbers
@@ -149,88 +147,38 @@ battery-saving mode can all skew the numbers).
 ```console
 dev/bin/benchmark-engines --sweep d --values 4,10,20,35,50,80,120 \
     --replicates 16 --generations 100 --trials 3 \
-    --output /tmp/benchmark-d-sweep.json
+    --output benchmark-d-sweep.json
 ```
 
-`--sweep` picks which setting varies (`d`, `N`, `mu`, `m`, or
-`loci-length`); `--values` is the comma-separated list of values to try
-for it. `--replicates` and `--generations` size each individual
-simulation run; `--trials` is how many times each one is repeated (the
-*middle* value across those repeats is what gets reported, which is
-more resistant to one unlucky, unrelated slowdown than an average
-would be). `--output` is optional -- without it, you get the printed
-table only; with it, you also get a JSON file recording the full
-result, including which computer produced it and when, so a later
-comparison can tell whether two runs are actually measuring the same
-thing. That file is not meant to be committed to this repository —
-timing numbers are only meaningful for the machine that produced them;
-a finding worth keeping belongs in prose (a design document, an issue,
-a commit message), the way every earlier benchmark sweep in this
-project's own history was recorded.
-
-`--config` optionally overrides the four settings *not* being swept
-(`N`, `d`, `m`, `mu`, plus locus length) from a real `fim` config file
--- the exact same file `fim run` reads, so a config already written for
-one purpose can be pointed at this tool too. Without it, this tool
-falls back to its own long-standing built-in reference-scale values,
-unchanged from before this option existed. The config must describe a
-single locus and plain, single-number `N`/`m`/`mu` (not the per-deme or
-per-locus shapes a real run can also use) -- this tool has only ever
-modeled that simpler case.
+- `--sweep`: `d`, `N`, `mu`, `m`, or `loci-length`.
+- `--values`: comma-separated values of the swept setting.
+- `--replicates` and `--generations`: size each simulation.
+- `--trials`: repetitions; the reported time is their median.
+- `--output`: optional JSON evidence with results and machine/time metadata.
+  Without it, only the table is printed. Timing files are local evidence,
+  not committed artifacts; record durable findings in a benchmark report.
+- `--config`: use a `fim` YAML configuration for nonswept settings.
+  It must specify one locus and scalar `N`, `m`, and `mu`. Without this
+  option, built-in reference-scale values apply.
 
 ## `benchmark-queue`
 
-**What it does:** Takes a list of *stages* (almost always several
-`benchmark-engines` invocations, one per question you want answered)
-and runs them one stage at a time, waiting until the machine is
-genuinely quiet before starting each one — not just checking once at
-the start, but re-checking every thirty seconds for up to an hour
-before giving up and running anyway (with a clear warning in its own
-log that this particular result should not be trusted the way the
-others are). A stage can hold more than one command: every command in
-one stage runs at the same time, and the next stage does not start
-until all of them have finished.
+Runs stages sequentially. Commands within a stage run concurrently; the next
+stage waits for all of them to finish. Before each stage, the default idle
+check polls every 30 seconds for up to an hour, then proceeds with a warning
+if load remains high.
 
-**Why it matters:** `benchmark-engines`'s own numbers are only
-meaningful when nothing else on the machine is meaningfully competing
-for the same CPU cores while it runs. `"generational"`'s own optional
-multi-threading can reach for every core the machine has, so two
-sweeps' own timed runs starting at the same moment can genuinely slow
-each other down. How much this actually matters depends heavily on the
-machine: a 4-8 core laptop can be thrown off by almost any second
-process, where a dedicated many-core server has enough spare capacity
-that several sweeps really can run side by side without meaningfully
-affecting each other's numbers — this tool's own idle check (how
-"quiet" is quiet enough before starting the next stage) is tunable for
-exactly that reason; see `--idle-load-fraction` below. Grouping several
-independent commands into one stage is how you take advantage of that
-spare capacity deliberately; putting one command alone in its own stage
-is how you say "this one needs the whole machine to itself." Either
-way, running one stage at a time, with a real idle check between them,
-is what makes results actually comparable to each other on whichever
-machine you are using, without requiring a person to sit and watch each
-stage finish before starting the next.
-
-**When to run it:** Whenever there is more than one question worth
-sweeping for — several settings, or the same setting at several fixed
-combinations of everything else — and, like `benchmark-engines` itself,
-never as part of an automated test, build, or release step. Written to
-be started and left alone for as long as it takes: every command's own
-output is written to its own file as it happens (not held back until
-everything finishes), and a summary file is rewritten after every
-single stage completes, so checking in partway through — or a queue
-that takes days — always shows an accurate, up-to-date picture of what
-has run so far and what has not.
-
-**Usage:**
+Use one command per stage for exclusive machine use. Concurrent commands can
+distort timings, especially when an engine uses all available cores. Use
+concurrent stages only where the machine has sufficient spare capacity.
+Each command's output is logged as it runs; `summary.json` is updated after
+each stage.
 
 ```console
-dev/bin/benchmark-queue my-sweeps.json --log-dir /tmp/fim-sweeps
+dev/bin/benchmark-queue my-sweeps.json --log-dir benchmark-logs
 ```
 
-`my-sweeps.json` is a JSON object with a `stages` list and, optionally,
-a `settings` object. Each entry in `stages` is itself a list of one or
-more commands:
+Example queue:
 
 ```json
 {
@@ -256,150 +204,88 @@ more commands:
 }
 ```
 
-This example's two `d10-len*` commands run at the same time (they are
-in the first stage together); `d-fine-grid` only starts once both of
-those have finished, and runs by itself (its own stage holds just the
-one command).
+`label` must be unique across the file. It names `<log-dir>/<label>.log`
+and the command's summary entry. Optional per-command `timeout_seconds`
+overrides `settings.default_timeout_seconds` (default: four hours).
 
-`label` is a short name used for that command's own log file
-(`<log-dir>/<label>.log`) and its entry in `<log-dir>/summary.json` —
-unique across the whole file, not just within one stage. Give one
-command an optional `"timeout_seconds"` if it might reasonably hang or
-run unexpectedly long — without one, `settings.default_timeout_seconds`
-(or, absent that too, four hours) applies. One command failing, or
-timing out, does not stop the rest of the queue from running — set
-`settings.stop_on_failure` (or pass `--stop-on-failure`) if you would
-rather it did (a stage already running is always let finish in full
-first; nothing is cut short mid-stage).
+A failure or timeout does not stop later stages unless
+`settings.stop_on_failure` or `--stop-on-failure` is set. A running stage
+always finishes before the queue stops.
 
-`settings` is optional, every key in it is optional, and it exists so
-one queue file is portable across very different machines rather than
-carrying one hardcoded idle threshold that only suits whichever machine
-wrote it. `idle_load_fraction` is the one most worth setting per
-machine: it means "proceed once 1-minute load average drops to this
-fraction of the CPU count" — the conservative built-in default (`0.1`)
-is right for a laptop, and far too cautious for a dedicated many-core
-server (a load of `5` out of `22` cores still has `17` genuinely idle
-ones). Keep one queue file per machine profile — `queue-laptop.json`,
-`queue-citrus2.json` — each with its own `settings.idle_load_fraction`,
-rather than remembering to pass `--idle-load-fraction` by hand every
-time. A command-line flag (`--idle-load-fraction`, `--idle-poll-
-seconds`, `--idle-max-wait-seconds`, `--default-timeout-seconds`,
-`--stop-on-failure`) always overrides whatever the queue file's own
-`settings` says, for the one time you want to override a shared file
-without editing it.
+All `settings` entries are optional. `idle_load_fraction` is the allowed
+one-minute load average divided by CPU count; the default is `0.1`.
+Choose a threshold for the machine rather than assuming the example's `2.0`
+is appropriate. Keep separate queue files for different machine profiles.
+Command-line options override file settings:
+`--idle-load-fraction`, `--idle-poll-seconds`, `--idle-max-wait-seconds`,
+`--default-timeout-seconds`, and `--stop-on-failure`.
 
 ## `build-examples-catalog`
 
-**What it does:** Reads every example directory under `doc/examples/`
-(one directory with a `README.md` is one example) and the class list in
-`doc/examples/classes.yaml`, and writes the desktop app's bundled copy:
-`src/fim/gui/webui/examples/catalog.json`, plus a copy of each example's
-complete committed result artifacts, including every kept replicate's
-outputs and the compressed JSONL archive parts.
+Reads example directories containing `README.md` under `doc/examples/` and
+the class list in `doc/examples/classes.yaml`. Writes
+`src/fim/gui/webui/examples/catalog.json` and copies committed result
+artifacts, including kept replicates and compressed JSONL parts.
 
-**Why it matters:** The packaged app carries only `src/fim/gui/webui/`,
-not `doc/`. The Examples dialog reads this catalog, so it must match the
-examples in the repository. An example's `config.yaml` may give its
-`name`, `description`, and `class`; when it does not, the name is the
-README's first heading, the description is the README's first paragraph,
-and the class is "Unclassified", listed last. When `classes.yaml` is
-absent, every example must be unclassified. An unknown class, a class
-with no examples, or a malformed class list stops the build with a
-message that names the problem.
-
-**When to run it:** You rarely need to. The pre-commit hook runs it
-whenever a file under `doc/examples/`, `doc/usage.md` (which sets the
-order of the examples), or the script itself is staged, and stages the
-result. `test/test_examples_catalog.py` fails if the committed bundle is
-stale.
-
-**Usage:**
+The packaged app contains `webui/`, not `doc/`, so the bundle must be rebuilt
+when example content changes. Metadata comes from `config.yaml` when present;
+otherwise the first README heading supplies the name, its first paragraph
+the description, and the class is “Unclassified” (listed last).
+Without `classes.yaml`, all examples must be unclassified. Unknown classes,
+empty classes, and malformed class lists fail the build.
 
 ```console
 dev/bin/build-examples-catalog
 dev/bin/build-examples-catalog --check
 ```
 
-The default command refreshes the bundle and removes files it no longer
-lists. `--check` reports stale bundle files without changing anything.
+The default refreshes the bundle and removes unlisted files. `--check`
+reports stale files without changes. The pre-commit hook runs the generator
+when `doc/examples/`, `doc/usage.md` (example ordering), or the generator is
+staged. `test/test_examples_catalog.py` checks freshness.
 
 ## `calibrate-auto-threshold`
 
-**What it does:** Reuses `benchmark-engines`'s own measuring code to
-sweep deme count (`d`) specifically, comparing `"generational"` against
-`"generational-vector"` at each value, and reports the smallest `d`
-above which `"generational-vector"` reliably wins on your own machine
-right now — the number `engine_backend: auto` should actually use for
-its own `auto_vector_min_d` setting.
+Sweeps deme count using the `benchmark-engines` measurement code and compares
+`generational` with `generational-vector`. Reports the smallest tested `d`
+above which the vector backend consistently wins.
 
-**Why it matters:** `auto_vector_min_d`'s own shipped default (`35`)
-was measured once, on one specific machine, before this project's own
-`drift` step changed in a way that turned out to shift the real
-crossover point materially (see `doc/fim-simulator-design.md`'s own
-§4.6/§9.1) — a stale number a config quietly trusts unless someone
-re-measures it. This script is that re-measurement, made real and
-repeatable rather than a one-off, unretained pass whose own method
-nobody could check later. It is honest about a real possibility this
-project's own history has already run into on some machines:
-`"generational-vector"` sometimes wins at *every* deme count tested,
-with no crossover to find in that range at all — this script says so
-plainly (and suggests trying smaller values) rather than picking the
-smallest number it happened to test and presenting that as a real
-measurement.
-
-**When to run it:** Whenever you want a real, evidence-based
-`auto_vector_min_d` for the specific machine your own simulations
-actually run on, or whenever you suspect a code change might have
-moved the threshold (this project's own history already has one
-example of exactly that). Not run automatically by any test, build, or
-release step, for the same reason `benchmark-engines` is not — timing
-numbers depend on how busy your own machine is at the moment, not on
-the code, so a result belongs to a deliberate, by-hand run on an
-otherwise idle machine.
-
-**Usage:**
+The shipped `auto_vector_min_d: 2` is a measured default, not a
+hardware-independent boundary. Recalibrate on the target machine or after
+performance changes. If the vector backend wins throughout the tested range,
+the script reports no crossover and suggests testing smaller values.
+This timing-dependent command is not an automated gate.
 
 ```console
 dev/bin/calibrate-auto-threshold \
     --d-values 4,10,20,30,40,60,80,120 --replicates 16 \
     --generations 100 --trials 3 \
-    --output /tmp/auto-vector-min-d-evidence.json
+    --output auto-vector-min-d-evidence.json
 ```
 
-Every flag has a sensible default (shown by `--help`); running the
-command with no arguments at all sweeps a reasonable default range of
-deme counts. If it finds a real threshold, add `auto_vector_min_d:
-<the number it found>` to your own YAML config to actually use it —
-this script only measures and reports; it does not change any config
-file, cache, or default on your behalf. `--output` is optional, the
-same as `benchmark-engines`'s own — the file it writes is meant for you
-to read, not for this project to commit or for `simulate_params()` to load
-automatically.
+All options have defaults listed by `--help`. Apply a measured threshold by
+setting `auto_vector_min_d` in a configuration; the script changes no
+configuration or default. Optional `--output` records local evidence, not
+input loaded automatically by `simulate_params()`.
 
 ## `calibrate-convergence-defaults`
 
-**What it does:** Measures the convergence rule against answers that are
-known. `rule REGIME` runs 12 seeded single runs of a regime (a fast island
-model, Golden Part VI, a ring of six demes) and counts how often a run's
-reported average misses its target by more than the requested precision, or
-by more than 1.96 of its own standard errors. `spectrum REGIME` measures how
-many relaxation times the allele-spectrum statistics need before they settle,
-next to `D`. Each command prints one JSON object; the objects are kept under
-the matching keys of
+Measures convergence against known targets:
+
+- `rule REGIME`: 12 seeded single runs; counts misses beyond the requested
+  precision and beyond 1.96 reported standard errors.
+- `spectrum REGIME`: measures allele-spectrum relaxation times alongside `D`.
+
+Regimes include a fast island model, Golden Part VI, and a six-deme ring.
+Each command prints a JSON object, recorded under the matching key in
 `test/validation/convergence-rule-calibration-evidence.json`.
+See [convergence](../../doc/convergence.md) for the stopping rule and its
+interpretation.
 
-**Why it matters:** An error bar is only worth reporting if it is right about
-one time in twenty. The counts in the evidence file are the permanent record
-that it is, and the bounds the tests enforce come from them. The seeds are
-fixed, so the same commit always prints the same numbers: unlike
-`calibrate-statistical-bands`, the tests may call this script's functions.
-
-**When to run it:** After a change to the convergence rule, the burn-in
-derivation, or a regime's parameters. A `rule` run takes minutes
-(a few minutes for `fast`, up to ten for `ring` on four worker processes).
-
-**Usage:**
+Run after changing convergence, burn-in derivation, or regime parameters.
+Fixed seeds make the evidence reproducible; tests may call these functions.
+Typical `rule` runs take several minutes, up to about ten for `ring` with
+four workers.
 
 ```console
 dev/bin/calibrate-convergence-defaults rule golden-part-vi --loci 4 --jobs 4
@@ -409,47 +295,15 @@ dev/bin/calibrate-convergence-defaults --list
 
 ## `calibrate-statistical-bands`
 
-**What it does:** Runs each of the project's three scientific validation
-scenarios (see [the worked examples](../../doc/examples/README.md) for
-what these scenarios actually model biologically) many times over with
-different random seeds, and measures how much the result naturally
-varies from one run to the next just by chance. It writes those
-measurements to a JSON file
-(`test/validation/statistical-calibration-evidence.json`) that is
-committed to the repository.
+Runs the three [scientific validation scenarios](../../doc/examples/README.md)
+with multiple seeds and records their variation in
+`test/validation/statistical-calibration-evidence.json`. Tests use this
+committed evidence to set tolerance bands around theoretical predictions.
+The bands must accommodate sampling variation without hiding model errors.
 
-**Why it matters:** The automated tests that check the simulator's
-output against these three published scenarios cannot demand an *exact*
-match -- the model is stochastic (randomness is part of what it
-simulates), so even a perfectly correct implementation gives a slightly
-different answer every time it runs with a different seed, the same way
-flipping a fair coin 100 times rarely lands on exactly 50 heads even
-though 50 is the "expected" answer. The tests instead check that the
-result falls within a tolerance band wide enough to absorb that natural
-randomness, but no wider -- a band that is too narrow makes the test
-fail on perfectly good runs (a "flaky" test, which this project treats
-as seriously as a wrong answer, never as something to shrug off and
-re-run); a band that is too wide would let a genuinely broken simulator
-sneak through undetected. Before this script existed, that band's width
-was set once, by hand, from a one-off measurement whose own method,
-inputs, and results were never written down or kept -- meaning nobody
-could later check *how* the number was chosen, or reproduce the
-reasoning behind it. This script makes that measurement a real,
-repeatable, versioned procedure: its own output file, committed to the
-repository, is the permanent record of exactly how wide each tolerance
-band is and why.
-
-**When to run it:** Essentially never, unless you deliberately change
-one of the three validation scenarios' own configuration (population
-size, migration rate, number of generations, and so on) enough that the
-old measurement might no longer apply. This script is intentionally
-*not* run automatically by any test, build, or release step -- doing so
-would make the tests themselves randomly pass or fail from run to run,
-exactly the "flaky test" problem the band exists to prevent. It is a
-tool you run by hand, on purpose, and then commit the resulting JSON
-file as its own, clearly-described change.
-
-**Usage:**
+Recalibrate when scenario parameters change enough to invalidate the evidence.
+The script is a manual procedure, not a test/build/release step; review and
+commit the resulting evidence as a separate, documented change.
 
 ```console
 dev/bin/calibrate-statistical-bands \
@@ -458,141 +312,53 @@ dev/bin/calibrate-statistical-bands \
     --output test/validation/statistical-calibration-evidence.json
 ```
 
-Every flag has a sensible default (shown by `--help`); running the
-command with no arguments at all uses those defaults and writes the
-same committed output file. Increasing a `--replicates-*` count makes
-the measurement more precise (a larger sample gives a steadier estimate
-of the natural variation) at the cost of a longer run.
+Defaults are listed by `--help`; without arguments the script writes the
+committed evidence path. Higher replicate counts improve precision at
+additional runtime cost.
 
 ## `check-doc-links`
 
-**What it does:** Reads every `.md` (Markdown) file in the repository
-and checks three things: that every link to another local file actually
-points at a file that exists, that every link with a `#section-name`
-actually names a real heading in that file, and that every documentation
-page can be reached by following links from somewhere else (a page with
-nothing linking to it is flagged as an "orphan").
-
-**Why it matters:** This project's documentation is deliberately split
-across many small, cross-linked pages -- a main `README.md`, several
-guides under `doc/`, the [worked examples](../../doc/examples/README.md)
--- on the idea that a reader should be able to click through to exactly
-the section they need, rather than scroll one enormous page. That only
-works for as long as every link is actually correct. A file gets
-renamed, a heading gets reworded, a page gets moved into a new folder --
-any of these silently breaks a link elsewhere that nobody thought to go
-back and check, and the person who eventually clicks it (maybe months
-later, maybe a future maintainer with no memory of the change at all)
-just hits a dead end with no explanation. Nothing else in this project's
-toolchain catches this: a Markdown formatter only checks that a file is
-well-formed on its own, not that its links go anywhere real.
-
-**When to run it:** Any time you add, rename, move, or delete a
-documentation file, or retitle a heading that something else links to.
-It also runs automatically as part of `./build --ci` and this project's
-`pre-push` git hook, so a broken link is caught before it is ever
-pushed, even if you forget to check by hand.
-
-**Usage:**
+Checks local file targets, heading anchors, and orphan pages across repository
+Markdown. It does not require Docker.
 
 ```console
 dev/bin/check-doc-links
 ```
 
-Takes no arguments. It always checks the whole repository, starting
-from wherever it is run. Prints one line per problem found (if any) and
-exits with a non-zero status; prints a single confirmation line and
-exits successfully if everything checks out.
+Run after adding, moving, renaming, or deleting pages or linked headings.
+It also runs in `./build --ci` and the pre-push hook. It takes no arguments,
+locates the repository from any working directory, prints each problem, and
+exits nonzero on failure; otherwise it prints a confirmation.
 
 ## `check-webui-assets`
 
-**What it does:** Reads the desktop app's own browser files -- its
-HTML pages, its stylesheets, and its scripts -- and checks four things
-about how they fit together: that every styling rule is one some page or
-script can actually reach, that every class name written onto an element
-either has styling behind it or is used by a script for something, that
-every link and every file reference points at a file that is really
-there, and that every icon reference names an icon that really exists in
-the app's icon file.
-
-**Why it matters:** The desktop app is not one file; it is dozens of
-small ones that only become a working screen together. The tools that
-check each file on its own -- `eslint`, `stylelint`, `htmlhint`, run by
-[`validate-repository`](#validate-repository) -- deliberately never look
-across that boundary, so none of them can tell you that a button's
-styling was deleted last month and the button has been plain ever since,
-or that an icon reference was misspelled and one toolbar button has been
-quietly blank. Those faults are invisible in exactly the wrong way: the
-app still starts, the screen still appears, and nothing reports an
-error. Only something that reads all the files together can notice, and
-this is that something. It is the desktop app's counterpart to
-[`check-doc-links`](#check-doc-links), which asks the same question of
-the documentation.
-
-A small number of class names are emitted by
-[`generate-help-html`](#generate-help-html) rather than written by hand,
-and so have a program rather than a file as their user. Those are listed
-as named exceptions at the top of the script, each with the reason it is
-there.
-
-**When to run it:** Any time you change the desktop app's HTML,
-stylesheets, or screen scripts -- particularly when deleting something,
-which is when a reference is most likely to be left behind pointing at
-nothing. It also runs automatically as part of `./build`, after the
-in-app Help pages are regenerated, so a stale reference is caught before
-it is committed. It needs no Docker.
-
-**Usage:**
+Checks references across the desktop app's HTML, CSS, and JavaScript:
+reachable styling rules, class names with styles or script uses, local file
+and link targets, and icon names. Generated-help classes have named
+exceptions with explanations in the script.
 
 ```console
 dev/bin/check-webui-assets
 ```
 
-Takes no arguments. It always checks the whole desktop app, starting
-from wherever it is run. Prints one line per problem found (if any) and
-exits with a non-zero status; prints a single confirmation line and
-exits successfully if everything checks out.
+Run after web asset changes, particularly deletions. The check complements
+per-file linters and runs in `./build` after help generation.
+It takes no arguments, locates the app from any working directory, prints
+each problem, and exits nonzero on failure. No Docker is required.
 
 ## `compare-against-hierfstat`
 
-**What it does:** Builds a small Docker image containing
-[hierfstat](https://cran.r-project.org/package=hierfstat), an R package
-from a different research group that independently implements the same
-underlying model this project does (a migration matrix, random genetic
-drift, and mutation, applied generation by generation). It runs hierfstat
-with the same population size, migration rate, mutation rate, and deme
-count as one of this project's own already-tested scenarios, reads back
-the genotypes hierfstat itself simulated, and computes this project's own
-statistics (`H_S`, `H_T`, `G_ST`, `D`) from them -- then prints those
-numbers next to this project's own closed-form theoretical prediction for
-the same scenario, so you can see how closely an entirely separate
-implementation, written by someone else, in a different programming
-language, agrees.
+Builds a Docker image with
+[hierfstat](https://cran.r-project.org/package=hierfstat), an independent R
+implementation of migration, drift, and mutation. It simulates a reference
+scenario, computes `fim` statistics (`H_S`, `H_T`, `G_ST`, `D`) from
+hierfstat's genotypes, and prints them beside theoretical predictions.
 
-**Why it matters:** Every other check in this project's test suite
-compares this project's own code against a formula, a published number,
-or another part of this project's own code -- never against a genuinely
-different program's own simulation of the same process. This script is
-the one place that happens. Deliberate care went into *what* gets
-compared: hierfstat's own built-in summary statistics use a different
-convention (correcting for the fact that real studies only ever sample a
-handful of individuals from a much bigger population), so this script
-does not use them -- it reads hierfstat's simulated genotypes directly
-and runs this project's own statistics on them instead, so both sides of
-the comparison are computed the same way, and the only real difference
-left is which program generated the underlying random simulation.
-
-**When to run it:** Whenever you want independent reassurance that this
-project's own simulator is not just internally consistent but agrees
-with someone else's separately-written code -- there is no fixed
-schedule for this. It is deliberately **not** run automatically by any
-test, build, or release step: it needs Docker installed and running, the
-first run takes a few minutes to build the image, and it only ever
-prints a comparison for you to read, rather than a pass/fail answer (see
-its own `--help` text for why a firm pass/fail tolerance does not exist
-yet).
-
-**Usage:**
+The comparison uses genotypes rather than hierfstat's summary statistics,
+which apply sampling corrections inappropriate to this comparison.
+See [migration conventions](../../doc/migration-conventions.md) and
+[differentiation measures](../../doc/jost-differentiation-measures.md)
+before interpreting differences.
 
 ```console
 dev/bin/compare-against-hierfstat \
@@ -600,48 +366,24 @@ dev/bin/compare-against-hierfstat \
     --generations 4000 --nbal 99 --nbloc 200 --seed 900001
 ```
 
-Every flag has a sensible default matching one of this project's own
-already-tested scenarios; running the command with no arguments at all
-uses those defaults. Pass `--skip-build` on a second run to reuse the
-already-built image instead of checking for updates to it.
+All flags have reference-scenario defaults. `--skip-build` reuses the image.
+Docker is required; the initial build takes several minutes. This manual
+comparison has no established pass/fail tolerance and is not an automated
+gate; `--help` describes that limitation.
 
 ## `extract-release-notes`
 
-**What it does:** Reads `CHANGELOG.md` and prints just the section for
-one specific version -- the bullet points describing what changed in
-that release -- with the surrounding heading and everything else
-stripped away.
-
-**Why it matters:** `CHANGELOG.md` is the project's single, ongoing,
-hand-written record of what changed in each release; it is kept up to
-date as part of normal work, not written specially at release time. When
-a new version is actually published as a GitHub Release, that release
-needs its own description text for people to read on GitHub. Rather than
-maintaining that description as a second piece of writing (which would
-be tedious to keep in sync, and an easy way for the two texts to quietly
-drift apart from each other over time), the automated release process
-runs this script to lift the relevant section straight out of the
-changelog. There should never be a reason to describe the same release
-twice, once by hand and once for GitHub.
-
-**When to run it:** In ordinary use, never by hand -- it runs
-automatically as part of the release workflow whenever a version tag
-(like `v1.2.0`) is pushed. You would only run it yourself to preview
-what a release's notes will look like before actually publishing it.
-
-**Usage:**
+Prints a selected version's `CHANGELOG.md` section without its heading or
+surrounding sections. The release workflow uses it for the GitHub Release
+description. Run manually to preview notes.
 
 ```console
 dev/bin/extract-release-notes v1.2.0
 dev/bin/extract-release-notes 1.2.0 --changelog path/to/CHANGELOG.md
 ```
 
-The version may be written with or without a leading `v` (a real release
-tag looks like `v1.2.0`; `CHANGELOG.md`'s own heading for it is written
-as `## [1.2.0]`, without the `v` -- either spelling given here works).
-`--changelog` is only useful for testing against a copy of the file
-somewhere other than the repository root; day to day, the default
-(`CHANGELOG.md` in the current directory) is always what you want.
+The version accepts an optional leading `v`. `--changelog` overrides the
+default `CHANGELOG.md` in the current directory.
 
 ## `generate-api-docs`
 
@@ -686,7 +428,7 @@ bypasses Git hooks entirely).
 
 ```console
 dev/bin/generate-api-docs
-dev/bin/generate-api-docs /tmp/scratch-api.md
+dev/bin/generate-api-docs scratch-api.md
 ```
 
 With no arguments, overwrites the real, committed `src/fim/API.md`. A
@@ -719,289 +461,154 @@ An optional path writes a separate reference with links relative to that
 location. Freshness checks render beside the committed reference, as for
 `generate-api-docs`.
 
+See the [Python guide](../../doc/python-api.md) for runnable examples and
+the [functional API contract](../../doc/fim-simulator-functional-api.md)
+for supported imports.
+
 ## `generate-heatmap-queue`
 
-**What it does:** `engine_backend="auto"` decides between two of this
-project's three engines using two separate settings, one for deme
-count (`auto_vector_min_d`) and one for locus length/capacity
-(`auto_vector_max_capacity`) -- as if the real line where one engine
-starts beating the other were a perfect rectangle in that two-setting
-space. Nobody had actually checked that: every speed measurement taken
-so far ([`benchmark-engines`](#benchmark-engines)) only ever varied one
-of those two settings at a time. This tool writes a
-[`benchmark-queue`](#benchmark-queue) file that measures every
-combination of several deme counts and several locus lengths at once,
-so the shape of that boundary becomes visible instead of assumed.
-
-**Why it matters:** Two settings can easily interact in a way neither
-one shows on its own -- the real boundary could be a diagonal line, not
-the rectangle two independent settings describe, and if it is, the
-current settings could be silently picking the slower engine somewhere
-nobody has looked yet. This tool's own generated file also demonstrates
-[`benchmark-queue`](#benchmark-queue)'s own concurrent-stage feature
-put to real use: every locus-length value's own measurement is
-independent of every other one, so they all run at the same time (one
-shared stage), rather than paying for a separate wait-for-quiet pause
-before each.
-
-**When to run it:** The same "otherwise idle machine" caveat
-`benchmark-engines` itself carries applies here too, and the same
-answer applies: on a machine with real spare capacity, several
-measurements really can run side by side without spoiling each
-other's numbers (see `benchmark-queue`'s own "why it matters" section
-above). Start with a deliberately coarse, widely-spaced set of values;
-read the result ([`render-heatmap`](#render-heatmap)); then run this
-tool again with a narrower, denser range centered on wherever the
-first pass actually found the boundary, rather than measuring the
-whole space in fine detail from the start -- most of it has already
-turned out to be one-sided in every measurement taken so far.
-
-**Usage:**
+Writes a `benchmark-queue` file that measures every combination of selected
+deme counts and locus lengths. The grid tests whether the two thresholds
+used by `engine_backend: auto` (`auto_vector_min_d` and
+`auto_vector_max_capacity`) approximate the measured backend crossover.
 
 ```console
 dev/bin/generate-heatmap-queue \
     --d-values 10,35,70,120,300 --length-values 5,6,7,8 \
-    --out-dir /tmp/fim-heatmap
-dev/bin/benchmark-queue /tmp/fim-heatmap/queue.json \
-    --log-dir /tmp/fim-heatmap/logs
-dev/bin/render-heatmap /tmp/fim-heatmap
+    --out-dir fim-heatmap
+dev/bin/benchmark-queue fim-heatmap/queue.json \
+    --log-dir fim-heatmap/logs
+dev/bin/render-heatmap fim-heatmap
 ```
 
-`--d-values`/`--length-values` are the two axes of the grid (comma-
-separated; every value on one axis is measured against every value on
-the other). `--fixed-N`/`--fixed-m`/`--fixed-mu` hold the three other
-settings steady throughout (defaults match `benchmark-engines`'s own);
-`--replicates`/`--generations`/`--trials` size and repeat each
-individual measurement, exactly as the equivalent `benchmark-engines`
-flags do. `--out-dir` is where everything this tool and the two it
-hands off to (`benchmark-queue`, `render-heatmap`) produce actually
-lives -- one small config file per locus-length value, the queue file
-itself, and (once `benchmark-queue` has actually run it)
-`render-heatmap`'s own input files.
+- `--d-values` and `--length-values`: comma-separated grid axes.
+- `--fixed-N`, `--fixed-m`, `--fixed-mu`: settings held constant, with
+  defaults matching `benchmark-engines`.
+- `--replicates`, `--generations`, `--trials`: size and repeat measurements.
+- `--out-dir`: configurations, queue, and subsequent result files.
+
+Locus-length measurements share a concurrent stage. Ensure sufficient
+capacity to avoid timing interference; see [`benchmark-queue`](#benchmark-queue).
+Start with a coarse grid, then refine near the measured boundary.
 
 ## `generate-help-html`
 
-**What it does:** Converts the two operational guides
-`doc/usage.md`/`doc/configuration.md` into the HTML shown by the desktop
-app's (`fim-gui`) own built-in Help screen, and writes that HTML into
-`src/fim/gui/webui/help/`. Worked-example YAML blocks in `usage.md` are
-generated from the canonical files under `doc/examples/<example>/config.yaml`
-by [`update-worked-examples`](#update-worked-examples) first.
-
-**Why it matters:** The Help screen exists so you can look up how a
-command or a configuration field works without leaving the app or
-needing an internet connection -- useful in the field, or anywhere a
-connection is not reliable. Its text is not written separately from the
-guides you would read on GitHub; it is produced directly from the exact
-same `doc/usage.md`/`doc/configuration.md` files, for the identical
-reason `generate-api-docs` above reads docstrings instead of a
-hand-written summary: one source of truth that cannot say two different
-things in two different places. See "[Why generated files exist at
-all](#why-generated-files-exist-at-all)" above -- the generated HTML
-under `src/fim/gui/webui/help/` should never be hand-edited; edit the
-Markdown guide instead and regenerate.
-
-**When to run it:** You rarely need to remember this yourself. The
-`pre-commit` git hook already runs it automatically whenever a change
-you are committing touches `doc/usage.md` or `doc/configuration.md`.
-`pre-push` and `./build --ci` separately double-check that the committed
-HTML still matches what running this script again right now would
-produce.
-
-**Usage:**
+Converts `doc/usage.md` and `doc/configuration.md` into offline desktop
+help under `src/fim/gui/webui/help/`, together with `doc/statistics.md`.
+First synchronizes usage-guide YAML
+through [`update-worked-examples`](#update-worked-examples).
 
 ```console
 dev/bin/generate-help-html
-dev/bin/generate-help-html --output-dir /tmp/scratch-help
+dev/bin/generate-help-html --output-dir scratch-help
 ```
 
-With no arguments, overwrites the real, committed HTML files under
-`src/fim/gui/webui/help/`. `--output-dir PATH` writes to a scratch
-directory of your choosing instead, without touching the committed
-files -- used by the freshness check described above.
+The default overwrites committed HTML; `--output-dir` writes elsewhere.
+Edit the Markdown sources, not generated HTML. The pre-commit hook refreshes
+help when either guide changes; the pre-push hook and `./build --ci` check
+freshness.
+
+Inline TeX and fenced `math` equations are converted to native MathML by
+the pinned development dependency `latex2mathml`. Equation tags appear
+beside display equations. The bundled pages need no network connection,
+JavaScript math library, or separately downloaded fonts. Unsupported
+TeX commands stop generation instead of appearing as raw markup.
+Statistic-key headings remain unchanged so desktop help links keep working.
 
 ## `regenerate-example-outputs`
 
-**What it does:** For each example under `doc/examples/` that has a
-`config.yaml` (or only the ones you name), runs exactly
-`python -m fim.launcher run doc/examples/<id>/config.yaml --output <temporary
-directory> --quiet`, with the results directory pointed at a temporary
-directory, and then replaces the example's committed output files with
-the fresh ones: every artifact of a single run, or the batch manifest,
-summary, and every kept replicate's complete artifacts. Trajectories,
-convergence histories, and sigma-band JSONL data are losslessly
-gzip-compressed into parts no larger than 50 MiB. Pairwise matrices and
-scatter plots are retained too. Opening the example restores JSONL data
-automatically and verifies its original manifest digests; no rerun or
-manual unpacking is needed. A failed run leaves the example's files as
-they were.
+Runs examples with `config.yaml` under `doc/examples/`, then replaces
+their committed outputs. The invocation is
+`python -m fim.launcher run doc/examples/<id>/config.yaml --output <staging-directory> --quiet`.
+A failed run leaves committed artifacts unchanged.
 
-**Why it matters:** The desktop app ships these files as read-only
-example runs, and `test/test_doc_examples.py` (slow) fails when a fresh
-run no longer matches them. The command line carries nothing except the
-configuration, so every setting a configuration leaves out takes
-`fim run`'s own default, the same value the desktop app submits.
+Outputs include single-run artifacts or the batch manifest, summary, and
+kept replicates. Trajectory, convergence, and sigma-band JSONL are losslessly
+gzip-compressed into parts of at most 50 MiB. Pairwise matrices and scatter
+plots are retained. Opening an example restores JSONL and verifies manifest
+digests; manual unpacking or rerunning is unnecessary.
 
-**When to run it:** After a change to an example's configuration, or to
-the engine, statistics, or report format, once the slow test reports a
-mismatch. Some examples take a long time: Dear-Nolan low runs for about an
-hour, and Jost (2008) Part VI for about a quarter of an hour. On
-a shared machine, `--jobs` and `--workers` keep the load bounded;
-neither changes any result.
-
-**Usage:**
+Run after configuration, engine, statistic, or report-format changes when
+the slow replay test (`test/test_doc_examples.py`) reports a mismatch.
+Examples may take about an hour (Dear-Nolan low) or a quarter-hour (Jost Part
+VI), depending on backend and hardware. Bound load on shared machines.
 
 ```console
-dev/bin/regenerate-example-outputs                      # every example
-dev/bin/regenerate-example-outputs golden-part-vi       # just one
-dev/bin/regenerate-example-outputs --list               # list examples
-dev/bin/regenerate-example-outputs --dry-run            # show commands
+dev/bin/regenerate-example-outputs                      # all examples
+dev/bin/regenerate-example-outputs golden-part-vi       # one example
+dev/bin/regenerate-example-outputs --list
+dev/bin/regenerate-example-outputs --dry-run
 dev/bin/regenerate-example-outputs --jobs 3 --workers 2
 ```
 
-`--jobs N` runs up to `N` examples at once. `--workers N` sets the
-process count of a `lineal` batch and is not passed to any other engine.
-Commit the changed files together with the rebuilt examples bundle that
-the pre-commit hook stages.
+`--jobs` bounds concurrent examples. `--workers` sets `lineal` batch worker
+processes and is not passed to other engines. Neither changes results.
+Commit outputs with the rebuilt examples bundle staged by the hook.
 
 ## `update-worked-examples`
 
-**What it does:** Copies each canonical YAML config in
-`doc/examples/<example>/config.yaml` into its marked code block in
-`doc/usage.md`.
-
-**Why it matters:** The configs are editable standalone files, while the
-usage guide and the GUI Help screen still show each complete example in
-context. A single source prevents those displayed copies from drifting.
-The pre-commit hook refreshes `doc/usage.md` when a config or the guide
-changes; tests also verify that every config is included exactly once.
-
-**Usage:**
+Copies each `doc/examples/<example>/config.yaml` into its marked YAML block
+in `doc/usage.md`. The pre-commit hook refreshes the guide when a
+configuration or the guide changes. Tests verify each configuration is
+included once.
 
 ```console
 dev/bin/update-worked-examples
 dev/bin/update-worked-examples --check
 ```
 
-The default command refreshes `doc/usage.md`. `--check` reports stale or
-unreferenced configs without changing files.
+The default updates the guide; `--check` reports stale or unreferenced
+configurations without changing files.
 
 ## `render-heatmap`
 
-**What it does:** Reads every result file
-[`generate-heatmap-queue`](#generate-heatmap-queue) pointed a
-`benchmark-engines --output` at, and prints two grids -- deme count
-down the side, locus length across the top -- one showing which engine
-actually won at each combination, the other showing by how much
-(`"generational-vector"`'s own time divided by `"generational"`'s own,
-with JIT on; below `1.0` means the array-native engine is still ahead).
-
-**Why it matters:** A table of raw seconds, one per combination,
-answers "how long did this take" but not the actual question -- "does
-the boundary between the two engines bend." Seeing both engines'
-own winner and the size of the gap side by side, arranged the same way
-the two settings actually vary, makes that shape visible at a glance
-instead of requiring a reader to mentally cross-reference several
-separate `benchmark-engines` tables.
-
-**When to run it:** Once [`benchmark-queue`](#benchmark-queue) has
-actually finished running the queue file
-[`generate-heatmap-queue`](#generate-heatmap-queue) wrote -- this tool
-reads that run's own output files, not live data, so running it before
-the queue finishes finds nothing yet (and says so directly, rather than
-printing an empty or misleading grid).
-
-**Usage:**
+Reads `result-len*.json` files produced by the generated benchmark queue.
+Prints grids with deme count down rows and locus length across columns:
+the winning engine and the ratio of `generational-vector` time to
+`generational` time with JIT enabled. Ratios below 1 favor the vector engine.
 
 ```console
-dev/bin/render-heatmap /tmp/fim-heatmap
+dev/bin/render-heatmap fim-heatmap
 ```
 
-The one argument is the same `--out-dir` directory
-[`generate-heatmap-queue`](#generate-heatmap-queue) was given -- this
-tool finds every `result-len*.json` file in it on its own; nothing
-else needs to be told which files to read.
+Pass the directory supplied to `generate-heatmap-queue --out-dir`.
+Run after the queue finishes; missing results are reported rather than
+rendered as an empty grid.
 
 ## `validate-repository`
 
-**What it does:** Runs seven separate checking tools over the whole
-repository in one command: `shellcheck` (checks every shell script for
-real bugs), `yamllint` (checks the GitHub Actions/Dependabot
-configuration files for structural mistakes), `markdownlint` (checks
-every Markdown file for consistent formatting), `eslint`, `stylelint`,
-and `htmlhint` (check the desktop app's JavaScript, stylesheets, and
-HTML for the faults a web browser would never report -- a misspelled
-call, an unknown style property, two elements sharing one name), and
-`gitleaks` (scans the project's entire commit history for text that
-looks like an accidentally-committed password, API key, or other
-credential).
+Runs pinned Docker-backed tools across the repository:
 
-**Why it matters:** These checks catch a different kind of mistake
-than the test suite does -- not "does the simulator compute the right
-answer," but "is the surrounding project itself sound": a shell script
-with a bug that only shows up on someone else's machine, a broken
-continuous-integration configuration file, an inconsistently formatted
-guide, a stylesheet a browser silently ignores half of, or -- most
-seriously -- a real credential accidentally left in a
-file that gets committed and pushed to a public repository, where it
-would then need to be treated as compromised and rotated immediately.
-This matters for the project's overall trustworthiness even if you never
-personally touch a shell script or a CI configuration file yourself. You
-do not need any of the seven tools installed on your own computer to run
-this: each one is a specific, version-pinned tool that runs inside
-Docker (see the [maintainer runbook](../../CONTRIBUTING.md)'s own note
-on the Docker-backed wrappers in `bin/`), the same exact version every
-time, on every machine and in the automated CI checks alike -- so a
-result never depends on which version of a tool someone happened to
-have lying around.
-
-**When to run it:** Usually you will not have to run it by hand at all:
-the `pre-push` hook runs it automatically before every push, so the
-normal experience is that problems surface locally, seconds after you
-introduce them. Run it directly when you want reassurance about the
-whole repository rather than the files you changed -- before a release,
-say -- or after installing the hooks for the first time.
-
-It is not part of `./build`, because every tool it runs needs Docker and
-`./build` deliberately does not. Its companion check that needs no
-Docker, [`check-webui-assets`](#check-webui-assets), does run in
-`./build`.
-
-**Where it runs automatically:**
-
-| Place | When |
-|---|---|
-| `pre-push` hook | Every push, unless Docker is unavailable or `PRE_PUSH_SKIP_VALIDATE=true` |
-| CI (`lint-assets`) | Pushes and pull requests to `staging` and `main`, and release tags |
-
-CI deliberately does not run it on `dev`. The pinned images are already
-warm on a machine that has pushed before, so the hook costs seconds
-while a CI runner starts cold every time -- and a failure reported after
-the push has already cost a round trip. The `staging`/`main` job is a
-backstop for the cases the hook cannot cover: a push made with the hooks
-never installed, with `PRE_PUSH_SKIP_VALIDATE=true`, or with no Docker
-daemon running. If that job ever fails, the hook was bypassed.
-
-Secret scanning is the exception and runs on every branch, in its own
-`.github/workflows/gitleaks-ci.yml` workflow, because a leaked
-credential is the one failure already irreversible by the time it
-reaches `staging` -- rotation is the only remedy, and every hour it sits
-in a pushed branch is exposure.
-
-**Usage:**
+- ShellCheck: shell scripts
+- yamllint: YAML, including GitHub Actions and Dependabot
+- markdownlint: Markdown formatting
+- ESLint, Stylelint, HTMLHint: desktop JavaScript, CSS, and HTML
+- gitleaks: credential-like content in the complete commit history
 
 ```console
 dev/bin/validate-repository
 ```
 
-Takes no arguments. Requires Docker to be installed and running --
-each tool's own pinned image is downloaded automatically the first time
-it is needed, then reused after that.
+Takes no arguments and requires a running Docker daemon. Images are
+downloaded on first use and cached. No host linter installation is required.
+This command is separate from `./build`, which does not require Docker.
+The Docker-free [`check-webui-assets`](#check-webui-assets) runs in the build.
+
+| Automatic execution | Conditions |
+|---|---|
+| Pre-push hook | Every push unless Docker is unavailable or `PRE_PUSH_SKIP_VALIDATE=true` |
+| CI `lint-assets` | Pushes and pull requests to `staging`/`main`, and release tags |
+
+`lint-assets` does not run on `dev`. CI validation covers pushes made without
+local checks. Credential scanning additionally runs on every branch in
+`.github/workflows/gitleaks-ci.yml`. Treat a published credential as
+compromised and rotate it; deleting it from the working tree is insufficient.
 
 ## Related documents
 
 - [Maintainer runbook](../../CONTRIBUTING.md)
 - [Repository-managed hooks](../git-hooks/README.md)
 - [Developer and extension guide](../../doc/developer.md)
+- [Scientific test plan](../../doc/fim-simulator-test-plan.md)
 - [Source-tree orientation](../../src/README.md)
 - [Project overview](../../README.md)

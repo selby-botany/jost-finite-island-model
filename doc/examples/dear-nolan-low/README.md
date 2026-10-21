@@ -5,9 +5,9 @@ botanical simulations: five demes of 100 individuals each with very low
 migration and negligible mutation. It is meant to run to the population's
 equilibrium, which takes tens of thousands of generations.
 
-## Status: this example runs as a batch and agrees with theory
+## Batch result
 
-**The batch converges.** It ran 10 replicates and stopped at the minimum of 10
+The batch ran 10 replicates and stopped at the minimum of 10
 because the 95% confidence interval for `D` was within the requested ±0.01
 (this example watches `D`). Each replicate burned in for 104,338 generations
 (about 5.3 relaxation times of 19,693), averaged over a 393,853-generation
@@ -20,22 +20,18 @@ generations where it is defined is **0.954 ± 0.014** (0.939 to 0.968); computed
 from the averaged heterozygosities (H<sub>S</sub> ≈ 0.0009, H<sub>T</sub> ≈
 0.029) it is about 0.969, against theory 0.9695.
 
-The shipped configuration sets `max_generations: 1000000000`, a cap far above
-any need, so each replicate stops when its window is done and never because it
-ran out of generations. An earlier version of this example, run as a single
-run with the derived cap (399,728 generations), ended at the cap with
-`converged_on: null`, because this scenario needs more than two million
-generations in one run at this precision: `D` swings over the population's
-relaxation time (about 19,700 generations), so even a window of millions of
-generations holds only about a hundred independent draws of it. A batch spreads
-that work over replicates, each averaging over about 394,000 generations.
+The configuration sets `max_generations: 1000000000`, so each replicate
+reaches its precision criterion before the generation cap. At the reported
+relaxation time of about 19,700 generations, an averaging window of roughly
+394,000 generations contains only about 20 relaxation-time units. Replication
+provides independent run-level estimates in addition to the within-run
+averaging.
 
 The committed outputs were produced with `engine_backend: auto`, which
-resolves to `generational-vector` here. The batch took about 55 minutes on a
-10-core development machine with other jobs running (the earlier single-run
-version took about three and a half minutes on a 22-thread Linux machine). The
-reference `lineal` engine produces the same result bit for bit, and is about
-30 times slower (see "Engine identity").
+resolves to `generational-vector` for this configuration. The batch took
+about 55 minutes on a 10-core development machine with other jobs running.
+The reference `lineal` engine produces the same result bit for bit and is
+about 30 times slower under the measured conditions (see "Engine identity").
 
 ## Biological context
 
@@ -44,11 +40,11 @@ isolated plant populations where seed dispersal between sites is rare.
 The low-migration configuration (m = 0.0001, &mu; = 0.000001) gives
 Nm = 0.01, which the traditional view reads as "very high differentiation".
 
-At equilibrium the opposite happens for the heterozygosity-based
+At equilibrium, heterozygosity-based
 differentiation that G<sub>ST</sub> and D measure. Each deme is nearly always
 fixed for a single allele (H<sub>S</sub> ≈ 0.001), and because the total
 diversity is also near zero (H<sub>T</sub> ≈ 0.03), almost all demes are fixed
-for the *same* allele. In the source correspondence, 189 of 200 simulated loci
+for the *same* allele. In the published source results, 189 of 200 simulated loci
 had two demes fixed for the same allele (about 95%). G<sub>ST</sub> is high
 (the little diversity that exists is between demes) but D, which measures
 differentiation of allele frequencies, is near zero: it is controlled by
@@ -70,14 +66,13 @@ demes does D fall toward 0.04. The population needs about 19,700 generations
 to forget its starting state (the relaxation time; see
 [Convergence defaults](../../convergence.md)).
 
-`config.yaml` therefore leaves `convergence_burn_in` on `auto` and sets
+`config.yaml` leaves `convergence_burn_in` on `auto` and sets
 `max_generations` far above any need. Each replicate derives a burn-in of 104,338
 generations (about 5.3 relaxation times) and then averages over a window
 matched to the batch's precision (see
-[Batches](../../convergence.md#batches-replicates-that-average)). Earlier
-versions stopped this scenario after a few hundred generations, on the plateau,
-with a large D. This example watches **D** and stops when D's interval across
-replicates is within the precision.
+[Batches](../../convergence.md#batches-replicates-that-average)). The example
+watches **D** and stops when D's interval across replicates is within the
+precision.
 
 ## Parameters
 
@@ -91,9 +86,8 @@ replicates is within the precision.
 | convergence | `auto` | Burn-in derived from the model; cap set far above need (1,000,000,000) |
 | seed | 20260825 | Exact RNG seed |
 
-Thirty independent loci stand in for many separate simulation runs, as in the
-source correspondence (each locus is an independent replicate of the same
-demographic process).
+The 30 independent loci provide independent realizations of the demographic
+process within each replicate.
 
 ## Running the example
 
@@ -149,23 +143,15 @@ D ≈ 0.04.
 generations (0.954 ± 0.014); the value built from the averaged heterozygosities
 is about 0.969, which matches the theoretical `G_ST` (0.96946) and Jost's
 published ≈ 0.97. H<sub>S</sub> ≈ 0.001 and H<sub>T</sub> ≈ 0.03 show the same
-picture as the source: nearly every deme is fixed, and nearly all of them on
+picture as the published source results: nearly every deme is fixed, and nearly all of them on
 the same allele.
 
-### Engine identity
+### Backend validation
 
-`engine_backend: auto` resolved to `generational-vector`. The `lineal`
-reference reproduced the report exactly when this example was a single run: the
-same configuration with only `engine_backend` changed to `lineal`, run on the
-same 22-thread Linux machine, stopped at the same generation (2,625,168) with an
-identical `report.json` (every field equal, `run_id` aside, which differs
-because it hashes the configuration). It took 1 hour 44 minutes, against 3
-minutes 24 seconds for `auto`: about 30 times as long. The batch has not been
-rerun on `lineal`. The automated slow test
-(`test/validation/test_examples_auto_backend.py`) skips this example because of
-that time; the other examples are rerun on `lineal` there, and the engine
-parity tests cover this configuration's shape. The single run's report is kept
-as validation data for the convergence rule (`test/validation/`).
+`engine_backend: auto` resolves to `generational-vector` for this
+configuration. The automated example-reproduction test
+(`test/validation/test_examples_auto_backend.py`) skips this long-running
+batch. Engine-parity tests cover the configuration's model shape.
 
 ## Relationship to the published calibration
 
@@ -177,9 +163,9 @@ uses:
 - A different seed (884000)
 
 That configuration starts the population at the mathematical fixed point where
-the within-deme and between-deme identity recursions balance, so it needs no
-long approach. This example starts from a random draw and shows the approach
-itself, which is why it runs for so long. `test/validation/
+the within-deme and between-deme identity recursions balance. This example
+starts from a random draw and records the approach to equilibrium.
+`test/validation/
 test_convergence_defaults.py` checks that a run with the default settings
 stops near the same equilibrium.
 

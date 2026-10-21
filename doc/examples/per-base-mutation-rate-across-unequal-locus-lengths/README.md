@@ -18,10 +18,9 @@ averaged over a 5,002-generation window; across the replicates `D` = 0.199 ±
 0.014 and `G_ST` = 0.0590 ± 0.0012 (95% confidence half-widths), pooled over
 both loci. The burn-in is sized from the slowest locus: the 50-base locus
 mutates ten times less than the 500-base one, so it takes about ten times
-longer to forget its starting state (a relaxation time of 250 generations),
-and the derived burn-in and window follow it. An earlier version averaged the
-two rates, derived too short a burn-in, and stopped at generation 231 with `D`
-still on its approach from the starting state.
+longer to forget its starting state (a relaxation time of 250 generations).
+The derived burn-in and averaging window therefore use the slowest locus's
+timescale.
 
 ## Why the precision is 0.03
 

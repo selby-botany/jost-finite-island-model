@@ -1,28 +1,11 @@
-"""Seeded initial-condition strategies.
+"""Generate initial population states from supported initial-condition models.
 
-Before a simulation can run at all, every deme needs a starting set of
-allele frequencies at generation zero — this module is where that
-starting point comes from. Three strategies are provided, all reachable
-through `generate_initial_state`: `DirichletInitialCondition` (the
-default) draws a random starting frequency for each deme/locus from a
-symmetric Dirichlet distribution (a standard way of picking a random
-set of proportions that add up to 1, used throughout population
-genetics for exactly this purpose); `ExplicitInitialCondition` instead
-uses a frequency table the caller supplied directly in
-`SimulationParams` (``p_0`` in a config file), for reproducing a
-specific known starting condition rather than a random one;
-`EquilibriumSplitInitialCondition` instead simulates one ancestral
-population to mutation-drift equilibrium and founds every deme by
-sampling from it (see that class's own docstring).
-
-Every strategy but the last shares one contract, stated precisely by
-`DirichletInitialCondition`'s own docstring: generation zero is a
-*continuous belief*, not yet a sampled population — `fim.model.
-operators.drift`'s first application is what turns it into the model's
-first actual `N`-gene-copy realization. `EquilibriumSplitInitialCondition`
-does not fit that contract, and its own docstring explains why not: its
-generation zero is already sampled, finite, and real by the time it is
-returned.
+`DirichletInitialCondition` draws starting frequencies from a symmetric
+Dirichlet distribution. `ExplicitInitialCondition` uses configured `p_0`
+frequencies. `EquilibriumSplitInitialCondition` simulates an ancestral
+population to mutation-drift equilibrium and samples its demes. The Dirichlet
+and explicit models return frequencies before the first finite-population
+drift step; the equilibrium split returns sampled gene copies.
 """
 
 from __future__ import annotations

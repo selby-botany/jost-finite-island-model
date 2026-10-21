@@ -1,51 +1,10 @@
-"""Project-root, results-directory, and atomic-publish logic, shared by
-every front end.
+"""Resolve project, results, and log locations and publish output atomically.
 
-This is where every part of `fim` (the command line, the desktop app,
-every test) goes to answer four small but easy-to-get-wrong questions,
-so each one is answered exactly once, the same way everywhere, rather
-than reinvented slightly differently in each front end:
-
-1. "Where does this project actually live on disk?" (`project_root`) —
-   needed to find a sensible default place to write output, without
-   requiring every command to be told an explicit path every time.
-2. "Where should a run's output go if the user did not name a specific
-   folder?" (`default_output_directory`, `results_directory`) — a
-   single, predictable `results/` folder under the project root, with
-   each unnamed run getting its own timestamped subfolder so two runs
-   never collide by writing into the same place.
-3. "How do we write a whole folder's worth of output files without ever
-   leaving a half-written, broken folder behind if something goes wrong
-   partway through?" (`atomic_directory`) — see that function's own
-   docstring for the answer.
-4. "Where does this program's own operational log go, if nobody said
-   otherwise?" (`log_directory`, `default_log_file`) — a `logs/` folder
-   beside `results/`, under the same resolved project root
-   (`doc/fim-logging-design.md` §6).
-
-Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
-run orchestration resolves the exact same `project-root/results/`
-layout, timestamped default folder naming, and atomic-publish-or-nothing
-guarantee as `fim run`, rather than a second, independently maintained
-copy of this logic. `project_root` is anchored on
-the `fim` package's own `__init__.py` (`fim.__file__`), not the calling
-module's `__file__`: every caller under `src/fim/`, regardless of how deep
-it sits (`fim/cli.py`, `fim/gui/runner.py`, ...), resolves the identical
-root this way, where anchoring on each caller's own `__file__` would need a
-different `parents[N]` depth per caller and silently break the moment a new
-caller sat at a different depth.
-
-`project_root`/`results_directory`/`log_directory` are each
-independently, explicitly overridable — `set_root_override`/`set_
-results_directory_override`/`set_log_directory_override`, and the
-matching `FIM_HOME`/`FIM_RESULTS_DIRECTORY`/`FIM_LOG_DIRECTORY`
-environment variables — for a user (or a test) who wants results, logs,
-or both somewhere other than the default, without a per-invocation
-flag on every single command (`fim run -o <path>`/`-L file=<path>`
-already exist for that narrower, one-off case). See each function's
-own docstring for the exact precedence, and `20260918-claude-sonnet-5-
-configurable-storage-root-design.md` (`selby/restricted`) for the full
-design.
+The default results and log directories are relative to the project root.
+Environment variables and explicit overrides can select other locations.
+`atomic_directory` stages a complete output tree before publishing it so an
+incomplete run directory is not exposed. See `doc/configuration.md` for path
+configuration.
 """
 
 from __future__ import annotations
@@ -279,69 +238,14 @@ STAGING_LOCK_FILENAME = ".fim-staging.lock"
 
 @contextlib.contextmanager
 def atomic_directory(target: Path) -> Iterator[Path]:
-    """Build a directory's contents in a hidden temporary sibling, then
-    publish it at `target` with one atomic rename.
+    """Build a directory in a hidden sibling, then publish it atomically.
 
-    The problem this solves: a simulation run writes several files
-    (trajectory data, a report, a plot, a manifest) into its own output
-    folder over the course of running, which can take anywhere from a
-    second to hours. If that run is interrupted partway through — the
-    process crashes, the computer loses power, or a person simply
-    presses Ctrl-C — writing those files *directly* into the final
-    folder would leave behind a folder that looks like a real,
-    completed run's output (it exists, it has some files in it) but is
-    actually missing whatever had not been written yet. Nothing about
-    that folder's own name or existence would reveal it was actually
-    incomplete — a real bug found in `cli.py` before this function was
-    extracted from it, and one this function exists specifically to
-    prevent.
-
-    The fix follows the same idea a careful editor uses when saving a
-    long document: write the whole new version to a *different* file
-    first, and only once it is completely finished, replace the old file
-    with the new one in a single step — never leaving a moment where the
-    file exists but is only half-written. Concretely: every write inside
-    the `with` block happens in a hidden temporary folder next to
-    `target` (a dot-prefixed sibling, created directly inside
-    `target.parent`, on the very same filesystem — required so the
-    final step below can be one atomic rename rather than a slower,
-    interruptible copy). "Atomic" here means the same thing it means in
-    everyday English: indivisible — from the perspective of anything
-    else looking at the filesystem, that rename either has not happened
-    yet (nothing at `target`) or has completely finished (everything at
-    `target`); there is no in-between moment where `target` exists but
-    only holds some of the files. If the code inside the `with` block
-    raises anything at all — an ordinary exception, or `^C` from the
-    keyboard — the temporary folder is discarded and `target` is left
-    completely untouched, never created in a broken state. `target`
-    therefore either does not exist yet or exists fully complete; there
-    is no third, partial state ever observable from outside this
-    function.
-
-    A process that is *killed* is different: SIGKILL, or a SIGTERM with no
-    handler installed, ends Python without running the cleanup below
-    (`fim run` turns its first SIGTERM into `SystemExit` precisely so the
-    cleanup does run; see `fim.termination`). `target` is still never
-    half-written, but the hidden temporary sibling is left behind.
-    `fim.persistence.staging.find_orphan_staging` reports such orphans,
-    and reclaims those whose builder is provably gone (run lifecycle design
-    `20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
-    `selby/restricted`, sections 2, 5 and 11).
-
-    This guarantee is about the *rename* being all-or-nothing, not about
-    surviving a total loss of power (a separate, harder guarantee this
-    function does not attempt — internal tracking reference S11): nothing
-    here calls `fsync` (the low-level operation that would force every
-    written byte all the way out to physical disk before continuing), so
-    on an actual, unclean power loss, the operating system and disk are
-    still free to have recorded the rename itself before every byte
-    written into the temporary folder had physically reached the disk —
-    meaning a `target` that survives such an event can exist, look
-    complete, and still contain corrupted or truncated file content in
-    that specific, narrow scenario. Read this function's guarantee as
-    "no half-written folder is ever visible to look at," not "every
-    folder this function ever produced is guaranteed to have survived a
-    power failure with perfect data integrity."
+    The staging directory is created beside `target` on the same
+    filesystem. Successful exit renames it to `target`; an exception in
+    the context body removes the staging directory. Termination without
+    cleanup may leave staging behind. The rename prevents readers from
+    seeing a partially populated target, but no `fsync` is performed,
+    so this does not guarantee data durability after power loss.
 
     Args:
         target: The directory's final path. Must not already exist.

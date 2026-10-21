@@ -238,85 +238,32 @@ def _partition_into_blocks(
 
 
 class ThreadedAdvancer:
-    """Fans `SequentialAdvancer`'s own per-lane stepping out across threads.
+    """Advance active lanes concurrently using worker threads.
 
-    Partitions whichever lanes are active this tick into up to
-    `max_workers` contiguous blocks (`_partition_into_blocks`) and steps
-    each block — sequentially, in order, exactly what `SequentialAdvancer`
-    already does — inside its own thread, via `ThreadPoolExecutor`.
-    Blocks are disjoint (every lane belongs to exactly one), so no two
-    threads ever touch the same lane's own state, RNG, or allele
-    registry at once; the one thing genuinely shared across threads is
-    `store`, made safe by the `threading.Lock` both
-    `fim.persistence.store.InMemoryTrajectoryStore` and
-    `fim.persistence.binary_store.BinaryLogStore` now hold around
-    their own `write_generation`.
-
-    Whether this delivers real wall-clock speedup over
-    `SequentialAdvancer` depends on how much of each generation's own
-    work happens inside NumPy/JIT calls that release the GIL versus
-    pure-Python loop overhead — measured, not merely open, as of
-    `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-    §10 items 10a/10c: at this project's own reference scale, `drift`'s
-    own `_inversion_binomial` primitive (needed to keep this backend
-    bit-identical to `LinealBackend`, see below) is pure Python and
-    holds the GIL for nearly all of `drift`'s own wall-clock time. That
-    measurement predates §10 item 10e's own stages 1-3b (2026-09-03):
-    `migrate`'s own scalar-rate, continuous-migration path and `mutate`'s
-    own event-count draw, whole-generation minting, source attribution,
-    and (below a per-locus capacity bound) target selection are now
-    `nogil`-compiled too, under `jit=True` — the "unjitted and GIL-bound
-    regardless of `jit`" claim this paragraph made through 2026-09-02 is
-    no longer an accurate description of the code. Whether that
-    translates into real wall-clock thread scaling is a genuinely
-    different, re-measured-not-yet question — `20260903-claude-sonnet-
-    5-fim-vg-performance-campaign-design.md` §6.3 item 1 schedules the
-    re-sweep this claim now depends on; until that lands, treat this
-    class's own real-world thread-scaling behavior as unmeasured against
-    the current code, not as either the old regression or a new win.
-    What this class does guarantee, unconditionally:
-    identical results to `SequentialAdvancer` for the same seed, since
-    the actual per-lane computation is the same code
-    (`SequentialAdvancer.advance` itself, called once per block), only
-    fanned out across threads rather than run in one.
-
-    Block assignment is computed fresh every tick from whichever lanes
-    happen to be active (`_partition_into_blocks`), not a persistent,
-    static assignment decided once at batch start — worth revisiting as
-    a later, separately-measured optimization once lane membership is
-    treated as fixed-and-masked rather than genuinely shrinking, but not
-    this class's own current scope.
+    Each tick, the active lanes are divided into up to `max_workers`
+    contiguous blocks. Each block is advanced sequentially by
+    `SequentialAdvancer`; blocks contain disjoint lanes. The same
+    per-lane operations preserve results for the same seed as
+    `SequentialAdvancer`. Threading may improve throughput when the
+    workload releases the Python global interpreter lock; speedup is
+    workload-dependent. Block assignments are recalculated each tick.
     """
 
     def __init__(
         self, max_workers: int | None = None, *, jit: JitOption = "off"
     ) -> None:
-        """Configure how many blocks/threads this advancer fans out across.
+        """Configure the worker count and JIT option.
 
         Args:
-            max_workers: Defaults to `os.cpu_count()` (or 1 if that
-                cannot be determined) — the same default reasoning
-                `concurrent.futures.ThreadPoolExecutor` itself uses.
-                Deliberately not the same `max_workers` `simulate_params()`'s own
-                public signature accepts — that one is `LinealBackend`-
-                only (a process count); reusing the name for a thread
-                count here was flagged, not settled, by the design this
-                implements, so this constructor's own parameter is
-                reachable only by building a `GenerationalBackend`
-                directly, not yet through `simulate_params()` itself.
-            jit: Passed through to each block's own `SequentialAdvancer`
-                — see its docstring. ``"numba"`` JIT-compiles `drift`'s
-                own multinomial draw (`fim.model.operators.drift`'s own
-                docstring) — bit-identical, and no longer regresses
-                wall-clock time the way an earlier, per-pair-call version
-                measurably did, but is not yet shown to be a clear
-                standalone win either: `drift`'s own dominant cost at
-                this project's reference scale is marshaling to and from
-                `ModelState`'s sparse representation, not the compiled
-                draw itself, so this setting alone should not be assumed
-                to speed up `ThreadedAdvancer`'s own thread fan-out in
-                practice. `migrate`/`mutate`'s RNG calls stay unjitted
-                and GIL-bound regardless of this setting either way.
+            max_workers: Maximum worker threads. Defaults to the
+                available CPU count, or 1 if it cannot be determined.
+                This option is available through a directly configured
+                `GenerationalBackend`; `simulate_params()`'s
+                `max_workers` option configures processes for
+                `LinealBackend`.
+                jit: Passed to each block's `SequentialAdvancer`. The
+                    `"numba"` option requires Numba and preserves results
+                    for the same seed.
 
         Raises:
             ValueError: If `max_workers` is given and is less than 1.

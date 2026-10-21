@@ -1,24 +1,10 @@
-"""Derive convergence defaults from the modeled population's own timescale.
+"""Derive convergence defaults from the population relaxation time.
 
-How long a run must be watched depends on how fast the population forgets its
-starting state: its *relaxation time*, `tau`. This module estimates `tau` from
-the migration, mutation and deme-size parameters (the slowest locus sets it)
-and turns it into a default burn-in and `max_generations`.
-
-Why `tau` has this form, and the numerical check behind it, is written up in
-the design document `20260925-claude-sonnet-5-convergence-defaults-derived-
-from-model-design.md` (Appendix A) and, for users, in `doc/convergence.md`.
-In short: every watched statistic is a smooth function of the pairwise
-identity probabilities `J`, `J` obeys a linear recurrence, and the run is
-settled only once that recurrence's slowest mode has decayed.
-
-Two routes give `tau`:
-
-- `island_relaxation_time` is a closed form, exact to about 1% for the
-  symmetric island model with equal deme sizes (the default `m` scalar).
-- `recursion_relaxation_time` builds the recurrence's linear part as a
-  `d² by d²` matrix and takes its spectral radius. It handles any migration
-  matrix and unequal deme sizes, at a cost that limits it to small `d`.
+The relaxation time estimates how quickly the modeled population approaches
+its stationary distribution. The symmetric island model has a closed-form
+estimate; a matrix-based recursion supports arbitrary migration matrices and
+unequal deme sizes for populations within the configured size limit. See
+`doc/convergence.md` for the derivation and calibration.
 """
 
 from __future__ import annotations

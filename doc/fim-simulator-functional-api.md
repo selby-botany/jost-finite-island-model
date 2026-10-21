@@ -17,24 +17,17 @@
 
 ## Who this document is for
 
-Anyone writing or reviewing a **fim functional** test (see `doc/
-fim-simulator-detailed-test-plan.md`'s own taxonomy) — a test whose job
-is to check the simulator's documented, externally visible *behavior*,
-not its internal machinery. This document lists exactly what that
-external surface is: every module, class, and function a functional
-test is allowed to import and call. A functional test that reaches past
-this list — into `fim.model.operators`, a name starting with `_`, or any
-module not listed here — has stopped being a functional test and become
-an internal one (still potentially valuable, just a different kind; see
-the detailed test plan).
+This reference defines the supported imports and calls for **functional
+tests** of documented, externally visible behavior. Tests that use private
+names or unlisted implementation modules are internal tests; see the
+[test taxonomy](fim-simulator-detailed-test-plan.md).
 
-This list is not a tutorial. For what each piece of biology and
-statistics actually means, see the [finite island model
-introduction](finite-island-model-introduction.md) and the [Jost
-differentiation-measures guide](jost-differentiation-measures.md); for
-how to install and run the simulator as an end user, see
-[usage.md](usage.md) and [configuration.md](configuration.md). This
-document only answers "what can code call."
+For runnable examples, see [Using fim from Python](python-api.md). For
+scientific interpretation, see the [model introduction](finite-island-model-introduction.md),
+[statistics reference](statistics.md), and
+[differentiation-measures guide](jost-differentiation-measures.md).
+Installation and command-line operations are covered in
+[usage](usage.md) and [configuration](configuration.md).
 
 ## What "externally accessible" means here
 
@@ -49,17 +42,16 @@ a submodule never re-exported (`fim.model.operators` is the standing example),
 is an implementation detail, free to change shape without counting as a
 breaking change to this API. `fim` ships type information (`py.typed`).
 
-`fim.gui` is a separate, GUI-specific API surface, not covered here —
-see `doc/fim-gui-test-plan.md`.
+`fim.gui` has a separate surface described in the
+[GUI test plan](fim-gui-test-plan.md).
 
 ## 1. `fim` — the front door
 
-The names a Python user needs, loaded on first use so `import fim` stays
-light. [Using fim from Python](python-api.md) is the guide with runnable
-examples; this section is the reference.
+The top-level API loads names on first use to minimize import overhead.
+See [Using fim from Python](python-api.md) for runnable examples.
 
 - **`simulate(spec, *, execution=None, recording=None, clock=None) -> Result`**
-  runs a `RunSpec` (or a `RunConfig`, whose own execution and recording the
+  runs a `RunSpec` (or a `RunConfig`, whose execution and recording the
   keywords override) and always returns a `Result`. With
   `recording.directory` set, the run is published there atomically in the
   layout `fim run` writes; with `execution.workers`, a `lineal` batch runs in
@@ -75,7 +67,9 @@ examples; this section is the reference.
 - **`Execution`** (backend, JIT, worker processes, the `auto` thresholds) and
   **`Recording`** (directory, trajectory retention) are passed beside the
   `RunSpec`. They never change a result and take no part in a run's identity.
-- **`run_identity(spec) -> str`** — the run's ID, from the science only.
+- **`run_identity(spec) -> str`** — the ID derived from model, stopping,
+  replication, analysis, and seed settings; execution/storage settings are
+  excluded.
 - **`load_config(path) -> RunConfig`**, **`RunConfig`** — a configuration
   file as grouped objects, with its labels.
 - **`Result`** — `run_id`, `spec`, `replicates` (a tuple of **`Replicate`**),
@@ -100,8 +94,8 @@ the engine's `SimulationParams`, and `fim.spec.from_params` reads one back.
 
 ## 1b. `fim.engine` — the engine entry point
 
-What `simulate` calls. Code that already holds `SimulationParams` can call it
-directly.
+`simulate` delegates to this engine API. Code holding `SimulationParams`
+can call it directly.
 
 - **`simulate_params(params, *, store=None, run_id=None, clock=None,
   max_workers=None, store_factory=None) -> RunResult | tuple[RunResult, ...]`**
@@ -112,7 +106,7 @@ directly.
   `n_replicates` when `stop_batch_early` lets the batch stop once every
   watched statistic's across-replicate interval has tightened enough).
   `max_workers` and `store_factory` opt `lineal` into running replicates in
-  worker processes and give each replicate its own store; `clock` is a test
+  worker processes and assign a separate store per replicate; `clock` is a test
   seam. `engine_backend` selects the implementation: `"lineal"` (the
   reference), `"generational"` (thread-based replicate fan-out, bit-identical
   to `lineal` for the same seed), `"generational-vector"` (array-native; one
@@ -125,19 +119,18 @@ directly.
   a table over the per-replicate memory ceiling (2 GiB, or the
   `FIM_VECTOR_MEMORY_CEILING_BYTES` environment variable) raises
   `fim.model.vector_block.VectorMemoryCeilingError` with the remedies named.
-  The backend that actually ran, never the literal `"auto"`, is recorded on
+  The resolved backend, not the literal `"auto"`, is recorded on
   each result's `manifest.engine_backend`.
 - **`deterministic_run_id(params) -> str`** — the run ID, from
   `SimulationParams.identity_dict`, which leaves out the engine, JIT, trajectory
   retention, and storage settings.
 - **`report_for_state(state, params, *, run_id, converged, reason, ...) -> FinalReport`**
-  Builds a `FinalReport` from any `ModelState`, not only a state a run just
-  finished producing — the same function `fim.reanalyze` uses to recompute a
-  report at an earlier saved generation. Optional `window_statistics` and
+  Builds a `FinalReport` from any `ModelState`, including a saved generation
+  passed by `fim.reanalyze`. Optional `window_statistics` and
   `converged_statistics` carry what only the run itself knows.
 - **`reports_summary(reports) -> Mapping[str, float | None]`** and
   **`replicate_summary(reports) -> Mapping[str, tuple[float, ConfidenceInterval]]`**
-  Aggregate several replicates' own `FinalReport`s into means (and, for the
+  Aggregate per-replicate `FinalReport`s into means (and, for the
   latter, confidence intervals) per statistic.
 - **`build_engine_backend(engine_backend, *, jit="off", max_workers=None,
   store_factory=None, params=None,
@@ -145,76 +138,57 @@ directly.
   auto_vector_max_capacity=DEFAULT_AUTO_VECTOR_MAX_CAPACITY) ->
   EngineBackend`** — the factory `simulate_params()` itself calls; available for
   a caller that wants a configured backend object directly. `params` is
-  required, and only actually read, when `engine_backend="auto"`.
+  required for `engine_backend="auto"` and also enables capacity checks for
+  an explicitly selected vector backend.
 - **`DEFAULT_AUTO_VECTOR_MIN_D`** — the module-level constant
-  `auto_vector_min_d` defaults to; its own docstring has the full
-  benchmark finding behind the default value and why it is a parameter,
-  not a hardcoded constant.
+  `auto_vector_min_d` defaults to; its docstring records the benchmark
+  evidence behind the default.
 - **`DEFAULT_AUTO_VECTOR_MAX_CAPACITY`** — the module-level constant
-  `auto_vector_max_capacity` defaults to; its own docstring has the
-  full benchmark finding behind the default value, the same "parameter,
-  not a hardcoded constant" reasoning `DEFAULT_AUTO_VECTOR_MIN_D`
-  already carries.
+  `auto_vector_max_capacity` defaults to; its docstring records the
+  benchmark evidence and tuning rationale.
 - **`EngineBackend`** (a `Protocol`), **`LinealBackend`**,
   **`GenerationalBackend`** — the common backend contract and its two
-  current implementations. `LinealBackend` wraps today's own
-  process-based dispatch unchanged; `GenerationalBackend` wraps
+  implementations. `LinealBackend` uses process-based dispatch;
+  `GenerationalBackend` wraps
   `run_batch` (below), driven by an injectable `Advancer`
   (`SequentialAdvancer`, no new concurrency — what `GenerationalBackend()`
   defaults to when constructed directly rather than through
-  `build_engine_backend`; `ThreadedAdvancer`, real thread-based fan-out —
-  what `engine_backend="generational"` actually builds;
+  `build_engine_backend`; `ThreadedAdvancer`, thread-based fan-out —
+  what `engine_backend="generational"` builds;
   `VectorizedAdvancer`, array-native, one compiled kernel call per
   generation, both mutation models, both migrant sampling modes — what
-  `engine_backend="generational-vector"` actually builds).
+  `engine_backend="generational-vector"` builds).
 - **`run_batch(params, store, run_id, clock, advancer) -> tuple[RunResult, ...]`**,
   **`ReplicaLane`** — the generation-first driving loop `GenerationalBackend`
   calls, and the per-replica working-state object it advances one
   generation at a time; for the same seed, bit-identical to
-  `LinealBackend`'s own trajectory under
+  `LinealBackend`'s trajectory under
   `SequentialAdvancer`/`ThreadedAdvancer`/`VectorizedAdvancer` (the last
-  on the same platform; see `engine_backend`'s own entry above).
+  on the same platform; see `engine_backend` above).
 - **`FinalReport`** (a `TypedDict`) — the scalar numbers a finished
   run reports, averaged across every tracked locus: `run_id`,
   `generation`, `converged`, `converged_on` (the watched statistic(s)
   that had settled when the run stopped; `None` for a run that hit its
-  cap), `reason`, and the six
+  cap), `reason`, and
   differentiation/heterozygosity measures `G_ST` (`None` when every
   tracked locus has fixed, since the statistic is undefined with no
   variation left), `D`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`, plus the
   literature-derived supplemental statistics `A_CGD` (Caballero-
-  García-Dorado allelic distance), `Delta` (Gregorius δ), and `MI`
+  García-Dorado allelic distance), `Delta` (Gregorius $\delta_G$), and `MI`
   (Sherwin mutual information).
 - **`RunResult`** (a frozen dataclass) — everything one finished run
   produced: `run_id`, `params`, `final_state` (a `ModelState`, every
   deme's allele frequencies at every locus at the last generation),
   `report` (a `FinalReport`), `convergence_generations`/
-  `convergence_history`/`convergence_histories` (the run's own
-  generation-by-generation trajectory of whichever statistic(s) it
+  `convergence_history`/`convergence_histories` (the run's
+  generation-by-generation histories of whichever statistic(s) it
   watched), `manifest` (a `RunManifest`), and `store` (the
   `TrajectoryStore` the run wrote to, for reading its full
   per-generation history back later).
-- **`deterministic_run_id(params) -> str`** — the same configuration
-  always produces the same id; used when a caller does not supply its
-  own `run_id`.
-- **`report_for_state(state, params, *, run_id, converged, reason, ...) -> FinalReport`**
-  Builds a `FinalReport` from any `ModelState`, not only a state `simulate_params()`
-  itself just finished producing — the same function `fim.reanalyze`
-  uses to recompute a report at an earlier saved generation. Optional
-  `window_statistics` and `converged_statistics` (the statistics a run's
-  own monitor saw pass, `ConvergenceMonitor.stable_statistics`) carry
-  what only the run itself knows.
-- **`reports_summary(reports) -> Mapping[str, float | None]`** and
-  **`replicate_summary(reports) -> Mapping[str, tuple[float, ConfidenceInterval]]`**
-  Aggregate several replicates' own `FinalReport`s into means (and, for
-  the latter, confidence intervals) per statistic — what the CLI's own
-  batch/stats output and the desktop app's batch-results screen are
-  built from.
 
 ## 2. `fim.model` — describe a simulation
 
-The plain data describing one finite-island population at a moment in
-time, and the pure functions that build a starting one.
+Population data structures and initialization functions.
 
 - **`SimulationParams`** (a frozen dataclass) — the full, validated
   configuration `simulate_params()` takes: `gene_copies` (`PopulationSize`, an `int` gene-copy
@@ -228,16 +202,16 @@ time, and the pure functions that build a starting one.
   `migrant_sampling` (`"continuous"` or a stochastic mode),
   `mutation_model` (`"infinite_alleles"` or `"finite_alleles"`), and an
   optional `initial_frequencies` override. Constructing one validates
-  every field; see `doc/configuration.md` for what each one means to a
-  user filling in a form, and `fim-simulator-design.md` for the
-  scientific rationale behind each default.
+  every field; see [configuration](configuration.md) for field meanings
+  and the [simulator design](fim-simulator-design.md) for scientific
+  assumptions.
 - **`ModelState`** — one simulated population at one generation: every
-  deme's own allele-frequency mapping, at every locus. Its own public
+  deme's allele-frequency mapping, at every locus. Its public
   accessors (`frequency_map`, `deme_count`, `locus_count`, `support_sizes`,
   `total_frequency`, `to_rows`, `from_rows`) are how a functional test
   reads a run's output without knowing anything about how frequencies
   are stored internally.
-- **`LocusSpec`** — one tracked locus's own configuration (sequence
+- **`LocusSpec`** — one tracked locus's configuration (sequence
   length, per-locus mutation rate override, and so on).
 - **`AlleleId`**, **`AlleleRegistry`**, **`founding_allele_ids`** — how
   alleles are identified and how a population's *founding* alleles (the
@@ -248,7 +222,7 @@ time, and the pure functions that build a starting one.
   distribution (`initial_allele_count`/`initial_concentration`, or an
   explicit `initial_frequencies` override) the parameters describe.
 
-`fim.model.operators` (Migrate/Mutate/Drift, the actual per-generation
+`fim.model.operators` (Migrate/Drift/Mutate, the per-generation
 update rules `simulate_params()` calls in a loop) is **not** part of this list —
 see "What is deliberately not here," below.
 
@@ -256,27 +230,25 @@ see "What is deliberately not here," below.
 
 Helpers for the spatial (stepping-stone) migration case, exported
 directly from `fim.model.topology` (not re-exported at the `fim.model`
-top level, since most callers only ever need a plain scalar or
-hand-built matrix for `m`):
+top level):
 
 - **`stepping_stone_neighbors(d, *, topology, rate) -> dict[int, dict[int, float]]`**
   A sparse one-based neighbor map for a 1-D ring or bounded-line
   arrangement of `d` demes.
 - **`dense_matrix_from_neighbors(neighbors, d) -> tuple[tuple[float, ...], ...]`**
-  Turns any sparse neighbor map (from the function above, or hand-built,
-  as the Crow & Aoki torus scenario tests do for a 2-D lattice this
-  project has no dedicated builder for) into the dense, row-stochastic
-  matrix `Migration` and `simulate_params()` actually expect.
+  Converts a sparse neighbor map into the dense, row-stochastic matrix
+  accepted by `Migration` and `simulate_params()`.
 
 ## 4. `fim.statistics` — differentiation and diversity measures
 
 Pure functions computing a diversity or differentiation statistic from
-a frequency table, or predicting one theoretically from a model's own
-parameters — no dependency on the engine, persistence, or a run having
-happened at all. Full formulas and citations:
-[jost-differentiation-measures.md](jost-differentiation-measures.md).
+a frequency table, or predicting it from model parameters. These functions
+do not depend on the engine or persistence. See the
+[statistics reference](statistics.md) for interpretation, formulas, and
+implementation links, and
+[differentiation measures](jost-differentiation-measures.md) for derivations.
 
-*Computed from an actual (or simulated) frequency table:* `heterozygosity`,
+*Computed from a frequency table:* `heterozygosity`,
 `identity`, `hill_number`, `h_s`, `h_t`, `h_st`, `total_hill_number`,
 `within_hill_number`, `g_st`, `g_st_log`, `jost_d`, `e_st`, `k_st`,
 `differentiation_q`, `d_m`, `r_st`, `statistics_report`.
@@ -286,9 +258,7 @@ frequency table needed:* `equilibrium_d`, `equilibrium_g_st`,
 `equilibrium_shannon_entropy_isolated`/`_isolated_smm`/`_total`/
 `_subpopulation`, `equilibrium_shannon_differentiation`.
 
-*Convergence-speed prediction (Whitlock 1992), a different kind of
-question from every formula above — how fast identity moves toward
-equilibrium, not what value it settles to:* `identity_recovery_rate`,
+*Identity-recovery dynamics (Whitlock 1992):* `identity_recovery_rate`,
 `identity_recovery_equilibrium`, `identity_recovery_trajectory`,
 `identity_recovery_half_life`.
 
@@ -301,26 +271,26 @@ directly from a frequency table instead of from a live simulation.
 
 ## 5. `fim.convergence` — deciding when a run is done
 
-- **`ConvergenceMonitor`** — the stateful class driving a run's own
+- **`ConvergenceMonitor`** — the stateful class driving a run's
   stopping decision: accumulates a watched statistic's history
   generation by generation, asks its configured `ConvergenceCriterion`
   whether to stop, and separately enforces `SimulationParams.
   max_generations` as a hard safety cap.
 - **`ConvergenceCriterion`** and its concrete rules —
   `TrailingWindowCriterion`/`trailing_window_stable` (has a statistic's
-  own recent history stopped moving) and `ConfidenceIntervalCriterion`
+  recent history stabilized) and `ConfidenceIntervalCriterion`
   (has a confidence interval across replicates tightened enough).
   Watching several statistics at once (requiring them to agree) is a
   `ConvergenceMonitor` feature — see `convergence_combinator` in
-  `doc/configuration.md` — not a separate criterion class.
-- **`ConvergenceOutcome`**, **`StopReason`** — what a monitor's own
-  decision looked like: which generation, whether it converged or hit
+  [configuration](configuration.md#convergence_combinator).
+- **`ConvergenceOutcome`**, **`StopReason`** — the monitor's stop decision:
+  which generation, whether it converged or hit
   the cap, and why.
 
 ## 6. `fim.persistence` — reading and writing run results
 
 - **`TrajectoryStore`** (the interface) and its two implementations,
-  **`BinaryLogStore`** (the real, file-backed store — a compact binary
+  **`BinaryLogStore`** (a file-backed store — a compact binary
   log written by a background thread, so a run's history survives an
   interruption up to its last complete block; `close()` or a `with`
   block commits and releases it, and a closed store accepts no more
@@ -328,12 +298,12 @@ directly from a frequency table instead of from a live simulation.
   the same interface, nothing touches disk). **`TrajectoryRow`** is one
   row of that per-generation history.
 - **`RunManifest`**, **`read_manifest`**, **`write_manifest`** — a
-  finished run's own bookkeeping (parameters, timing, software version,
+  finished run's bookkeeping (parameters, timing, software version,
   and a checksum of its trajectory file, used to detect the trajectory
   having since been edited, corrupted, or replaced). `engine_backend`/
-  `jit` record which engine implementation and JIT setting actually
+  `jit` record which engine implementation and JIT setting
   produced the run — `None` for anything predating those two fields;
-  `simulate_params()` always resolves and records the real choice, never the
+  `simulate_params()` records the resolved backend, not the
   literal string `"auto"`.
 
 ## 7. `fim.reanalyze` — re-deriving statistics from a saved trajectory
@@ -341,56 +311,40 @@ directly from a frequency table instead of from a live simulation.
 - **`reanalyze_trajectory(...)`** and **`group_rows_by_generation(...)`**
   Read a trajectory a run already wrote to disk and recompute its
   statistics report at any earlier generation, not only the one the run
-  actually stopped at.
+  stopped at.
 - **`differentiation_q_for_state(state, order) -> float`** — the general
   `differentiation_q` family (§4), evaluated directly against a saved
   `ModelState` at a chosen order, for a "how does the conclusion change
   at a different `q`" sweep.
-- **`ReanalyzedGeneration`** — one such recomputed generation's own
+- **`ReanalyzedGeneration`** — one recomputed generation's
   result.
 
 ## 8. `fim.viz` — headless plotting
 
 Matplotlib-based plotting functions with no GUI dependency (used by both
-the CLI's own file output and the desktop app's screens):
+CLI file output and desktop app screens):
 `plot_convergence_trace`, `plot_frequency_bars`, `plot_frequency_scatter`.
 
 ## 9. `fim.cli` — the command line
 
-- **`main(argv=None) -> int`** — the whole CLI's own entry point
-  (`init`/`run`/`stats`/`update` subcommands); what `fim` on a shell
-  actually calls, and what `test/cli/test_cli.py` drives directly rather
-  than shelling out to a subprocess.
+- **`main(argv=None) -> int`** — the CLI entry point, called by the `fim`
+  command and directly by `test/cli/test_cli.py`. See the
+  [command reference](usage.md) for subcommands.
 - **`load_config(path) -> SimulationParams`** — parses a YAML
   configuration file (see `configuration.md`) into a validated
   `SimulationParams`, the same parsing the `run`/`stats` subcommands use.
 
 ## What is deliberately not here
 
-- **`fim.model.operators`** — the actual Migrate/Mutate/Drift step
-  functions. `simulate_params()` is the documented way to run generations; nothing
-  outside `fim.engine` calls these directly, by this project's own
-  stated design (see `fim.model`'s own package docstring).
-- Any name starting with `_` in any module, anywhere — always private,
-  regardless of how useful it looks from outside.
+- **`fim.model.operators`** — Migrate/Drift/Mutate step
+  functions. Functional tests must run generations through
+  `simulate_params()` rather than importing individual operators.
+- Any name starting with `_` — private in every module.
 - Test-only helpers that happen to mirror internal engine mechanics for
   cross-checking purposes (the exact-recursion oracle in
   `test/validation/test_simulator_equilibrium.py`, for instance) — these
   live in `test/`, are never imported by production code, and are
   themselves an example of the "internal/deep" test category the
   detailed test plan describes, not part of this API.
-- `fim.gui` — a separate surface for the desktop application; see
-  `doc/fim-gui-test-plan.md`.
-
----
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5.5
-generator-model-token: claude-sonnet-5-5
-generator-provider: Anthropic
-generation-date: 2026-10-15
-generator-responsibility: revision
-```
+- `fim.gui` — a separate surface for the desktop application; see the
+  [GUI test plan](fim-gui-test-plan.md).

@@ -1,31 +1,8 @@
-"""Background-thread scalar-run orchestration (`doc/fim-gui-design.md` §7.1).
+"""Background-thread orchestration for scalar GUI runs.
 
-`fim.engine.simulate_params` is a single blocking call; a multi-thousand-generation
-run would freeze the Tk main thread for its whole duration. `start_run`
-runs it on a `threading.Thread` instead, and gets progress and
-cancellation for free from `fim.gui.store.GuiProgressStore` — no change
-to `fim.engine` at all.
-
-The worker does its work inside `fim.paths.atomic_directory`, the exact
-context manager `cli._command_run_scalar` already uses (`fim.paths` was
-extracted from the CLI for precisely this shared use — §12): every
-write lands in a
-hidden temporary sibling of `output_directory`, published with one
-atomic rename only if the `with` block exits normally. A cancelled run
-raises `RunCancelledError` out of that block; an unexpected engine error
-raises one of `_EXPECTED_ENGINE_ERRORS`. Either way, `atomic_directory`'s
-own `except BaseException` clause discards the temporary directory and
-`output_directory` is never created — no GUI-specific cleanup code is
-needed for either outcome.
-
-Writes the same four artifacts, in the same order, as
-`fim.persistence.artifacts.write_run_artifacts`: `trajectory.tlog` streamed
-generation-by-generation by the `TrajectoryStore` passed into `fim`,
-then `report.json` and `scatter.png` once the run finishes, then —
-last, and only once both are flushed — `manifest.json`, augmented with
-each artifact's SHA-256 digest, the record
-`fim.persistence.manifest.verify_trajectory_integrity` later checks
-against.
+The worker runs the shared simulation engine, reports progress through
+`GuiProgressStore`, and writes the same run artifacts as the command-line
+interface. Output is published atomically only after a successful run.
 """
 
 from __future__ import annotations

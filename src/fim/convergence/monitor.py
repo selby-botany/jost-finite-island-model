@@ -1,18 +1,9 @@
-"""Stateful convergence monitoring with an explicit hard-cap outcome.
+"""Monitor single-run and replicate-batch convergence.
 
-Two monitors share one result type. `BurnInMonitor` drives a single run: it
-waits out the burn-in, then averages each watched statistic over an evidence
-window that grows until its standard error is small enough and its effective
-sample size large enough (design `20261005-claude-opus-5-5-simplified-
-convergence-rule-design.md`, `selby/restricted`, 6.1). `ConvergenceMonitor`
-drives the replicate batch: it remembers one value per completed replicate
-and asks a `fim.convergence.criteria.ConvergenceCriterion` whether the
-across-replicate interval is tight enough.
-
-Both always enforce a hard generation (or replicate) cap, so a statistic that
-genuinely never settles still cannot run a simulation forever.
-`ConvergenceOutcome` is the small, immutable record they hand back describing
-which of the two things happened, if either yet has.
+`BurnInMonitor` discards the burn-in and evaluates statistics over a growing
+evidence window. The batch monitor tracks values from completed replicates
+and evaluates the configured confidence-interval criterion. Both report when
+a convergence criterion or a hard generation or replicate cap is reached.
 """
 
 from __future__ import annotations

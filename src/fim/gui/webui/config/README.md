@@ -24,7 +24,11 @@ that no name is declared twice and that every file here is loaded first.
 - Name a color by its role (`CHART_AXIS_COLOR`) rather than its appearance.
 - Colors that must follow the light or dark theme are not constants: read the
   `--fim-*` custom property at draw time.
-- A constant used by one script and defined in another is fine, but ESLint
-  flags a constant that nothing uses. Delete it or use it.
-- When a value mirrors Python, say which Python constant, since nothing links
-  the two.
+- Constants may be shared across scripts. Remove unused declarations;
+  ESLint reports constants with no consumers.
+- When a value mirrors Python, name the corresponding Python constant.
+  The declarations are maintained separately.
+
+See the [GUI design](../../../../../doc/fim-gui-design.md) for script
+loading and drawing boundaries, and the
+[Python constants reference](../../../config/README.md) for model defaults.

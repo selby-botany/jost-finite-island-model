@@ -1,7 +1,10 @@
-<div class="help-gui-note"><p><strong>Reading this in fim-gui?</strong> Every setting below is also a field on the Configure screen, grouped the same way this reference's own sections are. This page documents the underlying YAML key each field corresponds to and its exact type, default, and constraints.</p></div><h1 id="fim-configuration-reference"><code>fim</code> configuration reference</h1>
+<div class="help-gui-note"><p><strong>Configuration reference</strong> This page lists YAML keys, types, defaults, and constraints. Configure and Settings expose the corresponding desktop controls; advanced options are available in Expert Settings.</p></div><h1 id="fim-configuration-reference"><code>fim</code> configuration reference</h1>
 <p><code>fim run</code> accepts one YAML mapping. Unknown keys, incompatible shapes, and
 out-of-range values are errors. See <a href="#" data-fim-help="usage" data-fim-anchor="">Using <code>fim</code></a> for commands and
 the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md">project overview</a> for installation.</p>
+<p>Mathematical quantities use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math>; YAML keys, literal values, and API
+identifiers use backticks. Display equations have unique local
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mtext>CFG</mtext></mrow></math> tags.</p>
 <h2 id="contents">Contents</h2>
 <ul>
 <li><a href="#settings-index">Settings index</a></li>
@@ -244,15 +247,15 @@ engine_backend: auto   # recommended choice; the library default is lineal
 <li><strong>Required:</strong> yes</li>
 <li><strong>Meaning:</strong> individuals per deme</li>
 </ul>
-<p><code>N</code> counts the individuals on each island, the number a field botanist counts.
-The simulator counts gene copies, so it multiplies <code>N</code> by <a href="#ploidy"><code>ploidy</code></a>:
+<p><code>N</code> counts individuals per deme. The simulator multiplies it by
+<a href="#ploidy"><code>ploidy</code></a> to obtain the gene-copy count:
 <code>N: 225</code> with <code>ploidy: diploid</code> is 450 gene copies per deme. That conversion
 happens once, when the configuration is read; everything after it, including
 every statistic and the analytic formulas, works in gene copies.</p>
 <p>Per-deme lists model unequal island sizes: every stage of the update
-pipeline (<code>migrate</code>, <code>mutate</code>, <code>drift</code>), the founding-allele-count bound
-(checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
-each deme's own gene-copy count.</p>
+pipeline (<code>migrate</code>, <code>drift</code>, <code>mutate</code>), the founding-allele-count bound
+(checked against the smallest <var>N</var><sub>i</sub>), and deme_weighting: size (when chosen) all use
+each deme's gene-copy count.</p>
 <pre><code class="language-yaml">N: [120, 450, 60]   # three demes, unequal individual counts
 ploidy: haploid
 d: 3
@@ -265,22 +268,20 @@ prefer the scalar form when every deme is the same size.</p>
 <li><strong>Required:</strong> yes</li>
 <li><strong>Meaning:</strong> gene copies per individual (1, 2, 3 or 4)</li>
 </ul>
-<p>Says how many gene copies each individual carries, so the simulator can turn
-<code>N</code> (individuals) into gene copies. Say it in words; a number is refused. The
-words exist for a reason: files written when <code>N</code> counted gene copies say
-<code>N: 450</code> with <code>ploidy: 2</code>, and reading that under today's rule would silently
-give 900 gene copies. Refusing the number makes such a file fail with an
-instruction instead: write <code>N: 225</code> with <code>ploidy: diploid</code>.</p>
+<p>Specifies gene copies per individual. Use a named value, not a number.
+For example, <code>N: 225</code> with <code>ploidy: diploid</code> represents 450 gene copies.
+Numeric ploidy values are rejected to prevent ambiguous interpretation of
+configurations that use <code>N</code> as a gene-copy count.</p>
 <pre><code class="language-yaml">N: 225            # individuals per deme
 ploidy: diploid   # 2 gene copies each, so 450 gene copies per deme
 </code></pre>
 <p>Literature configurations that state haploid reproductive individuals, such as
 Jost (2008) Part VI and the Dear-Nolan scenarios, say <code>ploidy: haploid</code>, so
-their <code>N</code> is exactly the gene-copy count the source gives.</p>
+their individual and gene-copy counts are equal.</p>
 <p>Because it is part of the recorded configuration, two runs that differ only
 in <code>ploidy</code> get different auto-generated run ids, even when their gene-copy
 counts are equal: 450 haploid and 225 diploid individuals are the same
-process with two records.</p>
+genetic process but different recorded population descriptions.</p>
 <h3 id="d"><code>d</code></h3>
 <ul>
 <li><strong>Type:</strong> integer at least 2</li>
@@ -297,44 +298,38 @@ process with two records.</p>
 its frequency vector and receives <code>m</code> from the size-weighted average of all
 other demes. Matrix rows must each sum to 1.</p>
 <p>A full matrix models asymmetric migration — row <code>k</code> gives destination deme
-<code>k</code>'s exact source weights, and row <code>k</code>'s weights need not equal row <code>j</code>'s.
+<code>k</code>'s source weights, and row <code>k</code>'s weights need not equal row <code>j</code>'s.
 Every row is independently configurable, including rows that are not
 symmetric with any other row.</p>
 <pre><code class="language-yaml">m:
-  - [0.90, 0.05, 0.05]   # deme 1 retains most of its own frequency
+  - [0.90, 0.05, 0.05]   # deme 1 retains 90% and receives 5% from each neighbor
   - [0.10, 0.80, 0.10]   # deme 2 blends evenly with both neighbors
   - [0.00, 0.20, 0.80]   # deme 3 exchanges only with deme 2
 d: 3
 </code></pre>
-<p>Two things worth being precise about, because both differ from the scalar
-case:</p>
+<p>Matrix and scalar forms have the following relationship:</p>
 <ul>
 <li><strong>A matrix's rows are the authoritative weights — they are not scaled by
 <code>N</code>.</strong> The scalar path automatically derives a size-weighted migrant pool
-from each deme's own gene-copy count; a matrix already states each
-destination's exact source mix, so <code>N</code> (scalar or per-deme) has nothing
-left to contribute to migration and does not change the result. If unequal
+from each deme's gene-copy count; a matrix directly specifies the
+destination's source mix, so <code>N</code> does not alter that blend. If unequal
 deme sizes should also drive migration weighting, build that weighting into
 the matrix itself. (This describes the default <code>migrant_sampling: continuous</code> blend. Under the opt-in migrant_sampling: stochastic, below,
 <code>N</code> re-enters the picture — not to change the mean, but to set how much a
-given generation's actual migrant count can vary around it.)</li>
+generation's migrant count can vary around it.)</li>
 <li><strong>The scalar form is the matrix's symmetric special case, not a different
 mechanism.</strong> For equal-size demes, a scalar rate <code>m</code> is numerically
 identical to the full matrix with <code>1 - m</code> on the diagonal and <code>m / (d - 1)</code>
-on every off-diagonal entry — prefer the scalar form when migration truly
-is symmetric and every deme is the same size; reach for a matrix only when
-it is not.</li>
+on every off-diagonal entry. Prefer the scalar form for equal-size demes
+with symmetric migration.</li>
 </ul>
 <h4 id="sparse-and-spatial-stepping-stone-migration">Sparse and spatial (stepping-stone) migration</h4>
-<p>Writing out a <code>d</code> by <code>d</code> matrix by hand stops being realistic once <code>d</code> grows
-past a handful of demes, and it is actively the wrong shape for a spatial
-topology, where almost every entry is <code>0</code> — each deme migrates only with a
-couple of neighbors, not the whole population. Two compact alternatives to
-the dense matrix cover this:</p>
+<p>Sparse migration graphs can be specified without writing every zero in a
+dense matrix. Two compact forms are available:</p>
 <p><strong>A sparse neighbor map.</strong> Give only the nonzero off-diagonal weights, keyed
 by deme (one-based) and neighbor (one-based); each deme's self-retention is
-implied as <code>1</code> minus its listed weights, exactly like the scalar case. A
-deme absent from the map migrates with nobody.</p>
+implied as <code>1</code> minus its listed weights. A deme absent from the map has
+no incoming migration.</p>
 <pre><code class="language-yaml">m:
   1: {2: 0.01}
   2: {1: 0.01, 3: 0.01}
@@ -342,14 +337,13 @@ deme absent from the map migrates with nobody.</p>
   4: {3: 0.01}
 d: 4
 </code></pre>
-<p>This is fully general — weights need not be symmetric, and this is the
-right form for any irregular adjacency (real geography, an arbitrary graph),
-not only the two named topologies below.</p>
-<p><strong>Named topology sugar</strong>, for the common stepping-stone cases: a compact
+<p>Weights need not be symmetric. Use this form for irregular adjacency
+graphs as well as regular topologies.</p>
+<p><strong>Named topologies</strong>, for common stepping-stone cases: a compact
 <code>{topology, rate}</code> mapping (plus <code>rows</code> and <code>columns</code> for a torus) that
 expands to the sparse form above.
 <code>rate</code> is every deme's total outgoing migration fraction, split evenly among
-its actual neighbors — the same meaning <code>m</code> already has as a scalar, applied
+its neighbors — the same meaning <code>m</code> has as a scalar, applied
 locally instead of globally.</p>
 <pre><code class="language-yaml">m:
   topology: ring     # or: linear
@@ -383,24 +377,24 @@ d: 100
 </code></pre>
 </li>
 </ul>
-<p>Both the sparse map and the topology sugar are config-file conveniences:
+<p>Both sparse maps and named topologies are configuration-file shorthand:
 they expand to the ordinary dense matrix at load time (visible as such in
-<code>report.json</code>/<code>manifest.json</code> and in to_dict()), so nothing downstream —
-<code>migrate()</code>, statistics, persistence — needs to know a sparse form was ever
-involved. Building a <code>SimulationParams</code> directly in Python (bypassing
-from_mapping) still needs an already-dense matrix; call
-fim.model.topology.stepping_stone_neighbors and
-fim.model.topology.dense_matrix_from_neighbors yourself to get one.</p>
+<code>manifest.json</code> and <code>to_dict()</code>). Operators, statistics, and persistence
+receive the expanded matrix. A <code>SimulationParams</code> constructed directly in
+Python requires a dense matrix; use
+<code>fim.model.topology.stepping_stone_neighbors</code> and
+<code>fim.model.topology.dense_matrix_from_neighbors</code> to construct one.
+See the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-functional-api.md#3-fimmodeltopology--build-a-migration-matrix">topology API</a>.</p>
 <p>Migration topologies that no fixed matrix can express — neighbor
 selection that changes over a run — are outside the current configuration
-surface. It has a named landing spot in the design document (§9.2, §11);
-it is not silently missing. (A plain bounded 2D lattice is expressible
-today as a sparse neighbor map; the <code>torus</code> sugar covers the wrapped
-case.)</p>
+surface. A bounded 2D lattice can be expressed as a sparse neighbor map;
+<code>torus</code> covers the wrapped case. See the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/migration-conventions.md">migration conventions</a> for matrix orientation
+and comparisons with the literature.</p>
 <h3 id="mu"><code>mu</code></h3>
 <ul>
 <li><strong>Type:</strong> number in <code>[0, 1]</code>, or a list of exactly one rate per locus</li>
-<li><strong>Required:</strong> yes, unless μ<sub>b</sub> (<code>μ&lt;sub&gt;b&lt;/sub&gt;</code>) is given instead (the
+<li><strong>Required:</strong> yes, unless <code>mu_b</code> is given instead (the
 two are mutually
 exclusive)</li>
 <li><strong>Meaning:</strong> per-gene-copy mutation probability per generation: after
@@ -409,7 +403,7 @@ mutates with this probability (the textbook Wright-Fisher model)</li>
 </ul>
 <p>A scalar applies identically to every locus, regardless of <code>length</code>, and
 is the right choice whenever every locus should mutate at the same rate.
-A list gives each locus its own explicit rate, positionally matched to
+A list gives each locus a rate, positionally matched to
 <code>loci</code>:</p>
 <pre><code class="language-yaml">mu: [0.001, 0.01]
 loci:
@@ -419,18 +413,14 @@ loci:
     length: 500
 </code></pre>
 <h4 id="deriving-mu-from-a-per-base-rate">Deriving <code>mu</code> from a per-base rate</h4>
-<p>Configuring <code>mu</code> directly means picking one number per locus by hand, with
-no built-in relationship to that locus's <code>length</code> — nothing stops two
-loci of very different lengths from sharing an identical <code>mu</code>, which
-contradicts the model's own reasoning for why longer loci should mutate
-more often (more sites for a copying error to land on).</p>
-<p>μ<sub>b</sub> (<code>μ&lt;sub&gt;b&lt;/sub&gt;</code>) is the alternative: a single per-base-pair mutation
-probability,
-from which each locus's own rate is derived using its own <code>length</code>,
-following the differentiation-measures guide's Eq. 5 relation exactly
-(not its linear <code>μ&lt;sub&gt;b&lt;/sub&gt; * length</code> approximation):</p>
-<pre><code class="language-math">\mathit{mu} = 1 - (1 - \mathit{mu\_b})^{\mathit{length}}
-</code></pre>
+<p><code>mu</code> specifies per-locus probabilities independently of length.
+Alternatively, <code>mu_b</code> specifies a shared per-base-pair mutation probability.
+Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mi>b</mi></msub></mrow></math> for the probability configured by <code>mu_b</code>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math> for
+the positive integer <code>length</code>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mi>ℓ</mi></msub></mrow></math> for the derived per-locus
+probability. Each base avoids mutation with probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>μ</mi><mi>b</mi></msub></mrow></math>;
+all <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math> bases avoid it with probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msub><mi>μ</mi><mi>b</mi></msub><msup><mo stretchy="false">)</mo><mi>ℓ</mi></msup></mrow></math>.
+Taking the complement gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003BC;</mi><mi>&#x02113;</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>&#x003BC;</mi><mi>b</mi></msub><msup><mo stretchy="false">&#x00029;</mo><mi>&#x02113;</mi></msup></mrow></math><span class="equation-tag">(CFG.1)</span></div>
 <pre><code class="language-yaml">mu_b: 0.00003
 loci:
   - locus_id: 1
@@ -438,11 +428,9 @@ loci:
   - locus_id: 2
     length: 8000      # mu ≈ 0.216 here — the same mu_b, a much higher mu
 </code></pre>
-<p>μ<sub>b</sub> is a config-file convenience, expanded to an explicit per-locus
-<code>mu</code> at load time — like every other shorthand in this reference (the
-compact n<sub>loci</sub>/locus_lengths locus form, the migration sparse map,
-the stepping-stone topology mapping), to_dict()/<code>manifest.json</code> always
-record the expanded <code>mu</code>, never μ<sub>b</sub> itself.</p>
+<p>This uses the full probability relation, not the linear approximation
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi><msub><mi>μ</mi><mi>b</mi></msub></mrow></math>. At load time, <code>mu_b</code> expands to a per-locus <code>mu</code> list.
+<code>to_dict()</code> and <code>manifest.json</code> record that list, not <code>mu_b</code>.</p>
 <p>By default, every mutation produces a globally novel allele identity; see
 <a href="#mutation_model">mutation_model</a> below for the opt-in alternative.</p>
 <h3 id="seed"><code>seed</code></h3>
@@ -451,8 +439,7 @@ record the expanded <code>mu</code>, never μ<sub>b</sub> itself.</p>
 <li><strong>Required:</strong> yes; there is no default</li>
 <li><strong>Meaning:</strong> seed for the run's NumPy <code>PCG64</code> generator</li>
 </ul>
-<p>A negative seed is rejected: <code>PCG64</code> has no equivalent upper bound to
-reject against in turn, so non-negativity is the entire legal range.</p>
+<p>Negative seeds are rejected; there is no upper bound.</p>
 <h2 id="loci">Loci</h2>
 <h3 id="loci-1"><code>loci</code></h3>
 <ul>
@@ -463,9 +450,9 @@ reject against in turn, so non-negativity is the entire legal range.</p>
 defaults to its one-based position. IDs must be unique.</p>
 <p>As an alternative to <code>loci</code>, use:</p>
 <ul>
-<li>n<sub>loci</sub> — positive locus count, default <code>1</code>;</li>
+<li><code>n_loci</code> — positive locus count, default <code>1</code>;</li>
 <li>locus_lengths — one positive integer shared by all loci, or exactly
-n<sub>loci</sub> integers, default <code>200</code>.</li>
+<code>n_loci</code> integers, default <code>200</code>.</li>
 </ul>
 <p>Do not combine the two forms. Differentiation statistics never read
 <code>length</code> directly; it acts only through the mutation model, below.</p>
@@ -490,23 +477,21 @@ locus_lengths: [50, 8000]
 <p>Controls what a mutation event turns an allele <em>into</em>, independently of
 <code>mu</code> (which controls how <em>often</em> one happens).</p>
 <ul>
-<li>infinite_alleles (the default): every mutation event produces a label
-never seen before, anywhere, ever. A good approximation once a locus
+<li>infinite_alleles (the default): each mutation produces a globally unique
+label. This approximates mutation at a locus that
 spans many base pairs — see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md#distance-between-alleles-is-a-different-model">the differentiation-measures guide</a> —
 but increasingly unrealistic for a short locus, where the same state
 can plausibly arise more than once by chance (a <em>recurrence</em>).</li>
 <li>finite_alleles: each locus gets a bounded state space of exactly
-4<sup>length</sup> possible states (the differentiation-measures guide's own
-worked reasoning: &quot;a single-character locus admits at most four
-alleles&quot;). A mutation event's target is drawn uniformly from the other
-<code>capacity - 1</code> states — never its own current state, but possibly one
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mi>ℓ</mi></msup></mrow></math> possible states, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math> is its <code>length</code>, corresponding to four bases per sequence
+position. A mutation target is drawn uniformly from the other
+<code>capacity - 1</code> states — never its current state, but possibly one
 already present elsewhere in the run. This still imposes no ordering or
 distance between alleles; it only gives the label space a ceiling. See
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#32-alleles-loci-and-identity">the simulator design, §3.2 and §9</a>
-for the full reasoning, including why this is a <em>different</em>, and
-deliberately not chosen, direction from a stepwise (microsatellite)
-mutation model.</li>
+for the assumptions and the distinction from a stepwise (microsatellite)
+mutation model, which is not implemented.</li>
 </ul>
 <pre><code class="language-yaml">mutation_model: finite_alleles
 loci:
@@ -516,11 +501,9 @@ loci:
 <p>finite_alleles interacts with <code>length</code>, initial_allele_count, and
 p_0: every locus's starting allele IDs — the founding range
 0 .. initial_allele_count - 1, or an explicit p_0's specific IDs —
-must fit inside that locus's own 4<sup>length</sup> capacity, checked
-independently per locus. A locus this short with the library default
-initial_allele_count: 2 always fits (capacity is at least 4); it is
-easiest to violate by combining a short <code>length</code> with an explicit p_0
-using IDs that were only ever meant for a longer locus.</p>
+must fit inside that locus's <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mrow><mi>ℓ</mi></mrow></msup></mrow></math> capacity, checked
+independently per locus. The default <code>initial_allele_count: 2</code> fits any
+positive length; explicit <code>p_0</code> IDs must also satisfy the capacity bound.</p>
 <h2 id="initial-conditions">Initial conditions</h2>
 <p>Generation 0 — whether drawn from initial_concentration or supplied
 explicitly via p_0 — is a continuous prior, not a state the run's <code>N</code>
@@ -564,61 +547,57 @@ ID, so they cannot collide with explicit labels.</p>
 </ul>
 <p>Together these select the <strong>equilibrium-split</strong> starting condition instead
 of the Dirichlet draw above. Set all three, or none of them: a partial
-configuration is rejected rather than guessed at.</p>
-<p>Equilibrium-split founds your demes from a real ancestral population rather
-than from a prior. It runs in two phases. First it simulates <em>one</em> population
-holding the same total number of gene copies your whole run will have (the sum
-of every deme's <code>N</code>, all in one deme), applying drift and mutation generation
-after generation — there is nothing to migrate between with only one deme —
-until that population has reached mutation-drift equilibrium. Then it splits
-that finished population into
-your <code>d</code> demes, each drawing its own <code>N</code> gene copies from the shared pool
-without replacement, so every deme gets a different sample. That sampling is a
-genuine founder effect: your demes already differ a little at generation 0,
-from the chance of which copies each one happened to receive.</p>
-<p>How long the first phase lasts is worked out from the model, not watched for.
-A single population at equilibrium does not sit still: its diversity
-(H<sub>S</sub>, which equals H<sub>T</sub> when there is only one deme) keeps
-wandering around its expected value by drift, so waiting for it to stop
-changing would never end. What the model does say is how fast the population
-forgets where it started. The ancestral population holds N gene copies (the
-sum of your demes' <code>N</code>) and mutates at rate μ, so it forgets its start on a
-time scale of about 1/(2μ + 1/N) generations, its relaxation time (the same
-idea as <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence defaults</a>, for one deme). The first phase
+configuration is rejected.</p>
+<p>Equilibrium-split derives starting frequencies from a simulated ancestral
+population. First, one population holds the sum of all demes' gene-copy
+counts and undergoes drift and mutation without migration. After its
+model-derived equilibration period, it splits into <code>d</code> demes by sampling
+without replacement, allocating each deme its configured gene-copy count.
+This sampling introduces founder variation at generation 0.</p>
+<p>The first-phase duration is derived from the model, not detected from a
+flat trajectory. At equilibrium, population diversity
+(<var>H</var><sub>S</sub>, which equals <var>H</var><sub>T</sub> when there is only one deme)
+fluctuates around its expectation. The model describes the rate at which
+dependence on the initial state decays. With <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub></mrow></math> ancestral
+gene copies and mutation rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>, its approximate relaxation time is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>2</mn><mi>&#x003BC;</mi><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002F;</mo><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(CFG.2)</span></div>
+<p>This is the same idea as <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence defaults</a>, for one deme. The first phase
 runs until the population's expected diversity, from any starting frequencies,
-is within your tolerance of its equilibrium value, which is close to
-θ/(1 + θ) with θ = 2Nμ: about ln(1 / tolerance) relaxation times. With
-several loci, the locus with the smallest μ decides.</p>
+is within your tolerance of its equilibrium value. Define:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B8;</mi><mo>&#x0003D;</mo><mn>2</mn><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mi>&#x003BC;</mi></mrow></math><span class="equation-tag">(CFG.3)</span></div>
+<p>The approximate equilibrium diversity is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">q</mi></mrow></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mi>&#x003B8;</mi></mrow><mrow><mn>1</mn><mo>&#x0002B;</mo><mi>&#x003B8;</mi></mrow></mfrac></mrow></math><span class="equation-tag">(CFG.4)</span></div>
+<p>For tolerance <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math>, reaching it takes about <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mi>ε</mi><mo stretchy="false">)</mo></mrow></math>
+relaxation times. With several loci, the locus with the smallest <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> decides.</p>
 <p>The three keys control only the first phase:</p>
 <ul>
 <li><strong>equilibrium_convergence_tolerance</strong> — how close to equilibrium the
-ancestral population must be, in H<sub>S</sub>'s own units: the largest
+ancestral population must be, in <var>H</var><sub>S</sub> units: the largest
 expected difference between its diversity and the equilibrium value. It
 sets how long the first phase runs; 0.01 means about 4.6 relaxation times,
 0.05 about 3. It must be greater than 0.</li>
 <li><strong>equilibrium_convergence_window</strong> — the fewest generations the first phase
-runs, however quickly the model says it equilibrates. It is deliberately
+runs, even if the derived duration is shorter. It is
 separate from the main run's burn-in, because this phase runs at a different
-population size than your real run. It cannot exceed
+population size than the main run. It cannot exceed
 equilibrium_max_generations.</li>
 <li><strong>equilibrium_max_generations</strong> — the safety limit on the first phase.</li>
 </ul>
-<p>One important difference from max_generations: a first phase that needs more
-than equilibrium_max_generations is an <strong>error</strong>, not an ordinary result. A
-run founded from a population that had not reached equilibrium would defeat
-the only thing this mode exists to provide, so <code>fim</code> stops before the first
-phase starts, with a message saying how many generations it needs.</p>
-<p>For example, three demes of 200 haploid individuals (N = 600) with μ = 0.001
+<p>Unlike the main <code>max_generations</code> cap, an ancestral duration exceeding
+<code>equilibrium_max_generations</code> is an error. The run stops before the phase
+begins and reports the required generation count.</p>
+<p>For example, three demes of 200 haploid individuals (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mo>=</mo><mn>600</mn></mrow></math>)
+with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>=</mo><mn>0.001</mn></mrow></math>
 relax in about 273 generations, so a tolerance of 0.01 needs 1,256
 generations, and the example below (tolerance 0.005) needs 1,445.</p>
-<p>The run saves every generation of the first phase in its own
+<p>The run saves every generation of the first phase in
 <a href="#" data-fim-help="usage" data-fim-anchor="equilibrium_trajectorytlog"><code>equilibrium_trajectory.tlog</code></a>,
 beside <code>trajectory.tlog</code>. Its generations are numbered from 0 within the
 first phase, separately from the main run's, and the manifest records how
 many there were (<code>equilibrium_generation_count</code>) and the diversity at the
 split (<code>equilibrium_final_heterozygosity</code>).</p>
 <p>Equilibrium-split cannot be combined with an explicit p_0 — a run cannot both
-fix its starting frequencies and derive them — and it uses its own random
+fix its starting frequencies and derive them — and it uses a separate random
 number stream, derived from <code>seed</code>, so the same <code>seed</code> always reproduces the
 same founding populations.</p>
 <pre><code class="language-yaml">equilibrium_convergence_window: 50
@@ -634,7 +613,7 @@ per-pair ones). Identity statistics: <code>D</code>, <code>G_ST</code>, <code>H_
 <code>Gs</code>, <code>Gd</code>, <code>D_m</code>, <code>R_ST</code>, <code>G_ST_NEI_LOG</code>, <code>G_ST_HEDRICK</code>, <code>F_ST</code> and the
 all-demes Nei identities and distances (<code>NEI_I_ALL_GEO</code>, <code>NEI_D_ALL_ARITH</code>,
 and so on). Allele-spectrum statistics: <code>E_ST</code>, <code>K_ST</code>, <code>A_CGD</code>, <code>Delta</code>
-(Gregorius's δ), <code>MI</code> (Sherwin mutual information).</li>
+(Gregorius's <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>), <code>MI</code> (Sherwin mutual information).</li>
 <li><strong>Default:</strong> <code>[D, G_ST]</code></li>
 </ul>
 <p>By default a run watches both and stops when both have settled
@@ -654,7 +633,7 @@ forms (convergence_estimate); every other statistic is the mean of values.</p>
 family) cannot share one absolute precision with the proportions, so its target
 is relative: <code>precision * max(1, |window mean|)</code>, a relative precision with an
 absolute floor. statistic_precision overrides it.</p>
-<p>A list watches several statistics at once — each keeps its own independent
+<p>A list watches several statistics at once — each keeps an independent
 history, judged over the same burn-in and evidence window against the same
 precision — combined by convergence_combinator. A name may
 not repeat.</p>
@@ -667,7 +646,7 @@ convergence_combinator: any   # stop once either statistic settles
 <li><strong>Default:</strong> none (every statistic uses <code>precision</code>, or the relative
 precision above)</li>
 </ul>
-<p>Gives one watched statistic its own plus-or-minus, in that statistic's own
+<p>Gives one watched statistic a precision target in that statistic's
 units, replacing <code>precision</code> for it. The name must be a watched statistic and
 the value non-negative.</p>
 <p>In the app this is the optional &quot;per-statistic precision&quot; field under the
@@ -684,9 +663,9 @@ statistic_precision:
 </ul>
 <p>Only meaningful when convergence_statistic is a list: <code>all</code> requires every
 watched statistic to be simultaneously stable before stopping (a strict
-reading of &quot;several statistics need to agree&quot;); <code>any</code> stops as soon as one
-of them is. With a single statistic — the default — the two are the same
-value by construction, so this key has no effect and needs no attention.</p>
+criterion); <code>any</code> stops as soon as one settles. With a single watched
+statistic, the two settings are equivalent. The default watched set
+contains <code>D</code> and <code>G_ST</code>.</p>
 <p>Under <code>any</code>, the statistics that did not trigger the stop may still be
 imprecise when the run ends: their reported window means are not converged
 estimates. <code>report.json</code>'s
@@ -718,9 +697,9 @@ tenth of the run at each check, and a derived <code>max_generations</code> is re
 give it explicitly.</p>
 <p>For example, five demes of 100 gene copies with <code>m: 0.0001</code> and <code>mu: 0.000001</code>
 have <code>tau</code> of about 19,700 generations, so at the default precision the burn-in
-is about 104,000 generations and the cap about 399,000. A run that finishes in a
-hundred generations there would be a warning sign, not good news.</p>
-<p>Choose your own whole number to override. Too short a burn-in starts averaging
+is about 104,000 generations and the cap about 399,000. A run ending after
+100 generations cannot provide an equilibrium estimate for that configuration.</p>
+<p>Choose a positive integer to override. Too short a burn-in starts averaging
 inside the transient and biases the average. Why the formula has this form,
 and how its numbers were chosen, is in <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence</a>.</p>
 <pre><code class="language-yaml">convergence_burn_in: 5000
@@ -739,7 +718,7 @@ that are functions of the heterozygosities <code>H_S</code> and <code>H_T</code>
 <tbody>
 <tr>
 <td><code>mean_of_values</code> (default)</td>
-<td>The average of the statistic's own values over the evidence window</td>
+<td>The average of statistic values over the evidence window</td>
 <td>Comparing with published replicate means</td>
 </tr>
 <tr>
@@ -765,7 +744,7 @@ the headline would then change meaning between points of a sweep. The <code>auto
 thresholds are the Expert Settings <code>estimate_auto_denominator</code> and
 <code>estimate_auto_fraction</code>.</p>
 <p>In the app this is a Settings default (Settings, Convergence: &quot;expected
-value&quot;); a loaded configuration keeps its own.</p>
+value&quot;); a loaded configuration retains its value.</p>
 <pre><code class="language-yaml">convergence_estimate: mean_of_values   # or value_of_means, or auto
 </code></pre>
 <h3 id="precision">precision</h3>
@@ -774,8 +753,8 @@ value&quot;); a loaded configuration keeps its own.</p>
 <li><strong>Default:</strong> <code>0.01</code></li>
 </ul>
 <p>How precisely to estimate each watched statistic: plus or minus this amount,
-in the statistic's own units, at the <code>confidence</code> level. One number answers
-&quot;how precise?&quot; for a single run and a batch alike.</p>
+in the statistic's units, at the <code>confidence</code> level. The same target
+applies to single runs and batches.</p>
 <ul>
 <li>A single run burns in and then averages each watched statistic over a
 growing window until the average's standard error is at most
@@ -794,41 +773,35 @@ stop_batch_early).</li>
 <li><strong>Type:</strong> boolean</li>
 <li><strong>Default:</strong> <code>false</code></li>
 </ul>
-<p>Controls whether E<sub>ST</sub>/K<sub>ST</sub>/A<sub>CGD</sub>/Delta/MI are
+<p>Controls whether <var>E</var><sub>ST</sub>/<var>K</var><sub>ST</sub>/<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>/Delta/MI are
 computed every generation for display, even when none of them is being
-watched for convergence. D, G<sub>ST</sub>, H<sub>S</sub>, and H<sub>T</sub>
+watched for convergence. D, <var>G</var><sub>ST</sub>, <var>H</var><sub>S</sub>, and <var>H</var><sub>T</sub>
 are always tracked and available for display regardless of this setting
 and regardless of convergence_statistic — each is either the shared
-H<sub>S</sub>/H<sub>T</sub> input every other statistic derives from, or an
+<var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> input every other statistic derives from, or an
 O(1) step once those are known, so computing them costs nothing extra.
-E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, Delta, and MI are
-different: each is a genuine, independent pass over every locus's own
-frequency table, repeated every single generation of the run (not merely
-once, for a final report). A performance investigation (commit
-<code>b12679b</code>, issues FIM-24/FIM-32) measured skipping E<sub>ST</sub>/
-K<sub>ST</sub> alone, when neither was watched, at roughly a <strong>38%
-reduction</strong> in per-generation convergence-check cost at a many-alleles
-reference configuration — enabling this setting pays that same cost
-back for all five, deliberately, in exchange for a real, continuously
-updated value in a GUI trajectory panel or live statistics table
-instead of &quot;not known this generation.&quot; A statistic already named in
-convergence_statistic is always computed regardless of this setting —
-it has to be, for the run to detect it converging.</p>
-<p>Leave this <code>false</code> (the default) unless the display value is actually worth
-the recurring per-generation cost for your own configuration.</p>
+<var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, Delta, and MI each require
+an additional pass over frequency tables. Enabling this setting computes
+all five every generation for live plots and tables, increasing runtime.
+The cost grows with deme and allele counts; omitting <var>E</var><sub>ST</sub> and
+<var>K</var><sub>ST</sub> reduced convergence-check time by about 38% in a
+many-allele reference configuration.</p>
+<p>Statistics named in <code>convergence_statistic</code> are always computed, regardless
+of this setting. Leave it <code>false</code> unless supplementary live histories are
+needed. See the <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> for definitions.</p>
 <pre><code class="language-yaml">track_expensive_statistics: true
 </code></pre>
 <p>In the desktop app there is no control for this key on Configure. The app
 sets it on every run, batch and sweep it starts, and in every preset or
 YAML file it saves, from Settings' &quot;Statistics shown&quot;: <code>true</code> while
-E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub> or I is
+<var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> or I is
 shown, <code>false</code> once all five are hidden. Showing any one of them computes
 all five every generation, so runs take longer; the extra time is small
 for a few demes and grows with the deme count (in one measurement, about a
 fifth more at 100 demes and two thirds more at 500). None of the five is
 shown on a fresh install. A value in a loaded YAML file, preset or reopened
 run is replaced by the Settings choice when the app runs it; <code>fim run</code>
-and <code>fim sweep</code> use the file's own value, as written.</p>
+and <code>fim sweep</code> use the file's value.</p>
 <h3 id="max_generations">max_generations</h3>
 <ul>
 <li><strong>Type:</strong> positive integer, or <code>auto</code></li>
@@ -838,7 +811,7 @@ and <code>fim sweep</code> use the file's own value, as written.</p>
 outcome that did not reach the requested precision, with the average and error
 bar the run has. <code>auto</code> derives it as <code>max(200000, burn_in + ceil(15 tau))</code>, at
 most 10,000,000 (at least 200,000, so a single locus has room to average its
-own noise down to the configured precision — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md#how-precise-is-the-reported-value">How precise is the reported
+variation down to the configured precision — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md#how-precise-is-the-reported-value">How precise is the reported
 value?</a>); see
 <a href="#convergence_burn_in">convergence_burn_in</a>. A cap at or below the burn-in ends
 the run before any averaging, and the run logs a warning. Setting only a
@@ -932,12 +905,11 @@ trajectory_stride: 20
 <li><strong>Type:</strong> mapping of Expert Setting names to values</li>
 <li><strong>Default:</strong> empty (every Expert Setting at its default)</li>
 </ul>
-<p>The policy constants of the convergence rule that a careful person could
-choose differently. Leave it out unless you know why you want to change one:
-the defaults are the measured, documented choices (see
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence</a>). Only settings that differ from their default
-are written to <code>manifest.json</code>, so the manifest says exactly what ran, and a
-run that changes one is a different run (its auto-generated <code>run_id</code> changes).</p>
+<p>Overrides for convergence and storage policy constants. The defaults and
+their calibration are documented in <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence</a>.
+Only nondefault values are written to <code>manifest.json</code>.
+Convergence-policy overrides affect run identity; storage-policy overrides
+do not. See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md#what-decides-a-runs-identity">run identity</a>.</p>
 <table>
 <thead>
 <tr>
@@ -952,7 +924,7 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
 <td><code>burn_in_minimum_relaxation_times</code></td>
 <td><code>5</code></td>
 <td>at least 1</td>
-<td>Floor of the burn-in multiple <code>k = max(floor, ln(2 / precision))</code></td>
+<td>Floor <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>k</mi><mrow><mo>min</mo></mrow></msub></mrow></math> of the burn-in multiple <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi><mo>=</mo><mo>max</mo><mo stretchy="false">(</mo><msub><mi>k</mi><mrow><mo>min</mo></mrow></msub><mo>,</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>2</mn><mo>/</mo><mi>ε</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math>, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math> is <code>precision</code></td>
 </tr>
 <tr>
 <td><code>first_check_relaxation_times</code></td>
@@ -1012,7 +984,7 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
 <td><code>estimate_auto_denominator</code></td>
 <td><code>0.01</code></td>
 <td>between 0 and 1, exclusive</td>
-<td>Denominator (<code>H_T</code> for <code>G_ST</code>, <code>1 - H_S</code> for <code>D</code>) below which a generation is degenerate for <code>convergence_estimate: auto</code></td>
+<td>Denominator (<var>H</var><sub>T</sub> for <code>G_ST</code>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math> for <code>D</code>) below which a generation is degenerate for <code>convergence_estimate: auto</code></td>
 </tr>
 <tr>
 <td><code>estimate_auto_fraction</code></td>
@@ -1096,7 +1068,7 @@ run that changes one is a different run (its auto-generated <code>run_id</code> 
 <p>In the desktop app, Settings has a collapsed &quot;Expert settings&quot; section with one
 row per setting: its value, its default and range, what it does, and a Reset
 button; a changed row is marked. Save keeps them with the other run defaults,
-so they apply to every new run; a loaded configuration keeps its own <code>expert:</code>
+so they apply to every new run; a loaded configuration keeps its <code>expert:</code>
 mapping for its run, and the notice that lists how its run settings differ from
 yours lists the expert ones too.</p>
 <h2 id="analysis-and-execution">Analysis and execution</h2>
@@ -1105,41 +1077,39 @@ yours lists the expert ones too.</p>
 <li><strong>Type:</strong> <code>size</code> or <code>equal</code></li>
 <li><strong>Default:</strong> <code>equal</code></li>
 </ul>
-<p>This setting controls E<sub>ST</sub>. Jost's <code>D</code> and K<sub>ST</sub> use equal deme weighting by
-definition, and <code>equal</code> is the default so E<sub>ST</sub> follows the same
-convention unless you ask otherwise. Choose <code>size</code> to weight each deme by its
-own gene-copy count. When every deme is the same size, both settings produce
-the same E<sub>ST</sub>.</p>
+<p>This setting controls <var>E</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> (<code>Delta</code>), and mutual
+information (<code>MI</code>). Choose <code>size</code> to weight each deme by its gene-copy count;
+<code>equal</code> gives every deme the same weight. The settings agree when all demes
+have the same size.</p>
+<p>Other reported measures use equal deme treatment, including
+<var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>G</var><sub>ST</sub>, Jost's <code>D</code>, and <var>K</var><sub>ST</sub>.
+See the <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> for definitions and
+implementation links.</p>
 <h3 id="locus_aggregation">locus_aggregation</h3>
 <ul>
 <li><strong>Type:</strong> <code>ratio_of_means</code> or <code>mean_of_ratios</code></li>
 <li><strong>Default:</strong> <code>ratio_of_means</code></li>
 </ul>
-<p>Controls how <code>D</code> and G<sub>ST</sub> combine across loci in the final report,
+<p>Controls how <code>D</code> and <var>G</var><sub>ST</sub> combine across loci in the final report,
 when more than one locus is tracked. Every other reported statistic
-(H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>) is unaffected — each is already a
+(<var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>H</var><sub>ST</sub>, <var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>) is unaffected — each is already a
 linear mean across loci, with no such ambiguity to resolve.</p>
 <ul>
-<li><code>ratio_of_means</code> (the default): average H<sub>S</sub>/H<sub>T</sub> across loci
-first, then compute one <code>D</code>/G<sub>ST</sub> from those pooled values. This
+<li><code>ratio_of_means</code> (the default): average <var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> across loci
+first, then compute one <code>D</code>/<var>G</var><sub>ST</sub> from those pooled values. This
 matches what the exact gene-identity recursion predicts and avoids a
 small-denominator instability a per-locus ratio can have.</li>
-<li><code>mean_of_ratios</code>: compute <code>D</code>/G<sub>ST</sub> at each locus independently,
-then average those — this project's own original behavior, kept
-available for comparability with literature or prior analyses that
-used it, not because it is the better estimator. Measured against the
-exact gene-identity recursion at this project's own reference scale,
-<code>ratio_of_means</code> landed within 0.25% of the recursion's own
-prediction where <code>mean_of_ratios</code> was off by 1.88% (up to 4.84% of
-<code>D</code> alone in the worst individually measured scenario) — see
-<code>CHANGELOG.md</code>'s own entry for this change for the full comparison.</li>
+<li><code>mean_of_ratios</code>: compute <code>D</code>/<var>G</var><sub>ST</sub> at each locus independently,
+then average the ratios. Use this when matching an analysis or publication
+that applies this estimator. The mean of ratios generally differs from
+the ratio of means; see
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">differentiation measures</a> for formulas.</li>
 </ul>
-<p>The convergence monitor's watched <code>D</code>/G<sub>ST</sub> (when either is the
-convergence_statistic) respects this same setting, so a run never
-watches a different estimator than the one its own final report shows.</p>
+<p>The convergence monitor uses the same locus-aggregation setting for watched
+<code>D</code>/<var>G</var><sub>ST</sub> as the final report.</p>
 <pre><code class="language-yaml">n_loci: 2
 locus_lengths: [50, 500]
-locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
+locus_aggregation: mean_of_ratios   # average per-locus ratios
 </code></pre>
 <h3 id="n_replicates">n_replicates</h3>
 <ul>
@@ -1151,12 +1121,10 @@ locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
 (<code>fim.engine.simulate_params</code>, returning one <code>RunResult</code> per replicate) and the CLI
 (<code>fim run</code>, writing one <code>replicate-NNN/</code> subdirectory per replicate; see
 <a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">Using <code>fim</code></a>). This is a hard cap, not a
-target: stop_batch_early (below) is on by default, so an
-unconfigured run stops well short of <code>200</code> for most configurations,
-adaptively, once its own confidence interval is tight enough — set
-n_replicates: <code>1</code> explicitly for a single, ordinary scalar run with no
-batching at all (stop_batch_early is a no-op at n_replicates <code>1</code>
-either way).</p>
+target. With <code>stop_batch_early</code> enabled (the default), a batch can stop
+before this cap when its interval meets the requested precision.
+Set <code>n_replicates: 1</code> for a single run; <code>stop_batch_early</code> has no effect
+in that case.</p>
 <h3 id="stop_batch_early">stop_batch_early</h3>
 <ul>
 <li><strong>Type:</strong> boolean</li>
@@ -1165,23 +1133,21 @@ either way).</p>
 <p>Early stopping for a replicate batch (n_replicates greater than one):
 once at least replicate_minimum replicates have run, stop as soon as
 every statistic named in convergence_statistic has an across-replicate
-Student's-t confidence interval (mean of each replicate's own window mean
+Student's-t confidence interval (mean of per-replicate window means
 of that statistic, over the replicates so far) with a half-width at most
 precision — combined
-across several watched statistics by convergence_combinator, exactly like
+across several watched statistics by convergence_combinator, as for
 within-run convergence. n_replicates is still the hard cap:
 reaching it without tightening ends the batch anyway, a valid,
-non-adaptively-stopped result. This is the mechanism that answers &quot;how many
-replicate runs are needed for a confidence interval&quot; without guessing a
-fixed count in advance — see each statistic's realized interval in
-<code>summary.json</code> (CLI) or fim.engine.replicate_summary (library).</p>
+cap-limited result. See each statistic's achieved interval in
+<code>summary.json</code> (CLI) or <code>fim.engine.replicate_summary</code> (library).</p>
 <p>Replicates are considered in replicate order — replicate 1, then 2, then
 3, and so on — on every engine_backend, never in the order they happen
 to finish. A <code>generational</code> batch advances many replicates at once, and
 one that converges quickly can finish before a lower-numbered one; it
 waits until every lower-numbered replicate has finished before it
-counts. How quickly a replicate converges is related to its own
-statistics, so keeping whichever replicates finish first would bias the
+counts. How quickly a replicate converges is related to its
+statistics, so selecting the first replicates to finish would bias the
 result. Because of this rule, the same configuration and seed keep the
 same replicates and write the same <code>summary.json</code> under <code>lineal</code> and
 <code>generational</code>.</p>
@@ -1201,7 +1167,7 @@ stop_batch_early: false    # always run all 16
 </ul>
 <p>How many generations each replicate of a batch averages, after its burn-in.
 A replicate of a batch burns in, averages for its window, and stops; it has
-no precision check of its own, because the batch reaches the precision across
+no within-replicate precision check, because the batch reaches precision across
 replicates. Each replicate contributes its window mean to the interval, in
 the form <code>convergence_estimate</code> selects.</p>
 <p><code>auto</code> matches the window to the batch. The first wave of replicates (as many
@@ -1209,10 +1175,17 @@ as run at once: <code>max_concurrent_replicates</code>, else the Expert Setting
 <code>batch_width</code>, 8 by default) averages for <code>first_wave_averaging_multiple</code>
 relaxation times, 20 by default. When the wave ends, its windows give each
 watched statistic's standard deviation <code>sigma</code> and integrated autocorrelation
-time <code>tau_int</code>. The window that gives one replicate the standard error
-<code>SE = precision * sqrt(R) / t(R - 1)</code>, where <code>R</code> is the number of replicates
-the batch aims for (the larger of <code>replicate_minimum</code> and <code>replicate_wave_multiple</code>
-times the wave width), is <code>tau_int * (sigma / SE)^2</code>. The slowest watched
+time <code>tau_int</code>. Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math> for these estimates,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math> for the requested <code>precision</code>, and <var>R</var> for the number of
+replicates the batch aims for (the larger of <code>replicate_minimum</code> and
+<code>replicate_wave_multiple</code> times the wave width). The standard error needed
+for one replicate is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>SE</mo><mo>&#x0003D;</mo><mfrac><mrow><mi>&#x003B5;</mi><msqrt><mrow><mi>R</mi></mrow></msqrt></mrow><mrow><msub><mi>t</mi><mrow><mi>R</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(CFG.5)</span></div>
+<p>Here <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>t</mi><mrow><mi>R</mi><mo>−</mo><mn>1</mn></mrow></msub></mrow></math> is the two-sided Student critical value for the configured
+<code>confidence</code> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>R</mi><mo>−</mo><mn>1</mn></mrow></math> degrees of freedom. The estimated generation window
+required to achieve that error is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>W</mi><mo>&#x0003D;</mo><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mfrac><mrow><mi>&#x003C3;</mi></mrow><mrow><mo>SE</mo></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mn>2</mn></msup></mrow></math><span class="equation-tag">(CFG.6)</span></div>
+<p>The slowest watched
 statistic decides, and the window is held between <code>averaging_multiple_minimum</code>
 and <code>averaging_multiple_maximum</code> relaxation times (5 and 100). Every later
 replicate uses it; replicates with different windows are pooled with equal
@@ -1227,7 +1200,7 @@ replicate.</p>
 <p>A single run (<code>n_replicates: 1</code>) ignores <code>auto</code> and judges itself by the
 within-run rule. A single run with a positive number is a <em>fixed-window run</em>:
 it burns in, averages that many generations, and stops, with no precision
-check. Each replicate of a batch records its own window in its parameters, so
+check. Each replicate records its window in its parameters, so
 the replicate's manifest reproduces it exactly.</p>
 <pre><code class="language-yaml">replicate_averaging_window: auto     # match the window to the batch
 replicate_averaging_window: 20000    # or: every replicate averages 20,000
@@ -1245,7 +1218,7 @@ replicate's window so that their interval is plus or minus <code>precision</code
 choose the number of replicates, the engine chooses how long each one averages.
 It needs n_replicates of at least 2.</p>
 <p>In the app, precision_method and replicate_averaging_window are Settings
-defaults (Settings, Convergence); a loaded configuration keeps its own.</p>
+defaults (Settings, Convergence); a loaded configuration retains its values.</p>
 <pre><code class="language-yaml">n_replicates: 16
 precision_method: planned_replicates   # 16 replicates, each long enough for +/- precision
 </code></pre>
@@ -1254,22 +1227,17 @@ precision_method: planned_replicates   # 16 replicates, each long enough for +/-
 <li><strong>Type:</strong> integer at least 2</li>
 <li><strong>Default:</strong> <code>10</code></li>
 </ul>
-<p>The fewest replicates before the batch may stop early — the
-replicate-layer analog of the within-run first check, guarding against a
-lucky-early-tight fluke from too small a sample. Only meaningful when
-stop_batch_early is on. A value larger than n_replicates is
-silently capped at n_replicates rather than rejected — setting
-n_replicates to something small without separately thinking about
-replicate_minimum is an ordinary, common thing to do, not a mistake
-worth an error for.</p>
+<p>Minimum replicates before an early-stop check. This reduces the risk of
+stopping on an artificially narrow interval from a small sample.
+Applies only when <code>stop_batch_early</code> is enabled. Values above
+<code>n_replicates</code> are capped at <code>n_replicates</code>.</p>
 <h3 id="confidence">confidence</h3>
 <ul>
 <li><strong>Type:</strong> <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></li>
 <li><strong>Default:</strong> <code>0.95</code></li>
 </ul>
-<p>How sure the plus-or-minus of precision is: the two-tailed confidence level of
-the batch's stopping interval and of the intervals <code>summary.json</code> and
-replicate_summary report.</p>
+<p>Two-tailed confidence level used for precision targets and the intervals in
+<code>summary.json</code> and <code>replicate_summary</code>.</p>
 <h3 id="migrant_sampling">migrant_sampling</h3>
 <ul>
 <li><strong>Type:</strong> <code>continuous</code> or <code>stochastic</code></li>
@@ -1279,17 +1247,17 @@ replicate_summary report.</p>
 which <code>m</code> shape is configured above.</p>
 <ul>
 <li><code>continuous</code> (the default): each deme's migrant count is exactly
-N<sub>i</sub> * rate
-(or, for a matrix row, N<sub>i</sub> times that row's non-self weight) — a fixed
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mi>i</mi></msub><msub><mi>r</mi><mi>i</mi></msub></mrow></math>, where <var>N</var><sub>i</sub> is its gene-copy count and <var>r</var><sub>i</sub> its migrant fraction
+(or, for a matrix row, <var>N</var><sub>i</sub> times that row's non-self weight) — a fixed
 fraction, not a random draw.</li>
 <li><code>stochastic</code>: each deme's migrant count is instead drawn fresh every
-generation from Binomial(N<sub>i</sub>, rate) — mean N<sub>i</sub> * rate, matching the
+generation from <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">B</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow><mo stretchy="false">(</mo><msub><mi>N</mi><mi>i</mi></msub><mo>,</mo><msub><mi>r</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></math> — mean <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mi>i</mi></msub><msub><mi>r</mi><mi>i</mi></msub></mrow></math>, matching the
 continuous case in expectation, but varying generation to generation.
 Migrant <em>composition</em> is unaffected either way: migrants still carry
 exactly the deterministic, weighted pool average. Requires a concrete
 <code>N</code> (always true for a CLI run; a direct <code>fim.model.operators.migrate</code>
 call needs population_size). Every <code>engine_backend</code> runs it, with the
-same numbers: <code>generational-vector</code> draws the migrant counts inside
+same results: <code>generational-vector</code> draws migrant counts inside
 its compiled step, in the same order as <code>lineal</code>, so a stochastic run
 matches the other two exactly for the same seed.</li>
 </ul>
@@ -1297,49 +1265,41 @@ matches the other two exactly for the same seed.</li>
 </code></pre>
 <p>This is the finite island model variant described in
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md#32-one-generation-in-two-steps">the finite island model introduction, §3.2</a>:
-sampling the actual migrant count instead of treating migration as an
+sampling migrant counts instead of treating migration as an
 idealized continuous fraction. It adds one random process to the pipeline
 (how many migrate) without duplicating the one already there (<code>drift</code>
 still resamples every gene copy exactly once per generation) — see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#9-extensibility-where-the-next-what-if-lands">the simulator design, §9</a>
 for why the two don't compound.</p>
 <h2 id="engine-backend-and-jit">Engine backend and JIT</h2>
-<p>Everything above this section is a <strong>science</strong> setting — it changes what
-gets computed. <code>engine_backend</code>, <code>jit</code>, <code>auto_vector_min_d</code>,
-<code>auto_vector_max_capacity</code>, and <code>max_concurrent_replicates</code> are
-different: they change <em>how</em> the computation runs, not what it
-computes. Every <code>SimulationParams</code> field above is still validated and
-honored exactly the same way regardless of which engine backend
-actually executes it — changing these five never
-changes what a run converges to, only how long getting there takes.</p>
+<p>Backend, JIT, and automatic-selection thresholds control execution without
+changing simulated results on the same platform. Resource use and runtime
+can differ. <code>max_concurrent_replicates</code> also determines the first-wave
+width of adaptive batches and can therefore affect their averaging windows
+and results; see its entry below.</p>
 <h3 id="engine_backend">engine_backend</h3>
 <ul>
 <li><strong>Type:</strong> <code>lineal</code>, <code>generational</code>, <code>generational-vector</code>, or <code>auto</code></li>
 <li><strong>Default:</strong> <code>lineal</code></li>
 </ul>
-<p>Which of three interchangeable engine implementations actually drives
-the run:</p>
+<p>Selects the engine implementation:</p>
 <ul>
-<li><code>lineal</code> (the default): the straightforward, reference
-implementation. Every replicate runs on its own, one after another
-(or in separate worker processes if you ask for that — see
-<a href="#n_replicates">n_replicates</a> above).</li>
+<li><code>lineal</code> (the default): the reference
+implementation. Replicates run sequentially or in separate worker
+processes; see
+<a href="#n_replicates">n_replicates</a>.</li>
 <li><code>generational</code>: the same computation, restructured to advance every
 replicate one generation at a time together, spread across threads
 instead of processes. Produces bit-for-bit identical results to
 <code>lineal</code> for the same inputs.</li>
-<li><code>generational-vector</code>: the same computation again, this time done
-with whole-array math and one compiled step per generation instead of
-one calculation per deme — by far the fastest option, from a handful
-of demes up. It runs both mutation models (<code>infinite_alleles</code> and
+<li><code>generational-vector</code>: array-based state and one compiled step per
+generation. It runs both mutation models (<code>infinite_alleles</code> and
 <code>finite_alleles</code>), a scalar or full-matrix <code>m</code>, and either
-migrant_sampling setting (see those settings above). Needs an extra, optional piece of software
-(<code>numba</code>) that a plain <code>pip install fim</code> does not include — install
-<code>fim[jit]</code> instead to add it. Matches <code>lineal</code> and <code>generational</code>
-exactly: for the same seed on the same machine, every trajectory row
-(allele identity and frequency, bit for bit), the report, the final
-state and the manifest (apart from the <code>engine_backend</code> field that
-names it) are identical, under both mutation models, with or without
+migrant_sampling setting. Requires the optional <code>numba</code> dependency;
+install <code>fim[jit]</code> to add it. For the same seed on the same machine,
+it matches <code>lineal</code> and <code>generational</code>: every trajectory row
+(allele identity and frequency, bit for bit), the report, and the final
+state are identical, under both mutation models, with or without
 migration, for any number of loci. (The compiled arithmetic is checked
 against Python's only on the development platform, so across machines
 results agree statistically, as they already do for <code>jit: numba</code>.) It
@@ -1350,81 +1310,57 @@ that is very long — stops at the start with a message that names the
 remedies. The ceiling is 2 GiB per replicate, and the
 <code>FIM_VECTOR_MEMORY_CEILING_BYTES</code> environment variable (a number of
 bytes) raises or lowers it. With several replicates running at once
-each holds its own table; <code>max_concurrent_replicates</code> bounds how many.</li>
+each holds a table; <code>max_concurrent_replicates</code> bounds how many.</li>
 <li><code>auto</code>: picks <code>generational</code> or <code>generational-vector</code> automatically —
-never <code>lineal</code>. It picks <code>generational-vector</code> when migration is
-continuous, <code>jit</code> is <code>off</code>, <code>numba</code> is installed, <code>d</code> is at least
+never <code>lineal</code>. It picks <code>generational-vector</code> when
+<code>jit</code> is <code>off</code>, <code>numba</code> is installed, <code>d</code> is at least
 <code>auto_vector_min_d</code> and, under <code>mutation_model: finite_alleles</code> only,
 every locus fits under <code>auto_vector_max_capacity</code> (both below).
 Otherwise it picks <code>generational</code>. Because both give identical
 results, the choice changes how fast a run finishes, nothing else, and
-a computer without <code>numba</code> quietly gets <code>generational</code> instead of an
+a computer without <code>numba</code> uses <code>generational</code> instead of an
 error.</li>
 </ul>
-<p><strong>Why you might care:</strong> if a run is taking uncomfortably long —
-especially one with a large number of demes (<code>d</code>) or loci — that
-slowness is a property of the chosen engine, not of the science being
-simulated; the same configuration can run meaningfully faster under a
-different engine choice. <code>generational-vector</code> is the one worth
-reaching for first (for example 30 to 300 times faster than <code>lineal</code> on
-the infinite-alleles worked examples); see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">the simulator design's own section on choosing an
-engine backend</a>
-for the full decision guide and the measured evidence behind it.</p>
+<p>Performance depends on deme count, locus capacity, and hardware.
+The vector engine measured 30–300 times faster than <code>lineal</code> on the
+infinite-alleles worked examples. See the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">backend selection guide</a>
+and <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-engine-backend-benchmarks.md">benchmark results</a> for workloads,
+measurements, and limits.</p>
 <pre><code class="language-yaml">engine_backend: generational-vector
 mutation_model: infinite_alleles
 migrant_sampling: continuous
 </code></pre>
-<p><strong>In the desktop app:</strong> you will find it as <strong>execution engine</strong> in the
-Settings dialog (top-right of the top menu bar), offering the same four
-values in the order <code>lineal</code>, <code>auto</code>, <code>generational</code>,
-<code>generational-vector</code>, as the <em>default</em> every new configuration starts
-from — change it there once, and every fresh form picks it up from then
-on. Configure itself has no separate control for this field: it
-describes how the computation runs, not what experiment it asks, so it
-lives in Settings only, alongside <code>n_replicates</code> and the rest of this
-section's execution-flavored fields. The app's own built-in starting
-point for that default is <code>auto</code>, the recommended choice: it picks
-whichever engine measured fastest for your configuration, and the run
-records the engine it actually chose, so the run stays exactly as
-reproducible as one where you named an engine yourself. Loading a
-configuration file that names a different engine (<code>generational</code> or
-<code>generational-vector</code>, say) runs with that file's own value; it does
-not change what a <em>fresh</em> configuration starts from.</p>
-<p><strong>In <code>fim init</code>'s starter config:</strong> the file the CLI writes for a
-first-time user makes the same recommendation as the desktop app's
-fresh form — its <code>engine_backend: auto</code> line is explicit, not merely
-the field's absence falling through to the <code>lineal</code> default above. Delete
-the line (or set it to <code>lineal</code> yourself) to opt back into the reference
-implementation.</p>
+<p><strong>In the desktop app:</strong> <strong>Execution engine</strong> in Settings supplies the
+default for new configurations; its initial value is <code>auto</code>.
+<strong>Run settings...</strong> on Configure changes the backend for the pending run.
+Loading a configuration uses its backend without changing saved Settings.
+The manifest records the resolved backend, not the literal <code>auto</code>.</p>
+<p><strong>In <code>fim init</code>'s starter configuration:</strong> <code>engine_backend: auto</code> is
+explicit. Set it to <code>lineal</code>, or omit it, to use the reference backend.</p>
 <p>If the app or checkout you are using does not have the optional <code>numba</code>
-software installed, the two options that need it (<code>auto</code> and
-<code>generational-vector</code>) say so in their own labels. They stay selectable
-so a configuration file naming either one still loads and saves
-faithfully — but a run using them will report that <code>numba</code> is missing.
-Packaged beta downloads include <code>numba</code> already.</p>
+dependency installed, a direct <code>generational-vector</code> request reports that
+it is missing. <code>auto</code> falls back to <code>generational</code>.
+Packaged beta downloads include <code>numba</code>.</p>
 <p><code>jit</code>, <code>auto_vector_min_d</code>, and <code>auto_vector_max_capacity</code> also have
-their own Settings-dialog fields — expert-level defaults, not
-Configure-side per-run fields, since they are machine-specific tuning
-values meant to be re-measured rather than typed in on a per-run basis.
-Each appears in Settings only &quot;where apropos&quot;: <code>jit</code> only when
-Settings' own execution engine is set to <code>generational</code> (<code>lineal</code> never
-accepts anything but <code>off</code>; <code>generational-vector</code> always requires
-<code>numba</code> regardless of this setting), and <code>auto_vector_min_d</code>/<code>auto_ vector_max_capacity</code> only when it is set to <code>auto</code>, the one engine
+Settings fields. <code>jit</code> appears when the
+Settings execution engine is <code>generational</code> (<code>lineal</code>
+accepts only <code>off</code>; <code>generational-vector</code> always requires
+<code>numba</code> regardless of this setting). <code>auto_vector_min_d</code> and
+<code>auto_vector_max_capacity</code> appear only when it is set to <code>auto</code>, the engine
 either threshold affects.</p>
 <h3 id="jit">jit</h3>
 <ul>
 <li><strong>Type:</strong> <code>off</code> or <code>numba</code></li>
 <li><strong>Default:</strong> <code>off</code></li>
 </ul>
-<p>Whether the chosen engine_backend should additionally JIT-compile its
-own random draws, via the same optional <code>numba</code> dependency
+<p>Whether the chosen engine_backend should JIT-compile
+random draws using the optional <code>numba</code> dependency
 <code>generational-vector</code> always needs. Meaningful only under
-<code>engine_backend: generational</code> (speeds up part of that engine's own
-work, though marshaling cost elsewhere in the pipeline currently
-dominates more than the draw itself); <code>lineal</code> never accepts anything
-but <code>off</code>, permanently; <code>generational-vector</code> always requires <code>numba</code>
-regardless of this setting, so it too only accepts <code>off</code> here (there is
-no separate toggle to turn off what it already needs unconditionally).
+<code>engine_backend: generational</code> (speeds up part of that engine's
+work, although marshaling elsewhere can dominate runtime); <code>lineal</code> accepts
+only <code>off</code>; <code>generational-vector</code> always requires <code>numba</code>
+regardless of this setting and accepts only <code>off</code> here.
 Under <code>engine_backend: auto</code>, <code>jit: numba</code> selects <code>generational</code> (the
 one engine that offers the toggle) rather than <code>generational-vector</code>.</p>
 <h3 id="auto_vector_min_d">auto_vector_min_d</h3>
@@ -1434,19 +1370,14 @@ one engine that offers the toggle) rather than <code>generational-vector</code>.
 </ul>
 <p>The deme-count threshold <code>engine_backend: auto</code> uses to choose
 <code>generational-vector</code> over <code>generational</code>. Ignored under every other
-<code>engine_backend</code> value. Re-measured 2026-09-05 on a joint <code>d</code> x
-locus-length grid (104 points, real hardware, finite alleles):
-<code>generational-vector</code> never lost to <code>generational</code> at any tested <code>d</code>
-within <code>auto_vector_max_capacity</code>'s own default ceiling, and the
-infinite-alleles kernel measured 5 to 300 times faster than
-<code>generational</code> from <code>d = 2</code> up (2026-10-08), so this threshold is
-set to the smallest <code>d</code> a config can have at all — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">the simulator
-design's own section on choosing an engine
-backend</a> for the
-full joint result, including the narrower, <code>d</code>-dependent region above
-that capacity ceiling this single threshold cannot reach, and
-<code>dev/bin/benchmark-engines</code> (a maintainer tool, see <code>dev/bin/README.md</code>)
-for how to re-measure either threshold on your own hardware.</p>
+<code>engine_backend</code> value. The default covers all supported deme counts.
+In a 104-point finite-alleles grid, the vector engine won at every tested
+<code>d</code> within the default capacity ceiling. Infinite-alleles measurements
+found a 5–300-fold advantage over <code>generational</code> from <code>d = 2</code>.
+See the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">backend selection guide</a>
+for measurements, including regions above the capacity ceiling, and
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/dev/bin/README.md#benchmark-engines"><code>benchmark-engines</code></a> to recalibrate
+on the target hardware.</p>
 <h3 id="auto_vector_max_capacity">auto_vector_max_capacity</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 1</li>
@@ -1454,14 +1385,14 @@ for how to re-measure either threshold on your own hardware.</p>
 </ul>
 <p>The per-locus capacity ceiling <code>engine_backend: auto</code> uses alongside
 <code>auto_vector_min_d</code>, <strong>under <code>mutation_model: finite_alleles</code> only</strong> —
-<code>generational-vector</code> is only chosen when <code>d</code> clears its own threshold
-<em>and</em> every locus's own capacity (4<sup>length</sup>) is at most this
+<code>generational-vector</code> is chosen only when <code>d</code> meets its threshold
+and every locus's capacity (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mrow><mi>ℓ</mi></mrow></msup></mrow></math>) is at most this
 value; a single locus above it falls back to <code>generational</code> regardless
 of <code>d</code>. A finite-alleles table is <code>capacity</code> columns wide however few
 states are in use, which is why it needs a ceiling; an infinite-alleles
 table is as wide as the alleles alive at once, so <code>auto</code> does not apply
 this ceiling there. Ignored under every other <code>engine_backend</code> value.
-Re-measured alongside <code>auto_vector_min_d</code> on the same joint grid: the
+Measured alongside <code>auto_vector_min_d</code> on the joint grid: the
 largest capacity at which <code>generational-vector</code> won at every tested
 <code>d</code> — the same <code>dev/bin/benchmark-engines</code> maintainer tool re-measures
 this axis too (<code>--sweep loci-length</code>).</p>
@@ -1470,41 +1401,31 @@ this axis too (<code>--sweep loci-length</code>).</p>
 <li><strong>Type:</strong> integer at least 1, or omitted</li>
 <li><strong>Default:</strong> unset (every replicate advances together)</li>
 </ul>
-<p>Caps how many replicate lanes <code>engine_backend: generational</code> or
-<code>generational-vector</code> advance at once. Unset (the default) advances
-every requested replicate together, exactly like every prior release —
-every replicate lane is built up front, before the first generation
-runs. A smaller value instead builds lanes lazily: only this many exist
-at once, and a finished lane's own slot goes to the next
-not-yet-started replicate rather than every replicate starting
-simultaneously. Ignored under <code>engine_backend: lineal</code>, which never
-uses this windowed batching at all.</p>
+<p>Caps active replicate lanes for <code>generational</code> and <code>generational-vector</code>.
+When unset, every lane is built before the first generation. With a cap,
+lanes are built as slots become available.
+The <code>lineal</code> backend uses worker processes rather than this lane window.</p>
 <p>This matters most under <code>generational-vector</code>: that backend keeps a
 dense, per-locus array cached for every currently active replicate at
-once, so an unbounded batch's own memory use scales directly with
+once, so an unbounded batch's memory use scales directly with
 <code>n_replicates</code> — a run that comfortably fits at <code>n_replicates: 10</code> can
 run out of memory at <code>n_replicates: 200</code> on the identical configuration
 otherwise. Setting <code>max_concurrent_replicates</code> to a small number (<code>4</code>,
 say) bounds that memory use to a small, fixed multiple regardless of
-how many replicates the batch as a whole is asked to run. A value
-larger than <code>n_replicates</code> is silently capped at <code>n_replicates</code> rather
-than rejected, the same reasoning <code>replicate_minimum</code> (above) already
-uses.</p>
+the total requested replicate count. Values above <code>n_replicates</code> are
+capped at <code>n_replicates</code>.</p>
 <pre><code class="language-yaml">n_replicates: 200
 engine_backend: generational-vector
 max_concurrent_replicates: 4
 mutation_model: infinite_alleles
 migrant_sampling: continuous
 </code></pre>
-<p>Windowing changes only <em>when</em> a replicate's own lane is built and
-advanced relative to another — never what any replicate itself
-computes, so a batch's own results are identical with or without a
-window, aside from <code>run_id</code> itself: an auto-generated <code>run_id</code> is a
-hash of a run's <em>entire</em> configuration, this field included, so two
-otherwise-identical configs that differ only in
-<code>max_concurrent_replicates</code> get different auto-generated run ids (the
-same is already true of <code>engine_backend</code>, <code>jit</code>, and every other field
-on this page).</p>
+<p>For adaptive averaging, this value also determines the first-wave width
+used to size later replicate windows. It can therefore change results and
+is part of run identity. Unlike backend, JIT, and storage settings, it is
+not solely an execution choice. See
+<a href="#replicate_averaging_window"><code>replicate_averaging_window</code></a> and
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md#what-decides-a-runs-identity">Python run identity</a>.</p>
 <p><strong>On the command line:</strong> <code>fim run --max-concurrent-replicates N</code>
 overrides this field for one invocation, without editing the config
 file — see <a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">usage.md</a>. <strong>In the desktop
@@ -1514,7 +1435,7 @@ execution-flavored defaults.</p>
 <h2 id="run-labels">Run labels</h2>
 <p>A label describes a run without being part of it. The three label keys,
 <code>name</code>, <code>description</code>, and <code>class</code>, are all optional. They are <strong>not</strong> part
-of the run's ID: the ID is a hash of the model keys only, so changing a
+of the run's ID: labels are excluded from the identity mapping, so changing a
 run's name, description, or class never turns it into a different run.
 The labels are kept in the run's <code>metadata.json</code> file, beside
 <code>manifest.json</code>, never in the manifest's parameters.</p>
@@ -1574,11 +1495,10 @@ or removed from a study. You can still open it, reanalyze it, and copy its
 configuration. Each worked example's <code>config.yaml</code> carries
 <code>_read_only: true</code>.</p>
 <p>Because <code>_read_only: true</code> is part of the run's ID, a shipped example and
-your own run of the same model are different runs. When you load an example
-into Configure, every <code>_</code> key is dropped, so the run you make from it is an
+an editable run of the same model have different identities. Loading an
+example into Configure drops every <code>_</code> key, so the resulting run is an
 ordinary run that you can edit. A configuration without <code>_read_only</code>, or
-with <code>_read_only: false</code>, has the same ID it had before this attribute
-existed.</p>
+with <code>_read_only: false</code>, uses the ordinary editable-run identity.</p>
 <h2 id="validation-summary">Validation summary</h2>
 <table>
 <thead>
@@ -1665,11 +1585,11 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>finite_alleles with a locus's starting allele IDs exceeding its 4<sup>length</sup> capacity</td>
+<td>finite_alleles with a locus's starting allele IDs exceeding its <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mrow><mi>ℓ</mi></mrow></msup></mrow></math> capacity</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td>both <code>mu</code> and μ<sub>b</sub> given, or neither</td>
+<td>both <code>mu</code> and <code>mu_b</code> given, or neither</td>
 <td>rejected</td>
 </tr>
 <tr>
@@ -1677,7 +1597,7 @@ existed.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>μ<sub>b</sub> outside <code>[0, 1]</code></td>
+<td><code>mu_b</code> outside <code>[0, 1]</code></td>
 <td>rejected</td>
 </tr>
 <tr>

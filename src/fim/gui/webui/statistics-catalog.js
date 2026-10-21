@@ -56,6 +56,22 @@ const defaultShownStatistics = new Set();
 const _statisticSpecs = new Map();
 const _statisticCatalogReadyCallbacks = [];
 
+// Derived display rows and theoretical predictions are not catalog entries.
+const STATISTIC_REFERENCE_ANCHORS = {
+    "<sup>H</sup>D<sub>S</sub>": "effective-allele-counts",
+    "<sup>H</sup>D<sub>T</sub>": "effective-allele-counts",
+    Ne_S: "effective-allele-counts",
+    Ne_T: "effective-allele-counts",
+    A_S: "effective-allele-counts",
+    A_T: "effective-allele-counts",
+    S_S: "entropy",
+    S_T: "entropy",
+    identity_recovery_half_life: "identity-recovery",
+    identity_recovery_rate: "identity-recovery",
+    identity_recovery_equilibrium: "identity-recovery",
+    mutation_negligible_equilibrium: "mutation-negligible-equilibrium",
+};
+
 /**
  * Return one statistic's catalog entry, or `null` for a name the catalog
  * does not hold (Explore's predicted quantities).
@@ -276,7 +292,7 @@ function _buildStatisticSlots() {
         const before = trailing > 0 ? row.children[row.children.length - trailing] : null;
         for (const key of STATISTIC_NAMES) {
             const header = document.createElement("th");
-            header.innerHTML = formatStatisticLabel(key);
+            header.appendChild(buildStatisticName(key));
             header.dataset.shownKey = key;
             row.insertBefore(header, before);
         }

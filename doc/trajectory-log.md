@@ -1,10 +1,8 @@
 # The trajectory log
 
 A run keeps its trajectory (every allele frequency in every deme, at every
-generation) in one compact binary file, `trajectory.tlog`. This page says what
-the file is, how to get the familiar `trajectory.jsonl` text from it, what
-happens when a run is interrupted, and how the format works. Each section says
-who it is for.
+generation) in a compact binary file, `trajectory.tlog`. This guide covers
+text export, storage and recovery, inspection, and the binary format.
 
 - [For everyone: what you have and what to do with it](#for-everyone-what-you-have-and-what-to-do-with-it)
 - [Exporting trajectory.jsonl](#exporting-trajectoryjsonl)
@@ -15,12 +13,10 @@ who it is for.
 ## For everyone: what you have and what to do with it
 
 Each run folder holds a file called `trajectory.tlog`. It is the full record
-of the simulation, stored so that it is small and quick to read. The app uses
-it for the scrubber, the trajectory graphs and the animation; you do not need
-to do anything with it.
+of the simulation, or its retained generations when thinning is enabled.
+The app reads it directly for the scrubber, trajectory graphs, and animation.
 
-If you want the data as text, for a spreadsheet or another program, ask for
-it:
+To export text for a spreadsheet or another program:
 
 ```console
 fim export results/my-run
@@ -29,8 +25,7 @@ fim export results/my-run
 That writes `trajectory.jsonl` in the same folder: one line per allele
 frequency, in the format described under
 [Output schemas](usage.md#output-schemas). The file can be very large (see the
-next section), so the command checks that there is room first and tells you if
-there is not.
+storage section), so the command checks available disk space before writing.
 
 ## Exporting trajectory.jsonl
 
@@ -41,22 +36,22 @@ fim export RUN [-o PATH] [--workers N] [--force]
 - `RUN` is the run folder, or its `trajectory.tlog` (or
   `equilibrium_trajectory.tlog`, the ancestral phase of an
   [equilibrium-split](usage.md#equilibrium-split-founding) run).
-- The output defaults to the log's own name with `.jsonl`, beside it. `-o`
+- The output defaults to the log's name with `.jsonl`, beside it. `-o`
   chooses another place, for example another disk.
 - The command first checks the log against the digest in the run's
   `manifest.json` and refuses a log that has been changed or damaged.
 - It then works out the exact size of the file it will write (without writing
   anything) and refuses if the disk does not have that much free space.
 - The text goes to a `.partial` file that is renamed into place when it is
-  complete, so a stopped export never leaves a half file that looks finished.
+  complete, so an interrupted export is not published as a finished file.
 - It will not replace an existing file unless you pass `--force`.
 - Beside the output it writes `<output>.export.json`, a small receipt with the
   SHA-256 and size of both the log and the JSON Lines file, and the number of
   generations and rows. The JSON Lines file is canonical: the same log always
   gives the same bytes and the same digest.
 - `--workers` sets how many processes format the text (default: up to four).
-  Nothing changes except speed; one process formats and hashes about 0.6 GB a
-  second on a busy laptop.
+  Worker count affects speed, not output. One measured laptop throughput was
+  about 0.6 GB per second per process.
 
 `fim stats` and the app read the log directly; they never need the export.
 
@@ -71,7 +66,7 @@ every generation (high mutation, small demes) costs more: Jost (2008) Part VI
 takes about 220 bytes a generation. The text export is much larger than the
 log: the Dear-Nolan low example exports to 4.8 GB (about 670 times its log) and
 Part VI to 0.5 GB (about 17 times); a 400-locus, million-generation run exports
-to hundreds of gigabytes, which is why the export asks first.
+to hundreds of gigabytes.
 
 **Interruption.** The log is written as a sequence of *blocks* (512
 generations at most, and a snapshot always starts a new one). A block counts as
@@ -89,8 +84,8 @@ matter to code that keeps a log open for long (the desktop app's live runs, and
 **Thinning.** A long run can write only some of its generations
 ([`trajectory_retention`](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in)):
 generation 0, everything before the thinning start, one in every stride
-after it, the last burn-in generation and the final generation. The log format
-already allows gaps in the generation numbers; a reader lists exactly the
+after it, the last burn-in generation and the final generation. The format
+allows gaps in generation numbers; a reader lists the
 generations that were written, `frame_at` raises `KeyError` for a skipped one,
 and `fim stats` and the app say the run was thinned. The count of generations
 in a thinned file is a function of the settings and the final generation, so
@@ -117,8 +112,8 @@ the sync period (two seconds) are the Expert Settings `log_key_every`,
 `log_block_generations` and `log_sync_seconds`
 ([configuration](configuration.md#expert)). They change the log's size, how fast
 it can be read back, and how much a crash can take; they never change a
-simulated number. A run that changes one is recorded as such in its manifest
-and is a different run (its run ID changes).
+simulated number. Nondefault values are recorded in the manifest but do not
+change run identity; see [Python run identity](python-api.md#what-decides-a-runs-identity).
 
 **Durability.** A background thread writes the blocks and asks the operating
 system to flush them to the disk every two seconds, and when the log is
@@ -130,7 +125,7 @@ same configuration and seed write the same bytes, so the digest recorded in
 `manifest.json` can be compared between runs and between software versions.
 The desktop app asks for its open block to be written every second so a live
 view never goes stale. That moves block boundaries while the run is going, so
-when the app's log is closed it is rewritten, from its own committed
+when the app's log is closed it is rewritten, from committed
 generations, with the boundaries a command-line run would have chosen, and
 replaces the file (a second or so for the largest examples). Nothing is
 rewritten when no block was sealed on the clock. If the replacement fails (for
@@ -143,10 +138,10 @@ is correct but slower.
 
 ## For a technician: inspecting a log
 
-You do not need special tools:
+Use the command-line reader and exporter:
 
 ```console
-fim export RUN -o /tmp/trajectory.jsonl      # text, to look at or search
+fim export RUN -o trajectory.jsonl           # text for inspection or search
 fim stats RUN/trajectory.tlog                # statistics of the last generation
 fim stats RUN/trajectory.tlog --generation 500
 ```
@@ -155,11 +150,13 @@ If a log will not open:
 
 - *"does not match its manifest"*: the file changed after the run finished
   (copying that was interrupted, a disk problem, or an edit). Restore it from a
-  backup or rerun.
+  backup or rerun. For saved runs, use the checkpoint recovery procedure in
+  [run lifecycle](run-lifecycle.md#recovery-after-a-crash-or-power-failure).
 - *"not a trajectory log"* or *"header checksum mismatch"*: the first bytes of
   the file are damaged or it is not a log.
 - A log that was cut short (a copy that did not finish) opens up to its last
-  complete block; `fim export` and the app use that committed part.
+  complete block when inspected without a completed-run integrity check.
+  A completed run's manifest check rejects truncation.
 
 ## For developers: the format and the code
 
@@ -191,7 +188,8 @@ record        padded-4 varint body_len | padded-4 varint rows | u8 kind
   reader can start decoding at any keyframe block.
 - A pair body is `varint h`: `h == 1` is one allele at frequency exactly 1.0;
   otherwise `n = h >> 1` alleles follow, each as its id and either a *count*
-  (`frequency = count / deme size`, used only when `float(count) / float(size)`
+  (mathematically $f=c/n$, where $c$ is the allele count and $n$ the
+  deme's gene-copy count; used only when `float(count) / float(size)`
   reproduces the frequency bit for bit) or, when `h & 1`, the eight raw bytes
   of the float. The format is lossless for any input; compactness depends on
   frequencies being `count / size`. An unknown deme size (0) stores raw floats.
@@ -216,14 +214,13 @@ keeps getting rows.
 
 ### Rules that keep it correct
 
-- **Exactness.** A float's text in the export always comes from Python's own
-  `repr`: from a table built once per deme size, or from `float.__repr__`. No
-  float formatter was reimplemented, so there is nothing to prove equal.
-- **Determinism.** No wall clock reaches a byte. Blocks are sealed on count
+- **Exactness.** Float text comes from Python's `repr`, either cached per
+  deme size or obtained through `float.__repr__`.
+- **Determinism.** File bytes do not depend on wall-clock time. Blocks are sealed on count
   and size by default; sealing on elapsed time is opt-in
   (`block_seconds`) because it moves block boundaries, and a log that used it
-  is rewritten with the canonical boundaries when it closes. Time otherwise
-  only decides when the writer thread syncs.
+  is rewritten with the canonical boundaries when it closes. Wall-clock time
+  otherwise controls only when the writer thread syncs.
 - **One run per log.** The header names the run, so a store holds one run; a
   batch uses one store per replicate (a store factory).
 - **The writer thread** calls only `zlib.crc32`, `os.write` and the sync call,
@@ -257,5 +254,8 @@ test_frame_identity.py` (all three backends produce identical frames).
 
 ### Design
 
-The reasoning, measurements and the decisions behind this page are in the
-project's design documents; the benchmark scripts are checked in beside them.
+See the [persistence architecture](developer.md#persistence-and-reports),
+[persistence API](fim-simulator-functional-api.md#6-fimpersistence--reading-and-writing-run-results),
+and [source package](../src/fim/persistence/) for implementation details.
+The [statistics reference](statistics.md) explains the quantities recomputed
+from stored frequencies.

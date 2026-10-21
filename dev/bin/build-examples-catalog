@@ -1,41 +1,11 @@
 #!/usr/bin/env python3
-"""Build the desktop app's bundled examples catalog from `doc/examples/`.
+"""Build the desktop application's bundled examples catalog.
 
-Each `doc/examples/<id>/` directory with a `README.md` is one example.
-This script writes `src/fim/gui/webui/examples/`, the bundle the packaged
-app carries (`packaging/fim.spec` already bundles all of `webui/`):
-
-- `catalog.json`: the class tree, then one entry per example with its
-  ID, name, description, class, README text, a plain-text README
-  excerpt, the configuration's YAML text (or `null` when the example has
-  no `config.yaml`), and the list of bundled output files.
-- A copy of every committed run artifact, including each replicate's
-  outputs and the losslessly compressed, split JSONL archives. Opening
-  an example restores these archives automatically.
-
-Labels. An example's `config.yaml` may carry `name`, `description`, and
-`class`. When it does not, the name is the README's first heading, the
-description is the README's first prose paragraph, and the class is
-`unclassified`, which is listed last.
-
-Classes. `doc/examples/classes.yaml` defines the class tree (design doc
-`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
-§2, `selby/restricted`). When the file is absent, every example must be
-unclassified. The file is read by `fim.examples.classes`, its only
-reader, imported from this checkout's `src/`.
-
-Order. Classes appear in file order (parent, then its children).
-Within a class, examples follow the order of their
-`worked-example-config` markers in `doc/usage.md`; any other example
-follows, sorted by ID.
-
-Usage:
-    dev/bin/build-examples-catalog           # refresh the bundle
-    dev/bin/build-examples-catalog --check   # report a stale bundle
-
-The pre-commit hook runs this whenever `doc/examples/**`, `doc/usage.md`,
-or this script is staged. `test/test_examples_catalog.py` fails when the
-committed bundle is stale.
+Reads example READMEs, configurations, class metadata, and committed output
+files from `doc/examples/`, then writes the catalog and bundled artifacts
+under `src/fim/gui/webui/examples/`. Class and example order follow the
+source metadata. Use `--check` to report whether the bundle is stale without
+changing files.
 """
 
 from __future__ import annotations

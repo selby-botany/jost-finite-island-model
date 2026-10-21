@@ -1,52 +1,10 @@
 #!/usr/bin/env python3
-"""Generate a d x locus-length heatmap sweep as a `benchmark-queue` file.
+"""Generate a benchmark queue for a deme-count by locus-length grid.
 
-`engine_backend="auto"` resolves between `"generational"` and
-`"generational-vector"` on two independent thresholds --
-`auto_vector_min_d` and `auto_vector_max_capacity` -- as if the real
-decision boundary between the two engines were a rectangle in (d,
-capacity) space. Nothing has actually tested that: every sweep so far
-(`dev/bin/benchmark-engines --sweep d` and `--sweep loci-length`,
-independently) only ever varied one axis while holding the other at a
-single reference value, which cannot see whether the two axes
-*interact* -- whether the real boundary is a rectangle, or a diagonal
-that a fixed pair of independent thresholds gets wrong in some corner.
-
-This tool builds that check as a `benchmark-queue` queue file: one
-small YAML config per locus-length value (`--length-values`, holding
-`N`/`m`/`mu` fixed at `--fixed-N`/`--fixed-m`/`--fixed-mu`), and one
-`benchmark-engines --sweep d --config <that file>` job per length
-value, each internally sweeping the *entire* `--d-values` list in one
-already-JIT-warmed invocation. All of them are independent of each
-other and each individually cheap enough (this project's own history:
-citrus-2's own 22 cores sit at load 1-5 even under several concurrent
-`benchmark-engines` invocations) to belong in one shared parallel
-stage, rather than paying for `length-values` separate rounds of
-`benchmark-queue`'s own idle wait.
-
-Coarse first, refine only where it matters: the botanically relevant
-question is not "what is the exact wall-clock time everywhere," it is
-"where does V stop winning" -- most of the parameter space this project
-has already swept turned out to be one-sided (V wins at every `d` from
-2 through 500 tested so far; the one real crossover found lives
-somewhere between locus length 7 and 8). Run this tool once with a
-deliberately coarse, wide `--d-values`/`--length-values` first; read
-the result (`dev/bin/render-heatmap`, this tool's own companion); then
-run this tool again with a narrower, denser range centered on wherever
-the coarse pass found the boundary, rather than paying for a single
-dense grid over the whole space up front. This tool does not automate
-that refinement step itself -- deciding where a crossover actually
-landed, and whether it is worth a second pass, is a judgment call for
-whoever is reading the first pass's own results, not a rule this tool
-could get right unattended.
-
-Usage:
-    dev/bin/generate-heatmap-queue \\
-        --d-values 10,35,70,120,300 --length-values 5,6,7,8 \\
-        --out-dir /tmp/fim-heatmap
-    dev/bin/benchmark-queue /tmp/fim-heatmap/queue.json \\
-        --log-dir /tmp/fim-heatmap/logs
-    dev/bin/render-heatmap /tmp/fim-heatmap
+Writes one configuration per locus length and a `benchmark-queue` file whose
+jobs sweep the requested deme counts. Run the queue with
+`dev/bin/benchmark-queue`, then use `dev/bin/render-heatmap` to summarize the
+results.
 """
 
 from __future__ import annotations

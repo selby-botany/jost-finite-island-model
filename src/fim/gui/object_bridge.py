@@ -1,17 +1,8 @@
-"""Saved runs ("Save for later") for the GUI: the logic behind `Api`'s methods.
+"""GUI operations for creating and managing saved Run objects.
 
-A saved run is a Run object (`fim.persistence.run_objects`): a configuration
-the botanist saved to start, pause, and resume later, which may be a Draft
-that is not yet valid. `fim.gui.app.Api` stays a thin bridge over these
-functions, which are plain enough to test without a window.
-
-A Draft's configuration file records what was entered (fields that do not
-parse keep their text), but cannot always be turned back into form values,
-because the form has modes and selectors the configuration does not. So
-each save also writes the form's own values to `gui-form.json` in the
-object directory, next to a digest of the configuration it was saved with.
-Reopening uses those values while the digest still matches; after an edit
-made elsewhere (`fim object edit`), the configuration itself is converted.
+The bridge delegates lifecycle operations to `fim.run_service` and
+`fim.persistence.run_objects`. Drafts retain entered form values in
+`gui-form.json` so configurations that are not yet valid can be reopened.
 """
 
 from __future__ import annotations

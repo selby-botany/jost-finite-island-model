@@ -1,18 +1,8 @@
-"""Background-thread execution of a saved Run object for the GUI.
+"""Background execution for saved Run objects in the desktop interface.
 
-The counterpart to `fim.gui.runner` for a Run saved with "Save for later"
-(`fim.persistence.run_objects`). Execution goes through the same lifecycle
-service the CLI's `fim object start/resume` uses
-(`fim.run_service.execute_run_object`), so the GUI never applies lifecycle
-rules of its own. Pause and Cancel are durable requests recorded in the
-object's `run.json` (`request_pause`, `cancel_run_object`); the worker
-honors them at its next safe point.
-
-The worker posts the same `runner.RunMessage` shapes `fim.gui.runner`
-does, plus `("paused", generation)`, so `fim.gui.app._drain_run_messages`
-draws both kinds of run identically. Only one run is in flight at a time,
-and each run has its own queue, so a message from an earlier attempt can
-never reach a later attempt's view.
+Execution and lifecycle transitions use the same services as `fim object
+start` and `fim object resume`. The worker reports progress and responds to
+pause and cancellation requests at safe points.
 """
 
 from __future__ import annotations

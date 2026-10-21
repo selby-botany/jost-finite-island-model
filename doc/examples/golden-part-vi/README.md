@@ -18,24 +18,18 @@ observation motivating D as a replacement statistic.
 Published equilibrium values (100-replicate ensemble, multi-locus engineered
 start): **G<sub>ST</sub> ≈ 0.176, D ≈ 0.604**.
 
-## One locus per replicate: the batch earns its error bar
+## One locus per replicate: uncertainty across runs
 
-A single locus, watched by a single replicate, is exactly the case that
-once exposed a real defect in `fim`'s own convergence rule: a short
-trailing window can *look* stable purely because drift's own
-generation-to-generation wobble happens to cancel out for a moment, not
-because the run has settled near its true long-run value. An earlier version
-of this example fell into that trap: it reported "converged" at generation 400
-with D = 0.611, a number that looked like a clean match to the published
-ensemble mean (0.604) but was one lucky window among many unlucky ones nearby.
-
-`fim` now avoids it by construction. Each replicate burns in (here 449
+A single-locus statistic can have substantial generation-to-generation
+variation. The batch estimates its uncertainty across replicates rather
+than treating a short, apparently stable segment of one stochastic
+trajectory as evidence of equilibrium. Each replicate burns in (here 449
 generations, about 5.3 relaxation times of 85), averages over a
 1,693-generation window, and stops. The batch then adds replicates until the
 95% confidence interval across them is within the requested
 [precision](../../configuration.md#precision), here ±0.01
-([Convergence](../../convergence.md)). This example watches **D**, so the batch
-has to settle D: it needed 32 replicates, where the minimum is 10, and took
+([Convergence](../../convergence.md)). The batch watches **D** and needed 32
+replicates, above the minimum of 10, to meet its precision criterion. It took
 under three minutes on a development machine. Across the replicates
 **D = 0.6247 ± 0.0098** and **G<sub>ST</sub> = 0.1742 ± 0.0023** (95%
 confidence half-widths). The interval for G<sub>ST</sub>, 0.172 to 0.177,
@@ -46,22 +40,19 @@ function of them and the average of its values differs from its value at the
 averages (see the section "Which average?" in
 [Convergence](../../convergence.md)). `D` swings widely here (a standard
 deviation of 0.16 from one generation to the next in a single run), which is
-why 32 replicates were needed. The earlier single-run version of this example
-averaged one long window (176,127 generations) and reported D = 0.608 ± 0.004
-(one standard error).
+why 32 replicates were needed.
 
-## The real calibration: many seeds, many loci
+## Calibration evidence
 
-The genuine test that `fim`'s own mechanics reproduce Jost's theory is not
-this one single-locus run. `test/validation/test_simulator_equilibrium.py`
+The one-locus example is distinct from the replicated calibration tests.
+`test/validation/test_simulator_equilibrium.py`
 checks the Golden Part VI scenario against the analytic equilibrium, and
 `test/validation/test_convergence_rule_calibration.py` runs the convergence
 rule on it for 12 fixed seeds of 4 loci each: the averages scatter by 0.008
-around 0.603, the analytic D is 0.603, and no run misses its target by more
-than its error bar allows (`test/validation/convergence-rule-calibration-
-evidence.json`). This single-locus example exists to show a complete,
-minimal, reproducible configuration whose own D genuinely converges, not to
-stand in for that calibration.
+around 0.603, and the analytic D is 0.603. The evidence is recorded in
+`test/validation/convergence-rule-calibration-evidence.json`. This example
+provides a reproducible single-locus batch and does not replace the
+multi-seed calibration.
 
 ## Parameters
 
@@ -115,16 +106,15 @@ about a tenth of the size. `results/golden-part-vi/report.json` will match
 }
 ```
 
-(Abbreviated and rounded to the fields this document discusses; the real
+(Abbreviated and rounded to the fields discussed here; the complete
 `report.json` in this directory has every field, every recorded statistic's
 own `window_statistics` entry, and full floating-point precision.)
 
 Both averages match the published ensemble means (D ≈ 0.604, G<sub>ST</sub> ≈
-0.176) within a few standard errors, and both error bars were earned by the
-run (only D's was required to meet the precision; G<sub>ST</sub>'s happens
-to). The final generation's own single values, D = 0.6205 and G<sub>ST</sub> =
-0.2121, are real too but noisier: one stochastic draw each, not averaged
-estimates.
+0.176) within a few standard errors. Only D was required to meet the
+precision target; G<sub>ST</sub> also meets it. The final-generation values,
+D = 0.6205 and G<sub>ST</sub> = 0.2121, are individual stochastic
+observations rather than averages over the evidence window.
 
 ## Files in this directory
 

@@ -1,134 +1,11 @@
 #!/usr/bin/env python3
-"""Characterize engine wall-clock time across the parameter space.
+"""Benchmark engine backends across a one-parameter sweep.
 
-Measures how `engine_backend="lineal"`/`"generational"` (both
-`jit="off"` and `jit="numba"`)/`"generational-vector"` scale as one
-`SimulationParams` field sweeps across a range of values, holding every
-other field fixed. `L_1` -- a single-lineage (`n_replicates=1`)
-`"lineal"` run at the *same* swept value -- is a pure normalization
-divisor, not itself a series to plot: every other column is reported
-both in raw seconds and as a ratio to `L_1`, so the reported numbers
-answer "how many single-lineage-run-equivalents does this batch cost,"
-machine-independent in the sense that the ratio, not the absolute time,
-is the number worth comparing across machines/sessions. `L_batch`
-(`"lineal"` run at the *same* batch size as every other engine measured
-here) is the real fourth data series -- how the reference engine itself
-scales, on the same footing as G and V, not left implicit inside what
-they get divided by. Four backend/JIT combinations are measured at
-every point: `L_batch`, `"generational"` with `jit="off"`,
-`"generational"` with `jit="numba"`, and `"generational-vector"`
-(always effectively JIT'd; has no `jit="off"` mode) -- enough to plot
-t(sweep value) for every engine and JIT setting this project currently
-offers.
-
-Default sweep is `d` (deme count) -- the axis `auto_vector_min_d`
-(`fim.engine`) already exists to threshold, and the one the project
-owner asked this tool to characterize first. `--sweep N|mu|m|
-loci-length|replicates|max-concurrent-replicates` characterizes the other
-candidate scaling factors named directly (population size,
-mutation/migration rate, locus length/capacity, batch size, replicate lane
-window) -- run each independently; this tool does
-not attempt a full multi-factor grid (out of scope, and combinatorially
-large). `--sweep replicates` varies `L_batch`/G/V's own batch size
-(`n_replicates`) directly via `--values`, holding `d`/`N`/`mu`/`m`/
-locus length at the fixed baseline and `L_1` at its own always-`n_
-replicates=1` reference point regardless -- the one field this tool
-could already vary via `--replicates` for every *other* sweep, now
-itself sweepable, per this project's own multi-model engine review,
-2026-09-04, Tier E's unnamed "benchmarking-process" finding (GPT-5.6;
-`20260904-claude-sonnet-5-fim-engine-review-remediations.md` Phase 7
-item 7): "does not sweep the product of replicas, loci, demes, and
-capacity." This extension covers the two capabilities that finding and
-Phase 7 item 7 name explicitly -- a replica-count sweep and peak-RSS
-capture; the finding's own fuller six-scenario-class matrix (zero/
-migration-only/mutation-only/both; low/med/high active-deme mutation;
-1/several/many loci; bounded/unbounded execution; symmetric/explicit
-matrices; capacity sweeps near the configured budget) is a
-substantially larger scope than a single Tier E line item, and is not
-attempted here -- each of those six is already reachable by composing
-this tool's own existing `--sweep`/`--config`/`--values` options by
-hand, just not yet packaged as a named preset.
-
-`--measure-rss` additionally captures each backend's own peak resident
-set size, in a fresh subprocess per backend per point (`--_rss-worker`,
-this same script re-invoked with `sys.executable`) -- RSS is a
-monotonic high-water mark for the life of a process, so measuring two
-backends, or two points, back to back in one process would report
-whichever ran first's own peak polluting whichever ran after it, not
-either one's real peak (the same reasoning this project's own `FIM-54`
-remediation gives for why any peak-RSS before/after comparison needs
-one process per measurement, unlike the timing path's own safe
-median-of-N-trials-in-one-process harness). Off by default -- every
-existing invocation with no `--measure-rss` pays no extra subprocess
-cost and sees no RSS columns, identical to before this option existed.
-
-`"generational"` here means exactly what `fim(engine_backend=
-"generational")` gives a real caller: `GenerationalBackend(
-ThreadedAdvancer())`, default `max_workers` (`os.cpu_count()`) --
-deliberately not an idealized single-threaded measurement, so this
-tool's own G numbers already reflect whatever real thread-count
-behavior `ThreadedAdvancer` actually has on this machine, regressions
-included (see `20260901-claude-sonnet-5-fim-engine-backend-factory-
-design.md` S11's own "System-resource behavior" finding: post-Stage-F8,
-`ThreadedAdvancer` delivers little to no real speedup at this project's
-own reference scale -- this tool's own G/L_1 ratio is expected to show
-that directly, not hide it behind an idealized number).
-
-Every point is the median of `--trials` independent, freshly-built runs
-(not re-timing a warm cache) -- median-of-N, matching this project's
-own established sweep methodology (the d>=35 crossover finding used the
-same discipline after a first, discarded single-trial attempt showed
-30-40% run-to-run swings). `"generational"` with `jit="numba"` and
-`"generational-vector"` each pay their own one-time numba JIT compile
-cost on first use -- two independent compiled functions, not one; this
-tool issues one untimed warm-up call before each one's own first
-measurement so neither cost ever contaminates a reported trial (the
-exact mistake this project's own history already made once and had to
-catch).
-
-"Machine-saturated" (the project owner's own phrasing): this tool does
-not itself pin CPU affinity or launch background load -- it assumes the
-caller runs it on an otherwise-idle machine (this project's own
-established sweep discipline: "run in isolation, no unrelated process
-competing for CPU") and records `os.cpu_count()`/`os.getloadavg()` in
-its own output as a fingerprint of what "saturated" meant for that run,
-so a future comparison can tell whether two runs are actually
-comparable rather than assuming so.
-
-`--output` writes a full evidence file for whoever runs this, but its
-own results (unlike `calibrate-statistical-bands`'s own JSON) are not
-committed to this repository -- machine-specific timing numbers would
-go stale the moment anyone runs this on different hardware, exactly
-the reasoning `auto_vector_min_d`'s own docstring already gives for
-being a caller-supplied parameter rather than a hardcoded constant.
-Findings worth keeping get written up as prose (this project's own
-established practice for every prior benchmark sweep), not as a
-versioned raw-numbers artifact.
-
-`--config` overrides the fixed (non-swept) baseline -- `N`, `d`, `m`,
-`mu`, and locus length -- from a real `fim` YAML config file, the exact
-same format and `SimulationParams.from_mapping` validation `fim run`
-itself uses, rather than this tool's own compiled-in reference-scale
-constants (`DEFAULT_D`/`DEFAULT_N`/`DEFAULT_MU`/`DEFAULT_M`/`DEFAULT_
-LOCUS_LENGTH`, still used for whichever of those a config does not
-mention, and for every field when no `--config` is given at all --
-every existing invocation with no `--config` behaves identically to
-before this option existed). The config's own value for whichever
-field `--sweep` is actually varying is simply never consulted -- `
---values` always drives that one. The config must describe exactly one
-locus (this tool has only ever modeled one) and a scalar, symmetric
-`m`/`N`/`mu` (a caller-supplied migration matrix, or a per-deme `N`, or
-a per-locus `mu`, all valid in a real `fim` config, have no single
-scalar this tool could hold fixed while sweeping something else) --
-rejected with a clear error, not silently narrowed to one entry, if the
-config supplies either.
-
-Usage:
-    dev/bin/benchmark-engines --sweep d \\
-        --values 4,10,20,35,50,80,120 --replicates 16 \\
-        --generations 100 --trials 3 \\
-        --config my-baseline.yaml \\
-        --output /tmp/benchmark-d-sweep.json
+At each point, measures lineal, generational with JIT off and on, and
+vectorized backends. Reports wall-clock time and ratios to the single-run
+lineal reference; optional RSS measurements run each backend in a separate
+process. `--sweep` selects one parameter, and `--config` supplies fixed
+settings. Results depend on the machine and runtime environment.
 """
 
 from __future__ import annotations
@@ -1174,7 +1051,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--measure-rss",
         action="store_true",
-        help="Also capture each backend's own peak RSS per point, via one "
+        help="Also capture peak RSS per backend and point, via one "
         "fresh subprocess per backend (roughly doubles this run's own "
         "wall-clock cost). Off by default.",
     )

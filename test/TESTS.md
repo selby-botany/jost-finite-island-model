@@ -16728,7 +16728,7 @@ Configure/View included) was written under.
 
 <a id="gui.test_app_api.test_no_menu_title_contains_a_paren"></a>
 
-#### [test\_no\_menu\_title\_contains\_a\_paren](./gui/test_app_api.py#L5051)
+#### [test\_no\_menu\_title\_contains\_a\_paren](./gui/test_app_api.py#L5052)
 
 ```python
 def test_no_menu_title_contains_a_paren() -> None
@@ -16752,7 +16752,7 @@ rather than crashing a real Linux build the same way.
 
 <a id="gui.test_app_api.test_open_external_link_opens_the_os_default_browser"></a>
 
-#### [test\_open\_external\_link\_opens\_the\_os\_default\_browser](./gui/test_app_api.py#L5076)
+#### [test\_open\_external\_link\_opens\_the\_os\_default\_browser](./gui/test_app_api.py#L5077)
 
 ```python
 def test_open_external_link_opens_the_os_default_browser(
@@ -16766,7 +16766,7 @@ follows for OS-dispatched actions — no real browser opens in a test.
 
 <a id="gui.test_app_api.test_get_about_info_reports_the_dev_checkout_commit"></a>
 
-#### [test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit](./gui/test_app_api.py#L5156)
+#### [test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit](./gui/test_app_api.py#L5157)
 
 ```python
 def test_get_about_info_reports_the_dev_checkout_commit(
@@ -16783,7 +16783,7 @@ process's own live value, so the assertion is exact either way.
 
 <a id="gui.test_app_api.test_main_returns_2_on_a_malformed_fim_log_level"></a>
 
-#### [test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level](./gui/test_app_api.py#L5215)
+#### [test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level](./gui/test_app_api.py#L5216)
 
 ```python
 def test_main_returns_2_on_a_malformed_fim_log_level(
@@ -16810,7 +16810,7 @@ testing standard forbids.
 
 <a id="gui.test_app_api.test_main_logging_config_flag_wins_over_fim_logging_config_env_var"></a>
 
-#### [test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var](./gui/test_app_api.py#L5273)
+#### [test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var](./gui/test_app_api.py#L5274)
 
 ```python
 def test_main_logging_config_flag_wins_over_fim_logging_config_env_var(
@@ -16825,7 +16825,7 @@ instead of successfully applying the flag's own valid one.
 
 <a id="gui.test_app_api.test_main_honors_fim_logging_config_env_var_with_no_flag"></a>
 
-#### [test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag](./gui/test_app_api.py#L5310)
+#### [test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag](./gui/test_app_api.py#L5311)
 
 ```python
 def test_main_honors_fim_logging_config_env_var_with_no_flag(
@@ -16844,7 +16844,7 @@ coverage for this exact call path.
 
 <a id="gui.test_app_api.test_main_applies_root_results_directory_log_directory_and_preferences_file"></a>
 
-#### [test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file](./gui/test_app_api.py#L5351)
+#### [test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file](./gui/test_app_api.py#L5352)
 
 ```python
 def test_main_applies_root_results_directory_log_directory_and_preferences_file(
@@ -16861,7 +16861,7 @@ just before that.
 
 <a id="gui.test_app_api.test_initial_window_size_is_the_largest_polite_16_by_9"></a>
 
-#### [test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9](./gui/test_app_api.py#L5399)
+#### [test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9](./gui/test_app_api.py#L5400)
 
 ```python
 @pytest.mark.parametrize(
@@ -16882,7 +16882,7 @@ The window is 16:9, inside the display with a margin, and capped.
 
 <a id="gui.test_app_api.test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing"></a>
 
-#### [test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing](./gui/test_app_api.py#L5411)
+#### [test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing](./gui/test_app_api.py#L5412)
 
 ```python
 def test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing(
@@ -16893,7 +16893,7 @@ After a Study is deleted, its Experiment counts and lists only what exists.
 
 <a id="gui.test_app_api.test_list_studies_reports_closed_and_a_lifecycle_summary"></a>
 
-#### [test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary](./gui/test_app_api.py#L5428)
+#### [test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary](./gui/test_app_api.py#L5429)
 
 ```python
 def test_list_studies_reports_closed_and_a_lifecycle_summary(
@@ -16904,7 +16904,7 @@ Home receives each group's open/closed flag and its derived summary.
 
 <a id="gui.test_app_api.test_set_study_closed_reports_a_refusal_as_a_message"></a>
 
-#### [test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message](./gui/test_app_api.py#L5464)
+#### [test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message](./gui/test_app_api.py#L5465)
 
 ```python
 def test_set_study_closed_reports_a_refusal_as_a_message(
@@ -16915,7 +16915,7 @@ A missing or default group is a message, never an exception.
 
 <a id="gui.test_app_api.test_list_experiments_heals_studies_deleted_by_the_old_behavior"></a>
 
-#### [test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior](./gui/test_app_api.py#L5483)
+#### [test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior](./gui/test_app_api.py#L5484)
 
 ```python
 def test_list_experiments_heals_studies_deleted_by_the_old_behavior(
@@ -16926,7 +16926,7 @@ A manifest left naming a missing Study is repaired when Home lists it.
 
 <a id="gui.test_app_api.test_explore_predictions_count_individuals_and_multiply_by_ploidy"></a>
 
-#### [test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy](./gui/test_app_api.py#L5594)
+#### [test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy](./gui/test_app_api.py#L5595)
 
 ```python
 def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
@@ -16937,7 +16937,7 @@ def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
 
 <a id="gui.test_app_api.test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning"></a>
 
-#### [test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning](./gui/test_app_api.py#L5606)
+#### [test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning](./gui/test_app_api.py#L5607)
 
 ```python
 def test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning(
@@ -16948,7 +16948,7 @@ No ploidy argument means N is the gene-copy count, as before.
 
 <a id="gui.test_app_api.test_explore_rejects_a_ploidy_outside_one_to_four"></a>
 
-#### [test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four](./gui/test_app_api.py#L5618)
+#### [test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four](./gui/test_app_api.py#L5619)
 
 ```python
 @pytest.mark.parametrize("bad", ["0", "5", "diploid", ""])
@@ -16959,7 +16959,7 @@ Every Explore method refuses an unusable ploidy with one message.
 
 <a id="gui.test_app_api.test_explore_sweeps_the_n_axis_in_individuals"></a>
 
-#### [test\_explore\_sweeps\_the\_n\_axis\_in\_individuals](./gui/test_app_api.py#L5633)
+#### [test\_explore\_sweeps\_the\_n\_axis\_in\_individuals](./gui/test_app_api.py#L5634)
 
 ```python
 def test_explore_sweeps_the_n_axis_in_individuals() -> None
@@ -16969,7 +16969,7 @@ The axis values are individuals; each is evaluated at value * ploidy.
 
 <a id="gui.test_app_api.test_explore_grid_and_sweep_evaluate_at_gene_copies"></a>
 
-#### [test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies](./gui/test_app_api.py#L5651)
+#### [test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies](./gui/test_app_api.py#L5652)
 
 ```python
 def test_explore_grid_and_sweep_evaluate_at_gene_copies() -> None
@@ -16979,7 +16979,7 @@ The held N of a sweep or a grid is individuals times ploidy too.
 
 <a id="gui.test_app_api.test_list_studies_counts_only_the_member_runs_that_exist"></a>
 
-#### [test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist](./gui/test_app_api.py#L5666)
+#### [test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist](./gui/test_app_api.py#L5667)
 
 ```python
 def test_list_studies_counts_only_the_member_runs_that_exist(
@@ -16990,7 +16990,7 @@ def test_list_studies_counts_only_the_member_runs_that_exist(
 
 <a id="gui.test_app_api.test_create_study_and_experiment_store_documentation_and_list_it"></a>
 
-#### [test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it](./gui/test_app_api.py#L5697)
+#### [test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it](./gui/test_app_api.py#L5698)
 
 ```python
 def test_create_study_and_experiment_store_documentation_and_list_it(
@@ -17001,7 +17001,7 @@ Documentation given at creation is listed; blank text is stored as unset.
 
 <a id="gui.test_app_api.test_update_study_and_experiment_details_round_trip"></a>
 
-#### [test\_update\_study\_and\_experiment\_details\_round\_trip](./gui/test_app_api.py#L5719)
+#### [test\_update\_study\_and\_experiment\_details\_round\_trip](./gui/test_app_api.py#L5720)
 
 ```python
 def test_update_study_and_experiment_details_round_trip(
@@ -17012,7 +17012,7 @@ The details dialog's Save replaces name, description and documentation.
 
 <a id="gui.test_app_api.test_update_details_reports_a_blank_name_or_unknown_id"></a>
 
-#### [test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id](./gui/test_app_api.py#L5747)
+#### [test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id](./gui/test_app_api.py#L5748)
 
 ```python
 def test_update_details_reports_a_blank_name_or_unknown_id(
@@ -17023,7 +17023,7 @@ A failed save leaves a message for the dialog, and changes nothing.
 
 <a id="gui.test_app_api.test_update_run_details_writes_the_sidecar_and_home_lists_it"></a>
 
-#### [test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it](./gui/test_app_api.py#L5771)
+#### [test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it](./gui/test_app_api.py#L5772)
 
 ```python
 def test_update_run_details_writes_the_sidecar_and_home_lists_it(
@@ -17034,7 +17034,7 @@ A run's name and description are saved and shown in its Home row.
 
 <a id="gui.test_app_api.test_update_run_details_clears_with_blank_text_and_rejects_a_non_run"></a>
 
-#### [test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run](./gui/test_app_api.py#L5798)
+#### [test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run](./gui/test_app_api.py#L5799)
 
 ```python
 def test_update_run_details_clears_with_blank_text_and_rejects_a_non_run(
@@ -17045,7 +17045,7 @@ Blank clears a field; a directory with no manifest is not a run.
 
 <a id="gui.test_app_api.test_get_run_context_names_a_runs_study_and_experiment"></a>
 
-#### [test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment](./gui/test_app_api.py#L5816)
+#### [test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment](./gui/test_app_api.py#L5817)
 
 ```python
 def test_get_run_context_names_a_runs_study_and_experiment(
@@ -17056,7 +17056,7 @@ A run filed in a chosen Study is shown under it, not under the default.
 
 <a id="gui.test_app_api.test_get_run_context_before_a_run_uses_the_selected_or_default_study"></a>
 
-#### [test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study](./gui/test_app_api.py#L5842)
+#### [test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study](./gui/test_app_api.py#L5843)
 
 ```python
 def test_get_run_context_before_a_run_uses_the_selected_or_default_study(
@@ -17067,7 +17067,7 @@ With no run yet, the title names the chosen Study's Experiment.
 
 <a id="gui.test_app_api.test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest"></a>
 
-#### [test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest](./gui/test_app_api.py#L5865)
+#### [test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest](./gui/test_app_api.py#L5866)
 
 ```python
 def test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest(
@@ -21109,6 +21109,18 @@ The one genuinely new interaction Help adds relative to every other
 screen's own fixed-target "Back" button: recording
 *whichever* screen was showing, not always the same one.
 
+<a id="gui.test_help_screen.test_statistic_name_opens_its_definition_without_toggling_the_plot"></a>
+
+#### [test\_statistic\_name\_opens\_its\_definition\_without\_toggling\_the\_plot](./gui/test_help_screen.py#L190)
+
+```python
+@pytest.mark.parametrize("label_source", ["row", "column"])
+def test_statistic_name_opens_its_definition_without_toggling_the_plot(
+        window: webview.Window, label_source: str) -> None
+```
+
+Statistic help preserves plot visibility and returns to the same screen.
+
 <a id="gui.test_home_hierarchy_screen"></a>
 
 # [gui.test\_home\_hierarchy\_screen](./gui/test_home_hierarchy_screen.py#L1)
@@ -24808,7 +24820,7 @@ different, one.
 
 <a id="gui.test_results_screen.test_differently_scaled_statistics_start_off_the_trajectory_panel"></a>
 
-#### [test\_differently\_scaled\_statistics\_start\_off\_the\_trajectory\_panel](./gui/test_results_screen.py#L352)
+#### [test\_differently\_scaled\_statistics\_start\_off\_the\_trajectory\_panel](./gui/test_results_screen.py#L353)
 
 ```python
 def test_differently_scaled_statistics_start_off_the_trajectory_panel(
@@ -24829,7 +24841,7 @@ the legend toggle still reaches it.
 
 <a id="gui.test_results_screen.test_a_very_long_run_still_renders_its_trajectory_and_deme_pair_panels"></a>
 
-#### [test\_a\_very\_long\_run\_still\_renders\_its\_trajectory\_and\_deme\_pair\_panels](./gui/test_results_screen.py#L414)
+#### [test\_a\_very\_long\_run\_still\_renders\_its\_trajectory\_and\_deme\_pair\_panels](./gui/test_results_screen.py#L415)
 
 ```python
 def test_a_very_long_run_still_renders_its_trajectory_and_deme_pair_panels(
@@ -24864,7 +24876,7 @@ established by `test_open_run_screen.py`'s own reopened-run tests.
 
 <a id="gui.test_results_screen.test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints"></a>
 
-#### [test\_drawing\_a\_scatter\_sizes\_the\_canvas\_buffer\_before\_it\_paints](./gui/test_results_screen.py#L486)
+#### [test\_drawing\_a\_scatter\_sizes\_the\_canvas\_buffer\_before\_it\_paints](./gui/test_results_screen.py#L487)
 
 ```python
 def test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints(
@@ -24898,7 +24910,7 @@ the sync happened in `drawScatter` itself, not a frame later.
 
 <a id="gui.test_results_screen.test_a_single_replicate_run_gets_a_per_generation_results_table"></a>
 
-#### [test\_a\_single\_replicate\_run\_gets\_a\_per\_generation\_results\_table](./gui/test_results_screen.py#L550)
+#### [test\_a\_single\_replicate\_run\_gets\_a\_per\_generation\_results\_table](./gui/test_results_screen.py#L551)
 
 ```python
 def test_a_single_replicate_run_gets_a_per_generation_results_table(
@@ -24925,7 +24937,7 @@ same reason ``results`-outcome` reports above the plot).
 
 <a id="gui.test_results_screen.test_table_headers_toggle_and_highlight_their_statistic"></a>
 
-#### [test\_table\_headers\_toggle\_and\_highlight\_their\_statistic](./gui/test_results_screen.py#L637)
+#### [test\_table\_headers\_toggle\_and\_highlight\_their\_statistic](./gui/test_results_screen.py#L638)
 
 ```python
 def test_table_headers_toggle_and_highlight_their_statistic(
@@ -24941,7 +24953,7 @@ the header, the column and the stats-panel row; leaving clears it.
 
 <a id="gui.test_results_screen.test_capped_run_warns_in_both_message_and_final_generation_row"></a>
 
-#### [test\_capped\_run\_warns\_in\_both\_message\_and\_final\_generation\_row](./gui/test_results_screen.py#L701)
+#### [test\_capped\_run\_warns\_in\_both\_message\_and\_final\_generation\_row](./gui/test_results_screen.py#L702)
 
 ```python
 def test_capped_run_warns_in_both_message_and_final_generation_row(
@@ -24953,7 +24965,7 @@ A real capped run keeps its raw reason and never looks converged.
 
 <a id="gui.test_results_screen.test_not_converged_row_gets_a_warning_background_and_a_text_mark"></a>
 
-#### [test\_not\_converged\_row\_gets\_a\_warning\_background\_and\_a\_text\_mark](./gui/test_results_screen.py#L746)
+#### [test\_not\_converged\_row\_gets\_a\_warning\_background\_and\_a\_text\_mark](./gui/test_results_screen.py#L747)
 
 ```python
 def test_not_converged_row_gets_a_warning_background_and_a_text_mark(
@@ -24968,7 +24980,7 @@ global scope) so the result never depends on how a real run ends.
 
 <a id="gui.test_results_screen.test_completed_run_shows_title_above_canvas_and_back_returns_to_initial"></a>
 
-#### [test\_completed\_run\_shows\_title\_above\_canvas\_and\_back\_returns\_to\_initial](./gui/test_results_screen.py#L780)
+#### [test\_completed\_run\_shows\_title\_above\_canvas\_and\_back\_returns\_to\_initial](./gui/test_results_screen.py#L781)
 
 ```python
 def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
@@ -24980,7 +24992,7 @@ The run title sits above the plot and the Back action returns to p_0.
 
 <a id="gui.test_results_screen.test_completed_scatter_shows_the_marker_color_key_beneath_the_plot"></a>
 
-#### [test\_completed\_scatter\_shows\_the\_marker\_color\_key\_beneath\_the\_plot](./gui/test_results_screen.py#L830)
+#### [test\_completed\_scatter\_shows\_the\_marker\_color\_key\_beneath\_the\_plot](./gui/test_results_screen.py#L831)
 
 ```python
 def test_completed_scatter_shows_the_marker_color_key_beneath_the_plot(
@@ -24997,7 +25009,7 @@ the equivalent as a row of HTML beneath the plot.
 
 <a id="gui.test_results_screen.test_the_default_scatter_style_explains_its_count_colors"></a>
 
-#### [test\_the\_default\_scatter\_style\_explains\_its\_count\_colors](./gui/test_results_screen.py#L865)
+#### [test\_the\_default\_scatter\_style\_explains\_its\_count\_colors](./gui/test_results_screen.py#L866)
 
 ```python
 def test_the_default_scatter_style_explains_its_count_colors(
@@ -25014,7 +25026,7 @@ line of the original circles.
 
 <a id="gui.test_results_screen.test_deme_pair_selector_switches_to_a_chosen_pair_and_back"></a>
 
-#### [test\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back](./gui/test_results_screen.py#L898)
+#### [test\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back](./gui/test_results_screen.py#L899)
 
 ```python
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
@@ -25044,7 +25056,7 @@ live window.
 
 <a id="gui.test_results_screen.test_running_simulation_again_from_completed_starts_a_new_run"></a>
 
-#### [test\_running\_simulation\_again\_from\_completed\_starts\_a\_new\_run](./gui/test_results_screen.py#L999)
+#### [test\_running\_simulation\_again\_from\_completed\_starts\_a\_new\_run](./gui/test_results_screen.py#L1000)
 
 ```python
 def test_running_simulation_again_from_completed_starts_a_new_run(
@@ -25077,7 +25089,7 @@ live window (finish a run, only then click "Run simulation" again)
 
 <a id="gui.test_results_screen.test_open_folder_button_reaches_the_injected_opener_and_settles"></a>
 
-#### [test\_open\_folder\_button\_reaches\_the\_injected\_opener\_and\_settles](./gui/test_results_screen.py#L1103)
+#### [test\_open\_folder\_button\_reaches\_the\_injected\_opener\_and\_settles](./gui/test_results_screen.py#L1104)
 
 ```python
 def test_open_folder_button_reaches_the_injected_opener_and_settles(
@@ -25107,7 +25119,7 @@ recorded path is the icing.
 
 <a id="gui.test_results_screen.test_run_view_fits_the_default_window_without_excess_scrolling"></a>
 
-#### [test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling](./gui/test_results_screen.py#L1169)
+#### [test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling](./gui/test_results_screen.py#L1170)
 
 ```python
 def test_run_view_fits_the_default_window_without_excess_scrolling(
@@ -25140,7 +25152,7 @@ scrolling."
 
 <a id="gui.test_results_screen.test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix"></a>
 
-#### [test\_run\_view\_initial\_state\_canvas\_is\_unaffected\_by\_the\_trajectory\_fix](./gui/test_results_screen.py#L1261)
+#### [test\_run\_view\_initial\_state\_canvas\_is\_unaffected\_by\_the\_trajectory\_fix](./gui/test_results_screen.py#L1262)
 
 ```python
 def test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix(
@@ -25161,7 +25173,7 @@ overflowed the window in the first place.
 
 <a id="gui.test_results_screen.test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks"></a>
 
-#### [test\_completed\_scrubber\_updates\_supplemental\_panels\_on\_scrub\_ticks](./gui/test_results_screen.py#L1318)
+#### [test\_completed\_scrubber\_updates\_supplemental\_panels\_on\_scrub\_ticks](./gui/test_results_screen.py#L1319)
 
 ```python
 def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
@@ -25173,7 +25185,7 @@ Stepping the completed scrubber updates allele composition & spectrum.
 
 <a id="gui.test_results_screen.test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them"></a>
 
-#### [test\_graph\_stage\_shows\_the\_chosen\_graphs\_together\_and\_the\_menu\_changes\_them](./gui/test_results_screen.py#L1367)
+#### [test\_graph\_stage\_shows\_the\_chosen\_graphs\_together\_and\_the\_menu\_changes\_them](./gui/test_results_screen.py#L1368)
 
 ```python
 def test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them(
@@ -25197,7 +25209,7 @@ split let a graph un-hide itself behind the stage's back.
 
 <a id="gui.test_results_screen.test_graph_zoom_frame_takes_the_pane_and_gives_it_back"></a>
 
-#### [test\_graph\_zoom\_frame\_takes\_the\_pane\_and\_gives\_it\_back](./gui/test_results_screen.py#L1459)
+#### [test\_graph\_zoom\_frame\_takes\_the\_pane\_and\_gives\_it\_back](./gui/test_results_screen.py#L1460)
 
 ```python
 def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
@@ -25221,7 +25233,7 @@ too, not only the pane's.
 
 <a id="gui.test_results_screen.test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom"></a>
 
-#### [test\_graph\_zoom\_sizes\_are\_a\_function\_of\_the\_frame\_not\_of\_the\_last\_zoom](./gui/test_results_screen.py#L1571)
+#### [test\_graph\_zoom\_sizes\_are\_a\_function\_of\_the\_frame\_not\_of\_the\_last\_zoom](./gui/test_results_screen.py#L1572)
 
 ```python
 def test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom(
@@ -25242,7 +25254,7 @@ instead of spreading its rows across a stretched box.
 
 <a id="gui.test_results_screen.test_dragging_the_zoomed_scatter_pane_narrows_the_view"></a>
 
-#### [test\_dragging\_the\_zoomed\_scatter\_pane\_narrows\_the\_view](./gui/test_results_screen.py#L1645)
+#### [test\_dragging\_the\_zoomed\_scatter\_pane\_narrows\_the\_view](./gui/test_results_screen.py#L1646)
 
 ```python
 def test_dragging_the_zoomed_scatter_pane_narrows_the_view(
@@ -25264,7 +25276,7 @@ pane, `run-graph-stage.js`'s own `openGraphZoom`).
 
 <a id="gui.test_results_screen.test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane"></a>
 
-#### [test\_reset\_view\_is\_hidden\_for\_a\_non\_scatter\_zoomed\_pane](./gui/test_results_screen.py#L1706)
+#### [test\_reset\_view\_is\_hidden\_for\_a\_non\_scatter\_zoomed\_pane](./gui/test_results_screen.py#L1707)
 
 ```python
 def test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane(
@@ -25276,7 +25288,7 @@ Drag-to-zoom is scatter-only; the trajectory pane offers no reset button.
 
 <a id="gui.test_results_screen.test_deme_pair_selectors_stay_glued_to_the_scatter_axes"></a>
 
-#### [test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes](./gui/test_results_screen.py#L1735)
+#### [test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes](./gui/test_results_screen.py#L1736)
 
 ```python
 def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
@@ -25301,7 +25313,7 @@ rather than on the markup: the selectors must straddle the canvas.
 
 <a id="gui.test_results_screen.test_the_graph_you_are_watching_survives_the_run_finishing"></a>
 
-#### [test\_the\_graph\_you\_are\_watching\_survives\_the\_run\_finishing](./gui/test_results_screen.py#L1818)
+#### [test\_the\_graph\_you\_are\_watching\_survives\_the\_run\_finishing](./gui/test_results_screen.py#L1819)
 
 ```python
 def test_the_graph_you_are_watching_survives_the_run_finishing(
@@ -25332,7 +25344,7 @@ point is that the menu and the stage still agree afterwards.
 
 <a id="gui.test_results_screen.test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics"></a>
 
-#### [test\_the\_default\_pair\_sits\_side\_by\_side\_above\_the\_fold\_with\_statistics](./gui/test_results_screen.py#L1902)
+#### [test\_the\_default\_pair\_sits\_side\_by\_side\_above\_the\_fold\_with\_statistics](./gui/test_results_screen.py#L1903)
 
 ```python
 def test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics(
@@ -25351,7 +25363,7 @@ One column stacks them instead, and the table still stays put.
 
 <a id="gui.test_results_screen.test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows"></a>
 
-#### [test\_double\_click\_zooms\_the\_graph\_under\_the\_pointer\_and\_the\_caption\_follows](./gui/test_results_screen.py#L1960)
+#### [test\_double\_click\_zooms\_the\_graph\_under\_the\_pointer\_and\_the\_caption\_follows](./gui/test_results_screen.py#L1961)
 
 ```python
 def test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows(
@@ -25368,7 +25380,7 @@ generation the trajectory's dashed line marks.
 
 <a id="gui.test_results_screen.test_nice_axis_ticks_round_to_human_steps_at_every_scale"></a>
 
-#### [test\_nice\_axis\_ticks\_round\_to\_human\_steps\_at\_every\_scale](./gui/test_results_screen.py#L2007)
+#### [test\_nice\_axis\_ticks\_round\_to\_human\_steps\_at\_every\_scale](./gui/test_results_screen.py#L2008)
 
 ```python
 def test_nice_axis_ticks_round_to_human_steps_at_every_scale(
@@ -25386,7 +25398,7 @@ reimplementation that could drift from it.
 
 <a id="gui.test_results_screen.test_every_run_card_graph_draws_tick_marks_on_its_axes"></a>
 
-#### [test\_every\_run\_card\_graph\_draws\_tick\_marks\_on\_its\_axes](./gui/test_results_screen.py#L2052)
+#### [test\_every\_run\_card\_graph\_draws\_tick\_marks\_on\_its\_axes](./gui/test_results_screen.py#L2053)
 
 ```python
 def test_every_run_card_graph_draws_tick_marks_on_its_axes(
@@ -25411,7 +25423,7 @@ pixels there is the behavior a reader sees, not a markup detail.
 
 <a id="gui.test_results_screen.test_scrubbing_a_completed_scalar_run_moves_every_stats_row"></a>
 
-#### [test\_scrubbing\_a\_completed\_scalar\_run\_moves\_every\_stats\_row](./gui/test_results_screen.py#L2144)
+#### [test\_scrubbing\_a\_completed\_scalar\_run\_moves\_every\_stats\_row](./gui/test_results_screen.py#L2145)
 
 ```python
 def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
@@ -25433,7 +25445,7 @@ connection cannot quietly drop again on either one.
 
 <a id="gui.test_results_screen.test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square"></a>
 
-#### [test\_the\_scatter\_and\_trajectory\_panes\_share\_a\_height\_and\_the\_scatter\_stays\_square](./gui/test_results_screen.py#L2201)
+#### [test\_the\_scatter\_and\_trajectory\_panes\_share\_a\_height\_and\_the\_scatter\_stays\_square](./gui/test_results_screen.py#L2202)
 
 ```python
 def test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square(
@@ -39882,6 +39894,16 @@ def test_payload_is_json_and_ordered() -> None
 
 The bridge payload round-trips through JSON in catalog order.
 
+<a id="statistics.test_catalog.CatalogTests.test_descriptions_distinguish_partitioning_and_distance"></a>
+
+#### [test\_descriptions\_distinguish\_partitioning\_and\_distance](./statistics/test_catalog.py#L135)
+
+```python
+def test_descriptions_distinguish_partitioning_and_distance() -> None
+```
+
+Hover descriptions identify the formulas used by the implementation.
+
 <a id="statistics.test_differentiation"></a>
 
 # [statistics.test\_differentiation](./statistics/test_differentiation.py#L1)
@@ -43224,7 +43246,7 @@ Tests for heading anchors and freshness of generated in-app Help pages.
 
 <a id="validation.test_help_html.inject_header_ids"></a>
 
-#### [inject\_header\_ids](./validation/test_help_html.py#L20)
+#### [inject\_header\_ids](./validation/test_help_html.py#L24)
 
 ```python
 @pytest.fixture(scope="module")
@@ -43235,7 +43257,7 @@ Load the Help generator without running its command-line entry point.
 
 <a id="validation.test_help_html.test_help_heading_ids_preserve_rendered_text"></a>
 
-#### [test\_help\_heading\_ids\_preserve\_rendered\_text](./validation/test_help_html.py#L40)
+#### [test\_help\_heading\_ids\_preserve\_rendered\_text](./validation/test_help_html.py#L44)
 
 ```python
 @pytest.mark.parametrize(
@@ -43259,7 +43281,7 @@ Rendered code is literal text, not a second pass of Markdown emphasis.
 
 <a id="validation.test_help_html.test_generated_help_is_current_and_local_links_resolve"></a>
 
-#### [test\_generated\_help\_is\_current\_and\_local\_links\_resolve](./validation/test_help_html.py#L52)
+#### [test\_generated\_help\_is\_current\_and\_local\_links\_resolve](./validation/test_help_html.py#L56)
 
 ```python
 def test_generated_help_is_current_and_local_links_resolve(
@@ -43267,6 +43289,123 @@ def test_generated_help_is_current_and_local_links_resolve(
 ```
 
 Committed Help matches the generator and every local jump has a target.
+
+<a id="validation.test_help_html.test_every_statistic_has_a_bundled_definition_and_implementation_link"></a>
+
+#### [test\_every\_statistic\_has\_a\_bundled\_definition\_and\_implementation\_link](./validation/test_help_html.py#L94)
+
+```python
+def test_every_statistic_has_a_bundled_definition_and_implementation_link(
+) -> None
+```
+
+Every catalog row has a bundled definition and a resolvable API link.
+
+<a id="validation.test_help_html.test_statistics_api_links_resolve_without_redundant_guide_or_source_links"></a>
+
+#### [test\_statistics\_api\_links\_resolve\_without\_redundant\_guide\_or\_source\_links](./validation/test_help_html.py#L108)
+
+```python
+def test_statistics_api_links_resolve_without_redundant_guide_or_source_links(
+) -> None
+```
+
+The reference owns statistic definitions; API sections link to source.
+
+<a id="validation.test_help_html.test_derived_display_rows_have_bundled_definitions"></a>
+
+#### [test\_derived\_display\_rows\_have\_bundled\_definitions](./validation/test_help_html.py#L120)
+
+```python
+def test_derived_display_rows_have_bundled_definitions() -> None
+```
+
+Non-catalog predictions and effective counts also resolve offline.
+
+<a id="validation.test_help_html.test_statistics_reference_is_regenerated_by_the_commit_hook"></a>
+
+#### [test\_statistics\_reference\_is\_regenerated\_by\_the\_commit\_hook](./validation/test_help_html.py#L136)
+
+```python
+def test_statistics_reference_is_regenerated_by_the_commit_hook() -> None
+```
+
+A reference-only edit refreshes the bundled page before committing.
+
+<a id="validation.test_help_html.test_help_renders_tex_as_native_mathml"></a>
+
+#### [test\_help\_renders\_tex\_as\_native\_mathml](./validation/test_help_html.py#L156)
+
+```python
+@pytest.mark.parametrize(
+    ("expression", "element"),
+    [
+        (r"\frac{H_T-H_S}{1-H_S}", "mfrac"),
+        (r"\sum_{i=1}^{d}w_i p_{i,a}", "munderover"),
+        (r"\sqrt{J_XJ_Y}", "msqrt"),
+        (r"{}^{H}D_S", "msup"),
+        (r"\operatorname{TV}(p_i,p_{\mathrm{rest},i})", "msub"),
+        (r"\TeX", "mpadded"),
+    ],
+)
+def test_help_renders_tex_as_native_mathml(expression: str,
+                                           element: str) -> None
+```
+
+Fractions, sums, roots, and scripts are real math, not raw TeX.
+
+<a id="validation.test_help_html.test_statistics_equations_have_unique_visible_tags_and_no_raw_tex"></a>
+
+#### [test\_statistics\_equations\_have\_unique\_visible\_tags\_and\_no\_raw\_tex](./validation/test_help_html.py#L166)
+
+```python
+def test_statistics_equations_have_unique_visible_tags_and_no_raw_tex(
+) -> None
+```
+
+Every tagged source equation survives generation as offline display math.
+
+<a id="validation.test_help_html.test_help_math_preserves_code_examples_and_literal_identifiers"></a>
+
+#### [test\_help\_math\_preserves\_code\_examples\_and\_literal\_identifiers](./validation/test_help_html.py#L182)
+
+```python
+def test_help_math_preserves_code_examples_and_literal_identifiers() -> None
+```
+
+Math conversion never interprets the contents of code spans or fences.
+
+<a id="validation.test_help_html.test_inline_tex_subscripts_do_not_split_literal_identifiers"></a>
+
+#### [test\_inline\_tex\_subscripts\_do\_not\_split\_literal\_identifiers](./validation/test_help_html.py#L203)
+
+```python
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        ("H_S", "<var>H</var><sub>S</sub>"),
+        ("H_{ST}", "<var>H</var><sub>ST</sub>"),
+        ("N_i", "<var>N</var><sub>i</sub>"),
+        ("L_1", "<var>L</var><sub>1</sub>"),
+        ("n_replicates", "<var>n_replicates</var>"),
+        ("initial_allele_count", "<var>initial_allele_count</var>"),
+    ],
+)
+def test_inline_tex_subscripts_do_not_split_literal_identifiers(
+        expression: str, expected: str) -> None
+```
+
+Single-character TeX subscripts render without mangling legacy names.
+
+<a id="validation.test_help_html.test_help_rejects_unsupported_tex_commands"></a>
+
+#### [test\_help\_rejects\_unsupported\_tex\_commands](./validation/test_help_html.py#L211)
+
+```python
+def test_help_rejects_unsupported_tex_commands() -> None
+```
+
+A new macro cannot silently degrade to visible backslash text.
 
 <a id="validation.test_identity_recursion_trajectory"></a>
 

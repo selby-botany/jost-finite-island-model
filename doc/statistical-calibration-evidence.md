@@ -105,31 +105,27 @@ invocation the way the three above were — each replicate costs roughly
 replicate count was assembled from two separate exploratory sessions
 that used the same seeded, deterministic code path
 (`_run_engine_pooled`/`simulate_params()` with `seed=603000+i`) rather than one
-`main()` invocation, and the `d_values` were only captured for 6 of the
-10 `g_st_values` — an oversight in the first exploratory pass, not
-re-run to fix given the per-replicate cost. `mean_g_st`/`sigma_g` use
-all 10; `mean_d`/`sigma_d` use only the 6 that captured `D`. Re-running
-the script's own `--replicates-crow-aoki-torus` end to end would
-regenerate this section cleanly and is the right thing to do the next
-time this scenario's configuration changes.
+``main()` invocation. `D` values were captured for 6 of the 10
+`G_ST` replicates, so `mean_g_st` and `sigma_g` use all 10 replicates,
+while `mean_d` and `sigma_d` use the 6 replicates with `D` values.
+Rerun the script with `--replicates-crow-aoki-torus` after changing the
+scenario configuration to regenerate this section.
 
-**The empirical mean (`0.272`) sits measurably above the published
-`G_ST=0.172`** (Crow & Aoki 1984, Table 1, `n=9` row) — not within
-noise of it at face value, but well within the resulting 5-sigma
-assertion band (`0.327` at the assertion test's own 6 replicates,
-against an observed gap of `0.10`). Two rounds of horizon-search
-(documented in `test_crow_aoki_torus_scenario_via_engine`'s own
-docstring) showed the same seed's own `G_ST` trending steadily toward
+The empirical mean (`0.272`) exceeds the published
+`G_ST=0.172` (Crow & Aoki 1984, Table 1, `n=9` row). The difference
+is within the 5-sigma assertion band (`0.327` at 6 replicates), with an
+observed gap of `0.10`). Two rounds of horizon search
+(documented in the
+`test_crow_aoki_torus_scenario_via_engine` docstring) showed the
+seed-specific `G_ST` decreasing toward
 `0.172` as horizon lengthened (`0.361` at 2000 generations, `0.255` at
 4000, `0.213` at 8000) without leveling off by 8000 — consistent with
 this scenario's `N=20` being the smallest population size used anywhere
 in this file (versus `100`/`2000` elsewhere), so an `O(1/N)`-scale
-residual between this project's actual finite-population simulator and
-Crow & Aoki's own idealized calculation is expected to be proportionally
-much larger here than the `_ONE_OVER_N_TOL=0.005` already documented and
-tolerated for the symmetric-island scenarios above. This is reported as
-a genuine, honestly-measured finding, not adjusted away by choosing a
-different target or a tighter band after the fact.
+residual between the finite-population simulator and Crow & Aoki's
+idealized calculation may be proportionally larger here than the
+`_ONE_OVER_N_TOL=0.005` used for the symmetric-island scenarios. The
+reported mean and tolerance are the values from this characterization run.
 
 <details><summary>Raw per-replicate values</summary>
 
@@ -180,14 +176,3 @@ Shannon differentiation: [0.5180, 0.4773, 0.4271, 0.4522, 0.5531, 0.5293, 0.5262
 ```
 
 </details>
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-29
-generator-responsibility: other
-```

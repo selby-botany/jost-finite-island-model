@@ -184,3 +184,91 @@ def test_help_screen_returns_to_results_when_opened_from_there(
     result = outcome.get(timeout=10)
 
     assert result is True
+
+
+@pytest.mark.parametrize("label_source", ["row", "column"])
+def test_statistic_name_opens_its_definition_without_toggling_the_plot(
+    window: webview.Window,
+    label_source: str,
+) -> None:
+    """Statistic help preserves plot visibility and returns to the same screen."""
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+    button = (
+        "window.__helpRow.querySelector('button')"
+        if label_source == "row"
+        else "document.querySelector("
+        "'tr[data-statistic-columns] th[data-shown-key=\"D\"] button')"
+    )
+
+    def _drive() -> None:
+        try:
+            poll_page(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "window.fim.showScreen('screen-run');"
+                "window.__plotToggles = 0;"
+                "window.__helpRow = document.createElement('tr');"
+                "window.__helpRow.appendChild(buildStatCells('D', '0.42'));"
+                "applyStatRow(window.__helpRow, buildStatCells('G_ST', '0.1'));"
+                "applyStatRow(window.__helpRow, buildStatCells('D', '0.42'));"
+                "decorateTrajectoryStatisticRow(window.__helpRow, 'D');"
+                "window.__plotPressed = window.__helpRow.getAttribute('aria-pressed');"
+                "window.__helpRow.addEventListener('click', () => "
+                "window.__plotToggles++);"
+                "document.querySelector('#initial-stats tbody')"
+                ".appendChild(window.__helpRow);"
+                "window.__helpRow.querySelector('button').dispatchEvent("
+                "new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));"
+            )
+            window.evaluate_js(f"{button}.click();")
+            state = poll_page(
+                window,
+                "({"
+                "helpVisible: !document.getElementById('screen-help').hidden,"
+                "hasDefinition: document.querySelector('#help-content #d') !== null,"
+                "hasApi: document.querySelector("
+                "'#help-content [data-fim-external*=\"API.md#fim.statistics\"]') "
+                "!== null,"
+                "hasMath: document.querySelector("
+                "'#help-content math[display=\"block\"] mfrac') !== null,"
+                "hasEquationTag: Array.from(document.querySelectorAll("
+                "'#help-content .equation-tag')).some("
+                "element => element.textContent === '(S.2)'),"
+                "nativeMath: (() => {"
+                "const fraction = document.querySelector("
+                "'#help-content math[display=\"block\"] mfrac');"
+                "if (!fraction) return false;"
+                "const numerator = fraction.children[0].getBoundingClientRect();"
+                "const denominator = fraction.children[1].getBoundingClientRect();"
+                "return numerator.height > 0 && "
+                "denominator.top >= numerator.bottom;"
+                "})(),"
+                "toggles: window.__plotToggles,"
+                "plotUnchanged: window.__plotPressed === "
+                "window.__helpRow.getAttribute('aria-pressed')"
+                "})",
+                lambda value: value["helpVisible"] and value["hasDefinition"],
+            )
+            window.evaluate_js("document.getElementById('help-back-button').click();")
+            state["back"] = poll_page(
+                window,
+                "!document.getElementById('screen-run').hidden",
+                lambda value: value is True,
+            )
+            outcome.put(state)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    assert result == {
+        "helpVisible": True,
+        "hasDefinition": True,
+        "hasApi": True,
+        "hasMath": True,
+        "hasEquationTag": True,
+        "nativeMath": True,
+        "toggles": 0,
+        "plotUnchanged": True,
+        "back": True,
+    }

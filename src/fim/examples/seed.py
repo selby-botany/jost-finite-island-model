@@ -1,42 +1,10 @@
-"""Seed the bundled worked examples into the results folder as read-only runs.
+"""Install bundled worked examples as read-only runs and groupings.
 
-Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
-and-classes-design.md`, `selby/restricted`), section 4.2. The desktop app
-carries every worked example in `webui/examples/` (`dev/bin/build-
-examples-catalog` writes it): a `catalog.json` naming each example's
-labels, class, and configuration, and a copy of each example's saved
-output files. `seed_examples` turns that bundle into ordinary results the
-Home card can list:
-
-- **Run directories.** An example with a saved result (a `manifest.json`
-  in the bundle) gets `results/examples/<id>/`, holding its
-  `config.yaml`, its saved output files, and a `metadata.json` with its
-  name, description, and class. Every file there is app-owned: a newer
-  bundle replaces a file whose content differs, and removes one it no
-  longer ships.
-- **Studies.** One read-only Study per class that has at least one
-  seeded example, with the fixed id `study-examples-<class-id>` and the
-  class title as its name; a child class is its own Study, named
-  "Parent — Child".
-- **Experiment.** One read-only Experiment, `experiment-examples`, named
-  "Examples", holding those Studies in class order.
-
-An example with no saved result yet (its outputs were never committed)
-gets **no** run directory and appears in no Study. Home lists a Study's
-members only when each has a readable `manifest.json` (`fim.gui.app.
-_recent_run_at_directory`), and `groups.is_run_read_only` reads that
-same manifest, so a directory without one would be invisible in the tree
-yet editable and deletable on disk: the least surprising choice is to
-seed nothing until there is something to show. The Examples dialog still
-lists such an example, and can load it into Configure.
-
-Seeding is idempotent: a second call with the same bundle writes nothing.
-It never touches anything outside its own items: the `results/examples/`
-directories it creates (a directory there holding any file seeding did
-not write is left alone), the `study-examples-*` Studies, and
-`experiment-examples`. The Study and Experiment manifests are written
-through `groups.write_read_only_study`/`write_read_only_experiment`, the
-one write path that may create read-only groupings.
+Examples with saved output are copied under `results/examples/` and grouped
+into read-only Studies by class and a read-only Examples Experiment. Entries
+without saved output remain available in the Examples dialog but are not
+seeded as runs. Seeding is idempotent and only updates files and groupings
+owned by the bundled examples.
 """
 
 from __future__ import annotations

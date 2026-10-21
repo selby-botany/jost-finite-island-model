@@ -235,44 +235,25 @@ def _cached_final_report(
 def read_persisted_convergence_history(
     trajectory_path: Path, manifest: RunManifest
 ) -> tuple[list[int], dict[str, list[float]]] | None:
-    """Return a run's own persisted convergence-monitor history, or `None`.
+    """Return the persisted convergence history, or `None` if unavailable.
 
-    `convergence.jsonl` (`fim.persistence.artifacts.convergence_history_rows`/`fim.gui.
-    runner._convergence_history_rows`) holds one row per generation,
-    `{"generation": N, "D": ..., ...}` -- reading it back is what lets
-    reopening a run restore its own trajectory-vs-generation curve
-    instead of having none at all, the prior, deliberate scope boundary
-    `fim.gui.app.Api.open_run`'s own docstring used to name. Reshaped
-    here into the `(generations, histories)` pair `fim.gui.app`'s own
-    `convergenceGenerations`/`convergenceHistories` payload keys need
-    -- every row written shares the identical key set (`_convergence_
-    history_rows`'s own docstring: a statistic is either written for
-    every row or none), so `histories[name]` is always exactly as long
-    as `generations` with no further alignment check needed here.
-
-    `None` (nothing to show) under the identical conditions `_cached_
-    final_report`, above, treats as "recompute instead": no digest was
-    ever recorded for this artifact (a manifest written before it
-    existed), or the file is simply missing -- never an error, since the
-    trajectory curve staying absent on an old run is not a regression,
-    only unavailable extra context. A digest that *was* recorded but no
-    longer matches is different, for the identical reason `_cached_
-    final_report` already gives: that means the file changed since the
-    run completed, and silently ignoring it would mask that.
+    The sibling `convergence.jsonl` contains one row per generation,
+    with a generation number and a consistent set of statistic fields.
+    Rows are returned as parallel generation and history sequences. A
+    missing file or absent manifest digest returns `None`; a recorded
+    digest mismatch or invalid row raises `ValueError`.
 
     Args:
-        trajectory_path: The run's own `trajectory.tlog` --
-            `convergence.jsonl` is expected as its sibling.
-        manifest: The run's own manifest.
+        trajectory_path: The trajectory file; `convergence.jsonl` is
+            expected beside it.
+        manifest: The run manifest.
 
     Returns:
-        `(generations, histories)`, or `None` to signal "nothing
-        persisted to show."
+        `(generations, histories)`, or `None` if no history is available.
 
     Raises:
-        ValueError: If `convergence.jsonl` exists, a digest was
-            recorded for it, and the two no longer match, or a row's
-            own content is not the documented shape.
+        ValueError: If the file does not match its recorded digest, or
+            a row has an invalid shape.
     """
     if manifest.artifacts is None:
         return None

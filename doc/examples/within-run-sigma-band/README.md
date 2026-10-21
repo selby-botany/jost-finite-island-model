@@ -9,9 +9,9 @@ per-generation values.
 
 The two numbers answer different questions. The standard error says how
 precisely the run's average is known, and it shrinks as the run gets longer.
-`σ` says how much `D` wanders from one generation to the next at equilibrium,
-the spread you would see sampling one population at one time, and it does not
-shrink. The trajectory graph shows `σ` as a shaded band over the evidence
+`σ` measures how much `D` varies across generations at equilibrium; it does
+not shrink as the evidence window grows. The trajectory graph shows `σ` as a
+shaded band over the evidence
 window in the "Every generation" display (choose ±1 or ±2), and the standard
 error as a band around the running mean in the two averaged displays.
 
@@ -23,17 +23,14 @@ the time (2σ).
 
 ## Why eight loci
 
-The example tracks eight independent loci and pools them. An earlier
-version tracked one locus, and it stopped at generation 1,429 with a
-trailing-window mean `D` of only 0.019, against about 0.13 expected for
-this island model. That locus had drifted close to fixation (its
-within-deme heterozygosity fell below 0.1), where `D` sits near zero and
-barely moves, so the window looked steady and precise for the wrong
-reason. Eight pooled loci are almost never all near fixation at once.
-They still land a little below the prediction (0.127 against 0.132, about
-one standard error): one run's window mean is a single draw, and its
-standard error is itself only an estimate. The cost is a much longer run
-than one locus needs.
+The example tracks eight independent loci and pools them. A single locus
+can approach fixation, where within-deme heterozygosity and `D` may both
+remain low for an extended period. Such a trajectory can yield a narrow
+within-run error estimate while remaining unrepresentative of the
+multi-locus expectation. Pooling loci reduces the probability that all are
+near fixation at once. The observed mean is 0.127 against a prediction of
+0.132, about one standard error below the prediction. A single run's window
+mean is one realization, and its standard error is estimated from that run.
 
 ## Why a single run
 

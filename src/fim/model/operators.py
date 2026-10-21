@@ -1,32 +1,10 @@
-"""Pure migration, mutation, drift, and generation-pipeline operators.
+"""Implement migration, drift, mutation, and the generation update.
 
-This module implements the three biological processes every generation
-of the simulation actually goes through, plus `step`, which chains all
-three together in the standard order:
-
-- `migrate` — a fraction of each deme's gene copies are replaced by a
-  weighted average of every other deme's own allele frequencies (the
-  "migrant pool"), modeling individuals moving between sub-populations.
-- `drift` — the full population of `N` gene copies is re-sampled from
-  the current frequencies, the same way flipping a weighted coin `N`
-  times only approximately reproduces the coin's own true weighting;
-  this is what makes a finite population's allele frequencies wander
-  randomly from one generation to the next, purely from chance, even
-  with no migration or mutation happening at all.
-- `mutate` — each of those newly drawn gene copies independently
-  switches, with probability `mu`, to a different, new-or-existing
-  allele, modeling a real mutation event.
-
-Every function here is "pure" in the sense that none of them mutate
-their `ModelState` argument in place — each one returns a brand-new
-state representing the *result* of applying that one process, leaving
-the state it was given untouched (see `fim.model.state.ModelState`'s
-own docstring for why that immutability matters). `step`, at the
-bottom of this file, is what `fim.engine`'s run loop actually calls
-once per generation: it runs migration, then drift, then mutation, in
-that fixed order — the textbook Wright-Fisher island model, in which
-the new generation's gene copies are drawn from the post-migration
-parental pool and each copy then mutates on its own.
+The operators return new `ModelState` instances without modifying their
+inputs. `step` applies migration, then Wright-Fisher drift, then mutation to
+produce the next generation. Migration forms each deme's parental pool from
+the configured migration weights; drift samples gene copies from that pool,
+and mutation changes copies with the configured per-copy rate.
 """
 
 from __future__ import annotations
@@ -760,41 +738,12 @@ def drift(
 ) -> ModelState:
     """Resample ``N`` gene copies per deme and locus.
 
-    "Genetic drift" is the random change in allele frequencies from one
-    generation to the next that happens purely because a real
-    population is finite — even with no selection, migration, or
-    mutation at all, a fair coin flipped 10 times does not always come
-    up exactly 5 heads, and a deme's `N` gene copies are exactly that
-    kind of finite, random draw from the previous generation's own
-    frequencies. This function is what actually performs that draw: for
-    every deme and locus, it treats the current frequency map as the
-    probabilities of a multinomial draw of size `N` (multinomial being
-    the many-outcomes generalization of the familiar two-outcome
-    binomial coin flip), then converts the drawn integer counts back
-    into frequencies — which, unlike migration's or mutation's smooth,
-    continuous frequency changes, always land exactly on the ``1 / N``
-    grid (a frequency of, say, `3/50`, never `3.2/50`), since they came
-    from literally counting whole gene copies.
-
-    **Not `rng.multinomial` itself, deliberately, as of Stage F8**
-    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-    §5.4): both branches below decompose the multinomial draw into
-    sequential conditional-binomial draws via `_inversion_binomial`
-    (`_multinomial_via_inversion_binomial` for `jit=False`,
-    `_drift_counts_batched` for `jit=True`), visiting categories in
-    ascending allele-id order rather than `frequency_map`'s own
-    insertion order — the one shared algorithm, in the one canonical
-    order, this project's array-native Backend V (`fim.model.
-    vectorized`) also uses, which is what makes cross-backend numerical
-    agreement possible at all (`_inversion_binomial`'s own docstring
-    has the full argument for why `rng.multinomial`/`rng.binomial`
-    themselves cannot give this property). No longer bit-identical to
-    `rng.multinomial`'s own output for the same seed — an accepted,
-    deliberate cost, not an oversight (§5.4's own "the real cost, named
-    plainly"; `_multinomial_via_binomial`, this module's own earlier,
-    still-correct-and-tested building block, is what stayed
-    bit-identical to `rng.multinomial`, and is kept for that reason,
-    just no longer what this function calls).
+    For each deme and locus, draw ``N`` gene copies from the current
+    allele-frequency distribution and convert the counts to frequencies
+    on the ``1 / N`` grid. The multinomial draw is decomposed into
+    sequential conditional-binomial draws over allele IDs in ascending
+    order. Consequently, the result for a seed can differ from
+    ``rng.multinomial``.
 
     Args:
         state: Post-migration state (the parental pool).
@@ -802,23 +751,9 @@ def drift(
         rng: The run's explicitly threaded random generator.
         jit: When `True`, draw every (deme, locus) pair's own counts in
             one Numba-JIT-compiled, `nogil=True` call
-            (`_jit_drift_counts_batched`) instead of one call per pair
-            — bit-identical output either way (both branches now share
-            the identical primitive and visiting order, not merely
-            happen to agree — see `_drift_counts_batched`'s own
-            docstring), and free of GIL-release concerns during the
-            compiled call itself. Measured honestly, this is not yet a
-            clear standalone win for `drift`: it fixes a real,
-            separately measured regression an earlier per-pair-call
-            version had, but the compiled draw was never `drift`'s own
-            dominant cost at this project's reference scale — the
-            Python-level marshaling to and from `ModelState`'s own
-            sparse representation is, and `jit=True` does not remove
-            that (see `_drift_counts_batched`'s own docstring for the
-            full, measured picture). `False` (the default) is every
-            prior release's own behavior *shape*, unchanged, though no
-            longer its own exact numeric output (see above) — needs
-            `numba` installed only when `True`.
+            (`_jit_drift_counts_batched`) instead of one call per pair.
+            Both branches produce identical results for the same seed.
+            Numba is required only when this option is enabled.
 
     Returns:
         The next generation with frequencies on a ``1 / N`` grid.

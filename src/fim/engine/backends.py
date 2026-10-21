@@ -139,36 +139,16 @@ def resolve_auto_engine_backend(
     auto_vector_max_capacity: int,
     jit: JitOption = "off",
 ) -> Literal["generational", "generational-vector"]:
-    """Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
+    """Resolve `"auto"` to `"generational"` or `"generational-vector"`.
 
-    Shared by `build_engine_backend` (to know which backend to actually
-    construct) and `simulate_params()` (to know what to record in the run's own
-    manifest as provenance, `RunManifest.engine_backend`) — kept in one
-    place so the two can never silently drift apart on what `"auto"`
-    actually picked for a given `params`. Never resolves to `"lineal"`
-    — see `build_engine_backend`'s own `engine_backend` Args entry for
-    why only the generational-vs-vector axis is automated so far.
-
-    `"generational-vector"` is chosen when all of these hold:
-
-    - `jit` is `"off"`: Backend V has no `jit` toggle, only Backend G
-      offers one, and a caller who asked for it gets it (the output is the
-      same either way);
-    - `numba` is importable. Backend V's output is identical to
-      Backend G's, so a missing `numba` costs only speed: `"auto"` falls
-      back to `"generational"` instead of raising, as an explicit
-      `"generational-vector"` choice does;
-    - `params.d >= auto_vector_min_d`;
-    - under `mutation_model="finite_alleles"` only, the largest locus
-      capacity (`4 ** length`) is at most `auto_vector_max_capacity`: a
-      finite-alleles table is `capacity` columns wide however few states
-      are in use. Under infinite alleles the table is as wide as the
-      alleles alive at once, so there is no such ceiling (the table's own
-      memory ceiling, `fim.model.vector_block`, guards the rest).
-
-    Otherwise `"generational"`. Because V reproduces G bit for bit, the
-    choice changes how fast a run finishes and nothing in its output but
-    the manifest's `engine_backend` field.
+    Select `"generational-vector"` when `jit` is `"off"`, Numba is
+    available, `params.d` meets `auto_vector_min_d`, and the largest
+    finite-alleles locus capacity (when applicable) does not exceed
+    `auto_vector_max_capacity`. Otherwise select `"generational"`.
+    This function does not select `"lineal"`. The generational backends
+    produce the same results for the same seed on the development
+    platform; cross-platform bitwise parity has not been established.
+    The selected backend is recorded in the run manifest.
     """
     if jit != "off":
         return "generational"
@@ -184,30 +164,7 @@ def resolve_auto_engine_backend(
 
 
 def numba_is_available() -> bool:
-    """Return whether the optional `numba` dependency can actually be imported.
-
-    `importlib.util.find_spec` locates the module without importing it —
-    cheap enough to call on every `"generational-vector"` construction,
-    and it never pays numba's own (non-trivial) import cost just to
-    answer "is it there at all."
-
-    `build_engine_backend` calls this before constructing a
-    `VectorizedAdvancer` — `fim.model.vectorized`'s own mutate step
-    imports `numba` unconditionally on first use (its own module
-    docstring), with no pure-Python fallback, so a numba-less install
-    used to fail on the *first `advance()` call*, after generation zero
-    had already been built and persisted to the trajectory store — a
-    real, previously unguarded gap (this project's own multi-model
-    engine review, 2026-09-04, `FIM-01`/finding C-03/finding P1-3,
-    independently found by three of four reviewers). Checking here
-    instead turns that into a named `ValueError` at config time, before
-    anything has been written.
-
-    A module-level function, not inlined into `build_engine_backend`,
-    specifically so a test can monkeypatch it directly (`fim.engine.
-    numba_is_available`) to exercise the numba-less path without
-    actually uninstalling numba from the test environment.
-    """
+    """Return whether Python can locate `numba` without importing it."""
     return importlib.util.find_spec("numba") is not None
 
 
@@ -223,137 +180,45 @@ def build_engine_backend(
 ) -> EngineBackend:
     """Return the configured backend `simulate_params()` should run against.
 
-    One function, not a class hierarchy: Python's own first-class
-    functions make a `ConcreteFactory` subclass per backend unnecessary
-    ceremony here — a plain function that reads a choice and returns an
-    object satisfying `EngineBackend`'s shape does the same job with no
-    class tree to maintain.
-
     Args:
-        engine_backend: Which backend to build. `"generational"` builds
-            `GenerationalBackend(ThreadedAdvancer())` — real thread-based
-            parallelism, not merely the structural reshuffle
-            `SequentialAdvancer` alone would give (still directly
-            available by constructing `GenerationalBackend()` without
-            going through this factory, if a caller wants zero new
-            thread-safety surface). `"generational-vector"` builds
-            `GenerationalBackend(VectorizedAdvancer())` — array-native,
-            one compiled kernel call per generation over every locus
-            (`fim.model.vector_block`); runs both mutation models,
-            both migrant sampling modes — needs the optional `numba`
-            dependency unconditionally (see `jit`, below, for why that is
-            not the same thing as `jit="numba"`).
-            `"auto"` picks between `"generational"` and
-            `"generational-vector"` using `params`/`auto_vector_min_d`
-            (below) — never `"lineal"`, since no data yet characterizes
-            where that boundary sits (see `auto_vector_min_d`'s own
-            entry for why only the L-vs-V axis is automated so far).
-            `resolve_auto_engine_backend` lists the conditions: V for
-            continuous migration when `numba` is importable and `d` is
-            large enough (and, for finite alleles, the capacity small
-            enough), otherwise G. The output is identical either way.
-        jit: Whether the chosen backend should JIT-compile its own
-            operators. Under `"generational"`, `"numba"` JIT-compiles
-            `drift`'s own multinomial draw (`fim.model.operators.drift`'s
-            own docstring) — bit-identical output to `"off"`, for the
-            same seed, *on the same machine*: that claim (and every
-            "generational-vector" trajectory's own reliance on `numba`,
-            unconditionally, further below) rests on `numba`'s own
-            compiled math matching CPython's own `libm` bit for bit,
-            verified only on this project's own development platform so
-            far, not across the different `libm` implementations a
-            different operating system or CPU architecture can ship
-            (this project's own multi-model engine review, 2026-09-04,
-            `FIM-22`/finding Kimi-FIM-22) — a portability caveat to keep
-            in mind before treating a `jit="numba"`/"generational-
-            vector" result as reproducible across machines the way
-            every `jit="off"` result already is, not a known, confirmed
-            divergence. Not yet shown to be a standalone wall-clock win,
-            though: it fixes a real, separately measured regression an
-            earlier, per-pair-call version had, but `drift`'s own
-            dominant cost at this project's reference scale is
-            marshaling to and from `ModelState`'s sparse representation,
-            not the compiled draw itself (`drift`'s own docstring has
-            the full measurement). `migrate`/`mutate`'s own RNG calls
-            are not JIT-compiled at all. Needs the optional `numba`
-            dependency installed (``pip install fim[jit]``) — not
-            imported at all unless `jit="numba"` is actually requested.
-            `"generational-vector"` has no separate toggle for this yet
-            — its own mutate step always requires `numba` internally,
-            regardless of this argument, so only `jit="off"` (the
-            default) is accepted there; passing `jit="numba"` raises
-            `ValueError`, not a silent no-op. `"lineal"` never accepts
-            anything but `"off"` — a permanent restriction, not a
-            temporary gap: `LinealBackend` stays the untouched golden
-            reference every other backend's own parity tests are checked
-            against (see its own docstring).
-        max_workers: `LinealBackend`-only; ignored by every other
-            backend, since there is no process pool anywhere else for it
-            to size — `ThreadedAdvancer`'s own thread count is a
-            separate, not-yet-publicly-reachable knob (see its own
-            docstring for why this name is not reused for it there);
-            `run_batch`'s own `max_concurrent_replicates` is the
-            `"generational"`/`"generational-vector"` equivalent
-            concurrency/memory-bounding control, a real `SimulationParams`
-            field rather than a `build_engine_backend` argument.
-        store_factory: Every backend accepts this the same way now — one
-            real, independent store per replicate, keyed by that
-            replicate's own run id. `LinealBackend` uses it directly (a
-            worker process needs its own store; nothing else could be
-            shared across a process boundary). `GenerationalBackend`
-            wraps it in a `ReplicateFanoutStore` instead
-            (`GenerationalBackend`'s own docstring) — no process pool
-            involved, but the same one-store-per-replicate outcome.
-        params: The run this backend is actually being built for —
-            required, and only actually read, when `engine_backend ==
-            "auto"`, to look at `params.d`/`params.mutation_model`/
-            `params.migrant_sampling` and decide. Every other choice
-            ignores it entirely (a caller building a `"lineal"`/
-            `"generational"`/`"generational-vector"` backend directly
-            never needs to pass a real `SimulationParams` here at all).
-        auto_vector_min_d: The deme-count cutover `"auto"` uses to
-            decide between `"generational"` and `"generational-vector"`
-            — irrelevant, and unused, under every other `engine_backend`
-            value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (`2`), this
-            project's own best current estimate from a real benchmark
-            sweep (see that constant's own docstring for the full
-            finding, including its cross-environment caveats) —
-            deliberately a parameter, not a hardcoded constant, because
-            a follow-on check (the same sweep, run inside a Docker
-            container instead of natively) found the threshold does
-            *not* port cleanly across platforms: the qualitative
-            direction held, but neither the exact crossover point nor
-            the performance magnitude did. A deployment on
-            meaningfully different hardware should re-run that same
-            characterization and pass its own measured value here
-            rather than trust this default blindly.
-        auto_vector_max_capacity: The per-locus capacity ceiling
-            `"auto"` uses alongside `auto_vector_min_d` — the largest
-            capacity across every locus in `params.loci` must be at
-            most this value, in addition to `d >= auto_vector_min_d`,
-            for `"auto"` to pick `"generational-vector"` — under
-            `mutation_model="finite_alleles"` only (an infinite-alleles
-            table is as wide as the alleles alive at once, not
-            `4 ** length`); irrelevant, and unused, under every other
-            `engine_backend` value.
-            Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
-            see that constant's own docstring for the measured finding
-            behind it and the same cross-environment/cross-fix
-            staleness caveats `auto_vector_min_d` already carries.
+        engine_backend: Backend to construct. `"lineal"` uses
+            `LinealBackend`; `"generational"` uses
+            `GenerationalBackend` with `ThreadedAdvancer`;
+            `"generational-vector"` uses `GenerationalBackend` with
+            `VectorizedAdvancer` and requires `numba`. `"auto"` selects
+            between the generational backends and never selects
+            `"lineal"`. The vector backend is selected when `numba` is
+            importable, `jit` is `"off"`, `params.d` meets
+            `auto_vector_min_d`, and, for finite alleles, the largest
+            locus capacity does not exceed `auto_vector_max_capacity`.
+            Otherwise, `"auto"` selects `"generational"`.
+        jit: JIT option for the selected backend. `"generational"`
+            accepts `"off"` or `"numba"`; `"lineal"` and
+            `"generational-vector"` require `"off"`. The vector backend
+            uses Numba internally regardless. The generational JIT path
+            preserves results for the same seed on the development
+            platform; cross-platform bitwise parity has not been
+            established.
+        max_workers: Worker-process count for `"lineal"`; ignored by
+            other backends. Generational batch concurrency is configured
+            through `SimulationParams.max_concurrent_replicates`.
+        store_factory: Optional factory for a separate trajectory store
+            per replicate.
+        params: Run parameters. Required for `"auto"` and used to check
+            finite-alleles capacity when `"generational-vector"` is
+            selected explicitly, if provided.
+        auto_vector_min_d: Minimum deme count for `"auto"` to select the
+            vector backend. Defaults to `2`; benchmark crossover points
+            may vary by platform.
+        auto_vector_max_capacity: Maximum finite-alleles locus capacity
+            for `"auto"` to select the vector backend. Defaults to
+            `4096`.
 
     Raises:
-        ValueError: If `engine_backend == "lineal"` and `jit != "off"`,
-            `engine_backend == "generational-vector"` (or `"auto"`
-            resolves to it) and `jit != "off"`, `engine_backend ==
-            "generational-vector"` (or `"auto"` resolves to it) and the
-            optional `numba` dependency is not installed, `engine_backend
-            == "generational-vector"` and `params` uses `mutation_model ==
-            "finite_alleles"` and names a locus whose capacity exceeds
-            `auto_vector_max_capacity` (checked only when `params` is
-            given; `"auto"` already refuses an over-capacity config on its
-            own, before ever reaching this branch),
-            `engine_backend == "auto"` and `params` is `None`, or
-            `engine_backend` names something unrecognized.
+        ValueError: If the backend name or JIT option is invalid, `"auto"`
+            is used without `params`, the vector backend lacks `numba`,
+            or an explicitly selected vector backend exceeds the
+            finite-alleles capacity limit.
     """
     if engine_backend == "auto":
         if params is None:

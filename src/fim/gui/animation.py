@@ -1,29 +1,8 @@
-"""Sample animation frames from a persisted trajectory as raw scatter
-coordinates, not rendered images (`doc/fim-gui-design.md` §8).
+"""Select and prepare animation frames from a persisted trajectory.
 
-A converged run can persist hundreds or thousands of generations, and
-turning every one of them into a separate frame is both slow and
-unnecessary for a human watching a scatter drift. This module samples at
-most `GUI_ANIMATION_MAX_FRAMES` generations, evenly spaced across the
-run's persisted range, always including generation 0 and the final
-generation — unchanged from an earlier, Tk-era revision of this module
-— but each sampled generation now produces a plain coordinate array
-(`fim.viz.scatter.frequency_points`), not a rendered `Figure`:
-pywebview's own scrubber ships the whole sampled set to the page once
-and drives play/pause/scrub entirely with client-side Canvas redraws
-(`doc/fim-gui-design.md` §5.2, §8), so nothing here needs to render
-anything at all. This also makes pre-computation itself cheaper, not
-just playback: building `max_frames` coordinate arrays costs a
-fraction of what building `max_frames` Matplotlib figures did, since
-no rasterization happens on this path.
-
-Reached only after the trajectory's integrity has already been
-verified — the unified run view's `completed` state, reached either by
-a run that just finished (its manifest was just written, never edited)
-or by opening a persisted run (`fim.reanalyze.reanalyze_trajectory`
-itself calls `fim.persistence.manifest.verify_trajectory_integrity`
-first). This module therefore reads the trajectory directly, trusting
-the caller, rather than re-verifying it a second time.
+The module samples at most `GUI_ANIMATION_MAX_FRAMES` generations, including
+the first and final generations, and returns scatter coordinates for the web
+interface to render. Callers verify trajectory integrity before reading it.
 """
 
 from __future__ import annotations

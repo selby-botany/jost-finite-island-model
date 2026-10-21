@@ -1,24 +1,8 @@
-"""Explicit, opt-in release-check logic shared by every front end.
+"""Check GitHub for a newer release when explicitly requested.
 
-This is the code behind "Check for updates": it asks GitHub whether a
-newer version of `fim` has been released than the one currently
-installed, and if so, reports the new version's own name and the web
-page describing it — it never downloads or installs anything itself,
-only checks and reports. It is also, deliberately, the *only* code
-anywhere in this entire project that ever makes a network connection to
-anywhere at all (see `SECURITY.md`'s own threat model) — every other
-part of `fim` runs entirely offline, with no network access needed or
-attempted. That single network call happens only when a person
-explicitly asks for it (the command line's own `fim update --check`, or
-the desktop app's own "Check for updates" menu item) — nothing here ever
-runs automatically in the background, on a timer, or as a side effect of
-an ordinary simulation run.
-
-Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
-"Check for updates" action performs exactly the same GitHub Releases
-lookup and version comparison as `fim update --check`, rather than a
-second implementation of the one network operation `SECURITY.md`'s
-threat model permits.
+The update check reports the latest release and its page; it does not download
+or install software. Network access occurs only in response to the command-line
+or desktop update action, not during ordinary simulation or analysis.
 """
 
 from __future__ import annotations

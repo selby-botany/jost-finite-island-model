@@ -1,8 +1,8 @@
 # Developer and extension guide
 
-This guide is for a maintainer extending the simulator without relying on
-institutional knowledge. Start with the [project overview](../README.md), then
-use the [generated API reference](../src/fim/API.md) for exact signatures.
+This guide describes the architecture, extension points, and validation
+requirements. Start with the [project overview](../README.md), then use the
+[generated API reference](../src/fim/API.md) for signatures.
 
 ## Contents
 
@@ -43,15 +43,15 @@ The scientific rationale is in the
 [detailed design](fim-simulator-detailed-design.md)
 records implementation and release choices, and the
 [detailed test plan](fim-simulator-detailed-test-plan.md) maps each
-requirement to evidence — its own companions,
+requirement to evidence. The
 [the externally accessible engine API](fim-simulator-functional-api.md)
-and the [desktop GUI test plan](fim-gui-test-plan.md), scope exactly
+and the [desktop GUI test plan](fim-gui-test-plan.md) define
 what a functional test may call. The [desktop GUI design](fim-gui-design.md)
 covers why and how `fim.gui` itself is built, and the
 [operational logging design](fim-logging-design.md) covers the `-l`/`-L`
 flags and where log calls live. The plain-language
-[test plan](fim-simulator-test-plan.md) is this project's own answer,
-for a non-programmer, to "can this simulator's numbers be trusted."
+[test plan](fim-simulator-test-plan.md) explains scientific validation without
+requiring programming knowledge.
 
 ## Build environment
 
@@ -62,7 +62,7 @@ The supported maintainer environment is Unix-like and requires:
 - Python 3.12 or newer
 
 The root `build` script and Git hooks assume Unix paths. They use Bash arrays,
-`[[ ... ]]`, and BASH<sub>SOURCE</sub>, so plain POSIX `sh` is not sufficient, but
+`[[ ... ]]`, and `BASH_SOURCE`, so plain POSIX `sh` is not sufficient, but
 they avoid modern-only Bash features and work with the Bash 3.2 bundled with
 macOS. The Python build itself does not need Docker.
 
@@ -70,7 +70,7 @@ Create `.venv` with Python 3.12 or newer and install `.[dev]`. Shell activation
 is optional: `build`, the Git hooks, and the commands in `bin/` automatically
 select `.venv/bin/python`. A versioned `.venv-*` is accepted as a fallback.
 `PYTHON=/path/to/python` overrides build selection, while
-FIM<sub>PYTHON</sub>=/path/to/python overrides the local command wrappers. Source
+`FIM_PYTHON=/path/to/python` overrides the local command wrappers. Source
 `include/dot-bashrc` to make those wrappers available as direct commands.
 
 Docker Engine is required for the complete repository-file checks. It runs the
@@ -96,24 +96,23 @@ and smoke-tested by the tag-driven GitHub Actions release workflow.
 2. **Drift:** each deme/locus is multinomially resampled to exactly `N` gene
    copies from its post-migration frequencies.
 3. **Mutation:** each of those `N` new gene copies mutates independently
-   with its locus's own probability (`mu`: a shared scalar, an explicit
+   with its locus's probability (`mu`: a shared scalar, an explicit
    per-locus list, or one derived per locus from a per-base rate,
-   μ<sub>b</sub>), so an allele carried by `n` copies loses
-   `Binomial(n, mu)` of them. By default (mutation_model:
+   `mu_b`), so an allele carried by $n$ copies loses
+   $\mathrm{Binomial}(n,\mu)$ of them, with $\mu$ its mutation probability.
+   By default (mutation_model:
    infinite_alleles) each mutant copy receives a globally novel ID; under
    the opt-in finite_alleles model, its target is drawn uniformly from the
-   other states of its own locus's bounded state space and can recur.
+   other states of its locus's bounded state space and can recur.
 
 This is the textbook Wright-Fisher island model: two gene copies of the
 next generation are identical only if their parental copies were and
 neither mutated, so the identity recursions behind the closed-form
 trajectories (`fim.statistics.identity_recursion`) and the
 equilibrium-split burn-in (`fim.convergence.defaults.
-panmictic_equilibration`) carry the factor `(1 − μ)²`. Releases before
-this order was adopted ran Migrate → Mutate → Drift with a mutation step
-that scaled every allele's frequency down in proportion to a deme-wide
-event count; that added an `O(μ/N)` excess identity each generation and
-was not the textbook model.
+panmictic_equilibration`) carry the factor $(1-\mu)^2$.
+See [migration conventions](migration-conventions.md) for the identity
+recursions and their relationship to published models.
 
 Every operator receives all changing inputs explicitly and returns a new
 `ModelState`. `ModelState` enforces one normalized sparse frequency map per
@@ -121,20 +120,18 @@ deme/locus.
 
 ## Engine backends
 
-The pipeline above (Migrate → Drift → Mutate) is what gets computed;
-`fim.engine` offers three implementations of *how* it gets driven,
+`fim.engine` offers three implementations of the generation pipeline,
 behind one shared `EngineBackend` protocol (`run(params, store, run_id,
 clock) -> RunResult | tuple[RunResult, ...]`), selected via `simulate_params()`'s
-own `engine_backend` keyword (`build_engine_backend`, `fim.engine`). See
-the [simulator design's own §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)
-for the user-facing "what/why/how" version of this; this section is the
-implementation-level view, plus what building it actually cost.
+`engine_backend` setting (`build_engine_backend`, `fim.engine`). See
+the [backend selection guide](fim-simulator-design.md#46-choosing-an-engine-backend)
+for performance guidance; this section describes implementation constraints.
 
 - **`LinealBackend`** (`"lineal"`, the default). Replica-first: one
   replicate runs to completion (or the configured process pool runs
   several in parallel — `max_workers`) before statistics/reports get
-  assembled. Permanently unmodified as the golden reference every other
-  backend's own output is checked against — see
+  assembled. It is the reference implementation against which other
+  backends are checked; see
   [Determinism](#determinism) below.
 - **`GenerationalBackend`** (`"generational"`/`"generational-vector"`,
   both share this one class). Generation-first instead: every
@@ -142,36 +139,30 @@ implementation-level view, plus what building it actually cost.
   one generation before any of them moves to the next, via a pluggable
   `Advancer`. `SequentialAdvancer` does this with no new concurrency (a
   pure reshuffle, still bit-identical to `LinealBackend`);
-  `ThreadedAdvancer` fans the same per-generation work out across real
+  `ThreadedAdvancer` distributes per-generation work across
   threads (`ThreadPoolExecutor`, one pool per generation tick); this
-  project's own factory only ever reaches `ThreadedAdvancer` through
+  factory uses `ThreadedAdvancer` for
   `"generational"` — building `GenerationalBackend(SequentialAdvancer())`
-  directly is possible but not exposed as its own `engine_backend`
-  string, since it buys nothing `"lineal"` does not already give a
-  caller who just wants the reference behavior.
+  directly is supported but has no separate `engine_backend` string.
 - **`VectorizedAdvancer`** (`"generational-vector"`). A third
   `Advancer`: keeps each replicate's state in one dense NumPy table
   (`fim.model.vector_block.VectorBlock`: `loci x demes x width`
   frequencies and counts, an allele-id array per locus) and advances a
   whole generation, every locus, with one compiled kernel call
   (`fim.model.vector_kernels.run_generation`) instead of one Python-level
-  operator call per deme. Both mutation models run on it; stochastic
-  migrant counts do not yet (`ValueError`, with a message pointing to
-  `lineal`/`generational`; the kernel's migration step is already split
-  into a draw phase and a blend phase for that follow-up). Under infinite
-  alleles the table's columns are the alleles alive now, kept in
+  operator call per deme. Both mutation models and both migrant-sampling
+  modes are supported. Under infinite
+  alleles the table's columns represent currently present alleles, kept in
   ascending id order, appended for each new mutant, compacted when
   extinct, grown by doubling and shrunk after a long quiet stretch, with
   a per-replicate memory ceiling that fails early with the remedies
-  named. Requires `numba` unconditionally — see `pyproject.toml`'s own
-  `jit` extra comment for the two-different-import-paths distinction
-  this cost a real CI outage to get right (below); the kernel module is
-  imported lazily, so `import fim` never needs it. `fim.model.vectorized`
-  is the earlier per-locus implementation, superseded and no longer
-  called by the engine.
+  named. Requires `numba`, provided by the `jit` extra in `pyproject.toml`.
+  The kernel module is imported lazily, so `import fim` does not require it.
+  The engine does not call the per-locus implementation in
+  `fim.model.vectorized`.
 
-**What keeps Backend V bit-identical to L and G — the rules a change to
-`fim.model.operators` must not silently break.** Each is checked by exact
+**Backend parity requirements.** Changes to `fim.model.operators` must preserve
+the following rules, checked by exact
 tests (`test/model/test_vector_kernels.py`, `test_vector_block.py`,
 `test/engine/test_vector_parity.py`), which compare complete ordered row
 streams, never summaries:
@@ -185,9 +176,9 @@ streams, never summaries:
    deme-ascending size-weighted mass, each pool value clamped at zero,
    each row divided by the `fsum` of its positive entries; a full matrix
    is one `fsum` per cell.
-4. Drift normalization with NumPy's own pairwise `ndarray.sum()` over the
+4. Drift normalization with NumPy's pairwise `ndarray.sum()` over the
    present probabilities (ported to the kernel).
-5. The same inversion binomial, one uniform per real draw.
+5. The same inversion binomial, one uniform per nondegenerate draw.
 6. Infinite alleles: identities handed out deme-major, locus-minor from
    one counter; finite alleles: the K-allele target draws of
    `FiniteAlleleSpace`, interleaved with the next pair's counts.
@@ -199,84 +190,26 @@ first generation, which is the intent. The statistics `D`, `G_ST`, `H_S`,
 `statistics_report`'s bits for the same reason (a different last bit can,
 rarely, move a convergence stop).
 
-**A cross-backend RNG-unification story worth knowing before touching
-any of this code.** For a long stretch of this feature's own
-development, `"generational-vector"`'s output only matched the other
-two backends *statistically* (same distribution, not the same
-trajectory) — an accepted, documented gap, until a direct instruction
-to make it exact changed that. Getting there took a genuinely new
-primitive, `fim.model.operators._inversion_binomial` (mode-anchored
-inverse-CDF sampling, exactly one `rng.random()` per draw, replacing
-NumPy's own opaque-draw-count `rng.binomial()`), because two
-independent implementations cannot consume the same seed's own
-random-number stream identically unless each draw's own cost in
-"how many uniforms did that consume" is fixed and known in advance —
-`rng.binomial()`'s own internal algorithm choice is not. Two real,
-data-losing bugs were found and fixed *while building that primitive
-alone*, before it ever reached `drift`: a first draft anchored at
-`k=0` and underflowed to a literal `0.0` for `n` in the thousands
-(this project's own ordinary deme population sizes), silently wrong
-100% of the time; a second draft conflated a point mass with a
-cumulative probability, wrong across nearly the whole `n`/`p` range.
-Both were caught by a test that actually failed, not by inspection —
-the general lesson this whole story keeps re-teaching.
+`fim.model.operators._inversion_binomial` uses mode-anchored inverse-CDF
+sampling with one `rng.random()` per draw. A fixed uniform-draw count is
+required for cross-backend RNG alignment; NumPy's `rng.binomial()` does not
+provide that contract.
 
-**The more expensive lesson: a per-operator exact-match test suite is
-not the same thing as an exact-match *run*.** Every operator
-(`migrate`, `mutate`, `drift`) eventually passed its own isolated
-exact-match test against the dict-based backends — and a full,
-real, multi-generation batch still did not match, because
-`build_vectorized_state` re-derived Backend V's own finite-alleles
-"which allele IDs have ever existed" bookkeeping from scratch every
-generation, using only whichever IDs were currently present. That
-silently forgets any allele that went extinct in the very generation
-it was minted — the *ordinary* fate of a fresh low-frequency mutant
-under drift, not a rare edge case — letting Backend V re-mint an
-identity `LinealBackend`'s own registry had already permanently
-retired. No isolated single-call test could have caught this, by
-construction: each one started from a manually built common state
-rather than a real, round-tripping, generation-to-generation driving
-loop. Fixed by carrying that bookkeeping forward across generations
-explicitly (`ReplicaLane.vectorized_locus_states`,
-`build_vectorized_state`'s own `previous_locus_states` parameter) —
-found and fixed only because a full run was actually executed and
-checked end to end, not assumed correct from the per-operator proofs
-alone. **If you extend or refactor any of `fim.model.vectorized`,
-re-run a full multi-generation batch against `LinealBackend` before
-trusting a change — an isolated operator test is necessary, and has
-already been proven not sufficient.**
+Finite-allele identity bookkeeping must persist across generations, including
+identities no longer present in the population. The per-locus vector path
+carries it in `ReplicaLane.vectorized_locus_states` through
+`build_vectorized_state(previous_locus_states=...)`. Validate state
+round-tripping with full multi-generation batches against `LinealBackend`;
+isolated operator tests cannot establish end-to-end parity.
 
-**A real, currently-unaddressed regression, found by profiling rather
-than assumed away.** The RNG-unification work above made `drift`
-bit-identical across backends at a real, measured cost:
-`_inversion_binomial` is pure Python, and profiling a `"generational"`
-run (`cProfile`, `dev/bin/benchmark-engines`) found it now dominates
-`drift`'s own wall-clock time and holds the GIL for essentially all of
-it — where NumPy's own C-level `rng.binomial()` used to spend at least
-some of that time with the GIL released. The measurable consequence: a
-thread-count scaling sweep at this project's own reference scale
-(`d=60`) found `ThreadedAdvancer` delivers no real speedup at any
-thread count from 1 to 14 today, flat to actively worse than one
-thread past 4-6 threads — a real regression against a benchmark this
-project had already recorded, confirmed by checking git commit
-timestamps rather than assumed coincidental (the earlier, better
-number was measured before the RNG-unification commits landed, the
-same day). `jit="numba"` helps the single-thread case for real but does
-not restore thread scaling, because `migrate`'s/`mutate`'s own RNG
-calls stay unjitted and GIL-bound regardless of that setting — already
-correctly documented on `ThreadedAdvancer.__init__`'s own docstring, now
-backed by a direct measurement rather than inference. **Not fixed as
-part of this profiling pass** — a real fix needs a `nogil=True`-
-compiled, bit-identical replacement for `migrate`'s/`mutate`'s own RNG
-calls too (the same pattern `_inversion_binomial`'s own nested-closure
-JIT wiring already establishes for `drift`), and/or caching
-`ThreadedAdvancer`'s own `ThreadPoolExecutor` across generation ticks
-instead of rebuilding it every one (found by reading the code this
-profiling pointed at — a real, separate cost, not yet isolated from the
-GIL-contention cost above). If you pick this up: re-run
-`dev/bin/benchmark-engines --sweep d` before and after, the same way
-every other performance claim in this codebase is checked, not
-reasoned about.
+**Threading limits.** Python-level RNG work holds the GIL. A reference-scale
+measurement at `d=60` found no speedup across 1–14 threads, with additional
+overhead beyond 4–6 threads. `jit="numba"` improves some single-thread work
+but does not remove GIL-bound migration and mutation calls.
+`ThreadedAdvancer` also creates a `ThreadPoolExecutor` per generation.
+Performance changes must preserve bit parity and be measured before and
+after with `dev/bin/benchmark-engines --sweep d`; see
+[maintainer scripts](../dev/bin/README.md#benchmark-engines).
 
 ## Determinism
 
@@ -287,14 +220,12 @@ reasoned about.
 - Preserve first-observed allele order; ordering has no biological meaning but
   stable iteration keeps byte output reproducible.
 - Keep timestamps in manifest metadata and default directory names only.
-- A replicate batch's `SeedSequence` seed derivation, and each replicate's own PCG64
+- A replicate batch's `SeedSequence` seed derivation and per-replicate PCG64
   generator, are unaffected by execution order or worker count: opt-in
   parallel replicate execution (`fim`'s max_workers) runs each replicate
-  in its own worker process, computes exactly the same result as running it
-  alone, and only its own `RunResult`'s wall-clock timestamps can vary.
-- **Which `engine_backend` drives a run is itself a determinism axis, not
-  an orthogonal performance-only knob** ([Engine backends](#engine-backends)
-  above has the full story). `"lineal"` and `"generational"` are
+  in a separate worker process and computes the same result as sequential
+  execution; wall-clock timestamps can vary.
+- `"lineal"` and `"generational"` are
   bit-identical for the same seed, always, by construction — different
   execution order over the identical dict-based arithmetic.
   `"generational-vector"` is bit-identical to both too, for the same
@@ -303,17 +234,11 @@ reasoned about.
   limit is the compiled mathematics: Numba's `lgamma`, `log`, `log1p`
   and `exp` are verified against CPython's only on the development
   platform, the same caveat `jit="numba"` carries, so across machines
-  results agree statistically, not row for row. (Before the compiled
-  kernel it matched only statistically, for two reasons — migration by a
-  BLAS matrix product, and a locus-major draw order — both gone.) Check
+  results agree statistically, not row for row. Check
   `manifest.engine_backend` to know which engine produced an archived
   run. The
-  [simulator design's own §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)
-  has the equation-level explanation of why (the same weighted-blend
-  formula, two different summation orders, occasionally landing on
-  opposite sides of one of drift's own discrete decision boundaries) —
-  written for a scientist audience, not a maintainer one; worth pointing
-  a collaborator there directly rather than re-deriving it in a reply.
+  [backend guide](fim-simulator-design.md#46-choosing-an-engine-backend)
+  describes reproducibility limits and numerical conventions.
 
 Tests use a derandomized Hypothesis profile and literal PCG64 seeds. Statistical
 tolerances are derived from sample size before a seed is selected.
@@ -332,7 +257,7 @@ statistics, or visualizations. A store may also take a generation as a
 frames only to a store that asks for them (`wants_frames`) and keeps handing
 rows to any other.
 
-**The store is the binary log.** `BinaryLogStore` writes
+`BinaryLogStore` writes
 `trajectory.tlog` (and `equilibrium_trajectory.tlog`): a chained-checksum
 block log with sparse delta records, written by a background thread, read
 back with random access (`LogReader`), exported to the canonical
@@ -343,7 +268,7 @@ store: `InMemoryTrajectoryStore` serves library calls and tests that need no
 file, and the export's expected text in the tests is built from its rows with
 plain `json.dumps`.
 
-A store holds one run, so a batch gives every replicate its own
+A store holds one run, so a batch gives every replicate a separate store
 (`ReplicateFanoutStore` with a store factory). Its writer thread and file
 descriptor live from the first frame to `close`, so the lifecycle rules matter:
 
@@ -370,7 +295,7 @@ descriptor live from the first frame to `close`, so the lifecycle rules matter:
   sent closed, without its writer, and reads from the file in the receiving
   process.
 - `discard(run_id)` closes the writer and removes the file.
-- Tests prove a real entry point leaves nothing open with
+- Entry-point tests verify that stores are closed with
   `conftest.tracked_log_stores` and `assert_none_open`
   (`test/persistence/test_store_lifecycle.py`).
 
@@ -379,7 +304,7 @@ mandatory once max_workers is set, since a single store object cannot
 cross a worker-process boundary. `fim`'s store_factory builds one given a
 replicate's run_id; it must itself be picklable under max_workers (a
 module-level function, or `functools.partial` over one — never a closure or
-lambda), which is exactly how the CLI wires each replicate to its own real
+lambda). The CLI uses this to assign each replicate a separate
 `replicate-NNN/trajectory.tlog`.
 
 Statistics are computed per locus, then arithmetic-mean aggregated in the final
@@ -388,7 +313,7 @@ adding engine state.
 
 ## Run objects and checkpoints
 
-A Run object is a saved run that can be paused and resumed exactly. The user
+A Run object is a saved run that can be paused and resumed. The user
 view is [saved runs](run-lifecycle.md). Every front end (`fim object`, the
 desktop app's Saved runs, sweep points) goes through one service, so the
 lifecycle rules live in one place:
@@ -465,17 +390,17 @@ may read the GUI's shown set; a test enforces that.
 
 | Requested change | Extension point |
 |---|---|
-| Unequal deme size | Pass per-deme `N`; operators and E<sub>ST</sub> support it |
+| Unequal deme size | Pass per-deme `N`; operators and $E_{ST}$ support it |
 | Asymmetric migration | Pass a validated `d` by `d` matrix |
 | Stepping-stone topology (1D) | `fim.model.topology`: `m: {topology: ring\|linear, rate}` or a hand-written sparse map |
 | Spatial migration beyond 1D or a fixed matrix | 2D lattice topology, or a `MigrantPoolStrategy` interface — neither built yet |
-| Random, rather than fixed, migrant counts | migrant_sampling: stochastic; `migrate()` accepts `rng` and draws Binomial(N<sub>i</sub>, rate) |
-| Per-locus mutation rate from length | μ<sub>b</sub> (a per-base rate) derives each locus's own `mu` from its `length`; or pass `mu` as an explicit per-locus list directly |
+| Random, rather than fixed, migrant counts | `migrant_sampling: stochastic`; `migrate()` accepts `rng` and draws $\mathrm{Binomial}(N_i,r_i)$, where $r_i$ is the migrant fraction |
+| Per-locus mutation rate from length | `mu_b` derives each locus's `mu` from its `length`; alternatively, pass a per-locus `mu` list |
 | Finite-length alleles (remove infinite-length artifacts) | mutation_model: finite_alleles; `LocusSpec.length` bounds each locus to `4 ** length` states, and mutation can recur |
 | Selection | Add a pure `select` operator before drift |
 | Stepwise (distance-based) mutation, e.g. for microsatellites | Add a strategy behind mutation identity assignment — a different, still-unbuilt model from the row above (§3.2 of the design doc explains why) |
 | Several convergence statistics | Pass a list for convergence_statistic plus convergence_combinator |
-| How many replicate runs give a confidence interval | precision stops a batch (while stop_batch_early is on) once every watched statistic's across-replicate CI tightens to it, instead of a hand-guessed n<sub>replicates</sub>; fim.engine.replicate_summary / the CLI's `summary.json` report the realized interval |
+| Adaptive replicate count | `precision` and `stop_batch_early` control stopping; `fim.engine.replicate_summary` and `summary.json` report achieved intervals |
 | Faster replicate batches | max_workers (library) / `--workers`, `--sequential` (CLI): one worker process per replicate batch-slot, opt-in, changes nothing about what is computed |
 | Large trajectories | Implement another `TrajectoryStore` |
 | GUI | Call `fim.engine.simulate_params`; do not duplicate model logic |
@@ -500,13 +425,10 @@ visualization rendering. Coverage is a floor; golden and invariant tests carry
 the scientific proof. Every Backend-V-only test (`fim.model.vector_kernels`,
 `fim.model.vector_block`, `VectorizedAdvancer`) starts with `pytest.importorskip("numba")` rather
 than assuming it is installed, so `.[dev]` alone still runs cleanly —
-those tests skip instead of failing. CI's own coverage-gated job installs
+those tests skip when the optional dependency is absent. The coverage-gated CI job installs
 `.[dev,jit]` specifically, not `.[dev]`: skipped tests contribute no
-coverage, and Backend V's own code is too large a share of `src/fim` for
-the 90 percent gate to pass without it actually running (a real
-regression this project found and fixed once already — reproduce the
-gate locally with `.[dev,jit]` installed, not `.[dev]` alone, or you will
-see a coverage number CI does not).
+coverage. Install `.[dev,jit]` locally to reproduce the 90 percent coverage
+gate, including Backend V tests.
 
 ## Documentation
 
@@ -523,14 +445,15 @@ hook refreshes API docs, the pre-push hook checks freshness, and CI repeats
 both checks. See [source-tree orientation](../src/README.md) and
 [repository-managed hooks](../dev/git-hooks/README.md).
 
-After changing `doc/usage.md` or `doc/configuration.md`, regenerate the
+After changing `doc/usage.md`, `doc/configuration.md`, or `doc/statistics.md`,
+regenerate the
 GUI's Help screen content the same way:
 
 ```console
 dev/bin/generate-help-html
 ```
 
-The pre-commit hook refreshes it automatically when either source doc (or
+The pre-commit hook refreshes it automatically when a source guide (or
 the generator itself) is staged; the pre-push hook and CI verify freshness
 the same way they do for the API reference above. anchor_for in
 `dev/lib/docslug.py` is the one GitHub-compatible heading-anchor slugger

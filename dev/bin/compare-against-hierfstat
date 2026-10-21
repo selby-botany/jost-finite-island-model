@@ -1,50 +1,11 @@
 #!/usr/bin/env python3
-"""Compare this project's engine against hierfstat, an independent simulator.
+"""Compare simulated trajectories with the independent hierfstat simulator.
 
-Every existing literature-grounded check in this project compares this
-project's own math (or this project's own engine) against a formula or a
-published number -- never against another program's own simulation of the
-same process. hierfstat (Goudet's group, CRAN R package) implements exactly
-this project's own model -- a migration matrix, Wright-Fisher drift, and
-mutation, run generation by generation (`sim.genot.metapop.t`) -- in
-independently-written code with its own random number stream, which makes
-it the first source of genuinely independent comparison data this project
-has ever had.
-
-hierfstat's own summary-statistic functions (`basic.stats`/`wc`/`betas`)
-are deliberately never called: they are finite-sample, bias-corrected
-estimators (built for the real-world case of a genotyped *sample*, not a
-fully known population), a different mathematical quantity from this
-project's own exact `h_s`/`h_t`/`g_st`/`jost_d` -- the same "related but
-different quantity" trap already found for Weir & Cockerham's F_ST and
-Chao et al.'s L1-L3 starling estimates, confirmed a third time (with an
-exact worked comparison) for mmod's own test suite while researching this
-tool. Instead, `dev/docker/hierfstat/simulate.R` is asked to return the
-*entire* simulated population's raw genotypes (`size = N`, avoiding any
-additional sampling step beyond the drift process itself); this script
-converts those genotypes into a `FrequencyTable` by hand and runs this
-project's own exact statistics on the result -- both sides of the
-comparison then use the same formula layer, so what is actually being
-compared is two different programs' own simulated trajectories, nothing
-else.
-
-Deliberately NOT wired into `build` or `ci.yml`: builds and runs a Docker
-container (slow, and an external dependency this project does not
-otherwise have), the same "manually-invoked, outside the deterministic PR
-gate" category `dev/bin/calibrate-statistical-bands` already established
-for its own reasons. This script reports a comparison; it does not assert
-pass/fail -- no calibrated tolerance exists yet for "how far apart should
-two independent stochastic simulators land," and manufacturing one without
-characterizing it properly would repeat the exact mistake this project's
-own testing rules forbid (a tolerance picked because it happened to make
-one run pass). See `1121-citrus`'s own
-`20260830-claude-sonnet-5-external-tooling-cross-validation-plan.md`
-design doc for the full reasoning.
-
-Usage:
-    dev/bin/compare-against-hierfstat \\
-        --population-size 100 --m 0.01 --mu 0.005 --d 4 \\
-        --generations 4000 --nbal 99 --nbloc 200 --seed 900001
+Runs a matching scenario in hierfstat, converts its raw population genotypes
+to allele frequencies, and computes this project's statistics for comparison.
+The command reports measurements but does not pass or fail a tolerance test;
+no comparison tolerance has been calibrated. It is a manual maintainer tool
+that requires the hierfstat Docker image.
 """
 
 from __future__ import annotations

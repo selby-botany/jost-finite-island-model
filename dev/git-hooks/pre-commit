@@ -72,7 +72,7 @@ fi
 help_sources_staged=false
 while IFS= read -r -d '' path; do
     case "${path}" in
-        doc/usage.md | doc/configuration.md \
+        doc/usage.md | doc/configuration.md | doc/statistics.md \
         | doc/examples/*/config.yaml \
         | dev/bin/generate-help-html | dev/bin/update-worked-examples \
         | dev/lib/docslug.py)

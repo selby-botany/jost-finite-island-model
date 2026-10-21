@@ -1,8 +1,8 @@
-"""JSON-shaped payloads for the sweep bridge calls (`fim.gui.app.Api`).
+"""Convert between web-interface requests and parameter-sweep data.
 
-Pure functions turning a page request into a `SweepSpec` and turning a
-plan, a Study or its results back into plain dictionaries the page can
-draw. Nothing here touches a window or starts a run; `Api` owns that.
+Pure functions in this module build sweep specifications and serialize plans,
+studies, and results as dictionaries for the page. Window management and
+execution are handled by `fim.gui.app.Api`.
 """
 
 from __future__ import annotations

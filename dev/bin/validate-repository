@@ -11,68 +11,12 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     cat <<'EOF'
 Usage: dev/bin/validate-repository
 
-Run every repository-hygiene checker this project uses, over the whole
-checkout:
+Run repository-wide checks for shell scripts, YAML, Markdown, GUI
+JavaScript, CSS, HTML, and likely secrets. The checks use the wrappers in
+`bin/` and require Docker Engine.
 
-  - shellcheck    every shell script this project ships, for real bugs
-                  (not just style) -- an unquoted variable that breaks on
-                  a space, a typo'd flag, a comparison that silently
-                  never matches.
-  - yamllint      the GitHub Actions workflow files and Dependabot
-                  config, for syntax and structural mistakes YAML's own
-                  permissive parsing would otherwise let through
-                  silently (a workflow that "parses" but never runs the
-                  step you meant it to).
-  - markdownlint  every Markdown file in the repository, for consistent,
-                  correctly structured formatting (heading levels that
-                  skip a level, an unclosed code fence, and so on).
-  - eslint        the desktop GUI's browser JavaScript, for mistakes the
-                  browser would not report at all -- a misspelled DOM
-                  call, a variable that is never used because the code
-                  that used it moved, a comparison against the wrong
-                  thing.
-  - stylelint     the desktop GUI's stylesheets, for the same kind of
-                  silent fault in CSS: an unknown property, a selector
-                  written twice, a calc() with a missing space that a
-                  browser simply ignores.
-  - htmlhint      the desktop GUI's HTML, for structural mistakes a
-                  browser papers over rather than reports -- two
-                  elements sharing one id, a tag left unclosed, an
-                  image with no alt text.
-  - gitleaks      a scan of the entire repository for text that looks
-                  like a credential, API key, or password -- something
-                  that must never be committed, checked here rather
-                  than trusted to memory.
-
-Not run here, because it needs no Docker and so belongs on the everyday
-path instead: dev/bin/check-webui-assets, which checks that the GUI's
-styles, links, and icon references still line up with each other. It
-runs as part of ./build.
-
-Why this exists:
-  These checks catch a different class of mistake than the test suite --
-  a broken shell script, a malformed YAML workflow file, an inconsistent
-  Markdown heading, a dead stylesheet rule, or a leaked API key or
-  password -- before it reaches a reviewer or a released package. This
-  matters even for a researcher who never expects to touch a shell
-  script directly: a broken CI workflow or a leaked secret affects the
-  safety and reliability of the whole project, not just whichever file
-  happened to change.
-
-  None of the tools above need to be installed on your machine
-  directly. Each one is a pinned, Docker-backed wrapper script living in
-  this project's own bin/ directory (bin/shellcheck, bin/yamllint,
-  bin/markdownlint, bin/eslint, bin/stylelint, bin/htmlhint,
-  bin/gitleaks) -- running the tool actually means
-  running a specific, version-locked container image, the same one every
-  time, on every machine and in CI alike. That way a result never
-  depends on which version of a linter someone happened to have
-  installed locally, and a fresh checkout can run this immediately with
-  no setup beyond having Docker itself installed and running.
-
-Requires Docker Engine to be running (the wrappers in bin/ pull their
-pinned tool images automatically on first use, and reuse them after
-that).
+`dev/bin/check-webui-assets` separately checks cross-file GUI asset
+references and runs as part of `./build`.
 
 Options:
   -h, --help    Show this help message and exit.

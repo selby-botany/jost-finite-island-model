@@ -21,15 +21,12 @@ default equal weighting.
 
 ## Why eight loci
 
-The example tracks eight independent loci and pools them. An earlier
-version tracked one locus, and that locus's diversity swung widely: its
-within-deme heterozygosity moved between about 0.13 and 0.70 within a
-thousand generations, so its average over a short window said little about
-the long run. Pooling loci averages many of those slow swings away, and each
-replicate now averages over a window long enough for the batch's precision
-(6,707 generations here) instead of stopping on the first window that fills. The saved trajectory is
-thinned (every generation to 5,000, then one in ten) to keep the example
-small; the statistics and the report are unaffected.
+The example tracks eight independent loci and pools them. Between-locus
+variation reduces the influence of a single locus's drift trajectory on the
+reported replicate average. Each replicate averages over the 6,707-generation
+window associated with the batch precision. The saved trajectory is thinned
+(every generation to 5,000, then one in ten) to keep the example small; the
+statistics and report are unaffected.
 
 ## Run
 

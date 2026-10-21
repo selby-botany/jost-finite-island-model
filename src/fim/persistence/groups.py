@@ -1,72 +1,10 @@
-"""Study and Experiment: named groupings of Runs, and of Studies.
+"""Store and manage Study and Experiment groupings.
 
-Full design: `20260917-claude-sonnet-5-run-study-experiment-hierarchy-
-design.md` (`selby/restricted`). Three layers exist after this module:
-a **Run** (unchanged — one scalar run or replicate batch, `fim.
-persistence.manifest`), a **Study** (a named list of Run directories
-pursuing one research question), and an **Experiment** (a named list of
-Study ids pursuing a longer-running research goal). A Study/Experiment
-never duplicates or moves anything it references — `StudyManifest.
-run_directories` names existing run directories exactly the way
-`fim.persistence.manifest.BatchManifest.replicate_run_ids` already
-names existing replicate directories one level down, and
-`ExperimentManifest.study_ids` does the same one level further up.
-
-`StudyManifest`/`ExperimentManifest` are deliberately two separate,
-structurally parallel dataclasses (a "twin," like `fim.persistence.
-manifest`'s own `RunManifest`/`BatchManifest`) rather than one generic
-type parameterized over the member field name — this project's own
-established convention prefers a small explicit copy over a shared
-generic (`fim.persistence.manifest.read_manifest`/`read_batch_manifest`
-are byte-identical copy-paste-adapts of each other for the same reason).
-
-Deleting a Study deletes every Run it references; deleting an
-Experiment deletes every Study it references (and, transitively, every
-Run those Studies reference) — a deliberate, explicit product decision
-overriding this design document's own original, more conservative
-leaning ("deleting an organizational grouping should never be a
-data-destroying operation"), confirmed directly by the project owner
-when this module was implemented. `delete_study`/`delete_experiment`
-both accept an escape hatch (`delete_runs=False`/`delete_studies=False`)
-for a caller that genuinely only wants the grouping gone.
-
-**Read-only items** (read-only examples design, 2026-10-05, section 3).
-A Study or Experiment whose manifest has `read_only: true`, and a Run
-whose manifest parameters have `_read_only: true` (`is_run_read_only`),
-are shipped examples that every function here refuses to edit, raising
-`ReadOnlyError` (a `ValueError`, so every existing caller that reports
-a `ValueError` reports this one too):
-
-- a read-only Study or Experiment cannot be renamed, described,
-  documented, deleted, emptied, or gain or lose members;
-- a read-only Run is never deleted; its link can be removed from an
-  editable Study, but never from a read-only Study. A
-  Study or Experiment being deleted or emptied skips its read-only
-  members rather than failing, so a user's own grouping that happens to
-  hold an example stays fully manageable, and the example survives.
-
-Viewing and copying stay allowed; a copy (`copy_study`/
-`copy_experiment`) is always an ordinary, editable grouping. Only the
-examples seeding code writes read-only manifests, through
-`write_read_only_study`/`write_read_only_experiment`, which bypass the
-checks. `read_only` is written to JSON only when true, with no schema
-bump: an older fim ignores the key when reading, but an older fim that
-rewrites such a manifest drops it, so re-seeding restores it.
-
-**Open and closed groups** (run lifecycle design §6.3). A Study or
-Experiment is open by default; a manifest written before `closed`
-existed reads back open. Closing a group freezes its organization:
-a closed Study cannot gain, lose, or be emptied of Runs, a closed
-Experiment cannot gain Studies, and neither can be deleted, raising
-`ClosedGroupError` (a `ValueError`) until it is reopened. Closing never
-freezes the Runs themselves: a shared Run can still be deleted from
-elsewhere, which removes its link here too, and a bit-identical
-recomputation (`supersede_run`) still replaces the link. Renaming and
-documenting stay allowed, because notes on what a group found are
-written after it is closed. The default Study and Experiment always
-stay open, so every new run has a home. `fim.group_lifecycle`
-validates active work before closing and derives each group's
-execution summary.
+A Study references Run directories; an Experiment references Study IDs.
+Manifests store membership and descriptive metadata without copying the
+referenced data. The module provides CRUD, copy, read-only protection, and
+closed-group checks. Deleting a grouping also deletes referenced data by
+default; callers can disable that behavior explicitly.
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
 # Saved runs: pause, resume, and recover
 
-A long simulation can take hours. A *saved run* (a "Run object") lets you keep
-a configuration before it is finished, start it later, pause it, and continue
-it exactly where it stopped, even after the computer restarts. This guide
+A *saved run* (a "Run object") stores a configuration for later execution and
+supports pausing and continuation from a checkpoint, including after a
+computer restart. This guide
 explains what you can do with a saved run, what each state means, and how to
 recover when something goes wrong.
 
@@ -53,7 +53,7 @@ A saved run is a folder under `results/objects/`, named by its object ID
 
 | File | Contents |
 |------|----------|
-| `config.yaml` | The configuration, exactly as saved |
+| `config.yaml` | The saved configuration |
 | `run.json` | The lifecycle record: state, phase, generation, latest checkpoint, attempts, errors |
 | `checkpoints/` | The latest committed checkpoint (older ones are removed) |
 | `trajectory.tlog` | The trajectory log, written as the run proceeds |
@@ -93,7 +93,7 @@ It cannot start until these are fixed:
 
 `fim object edit OBJECT_ID CONFIG` replaces the configuration. The object
 becomes `planned` when the new configuration is valid and goes back to
-`draft` when it is not, as often as you like, until the run is started.
+`draft` when it is not. Editing is available until the run starts.
 
 `interrupted`, `failed`, and `paused` objects resume from their latest
 checkpoint. A run that stopped *before its first checkpoint* (for example, it
@@ -157,24 +157,21 @@ produces the same trajectory, the same report, and the same convergence
 decision as a run that was never stopped. A trajectory log cut off by a crash
 is trimmed back to the checkpoint and continued from there.
 
-A checkpoint is verified (by SHA-256 digest) before it is used. A checkpoint
-written by a different checkpoint format version is refused rather than
-guessed at.
+A checkpoint's SHA-256 digest is verified before use. Incompatible
+checkpoint format versions are rejected.
 
 ### Cost of a checkpoint
 
-Checkpoints are cheap compared with the run itself. On an Apple M4 laptop, a
-single replicate with d = 20 and N = 225 takes about 20–35 ms per checkpoint
+On an Apple M4 laptop, a
+single replicate with $d=20$ and $N=225$ takes about 20–35 ms per checkpoint
 and keeps about 350 KB on disk. A 16-replicate vector-engine batch with large
 d takes about 135 ms per checkpoint and keeps about 19 MB. Only the latest
 checkpoint is kept, so disk use does not grow with run length.
 
 ### Compatibility between versions
 
-Saved runs are new and are not yet part of a released version of fim.
-
-- Earlier versions of fim ignore `results/objects/`. Downgrading does not
-  damage saved runs, but the earlier version cannot see or resume them.
+- Versions without saved-run support ignore `results/objects/`. They cannot
+  see or resume saved runs.
 - A `run.json` with a `schema_version` this version does not know is refused
   with `unsupported run.json schema_version`.
 - A checkpoint from a different checkpoint format version is refused, not
@@ -201,16 +198,15 @@ again.
 
 ## Recovery after a crash or power failure
 
-You do not need to do anything special. Each command that reads objects
+Each command that reads objects
 (`list`, `status`, `start`, `resume`) first checks every object recorded as
 running. When no process owns it any more, the object is recorded as
 `interrupted`, and `fim object resume` continues it from its latest
 checkpoint.
 
-There is one exception. If the run had already written every finished
-artifact and only the last bookkeeping step was lost, the artifacts are
-verified against the completion receipt the run wrote, and the object is
-recorded as `completed` instead. Nothing is computed twice.
+If every final artifact was written but the last lifecycle update was lost,
+the command verifies the completion receipt and records the object as
+`completed` without rerunning it.
 
 A command killed in the middle of writing can leave a hidden staging folder
 (its name starts with `.`) next to the run. These folders are never mistaken
@@ -254,9 +250,9 @@ from the command line, and the reverse.
 ## What is not a saved run
 
 `fim run`, the desktop app's **Run simulation**, and the Python `simulate_params()`
-function run to the end in one go and write their output only when they
-finish. They cannot be paused or resumed. Use a saved run when a run may take
-longer than you can leave the computer alone.
+function execute without saved-run checkpoints and publish their output
+when they finish. They cannot be paused or resumed. Use a saved run for
+work that may need to continue across sessions.
 
 **Supported configurations.** Every engine backend (`lineal`, `generational`,
 and `generational-vector`) supports saved runs. A configuration is refused at
@@ -264,8 +260,7 @@ start, with the reason, when:
 
 - it asks for the JIT on the `lineal` backend;
 - it asks for `generational-vector` and Numba is not installed;
-- a locus exceeds the vector backend's capacity;
-- the desktop app is asked to run a batch (use the command line).
+- a locus exceeds the vector backend's capacity.
 
 ## Troubleshooting
 

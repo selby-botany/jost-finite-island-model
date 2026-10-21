@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate `test/TESTS.md`, the committed reference listing every test
-module, class, and test function under `test/` together with its
-docstring, from the docstrings actually written in `test/` -- the
-`test/` counterpart to `dev/bin/generate-api-docs`'s own `src/fim/
-API.md`. Never hand-edit the generated file itself.
+"""Generate the committed test reference from test module and function docstrings.
 
 Why this exists: `doc/fim-simulator-detailed-test-plan.md` organizes and
 tabulates the test suite; the detail behind any one test -- what it

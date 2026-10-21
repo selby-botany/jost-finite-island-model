@@ -1,40 +1,10 @@
-"""Read and validate the run-class tree, `doc/examples/classes.yaml`.
+"""Read and validate the run-class hierarchy in `doc/examples/classes.yaml`.
 
-A **class** is a group ID for runs: the worked examples use classes to
-build the Examples dialog's tree, and a user's own run may carry one
-too, as the configuration label `class` (`doc/configuration.md`). This
-module is the only reader of the class file (design doc
-`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
-`selby/restricted`, section 2).
-
-The file holds one top-level key, `classes`, a list of entries:
-
-```yaml
-classes:
-  - id: getting-started
-    title: Getting started
-    description: One-screen runs that show the core statistics settling.
-  - id: literature
-    title: Literature comparisons
-    children:
-      - id: literature-distances
-        title: Genetic distances
-```
-
-Rules, all enforced by `parse_class_tree`:
-
-- The tree is shallow: top-level classes plus at most one level of
-  `children`. A child with `children` of its own is rejected.
-- Order in the file is display order, and it is preserved.
-- Every `id` is lowercase kebab-case (`getting-started`) and unique
-  across the whole tree, parents and children together.
-- `title` is required; `description` is optional. Any other key is
-  rejected, so a typo is reported rather than ignored.
-
-The file lives in the source checkout, beside the examples. A packaged
-build carries no `doc/` directory, so `load_default_class_tree` returns
-`None` there, and `validate_run_class` then checks only the ID's format
-(see its docstring for why that is the safe choice).
+The YAML file defines ordered top-level classes and optional single-level
+children. IDs must be unique lowercase kebab-case strings; titles are
+required, descriptions are optional, and unknown keys or deeper nesting are
+rejected. Packaged builds without the source `doc/` tree validate class IDs
+by format only.
 """
 
 from __future__ import annotations

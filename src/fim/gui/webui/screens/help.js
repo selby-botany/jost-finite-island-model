@@ -1,18 +1,8 @@
 "use strict";
 
-/* The Help screen (in-app help design §4.4) -- fetches one of `dev/bin/
- * generate-help-html`'s own committed, body-only HTML fragments
- * (`help/usage.html`, `help/configuration.html`) and injects it into
- * `#help-content`. No bridge call: the fragment is a static file
- * already bundled alongside `index.html` (`packaging/fim.spec`'s own
- * whole-`webui/`-tree `datas` entry needs no change for it, design
- * §4.7), fetched the same way the page's own `app.css` already loads.
- *
- * Reachable from every screen via the native Help menu
- * (`fim.gui.app._build_menu`), including mid-run -- the first screen in
- * this app that needs a real "return to wherever I was" instead of a
- * fixed Back target (design §4.4's own departure from every existing
- * screen's fixed-edge "Back" button).
+/* Load bundled usage, configuration, and statistics references.
+ * Internal links stay in Help; external links use the system browser.
+ * Navigation history preserves the screen from which Help was opened.
  */
 
 const helpContent = document.getElementById("help-content");
@@ -21,7 +11,7 @@ const helpBackButton = document.getElementById("help-back-button");
 /**
  * Show one embedded doc's rendered HTML.
  *
- * @param {string} topic - `"usage"` or `"configuration"`.
+ * @param {string} topic - `"usage"`, `"configuration"`, or `"statistics"`.
  * @param {string} [anchor] - A heading id to scroll to once rendered.
  */
 window.fim.showHelp = async function showHelp(topic, anchor) {

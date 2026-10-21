@@ -1,16 +1,9 @@
-"""Convergence policy constants.
+"""Policy constants for single-run and replicate-batch convergence.
 
-Every value here is a choice a careful person could make differently, so
-each is a policy constant: named, documented with its evidence, and an
-Expert Setting (`fim.config.expert`) a run's configuration can change.
-
-The rule these constants steer is "burn in, then average" (design
-`20261005-claude-opus-5-5-simplified-convergence-rule-design.md`,
-`selby/restricted`): wait out the burn-in, then average each watched
-statistic over an evidence window that grows until its standard error is
-small enough and its effective sample size large enough.
-
-See `README.md` in this directory for the table of every constant.
+The settings govern burn-in, evidence-window growth, sample-size limits, and
+generation or replicate caps. A run can override eligible values through
+`fim.config.expert.ExpertSettings`. See `doc/convergence.md` for the method
+and its rationale.
 """
 
 from __future__ import annotations

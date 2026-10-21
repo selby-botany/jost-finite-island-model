@@ -32,13 +32,13 @@ Both release executables (`fim-windows-x64.exe` and `fim-windows-arm64.exe`)
 are unsigned research tools, so Windows SmartScreen may show an
 unrecognized-publisher warning for either one. Verify the adjacent SHA-256
 file before running it. Each is built natively — PyInstaller does not
-cross-compile — on its own architecture-matched GitHub-hosted Windows
+cross-compile — on an architecture-matched GitHub-hosted Windows
 runner, from the same tagged source.
 
 ## Dependencies
 
 Runtime dependencies are limited to NumPy, Matplotlib, and PyYAML, plus one
-deliberately pinned transitive dependency of Matplotlib, pyparsing (see
+explicitly pinned transitive dependency of Matplotlib, pyparsing (see
 [the detailed design's engineering decisions](doc/fim-simulator-detailed-design.md#2-engineering-decisions)
 for why it is pinned explicitly rather than left to resolution). All four are
 version constrained in `pyproject.toml`. CI runs deterministic tests against

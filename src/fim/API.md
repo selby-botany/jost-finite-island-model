@@ -2328,61 +2328,16 @@ Refuse a batch configuration a resumable batch session cannot run.
 
 # [fim.cli](./cli.py#L1)
 
-Researcher-facing command-line interface for the simulator.
+Command-line interface for simulation, analysis, and run organization.
 
-This is what actually runs when you type `fim` at a terminal — the part
-of the program that reads what you typed, figures out which of the
-things you asked for, and calls the right code to do it. Its commands,
-each its own subsection below:
-
-- `fim init` — write out a starter configuration file (a filled-in
-  example, ready to run or edit) so a new user has something concrete to
-  start from rather than an empty file and a blank page of documentation
-  (`_command_init`).
-- `fim run CONFIG` — actually run a simulation from a configuration file
-  and write its results to disk. Dispatches to one of two paths
-  depending on the configuration's own `n_replicates` (`_command_run`):
-  a single simulation (`_command_run_scalar`) or a whole batch of
-  independent, differently seeded repeats of the same configuration
-  (`_command_run_batch`) — see `fim.engine`'s own docstring for why
-  running several repeats matters at all. The configuration's labels
-  (`name`, `description`, `class`) and `--name`/`--description` attach
-  optional metadata to the completed run; `--study` adds it to an
-  existing Study once it finishes (`_record_run_organization`).
-- `fim study create/add-run/list/delete/copy` — organize completed runs
-  into a named Study, a purely local bookkeeping operation with no
-  engine involved (`_command_study`; `fim.persistence.groups`). See
-  `20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`
-  (`selby/restricted`) for the full Run/Study/Experiment design.
-- `fim experiment create/add-study/list/delete/copy` — the identical
-  bookkeeping one level up, grouping Studies into a named Experiment
-  (`_command_experiment`; `fim.persistence.groups`).
-- `fim sweep plan/run/resume/report` — run one configuration over a
-  parameter space as a single Study (`fim.cli_sweep`; `fim.sweep`).
-- `fim object create/edit/list/status/start/resume/pause/cancel/delete` —
-  save a configuration of any validity as a Run object (`draft` until it
-  is valid, then `planned`) and execute it with durable checkpoints, so a
-  paused or interrupted run continues exactly (`fim.cli_objects`;
-  `fim.run_service`).
-- `fim stats TRAJECTORY` — recompute statistics from a run's own saved
-  data, for any generation, without re-running the simulation
-  (`_command_stats`; see `fim.reanalyze`'s own docstring for what
-  "re-analysis" means and why it is useful).
-- `fim update --check` — the one place this whole program ever makes a
-  network connection: ask GitHub whether a newer release exists
-  (`_command_update`; see `fim.update`'s own docstring for the full
-  reasoning and the security posture behind it).
-
-This file's own job stops at parsing arguments, calling the right
-function, and printing the result or a plain-language error message —
-the actual scientific work (running the simulation, computing
-statistics) always lives in `fim.engine`/`fim.reanalyze`, never here.
-That separation is what lets the exact same underlying logic also power
-the desktop app (`fim.gui`) without duplicating it.
+The `fim` commands parse configuration and options, delegate simulation,
+analysis, and persistence to package modules, and report results. The
+interface includes `init`, `run`, `stats`, `study`, `experiment`, `object`,
+`sweep`, and `update`.
 
 <a id="fim.cli.load_config"></a>
 
-#### [load\_config](./cli.py#L184)
+#### [load\_config](./cli.py#L108)
 
 ```python
 def load_config(path: Path | str) -> SimulationParams
@@ -2412,7 +2367,7 @@ re-check any of that.
 
 <a id="fim.cli.main"></a>
 
-#### [main](./cli.py#L231)
+#### [main](./cli.py#L155)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -2420,32 +2375,14 @@ def main(argv: Sequence[str] | None = None) -> int
 
 Parse command-line arguments and dispatch one operation.
 
-This is the single entry point every invocation of `fim` from a
-terminal reaches (via `pyproject.toml`'s own `[project.scripts]`
-entry, by way of `fim.launcher`) — it parses whatever was typed,
-figures out which command (see this module's own docstring, above)
-was requested, and calls the matching function (`_dispatch_command`).
-
-Every error that any command can reasonably raise on genuinely bad
-input (a malformed configuration file, an invalid parameter
-combination, a missing file, and so on) is caught here in one place
-and turned into a short, plain "fim: error: ..." message on a single
-line, with an exit status a shell script can check, rather than a
-long, intimidating Python traceback — this project's programming
-mistakes should look like tracebacks (so they get noticed and
-fixed), but a *user's* mistake (a typo in a config file, an
-out-of-range value) should look like a normal, readable command-line
-error, the same way a real command-line tool a person did not write
-themselves would report it. The specific exception types listed are
-exactly the ones the actual work below (`fim.engine`, YAML parsing,
-file I/O) can raise for an ordinary, expectable mistake; anything
-else escaping this function uncaught is treated as a real bug in
-this project's own code, and is deliberately allowed to surface as
-a full traceback instead of being hidden behind a generic message.
+Expected input, validation, and file-operation errors are reported as
+concise command-line messages with a nonzero status. Unexpected
+exceptions propagate with a traceback.
 
 **Arguments**:
 
-- `argv` - Arguments excluding the program name, or ``None`` for ``sys.argv``.
+- `argv` - Arguments excluding the program name, or ``None`` to use
+  ``sys.argv``.
 
 
 **Returns**:
@@ -2456,28 +2393,20 @@ a full traceback instead of being hidden behind a generic message.
 
 # [fim.cli\_objects](./cli_objects.py#L1)
 
-`fim object`: save, inspect, and control persisted Run objects.
+CLI handlers for creating and managing persisted Run objects.
 
-A Run object (`fim.persistence.run_objects`) holds a saved configuration of
-any validity and its lifecycle: `draft` while the configuration is invalid
-or incomplete, `planned` once it is valid, then executing, paused, or
-finished. Every command here calls `fim.run_service` or
-`fim.persistence.run_ownership`; none applies lifecycle rules itself.
-
-`start` and `resume` execute in the foreground. From another terminal,
-`pause` asks the running command to publish a checkpoint and stop, and
-`cancel` asks it to stop and keep its partial trajectory. SIGTERM pauses
-the command the same way; a second SIGTERM ends it at once. A command that
-is killed leaves the object `running` until any later command notices that
-its owner is gone and records it as `interrupted`; `resume` then continues
-from the latest checkpoint. A command killed after it published every
-artifact is recorded as `completed` instead, once its completion receipt
-verifies. A run stopped before its first checkpoint cannot resume; `clone`
-saves its configuration as a new object that starts from generation zero.
+Run objects store configurations and lifecycle state. Commands delegate
+lifecycle rules and execution to `fim.persistence` and `fim.run_service`.
+`start` and `resume` run in the foreground; `pause` checkpoints and stops,
+while `cancel` stops and retains partial data. Interrupted runs resume from
+their latest checkpoint. SIGTERM requests a pause; a second SIGTERM ends
+execution immediately. A later command reconciles a lost owner as interrupted,
+or as completed when its completion receipt verifies. An object without a
+checkpoint can be cloned to start a new run from generation zero.
 
 <a id="fim.cli_objects.add_object_subcommands"></a>
 
-#### [add\_object\_subcommands](./cli_objects.py#L63)
+#### [add\_object\_subcommands](./cli_objects.py#L55)
 
 ```python
 def add_object_subcommands(
@@ -2488,7 +2417,7 @@ Wire `fim object` and its subcommands, `create` through `reclaim`.
 
 <a id="fim.cli_objects.command_object"></a>
 
-#### [command\_object](./cli_objects.py#L126)
+#### [command\_object](./cli_objects.py#L118)
 
 ```python
 def command_object(arguments: argparse.Namespace,
@@ -2512,26 +2441,22 @@ Dispatch one `fim object` invocation.
 
 # [fim.cli\_sweep](./cli_sweep.py#L1)
 
-`fim sweep`: plan, run, resume and report a parameter sweep.
+Command handlers for planning, running, and reporting parameter sweeps.
 
-The command-line half of the sweep-as-Study feature
-(`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`, section 5). A sweep file is an ordinary configuration
-plus a `sweep:` block; `fim.sweep.spec_from_config` splits it, so the
-ordinary configuration validator never sees `sweep`. The work itself is in
-`fim.sweep` (what the points are) and `fim.sweep_run` (running them); this
-module parses arguments and prints.
+A sweep configuration combines model settings with a `sweep:` block.
+`fim.sweep` validates the specification and enumerates points;
+`fim.sweep_run` executes and resumes them. This module provides the CLI.
 
 <a id="fim.cli_sweep.BUDGET_EXIT_STATUS"></a>
 
-#### [BUDGET\_EXIT\_STATUS](./cli_sweep.py#L79)
+#### [BUDGET\_EXIT\_STATUS](./cli_sweep.py#L75)
 
 Exit status of a run that stopped because it reached a budget (0 means done,
 1 a failure, 2 a usage error, 130 a cancel).
 
 <a id="fim.cli_sweep.add_sweep_subcommands"></a>
 
-#### [add\_sweep\_subcommands](./cli_sweep.py#L84)
+#### [add\_sweep\_subcommands](./cli_sweep.py#L80)
 
 ```python
 def add_sweep_subcommands(
@@ -2542,7 +2467,7 @@ Wire the `fim sweep` subcommands (plan, run, resume, verify, ...).
 
 <a id="fim.cli_sweep.command_sweep"></a>
 
-#### [command\_sweep](./cli_sweep.py#L471)
+#### [command\_sweep](./cli_sweep.py#L467)
 
 ```python
 def command_sweep(arguments: argparse.Namespace,
@@ -2566,23 +2491,16 @@ for the scan that enforces it.
 
 # [fim.config.convergence](./config/convergence.py#L1)
 
-Convergence policy constants.
+Policy constants for single-run and replicate-batch convergence.
 
-Every value here is a choice a careful person could make differently, so
-each is a policy constant: named, documented with its evidence, and an
-Expert Setting (`fim.config.expert`) a run's configuration can change.
-
-The rule these constants steer is "burn in, then average" (design
-`20261005-claude-opus-5-5-simplified-convergence-rule-design.md`,
-`selby/restricted`): wait out the burn-in, then average each watched
-statistic over an evidence window that grows until its standard error is
-small enough and its effective sample size large enough.
-
-See `README.md` in this directory for the table of every constant.
+The settings govern burn-in, evidence-window growth, sample-size limits, and
+generation or replicate caps. A run can override eligible values through
+`fim.config.expert.ExpertSettings`. See `doc/convergence.md` for the method
+and its rationale.
 
 <a id="fim.config.convergence.BURN_IN_MINIMUM_RELAXATION_TIMES"></a>
 
-#### [BURN\_IN\_MINIMUM\_RELAXATION\_TIMES](./config/convergence.py#L20)
+#### [BURN\_IN\_MINIMUM\_RELAXATION\_TIMES](./config/convergence.py#L13)
 
 Fewest relaxation times `tau` the burn-in lasts: the floor of `k`.
 
@@ -2598,7 +2516,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.FIRST_CHECK_RELAXATION_TIMES"></a>
 
-#### [FIRST\_CHECK\_RELAXATION\_TIMES](./config/convergence.py#L34)
+#### [FIRST\_CHECK\_RELAXATION\_TIMES](./config/convergence.py#L27)
 
 First check, in relaxation times after the burn-in ends.
 
@@ -2609,7 +2527,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.FIRST_CHECK_MINIMUM"></a>
 
-#### [FIRST\_CHECK\_MINIMUM](./config/convergence.py#L43)
+#### [FIRST\_CHECK\_MINIMUM](./config/convergence.py#L36)
 
 Fewest generations after the burn-in before the first check.
 
@@ -2620,7 +2538,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.MINIMUM_EFFECTIVE_SAMPLE_SIZE"></a>
 
-#### [MINIMUM\_EFFECTIVE\_SAMPLE\_SIZE](./config/convergence.py#L52)
+#### [MINIMUM\_EFFECTIVE\_SAMPLE\_SIZE](./config/convergence.py#L45)
 
 Smallest effective sample size an evidence window must hold to be trusted.
 
@@ -2634,7 +2552,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.CHECK_GROWTH"></a>
 
-#### [CHECK\_GROWTH](./config/convergence.py#L64)
+#### [CHECK\_GROWTH](./config/convergence.py#L57)
 
 Factor by which the evidence window grows between checks (doubling).
 
@@ -2646,7 +2564,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.FRACTIONAL_BURN_IN"></a>
 
-#### [FRACTIONAL\_BURN\_IN](./config/convergence.py#L74)
+#### [FRACTIONAL\_BURN\_IN](./config/convergence.py#L67)
 
 Share of a run discarded as burn-in when no relaxation time is available.
 
@@ -2659,7 +2577,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.CAP_RELAXATION_MULTIPLE"></a>
 
-#### [CAP\_RELAXATION\_MULTIPLE](./config/convergence.py#L85)
+#### [CAP\_RELAXATION\_MULTIPLE](./config/convergence.py#L78)
 
 Default `max_generations`, in relaxation times, beyond the burn-in.
 
@@ -2673,7 +2591,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.MINIMUM_MAX_GENERATIONS"></a>
 
-#### [MINIMUM\_MAX\_GENERATIONS](./config/convergence.py#L97)
+#### [MINIMUM\_MAX\_GENERATIONS](./config/convergence.py#L90)
 
 Smallest derived cap.
 
@@ -2691,7 +2609,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.ABSOLUTE_MAX_GENERATIONS"></a>
 
-#### [ABSOLUTE\_MAX\_GENERATIONS](./config/convergence.py#L113)
+#### [ABSOLUTE\_MAX\_GENERATIONS](./config/convergence.py#L106)
 
 Ceiling on a derived cap, so a nearly isolated system stays finite.
 
@@ -2699,7 +2617,7 @@ Kind: policy (safety).
 
 <a id="fim.config.convergence.GEWEKE_FIRST_FRACTION"></a>
 
-#### [GEWEKE\_FIRST\_FRACTION](./config/convergence.py#L119)
+#### [GEWEKE\_FIRST\_FRACTION](./config/convergence.py#L112)
 
 Share of an evidence window, from its start, that Geweke's `z` compares.
 
@@ -2707,7 +2625,7 @@ Kind: convention (Geweke 1992: the first 10% against the last 50%).
 
 <a id="fim.config.convergence.GEWEKE_LAST_FRACTION"></a>
 
-#### [GEWEKE\_LAST\_FRACTION](./config/convergence.py#L125)
+#### [GEWEKE\_LAST\_FRACTION](./config/convergence.py#L118)
 
 Share of an evidence window, from its end, that Geweke's `z` compares.
 
@@ -2715,7 +2633,7 @@ Kind: convention (Geweke 1992: the first 10% against the last 50%).
 
 <a id="fim.config.convergence.START_DRIFT_ALERT_Z"></a>
 
-#### [START\_DRIFT\_ALERT\_Z](./config/convergence.py#L131)
+#### [START\_DRIFT\_ALERT\_Z](./config/convergence.py#L124)
 
 Absolute Geweke `z` above which the report says the burn-in may be too short.
 
@@ -2727,7 +2645,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.SPECTRUM_BURN_IN_MULTIPLIER"></a>
 
-#### [SPECTRUM\_BURN\_IN\_MULTIPLIER](./config/convergence.py#L141)
+#### [SPECTRUM\_BURN\_IN\_MULTIPLIER](./config/convergence.py#L134)
 
 Factor on the burn-in when an allele-spectrum statistic is watched.
 
@@ -2740,7 +2658,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.REPLICATE_WAVE_MULTIPLE"></a>
 
-#### [REPLICATE\_WAVE\_MULTIPLE](./config/convergence.py#L152)
+#### [REPLICATE\_WAVE\_MULTIPLE](./config/convergence.py#L145)
 
 Replicate waves a batch aims for: `R_target = max(replicate_minimum, m * W)`.
 
@@ -2753,7 +2671,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.BATCH_WIDTH"></a>
 
-#### [BATCH\_WIDTH](./config/convergence.py#L163)
+#### [BATCH\_WIDTH](./config/convergence.py#L156)
 
 Replicates assumed to run at once, when `max_concurrent_replicates` is unset.
 
@@ -2767,7 +2685,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.AVERAGING_MULTIPLE_MINIMUM"></a>
 
-#### [AVERAGING\_MULTIPLE\_MINIMUM](./config/convergence.py#L175)
+#### [AVERAGING\_MULTIPLE\_MINIMUM](./config/convergence.py#L168)
 
 Smallest matched averaging window, in relaxation times.
 
@@ -2778,7 +2696,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.AVERAGING_MULTIPLE_MAXIMUM"></a>
 
-#### [AVERAGING\_MULTIPLE\_MAXIMUM](./config/convergence.py#L184)
+#### [AVERAGING\_MULTIPLE\_MAXIMUM](./config/convergence.py#L177)
 
 Largest matched averaging window, in relaxation times.
 
@@ -2790,7 +2708,7 @@ Kind: policy.
 
 <a id="fim.config.convergence.FIRST_WAVE_AVERAGING_MULTIPLE"></a>
 
-#### [FIRST\_WAVE\_AVERAGING\_MULTIPLE](./config/convergence.py#L194)
+#### [FIRST\_WAVE\_AVERAGING\_MULTIPLE](./config/convergence.py#L187)
 
 Averaging window, in relaxation times, of the first wave of replicates.
 
@@ -3077,22 +2995,16 @@ Kind: policy (display).
 
 # [fim.config.expert](./config/expert.py#L1)
 
-Expert Settings: the policy constants a run's configuration may change.
+Validated per-run overrides for convergence and storage policy settings.
 
-Each field is the run-specific form of a policy constant in
-`fim.config.convergence`; its default is that constant. A run's configuration
-can carry an `expert:` mapping of the fields it changes. `SimulationParams`
-validates the mapping here, copies it into the run's parameters (so the
-manifest says exactly what ran, and the run ID changes with it), and only
-non-default entries are written back out, so a run with default Expert Settings
-is byte-for-byte the run it was before the mapping existed.
-
-Numerical guards and derivable constants are not Expert Settings (design
-`20261005-claude-opus-5-5-simplified-convergence-rule-design.md`, 11.1).
+`ExpertSettings` collects eligible policy constants from
+`fim.config.convergence` and `fim.config.storage`. Defaults preserve standard
+behavior; numerical guards and values derived from model parameters are not
+configurable through this mapping.
 
 <a id="fim.config.expert.ExpertSettings"></a>
 
-## [ExpertSettings Objects](./config/expert.py#L54)
+## [ExpertSettings Objects](./config/expert.py#L48)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -3158,7 +3070,7 @@ The convergence policy constants one run uses.
 
 <a id="fim.config.expert.ExpertSettings.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./config/expert.py#L138)
+#### [\_\_post\_init\_\_](./config/expert.py#L132)
 
 ```python
 def __post_init__() -> None
@@ -3172,7 +3084,7 @@ Validate every field against its documented range.
 
 <a id="fim.config.expert.ExpertSettings.from_mapping"></a>
 
-#### [from\_mapping](./config/expert.py#L171)
+#### [from\_mapping](./config/expert.py#L165)
 
 ```python
 @classmethod
@@ -3198,7 +3110,7 @@ Build the settings a configuration's `expert:` mapping asks for.
 
 <a id="fim.config.expert.ExpertSettings.changes"></a>
 
-#### [changes](./config/expert.py#L202)
+#### [changes](./config/expert.py#L196)
 
 ```python
 def changes() -> dict[str, float | int]
@@ -3212,7 +3124,7 @@ Return the fields that differ from their defaults, by name.
 
 <a id="fim.config.expert.expert_template"></a>
 
-#### [expert\_template](./config/expert.py#L216)
+#### [expert\_template](./config/expert.py#L210)
 
 ```python
 def expert_template() -> str
@@ -3230,7 +3142,7 @@ them taking effect.
 
 <a id="fim.config.expert.ExpertSettingInfo"></a>
 
-## [ExpertSettingInfo Objects](./config/expert.py#L284)
+## [ExpertSettingInfo Objects](./config/expert.py#L278)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -3248,19 +3160,19 @@ How the app presents one Expert Setting.
 
 <a id="fim.config.expert.EXPERT_GROUPS"></a>
 
-#### [EXPERT\_GROUPS](./config/expert.py#L299)
+#### [EXPERT\_GROUPS](./config/expert.py#L293)
 
 The Settings subsections, in display order.
 
 <a id="fim.config.expert.EXPERT_SETTING_INFO"></a>
 
-#### [EXPERT\_SETTING\_INFO](./config/expert.py#L302)
+#### [EXPERT\_SETTING\_INFO](./config/expert.py#L296)
 
 Presentation of every Expert Setting, by name (a test checks the keys).
 
 <a id="fim.config.expert.describe_expert_settings"></a>
 
-#### [describe\_expert\_settings](./config/expert.py#L462)
+#### [describe\_expert\_settings](./config/expert.py#L456)
 
 ```python
 def describe_expert_settings() -> list[dict[str, str]]
@@ -4018,31 +3930,17 @@ method's whole job is deciding whether that computed interval
 
 # [fim.convergence.defaults](./convergence/defaults.py#L1)
 
-Derive convergence defaults from the modeled population's own timescale.
+Derive convergence defaults from the population relaxation time.
 
-How long a run must be watched depends on how fast the population forgets its
-starting state: its *relaxation time*, `tau`. This module estimates `tau` from
-the migration, mutation and deme-size parameters (the slowest locus sets it)
-and turns it into a default burn-in and `max_generations`.
-
-Why `tau` has this form, and the numerical check behind it, is written up in
-the design document `20260925-claude-sonnet-5-convergence-defaults-derived-
-from-model-design.md` (Appendix A) and, for users, in `doc/convergence.md`.
-In short: every watched statistic is a smooth function of the pairwise
-identity probabilities `J`, `J` obeys a linear recurrence, and the run is
-settled only once that recurrence's slowest mode has decayed.
-
-Two routes give `tau`:
-
-- `island_relaxation_time` is a closed form, exact to about 1% for the
-  symmetric island model with equal deme sizes (the default `m` scalar).
-- `recursion_relaxation_time` builds the recurrence's linear part as a
-  `d² by d²` matrix and takes its spectral radius. It handles any migration
-  matrix and unequal deme sizes, at a cost that limits it to small `d`.
+The relaxation time estimates how quickly the modeled population approaches
+its stationary distribution. The symmetric island model has a closed-form
+estimate; a matrix-based recursion supports arbitrary migration matrices and
+unequal deme sizes for populations within the configured size limit. See
+`doc/convergence.md` for the derivation and calibration.
 
 <a id="fim.convergence.defaults.DerivedConvergence"></a>
 
-## [DerivedConvergence Objects](./convergence/defaults.py#L39)
+## [DerivedConvergence Objects](./convergence/defaults.py#L25)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -4059,7 +3957,7 @@ Convergence settings derived from a model's relaxation time.
 
 <a id="fim.convergence.defaults.burn_in_multiple"></a>
 
-#### [burn\_in\_multiple](./convergence/defaults.py#L53)
+#### [burn\_in\_multiple](./convergence/defaults.py#L39)
 
 ```python
 def burn_in_multiple(precision: float, minimum: float) -> float
@@ -4084,7 +3982,7 @@ burn-in on its own. A precision of zero asks for an unbounded burn-in.
 
 <a id="fim.convergence.defaults.derive_burn_in"></a>
 
-#### [derive\_burn\_in](./convergence/defaults.py#L73)
+#### [derive\_burn\_in](./convergence/defaults.py#L59)
 
 ```python
 def derive_burn_in(relaxation_time: float,
@@ -4111,7 +4009,7 @@ Return the burn-in, in generations, for a relaxation time and precision.
 
 <a id="fim.convergence.defaults.derive_convergence_defaults"></a>
 
-#### [derive\_convergence\_defaults](./convergence/defaults.py#L100)
+#### [derive\_convergence\_defaults](./convergence/defaults.py#L86)
 
 ```python
 def derive_convergence_defaults(
@@ -4155,7 +4053,7 @@ its own burn-in.
 
 <a id="fim.convergence.defaults.describe_derived_convergence"></a>
 
-#### [describe\_derived\_convergence](./convergence/defaults.py#L150)
+#### [describe\_derived\_convergence](./convergence/defaults.py#L136)
 
 ```python
 def describe_derived_convergence(
@@ -4192,7 +4090,7 @@ thing.
 
 <a id="fim.convergence.defaults.island_relaxation_time"></a>
 
-#### [island\_relaxation\_time](./convergence/defaults.py#L196)
+#### [island\_relaxation\_time](./convergence/defaults.py#L182)
 
 ```python
 def island_relaxation_time(*, total_size: float, deme_count: int,
@@ -4226,7 +4124,7 @@ independent rate `2 mu`, and independent rates add, so
 
 <a id="fim.convergence.defaults.recursion_relaxation_time"></a>
 
-#### [recursion\_relaxation\_time](./convergence/defaults.py#L229)
+#### [recursion\_relaxation\_time](./convergence/defaults.py#L215)
 
 ```python
 def recursion_relaxation_time(*, deme_sizes: Sequence[int],
@@ -4261,7 +4159,7 @@ its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
 
 <a id="fim.convergence.defaults.relaxation_time"></a>
 
-#### [relaxation\_time](./convergence/defaults.py#L275)
+#### [relaxation\_time](./convergence/defaults.py#L261)
 
 ```python
 def relaxation_time(*, deme_sizes: Sequence[int], migration: MigrationInput,
@@ -4296,7 +4194,7 @@ size-weighted migrant pool) uses the recursion's eigenvalue.
 
 <a id="fim.convergence.defaults.PanmicticEquilibration"></a>
 
-## [PanmicticEquilibration Objects](./convergence/defaults.py#L325)
+## [PanmicticEquilibration Objects](./convergence/defaults.py#L311)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -4319,7 +4217,7 @@ How long one panmictic population takes to reach mutation-drift equilibrium.
 
 <a id="fim.convergence.defaults.panmictic_equilibration"></a>
 
-#### [panmictic\_equilibration](./convergence/defaults.py#L345)
+#### [panmictic\_equilibration](./convergence/defaults.py#L331)
 
 ```python
 def panmictic_equilibration(*, total_size: int,
@@ -4378,7 +4276,7 @@ The burn-in needs no such rule.
 
 <a id="fim.convergence.defaults.island_migration_matrix"></a>
 
-#### [island\_migration\_matrix](./convergence/defaults.py#L419)
+#### [island\_migration\_matrix](./convergence/defaults.py#L405)
 
 ```python
 def island_migration_matrix(sizes: Sequence[int],
@@ -4405,25 +4303,16 @@ form.
 
 # [fim.convergence.monitor](./convergence/monitor.py#L1)
 
-Stateful convergence monitoring with an explicit hard-cap outcome.
+Monitor single-run and replicate-batch convergence.
 
-Two monitors share one result type. `BurnInMonitor` drives a single run: it
-waits out the burn-in, then averages each watched statistic over an evidence
-window that grows until its standard error is small enough and its effective
-sample size large enough (design `20261005-claude-opus-5-5-simplified-
-convergence-rule-design.md`, `selby/restricted`, 6.1). `ConvergenceMonitor`
-drives the replicate batch: it remembers one value per completed replicate
-and asks a `fim.convergence.criteria.ConvergenceCriterion` whether the
-across-replicate interval is tight enough.
-
-Both always enforce a hard generation (or replicate) cap, so a statistic that
-genuinely never settles still cannot run a simulation forever.
-`ConvergenceOutcome` is the small, immutable record they hand back describing
-which of the two things happened, if either yet has.
+`BurnInMonitor` discards the burn-in and evaluates statistics over a growing
+evidence window. The batch monitor tracks values from completed replicates
+and evaluates the configured confidence-interval criterion. Both report when
+a convergence criterion or a hard generation or replicate cap is reached.
 
 <a id="fim.convergence.monitor.StopReason"></a>
 
-## [StopReason Objects](./convergence/monitor.py#L58)
+## [StopReason Objects](./convergence/monitor.py#L49)
 
 ```python
 class StopReason(StrEnum)
@@ -4444,7 +4333,7 @@ reasonable number of generations, and that is itself a useful finding.
 
 <a id="fim.convergence.monitor.ConvergenceOutcome"></a>
 
-## [ConvergenceOutcome Objects](./convergence/monitor.py#L79)
+## [ConvergenceOutcome Objects](./convergence/monitor.py#L70)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -4474,7 +4363,7 @@ which generation."
 
 <a id="fim.convergence.monitor.BurnInMonitor"></a>
 
-## [BurnInMonitor Objects](./convergence/monitor.py#L283)
+## [BurnInMonitor Objects](./convergence/monitor.py#L274)
 
 ```python
 class BurnInMonitor()
@@ -4521,7 +4410,7 @@ the form the stop was judged on. Such a monitor must record `H_S` and
 
 <a id="fim.convergence.monitor.BurnInMonitor.__init__"></a>
 
-#### [\_\_init\_\_](./convergence/monitor.py#L324)
+#### [\_\_init\_\_](./convergence/monitor.py#L315)
 
 ```python
 def __init__(
@@ -4593,7 +4482,7 @@ Initialize an empty monitor.
 
 <a id="fim.convergence.monitor.BurnInMonitor.generations"></a>
 
-#### [generations](./convergence/monitor.py#L449)
+#### [generations](./convergence/monitor.py#L440)
 
 ```python
 @property
@@ -4604,7 +4493,7 @@ Return recorded generations in order, parallel to `histories`' rounds.
 
 <a id="fim.convergence.monitor.BurnInMonitor.history"></a>
 
-#### [history](./convergence/monitor.py#L454)
+#### [history](./convergence/monitor.py#L445)
 
 ```python
 @property
@@ -4615,7 +4504,7 @@ Return the first watched statistic's recorded values.
 
 <a id="fim.convergence.monitor.BurnInMonitor.histories"></a>
 
-#### [histories](./convergence/monitor.py#L459)
+#### [histories](./convergence/monitor.py#L450)
 
 ```python
 @property
@@ -4628,7 +4517,7 @@ Covers the watched statistics and the display-only extras alike.
 
 <a id="fim.convergence.monitor.BurnInMonitor.value_generations"></a>
 
-#### [value\_generations](./convergence/monitor.py#L467)
+#### [value\_generations](./convergence/monitor.py#L458)
 
 ```python
 @property
@@ -4642,7 +4531,7 @@ it), so its history can be shorter than `generations`.
 
 <a id="fim.convergence.monitor.BurnInMonitor.window_start_generation"></a>
 
-#### [window\_start\_generation](./convergence/monitor.py#L476)
+#### [window\_start\_generation](./convergence/monitor.py#L467)
 
 ```python
 @property
@@ -4657,7 +4546,7 @@ start of the window the stop was judged on once the run has stopped.
 
 <a id="fim.convergence.monitor.BurnInMonitor.outcome"></a>
 
-#### [outcome](./convergence/monitor.py#L485)
+#### [outcome](./convergence/monitor.py#L476)
 
 ```python
 def outcome() -> ConvergenceOutcome
@@ -4669,7 +4558,7 @@ Safe to call at any time; never changes anything.
 
 <a id="fim.convergence.monitor.BurnInMonitor.reason"></a>
 
-#### [reason](./convergence/monitor.py#L492)
+#### [reason](./convergence/monitor.py#L483)
 
 ```python
 def reason() -> StopReason | None
@@ -4679,7 +4568,7 @@ Return the terminal reason, or `None` while running.
 
 <a id="fim.convergence.monitor.BurnInMonitor.should_stop"></a>
 
-#### [should\_stop](./convergence/monitor.py#L496)
+#### [should\_stop](./convergence/monitor.py#L487)
 
 ```python
 def should_stop() -> bool
@@ -4689,7 +4578,7 @@ Return whether the precision was reached or the cap hit.
 
 <a id="fim.convergence.monitor.BurnInMonitor.record"></a>
 
-#### [record](./convergence/monitor.py#L500)
+#### [record](./convergence/monitor.py#L491)
 
 ```python
 def record(generation: int,
@@ -4720,7 +4609,7 @@ Record one generation's value(s) and update the stop decision.
 
 <a id="fim.convergence.monitor.BurnInMonitor.awaiting_window"></a>
 
-#### [awaiting\_window](./convergence/monitor.py#L554)
+#### [awaiting\_window](./convergence/monitor.py#L545)
 
 ```python
 @property
@@ -4731,7 +4620,7 @@ Return whether this window-mode monitor is still waiting for its window.
 
 <a id="fim.convergence.monitor.BurnInMonitor.averaging_window"></a>
 
-#### [averaging\_window](./convergence/monitor.py#L559)
+#### [averaging\_window](./convergence/monitor.py#L550)
 
 ```python
 @property
@@ -4742,7 +4631,7 @@ Return the window mode's assigned window, or `None` if not known.
 
 <a id="fim.convergence.monitor.BurnInMonitor.set_averaging_window"></a>
 
-#### [set\_averaging\_window](./convergence/monitor.py#L563)
+#### [set\_averaging\_window](./convergence/monitor.py#L554)
 
 ```python
 def set_averaging_window(window: int) -> None
@@ -4764,7 +4653,7 @@ Assign the window of a monitor that was waiting for it.
 
 <a id="fim.convergence.monitor.BurnInMonitor.export_state"></a>
 
-#### [export\_state](./convergence/monitor.py#L585)
+#### [export\_state](./convergence/monitor.py#L576)
 
 ```python
 def export_state(
@@ -4784,7 +4673,7 @@ this state continues exactly as the original would have.
 
 <a id="fim.convergence.monitor.BurnInMonitor.restore_state"></a>
 
-#### [restore\_state](./convergence/monitor.py#L626)
+#### [restore\_state](./convergence/monitor.py#L617)
 
 ```python
 def restore_state(meta: Mapping[str, object],
@@ -4807,7 +4696,7 @@ Restore state written by `export_state` into a fresh monitor.
 
 <a id="fim.convergence.monitor.BurnInMonitor.stable_statistics"></a>
 
-#### [stable\_statistics](./convergence/monitor.py#L740)
+#### [stable\_statistics](./convergence/monitor.py#L731)
 
 ```python
 def stable_statistics() -> tuple[str, ...]
@@ -4822,7 +4711,7 @@ statistics that have a defined window mean.
 
 <a id="fim.convergence.monitor.BurnInMonitor.target_standard_error"></a>
 
-#### [target\_standard\_error](./convergence/monitor.py#L767)
+#### [target\_standard\_error](./convergence/monitor.py#L758)
 
 ```python
 @property
@@ -4833,7 +4722,7 @@ Return the largest standard error that meets the requested precision.
 
 <a id="fim.convergence.monitor.BurnInMonitor.target_standard_error_for"></a>
 
-#### [target\_standard\_error\_for](./convergence/monitor.py#L771)
+#### [target\_standard\_error\_for](./convergence/monitor.py#L762)
 
 ```python
 def target_standard_error_for(name: str, mean: float) -> float
@@ -4856,7 +4745,7 @@ Return the standard error `name`'s window must reach.
 
 <a id="fim.convergence.monitor.BurnInMonitor.minimum_effective_sample_size"></a>
 
-#### [minimum\_effective\_sample\_size](./convergence/monitor.py#L791)
+#### [minimum\_effective\_sample\_size](./convergence/monitor.py#L782)
 
 ```python
 @property
@@ -4867,7 +4756,7 @@ Return the effective-sample-size floor a window must meet.
 
 <a id="fim.convergence.monitor.BurnInMonitor.evidence_statistics"></a>
 
-#### [evidence\_statistics](./convergence/monitor.py#L795)
+#### [evidence\_statistics](./convergence/monitor.py#L786)
 
 ```python
 def evidence_statistics(name: str) -> WindowStatistics | None
@@ -4892,7 +4781,7 @@ describes, for a watched statistic and a display-only one alike.
 
 <a id="fim.convergence.monitor.BurnInMonitor.burn_in_generation"></a>
 
-#### [burn\_in\_generation](./convergence/monitor.py#L818)
+#### [burn\_in\_generation](./convergence/monitor.py#L809)
 
 ```python
 @property
@@ -4906,7 +4795,7 @@ start the run ended on.
 
 <a id="fim.convergence.monitor.BurnInMonitor.window_end_generation"></a>
 
-#### [window\_end\_generation](./convergence/monitor.py#L829)
+#### [window\_end\_generation](./convergence/monitor.py#L820)
 
 ```python
 @property
@@ -4917,7 +4806,7 @@ Return the last recorded generation, where the evidence window ends.
 
 <a id="fim.convergence.monitor.BurnInMonitor.evidence_geweke_z"></a>
 
-#### [evidence\_geweke\_z](./convergence/monitor.py#L833)
+#### [evidence\_geweke\_z](./convergence/monitor.py#L824)
 
 ```python
 def evidence_geweke_z(name: str) -> float | None
@@ -4941,7 +4830,7 @@ own per-generation values, whichever expected-value form is selected.
 
 <a id="fim.convergence.monitor.BurnInMonitor.projected_generations"></a>
 
-#### [projected\_generations](./convergence/monitor.py#L857)
+#### [projected\_generations](./convergence/monitor.py#L848)
 
 ```python
 @property
@@ -4958,7 +4847,7 @@ exists (zero precision, or a window with too few values).
 
 <a id="fim.convergence.monitor.BurnInMonitor.projected_generations_for"></a>
 
-#### [projected\_generations\_for](./convergence/monitor.py#L868)
+#### [projected\_generations\_for](./convergence/monitor.py#L859)
 
 ```python
 def projected_generations_for(name: str) -> int | None
@@ -4985,7 +4874,7 @@ reach `target` (design 6.10); the effective-sample-size floor needs
 
 <a id="fim.convergence.monitor.BurnInMonitor.estimate_forms"></a>
 
-#### [estimate\_forms](./convergence/monitor.py#L928)
+#### [estimate\_forms](./convergence/monitor.py#L919)
 
 ```python
 def estimate_forms(name: str) -> EstimateForms | None
@@ -5005,7 +4894,7 @@ Return `name`'s expected-value forms over the evidence window.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor"></a>
 
-## [ConvergenceMonitor Objects](./convergence/monitor.py#L1028)
+## [ConvergenceMonitor Objects](./convergence/monitor.py#L1019)
 
 ```python
 class ConvergenceMonitor()
@@ -5027,7 +4916,7 @@ are recorded without ever affecting the stop.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.__init__"></a>
 
-#### [\_\_init\_\_](./convergence/monitor.py#L1044)
+#### [\_\_init\_\_](./convergence/monitor.py#L1035)
 
 ```python
 def __init__(
@@ -5057,7 +4946,7 @@ Initialize an empty monitor.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.generations"></a>
 
-#### [generations](./convergence/monitor.py#L1083)
+#### [generations](./convergence/monitor.py#L1074)
 
 ```python
 @property
@@ -5068,7 +4957,7 @@ Return the number recorded alongside each `record` call, in order.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.history"></a>
 
-#### [history](./convergence/monitor.py#L1088)
+#### [history](./convergence/monitor.py#L1079)
 
 ```python
 @property
@@ -5079,7 +4968,7 @@ Return the first watched statistic's recorded values.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.histories"></a>
 
-#### [histories](./convergence/monitor.py#L1093)
+#### [histories](./convergence/monitor.py#L1084)
 
 ```python
 @property
@@ -5090,7 +4979,7 @@ Return every recorded statistic's values, by name.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.outcome"></a>
 
-#### [outcome](./convergence/monitor.py#L1097)
+#### [outcome](./convergence/monitor.py#L1088)
 
 ```python
 def outcome() -> ConvergenceOutcome
@@ -5100,7 +4989,7 @@ Return the current terminal or running outcome; never changes anything.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.reason"></a>
 
-#### [reason](./convergence/monitor.py#L1101)
+#### [reason](./convergence/monitor.py#L1092)
 
 ```python
 def reason() -> StopReason | None
@@ -5110,7 +4999,7 @@ Return the terminal reason, or `None` while running.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.should_stop"></a>
 
-#### [should\_stop](./convergence/monitor.py#L1105)
+#### [should\_stop](./convergence/monitor.py#L1096)
 
 ```python
 def should_stop() -> bool
@@ -5120,7 +5009,7 @@ Return whether the criterion was met or the cap hit.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.record"></a>
 
-#### [record](./convergence/monitor.py#L1109)
+#### [record](./convergence/monitor.py#L1100)
 
 ```python
 def record(generation: int,
@@ -5149,7 +5038,7 @@ Record one ordered observation and update the stop decision.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.stable_statistics"></a>
 
-#### [stable\_statistics](./convergence/monitor.py#L1163)
+#### [stable\_statistics](./convergence/monitor.py#L1154)
 
 ```python
 def stable_statistics() -> tuple[str, ...]
@@ -5475,104 +5364,19 @@ accounted for.
 
 # [fim.engine](./engine/__init__.py#L1)
 
-Public deterministic finite-island-model simulation engine.
+Simulation engine for the finite island model.
 
-What this file does, in plain terms: it is the part of the program that
-actually *runs* the simulation, generation by generation, and decides
-when to stop. Everything else in the `fim` package either sets up the
-inputs this file consumes (`fim.model.*` — validated parameters, the
-starting population) or does something with the outputs this file
-produces (`fim.persistence.*` writes them to disk, `fim.viz.*` plots
-them, `fim.cli`/`fim.gui` present them to a person). This module has no
-knowledge of files, plots, or user interfaces at all — it only computes.
+The engine advances replicate trajectories under migration, mutation, and
+genetic drift, computes differentiation statistics, and produces run
+reports. Model parameters and initial states come from `fim.model`;
+persistence and user interfaces are handled by separate package modules.
 
-If you have not already read
-[the finite island model introduction](../../doc/finite-island-model-introduction.md),
-this is a good place to stop and do that first; it explains, from zero,
-what a "finite island model" is and why anyone would want to simulate
-one. The short version, just enough to follow the code below: a
-population is split into several separate sub-populations, each called
-a **deme**, connected by occasional **migration** (some individuals move
-from one deme to another each generation). Within each deme, which two
-gene copies (**alleles**) a given offspring inherits at each genetic
-location (**locus**) is partly a matter of chance — a small deme can
-drift, purely by chance, toward one allele becoming common and another
-rare or extinct, a process called **genetic drift** — and partly subject
-to a small, constant chance of a brand-new mutation appearing
-(**mutation**). Migration, mutation, and drift pull in different
-directions: migration tends to make demes more genetically similar to
-each other (since they keep exchanging alleles), while drift tends to
-make them diverge (since each deme's own random luck runs independently
-of the others'). The whole point of running this simulation is to watch
-how genetically different the demes become over time under some chosen
-combination of population size, migration rate, and mutation rate — the
-kind of question real population geneticists ask about real,
-physically separated populations of plants or animals.
-
-"How different the demes have become" is not a single number; this
-project reports several different ways of measuring it side by side —
-Jost's D, Nei's G_ST, and others, named throughout this file as short,
-capitalized labels (`D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`).
-Each measures something related but genuinely different, and they can
-disagree about how large "the" differentiation is for the very same
-simulated population — which is itself one of the scientific points this
-whole project exists to illustrate, following
-[Jost et al. (2018)](../../doc/jost-differentiation-measures.md). This
-file never explains what any one of those measures actually *means*; it
-only ever computes, reports, and averages them (delegating the actual
-formulas to `fim.statistics.differentiation`). Read the linked guide for
-that.
-
-A single run does not go on forever. Two different, unrelated ideas both
-called "stopping" appear in this file, and it is easy to conflate them,
-so they are named distinctly throughout:
-
-- **Convergence** (`ConvergenceMonitor`, `TrailingWindowCriterion`): a
-  single simulated population's own statistics, tracked generation by
-  generation, are watched for having stopped changing meaningfully —
-  once they hold roughly steady for a stretch of generations in a row
-  (a "trailing window"), the run stops there rather than continuing to
-  a fixed, arbitrarily large generation count for no further scientific
-  reason. If the statistics never settle down, the run still stops once
-  it reaches `SimulationParams.max_generations`, a hard cap — that
-  outcome is reported honestly as "did not converge," not disguised as
-  success. `_run_one` below is the function that runs one simulated
-  population generation by generation until one of these two things
-  happens.
-- **Replication / the adaptive replicate stop** (`_replicate_monitor`,
-  `ConfidenceIntervalCriterion`): because the model is stochastic (its
-  own randomness is part of what it simulates — the same setup run
-  twice with two different random seeds gives two different, both
-  individually valid, outcomes), a single run's own final numbers are
-  only one sample from many possible ones. Running the *same*
-  configuration many times over with different seeds — each independent
-  run called a **replicate** — and looking at the spread across
-  replicates is how this project answers "how confident can we be in
-  this differentiation estimate," the same way a scientist would not
-  trust a single coin flip to tell them whether a coin is fair. By
-  default, a requested number of replicates (`SimulationParams.
-  n_replicates`) simply all run. Optionally
-  (`SimulationParams.stop_batch_early`), the batch instead stops
-  *early*, as soon as enough replicates have run to pin down each
-  watched statistic's own across-replicate confidence interval (see
-  `fim.statistics.interval`) to within a chosen tolerance — running
-  further replicates past that point would only narrow an already-
-  narrow-enough interval, at the cost of more computing time for no
-  real gain in confidence. Replicates are always considered in
-  replicate order (1, 2, 3, ...), on every engine backend, never in the
-  order they happen to finish: which replicates converge soonest is
-  itself correlated with their statistics, so keeping the fastest ones
-  would bias the estimate (`run_batch`'s own docstring).
-
-Determinism matters throughout: the same configuration and the same
-random seed always produce the exact same generation-by-generation
-trajectory, on any machine, every time. That is not a performance detail
-— it is what makes a result reproducible and verifiable by someone else,
-which for simulated *scientific* results is exactly as important as
-being able to show your work for a hand calculation. Every replicate
-gets its own seed, deterministically derived from the base seed
-(`fim.engine.identity.replicate_seed`), so a batch of replicates is itself fully
-reproducible too, not just each individual replicate in isolation.
+A trajectory ends when its convergence criterion is met or its generation
+limit is reached. A replicate batch may stop when the requested confidence
+interval precision is achieved. Replicates are accepted in index order,
+independent of completion order, and their seeds are derived from the base
+seed. See `doc/finite-island-model-introduction.md` for model background and
+`doc/convergence.md` for stopping criteria.
 
 <a id="fim.engine.api"></a>
 
@@ -5779,72 +5583,30 @@ def resolve_auto_engine_backend(
 ) -> Literal["generational", "generational-vector"]
 ```
 
-Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
+Resolve `"auto"` to `"generational"` or `"generational-vector"`.
 
-Shared by `build_engine_backend` (to know which backend to actually
-construct) and `simulate_params()` (to know what to record in the run's own
-manifest as provenance, `RunManifest.engine_backend`) — kept in one
-place so the two can never silently drift apart on what `"auto"`
-actually picked for a given `params`. Never resolves to `"lineal"`
-— see `build_engine_backend`'s own `engine_backend` Args entry for
-why only the generational-vs-vector axis is automated so far.
-
-`"generational-vector"` is chosen when all of these hold:
-
-- `jit` is `"off"`: Backend V has no `jit` toggle, only Backend G
-  offers one, and a caller who asked for it gets it (the output is the
-  same either way);
-- `numba` is importable. Backend V's output is identical to
-  Backend G's, so a missing `numba` costs only speed: `"auto"` falls
-  back to `"generational"` instead of raising, as an explicit
-  `"generational-vector"` choice does;
-- `params.d >= auto_vector_min_d`;
-- under `mutation_model="finite_alleles"` only, the largest locus
-  capacity (`4 ** length`) is at most `auto_vector_max_capacity`: a
-  finite-alleles table is `capacity` columns wide however few states
-  are in use. Under infinite alleles the table is as wide as the
-  alleles alive at once, so there is no such ceiling (the table's own
-  memory ceiling, `fim.model.vector_block`, guards the rest).
-
-Otherwise `"generational"`. Because V reproduces G bit for bit, the
-choice changes how fast a run finishes and nothing in its output but
-the manifest's `engine_backend` field.
+Select `"generational-vector"` when `jit` is `"off"`, Numba is
+available, `params.d` meets `auto_vector_min_d`, and the largest
+finite-alleles locus capacity (when applicable) does not exceed
+`auto_vector_max_capacity`. Otherwise select `"generational"`.
+This function does not select `"lineal"`. The generational backends
+produce the same results for the same seed on the development
+platform; cross-platform bitwise parity has not been established.
+The selected backend is recorded in the run manifest.
 
 <a id="fim.engine.backends.numba_is_available"></a>
 
-#### [numba\_is\_available](./engine/backends.py#L186)
+#### [numba\_is\_available](./engine/backends.py#L166)
 
 ```python
 def numba_is_available() -> bool
 ```
 
-Return whether the optional `numba` dependency can actually be imported.
-
-`importlib.util.find_spec` locates the module without importing it —
-cheap enough to call on every `"generational-vector"` construction,
-and it never pays numba's own (non-trivial) import cost just to
-answer "is it there at all."
-
-`build_engine_backend` calls this before constructing a
-`VectorizedAdvancer` — `fim.model.vectorized`'s own mutate step
-imports `numba` unconditionally on first use (its own module
-docstring), with no pure-Python fallback, so a numba-less install
-used to fail on the *first `advance()` call*, after generation zero
-had already been built and persisted to the trajectory store — a
-real, previously unguarded gap (this project's own multi-model
-engine review, 2026-09-04, `FIM-01`/finding C-03/finding P1-3,
-independently found by three of four reviewers). Checking here
-instead turns that into a named `ValueError` at config time, before
-anything has been written.
-
-A module-level function, not inlined into `build_engine_backend`,
-specifically so a test can monkeypatch it directly (`fim.engine.
-numba_is_available`) to exercise the numba-less path without
-actually uninstalling numba from the test environment.
+Return whether Python can locate `numba` without importing it.
 
 <a id="fim.engine.backends.build_engine_backend"></a>
 
-#### [build\_engine\_backend](./engine/backends.py#L214)
+#### [build\_engine\_backend](./engine/backends.py#L171)
 
 ```python
 def build_engine_backend(
@@ -5861,140 +5623,48 @@ def build_engine_backend(
 
 Return the configured backend `simulate_params()` should run against.
 
-One function, not a class hierarchy: Python's own first-class
-functions make a `ConcreteFactory` subclass per backend unnecessary
-ceremony here — a plain function that reads a choice and returns an
-object satisfying `EngineBackend`'s shape does the same job with no
-class tree to maintain.
-
 **Arguments**:
 
-- `engine_backend` - Which backend to build. `"generational"` builds
-  `GenerationalBackend(ThreadedAdvancer())` — real thread-based
-  parallelism, not merely the structural reshuffle
-  `SequentialAdvancer` alone would give (still directly
-  available by constructing `GenerationalBackend()` without
-  going through this factory, if a caller wants zero new
-  thread-safety surface). `"generational-vector"` builds
-  `GenerationalBackend(VectorizedAdvancer())` — array-native,
-  one compiled kernel call per generation over every locus
-  (`fim.model.vector_block`); runs both mutation models,
-  both migrant sampling modes — needs the optional `numba`
-  dependency unconditionally (see `jit`, below, for why that is
-  not the same thing as `jit="numba"`).
-  `"auto"` picks between `"generational"` and
-  `"generational-vector"` using `params`/`auto_vector_min_d`
-  (below) — never `"lineal"`, since no data yet characterizes
-  where that boundary sits (see `auto_vector_min_d`'s own
-  entry for why only the L-vs-V axis is automated so far).
-  `resolve_auto_engine_backend` lists the conditions: V for
-  continuous migration when `numba` is importable and `d` is
-  large enough (and, for finite alleles, the capacity small
-  enough), otherwise G. The output is identical either way.
-- `jit` - Whether the chosen backend should JIT-compile its own
-  operators. Under `"generational"`, `"numba"` JIT-compiles
-  `drift`'s own multinomial draw (`fim.model.operators.drift`'s
-  own docstring) — bit-identical output to `"off"`, for the
-  same seed, *on the same machine*: that claim (and every
-  "generational-vector" trajectory's own reliance on `numba`,
-  unconditionally, further below) rests on `numba`'s own
-  compiled math matching CPython's own `libm` bit for bit,
-  verified only on this project's own development platform so
-  far, not across the different `libm` implementations a
-  different operating system or CPU architecture can ship
-  (this project's own multi-model engine review, 2026-09-04,
-  `FIM-22`/finding Kimi-FIM-22) — a portability caveat to keep
-  in mind before treating a `jit="numba"`/"generational-
-  vector" result as reproducible across machines the way
-  every `jit="off"` result already is, not a known, confirmed
-  divergence. Not yet shown to be a standalone wall-clock win,
-- `though` - it fixes a real, separately measured regression an
-  earlier, per-pair-call version had, but `drift`'s own
-  dominant cost at this project's reference scale is
-  marshaling to and from `ModelState`'s sparse representation,
-  not the compiled draw itself (`drift`'s own docstring has
-  the full measurement). `migrate`/`mutate`'s own RNG calls
-  are not JIT-compiled at all. Needs the optional `numba`
-  dependency installed (``pip install fim[jit]``) — not
-  imported at all unless `jit="numba"` is actually requested.
-  `"generational-vector"` has no separate toggle for this yet
-  — its own mutate step always requires `numba` internally,
-  regardless of this argument, so only `jit="off"` (the
-  default) is accepted there; passing `jit="numba"` raises
-  `ValueError`, not a silent no-op. `"lineal"` never accepts
-  anything but `"off"` — a permanent restriction, not a
-  temporary gap: `LinealBackend` stays the untouched golden
-  reference every other backend's own parity tests are checked
-  against (see its own docstring).
-- `max_workers` - `LinealBackend`-only; ignored by every other
-  backend, since there is no process pool anywhere else for it
-  to size — `ThreadedAdvancer`'s own thread count is a
-  separate, not-yet-publicly-reachable knob (see its own
-  docstring for why this name is not reused for it there);
-  `run_batch`'s own `max_concurrent_replicates` is the
-  `"generational"`/`"generational-vector"` equivalent
-  concurrency/memory-bounding control, a real `SimulationParams`
-  field rather than a `build_engine_backend` argument.
-- `store_factory` - Every backend accepts this the same way now — one
-  real, independent store per replicate, keyed by that
-  replicate's own run id. `LinealBackend` uses it directly (a
-  worker process needs its own store; nothing else could be
-  shared across a process boundary). `GenerationalBackend`
-  wraps it in a `ReplicateFanoutStore` instead
-  (`GenerationalBackend`'s own docstring) — no process pool
-  involved, but the same one-store-per-replicate outcome.
-- `params` - The run this backend is actually being built for —
-  required, and only actually read, when `engine_backend ==
-  "auto"`, to look at `params.d`/`params.mutation_model`/
-  `params.migrant_sampling` and decide. Every other choice
-  ignores it entirely (a caller building a `"lineal"`/
-  `"generational"`/`"generational-vector"` backend directly
-  never needs to pass a real `SimulationParams` here at all).
-- `auto_vector_min_d` - The deme-count cutover `"auto"` uses to
-  decide between `"generational"` and `"generational-vector"`
-  — irrelevant, and unused, under every other `engine_backend`
-  value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (`2`), this
-  project's own best current estimate from a real benchmark
-  sweep (see that constant's own docstring for the full
-  finding, including its cross-environment caveats) —
-  deliberately a parameter, not a hardcoded constant, because
-  a follow-on check (the same sweep, run inside a Docker
-  container instead of natively) found the threshold does
-  *not* port cleanly across platforms: the qualitative
-  direction held, but neither the exact crossover point nor
-  the performance magnitude did. A deployment on
-  meaningfully different hardware should re-run that same
-  characterization and pass its own measured value here
-  rather than trust this default blindly.
-- `auto_vector_max_capacity` - The per-locus capacity ceiling
-  `"auto"` uses alongside `auto_vector_min_d` — the largest
-  capacity across every locus in `params.loci` must be at
-  most this value, in addition to `d >= auto_vector_min_d`,
-  for `"auto"` to pick `"generational-vector"` — under
-  `mutation_model="finite_alleles"` only (an infinite-alleles
-  table is as wide as the alleles alive at once, not
-  `4 ** length`); irrelevant, and unused, under every other
-  `engine_backend` value.
-  Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
-  see that constant's own docstring for the measured finding
-  behind it and the same cross-environment/cross-fix
-  staleness caveats `auto_vector_min_d` already carries.
+- `engine_backend` - Backend to construct. `"lineal"` uses
+  `LinealBackend`; `"generational"` uses
+  `GenerationalBackend` with `ThreadedAdvancer`;
+  `"generational-vector"` uses `GenerationalBackend` with
+  `VectorizedAdvancer` and requires `numba`. `"auto"` selects
+  between the generational backends and never selects
+  `"lineal"`. The vector backend is selected when `numba` is
+  importable, `jit` is `"off"`, `params.d` meets
+  `auto_vector_min_d`, and, for finite alleles, the largest
+  locus capacity does not exceed `auto_vector_max_capacity`.
+  Otherwise, `"auto"` selects `"generational"`.
+- `jit` - JIT option for the selected backend. `"generational"`
+  accepts `"off"` or `"numba"`; `"lineal"` and
+  `"generational-vector"` require `"off"`. The vector backend
+  uses Numba internally regardless. The generational JIT path
+  preserves results for the same seed on the development
+  platform; cross-platform bitwise parity has not been
+  established.
+- `max_workers` - Worker-process count for `"lineal"`; ignored by
+  other backends. Generational batch concurrency is configured
+  through `SimulationParams.max_concurrent_replicates`.
+- `store_factory` - Optional factory for a separate trajectory store
+  per replicate.
+- `params` - Run parameters. Required for `"auto"` and used to check
+  finite-alleles capacity when `"generational-vector"` is
+  selected explicitly, if provided.
+- `auto_vector_min_d` - Minimum deme count for `"auto"` to select the
+  vector backend. Defaults to `2`; benchmark crossover points
+  may vary by platform.
+- `auto_vector_max_capacity` - Maximum finite-alleles locus capacity
+  for `"auto"` to select the vector backend. Defaults to
+  `4096`.
 
 
 **Raises**:
 
-- `ValueError` - If `engine_backend == "lineal"` and `jit != "off"`,
-  `engine_backend == "generational-vector"` (or `"auto"`
-  resolves to it) and `jit != "off"`, `engine_backend ==
-  "generational-vector"` (or `"auto"` resolves to it) and the
-  optional `numba` dependency is not installed, `engine_backend
-  == "generational-vector"` and `params` uses `mutation_model ==
-  "finite_alleles"` and names a locus whose capacity exceeds
-  `auto_vector_max_capacity` (checked only when `params` is
-  given; `"auto"` already refuses an over-capacity config on its
-  own, before ever reaching this branch),
-  `engine_backend == "auto"` and `params` is `None`, or
-  `engine_backend` names something unrecognized.
+- `ValueError` - If the backend name or JIT option is invalid, `"auto"`
+  is used without `params`, the vector backend lacks `numba`,
+  or an explicitly selected vector backend exceeds the
+  finite-alleles capacity limit.
 
 <a id="fim.engine.batch"></a>
 
@@ -6014,81 +5684,25 @@ def run_batch(params: SimulationParams, store: TrajectoryStore,
 
 Run every replicate `params` describes, generation-first.
 
-The generation-first counterpart to `LinealBackend`'s own
-replica-first dispatch: every currently-active lane's own generation
-*g* is advanced before any of them moves on to generation *g + 1*
-(via `advancer.advance`), rather than one replica's entire trajectory
-running to completion before the next starts.
+Each active lane advances one generation per call to
+`advancer.advance`. Adaptive stopping is evaluated on the accepted
+replicate prefix: the cross-replicate monitor receives results in
+ascending replicate order, regardless of lane completion order.
+This preserves the stopping decision and accepted replicate set
+relative to `LinealBackend` for the same seed. Lanes continue
+advancing while a lower-numbered replicate is unfinished; completed
+results are held until they join the prefix. Lanes beyond a stopping
+point are discarded, including their stored trajectory rows.
 
-An adaptive early stop (`SimulationParams.
-stop_batch_early`; see `replicate_monitor`) is judged on an
-*accepted prefix*, in replicate order, exactly as `LinealBackend`'s
-own sequential loop judges it: replicate *i* is fed to the cross-
-replica monitor only once it and every lower-numbered replicate have
-finished, so the monitor sees replicates 1, 2, 3, ... in that order
-regardless of which lane happened to converge first. The stop fires
-at the same replicate, on the same values, as `LinealBackend` for
-the same seed, so both backends keep the same replicates and report
-the same summary. Feeding the monitor in finishing order instead
-(this function's own behavior through 2026-10-06) kept whichever
-replicates converged soonest; convergence time correlates with the
-statistics being estimated (in the adaptive worked example, the
-replicates that converge earliest have lower `D`), so that order
-biased the batch's own estimate rather than merely reordering it.
-
-Waiting for a slow, low-numbered replicate costs only time, never
-correctness: every lane keeps advancing, generation by generation,
-while the prefix waits. A lane that finishes ahead of the prefix is
-finalized immediately (its `RunResult` held until the prefix reaches
-it, the same memory every kept replicate already uses) and its
-window slot (`max_concurrent_replicates`) is reused at once. Once the
-stop fires, every lane past the stopping replicate — still running,
-or finished but not yet admitted — is discarded, exactly as
-`LinealBackend` never runs, and `run_batch_parallel` discards,
-replicates past its own stopping point.
-
-Every lane owns its own, never-shared `np.random.Generator` and its
-own `AlleleRegistry` — nothing here ever reads or writes another
-lane's state, which is what makes the traversal order above safe:
-reordering *when* one lane's generation is computed relative to
-another's never changes that lane's own result, and the accepted-
-prefix rule above means it never changes *which* lanes are kept.
-
-An adaptive stop's own discarded lanes have their own rows discarded
-from `store` before returning, not left behind as orphaned data no
-returned `RunResult` accounts for (this project's own multi-model
-engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
-1). `build_replica_lane` already wrote each lane's own generation
-zero eagerly, before this loop ever runs, so even a lane the
-generation-first loop below never advances past that point still
-has rows to discard, not merely lanes that got partway through.
-
-At most `params.max_concurrent_replicates` lanes are ever alive at
-once — `None` (the default) means every requested replicate, exactly
-every prior release's own behavior, since `min(window_size,
-n_replicates)` below then equals `n_replicates` itself and every
-lane is built up front as before. A smaller window instead builds
-lanes lazily: only the window's own worth exist up front, and a
-lane is constructed for replicate index *i* only once some earlier
-lane's own slot frees up, immediately before advancing past that
-point — never merely reserved. This is `FIM-45`/`P-04`/`P2-7`'s own
-fix (a replicate `run_batch` never gets to before an adaptive stop
-now never pays for that replicate's own setup either, on any
-`Advancer`) and, for `VectorizedAdvancer` specifically,
-`FIM-48`'s own fix too: that advancer's cached `VectorBlock`
-(`ReplicaLane.vectorized_state`, released immediately once a lane
-finalizes — see `finalize_replica_lane`) is held by every
-concurrently active lane at once, so bounding how many lanes are
-ever active at once directly bounds this backend's own steady-state
-memory, independent of `n_replicates` itself. A replacement lane is
-built only *after* confirming the cross-replica monitor has not
-just decided to stop — building one first and discarding it a line
-later would reintroduce exactly the wasted setup this fix exists to
-remove.
+At most `params.max_concurrent_replicates` lanes are active
+simultaneously. When set, additional lanes are constructed as slots
+become available; no new lane is built after the adaptive monitor
+stops. Limiting active lanes bounds per-lane state and vectorized
+buffers independently of the total replicate count.
 
 <a id="fim.engine.batch.waiting_for_window"></a>
 
-#### [waiting\_for\_window](./engine/batch.py#L233)
+#### [waiting\_for\_window](./engine/batch.py#L177)
 
 ```python
 def waiting_for_window(lane: ReplicaLane,
@@ -6376,58 +5990,19 @@ monitor.should_stop():` loop, per lane, in order.
 class ThreadedAdvancer()
 ```
 
-Fans `SequentialAdvancer`'s own per-lane stepping out across threads.
+Advance active lanes concurrently using worker threads.
 
-Partitions whichever lanes are active this tick into up to
-`max_workers` contiguous blocks (`_partition_into_blocks`) and steps
-each block — sequentially, in order, exactly what `SequentialAdvancer`
-already does — inside its own thread, via `ThreadPoolExecutor`.
-Blocks are disjoint (every lane belongs to exactly one), so no two
-threads ever touch the same lane's own state, RNG, or allele
-registry at once; the one thing genuinely shared across threads is
-`store`, made safe by the `threading.Lock` both
-`fim.persistence.store.InMemoryTrajectoryStore` and
-`fim.persistence.binary_store.BinaryLogStore` now hold around
-their own `write_generation`.
-
-Whether this delivers real wall-clock speedup over
-`SequentialAdvancer` depends on how much of each generation's own
-work happens inside NumPy/JIT calls that release the GIL versus
-pure-Python loop overhead — measured, not merely open, as of
-`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§10 items 10a/10c: at this project's own reference scale, `drift`'s
-own `_inversion_binomial` primitive (needed to keep this backend
-bit-identical to `LinealBackend`, see below) is pure Python and
-holds the GIL for nearly all of `drift`'s own wall-clock time. That
-measurement predates §10 item 10e's own stages 1-3b (2026-09-03):
-`migrate`'s own scalar-rate, continuous-migration path and `mutate`'s
-own event-count draw, whole-generation minting, source attribution,
-and (below a per-locus capacity bound) target selection are now
-`nogil`-compiled too, under `jit=True` — the "unjitted and GIL-bound
-regardless of `jit`" claim this paragraph made through 2026-09-02 is
-no longer an accurate description of the code. Whether that
-translates into real wall-clock thread scaling is a genuinely
-different, re-measured-not-yet question — `20260903-claude-sonnet-
-5-fim-vg-performance-campaign-design.md` §6.3 item 1 schedules the
-re-sweep this claim now depends on; until that lands, treat this
-class's own real-world thread-scaling behavior as unmeasured against
-the current code, not as either the old regression or a new win.
-What this class does guarantee, unconditionally:
-identical results to `SequentialAdvancer` for the same seed, since
-the actual per-lane computation is the same code
-(`SequentialAdvancer.advance` itself, called once per block), only
-fanned out across threads rather than run in one.
-
-Block assignment is computed fresh every tick from whichever lanes
-happen to be active (`_partition_into_blocks`), not a persistent,
-static assignment decided once at batch start — worth revisiting as
-a later, separately-measured optimization once lane membership is
-treated as fixed-and-masked rather than genuinely shrinking, but not
-this class's own current scope.
+Each tick, the active lanes are divided into up to `max_workers`
+contiguous blocks. Each block is advanced sequentially by
+`SequentialAdvancer`; blocks contain disjoint lanes. The same
+per-lane operations preserve results for the same seed as
+`SequentialAdvancer`. Threading may improve throughput when the
+workload releases the Python global interpreter lock; speedup is
+workload-dependent. Block assignments are recalculated each tick.
 
 <a id="fim.engine.lanes.ThreadedAdvancer.__init__"></a>
 
-#### [\_\_init\_\_](./engine/lanes.py#L291)
+#### [\_\_init\_\_](./engine/lanes.py#L252)
 
 ```python
 def __init__(max_workers: int | None = None,
@@ -6435,33 +6010,19 @@ def __init__(max_workers: int | None = None,
              jit: JitOption = "off") -> None
 ```
 
-Configure how many blocks/threads this advancer fans out across.
+Configure the worker count and JIT option.
 
 **Arguments**:
 
-- `max_workers` - Defaults to `os.cpu_count()` (or 1 if that
-  cannot be determined) — the same default reasoning
-  `concurrent.futures.ThreadPoolExecutor` itself uses.
-  Deliberately not the same `max_workers` `simulate_params()`'s own
-  public signature accepts — that one is `LinealBackend`-
-  only (a process count); reusing the name for a thread
-  count here was flagged, not settled, by the design this
-  implements, so this constructor's own parameter is
-  reachable only by building a `GenerationalBackend`
-  directly, not yet through `simulate_params()` itself.
-- `jit` - Passed through to each block's own `SequentialAdvancer`
-  — see its docstring. ``"numba"`` JIT-compiles `drift`'s
-  own multinomial draw (`fim.model.operators.drift`'s own
-  docstring) — bit-identical, and no longer regresses
-  wall-clock time the way an earlier, per-pair-call version
-  measurably did, but is not yet shown to be a clear
-  standalone win either: `drift`'s own dominant cost at
-  this project's reference scale is marshaling to and from
-  `ModelState`'s sparse representation, not the compiled
-  draw itself, so this setting alone should not be assumed
-  to speed up `ThreadedAdvancer`'s own thread fan-out in
-  practice. `migrate`/`mutate`'s RNG calls stay unjitted
-  and GIL-bound regardless of this setting either way.
+- `max_workers` - Maximum worker threads. Defaults to the
+  available CPU count, or 1 if it cannot be determined.
+  This option is available through a directly configured
+  `GenerationalBackend`; `simulate_params()`'s
+  `max_workers` option configures processes for
+  `LinealBackend`.
+- `jit` - Passed to each block's `SequentialAdvancer`. The
+  `"numba"` option requires Numba and preserves results
+  for the same seed.
 
 
 **Raises**:
@@ -6470,7 +6031,7 @@ Configure how many blocks/threads this advancer fans out across.
 
 <a id="fim.engine.lanes.ThreadedAdvancer.advance"></a>
 
-#### [advance](./engine/lanes.py#L353)
+#### [advance](./engine/lanes.py#L300)
 
 ```python
 def advance(active_lanes: Sequence[ReplicaLane],
@@ -6481,7 +6042,7 @@ Step every active lane by one generation, fanned out across threads.
 
 <a id="fim.engine.lanes.VectorizedAdvancer"></a>
 
-## [VectorizedAdvancer Objects](./engine/lanes.py#L374)
+## [VectorizedAdvancer Objects](./engine/lanes.py#L321)
 
 ```python
 class VectorizedAdvancer()
@@ -6532,7 +6093,7 @@ exact sum per cell in the continuous case).
 
 <a id="fim.engine.lanes.VectorizedAdvancer.__init__"></a>
 
-#### [\_\_init\_\_](./engine/lanes.py#L418)
+#### [\_\_init\_\_](./engine/lanes.py#L365)
 
 ```python
 def __init__(*, memory_ceiling_bytes: int | None = None) -> None
@@ -6546,7 +6107,7 @@ Remember the per-lane memory ceiling for new tables.
 
 <a id="fim.engine.lanes.VectorizedAdvancer.advance"></a>
 
-#### [advance](./engine/lanes.py#L426)
+#### [advance](./engine/lanes.py#L373)
 
 ```python
 def advance(active_lanes: Sequence[ReplicaLane],
@@ -6574,7 +6135,7 @@ up to the identities the block minted.
 
 <a id="fim.engine.lanes.frame_layout"></a>
 
-#### [frame\_layout](./engine/lanes.py#L498)
+#### [frame\_layout](./engine/lanes.py#L445)
 
 ```python
 def frame_layout(params: SimulationParams) -> FrameLayout
@@ -6593,7 +6154,7 @@ Return the frame layout of a run: its locus ids and gene copies per deme.
 
 <a id="fim.engine.lanes.equilibrium_frame_layout"></a>
 
-#### [equilibrium\_frame\_layout](./engine/lanes.py#L513)
+#### [equilibrium\_frame\_layout](./engine/lanes.py#L460)
 
 ```python
 def equilibrium_frame_layout(params: SimulationParams) -> FrameLayout
@@ -6616,7 +6177,7 @@ size.
 
 <a id="fim.engine.lanes.persist_state"></a>
 
-#### [persist\_state](./engine/lanes.py#L552)
+#### [persist\_state](./engine/lanes.py#L499)
 
 ```python
 def persist_state(store: TrajectoryStore, run_id: str,
@@ -6636,7 +6197,7 @@ construction validated every value, so they are written unvalidated.
 
 <a id="fim.engine.lanes.build_replica_lane"></a>
 
-#### [build\_replica\_lane](./engine/lanes.py#L571)
+#### [build\_replica\_lane](./engine/lanes.py#L518)
 
 ```python
 def build_replica_lane(
@@ -6661,7 +6222,7 @@ two backends' own run ids agree for the same configuration.
 
 <a id="fim.engine.lanes.finalize_replica_lane"></a>
 
-#### [finalize\_replica\_lane](./engine/lanes.py#L677)
+#### [finalize\_replica\_lane](./engine/lanes.py#L624)
 
 ```python
 def finalize_replica_lane(lane: ReplicaLane, clock: Clock,
@@ -6692,7 +6253,7 @@ begin with.
 
 <a id="fim.engine.lanes.generate_initial_state_with_outcome"></a>
 
-#### [generate\_initial\_state\_with\_outcome](./engine/lanes.py#L791)
+#### [generate\_initial\_state\_with\_outcome](./engine/lanes.py#L738)
 
 ```python
 def generate_initial_state_with_outcome(
@@ -6731,7 +6292,7 @@ without a further, unchecked `None` for type-checking purposes.
 
 <a id="fim.engine.lanes.initial_condition_mode"></a>
 
-#### [initial\_condition\_mode](./engine/lanes.py#L850)
+#### [initial\_condition\_mode](./engine/lanes.py#L797)
 
 ```python
 def initial_condition_mode(params: SimulationParams) -> str
@@ -6747,7 +6308,7 @@ uses for `engine_backend="auto"`.
 
 <a id="fim.engine.lanes.build_finite_allele_spaces"></a>
 
-#### [build\_finite\_allele\_spaces](./engine/lanes.py#L866)
+#### [build\_finite\_allele\_spaces](./engine/lanes.py#L813)
 
 ```python
 def build_finite_allele_spaces(
@@ -6892,52 +6453,16 @@ def run_batch_parallel(
 
 Run replicates in parallel worker-process batches of `max_workers`.
 
-This is `fim`'s own `max_workers` path — see that function's
-docstring for why real, separate operating-system processes are used
-at all here rather than something lighter-weight. This function's
-own job is just the bookkeeping around that: hand out replicates
-`max_workers` at a time to a pool of worker processes
-(`ProcessPoolExecutor`, from Python's own standard library), collect
-each one's result as it finishes, and — if an adaptive replicate
-stop is configured (`monitor`; see this module's own docstring,
-above) — decide after each whole batch of workers finishes whether
-enough replicates have now run to stop early.
-
-Replicates run in these fixed-size batches, rather than all being
-submitted to the worker pool at once, specifically so that adaptive
-stopping decision stays meaningful: the decision is always applied
-strictly in ascending replicate order (replicate 1's result seen
-before replicate 2's, and so on), the exact same order the
-sequential (non-parallel) loop already uses, so parallelizing the
-*computation* never reorders which replicate's own values actually
-fed the stopping decision. The one real trade-off for that
-guarantee: a batch can overshoot the exact minimal replicate count
-by up to ``max_workers - 1`` extra replicates, since the whole batch
-a stopping replicate happened to fall in has already been started by
-the time the decision is made.
-
-That overshoot's own compute is unavoidable — every future in the
-current batch was submitted to a pool sized exactly `max_workers`,
-so by the time a stop is decided, the rest have almost always
-already started running, and `Future.cancel()` cannot interrupt a
-worker process once it has (this project's own multi-model engine
-review, 2026-09-04, `FIM-50`/finding P2-1 case 2, confirms the
-compute cost is already documented and accepted). What is not
-accepted: `store_factory`, when given, makes each overshoot
-replicate's own worker write a real, persistent trajectory — those
-artifacts used to be left behind with no `RunResult` in this
-function's own return value to account for them, discoverable only
-by a reader of the store noticing a `run_id` that does not belong to
-any of the results actually returned. Now: `cancel()` is still tried
-first (a genuine, if rare, win for a future that has not started
-yet), then each overshoot future is waited on and, if `store_
-factory` is real, its own artifacts are discarded — never left
-orphaned regardless of whether the worker itself succeeded, raised,
-or was actually cancelled in time.
+Replicates are submitted in batches, and results are processed in
+ascending replicate order. If adaptive stopping is enabled, the
+stopping decision is evaluated after each batch; the final batch can
+therefore include up to ``max_workers - 1`` replicates beyond the
+stopping point. When `store_factory` is provided, artifacts from
+replicates beyond the accepted result prefix are discarded.
 
 <a id="fim.engine.lineal.run_one"></a>
 
-#### [run\_one](./engine/lineal.py#L464)
+#### [run\_one](./engine/lineal.py#L428)
 
 ```python
 def run_one(params: SimulationParams, store: TrajectoryStore, run_id: str,
@@ -8298,28 +7823,14 @@ def pooled_g_st_and_d(
 
 Return ``(G_ST, D)``, aggregated across loci per `locus_aggregation`.
 
-Two genuinely different estimators of the same two named statistics
-(`SimulationParams.locus_aggregation`'s own docstring has the full
-argument for why they differ and which this project recommends):
-
-- `"ratio_of_means"` (the default): pool `H_S`/`H_T` across loci
-  first — `mean_h_s`/`mean_h_t`, already computed by the caller for
-  the report's own `H_S`/`H_T` fields, reused here rather than
-  recomputed — then compute one `G_ST`/`D` from those pooled values,
-  via the identical private cores `g_st`/`jost_d` use internally
-  (`g_st_from_demes`/`jost_d_from_within_and_total`), so this
-  function does not re-derive either formula independently.
-- `"mean_of_ratios"` (this project's own original behavior): average
-  each locus's own already-computed `G_ST`/`D` — unchanged from
-  before this function existed.
-
-`E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST` are unaffected by either choice
-(`SimulationParams.locus_aggregation`'s own docstring again) and stay
-a plain per-locus mean regardless, computed by the caller.
+With `"ratio_of_means"`, compute each statistic from pooled `H_S`
+and `H_T` values supplied by the caller. With `"mean_of_ratios"`,
+average the per-locus `G_ST` and `D` values. `E_ST`, `K_ST`, `H_S`,
+`H_T`, and `H_ST` are averaged per locus regardless of this option.
 
 <a id="fim.engine.tracking.statistics_for_locus"></a>
 
-#### [statistics\_for\_locus](./engine/tracking.py#L835)
+#### [statistics\_for\_locus](./engine/tracking.py#L821)
 
 ```python
 def statistics_for_locus(
@@ -8330,34 +7841,26 @@ def statistics_for_locus(
         statistics: Collection[str] | None = None) -> DifferentiationReport
 ```
 
-Compute one locus's scalar statistics.
+Compute the requested differentiation statistics for one locus.
 
-Builds the input `fim.statistics.differentiation.statistics_report`
-actually expects — one dictionary per deme, mapping each allele
-identity present at this locus to its frequency (what fraction of
-that deme's gene copies at this locus currently carry it) — from
-this state's own internal representation, then hands that off to do
-the actual math. This function itself computes nothing statistical;
-it only reshapes data.
+Builds a normalized allele-frequency table from ``state`` and passes
+it to ``fim.statistics.differentiation.statistics_report``. When
+``params.deme_weighting`` is ``"size"``, population-size weights are
+supplied for ``E_ST``, ``Delta``, and ``MI`` only. Other statistics,
+including ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``,
+``A_CGD``, ``Gs``, and ``Gd``, use equal deme treatment.
 
-`deme_weighting` controls whether every deme counts equally toward
-the reported statistics regardless of its own population size
-(`params.deme_weighting == "equal"`), or whether a larger deme
-counts proportionally more than a smaller one (`"size"`, the
-default, weighting by `params.population_sizes`) — the same
-"should a bigger group's own numbers count for more" choice that
-comes up whenever averaging across groups of unequal size, with no
-universally correct answer; which is more appropriate depends on the
-actual scientific question being asked.
+**Arguments**:
 
-`statistics`: forwarded verbatim to `statistics_report` — `None`
-(the default) for `report_for_state`'s own final-report call, which
-needs every field; `convergence_values`'s own per-generation call
-passes `params.convergence_statistics` instead, so the fields no
-watched statistic ever reads are skipped rather than computed and
-discarded every generation (Phase 7 item 4, `FIM-24`/`FIM-32`; see
-`statistics_report`'s own `statistics` parameter for the full
-contract).
+- `state` - Population state to summarize.
+- `params` - Validated model parameters, including deme weighting.
+- `locus_index` - Zero-based locus position in the state.
+- `statistics` - Optional names of statistics to calculate.
+
+
+**Returns**:
+
+  A ``DifferentiationReport`` for the selected locus.
 
 <a id="fim.errors"></a>
 
@@ -8422,16 +7925,7 @@ read-only run.
 
 # [fim.examples](./examples/__init__.py#L1)
 
-The shipped worked examples and the run classes that group them.
-
-`fim.examples.classes` reads and validates `doc/examples/classes.yaml`,
-the class tree the Examples dialog shows and a configuration's `class`
-label is checked against (design doc `20261005-claude-opus-5-5-read-
-only-examples-and-classes-design.md`, `selby/restricted`, section 2).
-`fim.examples.seed` writes the desktop app's bundled examples into the
-results folder as read-only runs, Studies, and the Examples Experiment
-(section 4.2). Nothing is re-exported here, so importing one submodule never pays for
-another.
+Load, validate, and seed the bundled worked examples and run classes.
 
 <a id="fim.examples.artifacts"></a>
 
@@ -8560,47 +8054,17 @@ Missing, reordered, corrupt, or truncated parts fail explicitly.
 
 # [fim.examples.classes](./examples/classes.py#L1)
 
-Read and validate the run-class tree, `doc/examples/classes.yaml`.
+Read and validate the run-class hierarchy in `doc/examples/classes.yaml`.
 
-A **class** is a group ID for runs: the worked examples use classes to
-build the Examples dialog's tree, and a user's own run may carry one
-too, as the configuration label `class` (`doc/configuration.md`). This
-module is the only reader of the class file (design doc
-`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
-`selby/restricted`, section 2).
-
-The file holds one top-level key, `classes`, a list of entries:
-
-```yaml
-classes:
-  - id: getting-started
-    title: Getting started
-    description: One-screen runs that show the core statistics settling.
-  - id: literature
-    title: Literature comparisons
-    children:
-      - id: literature-distances
-        title: Genetic distances
-```
-
-Rules, all enforced by `parse_class_tree`:
-
-- The tree is shallow: top-level classes plus at most one level of
-  `children`. A child with `children` of its own is rejected.
-- Order in the file is display order, and it is preserved.
-- Every `id` is lowercase kebab-case (`getting-started`) and unique
-  across the whole tree, parents and children together.
-- `title` is required; `description` is optional. Any other key is
-  rejected, so a typo is reported rather than ignored.
-
-The file lives in the source checkout, beside the examples. A packaged
-build carries no `doc/` directory, so `load_default_class_tree` returns
-`None` there, and `validate_run_class` then checks only the ID's format
-(see its docstring for why that is the safe choice).
+The YAML file defines ordered top-level classes and optional single-level
+children. IDs must be unique lowercase kebab-case strings; titles are
+required, descriptions are optional, and unknown keys or deeper nesting are
+rejected. Packaged builds without the source `doc/` tree validate class IDs
+by format only.
 
 <a id="fim.examples.classes.RunClass"></a>
 
-## [RunClass Objects](./examples/classes.py#L66)
+## [RunClass Objects](./examples/classes.py#L36)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8619,7 +8083,7 @@ One class in the tree: its ID, display text, and child classes.
 
 <a id="fim.examples.classes.RunClass.to_dict"></a>
 
-#### [to\_dict](./examples/classes.py#L82)
+#### [to\_dict](./examples/classes.py#L52)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -8629,7 +8093,7 @@ Return a JSON-serializable mapping in the file's own key names.
 
 <a id="fim.examples.classes.ClassTree"></a>
 
-## [ClassTree Objects](./examples/classes.py#L93)
+## [ClassTree Objects](./examples/classes.py#L63)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8644,7 +8108,7 @@ The whole validated class tree, top-level classes in display order.
 
 <a id="fim.examples.classes.ClassTree.__contains__"></a>
 
-#### [\_\_contains\_\_](./examples/classes.py#L102)
+#### [\_\_contains\_\_](./examples/classes.py#L72)
 
 ```python
 def __contains__(class_id: object) -> bool
@@ -8654,7 +8118,7 @@ Return whether `class_id` names a class anywhere in the tree.
 
 <a id="fim.examples.classes.ClassTree.__iter__"></a>
 
-#### [\_\_iter\_\_](./examples/classes.py#L106)
+#### [\_\_iter\_\_](./examples/classes.py#L76)
 
 ```python
 def __iter__() -> Iterator[RunClass]
@@ -8664,7 +8128,7 @@ Yield every class, depth first: each parent, then its children.
 
 <a id="fim.examples.classes.ClassTree.get"></a>
 
-#### [get](./examples/classes.py#L112)
+#### [get](./examples/classes.py#L82)
 
 ```python
 def get(class_id: str) -> RunClass | None
@@ -8683,7 +8147,7 @@ Return the class with this ID, or `None` when there is none.
 
 <a id="fim.examples.classes.ClassTree.ids"></a>
 
-#### [ids](./examples/classes.py#L123)
+#### [ids](./examples/classes.py#L93)
 
 ```python
 def ids() -> tuple[str, ...]
@@ -8693,7 +8157,7 @@ Return every class ID in display order (see `__iter__`).
 
 <a id="fim.examples.classes.ClassTree.parent_of"></a>
 
-#### [parent\_of](./examples/classes.py#L127)
+#### [parent\_of](./examples/classes.py#L97)
 
 ```python
 def parent_of(class_id: str) -> RunClass | None
@@ -8713,7 +8177,7 @@ Return the parent of a child class, or `None` for a top-level one.
 
 <a id="fim.examples.classes.ClassTree.to_list"></a>
 
-#### [to\_list](./examples/classes.py#L146)
+#### [to\_list](./examples/classes.py#L116)
 
 ```python
 def to_list() -> list[dict[str, object]]
@@ -8723,7 +8187,7 @@ Return the tree as JSON-serializable data, in the file's own shape.
 
 <a id="fim.examples.classes.default_classes_path"></a>
 
-#### [default\_classes\_path](./examples/classes.py#L151)
+#### [default\_classes\_path](./examples/classes.py#L121)
 
 ```python
 def default_classes_path() -> Path
@@ -8742,7 +8206,7 @@ checkout root, then down to `doc/examples/classes.yaml`.
 
 <a id="fim.examples.classes.is_valid_class_id"></a>
 
-#### [is\_valid\_class\_id](./examples/classes.py#L166)
+#### [is\_valid\_class\_id](./examples/classes.py#L136)
 
 ```python
 def is_valid_class_id(text: object) -> TypeGuard[str]
@@ -8763,7 +8227,7 @@ Return whether `text` is a lowercase kebab-case class ID.
 
 <a id="fim.examples.classes.load_default_class_tree"></a>
 
-#### [load\_default\_class\_tree](./examples/classes.py#L180)
+#### [load\_default\_class\_tree](./examples/classes.py#L150)
 
 ```python
 def load_default_class_tree() -> ClassTree | None
@@ -8784,7 +8248,7 @@ Read the checkout's class file, or return `None` when it is absent.
 
 <a id="fim.examples.classes.parse_class_tree"></a>
 
-#### [parse\_class\_tree](./examples/classes.py#L198)
+#### [parse\_class\_tree](./examples/classes.py#L168)
 
 ```python
 def parse_class_tree(payload: object) -> ClassTree
@@ -8809,7 +8273,7 @@ Validate a parsed class file and build its tree.
 
 <a id="fim.examples.classes.read_class_tree"></a>
 
-#### [read\_class\_tree](./examples/classes.py#L231)
+#### [read\_class\_tree](./examples/classes.py#L201)
 
 ```python
 def read_class_tree(path: Path | str) -> ClassTree
@@ -8834,7 +8298,7 @@ Read and validate one class file.
 
 <a id="fim.examples.classes.validate_run_class"></a>
 
-#### [validate\_run\_class](./examples/classes.py#L256)
+#### [validate\_run\_class](./examples/classes.py#L226)
 
 ```python
 def validate_run_class(class_id: object,
@@ -8876,49 +8340,17 @@ both cases.
 
 # [fim.examples.seed](./examples/seed.py#L1)
 
-Seed the bundled worked examples into the results folder as read-only runs.
+Install bundled worked examples as read-only runs and groupings.
 
-Read-only examples design (`20261005-claude-opus-5-5-read-only-examples-
-and-classes-design.md`, `selby/restricted`), section 4.2. The desktop app
-carries every worked example in `webui/examples/` (`dev/bin/build-
-examples-catalog` writes it): a `catalog.json` naming each example's
-labels, class, and configuration, and a copy of each example's saved
-output files. `seed_examples` turns that bundle into ordinary results the
-Home card can list:
-
-- **Run directories.** An example with a saved result (a `manifest.json`
-  in the bundle) gets `results/examples/<id>/`, holding its
-  `config.yaml`, its saved output files, and a `metadata.json` with its
-  name, description, and class. Every file there is app-owned: a newer
-  bundle replaces a file whose content differs, and removes one it no
-  longer ships.
-- **Studies.** One read-only Study per class that has at least one
-  seeded example, with the fixed id `study-examples-<class-id>` and the
-  class title as its name; a child class is its own Study, named
-  "Parent — Child".
-- **Experiment.** One read-only Experiment, `experiment-examples`, named
-  "Examples", holding those Studies in class order.
-
-An example with no saved result yet (its outputs were never committed)
-gets **no** run directory and appears in no Study. Home lists a Study's
-members only when each has a readable `manifest.json` (`fim.gui.app.
-_recent_run_at_directory`), and `groups.is_run_read_only` reads that
-same manifest, so a directory without one would be invisible in the tree
-yet editable and deletable on disk: the least surprising choice is to
-seed nothing until there is something to show. The Examples dialog still
-lists such an example, and can load it into Configure.
-
-Seeding is idempotent: a second call with the same bundle writes nothing.
-It never touches anything outside its own items: the `results/examples/`
-directories it creates (a directory there holding any file seeding did
-not write is left alone), the `study-examples-*` Studies, and
-`experiment-examples`. The Study and Experiment manifests are written
-through `groups.write_read_only_study`/`write_read_only_experiment`, the
-one write path that may create read-only groupings.
+Examples with saved output are copied under `results/examples/` and grouped
+into read-only Studies by class and a read-only Examples Experiment. Entries
+without saved output remain available in the Examples dialog but are not
+seeded as runs. Seeding is idempotent and only updates files and groupings
+owned by the bundled examples.
 
 <a id="fim.examples.seed.BundledClass"></a>
 
-## [BundledClass Objects](./examples/seed.py#L115)
+## [BundledClass Objects](./examples/seed.py#L83)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8936,7 +8368,7 @@ One class in the bundle's tree.
 
 <a id="fim.examples.seed.BundledExample"></a>
 
-## [BundledExample Objects](./examples/seed.py#L132)
+## [BundledExample Objects](./examples/seed.py#L100)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8958,7 +8390,7 @@ One example in the bundle.
 
 <a id="fim.examples.seed.BundledExample.has_saved_result"></a>
 
-#### [has\_saved\_result](./examples/seed.py#L154)
+#### [has\_saved\_result](./examples/seed.py#L122)
 
 ```python
 @property
@@ -8969,7 +8401,7 @@ Return whether the bundle carries this example's saved run.
 
 <a id="fim.examples.seed.ExamplesBundle"></a>
 
-## [ExamplesBundle Objects](./examples/seed.py#L160)
+## [ExamplesBundle Objects](./examples/seed.py#L128)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8986,7 +8418,7 @@ A parsed examples bundle.
 
 <a id="fim.examples.seed.SeedReport"></a>
 
-## [SeedReport Objects](./examples/seed.py#L175)
+## [SeedReport Objects](./examples/seed.py#L143)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -9006,7 +8438,7 @@ What one `seed_examples` call found and did.
 
 <a id="fim.examples.seed.SeedReport.changed"></a>
 
-#### [changed](./examples/seed.py#L193)
+#### [changed](./examples/seed.py#L161)
 
 ```python
 @property
@@ -9017,7 +8449,7 @@ Return whether anything on disk changed.
 
 <a id="fim.examples.seed.example_run_directory"></a>
 
-#### [example\_run\_directory](./examples/seed.py#L198)
+#### [example\_run\_directory](./examples/seed.py#L166)
 
 ```python
 def example_run_directory(example_id: str,
@@ -9039,7 +8471,7 @@ Return where a seeded example's run lives.
 
 <a id="fim.examples.seed.example_study_id"></a>
 
-#### [example\_study\_id](./examples/seed.py#L212)
+#### [example\_study\_id](./examples/seed.py#L180)
 
 ```python
 def example_study_id(class_id: str) -> str
@@ -9049,7 +8481,7 @@ Return the fixed id of the read-only Study for one class.
 
 <a id="fim.examples.seed.read_bundle"></a>
 
-#### [read\_bundle](./examples/seed.py#L217)
+#### [read\_bundle](./examples/seed.py#L185)
 
 ```python
 def read_bundle(bundle: Path) -> ExamplesBundle | None
@@ -9075,7 +8507,7 @@ Read an examples bundle's `catalog.json`.
 
 <a id="fim.examples.seed.seed_examples"></a>
 
-#### [seed\_examples](./examples/seed.py#L246)
+#### [seed\_examples](./examples/seed.py#L214)
 
 ```python
 def seed_examples(results: Path | None = None,
@@ -9712,29 +9144,22 @@ the recorded positions.
 
 # [fim.group\_lifecycle](./group_lifecycle.py#L1)
 
-Close and reopen Studies and Experiments, and summarize their Runs.
+Validate Study and Experiment lifecycle operations and summaries.
 
-Run lifecycle design §6.3 (`20261006-gpt-6.1-sol-run-lifecycle-and-
-checkpoint-design.md`, `selby/restricted`). A group never has an
-execution state machine of its own: its summary is derived on every
-read from the lifecycle records of the distinct Run objects it reaches,
-plus the sweep points that have no Run object yet. A Run shared by two
-Studies of one Experiment counts once in the Experiment's summary.
-
-Closing a group (`fim.persistence.groups.ClosedGroupError`) freezes its
-organization only. It is refused while any Run the group reaches is
-active, so a group never reads closed while work still lands in it, and
-it never stops, pauses, or freezes a Run.
+Group summaries are derived from the lifecycle records of the Run objects
+and sweep points they reference. Closing a group freezes membership; it does
+not stop or pause runs. A group cannot be closed while referenced work is
+active.
 
 <a id="fim.group_lifecycle.LEGACY_STATE"></a>
 
-#### [LEGACY\_STATE](./group_lifecycle.py#L45)
+#### [LEGACY\_STATE](./group_lifecycle.py#L38)
 
 The state a legacy run directory (one with no lifecycle record) reads.
 
 <a id="fim.group_lifecycle.GroupBusyError"></a>
 
-## [GroupBusyError Objects](./group_lifecycle.py#L52)
+## [GroupBusyError Objects](./group_lifecycle.py#L45)
 
 ```python
 class GroupBusyError(FimError, ValueError)
@@ -9747,7 +9172,7 @@ refused group edit.
 
 <a id="fim.group_lifecycle.GroupSummary"></a>
 
-## [GroupSummary Objects](./group_lifecycle.py#L61)
+## [GroupSummary Objects](./group_lifecycle.py#L54)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -9769,7 +9194,7 @@ A group's execution summary, derived from its distinct Runs.
 
 <a id="fim.group_lifecycle.GroupSummary.to_dict"></a>
 
-#### [to\_dict](./group_lifecycle.py#L80)
+#### [to\_dict](./group_lifecycle.py#L73)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -9779,7 +9204,7 @@ Return the JSON-ready summary, states in lifecycle order.
 
 <a id="fim.group_lifecycle.close_experiment"></a>
 
-#### [close\_experiment](./group_lifecycle.py#L93)
+#### [close\_experiment](./group_lifecycle.py#L86)
 
 ```python
 def close_experiment(experiment_id: str,
@@ -9799,7 +9224,7 @@ Its Studies stay open or closed exactly as they were.
 
 <a id="fim.group_lifecycle.close_study"></a>
 
-#### [close\_study](./group_lifecycle.py#L112)
+#### [close\_study](./group_lifecycle.py#L105)
 
 ```python
 def close_study(study_id: str,
@@ -9817,7 +9242,7 @@ Close a Study once none of its Runs is active.
 
 <a id="fim.group_lifecycle.effective_state"></a>
 
-#### [effective\_state](./group_lifecycle.py#L125)
+#### [effective\_state](./group_lifecycle.py#L118)
 
 ```python
 def effective_state(run_object: RunObject,
@@ -9831,7 +9256,7 @@ and reads `interrupted` without being reconciled here.
 
 <a id="fim.group_lifecycle.experiment_summary"></a>
 
-#### [experiment\_summary](./group_lifecycle.py#L139)
+#### [experiment\_summary](./group_lifecycle.py#L132)
 
 ```python
 def experiment_summary(experiment: ExperimentManifest,
@@ -9845,7 +9270,7 @@ A Study listed by the Experiment that no longer exists is skipped.
 
 <a id="fim.group_lifecycle.reopen_experiment"></a>
 
-#### [reopen\_experiment](./group_lifecycle.py#L155)
+#### [reopen\_experiment](./group_lifecycle.py#L148)
 
 ```python
 def reopen_experiment(experiment_id: str,
@@ -9862,7 +9287,7 @@ Reopen an Experiment so its organization can change again.
 
 <a id="fim.group_lifecycle.reopen_study"></a>
 
-#### [reopen\_study](./group_lifecycle.py#L167)
+#### [reopen\_study](./group_lifecycle.py#L160)
 
 ```python
 def reopen_study(study_id: str,
@@ -9879,7 +9304,7 @@ Reopen a Study so its membership can change again.
 
 <a id="fim.group_lifecycle.study_summary"></a>
 
-#### [study\_summary](./group_lifecycle.py#L177)
+#### [study\_summary](./group_lifecycle.py#L170)
 
 ```python
 def study_summary(study: StudyManifest,
@@ -9897,53 +9322,24 @@ cannot be read is left out rather than guessed at.
 
 # [fim.gui](./gui/__init__.py#L1)
 
-Desktop GUI front end: a pywebview consumer of the existing simulator engine.
+Desktop user interface for the finite island model simulator.
 
-Six screens, rendered as a static local `webui/` page (plain HTML/CSS/
-JS) driven entirely through `fim.gui.app.Api` — the JS side's only way
-into Python. Every screen calls `fim.engine.simulate_params`, `fim.viz.scatter`, and
-`fim.model.params.SimulationParams` — the same public API `fim.cli`
-already uses — and never re-implements validation, statistics, or run
-orchestration (`doc/developer.md`'s architecture table: "GUI: call
-`fim.engine.simulate_params`; do not duplicate model logic."). See `doc/
-fim-gui-test-plan.md` for how this package's own test suite is
-organized, and `doc/developer.md`'s own architecture table for where
-this package sits relative to the rest of the project.
+The pywebview interface uses the shared model, engine, statistics, and
+persistence APIs. Its page assets are stored in `webui/`.
 
 <a id="fim.gui.animation"></a>
 
 # [fim.gui.animation](./gui/animation.py#L1)
 
-Sample animation frames from a persisted trajectory as raw scatter
-coordinates, not rendered images (`doc/fim-gui-design.md` §8).
+Select and prepare animation frames from a persisted trajectory.
 
-A converged run can persist hundreds or thousands of generations, and
-turning every one of them into a separate frame is both slow and
-unnecessary for a human watching a scatter drift. This module samples at
-most `GUI_ANIMATION_MAX_FRAMES` generations, evenly spaced across the
-run's persisted range, always including generation 0 and the final
-generation — unchanged from an earlier, Tk-era revision of this module
-— but each sampled generation now produces a plain coordinate array
-(`fim.viz.scatter.frequency_points`), not a rendered `Figure`:
-pywebview's own scrubber ships the whole sampled set to the page once
-and drives play/pause/scrub entirely with client-side Canvas redraws
-(`doc/fim-gui-design.md` §5.2, §8), so nothing here needs to render
-anything at all. This also makes pre-computation itself cheaper, not
-just playback: building `max_frames` coordinate arrays costs a
-fraction of what building `max_frames` Matplotlib figures did, since
-no rasterization happens on this path.
-
-Reached only after the trajectory's integrity has already been
-verified — the unified run view's `completed` state, reached either by
-a run that just finished (its manifest was just written, never edited)
-or by opening a persisted run (`fim.reanalyze.reanalyze_trajectory`
-itself calls `fim.persistence.manifest.verify_trajectory_integrity`
-first). This module therefore reads the trajectory directly, trusting
-the caller, rather than re-verifying it a second time.
+The module samples at most `GUI_ANIMATION_MAX_FRAMES` generations, including
+the first and final generations, and returns scatter coordinates for the web
+interface to render. Callers verify trajectory integrity before reading it.
 
 <a id="fim.gui.animation.AnimationFrame"></a>
 
-## [AnimationFrame Objects](./gui/animation.py#L55)
+## [AnimationFrame Objects](./gui/animation.py#L34)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -9978,7 +9374,7 @@ One sampled animation frame's raw scatter coordinates and supplemental payloads.
 
 <a id="fim.gui.animation.pre_render_frames"></a>
 
-#### [pre\_render\_frames](./gui/animation.py#L89)
+#### [pre\_render\_frames](./gui/animation.py#L68)
 
 ```python
 def pre_render_frames(
@@ -10009,7 +9405,7 @@ Sample up to `max_frames` frames' worth of coordinates from a trajectory.
 
 <a id="fim.gui.animation.pre_render_batch_frames"></a>
 
-#### [pre\_render\_batch\_frames](./gui/animation.py#L136)
+#### [pre\_render\_batch\_frames](./gui/animation.py#L115)
 
 ```python
 def pre_render_batch_frames(
@@ -10062,7 +9458,7 @@ was a real, reported defect for the band.
 
 <a id="fim.gui.animation.select_sample_generations"></a>
 
-#### [select\_sample\_generations](./gui/animation.py#L236)
+#### [select\_sample\_generations](./gui/animation.py#L215)
 
 ```python
 def select_sample_generations(
@@ -10097,39 +9493,16 @@ Return at most `max_frames` generation numbers, evenly spaced.
 
 # [fim.gui.app](./gui/app.py#L1)
 
-pywebview bootstrap and `Api` bridge — the GUI's own entry point
-(`doc/fim-gui-design.md` §4).
+Desktop application entry point and Python bridge for the pywebview UI.
 
-`fim.launcher` dispatches here for the zero-argument and `--graphical`
-paths, exactly as it dispatched to the Tk build's own `fim.gui.app:main`
-before the pywebview migration (`doc/fim-gui-design.md` §2) — the
-entry point name and shape are stable across the toolkit swap:
-`fim.launcher` itself did not change at all.
-
-`create_window` and `main` are deliberately separate: `main` blocks
-(`webview.start()` runs the GUI's own event loop until the window
-closes), so no test calls it directly. Every headless test instead calls
-`create_window()` itself, then drives the result with its own
-`webview.start(callback)`, confirmed directly against this window/bridge
-before writing this
-module (see `test/gui/test_app.py`): `window.evaluate_js(...)` returns
-the raw value of whatever JS expression it evaluates, not the resolved
-value of a Promise that expression happens to produce — a `js_api` call
-like `window.pywebview.api.ping()` returns a Promise to JS, so a direct
-`evaluate_js("window.pywebview.api.ping()")` reads back `{}` (Chromium's
-own JSON view of an unresolved Promise object), not `"pong"`. Every real
-call into the bridge — from a test, and from `webui/*.js` alike —
-therefore goes through a small `async` JS wrapper that `await`s the
-`js_api` call and writes its result into the DOM (or, for a test, a
-`window`-scoped variable), read back with a second, separate
-`evaluate_js` call. This is not a workaround bolted on for testing: it is
-also the correct, natural shape for a real UI event handler, which never
-needs to return a value to Python either — only update its own screen
-after the `await` resolves.
+`main` starts the application event loop. `create_window` constructs the
+window and its `Api` bridge separately for headless tests and other callers.
+The web interface calls the same simulation, analysis, and persistence
+modules used by the command-line interface.
 
 <a id="fim.gui.app.format_statistic"></a>
 
-#### [format\_statistic](./gui/app.py#L486)
+#### [format\_statistic](./gui/app.py#L463)
 
 ```python
 def format_statistic(value: float | None,
@@ -10153,7 +9526,7 @@ six regardless of that configurable value's own default.
 
 <a id="fim.gui.app.INFINITE_DISTANCE_TEXT"></a>
 
-#### [INFINITE\_DISTANCE\_TEXT](./gui/app.py#L507)
+#### [INFINITE\_DISTANCE\_TEXT](./gui/app.py#L484)
 
 How an infinite Nei distance (no allele shared) reaches the page.
 
@@ -10163,7 +9536,7 @@ spells "undefined".
 
 <a id="fim.gui.app.format_report_statistic"></a>
 
-#### [format\_report\_statistic](./gui/app.py#L515)
+#### [format\_report\_statistic](./gui/app.py#L492)
 
 ```python
 def format_report_statistic(values: Mapping[str, object], name: str,
@@ -10190,7 +9563,7 @@ is present but `None` is infinite and shows as `INFINITE_DISTANCE_TEXT`.
 
 <a id="fim.gui.app.FULL_PRECISION_DIGITS"></a>
 
-#### [FULL\_PRECISION\_DIGITS](./gui/app.py#L918)
+#### [FULL\_PRECISION\_DIGITS](./gui/app.py#L895)
 
 Significant digits that round-trip any float exactly through text.
 
@@ -10201,7 +9574,7 @@ would shift that difference by up to half a display digit.
 
 <a id="fim.gui.app.Api"></a>
 
-## [Api Objects](./gui/app.py#L1940)
+## [Api Objects](./gui/app.py#L1917)
 
 ```python
 class Api()
@@ -10223,7 +9596,7 @@ reimplemented here.
 
 <a id="fim.gui.app.Api.__init__"></a>
 
-#### [\_\_init\_\_](./gui/app.py#L1956)
+#### [\_\_init\_\_](./gui/app.py#L1933)
 
 ```python
 def __init__(*,
@@ -10293,7 +9666,7 @@ Start with no run in flight.
 
 <a id="fim.gui.app.Api.start_run"></a>
 
-#### [start\_run](./gui/app.py#L2105)
+#### [start\_run](./gui/app.py#L2082)
 
 ```python
 @_log_bridge_call
@@ -10381,7 +9754,7 @@ driver thread, before this method was written; see
 
 <a id="fim.gui.app.Api.can_start_run"></a>
 
-#### [can\_start\_run](./gui/app.py#L2325)
+#### [can\_start\_run](./gui/app.py#L2302)
 
 ```python
 @_log_bridge_call
@@ -10401,7 +9774,7 @@ then refused would wipe the view of the run still in flight.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
-#### [cancel\_run](./gui/app.py#L2512)
+#### [cancel\_run](./gui/app.py#L2489)
 
 ```python
 @_log_bridge_call
@@ -10417,7 +9790,7 @@ that arrives a moment after the run already finished on its own.
 
 <a id="fim.gui.app.Api.pause_run"></a>
 
-#### [pause\_run](./gui/app.py#L2527)
+#### [pause\_run](./gui/app.py#L2504)
 
 ```python
 @_log_bridge_call
@@ -10436,7 +9809,7 @@ pushed `fim.onRunPaused(generation)`.
 
 <a id="fim.gui.app.Api.save_run_object"></a>
 
-#### [save\_run\_object](./gui/app.py#L2547)
+#### [save\_run\_object](./gui/app.py#L2524)
 
 ```python
 @_log_bridge_call
@@ -10467,7 +9840,7 @@ reopened and fixed later; a valid one is saved as Planned.
 
 <a id="fim.gui.app.Api.list_run_objects"></a>
 
-#### [list\_run\_objects](./gui/app.py#L2588)
+#### [list\_run\_objects](./gui/app.py#L2565)
 
 ```python
 @_log_bridge_call
@@ -10483,7 +9856,7 @@ Return the Saved runs panel's rows (`object_bridge.list_rows`).
 
 <a id="fim.gui.app.Api.open_run_object"></a>
 
-#### [open\_run\_object](./gui/app.py#L2602)
+#### [open\_run\_object](./gui/app.py#L2579)
 
 ```python
 @_log_bridge_call
@@ -10506,7 +9879,7 @@ Return a saved run's form values, to edit it in Configure.
 
 <a id="fim.gui.app.Api.start_run_object"></a>
 
-#### [start\_run\_object](./gui/app.py#L2634)
+#### [start\_run\_object](./gui/app.py#L2611)
 
 ```python
 @_log_bridge_call
@@ -10532,7 +9905,7 @@ its own object directory.
 
 <a id="fim.gui.app.Api.cancel_run_object"></a>
 
-#### [cancel\_run\_object](./gui/app.py#L2762)
+#### [cancel\_run\_object](./gui/app.py#L2739)
 
 ```python
 @_log_bridge_call
@@ -10552,7 +9925,7 @@ Cancel a saved run that is not executing in this window, keeping its data.
 
 <a id="fim.gui.app.Api.clone_run_object"></a>
 
-#### [clone\_run\_object](./gui/app.py#L2778)
+#### [clone\_run\_object](./gui/app.py#L2755)
 
 ```python
 @_log_bridge_call
@@ -10572,7 +9945,7 @@ Clone a saved run into a new object with the same configuration.
 
 <a id="fim.gui.app.Api.delete_run_object"></a>
 
-#### [delete\_run\_object](./gui/app.py#L2798)
+#### [delete\_run\_object](./gui/app.py#L2775)
 
 ```python
 @_log_bridge_call
@@ -10592,7 +9965,7 @@ Delete a saved run that is not executing, and all of its data.
 
 <a id="fim.gui.app.Api.stop_active_work"></a>
 
-#### [stop\_active\_work](./gui/app.py#L2813)
+#### [stop\_active\_work](./gui/app.py#L2790)
 
 ```python
 def stop_active_work(timeout: float) -> None
@@ -10612,7 +9985,7 @@ the deadman still ends the process.
 
 <a id="fim.gui.app.Api.on_window_closing"></a>
 
-#### [on\_window\_closing](./gui/app.py#L2838)
+#### [on\_window\_closing](./gui/app.py#L2815)
 
 ```python
 def on_window_closing(window: _EvaluatesJs) -> bool
@@ -10637,7 +10010,7 @@ arrives through `finish_close`.
 
 <a id="fim.gui.app.Api.request_close"></a>
 
-#### [request\_close](./gui/app.py#L2861)
+#### [request\_close](./gui/app.py#L2838)
 
 ```python
 def request_close() -> None
@@ -10647,7 +10020,7 @@ Close the window the way its close button does (the Quit menu item).
 
 <a id="fim.gui.app.Api.close_needs_confirmation"></a>
 
-#### [close\_needs\_confirmation](./gui/app.py#L2871)
+#### [close\_needs\_confirmation](./gui/app.py#L2848)
 
 ```python
 def close_needs_confirmation() -> bool
@@ -10657,7 +10030,7 @@ Return whether closing now would lose edits or interrupt work.
 
 <a id="fim.gui.app.Api.close_requirements"></a>
 
-#### [close\_requirements](./gui/app.py#L2928)
+#### [close\_requirements](./gui/app.py#L2905)
 
 ```python
 @_log_bridge_call
@@ -10675,7 +10048,7 @@ Return what closing the window now would affect, for its dialog.
 
 <a id="fim.gui.app.Api.finish_close"></a>
 
-#### [finish\_close](./gui/app.py#L2940)
+#### [finish\_close](./gui/app.py#L2917)
 
 ```python
 @_log_bridge_call
@@ -10694,7 +10067,7 @@ the window from a helper thread so this call can return first.
 
 <a id="fim.gui.app.Api.report_unsaved_edits"></a>
 
-#### [report\_unsaved\_edits](./gui/app.py#L2960)
+#### [report\_unsaved\_edits](./gui/app.py#L2937)
 
 ```python
 @_log_bridge_call
@@ -10713,7 +10086,7 @@ consults it (`on_window_closing`).
 
 <a id="fim.gui.app.Api.open_output_folder"></a>
 
-#### [open\_output\_folder](./gui/app.py#L2973)
+#### [open\_output\_folder](./gui/app.py#L2950)
 
 ```python
 @_log_bridge_call
@@ -10732,7 +10105,7 @@ Reveal a completed run's output directory in the OS file browser.
 
 <a id="fim.gui.app.Api.get_run_setting_differences"></a>
 
-#### [get\_run\_setting\_differences](./gui/app.py#L3118)
+#### [get\_run\_setting\_differences](./gui/app.py#L3095)
 
 ```python
 @_log_bridge_call
@@ -10759,7 +10132,7 @@ configuration's run settings are in use (Settings saved, or
 
 <a id="fim.gui.app.Api.get_starter_form"></a>
 
-#### [get\_starter\_form](./gui/app.py#L3138)
+#### [get\_starter\_form](./gui/app.py#L3115)
 
 ```python
 @_log_bridge_call
@@ -10781,7 +10154,7 @@ calls instead.
 
 <a id="fim.gui.app.Api.get_starter_form_with_overrides"></a>
 
-#### [get\_starter\_form\_with\_overrides](./gui/app.py#L3155)
+#### [get\_starter\_form\_with\_overrides](./gui/app.py#L3132)
 
 ```python
 @_log_bridge_call
@@ -10823,7 +10196,7 @@ caller, never hidden behind values the botanist did not ask for.
 
 <a id="fim.gui.app.Api.get_initial_form"></a>
 
-#### [get\_initial\_form](./gui/app.py#L3199)
+#### [get\_initial\_form](./gui/app.py#L3176)
 
 ```python
 @_log_bridge_call
@@ -10849,7 +10222,7 @@ competing precedence rule against this restore path.
 
 <a id="fim.gui.app.Api.get_startup_behavior"></a>
 
-#### [get\_startup\_behavior](./gui/app.py#L3229)
+#### [get\_startup\_behavior](./gui/app.py#L3206)
 
 ```python
 @_log_bridge_call
@@ -10860,7 +10233,7 @@ Return how a fresh launch chooses its initial form values.
 
 <a id="fim.gui.app.Api.set_startup_behavior"></a>
 
-#### [set\_startup\_behavior](./gui/app.py#L3234)
+#### [set\_startup\_behavior](./gui/app.py#L3211)
 
 ```python
 @_log_bridge_call
@@ -10882,7 +10255,7 @@ Set how a fresh launch chooses its initial form values.
 
 <a id="fim.gui.app.Api.get_run_card_layout"></a>
 
-#### [get\_run\_card\_layout](./gui/app.py#L3257)
+#### [get\_run\_card\_layout](./gui/app.py#L3234)
 
 ```python
 @_log_bridge_call
@@ -10901,7 +10274,7 @@ Return how the Run card shows its graphs.
 
 <a id="fim.gui.app.Api.set_run_graphs"></a>
 
-#### [set\_run\_graphs](./gui/app.py#L3277)
+#### [set\_run\_graphs](./gui/app.py#L3254)
 
 ```python
 @_log_bridge_call
@@ -10923,7 +10296,7 @@ Remember which graphs the Run card shows together.
 
 <a id="fim.gui.app.Api.set_run_graph_columns"></a>
 
-#### [set\_run\_graph\_columns](./gui/app.py#L3296)
+#### [set\_run\_graph\_columns](./gui/app.py#L3273)
 
 ```python
 @_log_bridge_call
@@ -10944,7 +10317,7 @@ Set how many columns the Run card lays its graphs out in.
 
 <a id="fim.gui.app.Api.set_scatter_style"></a>
 
-#### [set\_scatter\_style](./gui/app.py#L3322)
+#### [set\_scatter\_style](./gui/app.py#L3299)
 
 ```python
 @_log_bridge_call
@@ -10965,7 +10338,7 @@ Choose how the scatter plot draws its points.
 
 <a id="fim.gui.app.Api.set_trajectory_display"></a>
 
-#### [set\_trajectory\_display](./gui/app.py#L3339)
+#### [set\_trajectory\_display](./gui/app.py#L3316)
 
 ```python
 @_log_bridge_call
@@ -10993,7 +10366,7 @@ either way.
 
 <a id="fim.gui.app.Api.set_trajectory_band_width"></a>
 
-#### [set\_trajectory\_band\_width](./gui/app.py#L3365)
+#### [set\_trajectory\_band\_width](./gui/app.py#L3342)
 
 ```python
 @_log_bridge_call
@@ -11018,7 +10391,7 @@ window) and the standard-error band of the averaged displays.
 
 <a id="fim.gui.app.Api.get_default_ploidy"></a>
 
-#### [get\_default\_ploidy](./gui/app.py#L3388)
+#### [get\_default\_ploidy](./gui/app.py#L3365)
 
 ```python
 @_log_bridge_call
@@ -11029,7 +10402,7 @@ Return the default ploidy: `"2"` unless changed; `""` asks each time.
 
 <a id="fim.gui.app.Api.set_default_ploidy"></a>
 
-#### [set\_default\_ploidy](./gui/app.py#L3393)
+#### [set\_default\_ploidy](./gui/app.py#L3370)
 
 ```python
 @_log_bridge_call
@@ -11051,7 +10424,7 @@ Set the ploidy a fresh configuration's form starts on.
 
 <a id="fim.gui.app.Api.validate_form"></a>
 
-#### [validate\_form](./gui/app.py#L3414)
+#### [validate\_form](./gui/app.py#L3391)
 
 ```python
 @_log_bridge_call
@@ -11084,7 +10457,7 @@ Validate the form exactly as "Run simulation" would.
 
 <a id="fim.gui.app.Api.get_initial_state_panels"></a>
 
-#### [get\_initial\_state\_panels](./gui/app.py#L3451)
+#### [get\_initial\_state\_panels](./gui/app.py#L3428)
 
 ```python
 @_log_bridge_call
@@ -11116,7 +10489,7 @@ state would show at generation 0.
 
 <a id="fim.gui.app.Api.get_initial_state_deme_pair_panel"></a>
 
-#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L3503)
+#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L3480)
 
 ```python
 @_log_bridge_call
@@ -11144,7 +10517,7 @@ pair as separate panels (`d > 6`).
 
 <a id="fim.gui.app.Api.get_equilibrium_predictions"></a>
 
-#### [get\_equilibrium\_predictions](./gui/app.py#L3540)
+#### [get\_equilibrium\_predictions](./gui/app.py#L3517)
 
 ```python
 @_log_bridge_call
@@ -11189,7 +10562,7 @@ of how large `N`/`d` are.
 
 <a id="fim.gui.app.Api.get_equilibrium_grid"></a>
 
-#### [get\_equilibrium\_grid](./gui/app.py#L3590)
+#### [get\_equilibrium\_grid](./gui/app.py#L3567)
 
 ```python
 @_log_bridge_call
@@ -11237,7 +10610,7 @@ integer value, not an interpolated blur (`_grid_axis_values`).
 
 <a id="fim.gui.app.Api.get_equilibrium_curve"></a>
 
-#### [get\_equilibrium\_curve](./gui/app.py#L3677)
+#### [get\_equilibrium\_curve](./gui/app.py#L3654)
 
 ```python
 @_log_bridge_call
@@ -11266,7 +10639,7 @@ samples an interval densely and spaces its points by the response.
 
 <a id="fim.gui.app.Api.get_equilibrium_sweep"></a>
 
-#### [get\_equilibrium\_sweep](./gui/app.py#L3722)
+#### [get\_equilibrium\_sweep](./gui/app.py#L3699)
 
 ```python
 @_log_bridge_call
@@ -11326,7 +10699,7 @@ the marker moves, with no extra bridge round trip per tick.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 
-#### [load\_yaml](./gui/app.py#L3846)
+#### [load\_yaml](./gui/app.py#L3823)
 
 ```python
 @_log_bridge_call
@@ -11352,7 +10725,7 @@ changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.list_examples"></a>
 
-#### [list\_examples](./gui/app.py#L3879)
+#### [list\_examples](./gui/app.py#L3856)
 
 ```python
 @_log_bridge_call
@@ -11386,7 +10759,7 @@ example's form values once the user loads it.
 
 <a id="fim.gui.app.Api.load_example"></a>
 
-#### [load\_example](./gui/app.py#L3928)
+#### [load\_example](./gui/app.py#L3905)
 
 ```python
 @_log_bridge_call
@@ -11419,7 +10792,7 @@ saved Settings are not changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.open_saved_example"></a>
 
-#### [open\_saved\_example](./gui/app.py#L3966)
+#### [open\_saved\_example](./gui/app.py#L3943)
 
 ```python
 @_log_bridge_call
@@ -11448,7 +10821,7 @@ again first. The page then opens it like any run, which takes
 
 <a id="fim.gui.app.Api.load_run_configuration"></a>
 
-#### [load\_run\_configuration](./gui/app.py#L4010)
+#### [load\_run\_configuration](./gui/app.py#L3987)
 
 ```python
 @_log_bridge_call
@@ -11487,7 +10860,7 @@ cleared, and the name and description come from the run's
 
 <a id="fim.gui.app.Api.list_presets"></a>
 
-#### [list\_presets](./gui/app.py#L4074)
+#### [list\_presets](./gui/app.py#L4051)
 
 ```python
 @_log_bridge_call
@@ -11536,7 +10909,7 @@ only once the user actually picks it.
 
 <a id="fim.gui.app.Api.get_preset_form_values"></a>
 
-#### [get\_preset\_form\_values](./gui/app.py#L4139)
+#### [get\_preset\_form\_values](./gui/app.py#L4116)
 
 ```python
 @_log_bridge_call
@@ -11572,7 +10945,7 @@ Return one preset's own form values, ready for `applyFormValues`.
 
 <a id="fim.gui.app.Api.load_preset"></a>
 
-#### [load\_preset](./gui/app.py#L4181)
+#### [load\_preset](./gui/app.py#L4158)
 
 ```python
 @_log_bridge_call
@@ -11602,7 +10975,7 @@ user's Settings (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.get_preset_yaml"></a>
 
-#### [get\_preset\_yaml](./gui/app.py#L4206)
+#### [get\_preset\_yaml](./gui/app.py#L4183)
 
 ```python
 @_log_bridge_call
@@ -11648,7 +11021,7 @@ saved preset).
 
 <a id="fim.gui.app.Api.save_current_as_preset"></a>
 
-#### [save\_current\_as\_preset](./gui/app.py#L4270)
+#### [save\_current\_as\_preset](./gui/app.py#L4247)
 
 ```python
 @_log_bridge_call
@@ -11680,7 +11053,7 @@ Save `values` as a user preset named `name`, persisted immediately.
 
 <a id="fim.gui.app.Api.delete_user_preset"></a>
 
-#### [delete\_user\_preset](./gui/app.py#L4305)
+#### [delete\_user\_preset](./gui/app.py#L4282)
 
 ```python
 @_log_bridge_call
@@ -11695,7 +11068,7 @@ affordance only ever offers a name it just listed.
 
 <a id="fim.gui.app.Api.save_yaml"></a>
 
-#### [save\_yaml](./gui/app.py#L4317)
+#### [save\_yaml](./gui/app.py#L4294)
 
 ```python
 @_log_bridge_call
@@ -11719,7 +11092,7 @@ Validate the form, then save it as a `fim run`-compatible YAML file.
 
 <a id="fim.gui.app.Api.export_graph_image"></a>
 
-#### [export\_graph\_image](./gui/app.py#L4354)
+#### [export\_graph\_image](./gui/app.py#L4331)
 
 ```python
 @_log_bridge_call
@@ -11756,7 +11129,7 @@ gap `save_yaml`'s own config export, just above, does not cover.
 
 <a id="fim.gui.app.Api.get_default_max_workers"></a>
 
-#### [get\_default\_max\_workers](./gui/app.py#L4407)
+#### [get\_default\_max\_workers](./gui/app.py#L4384)
 
 ```python
 @_log_bridge_call
@@ -11772,7 +11145,7 @@ workers` directly rather than inventing a second default.
 
 <a id="fim.gui.app.Api.get_engine_backend_availability"></a>
 
-#### [get\_engine\_backend\_availability](./gui/app.py#L4418)
+#### [get\_engine\_backend\_availability](./gui/app.py#L4395)
 
 ```python
 @_log_bridge_call
@@ -11814,7 +11187,7 @@ bind a copy at import time and quietly defeat exactly that hook.
 
 <a id="fim.gui.app.Api.get_significant_digits"></a>
 
-#### [get\_significant\_digits](./gui/app.py#L4454)
+#### [get\_significant\_digits](./gui/app.py#L4431)
 
 ```python
 @_log_bridge_call
@@ -11833,7 +11206,7 @@ back).
 
 <a id="fim.gui.app.Api.set_significant_digits"></a>
 
-#### [set\_significant\_digits](./gui/app.py#L4468)
+#### [set\_significant\_digits](./gui/app.py#L4445)
 
 ```python
 @_log_bridge_call
@@ -11865,7 +11238,7 @@ ever about a *run's own* output, never this GUI-local setting.
 
 <a id="fim.gui.app.Api.get_dark_mode_override"></a>
 
-#### [get\_dark\_mode\_override](./gui/app.py#L4505)
+#### [get\_dark\_mode\_override](./gui/app.py#L4482)
 
 ```python
 @_log_bridge_call
@@ -11883,7 +11256,7 @@ dark_mode_override` is already the one place this value lives.
 
 <a id="fim.gui.app.Api.set_dark_mode_override"></a>
 
-#### [set\_dark\_mode\_override](./gui/app.py#L4518)
+#### [set\_dark\_mode\_override](./gui/app.py#L4495)
 
 ```python
 @_log_bridge_call
@@ -11908,7 +11281,7 @@ Change the saved dark-mode override (Configure's own field).
 
 <a id="fim.gui.app.Api.get_default_run_settings"></a>
 
-#### [get\_default\_run\_settings](./gui/app.py#L4544)
+#### [get\_default\_run\_settings](./gui/app.py#L4521)
 
 ```python
 @_log_bridge_call
@@ -11942,7 +11315,7 @@ value for that one field and reported at launch
 
 <a id="fim.gui.app.Api.get_expert_settings_info"></a>
 
-#### [get\_expert\_settings\_info](./gui/app.py#L4612)
+#### [get\_expert\_settings\_info](./gui/app.py#L4589)
 
 ```python
 @_log_bridge_call
@@ -11962,7 +11335,7 @@ Return how Settings lists the Expert Settings.
 
 <a id="fim.gui.app.Api.set_default_run_settings"></a>
 
-#### [set\_default\_run\_settings](./gui/app.py#L4626)
+#### [set\_default\_run\_settings](./gui/app.py#L4603)
 
 ```python
 @_log_bridge_call
@@ -12007,7 +11380,7 @@ form no longer submits at all.
 
 <a id="fim.gui.app.Api.get_results_location"></a>
 
-#### [get\_results\_location](./gui/app.py#L4675)
+#### [get\_results\_location](./gui/app.py#L4652)
 
 ```python
 @_log_bridge_call
@@ -12037,7 +11410,7 @@ identical field (§5, Option D4).
 
 <a id="fim.gui.app.Api.set_results_location"></a>
 
-#### [set\_results\_location](./gui/app.py#L4708)
+#### [set\_results\_location](./gui/app.py#L4685)
 
 ```python
 @_log_bridge_call
@@ -12070,7 +11443,7 @@ location_override` is what applies a saved value, once, the
 
 <a id="fim.gui.app.Api.browse_for_results_location"></a>
 
-#### [browse\_for\_results\_location](./gui/app.py#L4744)
+#### [browse\_for\_results\_location](./gui/app.py#L4721)
 
 ```python
 @_log_bridge_call
@@ -12090,7 +11463,7 @@ Browse for a results/logs directory via the OS's own native folder picker.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 
-#### [get\_welcome\_dismissed](./gui/app.py#L4764)
+#### [get\_welcome\_dismissed](./gui/app.py#L4741)
 
 ```python
 @_log_bridge_call
@@ -12106,7 +11479,7 @@ at all.
 
 <a id="fim.gui.app.Api.dismiss_welcome"></a>
 
-#### [dismiss\_welcome](./gui/app.py#L4775)
+#### [dismiss\_welcome](./gui/app.py#L4752)
 
 ```python
 @_log_bridge_call
@@ -12121,7 +11494,7 @@ actions the user picks, never un-called.
 
 <a id="fim.gui.app.Api.get_statistics_catalog"></a>
 
-#### [get\_statistics\_catalog](./gui/app.py#L4786)
+#### [get\_statistics\_catalog](./gui/app.py#L4763)
 
 ```python
 @_log_bridge_call
@@ -12143,7 +11516,7 @@ statistic is defined.
 
 <a id="fim.gui.app.Api.set_shown_statistics"></a>
 
-#### [set\_shown\_statistics](./gui/app.py#L4807)
+#### [set\_shown\_statistics](./gui/app.py#L4784)
 
 ```python
 @_log_bridge_call
@@ -12171,7 +11544,7 @@ text`). A saved run's results never change.
 
 <a id="fim.gui.app.Api.get_pairwise_max_demes"></a>
 
-#### [get\_pairwise\_max\_demes](./gui/app.py#L4838)
+#### [get\_pairwise\_max\_demes](./gui/app.py#L4815)
 
 ```python
 @_log_bridge_call
@@ -12182,7 +11555,7 @@ Return the largest deme count whose runs save `pairwise.json` in full.
 
 <a id="fim.gui.app.Api.set_pairwise_max_demes"></a>
 
-#### [set\_pairwise\_max\_demes](./gui/app.py#L4843)
+#### [set\_pairwise\_max\_demes](./gui/app.py#L4820)
 
 ```python
 @_log_bridge_call
@@ -12206,7 +11579,7 @@ Set the largest deme count whose runs save every pair's statistics.
 
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
-#### [get\_startup\_warnings](./gui/app.py#L4867)
+#### [get\_startup\_warnings](./gui/app.py#L4844)
 
 ```python
 @_log_bridge_call
@@ -12226,7 +11599,7 @@ own docstring on why this exists instead of one).
 
 <a id="fim.gui.app.Api.get_live_deme_pair"></a>
 
-#### [get\_live\_deme\_pair](./gui/app.py#L4883)
+#### [get\_live\_deme\_pair](./gui/app.py#L4860)
 
 ```python
 @_log_bridge_call
@@ -12244,7 +11617,7 @@ unlike `_significant_digits`'s own thread-start snapshot.
 
 <a id="fim.gui.app.Api.set_live_deme_pair"></a>
 
-#### [set\_live\_deme\_pair](./gui/app.py#L4896)
+#### [set\_live\_deme\_pair](./gui/app.py#L4873)
 
 ```python
 @_log_bridge_call
@@ -12294,7 +11667,7 @@ than crash the whole push).
 
 <a id="fim.gui.app.Api.list_recent_runs"></a>
 
-#### [list\_recent\_runs](./gui/app.py#L4943)
+#### [list\_recent\_runs](./gui/app.py#L4920)
 
 ```python
 @_log_bridge_call
@@ -12316,7 +11689,7 @@ no single trajectory of its own to open.
 
 <a id="fim.gui.app.Api.list_home_runs"></a>
 
-#### [list\_home\_runs](./gui/app.py#L4977)
+#### [list\_home\_runs](./gui/app.py#L4954)
 
 ```python
 @_log_bridge_call
@@ -12350,7 +11723,7 @@ asked for this heavier per-row read, so neither pays for it.
 
 <a id="fim.gui.app.Api.list_studies"></a>
 
-#### [list\_studies](./gui/app.py#L5008)
+#### [list\_studies](./gui/app.py#L4985)
 
 ```python
 @_log_bridge_call
@@ -12382,7 +11755,7 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 
 <a id="fim.gui.app.Api.list_experiments"></a>
 
-#### [list\_experiments](./gui/app.py#L5063)
+#### [list\_experiments](./gui/app.py#L5040)
 
 ```python
 @_log_bridge_call
@@ -12407,7 +11780,7 @@ List every Experiment, oldest first.
 
 <a id="fim.gui.app.Api.get_study_run_summary"></a>
 
-#### [get\_study\_run\_summary](./gui/app.py#L5102)
+#### [get\_study\_run\_summary](./gui/app.py#L5079)
 
 ```python
 @_log_bridge_call
@@ -12435,7 +11808,7 @@ its own runs' config summaries and statistics.
 
 <a id="fim.gui.app.Api.create_study"></a>
 
-#### [create\_study](./gui/app.py#L5134)
+#### [create\_study](./gui/app.py#L5111)
 
 ```python
 @_log_bridge_call
@@ -12457,7 +11830,7 @@ Blank `description`/`documentation` are stored as unset.
 
 <a id="fim.gui.app.Api.create_experiment"></a>
 
-#### [create\_experiment](./gui/app.py#L5167)
+#### [create\_experiment](./gui/app.py#L5144)
 
 ```python
 @_log_bridge_call
@@ -12470,7 +11843,7 @@ Create a new, empty Experiment. See `create_study`.
 
 <a id="fim.gui.app.Api.get_details"></a>
 
-#### [get\_details](./gui/app.py#L5182)
+#### [get\_details](./gui/app.py#L5159)
 
 ```python
 @_log_bridge_call
@@ -12497,7 +11870,7 @@ read fresh from disk each time.
 
 <a id="fim.gui.app.Api.update_study_details"></a>
 
-#### [update\_study\_details](./gui/app.py#L5221)
+#### [update\_study\_details](./gui/app.py#L5198)
 
 ```python
 @_log_bridge_call
@@ -12518,7 +11891,7 @@ The details dialog's Save (`webui/screens/details.js`). Blank
 
 <a id="fim.gui.app.Api.update_experiment_details"></a>
 
-#### [update\_experiment\_details](./gui/app.py#L5246)
+#### [update\_experiment\_details](./gui/app.py#L5223)
 
 ```python
 @_log_bridge_call
@@ -12532,7 +11905,7 @@ See `update_study_details`.
 
 <a id="fim.gui.app.Api.update_run_details"></a>
 
-#### [update\_run\_details](./gui/app.py#L5265)
+#### [update\_run\_details](./gui/app.py#L5242)
 
 ```python
 @_log_bridge_call
@@ -12553,7 +11926,7 @@ Blank text clears a field; a run may have neither. The run's own
 
 <a id="fim.gui.app.Api.get_run_context"></a>
 
-#### [get\_run\_context](./gui/app.py#L5293)
+#### [get\_run\_context](./gui/app.py#L5270)
 
 ```python
 @_log_bridge_call
@@ -12587,7 +11960,7 @@ description (`webui/screens/details.js`).
 
 <a id="fim.gui.app.Api.ensure_default_study"></a>
 
-#### [ensure\_default\_study](./gui/app.py#L5353)
+#### [ensure\_default\_study](./gui/app.py#L5330)
 
 ```python
 @_log_bridge_call
@@ -12610,7 +11983,7 @@ never gains this call at all.
 
 <a id="fim.gui.app.Api.ensure_examples"></a>
 
-#### [ensure\_examples](./gui/app.py#L5372)
+#### [ensure\_examples](./gui/app.py#L5349)
 
 ```python
 @_log_bridge_call
@@ -12634,7 +12007,7 @@ brought it up to date.
 
 <a id="fim.gui.app.Api.add_run_to_study"></a>
 
-#### [add\_run\_to\_study](./gui/app.py#L5396)
+#### [add\_run\_to\_study](./gui/app.py#L5373)
 
 ```python
 @_log_bridge_call
@@ -12650,7 +12023,7 @@ Add one existing Run directory to a Study; idempotent.
 
 <a id="fim.gui.app.Api.add_study_to_experiment"></a>
 
-#### [add\_study\_to\_experiment](./gui/app.py#L5410)
+#### [add\_study\_to\_experiment](./gui/app.py#L5387)
 
 ```python
 @_log_bridge_call
@@ -12667,7 +12040,7 @@ Add one existing Study to an Experiment; idempotent.
 
 <a id="fim.gui.app.Api.set_experiment_closed"></a>
 
-#### [set\_experiment\_closed](./gui/app.py#L5426)
+#### [set\_experiment\_closed](./gui/app.py#L5403)
 
 ```python
 @_log_bridge_call
@@ -12687,7 +12060,7 @@ Closing is refused while a Run of one of its Studies is running
 
 <a id="fim.gui.app.Api.set_study_closed"></a>
 
-#### [set\_study\_closed](./gui/app.py#L5449)
+#### [set\_study\_closed](./gui/app.py#L5426)
 
 ```python
 @_log_bridge_call
@@ -12709,7 +12082,7 @@ a Run.
 
 <a id="fim.gui.app.Api.delete_study"></a>
 
-#### [delete\_study](./gui/app.py#L5470)
+#### [delete\_study](./gui/app.py#L5447)
 
 ```python
 @_log_bridge_call
@@ -12736,7 +12109,7 @@ A read-only example Run the Study holds is kept too
 
 <a id="fim.gui.app.Api.delete_study_runs"></a>
 
-#### [delete\_study\_runs](./gui/app.py#L5507)
+#### [delete\_study\_runs](./gui/app.py#L5484)
 
 ```python
 @_log_bridge_call
@@ -12761,7 +12134,7 @@ A read-only example Run stays in the Study and counts as kept.
 
 <a id="fim.gui.app.Api.delete_experiment"></a>
 
-#### [delete\_experiment](./gui/app.py#L5536)
+#### [delete\_experiment](./gui/app.py#L5513)
 
 ```python
 @_log_bridge_call
@@ -12781,7 +12154,7 @@ A read-only Study the Experiment holds is kept
 
 <a id="fim.gui.app.Api.copy_study"></a>
 
-#### [copy\_study](./gui/app.py#L5567)
+#### [copy\_study](./gui/app.py#L5544)
 
 ```python
 @_log_bridge_call
@@ -12798,7 +12171,7 @@ Copy a Study's own run list into a new, independent Study.
 
 <a id="fim.gui.app.Api.get_sweepable_keys"></a>
 
-#### [get\_sweepable\_keys](./gui/app.py#L5582)
+#### [get\_sweepable\_keys](./gui/app.py#L5559)
 
 ```python
 @_log_bridge_call
@@ -12809,7 +12182,7 @@ Return every parameter a sweep may vary, with its axis metadata.
 
 <a id="fim.gui.app.Api.plan_sweep"></a>
 
-#### [plan\_sweep](./gui/app.py#L5587)
+#### [plan\_sweep](./gui/app.py#L5564)
 
 ```python
 @_log_bridge_call
@@ -12834,7 +12207,7 @@ Enumerate and validate a sweep without running anything.
 
 <a id="fim.gui.app.Api.start_sweep"></a>
 
-#### [start\_sweep](./gui/app.py#L5648)
+#### [start\_sweep](./gui/app.py#L5625)
 
 ```python
 @_log_bridge_call
@@ -12864,7 +12237,7 @@ at or over the size threshold, until `confirmed` is true.
 
 <a id="fim.gui.app.Api.resume_sweep"></a>
 
-#### [resume\_sweep](./gui/app.py#L5708)
+#### [resume\_sweep](./gui/app.py#L5685)
 
 ```python
 @_log_bridge_call
@@ -12896,7 +12269,7 @@ Run the points of an existing sweep Study that are still missing.
 
 <a id="fim.gui.app.Api.cancel_sweep"></a>
 
-#### [cancel\_sweep](./gui/app.py#L5755)
+#### [cancel\_sweep](./gui/app.py#L5732)
 
 ```python
 @_log_bridge_call
@@ -12907,7 +12280,7 @@ Stop the running sweep: the current point is cancelled, the rest skipped.
 
 <a id="fim.gui.app.Api.get_sweep_status"></a>
 
-#### [get\_sweep\_status](./gui/app.py#L5761)
+#### [get\_sweep\_status](./gui/app.py#L5738)
 
 ```python
 @_log_bridge_call
@@ -12918,7 +12291,7 @@ Return a sweep Study's planned points with their derived states.
 
 <a id="fim.gui.app.Api.get_sweep_results"></a>
 
-#### [get\_sweep\_results](./gui/app.py#L5773)
+#### [get\_sweep\_results](./gui/app.py#L5750)
 
 ```python
 @_log_bridge_call
@@ -12929,7 +12302,7 @@ Return a sweep Study's finished points and their statistics.
 
 <a id="fim.gui.app.Api.estimate_sweep_cost"></a>
 
-#### [estimate\_sweep\_cost](./gui/app.py#L5781)
+#### [estimate\_sweep\_cost](./gui/app.py#L5758)
 
 ```python
 @_log_bridge_call
@@ -12959,7 +12332,7 @@ run already exists cost nothing and are left out.
 
 <a id="fim.gui.app.Api.get_sweep_eta"></a>
 
-#### [get\_sweep\_eta](./gui/app.py#L5848)
+#### [get\_sweep\_eta](./gui/app.py#L5825)
 
 ```python
 @_log_bridge_call
@@ -12979,7 +12352,7 @@ goes, and read from files, so it works while the sweep runs.
 
 <a id="fim.gui.app.Api.get_sweep_series"></a>
 
-#### [get\_sweep\_series](./gui/app.py#L5873)
+#### [get\_sweep\_series](./gui/app.py#L5850)
 
 ```python
 @_log_bridge_call
@@ -13006,7 +12379,7 @@ Return a statistic as response curves across a sweep's axes.
 
 <a id="fim.gui.app.Api.get_sweep_trajectories"></a>
 
-#### [get\_sweep\_trajectories](./gui/app.py#L5900)
+#### [get\_sweep\_trajectories](./gui/app.py#L5877)
 
 ```python
 @_log_bridge_call
@@ -13033,7 +12406,7 @@ Return how each point approached equilibrium, for the overlay chart.
 
 <a id="fim.gui.app.Api.compare_sweeps"></a>
 
-#### [compare\_sweeps](./gui/app.py#L5926)
+#### [compare\_sweeps](./gui/app.py#L5903)
 
 ```python
 @_log_bridge_call
@@ -13063,7 +12436,7 @@ Nothing is stored; the comparison is worked out on each call.
 
 <a id="fim.gui.app.Api.get_sweep_theory"></a>
 
-#### [get\_sweep\_theory](./gui/app.py#L5955)
+#### [get\_sweep\_theory](./gui/app.py#L5932)
 
 ```python
 @_log_bridge_call
@@ -13090,7 +12463,7 @@ every statistic, never an error.
 
 <a id="fim.gui.app.Api.export_sweep_table"></a>
 
-#### [export\_sweep\_table](./gui/app.py#L5981)
+#### [export\_sweep\_table](./gui/app.py#L5958)
 
 ```python
 @_log_bridge_call
@@ -13123,7 +12496,7 @@ overwritten once the researcher has chosen it.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
-#### [copy\_experiment](./gui/app.py#L6113)
+#### [copy\_experiment](./gui/app.py#L6090)
 
 ```python
 @_log_bridge_call
@@ -13140,7 +12513,7 @@ Copy an Experiment's own study list into a new, independent Experiment.
 
 <a id="fim.gui.app.Api.delete_runs"></a>
 
-#### [delete\_runs](./gui/app.py#L6128)
+#### [delete\_runs](./gui/app.py#L6105)
 
 ```python
 @_log_bridge_call
@@ -13171,7 +12544,7 @@ nothing at all is deleted and the refusal is reported.
 
 <a id="fim.gui.app.Api.delete_selected"></a>
 
-#### [delete\_selected](./gui/app.py#L6157)
+#### [delete\_selected](./gui/app.py#L6134)
 
 ```python
 @_log_bridge_call
@@ -13225,7 +12598,7 @@ policy) rather than double-counted or treated as a failure.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 
-#### [get\_batch\_replicate\_summary](./gui/app.py#L6245)
+#### [get\_batch\_replicate\_summary](./gui/app.py#L6222)
 
 ```python
 @_log_bridge_call
@@ -13267,7 +12640,7 @@ already uses — no second naming scheme.
 
 <a id="fim.gui.app.Api.get_batch_pair_statistics"></a>
 
-#### [get\_batch\_pair\_statistics](./gui/app.py#L6308)
+#### [get\_batch\_pair\_statistics](./gui/app.py#L6285)
 
 ```python
 @_log_bridge_call
@@ -13301,7 +12674,7 @@ existed, or above its deme-count limit).
 
 <a id="fim.gui.app.Api.open_run"></a>
 
-#### [open\_run](./gui/app.py#L6358)
+#### [open\_run](./gui/app.py#L6335)
 
 ```python
 @_log_bridge_call
@@ -13374,7 +12747,7 @@ reuse, not a second rendering path.
 
 <a id="fim.gui.app.Api.open_batch"></a>
 
-#### [open\_batch](./gui/app.py#L6542)
+#### [open\_batch](./gui/app.py#L6519)
 
 ```python
 @_log_bridge_call
@@ -13434,7 +12807,7 @@ Home screen's own reopen spinner (`open-run.js`'s own
 
 <a id="fim.gui.app.Api.open_study"></a>
 
-#### [open\_study](./gui/app.py#L6666)
+#### [open\_study](./gui/app.py#L6643)
 
 ```python
 @_log_bridge_call
@@ -13501,7 +12874,7 @@ refuse," not a bug).
 
 <a id="fim.gui.app.Api.compare_runs"></a>
 
-#### [compare\_runs](./gui/app.py#L6809)
+#### [compare\_runs](./gui/app.py#L6786)
 
 ```python
 @_log_bridge_call
@@ -13554,7 +12927,7 @@ animation screen's own frame sampler already computes.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 
-#### [get\_animation\_frames](./gui/app.py#L6895)
+#### [get\_animation\_frames](./gui/app.py#L6872)
 
 ```python
 @_log_bridge_call
@@ -13594,7 +12967,7 @@ any kind during playback.
 
 <a id="fim.gui.app.Api.get_animation_deme_pair_frames"></a>
 
-#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L6962)
+#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L6939)
 
 ```python
 @_log_bridge_call
@@ -13638,7 +13011,7 @@ shape the default view's own frames already arrived in.
 
 <a id="fim.gui.app.Api.get_deme_pair_panel"></a>
 
-#### [get\_deme\_pair\_panel](./gui/app.py#L7027)
+#### [get\_deme\_pair\_panel](./gui/app.py#L7004)
 
 ```python
 @_log_bridge_call
@@ -13680,7 +13053,7 @@ small `d`).
 
 <a id="fim.gui.app.Api.get_batch_deme_pair_panel"></a>
 
-#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L7073)
+#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L7050)
 
 ```python
 @_log_bridge_call
@@ -13719,7 +13092,7 @@ itself.
 
 <a id="fim.gui.app.Api.get_batch_animation_frames"></a>
 
-#### [get\_batch\_animation\_frames](./gui/app.py#L7116)
+#### [get\_batch\_animation\_frames](./gui/app.py#L7093)
 
 ```python
 @_log_bridge_call
@@ -13766,7 +13139,7 @@ recent_runs`/`open_run` already use.
 
 <a id="fim.gui.app.Api.ping"></a>
 
-#### [ping](./gui/app.py#L7188)
+#### [ping](./gui/app.py#L7165)
 
 ```python
 @_log_bridge_call
@@ -13781,7 +13154,7 @@ context, before any real screen is built on top of it.
 
 <a id="fim.gui.app.Api.ping_from_worker"></a>
 
-#### [ping\_from\_worker](./gui/app.py#L7198)
+#### [ping\_from\_worker](./gui/app.py#L7175)
 
 ```python
 @_log_bridge_call
@@ -13801,7 +13174,7 @@ inside a real batch run.
 
 <a id="fim.gui.app.Api.open_external_link"></a>
 
-#### [open\_external\_link](./gui/app.py#L7217)
+#### [open\_external\_link](./gui/app.py#L7194)
 
 ```python
 @_log_bridge_call
@@ -13820,7 +13193,7 @@ module already follows for another OS-dispatched action.
 
 <a id="fim.gui.app.Api.check_for_updates"></a>
 
-#### [check\_for\_updates](./gui/app.py#L7231)
+#### [check\_for\_updates](./gui/app.py#L7208)
 
 ```python
 @_log_bridge_call
@@ -13850,7 +13223,7 @@ own equivalent action called the same module the same way.
 
 <a id="fim.gui.app.Api.get_about_info"></a>
 
-#### [get\_about\_info](./gui/app.py#L7267)
+#### [get\_about\_info](./gui/app.py#L7244)
 
 ```python
 @_log_bridge_call
@@ -13897,7 +13270,7 @@ three-part parsing).
 
 <a id="fim.gui.app.RunDetails"></a>
 
-## [RunDetails Objects](./gui/app.py#L7414)
+## [RunDetails Objects](./gui/app.py#L7391)
 
 ```python
 class RunDetails(NamedTuple)
@@ -13907,7 +13280,7 @@ The optional name and description Configure gives a run before it starts.
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 
-#### [in\_flight\_bridge\_threads](./gui/app.py#L8625)
+#### [in\_flight\_bridge\_threads](./gui/app.py#L8602)
 
 ```python
 def in_flight_bridge_threads(
@@ -13935,7 +13308,7 @@ flakiness.
 
 <a id="fim.gui.app.await_bridge_threads"></a>
 
-#### [await\_bridge\_threads](./gui/app.py#L8660)
+#### [await\_bridge\_threads](./gui/app.py#L8637)
 
 ```python
 def await_bridge_threads(
@@ -13988,7 +13361,7 @@ seconds later.
 
 <a id="fim.gui.app.initial_window_size"></a>
 
-#### [initial\_window\_size](./gui/app.py#L8894)
+#### [initial\_window\_size](./gui/app.py#L8871)
 
 ```python
 def initial_window_size(screen_width: int,
@@ -14015,7 +13388,7 @@ edges), between `_MIN_WINDOW_SIZE` and `_MAX_WINDOW_SIZE`.
 
 <a id="fim.gui.app.create_window"></a>
 
-#### [create\_window](./gui/app.py#L8935)
+#### [create\_window](./gui/app.py#L8912)
 
 ```python
 def create_window(*,
@@ -14066,7 +13439,7 @@ pywebview's own API instead of Tk's.
 
 <a id="fim.gui.app.shutdown_timeout"></a>
 
-#### [shutdown\_timeout](./gui/app.py#L9149)
+#### [shutdown\_timeout](./gui/app.py#L9127)
 
 ```python
 def shutdown_timeout() -> float
@@ -14091,7 +13464,7 @@ outcome than the hang it guards against.
 
 <a id="fim.gui.app.main"></a>
 
-#### [main](./gui/app.py#L9461)
+#### [main](./gui/app.py#L9439)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -14140,49 +13513,16 @@ at all.
 
 # [fim.gui.batch\_runner](./gui/batch_runner.py#L1)
 
-Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
+Background orchestration for multi-replicate GUI runs.
 
-Under `engine_backend="lineal"`, runs a multi-replicate batch in
-parallel, as real OS processes, via `fim.engine.simulate_params(..., max_workers=N,
-store_factory=...)` — the same call shape `cli._command_run_batch`'s own
-default (non-`--sequential`) path already makes. This reverses the
-Tk-era design's "sequential-only, deliberately" decision: that
-constraint belonged to `GuiProgressStore`'s in-process
-`threading.Event`/callback pair, which cannot cross a process boundary —
-not to the engine, which has supported real parallel replicate execution
-since before any GUI existed. Under any other `engine_backend`,
-`max_workers` is never passed (there is no process pool for it to size);
-`store_factory` alone drives every backend's own batch execution now
-(`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
-`selby/restricted`).
-
-Progress and cancellation for this parallel path are entirely
-file-mediated (`fim.gui.store.LiveProgressStore`), not posted through
-`message_queue` per generation the way the Tk-era sequential runner did:
-a lightweight poller elsewhere (the pywebview bridge, not yet built)
-discovers progress by reading each in-flight replicate's own `.progress`
-sidecar, and requests cancellation by creating one shared file every
-worker's `LiveProgressStore` checks before each write. `message_queue`
-still carries the batch's terminal outcome — done, cancelled, or error —
-exactly as before, since those remain discrete events worth queueing;
-only per-generation progress moved off the queue and onto the filesystem.
-
-Writes the same artifacts `cli._command_run_batch`'s own default
-(parallel) path does, including the same orphan-replicate-directory
-pruning `fim.persistence.saved_run.prune_orphan_replicate_directories` performs: under
-`max_workers`, an adaptive early stop is applied only
-after a whole concurrent worker batch completes
-(`fim.engine.lineal.run_batch_parallel`), so a worker beyond the replicate that
-triggered the stop can still have fully written its own `replicate-NNN/`
-directory even though its result is discarded, never appearing in the
-tuple `fim` returns. Without pruning, `fim.paths.atomic_directory` would
-publish that orphan directory verbatim — a bug class the Tk-era sequential
-runner could never hit (sequential execution never overshoots), mirrored
-here now that real parallelism reopens it for the GUI too.
+For the lineal backend, replicate workers run in separate processes. Progress
+and cancellation use `LiveProgressStore` sidecar files; the message queue
+carries terminal results. The runner writes the same artifacts as the CLI and
+removes output from replicates discarded by an adaptive early stop.
 
 <a id="fim.gui.batch_runner.default_max_workers"></a>
 
-#### [default\_max\_workers](./gui/batch_runner.py#L113)
+#### [default\_max\_workers](./gui/batch_runner.py#L80)
 
 ```python
 def default_max_workers() -> int
@@ -14197,7 +13537,7 @@ overridable per call via `start_batch_run`'s `max_workers` argument.
 
 <a id="fim.gui.batch_runner.start_batch_run"></a>
 
-#### [start\_batch\_run](./gui/batch_runner.py#L124)
+#### [start\_batch\_run](./gui/batch_runner.py#L91)
 
 ```python
 def start_batch_run(
@@ -14262,53 +13602,30 @@ Resolve targets, guard the existing target, and start the worker thread.
 
 # [fim.gui.config\_form](./gui/config_form.py#L1)
 
-Marshal `SimulationParams` to and from the tabbed model-input screen.
+Convert between model parameters and GUI configuration form values.
 
-Every function here is a pure, Tk-free transformation between three
-shapes: a `SimulationParams` instance, a `dict[str, str]` of one string
-per form field (what `screens.input_screen.InputScreen` reads from and
-writes to its widgets), and a `dict[str, object]` payload ready for
-`fim.model.params.SimulationParams.from_mapping` — the identical
-validator `fim.cli` already uses (`doc/fim-gui-design.md` §6.1).
-Nothing here duplicates a validation rule `from_mapping` already
-enforces: a malformed string is only ever coerced to the right Python
-type before being handed to that one validator, never re-checked
-against a second, GUI-local copy of a rule.
-
-`TABS` groups fields the same way
-[configuration.md](../../doc/configuration.md)'s own section
-headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
-decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
-sized fields do (a comma-separated text field faithfully represents
-either); a `d`-by-`d` migration matrix, a `loci` list with custom
-`locus_id`s, and a `d`-by-locus explicit `p_0` now do too, each edited
-cell by cell (botanist GUI design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4 —
-`m_to_payload`/`m_from_params`'s own `"matrix"` mode,
-`loci_to_payload`/`loci_from_params`'s own `"custom"` mode, and
-`initial_conditions_to_payload`/`initial_conditions_from_params`'s own
-`"explicit_p0"` mode, respectively); a genuinely per-locus `mu` still
-does not, and instead raises a clear `ValueError` from
-`params_to_form_values` (the same "edit the YAML file directly" pattern
-this form has always used for a construct it cannot represent at all)
-— see `doc/fim-gui-design.md` §6.2.
+The module maps `SimulationParams` to and from form dictionaries and
+payloads validated by `SimulationParams.from_mapping`. Supported inputs
+include per-deme and per-locus lists, migration matrices, custom loci, and
+explicit initial-frequency tables. Per-locus mutation rates are not
+represented by the form; configurations using them must be edited as YAML.
 
 <a id="fim.gui.config_form.PLOIDY_REQUIRED_MESSAGE"></a>
 
-#### [PLOIDY\_REQUIRED\_MESSAGE](./gui/config_form.py#L69)
+#### [PLOIDY\_REQUIRED\_MESSAGE](./gui/config_form.py#L46)
 
 The refusal when the form's ploidy is blank (see `POPULATION_FIELDS`).
 
 <a id="fim.gui.config_form.PLOIDY_NAMES"></a>
 
-#### [PLOIDY\_NAMES](./gui/config_form.py#L72)
+#### [PLOIDY\_NAMES](./gui/config_form.py#L49)
 
 Display names for `SimulationParams.ploidy`'s allowed values (the same words
 a configuration spells them with).
 
 <a id="fim.gui.config_form.FormField"></a>
 
-## [FormField Objects](./gui/config_form.py#L80)
+## [FormField Objects](./gui/config_form.py#L57)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -14349,7 +13666,7 @@ One model-input screen field's config key, label, and value kind.
 
 <a id="fim.gui.config_form.TabSpec"></a>
 
-## [TabSpec Objects](./gui/config_form.py#L120)
+## [TabSpec Objects](./gui/config_form.py#L97)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -14365,13 +13682,13 @@ instead of appearing in any `TabSpec.fields` tuple.
 
 <a id="fim.gui.config_form.EXPERT_PREFIX"></a>
 
-#### [EXPERT\_PREFIX](./gui/config_form.py#L301)
+#### [EXPERT\_PREFIX](./gui/config_form.py#L278)
 
 Prefix of the form-value key of each Expert Setting (`expert_batch_width`).
 
 <a id="fim.gui.config_form.EXPERT_FIELDS"></a>
 
-#### [EXPERT\_FIELDS](./gui/config_form.py#L304)
+#### [EXPERT\_FIELDS](./gui/config_form.py#L281)
 
 One field per Expert Setting, for the Settings dialog's Expert section.
 
@@ -14384,7 +13701,7 @@ to the manifest.
 
 <a id="fim.gui.config_form.CONVERGENCE_STATISTIC_NAMES"></a>
 
-#### [CONVERGENCE\_STATISTIC\_NAMES](./gui/config_form.py#L321)
+#### [CONVERGENCE\_STATISTIC\_NAMES](./gui/config_form.py#L298)
 
 Every checkbox the Structure panel's "convergence statistic(s)" group
 offers: every convergence-eligible statistic in `fim.statistics.catalog`,
@@ -14394,7 +13711,7 @@ checkbox.
 
 <a id="fim.gui.config_form.all_fields"></a>
 
-#### [all\_fields](./gui/config_form.py#L338)
+#### [all\_fields](./gui/config_form.py#L315)
 
 ```python
 def all_fields() -> tuple[FormField, ...]
@@ -14404,7 +13721,7 @@ Return every plain `FormField` across every tab, in tab order.
 
 <a id="fim.gui.config_form.tab_for_field"></a>
 
-#### [tab\_for\_field](./gui/config_form.py#L367)
+#### [tab\_for\_field](./gui/config_form.py#L344)
 
 ```python
 def tab_for_field(name: str) -> str | None
@@ -14426,7 +13743,7 @@ Return the `TabSpec.name` holding the given config-key field, if any.
 
 <a id="fim.gui.config_form.tab_for_error"></a>
 
-#### [tab\_for\_error](./gui/config_form.py#L387)
+#### [tab\_for\_error](./gui/config_form.py#L364)
 
 ```python
 def tab_for_error(message: str) -> str | None
@@ -14453,7 +13770,7 @@ Return the tab holding the field a validation error message names.
 
 <a id="fim.gui.config_form.field_for_error"></a>
 
-#### [field\_for\_error](./gui/config_form.py#L430)
+#### [field\_for\_error](./gui/config_form.py#L407)
 
 ```python
 def field_for_error(message: str) -> str | None
@@ -14477,7 +13794,7 @@ Return the form field name a validation error message names, if any.
 
 <a id="fim.gui.config_form.form_values_to_payload"></a>
 
-#### [form\_values\_to\_payload](./gui/config_form.py#L485)
+#### [form\_values\_to\_payload](./gui/config_form.py#L462)
 
 ```python
 def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14523,7 +13840,7 @@ Coerce the form's string values into a `from_mapping`-ready payload.
 
 <a id="fim.gui.config_form.form_values_to_draft_payload"></a>
 
-#### [form\_values\_to\_draft\_payload](./gui/config_form.py#L536)
+#### [form\_values\_to\_draft\_payload](./gui/config_form.py#L513)
 
 ```python
 def form_values_to_draft_payload(
@@ -14549,7 +13866,7 @@ field is left out.
 
 <a id="fim.gui.config_form.expert_to_payload"></a>
 
-#### [expert\_to\_payload](./gui/config_form.py#L587)
+#### [expert\_to\_payload](./gui/config_form.py#L564)
 
 ```python
 def expert_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14577,7 +13894,7 @@ existed) is left out, so the setting keeps its default.
 
 <a id="fim.gui.config_form.run_setting_error"></a>
 
-#### [run\_setting\_error](./gui/config_form.py#L642)
+#### [run\_setting\_error](./gui/config_form.py#L619)
 
 ```python
 def run_setting_error(name: str, text: str) -> str | None
@@ -14602,7 +13919,7 @@ valid saved default and name exactly the one that is not.
 
 <a id="fim.gui.config_form.validate_run_settings"></a>
 
-#### [validate\_run\_settings](./gui/config_form.py#L668)
+#### [validate\_run\_settings](./gui/config_form.py#L645)
 
 ```python
 def validate_run_settings(values: Mapping[str, str]) -> None
@@ -14636,7 +13953,7 @@ default the starter model itself cannot use.
 
 <a id="fim.gui.config_form.m_to_payload"></a>
 
-#### [m\_to\_payload](./gui/config_form.py#L727)
+#### [m\_to\_payload](./gui/config_form.py#L704)
 
 ```python
 def m_to_payload(
@@ -14677,7 +13994,7 @@ Build `m`'s payload from the selector's mode and its own sub-fields.
 
 <a id="fim.gui.config_form.m_from_params"></a>
 
-#### [m\_from\_params](./gui/config_form.py#L815)
+#### [m\_from\_params](./gui/config_form.py#L792)
 
 ```python
 def m_from_params(params: SimulationParams) -> dict[str, str]
@@ -14709,7 +14026,7 @@ Render `params.m` back into the selector's form-value keys.
 
 <a id="fim.gui.config_form.mu_to_payload"></a>
 
-#### [mu\_to\_payload](./gui/config_form.py#L858)
+#### [mu\_to\_payload](./gui/config_form.py#L835)
 
 ```python
 def mu_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14739,7 +14056,7 @@ Build `mu`'s or `mu_b`'s payload key from the selector's mode.
 
 <a id="fim.gui.config_form.mu_from_params"></a>
 
-#### [mu\_from\_params](./gui/config_form.py#L884)
+#### [mu\_from\_params](./gui/config_form.py#L861)
 
 ```python
 def mu_from_params(params: SimulationParams) -> dict[str, str]
@@ -14779,7 +14096,7 @@ Render `params.mu` back into the mu/mu_b selector's form-value keys.
 
 <a id="fim.gui.config_form.per_base_mutation_rate"></a>
 
-#### [per\_base\_mutation\_rate](./gui/config_form.py#L930)
+#### [per\_base\_mutation\_rate](./gui/config_form.py#L907)
 
 ```python
 def per_base_mutation_rate(rates: Sequence[float],
@@ -14813,7 +14130,7 @@ if it reproduces every rate within `_PER_BASE_RATE_RELATIVE_TOLERANCE`.
 
 <a id="fim.gui.config_form.initial_conditions_to_payload"></a>
 
-#### [initial\_conditions\_to\_payload](./gui/config_form.py#L1024)
+#### [initial\_conditions\_to\_payload](./gui/config_form.py#L1001)
 
 ```python
 def initial_conditions_to_payload(
@@ -14860,7 +14177,7 @@ Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
 
 <a id="fim.gui.config_form.initial_conditions_from_params"></a>
 
-#### [initial\_conditions\_from\_params](./gui/config_form.py#L1184)
+#### [initial\_conditions\_from\_params](./gui/config_form.py#L1161)
 
 ```python
 def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]
@@ -14897,7 +14214,7 @@ Render `params`'s starting-frequency fields into the selector's form-value keys.
 
 <a id="fim.gui.config_form.loci_to_payload"></a>
 
-#### [loci\_to\_payload](./gui/config_form.py#L1256)
+#### [loci\_to\_payload](./gui/config_form.py#L1233)
 
 ```python
 def loci_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14931,7 +14248,7 @@ Build `loci`'s (or `n_loci`/`locus_lengths`'s) payload from the selector's mode.
 
 <a id="fim.gui.config_form.loci_from_params"></a>
 
-#### [loci\_from\_params](./gui/config_form.py#L1327)
+#### [loci\_from\_params](./gui/config_form.py#L1304)
 
 ```python
 def loci_from_params(params: SimulationParams) -> dict[str, str]
@@ -14955,7 +14272,7 @@ Render `params.loci` back into the selector's form-value keys.
 
 <a id="fim.gui.config_form.convergence_statistic_to_payload"></a>
 
-#### [convergence\_statistic\_to\_payload](./gui/config_form.py#L1359)
+#### [convergence\_statistic\_to\_payload](./gui/config_form.py#L1336)
 
 ```python
 def convergence_statistic_to_payload(
@@ -14980,7 +14297,7 @@ Build `convergence_statistic`'s payload from the multi-select checkboxes.
 
 <a id="fim.gui.config_form.convergence_statistic_from_params"></a>
 
-#### [convergence\_statistic\_from\_params](./gui/config_form.py#L1379)
+#### [convergence\_statistic\_from\_params](./gui/config_form.py#L1356)
 
 ```python
 def convergence_statistic_from_params(
@@ -14991,7 +14308,7 @@ Render `params.convergence_statistic` back into the checkbox keys.
 
 <a id="fim.gui.config_form.params_to_form_values"></a>
 
-#### [params\_to\_form\_values](./gui/config_form.py#L1402)
+#### [params\_to\_form\_values](./gui/config_form.py#L1379)
 
 ```python
 def params_to_form_values(params: SimulationParams) -> dict[str, str]
@@ -15022,7 +14339,7 @@ Render a validated `SimulationParams` back into the form's fields.
 
 <a id="fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES"></a>
 
-#### [DEFAULT\_RUN\_SETTING\_FIELD\_NAMES](./gui/config_form.py#L1499)
+#### [DEFAULT\_RUN\_SETTING\_FIELD\_NAMES](./gui/config_form.py#L1476)
 
 Every `SimulationParams`-backed form-value key the Settings dialog's
 own execution defaults cover (`fim.gui.preferences.GuiPreferences.
@@ -15063,7 +14380,7 @@ derived from Settings' "Statistics shown", not saved as a run default
 
 <a id="fim.gui.config_form.RUN_SETTING_LABELS"></a>
 
-#### [RUN\_SETTING\_LABELS](./gui/config_form.py#L1563)
+#### [RUN\_SETTING\_LABELS](./gui/config_form.py#L1540)
 
 Plain-language names for `DEFAULT_RUN_SETTING_FIELD_NAMES`, used when
 the GUI tells a user how a loaded configuration's run settings differ
@@ -15073,7 +14390,7 @@ from the other.
 
 <a id="fim.gui.config_form.run_setting_display"></a>
 
-#### [run\_setting\_display](./gui/config_form.py#L1589)
+#### [run\_setting\_display](./gui/config_form.py#L1566)
 
 ```python
 def run_setting_display(name: str, text: str) -> str
@@ -15098,7 +14415,7 @@ an empty cell.
 
 <a id="fim.gui.config_form.run_setting_differences"></a>
 
-#### [run\_setting\_differences](./gui/config_form.py#L1628)
+#### [run\_setting\_differences](./gui/config_form.py#L1605)
 
 ```python
 def run_setting_differences(
@@ -15131,7 +14448,7 @@ adopt them. This is that comparison.
 
 <a id="fim.gui.config_form.starter_form_values"></a>
 
-#### [starter\_form\_values](./gui/config_form.py#L1672)
+#### [starter\_form\_values](./gui/config_form.py#L1649)
 
 ```python
 def starter_form_values(
@@ -15171,7 +14488,7 @@ Return the form's default values, from the CLI's own starter config.
 
 <a id="fim.gui.config_form.payload_to_yaml_text"></a>
 
-#### [payload\_to\_yaml\_text](./gui/config_form.py#L1778)
+#### [payload\_to\_yaml\_text](./gui/config_form.py#L1755)
 
 ```python
 def payload_to_yaml_text(payload: Mapping[str, object]) -> str
@@ -15473,24 +14790,15 @@ Return pairwise identity decay by migration-graph distance, pooled.
 
 # [fim.gui.object\_bridge](./gui/object_bridge.py#L1)
 
-Saved runs ("Save for later") for the GUI: the logic behind `Api`'s methods.
+GUI operations for creating and managing saved Run objects.
 
-A saved run is a Run object (`fim.persistence.run_objects`): a configuration
-the botanist saved to start, pause, and resume later, which may be a Draft
-that is not yet valid. `fim.gui.app.Api` stays a thin bridge over these
-functions, which are plain enough to test without a window.
-
-A Draft's configuration file records what was entered (fields that do not
-parse keep their text), but cannot always be turned back into form values,
-because the form has modes and selectors the configuration does not. So
-each save also writes the form's own values to `gui-form.json` in the
-object directory, next to a digest of the configuration it was saved with.
-Reopening uses those values while the digest still matches; after an edit
-made elsewhere (`fim object edit`), the configuration itself is converted.
+The bridge delegates lifecycle operations to `fim.run_service` and
+`fim.persistence.run_objects`. Drafts retain entered form values in
+`gui-form.json` so configurations that are not yet valid can be reopened.
 
 <a id="fim.gui.object_bridge.cancel"></a>
 
-#### [cancel](./gui/object_bridge.py#L71)
+#### [cancel](./gui/object_bridge.py#L62)
 
 ```python
 def cancel(object_id: str, *, results: Path | None = None) -> str
@@ -15510,7 +14818,7 @@ Cancel a saved run, or ask its running worker to stop.
 
 <a id="fim.gui.object_bridge.configuration_text"></a>
 
-#### [configuration\_text](./gui/object_bridge.py#L88)
+#### [configuration\_text](./gui/object_bridge.py#L79)
 
 ```python
 def configuration_text(values: Mapping[str, str],
@@ -15535,7 +14843,7 @@ Turn form values into configuration text, whether or not they are valid.
 
 <a id="fim.gui.object_bridge.clone"></a>
 
-#### [clone](./gui/object_bridge.py#L121)
+#### [clone](./gui/object_bridge.py#L112)
 
 ```python
 def clone(object_id: str, *, results: Path | None = None) -> RunObject
@@ -15555,7 +14863,7 @@ Create a new saved run from another one's configuration.
 
 <a id="fim.gui.object_bridge.delete"></a>
 
-#### [delete](./gui/object_bridge.py#L146)
+#### [delete](./gui/object_bridge.py#L137)
 
 ```python
 def delete(object_id: str, *, results: Path | None = None) -> None
@@ -15570,7 +14878,7 @@ Delete a saved run that is not executing.
 
 <a id="fim.gui.object_bridge.form_values"></a>
 
-#### [form\_values](./gui/object_bridge.py#L159)
+#### [form\_values](./gui/object_bridge.py#L150)
 
 ```python
 def form_values(
@@ -15590,7 +14898,7 @@ Return a saved run's configuration as form values.
 
 <a id="fim.gui.object_bridge.list_rows"></a>
 
-#### [list\_rows](./gui/object_bridge.py#L186)
+#### [list\_rows](./gui/object_bridge.py#L177)
 
 ```python
 def list_rows(results: Path | None = None) -> dict[str, Any]
@@ -15610,7 +14918,7 @@ Return one row per saved run, after recording any lost worker.
 
 <a id="fim.gui.object_bridge.pause"></a>
 
-#### [pause](./gui/object_bridge.py#L207)
+#### [pause](./gui/object_bridge.py#L198)
 
 ```python
 def pause(object_id: str, *, results: Path | None = None) -> None
@@ -15625,7 +14933,7 @@ Ask a running saved run to checkpoint and pause.
 
 <a id="fim.gui.object_bridge.prepare_start"></a>
 
-#### [prepare\_start](./gui/object_bridge.py#L218)
+#### [prepare\_start](./gui/object_bridge.py#L209)
 
 ```python
 def prepare_start(
@@ -15655,7 +14963,7 @@ Check that a saved run can start or resume now, before any side effect.
 
 <a id="fim.gui.object_bridge.row"></a>
 
-#### [row](./gui/object_bridge.py#L250)
+#### [row](./gui/object_bridge.py#L241)
 
 ```python
 def row(run_object: RunObject) -> dict[str, Any]
@@ -15674,7 +14982,7 @@ Return the Saved runs panel's row for one saved run.
 
 <a id="fim.gui.object_bridge.save"></a>
 
-#### [save](./gui/object_bridge.py#L290)
+#### [save](./gui/object_bridge.py#L281)
 
 ```python
 def save(
@@ -15714,25 +15022,15 @@ Save the form as a new saved run, or over an existing Draft or Planned one.
 
 # [fim.gui.object\_runner](./gui/object_runner.py#L1)
 
-Background-thread execution of a saved Run object for the GUI.
+Background execution for saved Run objects in the desktop interface.
 
-The counterpart to `fim.gui.runner` for a Run saved with "Save for later"
-(`fim.persistence.run_objects`). Execution goes through the same lifecycle
-service the CLI's `fim object start/resume` uses
-(`fim.run_service.execute_run_object`), so the GUI never applies lifecycle
-rules of its own. Pause and Cancel are durable requests recorded in the
-object's `run.json` (`request_pause`, `cancel_run_object`); the worker
-honors them at its next safe point.
-
-The worker posts the same `runner.RunMessage` shapes `fim.gui.runner`
-does, plus `("paused", generation)`, so `fim.gui.app._drain_run_messages`
-draws both kinds of run identically. Only one run is in flight at a time,
-and each run has its own queue, so a message from an earlier attempt can
-never reach a later attempt's view.
+Execution and lifecycle transitions use the same services as `fim object
+start` and `fim object resume`. The worker reports progress and responds to
+pause and cancellation requests at safe points.
 
 <a id="fim.gui.object_runner.start_object_run"></a>
 
-#### [start\_object\_run](./gui/object_runner.py#L86)
+#### [start\_object\_run](./gui/object_runner.py#L76)
 
 ```python
 def start_object_run(
@@ -15774,120 +15072,37 @@ exits.
 
 # [fim.gui.preferences](./gui/preferences.py#L1)
 
-Versioned, atomic GUI-preferences store (P1 item 4, design doc
-`20260907-claude-sonnet-5-gui-preferences-persistence-design.md`).
+Versioned storage for persistent desktop-application preferences.
 
-Persists exactly the two things the remediation item names as confirmed
-gaps — the View menu's display precision and the model-input form's
-last successfully submitted values (including the Batch tab's own
-`max_workers` field, which is already one of those values;
-`start_run`'s own docstring: "the Batch tab's own `max_workers`
-field... parsed here directly") — never a run's own scientific
-configuration, which already has a permanent, replayable record in its
-own `manifest.json` (`fim.persistence.manifest`). Both fields are
-optional (`None` means "no saved preference yet"); a caller merges a
-loaded `GuiPreferences` with its own hardcoded default rather than this
-module carrying a second copy of it (`fim.gui.app`'s own `_DEFAULT_
-DISPLAY_SIGNIFICANT_DIGITS` stays the single source of truth there).
-
-A third, optional field — `named_presets` — was added later (botanist
-GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §12:
-"User-saved presets... live in the same preferences store, alongside...
-the last-submitted form snapshot"), a user's own named form-value
-snapshots, distinct from the built-in worked-example presets `fim.gui.
-presets` reads from the bundled usage guide — those are read-only and
-ship with the app; these are created, renamed by overwrite, and deleted
-entirely by the user, at any time, with no relationship to any run's
-own scientific record either. Purely additive to the on-disk shape
-(schema_version does not change): an older file with no `"presets"` key
-loads exactly as it already did, with `named_presets` simply `None`.
-
-A fourth, optional field — `dark_mode_override` — follows the same §12
-precedent again: "Dark-mode override (§11.2), when the user has
-explicitly chosen one rather than following the OS, is a new, small
-addition to that same preferences file — one more scalar value,
-following the exact precedent... `significant_digits`." `None` means
-"follow the OS," the app's own default (§11.2: "the app follows the
-OS-level light/dark preference by default"), not merely "unset" —
-there is no third stored value for "system" distinct from absence, the
-same way `significant_digits: None` already means "use the hardcoded
-default," not a fourth digit count. Purely additive again: an older
-file with no `"dark_mode_override"` key loads exactly as it already
-did, with the field simply `None`.
-
-A fifth GUI field — `startup_behavior` — chooses whether a fresh launch
-restores the last valid submitted form (`"restore"`, the default and
-the historic behavior) or restarts from the built-in starter form
-(`"restart"`). It affects only the next launch's initial form values,
-never any saved run artifact.
-
-A sixth field — `default_run_settings` — is the Settings dialog's own
-"execution/convergence-selection defaults" (`engine_backend`,
-`n_replicates`, `convergence_statistic`/`convergence_combinator`/
-`precision`), a real, reported request
-to move fields the user judged "applicable pretty universally" out of
-the per-run Configure form and into one global-default home, while an
-individual run's own Configure form can still override any of them for
-that one run. Deliberately the same `dict[str, str]` shape and
-validation precedent `form_values` already established (a partial
-`config_form.form_values_to_payload`-compatible mapping, re-validated
-on load by merging it over the true starter values rather than trying
-to validate a subset in isolation — `config_form.starter_form_values`'s
-own `overrides` parameter), not a sixth pair of narrowly-typed scalar
-fields: `track_expensive_statistics` is left out of this set, which
-follows `shown_statistics` instead (`Api._merge_default_run_settings`), and
-any future addition or removal from that set only ever changes
-`config_form.DEFAULT_RUN_SETTING_FIELD_NAMES`, never this store's own
-shape. `None` means "nothing saved yet"
-— `Api.get_default_run_settings` falls back to the starter values for
-exactly this field set in that case, the identical "no saved value yet"
-fallback `significant_digits`/`dark_mode_override` already have their
-own callers apply.
-
-Deliberately excludes a "default deme pair for the next run": `Api.
-_start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
-at the start of every run on purpose ("a fresh run never inherits a
-previous run's own live pair selection... never left showing stale
-state from whichever screen used it last") — persisting a value that
-would then need to override that reset contradicts a documented,
-deliberate design choice already in `app.py`, not an oversight this
-store should paper over.
-
-The on-disk shape is one small JSON document,
-`{"schema_version": 2, "gui": {...}, "form": {...}}`, written with the
-same mkstemp-then-`os.replace` atomic idiom `fim.gui.store.
-write_progress_sidecar` already uses — this module is that idiom's
-second caller, not a second implementation of it. A file this module
-cannot parse, or whose `schema_version` it does not recognize, is never
-silently ignored or partially trusted: it is renamed aside with a
-timestamp (never deleted — always a recoverable copy) and `load_
-preferences` returns fresh defaults plus a human-readable warning the
-caller is expected to actually show, not just log
-(`fim.gui.app.Api.get_startup_warnings`).
+Preferences include display settings, form values, named presets, startup
+behavior, and default run settings. The version 2 JSON document is written
+atomically; callers supply defaults for optional values. Version 1 settings
+are migrated where needed. Corrupt or unsupported files are preserved under
+a timestamped name, and loading returns defaults with a warning.
 
 <a id="fim.gui.preferences.RUN_GRAPH_KEYS"></a>
 
-#### [RUN\_GRAPH\_KEYS](./gui/preferences.py#L140)
+#### [RUN\_GRAPH\_KEYS](./gui/preferences.py#L57)
 
 Every graph the Run card can show, in on-screen order (`run-graph-stage.js`'s
 own `RUN_GRAPHS`, which this must stay in step with).
 
 <a id="fim.gui.preferences.DEFAULT_RUN_GRAPHS"></a>
 
-#### [DEFAULT\_RUN\_GRAPHS](./gui/preferences.py#L150)
+#### [DEFAULT\_RUN\_GRAPHS](./gui/preferences.py#L67)
 
 What a fresh install shows together: the scatter and the trajectories.
 
 <a id="fim.gui.preferences.SCATTER_STYLES"></a>
 
-#### [SCATTER\_STYLES](./gui/preferences.py#L156)
+#### [SCATTER\_STYLES](./gui/preferences.py#L73)
 
 How the scatter plot draws its points (`scatter.js`'s own `SCATTER_STYLES`).
 `circles` is the original encoding (radius grows with count).
 
 <a id="fim.gui.preferences.TRAJECTORY_DISPLAYS"></a>
 
-#### [TRAJECTORY\_DISPLAYS](./gui/preferences.py#L170)
+#### [TRAJECTORY\_DISPLAYS](./gui/preferences.py#L87)
 
 How the trajectory graph draws each statistic: its value at every
 recorded generation (the noise drift leaves in it), its trailing mean over
@@ -15898,7 +15113,7 @@ and `cumulativeMeanSeries`).
 
 <a id="fim.gui.preferences.TRAJECTORY_BAND_WIDTHS"></a>
 
-#### [TRAJECTORY\_BAND\_WIDTHS](./gui/preferences.py#L184)
+#### [TRAJECTORY\_BAND\_WIDTHS](./gui/preferences.py#L101)
 
 How wide the trajectory graph's bands are, in sigmas or standard errors.
 
@@ -15908,7 +15123,7 @@ band of the two averaged displays (design 6.8).
 
 <a id="fim.gui.preferences.GuiPreferences"></a>
 
-## [GuiPreferences Objects](./gui/preferences.py#L270)
+## [GuiPreferences Objects](./gui/preferences.py#L187)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -15989,7 +15204,7 @@ One loaded (or default) snapshot of the GUI's own preferences.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
-#### [to\_dict](./gui/preferences.py#L379)
+#### [to\_dict](./gui/preferences.py#L296)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -15999,7 +15214,7 @@ Return the on-disk JSON shape this preference set writes as.
 
 <a id="fim.gui.preferences.GuiPreferences.from_dict"></a>
 
-#### [from\_dict](./gui/preferences.py#L410)
+#### [from\_dict](./gui/preferences.py#L327)
 
 ```python
 @staticmethod
@@ -16019,7 +15234,7 @@ Parse the on-disk JSON shape `to_dict` writes.
 
 <a id="fim.gui.preferences.GuiPreferences.with_form_values"></a>
 
-#### [with\_form\_values](./gui/preferences.py#L516)
+#### [with\_form\_values](./gui/preferences.py#L433)
 
 ```python
 def with_form_values(form_values: Mapping[str, str]) -> GuiPreferences
@@ -16029,7 +15244,7 @@ Return a copy with `form_values` replaced — the common `start_run` update.
 
 <a id="fim.gui.preferences.GuiPreferences.with_named_preset"></a>
 
-#### [with\_named\_preset](./gui/preferences.py#L520)
+#### [with\_named\_preset](./gui/preferences.py#L437)
 
 ```python
 def with_named_preset(name: str, form_values: Mapping[str,
@@ -16050,7 +15265,7 @@ Return a copy with one named preset added, or overwritten by the same name.
 
 <a id="fim.gui.preferences.GuiPreferences.without_named_preset"></a>
 
-#### [without\_named\_preset](./gui/preferences.py#L538)
+#### [without\_named\_preset](./gui/preferences.py#L455)
 
 ```python
 def without_named_preset(name: str) -> GuiPreferences
@@ -16066,7 +15281,7 @@ surfacing.
 
 <a id="fim.gui.preferences.GuiPreferences.with_significant_digits"></a>
 
-#### [with\_significant\_digits](./gui/preferences.py#L553)
+#### [with\_significant\_digits](./gui/preferences.py#L470)
 
 ```python
 def with_significant_digits(significant_digits: int) -> GuiPreferences
@@ -16078,7 +15293,7 @@ The `set_significant_digits` bridge method's own update.
 
 <a id="fim.gui.preferences.GuiPreferences.with_dark_mode_override"></a>
 
-#### [with\_dark\_mode\_override](./gui/preferences.py#L560)
+#### [with\_dark\_mode\_override](./gui/preferences.py#L477)
 
 ```python
 def with_dark_mode_override(dark_mode_override: str | None) -> GuiPreferences
@@ -16093,7 +15308,7 @@ stay set forever), not merely "clear an error."
 
 <a id="fim.gui.preferences.GuiPreferences.with_welcome_dismissed"></a>
 
-#### [with\_welcome\_dismissed](./gui/preferences.py#L570)
+#### [with\_welcome\_dismissed](./gui/preferences.py#L487)
 
 ```python
 def with_welcome_dismissed() -> GuiPreferences
@@ -16109,7 +15324,7 @@ the OS."
 
 <a id="fim.gui.preferences.GuiPreferences.with_startup_behavior"></a>
 
-#### [with\_startup\_behavior](./gui/preferences.py#L581)
+#### [with\_startup\_behavior](./gui/preferences.py#L498)
 
 ```python
 def with_startup_behavior(startup_behavior: str) -> GuiPreferences
@@ -16124,7 +15339,7 @@ Return a copy with `startup_behavior` replaced.
 
 <a id="fim.gui.preferences.GuiPreferences.with_default_run_settings"></a>
 
-#### [with\_default\_run\_settings](./gui/preferences.py#L590)
+#### [with\_default\_run\_settings](./gui/preferences.py#L507)
 
 ```python
 def with_default_run_settings(values: Mapping[str, str]) -> GuiPreferences
@@ -16140,7 +15355,7 @@ reaches here (the same division of labor `with_form_values` and
 
 <a id="fim.gui.preferences.GuiPreferences.with_results_location_override"></a>
 
-#### [with\_results\_location\_override](./gui/preferences.py#L601)
+#### [with\_results\_location\_override](./gui/preferences.py#L518)
 
 ```python
 def with_results_location_override(path: str | None) -> GuiPreferences
@@ -16159,7 +15374,7 @@ rather than silently only ever growing.
 
 <a id="fim.gui.preferences.GuiPreferences.with_run_card_layout"></a>
 
-#### [with\_run\_card\_layout](./gui/preferences.py#L615)
+#### [with\_run\_card\_layout](./gui/preferences.py#L532)
 
 ```python
 def with_run_card_layout(
@@ -16179,7 +15394,7 @@ each argument left `None` keeps the current value.
 
 <a id="fim.gui.preferences.GuiPreferences.with_shown_statistics"></a>
 
-#### [with\_shown\_statistics](./gui/preferences.py#L653)
+#### [with\_shown\_statistics](./gui/preferences.py#L570)
 
 ```python
 def with_shown_statistics(keys: tuple[str, ...] | None) -> GuiPreferences
@@ -16189,7 +15404,7 @@ Return a copy with the shown statistics replaced (`None`: defaults).
 
 <a id="fim.gui.preferences.GuiPreferences.with_pairwise_max_demes"></a>
 
-#### [with\_pairwise\_max\_demes](./gui/preferences.py#L657)
+#### [with\_pairwise\_max\_demes](./gui/preferences.py#L574)
 
 ```python
 def with_pairwise_max_demes(max_demes: int) -> GuiPreferences
@@ -16199,7 +15414,7 @@ Return a copy with the `pairwise.json` deme-count limit replaced.
 
 <a id="fim.gui.preferences.GuiPreferences.with_default_ploidy"></a>
 
-#### [with\_default\_ploidy](./gui/preferences.py#L661)
+#### [with\_default\_ploidy](./gui/preferences.py#L578)
 
 ```python
 def with_default_ploidy(default_ploidy: str) -> GuiPreferences
@@ -16216,7 +15431,7 @@ The `Api.set_default_ploidy` bridge method's own update.
 
 <a id="fim.gui.preferences.load_preferences"></a>
 
-#### [load\_preferences](./gui/preferences.py#L708)
+#### [load\_preferences](./gui/preferences.py#L625)
 
 ```python
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]
@@ -16241,7 +15456,7 @@ Load `path`, quarantining and defaulting on any unreadable content.
 
 <a id="fim.gui.preferences.set_preferences_file_override"></a>
 
-#### [set\_preferences\_file\_override](./gui/preferences.py#L742)
+#### [set\_preferences\_file\_override](./gui/preferences.py#L659)
 
 ```python
 def set_preferences_file_override(path: Path | None) -> None
@@ -16267,7 +15482,7 @@ the identical "never pay for it unless actually used" reason.
 
 <a id="fim.gui.preferences.preferences_file_override"></a>
 
-#### [preferences\_file\_override](./gui/preferences.py#L764)
+#### [preferences\_file\_override](./gui/preferences.py#L681)
 
 ```python
 def preferences_file_override() -> Path | None
@@ -16277,7 +15492,7 @@ The current `preferences_file_path()` override, if any.
 
 <a id="fim.gui.preferences.preferences_file_path"></a>
 
-#### [preferences\_file\_path](./gui/preferences.py#L769)
+#### [preferences\_file\_path](./gui/preferences.py#L686)
 
 ```python
 def preferences_file_path(*,
@@ -16322,7 +15537,7 @@ configurable-storage-root-design.md` (`selby/restricted`).
 
 <a id="fim.gui.preferences.save_preferences"></a>
 
-#### [save\_preferences](./gui/preferences.py#L824)
+#### [save\_preferences](./gui/preferences.py#L741)
 
 ```python
 def save_preferences(path: Path, preferences: GuiPreferences) -> None
@@ -16338,31 +15553,14 @@ previous complete file or the new one, never a torn write.
 
 # [fim.gui.presets](./gui/presets.py#L1)
 
-Read the bundled examples catalog for the Examples dialog and presets.
+Read bundled examples for the Examples dialog and configuration form.
 
-Every `doc/examples/<id>/` directory is one example.
-`dev/bin/build-examples-catalog` writes them, with the class tree from
-`doc/examples/classes.yaml`, into `webui/examples/catalog.json` at commit
-time (design doc
-`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`
-§4.1, `selby/restricted`). `packaging/fim.spec` bundles the whole
-`webui/` tree into every packaged executable, so the catalog exists both
-in a development checkout and inside a frozen application, while
-`doc/examples/` itself is not bundled.
-
-An example's configuration may carry labels (`name`, `description`,
-`class`) and internal attributes (`_read_only` and any other key that
-starts with `_`). `split_configuration` separates them from the model
-keys, so a loaded example reaches the Configure form as an ordinary,
-editable configuration (design §1, "Consequence").
-
-`list_presets` and `get_preset` are the older, flat view of the same
-catalog, kept as thin aliases until their callers (the File menu's
-"Load example…" picker) move to the Examples dialog (design §5).
+The packaged catalog contains example metadata and configuration files.
+Legacy preset lookup functions provide a flat view of the same catalog.
 
 <a id="fim.gui.presets.ExampleClass"></a>
 
-## [ExampleClass Objects](./gui/presets.py#L50)
+## [ExampleClass Objects](./gui/presets.py#L33)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16380,7 +15578,7 @@ One class in the examples tree (design §2).
 
 <a id="fim.gui.presets.ExampleClass.to_dict"></a>
 
-#### [to\_dict](./gui/presets.py#L65)
+#### [to\_dict](./gui/presets.py#L48)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -16390,7 +15588,7 @@ Return the class as the JSON shape the bridge sends the page.
 
 <a id="fim.gui.presets.Example"></a>
 
-## [Example Objects](./gui/presets.py#L76)
+## [Example Objects](./gui/presets.py#L59)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16415,7 +15613,7 @@ One bundled example.
 
 <a id="fim.gui.presets.Catalog"></a>
 
-## [Catalog Objects](./gui/presets.py#L104)
+## [Catalog Objects](./gui/presets.py#L87)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16426,7 +15624,7 @@ The bundled class tree and examples, in display order.
 
 <a id="fim.gui.presets.Preset"></a>
 
-## [Preset Objects](./gui/presets.py#L112)
+## [Preset Objects](./gui/presets.py#L95)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16444,7 +15642,7 @@ One example with a configuration, in the older flat preset view.
 
 <a id="fim.gui.presets.get_example"></a>
 
-#### [get\_example](./gui/presets.py#L152)
+#### [get\_example](./gui/presets.py#L135)
 
 ```python
 def get_example(webui_directory: Path, example_id: str) -> Example | None
@@ -16459,7 +15657,7 @@ Return one example by ID, or `None` if the catalog has no such example.
 
 <a id="fim.gui.presets.get_preset"></a>
 
-#### [get\_preset](./gui/presets.py#L165)
+#### [get\_preset](./gui/presets.py#L148)
 
 ```python
 def get_preset(webui_directory: Path, preset_id: str) -> Preset | None
@@ -16474,7 +15672,7 @@ Return one preset by ID, or `None` if no such preset exists.
 
 <a id="fim.gui.presets.list_presets"></a>
 
-#### [list\_presets](./gui/presets.py#L178)
+#### [list\_presets](./gui/presets.py#L161)
 
 ```python
 def list_presets(webui_directory: Path) -> list[Preset]
@@ -16495,7 +15693,7 @@ Return every example that has a configuration, as a flat preset list.
 
 <a id="fim.gui.presets.load_catalog"></a>
 
-#### [load\_catalog](./gui/presets.py#L200)
+#### [load\_catalog](./gui/presets.py#L183)
 
 ```python
 def load_catalog(webui_directory: Path) -> Catalog
@@ -16519,7 +15717,7 @@ Return the bundled examples catalog.
 
 <a id="fim.gui.presets.find_example"></a>
 
-#### [find\_example](./gui/presets.py#L217)
+#### [find\_example](./gui/presets.py#L200)
 
 ```python
 def find_example(catalog: Catalog, example_id: str) -> Example | None
@@ -16534,7 +15732,7 @@ Return one example of an already-loaded catalog, or `None`.
 
 <a id="fim.gui.presets.catalog_presets"></a>
 
-#### [catalog\_presets](./gui/presets.py#L230)
+#### [catalog\_presets](./gui/presets.py#L213)
 
 ```python
 def catalog_presets(catalog: Catalog) -> list[Preset]
@@ -16547,7 +15745,7 @@ configuration, in catalog order.
 
 <a id="fim.gui.presets.load_bundle_catalog"></a>
 
-#### [load\_bundle\_catalog](./gui/presets.py#L247)
+#### [load\_bundle\_catalog](./gui/presets.py#L230)
 
 ```python
 def load_bundle_catalog(bundle_directory: Path) -> Catalog
@@ -16572,7 +15770,7 @@ bundle.
 
 <a id="fim.gui.presets.split_configuration"></a>
 
-#### [split\_configuration](./gui/presets.py#L274)
+#### [split\_configuration](./gui/presets.py#L257)
 
 ```python
 def split_configuration(
@@ -16599,7 +15797,7 @@ editable run (design §1).
 
 <a id="fim.gui.presets.strip_internal_yaml_keys"></a>
 
-#### [strip\_internal\_yaml\_keys](./gui/presets.py#L301)
+#### [strip\_internal\_yaml\_keys](./gui/presets.py#L284)
 
 ```python
 def strip_internal_yaml_keys(yaml_text: str) -> str
@@ -16626,23 +15824,14 @@ stay, since `fim run` records them as the new run's name.
 
 # [fim.gui.recent\_runs](./gui/recent_runs.py#L1)
 
-Scan `results/` for recently completed runs, scalar and batch
-(`doc/fim-gui-design.md` §9).
+Find recent scalar and batch runs in the results directory.
 
-The recent-runs picker is populated by scanning
-`fim.paths.results_directory()` for `*/manifest.json`, reading each with
-`fim.persistence.manifest.read_manifest` (scalar) or
-`fim.persistence.manifest.read_batch_manifest` (batch) — the same files
-`fim stats` and `fim run`'s own batch summary default to. A batch's
-manifest is listed but labeled distinctly (e.g. "batch (14/20)") rather
-than treated as something the picker can open directly: "Open
-replicate" on a batch's own results table is the path to any one
-replicate's trajectory, since a batch-level manifest has no single
-trajectory of its own to verify or re-analyze.
+Run manifests provide the list entries. Scalar runs can be opened directly;
+for a batch, the interface opens an individual replicate.
 
 <a id="fim.gui.recent_runs.RecentRun"></a>
 
-## [RecentRun Objects](./gui/recent_runs.py#L34)
+## [RecentRun Objects](./gui/recent_runs.py#L25)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -16677,7 +15866,7 @@ One run — scalar or batch — found under `results/`, ready to list.
 
 <a id="fim.gui.recent_runs.list_recent_runs"></a>
 
-#### [list\_recent\_runs](./gui/recent_runs.py#L69)
+#### [list\_recent\_runs](./gui/recent_runs.py#L60)
 
 ```python
 def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]
@@ -16705,38 +15894,15 @@ Return every run under `results_directory`, newest first.
 
 # [fim.gui.runner](./gui/runner.py#L1)
 
-Background-thread scalar-run orchestration (`doc/fim-gui-design.md` §7.1).
+Background-thread orchestration for scalar GUI runs.
 
-`fim.engine.simulate_params` is a single blocking call; a multi-thousand-generation
-run would freeze the Tk main thread for its whole duration. `start_run`
-runs it on a `threading.Thread` instead, and gets progress and
-cancellation for free from `fim.gui.store.GuiProgressStore` — no change
-to `fim.engine` at all.
-
-The worker does its work inside `fim.paths.atomic_directory`, the exact
-context manager `cli._command_run_scalar` already uses (`fim.paths` was
-extracted from the CLI for precisely this shared use — §12): every
-write lands in a
-hidden temporary sibling of `output_directory`, published with one
-atomic rename only if the `with` block exits normally. A cancelled run
-raises `RunCancelledError` out of that block; an unexpected engine error
-raises one of `_EXPECTED_ENGINE_ERRORS`. Either way, `atomic_directory`'s
-own `except BaseException` clause discards the temporary directory and
-`output_directory` is never created — no GUI-specific cleanup code is
-needed for either outcome.
-
-Writes the same four artifacts, in the same order, as
-`fim.persistence.artifacts.write_run_artifacts`: `trajectory.tlog` streamed
-generation-by-generation by the `TrajectoryStore` passed into `fim`,
-then `report.json` and `scatter.png` once the run finishes, then —
-last, and only once both are flushed — `manifest.json`, augmented with
-each artifact's SHA-256 digest, the record
-`fim.persistence.manifest.verify_trajectory_integrity` later checks
-against.
+The worker runs the shared simulation engine, reports progress through
+`GuiProgressStore`, and writes the same run artifacts as the command-line
+interface. Output is published atomically only after a successful run.
 
 <a id="fim.gui.runner.ProgressThrottle"></a>
 
-## [ProgressThrottle Objects](./gui/runner.py#L121)
+## [ProgressThrottle Objects](./gui/runner.py#L98)
 
 ```python
 class ProgressThrottle()
@@ -16758,7 +15924,7 @@ throttle.
 
 <a id="fim.gui.runner.ProgressThrottle.__init__"></a>
 
-#### [\_\_init\_\_](./gui/runner.py#L137)
+#### [\_\_init\_\_](./gui/runner.py#L114)
 
 ```python
 def __init__(*,
@@ -16770,7 +15936,7 @@ Start with no prior report, so the very first call always reports.
 
 <a id="fim.gui.runner.ProgressThrottle.should_report"></a>
 
-#### [should\_report](./gui/runner.py#L148)
+#### [should\_report](./gui/runner.py#L125)
 
 ```python
 def should_report(generation: int, max_generations: int) -> bool
@@ -16780,7 +15946,7 @@ Return whether `generation` should be posted to the UI now.
 
 <a id="fim.gui.runner.pairwise_status_text"></a>
 
-#### [pairwise\_status\_text](./gui/runner.py#L163)
+#### [pairwise\_status\_text](./gui/runner.py#L140)
 
 ```python
 def pairwise_status_text(deme_count: int, run_count: int) -> str
@@ -16800,7 +15966,7 @@ Return the status line shown while large `pairwise.json` files are saved.
 
 <a id="fim.gui.runner.progress_message"></a>
 
-#### [progress\_message](./gui/runner.py#L181)
+#### [progress\_message](./gui/runner.py#L158)
 
 ```python
 def progress_message(state: ModelState, generation: int,
@@ -16826,7 +15992,7 @@ saved Run and an ordinary one draw identical ticks.
 
 <a id="fim.gui.runner.start_run"></a>
 
-#### [start\_run](./gui/runner.py#L218)
+#### [start\_run](./gui/runner.py#L195)
 
 ```python
 def start_run(
@@ -16873,41 +16039,16 @@ Resolve targets, guard the existing target, and start the worker thread.
 
 # [fim.gui.store](./gui/store.py#L1)
 
-Progress reporting and cancellation for a background run (§7 of the GUI design doc).
+Progress reporting and cancellation support for background runs.
 
-`fim.persistence.store.TrajectoryStore` is a `Protocol` (structural
-typing, not an ABC), and `fim.engine.lineal.run_one`'s generation loop already
-calls `store.write_generation(...)` unconditionally, every generation,
-with no `try`/`except` around it — a clean, pre-existing extension point
-`GuiProgressStore`/`LiveProgressStore` decorate rather than a change to
-`fim.engine` itself.
-
-Named `RunCancelledError`, not an earlier prototype's `RunCancelled` —
-ruff's `N818` (exception names end in `Error`) is part of this
-project's lint gate (`doc/fim-gui-design.md` §2).
-
-Two decorators live here, for two execution shapes (`doc/
-fim-gui-design.md` §7.1, §7.2):
-
-- `GuiProgressStore` — a scalar run, one in-process background thread.
-  Holds a `threading.Event` and a callback closure; both are real
-  Python objects the calling thread can read/write directly, because
-  nothing here ever crosses a process boundary.
-- `LiveProgressStore` — a batch replicate, running inside its own
-  `ProcessPoolExecutor` worker process. A `threading.Event` and a
-  closure cannot be pickled across that boundary, so this decorator
-  holds only plain, picklable `Path`s instead: it *writes* a small
-  progress sidecar file after each generation and *checks* a shared
-  cancellation file before each write, rather than calling back into
-  the parent process directly (which nothing here could safely do).
-  The parent discovers progress by polling the sidecar, and requests
-  cancellation by creating the cancellation file — both plain
-  filesystem operations, needing no cross-process synchronization
-  primitive at all.
+`GuiProgressStore` reports scalar-run progress through an in-process callback.
+`LiveProgressStore` reports worker-process progress through sidecar files and
+checks a shared cancellation file. Both implement the trajectory-store
+interface used by the simulation engine.
 
 <a id="fim.gui.store.LIVE_BLOCK_SECONDS"></a>
 
-#### [LIVE\_BLOCK\_SECONDS](./gui/store.py#L63)
+#### [LIVE\_BLOCK\_SECONDS](./gui/store.py#L38)
 
 Seconds a run's open log block may wait before it is written.
 
@@ -16919,7 +16060,7 @@ finished file is byte-for-byte the one a command-line run writes.)
 
 <a id="fim.gui.store.RunCancelledError"></a>
 
-## [RunCancelledError Objects](./gui/store.py#L73)
+## [RunCancelledError Objects](./gui/store.py#L48)
 
 ```python
 class RunCancelledError(FimError)
@@ -16936,7 +16077,7 @@ Raised from `write_generation` to unwind an in-progress run.
 
 <a id="fim.gui.store.GuiProgressStore"></a>
 
-## [GuiProgressStore Objects](./gui/store.py#L89)
+## [GuiProgressStore Objects](./gui/store.py#L64)
 
 ```python
 class GuiProgressStore()
@@ -16951,7 +16092,7 @@ difference.
 
 <a id="fim.gui.store.GuiProgressStore.__init__"></a>
 
-#### [\_\_init\_\_](./gui/store.py#L98)
+#### [\_\_init\_\_](./gui/store.py#L73)
 
 ```python
 def __init__(inner: TrajectoryStore, *,
@@ -16977,7 +16118,7 @@ Wrap `inner`, reporting each write and honoring `cancel_event`.
 
 <a id="fim.gui.store.GuiProgressStore.write_generation"></a>
 
-#### [write\_generation](./gui/store.py#L124)
+#### [write\_generation](./gui/store.py#L99)
 
 ```python
 def write_generation(run_id: str,
@@ -17012,7 +16153,7 @@ store`'s own top docstring for who does.
 
 <a id="fim.gui.store.GuiProgressStore.begin_run"></a>
 
-#### [begin\_run](./gui/store.py#L163)
+#### [begin\_run](./gui/store.py#L138)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -17025,7 +16166,7 @@ though this decorator hands it rows.
 
 <a id="fim.gui.store.GuiProgressStore.wants_frames"></a>
 
-#### [wants\_frames](./gui/store.py#L171)
+#### [wants\_frames](./gui/store.py#L146)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -17035,7 +16176,7 @@ Return `False`: the live scatter's callback needs the rows.
 
 <a id="fim.gui.store.GuiProgressStore.write_frame"></a>
 
-#### [write\_frame](./gui/store.py#L176)
+#### [write\_frame](./gui/store.py#L151)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -17045,7 +16186,7 @@ Refuse frames; this decorator is fed rows (`wants_frames` is false).
 
 <a id="fim.gui.store.GuiProgressStore.read"></a>
 
-#### [read](./gui/store.py#L181)
+#### [read](./gui/store.py#L156)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -17055,7 +16196,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.gui.store.GuiProgressStore.discard"></a>
 
-#### [discard](./gui/store.py#L185)
+#### [discard](./gui/store.py#L160)
 
 ```python
 def discard(run_id: str) -> None
@@ -17065,7 +16206,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.gui.store.GuiProgressStore.close"></a>
 
-#### [close](./gui/store.py#L189)
+#### [close](./gui/store.py#L164)
 
 ```python
 def close() -> None
@@ -17075,7 +16216,7 @@ Close the wrapped store's own resources (`ClosableStore`).
 
 <a id="fim.gui.store.GuiProgressStore.equilibrium_store"></a>
 
-#### [equilibrium\_store](./gui/store.py#L193)
+#### [equilibrium\_store](./gui/store.py#L168)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -17090,7 +16231,7 @@ zero (`fim.persistence.store.EquilibriumStoreProvider`).
 
 <a id="fim.gui.store.LiveProgressStore"></a>
 
-## [LiveProgressStore Objects](./gui/store.py#L204)
+## [LiveProgressStore Objects](./gui/store.py#L179)
 
 ```python
 class LiveProgressStore()
@@ -17106,7 +16247,7 @@ or a callback. Structurally satisfies `TrajectoryStore`, exactly like
 
 <a id="fim.gui.store.LiveProgressStore.__init__"></a>
 
-#### [\_\_init\_\_](./gui/store.py#L214)
+#### [\_\_init\_\_](./gui/store.py#L189)
 
 ```python
 def __init__(inner: TrajectoryStore, *, progress_path: Path,
@@ -17132,7 +16273,7 @@ Wrap `inner`, recording progress in and honoring cancellation from disk.
 
 <a id="fim.gui.store.LiveProgressStore.begin_run"></a>
 
-#### [begin\_run](./gui/store.py#L246)
+#### [begin\_run](./gui/store.py#L221)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -17142,7 +16283,7 @@ Tell the wrapped store the run's layout (`FrameStore`).
 
 <a id="fim.gui.store.LiveProgressStore.wants_frames"></a>
 
-#### [wants\_frames](./gui/store.py#L250)
+#### [wants\_frames](./gui/store.py#L225)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -17152,7 +16293,7 @@ Whether the wrapped store prefers frames; nothing here needs rows.
 
 <a id="fim.gui.store.LiveProgressStore.write_frame"></a>
 
-#### [write\_frame](./gui/store.py#L254)
+#### [write\_frame](./gui/store.py#L229)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -17169,7 +16310,7 @@ first, and the sidecar follows the committed generation.
 
 <a id="fim.gui.store.LiveProgressStore.write_generation"></a>
 
-#### [write\_generation](./gui/store.py#L287)
+#### [write\_generation](./gui/store.py#L262)
 
 ```python
 def write_generation(run_id: str,
@@ -17189,7 +16330,7 @@ method's own docstring explains.
 
 <a id="fim.gui.store.LiveProgressStore.read"></a>
 
-#### [read](./gui/store.py#L309)
+#### [read](./gui/store.py#L284)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -17199,7 +16340,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.gui.store.LiveProgressStore.discard"></a>
 
-#### [discard](./gui/store.py#L313)
+#### [discard](./gui/store.py#L288)
 
 ```python
 def discard(run_id: str) -> None
@@ -17209,7 +16350,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.gui.store.LiveProgressStore.close"></a>
 
-#### [close](./gui/store.py#L317)
+#### [close](./gui/store.py#L292)
 
 ```python
 def close() -> None
@@ -17223,7 +16364,7 @@ while the run was going.
 
 <a id="fim.gui.store.LiveProgressStore.equilibrium_store"></a>
 
-#### [equilibrium\_store](./gui/store.py#L329)
+#### [equilibrium\_store](./gui/store.py#L304)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -17237,7 +16378,7 @@ equilibrium_store`).
 
 <a id="fim.gui.store.write_progress_sidecar"></a>
 
-#### [write\_progress\_sidecar](./gui/store.py#L339)
+#### [write\_progress\_sidecar](./gui/store.py#L314)
 
 ```python
 def write_progress_sidecar(progress_path: Path, generation: int) -> None
@@ -17262,7 +16403,7 @@ Atomically write one replicate's `.progress` sidecar.
 
 <a id="fim.gui.store.read_progress_sidecar"></a>
 
-#### [read\_progress\_sidecar](./gui/store.py#L372)
+#### [read\_progress\_sidecar](./gui/store.py#L347)
 
 ```python
 def read_progress_sidecar(progress_path: Path) -> dict[str, Any] | None
@@ -17278,7 +16419,7 @@ a complete, valid write; no partial-read handling is needed here.
 
 <a id="fim.gui.store.read_live_state"></a>
 
-#### [read\_live\_state](./gui/store.py#L395)
+#### [read\_live\_state](./gui/store.py#L370)
 
 ```python
 def read_live_state(trajectory_path: Path, run_id: str, generation: int,
@@ -17322,11 +16463,11 @@ generation still being written.
 
 # [fim.gui.sweep\_bridge](./gui/sweep_bridge.py#L1)
 
-JSON-shaped payloads for the sweep bridge calls (`fim.gui.app.Api`).
+Convert between web-interface requests and parameter-sweep data.
 
-Pure functions turning a page request into a `SweepSpec` and turning a
-plan, a Study or its results back into plain dictionaries the page can
-draw. Nothing here touches a window or starts a run; `Api` owns that.
+Pure functions in this module build sweep specifications and serialize plans,
+studies, and results as dictionaries for the page. Window management and
+execution are handled by `fim.gui.app.Api`.
 
 <a id="fim.gui.sweep_bridge.sweepable_keys_payload"></a>
 
@@ -17521,30 +16662,15 @@ Describe a sweep Study's finished points and their statistics.
 
 # [fim.gui.trajectory\_history](./gui/trajectory_history.py#L1)
 
-Sample a full statistic-vs-generation history from a persisted
-trajectory, for the Compare workspace's own trajectory-overlay panel
-(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-redesign.md` §8: "overlay their trajectory plots on one set of axes,
-one color per run").
+Sample statistic histories from persisted trajectories.
 
-`fim.reanalyze.reanalyze_trajectory` already recomputes statistics for
-one chosen generation of a persisted run; this module does the same
-underlying work — verify the trajectory's own integrity, group its rows
-by generation, rebuild a `ModelState` and call `report_for_state` — but
-for a whole, evenly-spaced sample of generations at once, not just one,
-so a full curve can be drawn for a run that was never watched live.
-
-Reuses `fim.gui.animation.select_sample_generations`/`GUI_ANIMATION_
-MAX_FRAMES` exactly as already established for the animation screen's
-own frame sampler, rather than inventing a second, independent sampling
-density: a run that persisted hundreds or thousands of generations
-should not turn into hundreds or thousands of `report_for_state` calls
-here any more than it turns into that many rendered animation frames,
-for the identical reason (`fim.gui.animation`'s own module docstring).
+The module verifies a trajectory, recomputes statistics for evenly spaced
+generations, and returns data for comparison plots. Sampling uses the same
+maximum frame count as the trajectory animation.
 
 <a id="fim.gui.trajectory_history.TrajectoryHistory"></a>
 
-## [TrajectoryHistory Objects](./gui/trajectory_history.py#L54)
+## [TrajectoryHistory Objects](./gui/trajectory_history.py#L39)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -17573,7 +16699,7 @@ One run's own sampled statistic-vs-generation history.
 
 <a id="fim.gui.trajectory_history.sampled_statistic_history"></a>
 
-#### [sampled\_statistic\_history](./gui/trajectory_history.py#L81)
+#### [sampled\_statistic\_history](./gui/trajectory_history.py#L66)
 
 ```python
 def sampled_statistic_history(
@@ -17711,30 +16837,16 @@ launched it, rather than blocking until the app window is closed.
 
 # [fim.logging\_setup](./logging_setup.py#L1)
 
-Central logging configuration for both front ends (`doc/fim-logging-
-design.md` §3.2).
+Configure logging for the command-line interface and desktop application.
 
-Every module under `fim` logs via `logging.getLogger(__name__)` alone
-and never touches handler or level configuration itself (`fim/__init__.
-py`'s own `NullHandler` is what keeps that safe by default). This is
-the one place that configuration actually happens — called once, with
-already-parsed values, by each of the three real entry points:
-`fim.cli.main` (from its own `-l`/`-L` arguments), `fim.launcher.main`
-and `fim.gui.app.main` (from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`).
-`configure` is idempotent: calling it more than once replaces the
-`fim` logger's own handlers rather than accumulating them, so a test
-(or a future caller) that calls it twice never sees doubled output.
-
-`apply_logging_config_file`, below, is each entry point's alternative
-to `configure` — not a layer on top of it — for the one thing `-l`/`-L`
-cannot express at all: a full, reusable, multiple-handler logging
-configuration read from an external YAML file (`--logging-config`/
-`FIM_LOGGING_CONFIG`, `20260918-claude-sonnet-5-configurable-storage-
-root-design.md`, `selby/restricted`, §9).
+`configure` applies the standard stream and file handlers from parsed options.
+`apply_logging_config_file` loads a complete `logging.config.dictConfig`
+configuration from YAML. Application entry points select one configuration
+path; the module does not configure loggers during import.
 
 <a id="fim.logging_setup.resolve_level"></a>
 
-#### [resolve\_level](./logging_setup.py#L63)
+#### [resolve\_level](./logging_setup.py#L49)
 
 ```python
 def resolve_level(level: str | int) -> int
@@ -17761,7 +16873,7 @@ Resolve a `-l`-style level name (or an already-numeric level).
 
 <a id="fim.logging_setup.log_file_streams"></a>
 
-#### [log\_file\_streams](./logging_setup.py#L91)
+#### [log\_file\_streams](./logging_setup.py#L77)
 
 ```python
 def log_file_streams() -> list[TextIO]
@@ -17796,7 +16908,7 @@ be worse than not dumping.
 
 <a id="fim.logging_setup.parse_log_options"></a>
 
-#### [parse\_log\_options](./logging_setup.py#L128)
+#### [parse\_log\_options](./logging_setup.py#L114)
 
 ```python
 def parse_log_options(text: str | None) -> dict[str, str]
@@ -17830,7 +16942,7 @@ silently wrong log destination" contract `doc/fim-logging-design.md`
 
 <a id="fim.logging_setup.apply_logging_config_file"></a>
 
-#### [apply\_logging\_config\_file](./logging_setup.py#L172)
+#### [apply\_logging\_config\_file](./logging_setup.py#L158)
 
 ```python
 def apply_logging_config_file(path: Path) -> None
@@ -17877,7 +16989,7 @@ CONFIG` is given, never both.
 
 <a id="fim.logging_setup.configure"></a>
 
-#### [configure](./logging_setup.py#L216)
+#### [configure](./logging_setup.py#L202)
 
 ```python
 def configure(level: str | int = "warning",
@@ -17994,8 +17106,7 @@ class AlleleRegistry()
 
 Allocate globally unique identities for alleles created by mutation.
 
-The infinite-alleles model's allocator (see this module's own
-docstring, above): every call to `next_id` returns an integer that
+In the infinite-alleles model, every call to `next_id` returns an integer that
 has never been returned before, from this registry or from
 `founding_allele_ids`, so a mutant allele's ID alone is always
 enough to tell it apart from every founding allele and from every
@@ -18004,7 +17115,7 @@ ever colliding on the same identifier.
 
 <a id="fim.model.allele.AlleleRegistry.__init__"></a>
 
-#### [\_\_init\_\_](./model/allele.py#L121)
+#### [\_\_init\_\_](./model/allele.py#L120)
 
 ```python
 def __init__(start: int = MINTED_ID_START) -> None
@@ -18023,7 +17134,7 @@ Initialize a registry at the first mutant-only identifier.
 
 <a id="fim.model.allele.AlleleRegistry.next_value"></a>
 
-#### [next\_value](./model/allele.py#L137)
+#### [next\_value](./model/allele.py#L136)
 
 ```python
 @property
@@ -18038,7 +17149,7 @@ exactly the counter this registry holds.
 
 <a id="fim.model.allele.AlleleRegistry.advance_to"></a>
 
-#### [advance\_to](./model/allele.py#L146)
+#### [advance\_to](./model/allele.py#L145)
 
 ```python
 def advance_to(value: int) -> None
@@ -18062,7 +17173,7 @@ afterwards still never returns an identity V already handed out.
 
 <a id="fim.model.allele.AlleleRegistry.next_id"></a>
 
-#### [next\_id](./model/allele.py#L166)
+#### [next\_id](./model/allele.py#L165)
 
 ```python
 def next_id() -> AlleleId
@@ -18072,7 +17183,7 @@ Return a new allele identity that has never been returned before.
 
 <a id="fim.model.allele.AlleleRegistry.next_k_ids"></a>
 
-#### [next\_k\_ids](./model/allele.py#L172)
+#### [next\_k\_ids](./model/allele.py#L171)
 
 ```python
 def next_k_ids(k: int) -> np.ndarray
@@ -18080,22 +17191,8 @@ def next_k_ids(k: int) -> np.ndarray
 
 Reserve ``k`` consecutive, never-before-returned allele identities.
 
-The vectorized counterpart to `next_id`, designed but never
-built in `20260829-claude-sonnet-5-fim-vector-design.md` §5.2 —
-built here for `20260901-claude-sonnet-5-fim-engine-backend-
-factory-design.md` §10 item 10e's own stage 3 (batching
-`mutate`'s own infinite-alleles minting across a whole
-generation instead of one `next_id()` call per event). The
-correctness guarantee `next_id`'s own docstring states —
-"every call returns something no earlier call ever returned" —
-constrains only the *reservation*, a single, genuinely
-sequential integer read-modify-write, not how the reserved
-block of `k` identities gets constructed afterward: `k`
-sequential `next_id()` calls and one `next_k_ids(k)` call return
-bit-identical values, in the same order, since both are exactly
-``base, base + 1, ..., base + k - 1`` — the only difference is
-that this method pays the sequential counter's own cost once,
-not `k` times.
+Values match `k` consecutive `next_id()` calls: the returned
+sequence is ``base, base + 1, ..., base + k - 1``.
 
 **Arguments**:
 
@@ -18114,22 +17211,16 @@ not `k` times.
 
 - `ValueError` - If `k` is negative.
 
-  Noted, not fixed (this project's own multi-model engine review,
-  2026-09-04, `FIM-20`/finding Kimi-FIM-20, calls this "minor
-  (theoretical)" and prescribes no fix): `base + np.arange(k,
-  dtype=np.int64)` computes in fixed-width `int64`, which silently
-  wraps around to a negative identity on overflow rather than
-  raising, unlike `self._next` itself (a plain Python `int`, never
-  fixed-width). Reaching it needs roughly `2**63` calls to `next_
-  id`/`next_k_ids` combined over one run's own lifetime — an
-  allele-minting rate no realistic configuration this project
-  validates for could approach before every other resource
-  (wall-clock time not least) already made the run practically
-  impossible to finish.
+
+**Notes**:
+
+  The returned array uses `int64`; an identity above the
+  signed `int64` range would wrap. The internal counter is an
+  arbitrary-precision Python integer.
 
 <a id="fim.model.allele.FiniteAlleleSpace"></a>
 
-## [FiniteAlleleSpace Objects](./model/allele.py#L224)
+## [FiniteAlleleSpace Objects](./model/allele.py#L201)
 
 ```python
 class FiniteAlleleSpace()
@@ -18148,19 +17239,14 @@ The full state space is never materialized, even when astronomically
 large: a target is decided as "one specific already-minted state" or
 "any not-yet-minted state" via a single float probability, computed as
 plain Python division rather than a fixed-width integer draw, so it
-never overflows regardless of ``capacity``. For a large enough
-``capacity`` relative to how many states have actually been minted so
-far, that probability underflows all the way to an exact ``0.0`` and
-every mutation mints fresh, indistinguishable from the infinite-alleles
-model — recovering it in the limit, as the differentiation-measures
-guide's own approximation argument predicts. At the more moderate
-capacities where this model actually changes anything, the same
-computation instead gives a real, honestly nonzero recurrence
-probability.
+never overflows regardless of ``capacity``.
+When `capacity` is large relative to the number of minted states,
+the recurrence probability can underflow to zero, and mutations
+mint fresh states as in the infinite-alleles limit.
 
 <a id="fim.model.allele.FiniteAlleleSpace.__init__"></a>
 
-#### [\_\_init\_\_](./model/allele.py#L249)
+#### [\_\_init\_\_](./model/allele.py#L221)
 
 ```python
 def __init__(capacity: int, initial_ids: Iterable[AlleleId]) -> None
@@ -18184,7 +17270,7 @@ Seed one locus's finite state space from its generation-zero alleles.
 
 <a id="fim.model.allele.FiniteAlleleSpace.capacity"></a>
 
-#### [capacity](./model/allele.py#L282)
+#### [capacity](./model/allele.py#L254)
 
 ```python
 @property
@@ -18195,7 +17281,7 @@ This locus's own fixed state-space size, ``K``.
 
 <a id="fim.model.allele.FiniteAlleleSpace.minted_states"></a>
 
-#### [minted\_states](./model/allele.py#L287)
+#### [minted\_states](./model/allele.py#L259)
 
 ```python
 @property
@@ -18208,7 +17294,7 @@ Every state minted so far, in minting order, including lost ones.
 
 <a id="fim.model.allele.FiniteAlleleSpace.next_unminted"></a>
 
-#### [next\_unminted](./model/allele.py#L295)
+#### [next\_unminted](./model/allele.py#L267)
 
 ```python
 @property
@@ -18219,7 +17305,7 @@ The inert counter `to_arrays` carries; stored so a restore is exact.
 
 <a id="fim.model.allele.FiniteAlleleSpace.restore_minted"></a>
 
-#### [restore\_minted](./model/allele.py#L299)
+#### [restore\_minted](./model/allele.py#L271)
 
 ```python
 def restore_minted(minted: list[AlleleId], next_unminted: int) -> None
@@ -18242,7 +17328,7 @@ a checkpoint without building a `capacity`-sized array.
 
 <a id="fim.model.allele.FiniteAlleleSpace.to_arrays"></a>
 
-#### [to\_arrays](./model/allele.py#L321)
+#### [to\_arrays](./model/allele.py#L293)
 
 ```python
 def to_arrays() -> tuple[np.ndarray, np.ndarray, int, int]
@@ -18287,7 +17373,7 @@ that eligibility decision; this method does not gate it.
 
 <a id="fim.model.allele.FiniteAlleleSpace.restore_from_arrays"></a>
 
-#### [restore\_from\_arrays](./model/allele.py#L364)
+#### [restore\_from\_arrays](./model/allele.py#L336)
 
 ```python
 def restore_from_arrays(minted_mask: np.ndarray, minted_list: np.ndarray,
@@ -18316,13 +17402,12 @@ mutates this space's own internal state as a side effect.
   entries holding every minted state, in minting order.
 - `minted_count` - How many of `minted_list`'s own entries are
   valid.
-- `next_unminted` - Inert since `FIM-46`'s fix (`to_arrays`'s own
-  docstring) — stored back verbatim, never read for a
-  mint decision.
+- `next_unminted` - Stored verbatim for compatibility; mint
+  decisions do not use this value.
 
 <a id="fim.model.allele.FiniteAlleleSpace.mutate_target"></a>
 
-#### [mutate\_target](./model/allele.py#L403)
+#### [mutate\_target](./model/allele.py#L374)
 
 ```python
 def mutate_target(current: AlleleId, rng: np.random.Generator) -> AlleleId
@@ -18338,43 +17423,11 @@ Return one state other than ``current``, uniformly at random.
 
 **Returns**:
 
-  A state drawn uniformly from the ``capacity - 1`` others: an
-  already-minted one (a recurrence), chosen uniformly among the
-  tracked minted set excluding ``current``, or a fresh one,
-  chosen uniformly among every not-yet-minted state — not
-  merely the smallest one.
-
-  **Corrected 2026-09-05** (this project's own multi-model
-  engine review, 2026-09-04, `FIM-46`/finding C-05/finding
-  P1.1/finding P1-5, independently found by three of four
-- `reviewers)` - the mint branch below used to always return
-  ``self._next_unminted``, the smallest not-yet-minted state,
-  deterministically — a specific unminted state other than
-  that one had probability exactly zero of ever being this
-  call's own return value, contradicting this docstring's own
-  "uniformly at random" claim and this class's own module
-  docstring. `_mutate_targets_batched` (`fim.model.vectorized`
-  and `fim.model.operators`, kept as duplicate implementations
-  for a documented circular-import reason) shared the
-  identical defect and is fixed the same way, so cross-backend
-  parity tests could never have caught this on their own —
-  they validate agreement between two implementations of the
-  same wrong distribution. A new, independent target-identity
-  oracle test (`test_mutate_target_mint_branch_is_uniform_
-  over_every_unminted_state`, `test/model/test_allele.py`)
-  checks the actual distribution directly, not merely
-  cross-backend agreement.
-
-  Uniform rejection sampling over ``0 .. capacity - 1``,
-  retrying only on an already-minted draw: correct regardless
-  of ``capacity``'s own magnitude, and cheap in the regime this
-  class exists for (`capacity` far larger than ``minted_
-  count`` — this class's own module docstring), since the
-  rejection probability is exactly ``minted_count / capacity``.
-  Never materializes a ``capacity``-sized structure, matching
-  this class's own documented "the full state space is never
-  materialized" contract, even at an astronomical ``capacity``
-  no array could hold at all.
+  A state drawn uniformly from the other ``capacity - 1``
+  states. Previously minted states excluding ``current`` are
+  selected uniformly as recurrences. Fresh states are sampled
+  uniformly from all unminted states using rejection sampling;
+  the full state space is not materialized.
 
 
 **Raises**:
@@ -18389,7 +17442,7 @@ Return one state other than ``current``, uniformly at random.
 
 <a id="fim.model.allele.FiniteAlleleRegistry"></a>
 
-## [FiniteAlleleRegistry Objects](./model/allele.py#L481)
+## [FiniteAlleleRegistry Objects](./model/allele.py#L420)
 
 ```python
 class FiniteAlleleRegistry()
@@ -18402,7 +17455,7 @@ the right space without knowing how many loci a run tracks.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.__init__"></a>
 
-#### [\_\_init\_\_](./model/allele.py#L488)
+#### [\_\_init\_\_](./model/allele.py#L427)
 
 ```python
 def __init__(spaces: Mapping[int, FiniteAlleleSpace]) -> None
@@ -18416,7 +17469,7 @@ Store one finite-allele space per locus, keyed by `LocusSpec.locus_id`.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.mutate_target"></a>
 
-#### [mutate\_target](./model/allele.py#L496)
+#### [mutate\_target](./model/allele.py#L435)
 
 ```python
 def mutate_target(locus_id: int, current: AlleleId,
@@ -18438,7 +17491,7 @@ Return a mutation target for ``locus_id`` under the K-allele model.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.locus_ids"></a>
 
-#### [locus\_ids](./model/allele.py#L515)
+#### [locus\_ids](./model/allele.py#L454)
 
 ```python
 @property
@@ -18449,7 +17502,7 @@ The locus identifiers this registry holds a space for.
 
 <a id="fim.model.allele.FiniteAlleleRegistry.space_for"></a>
 
-#### [space\_for](./model/allele.py#L519)
+#### [space\_for](./model/allele.py#L458)
 
 ```python
 def space_for(locus_id: int) -> FiniteAlleleSpace
@@ -18479,32 +17532,15 @@ decide eligibility) and `to_arrays`/`restore_from_arrays`
 
 # [fim.model.identifiers](./model/identifiers.py#L1)
 
-Shared identifier and frequency parsing for config, state, and row layers.
+Parse integer-like identifiers and bounded trajectory frequencies.
 
-Several different parts of this project read the same two small value
-shapes back out of loosely typed data (a YAML config file, a JSON
-trajectory row, or a `dict` built by hand in a test): an "integer-like
-identifier" (an allele ID or a deme index — always a whole number, but
-one that might have arrived as a string, since mapping keys are always
-strings under both JSON and YAML) and a "trajectory-row-style
-probability" (an allele frequency, always strictly greater than zero
-and at most one — see `fim.model.state.ModelState.from_rows` and
-`fim.persistence.store` for why a persisted row's own frequency can
-never legitimately be zero). This module is the single place both
-value shapes are parsed, so every caller enforces exactly the same
-rules on exactly the same kind of value.
-
-Regression fix for S5/S6: before this module existed, three call sites
-parsed the same two value shapes independently, and had already
-drifted apart once (`fim.model.params`'s config parser rejected a
-truncated float or a negative identifier that `fim.model.state.
-ModelState`'s own constructor and `from_rows` silently accepted). One
-shared rule, used everywhere the same value shape is parsed, cannot
-drift piecemeal the way three separately maintained copies did.
+The shared parsers apply consistent validation to configuration, model-state,
+and persisted trajectory data. Frequencies in trajectory rows are in ``(0, 1]``;
+explicit initial frequencies may also be zero before normalization.
 
 <a id="fim.model.identifiers.parse_bounded_frequency"></a>
 
-#### [parse\_bounded\_frequency](./model/identifiers.py#L31)
+#### [parse\_bounded\_frequency](./model/identifiers.py#L14)
 
 ```python
 def parse_bounded_frequency(message: str, raw_value: Any) -> float
@@ -18540,7 +17576,7 @@ accept in the first place.
 
 <a id="fim.model.identifiers.parse_integer_identifier"></a>
 
-#### [parse\_integer\_identifier](./model/identifiers.py#L63)
+#### [parse\_integer\_identifier](./model/identifiers.py#L46)
 
 ```python
 def parse_integer_identifier(message: str, raw_value: Any) -> int
@@ -18580,35 +17616,18 @@ ID from a deme ID from the message text.
 
 # [fim.model.initial](./model/initial.py#L1)
 
-Seeded initial-condition strategies.
+Generate initial population states from supported initial-condition models.
 
-Before a simulation can run at all, every deme needs a starting set of
-allele frequencies at generation zero — this module is where that
-starting point comes from. Three strategies are provided, all reachable
-through `generate_initial_state`: `DirichletInitialCondition` (the
-default) draws a random starting frequency for each deme/locus from a
-symmetric Dirichlet distribution (a standard way of picking a random
-set of proportions that add up to 1, used throughout population
-genetics for exactly this purpose); `ExplicitInitialCondition` instead
-uses a frequency table the caller supplied directly in
-`SimulationParams` (``p_0`` in a config file), for reproducing a
-specific known starting condition rather than a random one;
-`EquilibriumSplitInitialCondition` instead simulates one ancestral
-population to mutation-drift equilibrium and founds every deme by
-sampling from it (see that class's own docstring).
-
-Every strategy but the last shares one contract, stated precisely by
-`DirichletInitialCondition`'s own docstring: generation zero is a
-*continuous belief*, not yet a sampled population — `fim.model.
-operators.drift`'s first application is what turns it into the model's
-first actual `N`-gene-copy realization. `EquilibriumSplitInitialCondition`
-does not fit that contract, and its own docstring explains why not: its
-generation zero is already sampled, finite, and real by the time it is
-returned.
+`DirichletInitialCondition` draws starting frequencies from a symmetric
+Dirichlet distribution. `ExplicitInitialCondition` uses configured `p_0`
+frequencies. `EquilibriumSplitInitialCondition` simulates an ancestral
+population to mutation-drift equilibrium and samples its demes. The Dirichlet
+and explicit models return frequencies before the first finite-population
+drift step; the equilibrium split returns sampled gene copies.
 
 <a id="fim.model.initial.InitialConditionGenerator"></a>
 
-## [InitialConditionGenerator Objects](./model/initial.py#L72)
+## [InitialConditionGenerator Objects](./model/initial.py#L55)
 
 ```python
 class InitialConditionGenerator(Protocol)
@@ -18624,7 +17643,7 @@ interchangeably, without needing to know which one it actually has.
 
 <a id="fim.model.initial.InitialConditionGenerator.generate"></a>
 
-#### [generate](./model/initial.py#L82)
+#### [generate](./model/initial.py#L65)
 
 ```python
 def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
@@ -18634,7 +17653,7 @@ Return a validated generation-zero state.
 
 <a id="fim.model.initial.DirichletInitialCondition"></a>
 
-## [DirichletInitialCondition Objects](./model/initial.py#L91)
+## [DirichletInitialCondition Objects](./model/initial.py#L74)
 
 ```python
 class DirichletInitialCondition()
@@ -18655,7 +17674,7 @@ than resolves in code.
 
 <a id="fim.model.initial.DirichletInitialCondition.generate"></a>
 
-#### [generate](./model/initial.py#L106)
+#### [generate](./model/initial.py#L89)
 
 ```python
 def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
@@ -18675,7 +17694,7 @@ Draw a reproducible random initial state.
 
 <a id="fim.model.initial.ExplicitInitialCondition"></a>
 
-## [ExplicitInitialCondition Objects](./model/initial.py#L166)
+## [ExplicitInitialCondition Objects](./model/initial.py#L149)
 
 ```python
 class ExplicitInitialCondition()
@@ -18692,7 +17711,7 @@ generated one.
 
 <a id="fim.model.initial.ExplicitInitialCondition.generate"></a>
 
-#### [generate](./model/initial.py#L177)
+#### [generate](./model/initial.py#L160)
 
 ```python
 def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
@@ -18717,7 +17736,7 @@ Return the configured explicit state.
 
 <a id="fim.model.initial.EquilibrationOutcome"></a>
 
-## [EquilibrationOutcome Objects](./model/initial.py#L207)
+## [EquilibrationOutcome Objects](./model/initial.py#L190)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -18754,7 +17773,7 @@ allele frequencies, not only this `H_S` summary — is not held here:
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition"></a>
 
-## [EquilibriumSplitInitialCondition Objects](./model/initial.py#L241)
+## [EquilibriumSplitInitialCondition Objects](./model/initial.py#L224)
 
 ```python
 class EquilibriumSplitInitialCondition()
@@ -18841,7 +17860,7 @@ moving that function to a shared module both sides can import.
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition.__init__"></a>
 
-#### [\_\_init\_\_](./model/initial.py#L322)
+#### [\_\_init\_\_](./model/initial.py#L305)
 
 ```python
 def __init__(*, convergence_window: int, convergence_tolerance: float,
@@ -18874,7 +17893,7 @@ Configure one ancestral-equilibration phase.
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition.generate"></a>
 
-#### [generate](./model/initial.py#L362)
+#### [generate](./model/initial.py#L345)
 
 ```python
 def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
@@ -18891,7 +17910,7 @@ this method throws away.
 
 <a id="fim.model.initial.EquilibriumSplitInitialCondition.generate_with_outcome"></a>
 
-#### [generate\_with\_outcome](./model/initial.py#L379)
+#### [generate\_with\_outcome](./model/initial.py#L362)
 
 ```python
 def generate_with_outcome(
@@ -18949,7 +17968,7 @@ Equilibrate one ancestral population, then split it into `params.d` demes.
 
 <a id="fim.model.initial.generate_initial_state"></a>
 
-#### [generate\_initial\_state](./model/initial.py#L582)
+#### [generate\_initial\_state](./model/initial.py#L565)
 
 ```python
 def generate_initial_state(
@@ -18989,7 +18008,7 @@ always returns a bare `ModelState`, discarding it, exactly like
 
 <a id="fim.model.initial.founding_condition_for_heterozygosity"></a>
 
-#### [founding\_condition\_for\_heterozygosity](./model/initial.py#L634)
+#### [founding\_condition\_for\_heterozygosity](./model/initial.py#L617)
 
 ```python
 def founding_condition_for_heterozygosity(
@@ -19131,39 +18150,17 @@ Return the finite-alleles model's state-space size at a locus.
 
 # [fim.model.operators](./model/operators.py#L1)
 
-Pure migration, mutation, drift, and generation-pipeline operators.
+Implement migration, drift, mutation, and the generation update.
 
-This module implements the three biological processes every generation
-of the simulation actually goes through, plus `step`, which chains all
-three together in the standard order:
-
-- `migrate` — a fraction of each deme's gene copies are replaced by a
-  weighted average of every other deme's own allele frequencies (the
-  "migrant pool"), modeling individuals moving between sub-populations.
-- `drift` — the full population of `N` gene copies is re-sampled from
-  the current frequencies, the same way flipping a weighted coin `N`
-  times only approximately reproduces the coin's own true weighting;
-  this is what makes a finite population's allele frequencies wander
-  randomly from one generation to the next, purely from chance, even
-  with no migration or mutation happening at all.
-- `mutate` — each of those newly drawn gene copies independently
-  switches, with probability `mu`, to a different, new-or-existing
-  allele, modeling a real mutation event.
-
-Every function here is "pure" in the sense that none of them mutate
-their `ModelState` argument in place — each one returns a brand-new
-state representing the *result* of applying that one process, leaving
-the state it was given untouched (see `fim.model.state.ModelState`'s
-own docstring for why that immutability matters). `step`, at the
-bottom of this file, is what `fim.engine`'s run loop actually calls
-once per generation: it runs migration, then drift, then mutation, in
-that fixed order — the textbook Wright-Fisher island model, in which
-the new generation's gene copies are drawn from the post-migration
-parental pool and each copy then mutates on its own.
+The operators return new `ModelState` instances without modifying their
+inputs. `step` applies migration, then Wright-Fisher drift, then mutation to
+produce the next generation. Migration forms each deme's parental pool from
+the configured migration weights; drift samples gene copies from that pool,
+and mutation changes copies with the configured per-copy rate.
 
 <a id="fim.model.operators.drift"></a>
 
-#### [drift](./model/operators.py#L754)
+#### [drift](./model/operators.py#L732)
 
 ```python
 def drift(state: ModelState,
@@ -19175,41 +18172,12 @@ def drift(state: ModelState,
 
 Resample ``N`` gene copies per deme and locus.
 
-"Genetic drift" is the random change in allele frequencies from one
-generation to the next that happens purely because a real
-population is finite — even with no selection, migration, or
-mutation at all, a fair coin flipped 10 times does not always come
-up exactly 5 heads, and a deme's `N` gene copies are exactly that
-kind of finite, random draw from the previous generation's own
-frequencies. This function is what actually performs that draw: for
-every deme and locus, it treats the current frequency map as the
-probabilities of a multinomial draw of size `N` (multinomial being
-the many-outcomes generalization of the familiar two-outcome
-binomial coin flip), then converts the drawn integer counts back
-into frequencies — which, unlike migration's or mutation's smooth,
-continuous frequency changes, always land exactly on the ``1 / N``
-grid (a frequency of, say, `3/50`, never `3.2/50`), since they came
-from literally counting whole gene copies.
-
-**Not `rng.multinomial` itself, deliberately, as of Stage F8**
-(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§5.4): both branches below decompose the multinomial draw into
-sequential conditional-binomial draws via `_inversion_binomial`
-(`_multinomial_via_inversion_binomial` for `jit=False`,
-`_drift_counts_batched` for `jit=True`), visiting categories in
-ascending allele-id order rather than `frequency_map`'s own
-insertion order — the one shared algorithm, in the one canonical
-order, this project's array-native Backend V (`fim.model.
-vectorized`) also uses, which is what makes cross-backend numerical
-agreement possible at all (`_inversion_binomial`'s own docstring
-has the full argument for why `rng.multinomial`/`rng.binomial`
-themselves cannot give this property). No longer bit-identical to
-`rng.multinomial`'s own output for the same seed — an accepted,
-deliberate cost, not an oversight (§5.4's own "the real cost, named
-plainly"; `_multinomial_via_binomial`, this module's own earlier,
-still-correct-and-tested building block, is what stayed
-bit-identical to `rng.multinomial`, and is kept for that reason,
-just no longer what this function calls).
+For each deme and locus, draw ``N`` gene copies from the current
+allele-frequency distribution and convert the counts to frequencies
+on the ``1 / N`` grid. The multinomial draw is decomposed into
+sequential conditional-binomial draws over allele IDs in ascending
+order. Consequently, the result for a seed can differ from
+``rng.multinomial``.
 
 **Arguments**:
 
@@ -19218,23 +18186,9 @@ just no longer what this function calls).
 - `rng` - The run's explicitly threaded random generator.
 - `jit` - When `True`, draw every (deme, locus) pair's own counts in
   one Numba-JIT-compiled, `nogil=True` call
-  (`_jit_drift_counts_batched`) instead of one call per pair
-  — bit-identical output either way (both branches now share
-  the identical primitive and visiting order, not merely
-  happen to agree — see `_drift_counts_batched`'s own
-  docstring), and free of GIL-release concerns during the
-  compiled call itself. Measured honestly, this is not yet a
-  clear standalone win for `drift`: it fixes a real,
-  separately measured regression an earlier per-pair-call
-  version had, but the compiled draw was never `drift`'s own
-  dominant cost at this project's reference scale — the
-  Python-level marshaling to and from `ModelState`'s own
-  sparse representation is, and `jit=True` does not remove
-  that (see `_drift_counts_batched`'s own docstring for the
-  full, measured picture). `False` (the default) is every
-  prior release's own behavior *shape*, unchanged, though no
-  longer its own exact numeric output (see above) — needs
-  `numba` installed only when `True`.
+  (`_jit_drift_counts_batched`) instead of one call per pair.
+  Both branches produce identical results for the same seed.
+  Numba is required only when this option is enabled.
 
 
 **Returns**:
@@ -19243,7 +18197,7 @@ just no longer what this function calls).
 
 <a id="fim.model.operators.migrate"></a>
 
-#### [migrate](./model/operators.py#L883)
+#### [migrate](./model/operators.py#L818)
 
 ```python
 def migrate(state: ModelState,
@@ -19319,7 +18273,7 @@ are designed to quantify.
 
 <a id="fim.model.operators.jit_mutate_event_counts_batched"></a>
 
-#### [jit\_mutate\_event\_counts\_batched](./model/operators.py#L1094)
+#### [jit\_mutate\_event\_counts\_batched](./model/operators.py#L1029)
 
 ```python
 def jit_mutate_event_counts_batched(rng: np.random.Generator, ns: np.ndarray,
@@ -19343,7 +18297,7 @@ needs it installed at all.
 
 <a id="fim.model.operators.mutate"></a>
 
-#### [mutate](./model/operators.py#L1319)
+#### [mutate](./model/operators.py#L1254)
 
 ```python
 def mutate(state: ModelState,
@@ -19452,7 +18406,7 @@ of uniforms per draw, the primitive every backend shares.
 
 <a id="fim.model.operators.step"></a>
 
-#### [step](./model/operators.py#L1519)
+#### [step](./model/operators.py#L1454)
 
 ```python
 def step(state: ModelState,
@@ -19517,7 +18471,7 @@ docstring for why that was not the textbook model.
 
 <a id="fim.model.operators.expand_population_sizes"></a>
 
-#### [expand\_population\_sizes](./model/operators.py#L2150)
+#### [expand\_population\_sizes](./model/operators.py#L2085)
 
 ```python
 def expand_population_sizes(value: PopulationSize,
@@ -21609,169 +20563,17 @@ object is created per row.
 
 # [fim.model.vectorized](./model/vectorized.py#L1)
 
-Bounded-K (finite-alleles), array-native migrate/mutate/drift.
+Legacy dense-array operators for finite-alleles simulations.
 
-**Superseded.** `fim.engine.VectorizedAdvancer` no longer calls anything
-in this module: Backend V now runs both mutation models on
-`fim.model.vector_block.VectorBlock` and the compiled kernels in
-`fim.model.vector_kernels`, which reproduce `fim.model.operators` bit for
-bit (stage-major across loci, the same migration arithmetic, the same
-K-allele target draws). This module is kept, with its operator-level tests
-(`test/model/test_vectorized.py`), as the per-locus reference
-implementation the statistical-parity history below describes; everything
-below describes this module as it was designed, and its statements about
-Backend V's reproducibility ("statistical, not bit-identical", the
-multi-locus and BLAS divergences) are **historical**: they no longer
-describe the engine's Backend V.
-
-
-Scope, deliberately: the finite-alleles mutation model only (bounded
-`K = finite_allele_capacity(length)` per locus — see `fim.model.locus`).
-Infinite alleles is out of scope here, matching the vector design's own
-"V2 before V1" recommendation: under finite alleles, every allele
-identity at a locus is already a fixed integer in `0 .. K - 1` for the
-whole run, so a dense `(d, K)` array can be allocated once and reused
-generation after generation with no reindexing at all — the genuinely
-hard problem (an unbounded, per-generation-ragged identity space) that
-infinite alleles would require simply does not arise here. Deterministic
-("continuous") migration only — `SimulationParams.migrant_sampling ==
-"stochastic"` is not supported by this path yet, the same kind of
-documented, deliberate scope boundary `fim.model.operators.step`'s own
-`jit` argument already draws around `migrate`/`mutate`.
-
-`ModelState`'s own public shape is untouched by anything in this module:
-`VectorizedState`, below, is a compute-only, internal representation.
-`migrate_vectorized`, `mutate_vectorized`, and `drift_vectorized` all
-operate on this same dense representation in sequence within one
-generation, with no `ModelState` round-trip between them — the first
-real test of `20260901-claude-sonnet-5-fim-engine-backend-factory-
-design.md` §11's "fusing migrate -> mutate -> drift across stage
-boundaries" open question. `fim.engine.VectorizedAdvancer`, the one
-caller, originally converted to and from `ModelState` once *every*
-generation regardless (`ReplicaLane.state` was `ModelState`-typed
-across the whole batch driving loop) — a real, separately measured
-secondary cost this module's own within-generation fusion did nothing
-about, since it sat entirely outside `step_vectorized`. Fixed since:
-`fim.engine.ReplicaLane.vectorized_state` now caches the live
-`VectorizedState` itself across generations, and `VectorizedAdvancer`
-reads convergence statistics straight off it
-(`_convergence_values_vectorized`), so `vectorized_state_to_model_
-state` (below) is only ever called once per lane, when it actually
-stops — not once per generation.
-
-That within-generation fusion alone was not enough to make the whole
-pipeline competitive with the dict-based backends once actually
-benchmarked end to end, though: the real, measured dominant cost turned
-out to be neither the random draw nor that per-generation round-trip,
-but a *third* thing — `mutate_vectorized`/`drift_vectorized`'s own
-shared multinomial-decomposition helper issuing one array-valued
-`rng.binomial` call per allele-id category, `capacity - 1` times per
-invocation, each call vectorized only across `d` demes at a time. With
-`d` typically far smaller than `capacity`, per-call NumPy dispatch
-overhead dominated the actual compute — profiled directly, not assumed,
-the same "tested, not just reasoned about" discipline this project's
-own JIT work already established for `drift`'s dict-based path. Fixed
-by JIT-compiling that helper into one call covering the entire `(d,
-capacity)` grid at once (`_jit_multinomial_rows_batched`, below) — the
-exact same "batch every unit of work into one call, don't call once per
-small unit of it" lesson `fim.model.operators`'s own `_drift_counts_
-batched` already had to learn, rediscovered here independently on a
-second function before being generalized.
-
-Statistical, not bit-identical, parity with the dict-based operators in
-`fim.model.operators` was this module's own original correctness bar
-throughout (vector design §6) — every function below names, in its own
-docstring, exactly where and why its own random-draw sequence diverges
-from the dict-based original. **`migrate_vectorized`, `drift_vectorized`,
-and `mutate_vectorized` all clear a materially higher bar, as of Stage
-F8** (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§5.4): each now draws via the identical `_inversion_binomial`-based
-algorithm, in the identical order, that `fim.model.operators`'s own
-dict-based path uses (`migrate_vectorized` was always exact — no
-randomness at all in "continuous" mode) — checked directly, given an
-identical starting state and an identically seeded `rng`, across many
-seeds and a deliberately non-saturated capacity
-(`test_drift_vectorized_matches_dict_based_drift_exactly*`,
-`test_mutate_vectorized_matches_dict_based_mutate_exactly`,
-`test/model/test_vectorized.py`).
-
-**That per-operator proof alone was not enough to make a full,
-multi-generation `fim.engine` run agree with the dict-based backends
-either — a second, separate, more serious bug sat between "every
-operator is exact in isolation" and "a real run produces the same
-trajectory," found only by actually running one end to end, not
-inferred from the operator-level tests.** `build_vectorized_state`,
-below, used to re-derive each locus's own finite-alleles minted
-bookkeeping (`minted_mask`/`minted_list`/`minted_count`/`next_
-unminted`) from scratch every time it was called, using only whichever
-allele ids were currently present in the `ModelState` handed to it —
-and `fim.engine.VectorizedAdvancer` calls it once *every generation*
-(`ReplicaLane`'s own docstring). Any allele minted and then driven to
-extinction — including within the very generation it was minted in,
-the ordinary fate of a brand-new mutant sitting at `1/N` frequency, not
-a rare one — was silently forgotten, letting this backend re-mint an
-identity `FiniteAlleleSpace`'s own dict-based bookkeeping had already
-permanently retired, and systematically undercounting `minted_count`
-(hence biasing `_mutate_targets_batched`'s own `recurrence_probability`
-low). Measured directly: one real generation of a real run left the
-dict-based path's own `next_unminted` at `12` while re-deriving it from
-that generation's own output alone gave `2`. Fixed by carrying that
-bookkeeping forward across generations instead of re-deriving it
-(`build_vectorized_state`'s own `previous_locus_states` argument has
-the full mechanism, still used for a lane's first generation);
-`fim.engine.ReplicaLane.vectorized_state` is the persistence point —
-every generation after the first reuses that cached `VectorizedState`
-directly, via `step_vectorized`, so `build_vectorized_state` is not
-even called again for the rest of that lane's own run.
-
-With that fixed, a full **single-locus** run *is* bit-identical to
-`LinealBackend` when migration is off
-(`test_generational_vector_backend_matches_lineal_exactly_without_
-migration`, `test/engine/test_engine.py`) — but not in general with
-migration active, and not at all with **two or more loci**, migration
-on or off: `step_vectorized` fuses `migrate`/`drift`/`mutate` per
-locus, one whole locus's own dense `(deme, capacity)` array per call,
-while `operators.step` runs each stage across every tracked locus
-first — `drift`/`mutate`'s own dict-based loops are deme-major,
-locus-minor, so the two draw from the shared RNG stream in a genuinely
-different order the instant a run tracks more than one locus, migration
-active or not. Reconciling the two would mean flattening deme and
-locus together inside the batched RNG kernels themselves (drawing
-deme-major across every locus, one flat index space, in place of one
-call per locus) — a substantially larger change to this module's own
-one-locus-per-array design, for a benefit (cross-backend bit-identity)
-with no scientific value beyond test convenience: each backend's own
-per-locus output is already independently correct regardless of draw
-order (this project's own multi-model engine review, 2026-09-04,
-`FIM-09`/finding C-01/finding P1-1). A genuine multi-locus config
-instead gets the same *statistical* parity guarantee the
-migration-active single-locus case already has, below
-(`test_generational_vector_matches_lineal_statistically_multi_locus`,
-`test/engine/test_engine.py`). With
-migration active (any locus count): `migrate_vectorized`'s own dense
-matmul and `fim.model.operators.migrate`'s own dict-based blend are
-two different, both fully deterministic, floating-point reduction
-orders for the identical computation (BLAS's own summation order is
-not obligated to match a hand-written sequential one), and that
-sub-ULP disagreement occasionally sits close enough to a discrete
-draw's own decision boundary to flip it — measured directly, 23 of 30
-seeds with migration active diverged from `LinealBackend` within the
-first three generations. This is the honest limit `20260901-...-
-design.md` §5.4 names explicitly ("agreeing to within floating-point
-tolerance... not full bit-identity end to end") and not eliminable
-without giving up the vectorized/BLAS performance this backend exists
-for. What actually matters, and what makes the divergence acceptable
-rather than a defect, is that it carries no directional bias — checked
-directly, not assumed, by comparing each backend's own mean `D`/`G_ST`
-across many independently seeded replicates
-(`test_generational_vector_backend_matches_lineal_statistically`): a
-small sample can show a borderline gap, but it narrows back to noise
-as the sample grows, which is what an unbiased alternate realization
-looks like and a real bias would not.
+This module provides array-based migration, mutation, and drift operations.
+It remains available for direct use and testing; the active vector engine
+uses `fim.model.vector_block` and `fim.model.vector_kernels`. The operations
+support finite-alleles mutation and deterministic migration. `VectorizedState`
+is a compute representation and does not change the public `ModelState` shape.
 
 <a id="fim.model.vectorized.VectorizedLocusState"></a>
 
-## [VectorizedLocusState Objects](./model/vectorized.py#L198)
+## [VectorizedLocusState Objects](./model/vectorized.py#L46)
 
 ```python
 @dataclass(slots=True)
@@ -21791,25 +20593,25 @@ entirely independent of any real `FiniteAlleleSpace` instance;
 
 <a id="fim.model.vectorized.VectorizedLocusState.frequencies"></a>
 
-#### [frequencies](./model/vectorized.py#L211)
+#### [frequencies](./model/vectorized.py#L59)
 
 (d, capacity) float64, each row sums to 1.0
 
 <a id="fim.model.vectorized.VectorizedLocusState.minted_mask"></a>
 
-#### [minted\_mask](./model/vectorized.py#L213)
+#### [minted\_mask](./model/vectorized.py#L61)
 
 (capacity,) bool — has this state ever appeared
 
 <a id="fim.model.vectorized.VectorizedLocusState.minted_list"></a>
 
-#### [minted\_list](./model/vectorized.py#L214)
+#### [minted\_list](./model/vectorized.py#L62)
 
 (capacity,) int64 — minted ids, mint order
 
 <a id="fim.model.vectorized.VectorizedState"></a>
 
-## [VectorizedState Objects](./model/vectorized.py#L220)
+## [VectorizedState Objects](./model/vectorized.py#L68)
 
 ```python
 @dataclass(slots=True)
@@ -21820,7 +20622,7 @@ A whole state's own dense working representation, one locus at a time.
 
 <a id="fim.model.vectorized.build_vectorized_state"></a>
 
-#### [build\_vectorized\_state](./model/vectorized.py#L228)
+#### [build\_vectorized\_state](./model/vectorized.py#L76)
 
 ```python
 def build_vectorized_state(
@@ -21898,7 +20700,7 @@ spaces`'s own construction.
 
 <a id="fim.model.vectorized.vectorized_state_to_model_state"></a>
 
-#### [vectorized\_state\_to\_model\_state](./model/vectorized.py#L367)
+#### [vectorized\_state\_to\_model\_state](./model/vectorized.py#L215)
 
 ```python
 def vectorized_state_to_model_state(state: VectorizedState) -> ModelState
@@ -21932,7 +20734,7 @@ multiplier, not a different problem.
 
 <a id="fim.model.vectorized.vectorized_state_to_rows"></a>
 
-#### [vectorized\_state\_to\_rows](./model/vectorized.py#L414)
+#### [vectorized\_state\_to\_rows](./model/vectorized.py#L262)
 
 ```python
 def vectorized_state_to_rows(
@@ -21953,7 +20755,7 @@ produced a given row.
 
 <a id="fim.model.vectorized.migrate_vectorized"></a>
 
-#### [migrate\_vectorized](./model/vectorized.py#L773)
+#### [migrate\_vectorized](./model/vectorized.py#L621)
 
 ```python
 def migrate_vectorized(locus_state: VectorizedLocusState,
@@ -21973,7 +20775,7 @@ own §5.1 names as the natural generalization. Deterministic
 
 <a id="fim.model.vectorized.migrate_vectorized_symmetric"></a>
 
-#### [migrate\_vectorized\_symmetric](./model/vectorized.py#L790)
+#### [migrate\_vectorized\_symmetric](./model/vectorized.py#L638)
 
 ```python
 def migrate_vectorized_symmetric(locus_state: VectorizedLocusState,
@@ -22027,7 +20829,7 @@ blended[i, a] = (1 - rate) * frequencies[i, a] + rate * pool[i, a]
 
 <a id="fim.model.vectorized.symmetric_migration_weights"></a>
 
-#### [symmetric\_migration\_weights](./model/vectorized.py#L901)
+#### [symmetric\_migration\_weights](./model/vectorized.py#L749)
 
 ```python
 def symmetric_migration_weights(rate: float, sizes: np.ndarray) -> np.ndarray
@@ -22073,7 +20875,7 @@ correctly, only to have `1.0 - rate` win instead.
 
 <a id="fim.model.vectorized.mutate_vectorized"></a>
 
-#### [mutate\_vectorized](./model/vectorized.py#L948)
+#### [mutate\_vectorized](./model/vectorized.py#L796)
 
 ```python
 def mutate_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
@@ -22115,7 +20917,7 @@ division `drift_vectorized` uses), so no renormalization is needed.
 
 <a id="fim.model.vectorized.drift_vectorized"></a>
 
-#### [drift\_vectorized](./model/vectorized.py#L1197)
+#### [drift\_vectorized](./model/vectorized.py#L1045)
 
 ```python
 def drift_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
@@ -22147,7 +20949,7 @@ exactly what property that gives this function relative to
 
 <a id="fim.model.vectorized.step_vectorized"></a>
 
-#### [step\_vectorized](./model/vectorized.py#L1233)
+#### [step\_vectorized](./model/vectorized.py#L1081)
 
 ```python
 def step_vectorized(state: VectorizedState,
@@ -22207,58 +21009,17 @@ matrix ever built, the common case
 
 # [fim.paths](./paths.py#L1)
 
-Project-root, results-directory, and atomic-publish logic, shared by
-every front end.
+Resolve project, results, and log locations and publish output atomically.
 
-This is where every part of `fim` (the command line, the desktop app,
-every test) goes to answer four small but easy-to-get-wrong questions,
-so each one is answered exactly once, the same way everywhere, rather
-than reinvented slightly differently in each front end:
-
-1. "Where does this project actually live on disk?" (`project_root`) —
-   needed to find a sensible default place to write output, without
-   requiring every command to be told an explicit path every time.
-2. "Where should a run's output go if the user did not name a specific
-   folder?" (`default_output_directory`, `results_directory`) — a
-   single, predictable `results/` folder under the project root, with
-   each unnamed run getting its own timestamped subfolder so two runs
-   never collide by writing into the same place.
-3. "How do we write a whole folder's worth of output files without ever
-   leaving a half-written, broken folder behind if something goes wrong
-   partway through?" (`atomic_directory`) — see that function's own
-   docstring for the answer.
-4. "Where does this program's own operational log go, if nobody said
-   otherwise?" (`log_directory`, `default_log_file`) — a `logs/` folder
-   beside `results/`, under the same resolved project root
-   (`doc/fim-logging-design.md` §6).
-
-Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
-run orchestration resolves the exact same `project-root/results/`
-layout, timestamped default folder naming, and atomic-publish-or-nothing
-guarantee as `fim run`, rather than a second, independently maintained
-copy of this logic. `project_root` is anchored on
-the `fim` package's own `__init__.py` (`fim.__file__`), not the calling
-module's `__file__`: every caller under `src/fim/`, regardless of how deep
-it sits (`fim/cli.py`, `fim/gui/runner.py`, ...), resolves the identical
-root this way, where anchoring on each caller's own `__file__` would need a
-different `parents[N]` depth per caller and silently break the moment a new
-caller sat at a different depth.
-
-`project_root`/`results_directory`/`log_directory` are each
-independently, explicitly overridable — `set_root_override`/`set_
-results_directory_override`/`set_log_directory_override`, and the
-matching `FIM_HOME`/`FIM_RESULTS_DIRECTORY`/`FIM_LOG_DIRECTORY`
-environment variables — for a user (or a test) who wants results, logs,
-or both somewhere other than the default, without a per-invocation
-flag on every single command (`fim run -o <path>`/`-L file=<path>`
-already exist for that narrower, one-off case). See each function's
-own docstring for the exact precedence, and `20260918-claude-sonnet-5-
-configurable-storage-root-design.md` (`selby/restricted`) for the full
-design.
+The default results and log directories are relative to the project root.
+Environment variables and explicit overrides can select other locations.
+`atomic_directory` stages a complete output tree before publishing it so an
+incomplete run directory is not exposed. See `doc/configuration.md` for path
+configuration.
 
 <a id="fim.paths.set_root_override"></a>
 
-#### [set\_root\_override](./paths.py#L90)
+#### [set\_root\_override](./paths.py#L49)
 
 ```python
 def set_root_override(root: Path | None) -> None
@@ -22281,7 +21042,7 @@ over this one — see each function's own docstring.
 
 <a id="fim.paths.root_override"></a>
 
-#### [root\_override](./paths.py#L109)
+#### [root\_override](./paths.py#L68)
 
 ```python
 def root_override() -> Path | None
@@ -22291,7 +21052,7 @@ The current `project_root()` override, if any set via `set_root_override`.
 
 <a id="fim.paths.set_results_directory_override"></a>
 
-#### [set\_results\_directory\_override](./paths.py#L114)
+#### [set\_results\_directory\_override](./paths.py#L73)
 
 ```python
 def set_results_directory_override(path: Path | None) -> None
@@ -22310,7 +21071,7 @@ Override `results_directory()`'s own resolution, or clear a previous one.
 
 <a id="fim.paths.results_directory_override"></a>
 
-#### [results\_directory\_override](./paths.py#L129)
+#### [results\_directory\_override](./paths.py#L88)
 
 ```python
 def results_directory_override() -> Path | None
@@ -22320,7 +21081,7 @@ The current `results_directory()` override, if any.
 
 <a id="fim.paths.set_log_directory_override"></a>
 
-#### [set\_log\_directory\_override](./paths.py#L134)
+#### [set\_log\_directory\_override](./paths.py#L93)
 
 ```python
 def set_log_directory_override(path: Path | None) -> None
@@ -22337,7 +21098,7 @@ Override `log_directory()`'s own resolution, or clear a previous one.
 
 <a id="fim.paths.log_directory_override"></a>
 
-#### [log\_directory\_override](./paths.py#L147)
+#### [log\_directory\_override](./paths.py#L106)
 
 ```python
 def log_directory_override() -> Path | None
@@ -22347,7 +21108,7 @@ The current `log_directory()` override, if any.
 
 <a id="fim.paths.default_file_mode"></a>
 
-#### [default\_file\_mode](./paths.py#L193)
+#### [default\_file\_mode](./paths.py#L152)
 
 ```python
 def default_file_mode() -> int
@@ -22361,7 +21122,7 @@ and index files a botanist's other tools, backups and colleagues read.
 
 <a id="fim.paths.default_directory_mode"></a>
 
-#### [default\_directory\_mode](./paths.py#L203)
+#### [default\_directory\_mode](./paths.py#L162)
 
 ```python
 def default_directory_mode() -> int
@@ -22371,7 +21132,7 @@ Return the permission bits an ordinary new directory gets (usually `0o755`).
 
 <a id="fim.paths.write_text_atomically"></a>
 
-#### [write\_text\_atomically](./paths.py#L208)
+#### [write\_text\_atomically](./paths.py#L167)
 
 ```python
 def write_text_atomically(path: Path, text: str, *, prefix: str) -> None
@@ -22395,7 +21156,7 @@ unreadable to anyone but the owner.
 
 <a id="fim.paths.replace_with_retry"></a>
 
-#### [replace\_with\_retry](./paths.py#L243)
+#### [replace\_with\_retry](./paths.py#L202)
 
 ```python
 def replace_with_retry(source: Path, target: Path) -> None
@@ -22427,82 +21188,27 @@ for the whole window still raises the original error.
 
 <a id="fim.paths.STAGING_LOCK_FILENAME"></a>
 
-#### [STAGING\_LOCK\_FILENAME](./paths.py#L276)
+#### [STAGING\_LOCK\_FILENAME](./paths.py#L235)
 
 The owner lock `atomic_directory` holds inside its staging directory.
 
 <a id="fim.paths.atomic_directory"></a>
 
-#### [atomic\_directory](./paths.py#L281)
+#### [atomic\_directory](./paths.py#L240)
 
 ```python
 @contextlib.contextmanager
 def atomic_directory(target: Path) -> Iterator[Path]
 ```
 
-Build a directory's contents in a hidden temporary sibling, then
-publish it at `target` with one atomic rename.
+Build a directory in a hidden sibling, then publish it atomically.
 
-The problem this solves: a simulation run writes several files
-(trajectory data, a report, a plot, a manifest) into its own output
-folder over the course of running, which can take anywhere from a
-second to hours. If that run is interrupted partway through — the
-process crashes, the computer loses power, or a person simply
-presses Ctrl-C — writing those files *directly* into the final
-folder would leave behind a folder that looks like a real,
-completed run's output (it exists, it has some files in it) but is
-actually missing whatever had not been written yet. Nothing about
-that folder's own name or existence would reveal it was actually
-incomplete — a real bug found in `cli.py` before this function was
-extracted from it, and one this function exists specifically to
-prevent.
-
-The fix follows the same idea a careful editor uses when saving a
-long document: write the whole new version to a *different* file
-first, and only once it is completely finished, replace the old file
-with the new one in a single step — never leaving a moment where the
-file exists but is only half-written. Concretely: every write inside
-the `with` block happens in a hidden temporary folder next to
-`target` (a dot-prefixed sibling, created directly inside
-`target.parent`, on the very same filesystem — required so the
-final step below can be one atomic rename rather than a slower,
-interruptible copy). "Atomic" here means the same thing it means in
-everyday English: indivisible — from the perspective of anything
-else looking at the filesystem, that rename either has not happened
-yet (nothing at `target`) or has completely finished (everything at
-`target`); there is no in-between moment where `target` exists but
-only holds some of the files. If the code inside the `with` block
-raises anything at all — an ordinary exception, or `^C` from the
-keyboard — the temporary folder is discarded and `target` is left
-completely untouched, never created in a broken state. `target`
-therefore either does not exist yet or exists fully complete; there
-is no third, partial state ever observable from outside this
-function.
-
-A process that is *killed* is different: SIGKILL, or a SIGTERM with no
-handler installed, ends Python without running the cleanup below
-(`fim run` turns its first SIGTERM into `SystemExit` precisely so the
-cleanup does run; see `fim.termination`). `target` is still never
-half-written, but the hidden temporary sibling is left behind.
-`fim.persistence.staging.find_orphan_staging` reports such orphans,
-and reclaims those whose builder is provably gone (run lifecycle design
-`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
-`selby/restricted`, sections 2, 5 and 11).
-
-This guarantee is about the *rename* being all-or-nothing, not about
-surviving a total loss of power (a separate, harder guarantee this
-function does not attempt — internal tracking reference S11): nothing
-here calls `fsync` (the low-level operation that would force every
-written byte all the way out to physical disk before continuing), so
-on an actual, unclean power loss, the operating system and disk are
-still free to have recorded the rename itself before every byte
-written into the temporary folder had physically reached the disk —
-meaning a `target` that survives such an event can exist, look
-complete, and still contain corrupted or truncated file content in
-that specific, narrow scenario. Read this function's guarantee as
-"no half-written folder is ever visible to look at," not "every
-folder this function ever produced is guaranteed to have survived a
-power failure with perfect data integrity."
+The staging directory is created beside `target` on the same
+filesystem. Successful exit renames it to `target`; an exception in
+the context body removes the staging directory. Termination without
+cleanup may leave staging behind. The rename prevents readers from
+seeing a partially populated target, but no `fsync` is performed,
+so this does not guarantee data durability after power loss.
 
 **Arguments**:
 
@@ -22520,7 +21226,7 @@ power failure with perfect data integrity."
 
 <a id="fim.paths.default_output_directory"></a>
 
-#### [default\_output\_directory](./paths.py#L412)
+#### [default\_output\_directory](./paths.py#L316)
 
 ```python
 def default_output_directory(results: Path | None = None,
@@ -22560,7 +21266,7 @@ existing name without replacing any run data.
 
 <a id="fim.paths.project_root"></a>
 
-#### [project\_root](./paths.py#L451)
+#### [project\_root](./paths.py#L355)
 
 ```python
 def project_root() -> Path
@@ -22629,7 +21335,7 @@ more specific overrides — see each one's own docstring.
 
 <a id="fim.paths.results_directory"></a>
 
-#### [results\_directory](./paths.py#L531)
+#### [results\_directory](./paths.py#L435)
 
 ```python
 def results_directory(root: Path | None = None) -> Path
@@ -22663,7 +21369,7 @@ out the full precedence across all three location-specific chains.
 
 <a id="fim.paths.log_directory"></a>
 
-#### [log\_directory](./paths.py#L565)
+#### [log\_directory](./paths.py#L469)
 
 ```python
 def log_directory(root: Path | None = None) -> Path
@@ -22692,7 +21398,7 @@ override`, and `FIM_LOG_DIRECTORY` compose in the identical order
 
 <a id="fim.paths.default_log_file"></a>
 
-#### [default\_log\_file](./paths.py#L594)
+#### [default\_log\_file](./paths.py#L498)
 
 ```python
 def default_log_file(root: Path | None = None) -> Path
@@ -22713,7 +21419,7 @@ Return the default operational log file path.
 
 <a id="fim.paths.fim_index_directory"></a>
 
-#### [fim\_index\_directory](./paths.py#L608)
+#### [fim\_index\_directory](./paths.py#L512)
 
 ```python
 def fim_index_directory(results: Path | None = None) -> Path
@@ -22739,7 +21445,7 @@ where any individual run's own output lives.
 
 <a id="fim.paths.studies_directory"></a>
 
-#### [studies\_directory](./paths.py#L628)
+#### [studies\_directory](./paths.py#L532)
 
 ```python
 def studies_directory(results: Path | None = None) -> Path
@@ -22759,7 +21465,7 @@ Return the directory holding every `StudyManifest` JSON file.
 
 <a id="fim.paths.experiments_directory"></a>
 
-#### [experiments\_directory](./paths.py#L641)
+#### [experiments\_directory](./paths.py#L545)
 
 ```python
 def experiments_directory(results: Path | None = None) -> Path
@@ -22781,30 +21487,10 @@ Return the directory holding every `ExperimentManifest` JSON file.
 
 # [fim.persistence](./persistence/__init__.py#L1)
 
-Incremental trajectory and manifest persistence.
+Public interfaces for trajectory storage and run manifests.
 
-This package is where a run's results actually get written to (and
-read back from) disk. A run persists two kinds of file:
-
-- A "trajectory" — every generation's own allele frequencies, written
-  one generation at a time as it happens (`fim.persistence.
-  binary_store.BinaryLogStore`, a compact binary log; see
-  `doc/trajectory-log.md`), so a run's history survives even if it is
-  interrupted partway through and so it can later be re-analyzed at
-  any earlier generation (see `fim.reanalyze`). `fim.persistence.store`
-  defines the row schema and store interface both the real file-backed
-  store and an in-memory test double implement.
-- A "manifest" — the run's own bookkeeping recorded once, at
-  completion: its parameters, how it stopped, and a checksum of its
-  trajectory file (`fim.persistence.manifest`), used to detect if the
-  trajectory file has since been edited, corrupted, or replaced.
-
-`fim.persistence.report` holds a small helper, `write_report`, for
-writing other JSON result files (`report.json`, a batch's own
-`summary.json`) in the same deterministic, byte-reproducible format as
-the manifest — not itself re-exported here, since it is used directly
-by `fim.engine` and `fim.cli` rather than through this package's own
-top-level API.
+The package exports the binary and in-memory trajectory stores, the row schema
+and store protocol, and helpers for reading and writing run manifests.
 
 <a id="fim.persistence.artifacts"></a>
 
@@ -23805,79 +22491,17 @@ once in Python; Backend V builds its frame with a compiled call
 
 # [fim.persistence.groups](./persistence/groups.py#L1)
 
-Study and Experiment: named groupings of Runs, and of Studies.
+Store and manage Study and Experiment groupings.
 
-Full design: `20260917-claude-sonnet-5-run-study-experiment-hierarchy-
-design.md` (`selby/restricted`). Three layers exist after this module:
-a **Run** (unchanged — one scalar run or replicate batch, `fim.
-persistence.manifest`), a **Study** (a named list of Run directories
-pursuing one research question), and an **Experiment** (a named list of
-Study ids pursuing a longer-running research goal). A Study/Experiment
-never duplicates or moves anything it references — `StudyManifest.
-run_directories` names existing run directories exactly the way
-`fim.persistence.manifest.BatchManifest.replicate_run_ids` already
-names existing replicate directories one level down, and
-`ExperimentManifest.study_ids` does the same one level further up.
-
-`StudyManifest`/`ExperimentManifest` are deliberately two separate,
-structurally parallel dataclasses (a "twin," like `fim.persistence.
-manifest`'s own `RunManifest`/`BatchManifest`) rather than one generic
-type parameterized over the member field name — this project's own
-established convention prefers a small explicit copy over a shared
-generic (`fim.persistence.manifest.read_manifest`/`read_batch_manifest`
-are byte-identical copy-paste-adapts of each other for the same reason).
-
-Deleting a Study deletes every Run it references; deleting an
-Experiment deletes every Study it references (and, transitively, every
-Run those Studies reference) — a deliberate, explicit product decision
-overriding this design document's own original, more conservative
-leaning ("deleting an organizational grouping should never be a
-data-destroying operation"), confirmed directly by the project owner
-when this module was implemented. `delete_study`/`delete_experiment`
-both accept an escape hatch (`delete_runs=False`/`delete_studies=False`)
-for a caller that genuinely only wants the grouping gone.
-
-**Read-only items** (read-only examples design, 2026-10-05, section 3).
-A Study or Experiment whose manifest has `read_only: true`, and a Run
-whose manifest parameters have `_read_only: true` (`is_run_read_only`),
-are shipped examples that every function here refuses to edit, raising
-`ReadOnlyError` (a `ValueError`, so every existing caller that reports
-a `ValueError` reports this one too):
-
-- a read-only Study or Experiment cannot be renamed, described,
-  documented, deleted, emptied, or gain or lose members;
-- a read-only Run is never deleted; its link can be removed from an
-  editable Study, but never from a read-only Study. A
-  Study or Experiment being deleted or emptied skips its read-only
-  members rather than failing, so a user's own grouping that happens to
-  hold an example stays fully manageable, and the example survives.
-
-Viewing and copying stay allowed; a copy (`copy_study`/
-`copy_experiment`) is always an ordinary, editable grouping. Only the
-examples seeding code writes read-only manifests, through
-`write_read_only_study`/`write_read_only_experiment`, which bypass the
-checks. `read_only` is written to JSON only when true, with no schema
-bump: an older fim ignores the key when reading, but an older fim that
-rewrites such a manifest drops it, so re-seeding restores it.
-
-**Open and closed groups** (run lifecycle design §6.3). A Study or
-Experiment is open by default; a manifest written before `closed`
-existed reads back open. Closing a group freezes its organization:
-a closed Study cannot gain, lose, or be emptied of Runs, a closed
-Experiment cannot gain Studies, and neither can be deleted, raising
-`ClosedGroupError` (a `ValueError`) until it is reopened. Closing never
-freezes the Runs themselves: a shared Run can still be deleted from
-elsewhere, which removes its link here too, and a bit-identical
-recomputation (`supersede_run`) still replaces the link. Renaming and
-documenting stay allowed, because notes on what a group found are
-written after it is closed. The default Study and Experiment always
-stay open, so every new run has a home. `fim.group_lifecycle`
-validates active work before closing and derives each group's
-execution summary.
+A Study references Run directories; an Experiment references Study IDs.
+Manifests store membership and descriptive metadata without copying the
+referenced data. The module provides CRUD, copy, read-only protection, and
+closed-group checks. Deleting a grouping also deletes referenced data by
+default; callers can disable that behavior explicitly.
 
 <a id="fim.persistence.groups.ClosedGroupError"></a>
 
-## [ClosedGroupError Objects](./persistence/groups.py#L118)
+## [ClosedGroupError Objects](./persistence/groups.py#L56)
 
 ```python
 class ClosedGroupError(StoreError, ValueError)
@@ -23889,7 +22513,7 @@ A `ValueError` subclass for the same reason as `ReadOnlyError`.
 
 <a id="fim.persistence.groups.ReadOnlyError"></a>
 
-## [ReadOnlyError Objects](./persistence/groups.py#L125)
+## [ReadOnlyError Objects](./persistence/groups.py#L63)
 
 ```python
 class ReadOnlyError(StoreError, ValueError)
@@ -23905,7 +22529,7 @@ can catch it first.
 
 <a id="fim.persistence.groups.is_run_read_only"></a>
 
-#### [is\_run\_read\_only](./persistence/groups.py#L136)
+#### [is\_run\_read\_only](./persistence/groups.py#L74)
 
 ```python
 def is_run_read_only(run_directory: Path | str) -> bool
@@ -23929,7 +22553,7 @@ readable manifest is not read-only: nothing here is protecting it.
 
 <a id="fim.persistence.groups.refuse_read_only_run"></a>
 
-#### [refuse\_read\_only\_run](./persistence/groups.py#L159)
+#### [refuse\_read\_only\_run](./persistence/groups.py#L97)
 
 ```python
 def refuse_read_only_run(run_directory: Path | str, action: str) -> None
@@ -23953,7 +22577,7 @@ Shared by every function that edits a Run, here and in
 
 <a id="fim.persistence.groups.generate_study_id"></a>
 
-#### [generate\_study\_id](./persistence/groups.py#L195)
+#### [generate\_study\_id](./persistence/groups.py#L133)
 
 ```python
 def generate_study_id() -> str
@@ -23968,7 +22592,7 @@ membership list expected to grow over its own lifetime
 
 <a id="fim.persistence.groups.generate_experiment_id"></a>
 
-#### [generate\_experiment\_id](./persistence/groups.py#L206)
+#### [generate\_experiment\_id](./persistence/groups.py#L144)
 
 ```python
 def generate_experiment_id() -> str
@@ -23978,7 +22602,7 @@ Return a short, opaque, randomly generated Experiment id.
 
 <a id="fim.persistence.groups.StudyManifest"></a>
 
-## [StudyManifest Objects](./persistence/groups.py#L230)
+## [StudyManifest Objects](./persistence/groups.py#L168)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -24016,7 +22640,7 @@ written the same way.
 
 <a id="fim.persistence.groups.StudyManifest.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/groups.py#L273)
+#### [\_\_post\_init\_\_](./persistence/groups.py#L211)
 
 ```python
 def __post_init__() -> None
@@ -24026,7 +22650,7 @@ Validate schema version, identity, name, and timestamps.
 
 <a id="fim.persistence.groups.StudyManifest.run_count"></a>
 
-#### [run\_count](./persistence/groups.py#L289)
+#### [run\_count](./persistence/groups.py#L227)
 
 ```python
 @property
@@ -24037,7 +22661,7 @@ Return how many run directories this Study currently references.
 
 <a id="fim.persistence.groups.StudyManifest.to_dict"></a>
 
-#### [to\_dict](./persistence/groups.py#L293)
+#### [to\_dict](./persistence/groups.py#L231)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -24049,7 +22673,7 @@ Return a JSON-serializable study manifest mapping.
 
 <a id="fim.persistence.groups.StudyManifest.from_dict"></a>
 
-#### [from\_dict](./persistence/groups.py#L319)
+#### [from\_dict](./persistence/groups.py#L257)
 
 ```python
 @classmethod
@@ -24060,7 +22684,7 @@ Validate and reconstruct a study manifest from a parsed JSON mapping.
 
 <a id="fim.persistence.groups.ExperimentManifest"></a>
 
-## [ExperimentManifest Objects](./persistence/groups.py#L360)
+## [ExperimentManifest Objects](./persistence/groups.py#L298)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -24078,7 +22702,7 @@ mean on a Study.
 
 <a id="fim.persistence.groups.ExperimentManifest.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/groups.py#L382)
+#### [\_\_post\_init\_\_](./persistence/groups.py#L320)
 
 ```python
 def __post_init__() -> None
@@ -24088,7 +22712,7 @@ Validate schema version, identity, name, and timestamps.
 
 <a id="fim.persistence.groups.ExperimentManifest.study_count"></a>
 
-#### [study\_count](./persistence/groups.py#L398)
+#### [study\_count](./persistence/groups.py#L336)
 
 ```python
 @property
@@ -24099,7 +22723,7 @@ Return how many studies this Experiment currently references.
 
 <a id="fim.persistence.groups.ExperimentManifest.to_dict"></a>
 
-#### [to\_dict](./persistence/groups.py#L402)
+#### [to\_dict](./persistence/groups.py#L340)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -24111,7 +22735,7 @@ Return a JSON-serializable experiment manifest mapping.
 
 <a id="fim.persistence.groups.ExperimentManifest.from_dict"></a>
 
-#### [from\_dict](./persistence/groups.py#L425)
+#### [from\_dict](./persistence/groups.py#L363)
 
 ```python
 @classmethod
@@ -24122,7 +22746,7 @@ Validate and reconstruct an experiment manifest from a parsed mapping.
 
 <a id="fim.persistence.groups.refuse_closed"></a>
 
-#### [refuse\_closed](./persistence/groups.py#L489)
+#### [refuse\_closed](./persistence/groups.py#L427)
 
 ```python
 def refuse_closed(manifest: StudyManifest | ExperimentManifest,
@@ -24143,7 +22767,7 @@ Raise `ClosedGroupError` when `manifest` is a closed Study or Experiment.
 
 <a id="fim.persistence.groups.set_experiment_closed"></a>
 
-#### [set\_experiment\_closed](./persistence/groups.py#L511)
+#### [set\_experiment\_closed](./persistence/groups.py#L449)
 
 ```python
 def set_experiment_closed(experiment_id: str,
@@ -24166,7 +22790,7 @@ validates active work first and is what callers should use.
 
 <a id="fim.persistence.groups.set_study_closed"></a>
 
-#### [set\_study\_closed](./persistence/groups.py#L545)
+#### [set\_study\_closed](./persistence/groups.py#L483)
 
 ```python
 def set_study_closed(study_id: str,
@@ -24189,7 +22813,7 @@ validates active work first and is what callers should use.
 
 <a id="fim.persistence.groups.study_manifest_path"></a>
 
-#### [study\_manifest\_path](./persistence/groups.py#L576)
+#### [study\_manifest\_path](./persistence/groups.py#L514)
 
 ```python
 def study_manifest_path(study_id: str, *, results: Path | None = None) -> Path
@@ -24210,7 +22834,7 @@ Return where one Study's own manifest file lives.
 
 <a id="fim.persistence.groups.experiment_manifest_path"></a>
 
-#### [experiment\_manifest\_path](./persistence/groups.py#L591)
+#### [experiment\_manifest\_path](./persistence/groups.py#L529)
 
 ```python
 def experiment_manifest_path(experiment_id: str,
@@ -24222,7 +22846,7 @@ Return where one Experiment's own manifest file lives.
 
 <a id="fim.persistence.groups.read_study_manifest"></a>
 
-#### [read\_study\_manifest](./persistence/groups.py#L599)
+#### [read\_study\_manifest](./persistence/groups.py#L537)
 
 ```python
 def read_study_manifest(path: Path | str) -> StudyManifest
@@ -24232,7 +22856,7 @@ Read and validate one Study manifest JSON file.
 
 <a id="fim.persistence.groups.write_study_manifest"></a>
 
-#### [write\_study\_manifest](./persistence/groups.py#L609)
+#### [write\_study\_manifest](./persistence/groups.py#L547)
 
 ```python
 def write_study_manifest(path: Path | str, manifest: StudyManifest) -> None
@@ -24249,7 +22873,7 @@ needs its own atomicity here.
 
 <a id="fim.persistence.groups.read_experiment_manifest"></a>
 
-#### [read\_experiment\_manifest](./persistence/groups.py#L623)
+#### [read\_experiment\_manifest](./persistence/groups.py#L561)
 
 ```python
 def read_experiment_manifest(path: Path | str) -> ExperimentManifest
@@ -24259,7 +22883,7 @@ Read and validate one Experiment manifest JSON file.
 
 <a id="fim.persistence.groups.write_experiment_manifest"></a>
 
-#### [write\_experiment\_manifest](./persistence/groups.py#L633)
+#### [write\_experiment\_manifest](./persistence/groups.py#L571)
 
 ```python
 def write_experiment_manifest(path: Path | str,
@@ -24270,7 +22894,7 @@ Atomically write `manifest` to `path`, creating parent directories as needed.
 
 <a id="fim.persistence.groups.create_study"></a>
 
-#### [create\_study](./persistence/groups.py#L646)
+#### [create\_study](./persistence/groups.py#L584)
 
 ```python
 def create_study(name: str,
@@ -24302,7 +22926,7 @@ Create a new, empty Study and write its manifest.
 
 <a id="fim.persistence.groups.get_study"></a>
 
-#### [get\_study](./persistence/groups.py#L694)
+#### [get\_study](./persistence/groups.py#L632)
 
 ```python
 def get_study(study_id: str, *, results: Path | None = None) -> StudyManifest
@@ -24316,7 +22940,7 @@ Read one existing Study by id.
 
 <a id="fim.persistence.groups.study_run_directories"></a>
 
-#### [study\_run\_directories](./persistence/groups.py#L707)
+#### [study\_run\_directories](./persistence/groups.py#L645)
 
 ```python
 def study_run_directories(study: StudyManifest,
@@ -24335,7 +22959,7 @@ are this function's own two callers.
 
 <a id="fim.persistence.groups.list_studies"></a>
 
-#### [list\_studies](./persistence/groups.py#L727)
+#### [list\_studies](./persistence/groups.py#L665)
 
 ```python
 def list_studies(*, results: Path | None = None) -> list[StudyManifest]
@@ -24353,7 +22977,7 @@ to the rest of the listing.
 
 <a id="fim.persistence.groups.add_run_to_study"></a>
 
-#### [add\_run\_to\_study](./persistence/groups.py#L754)
+#### [add\_run\_to\_study](./persistence/groups.py#L692)
 
 ```python
 def add_run_to_study(study_id: str,
@@ -24380,7 +23004,7 @@ Run, it does not change it.
 
 <a id="fim.persistence.groups.delete_study"></a>
 
-#### [delete\_study](./persistence/groups.py#L791)
+#### [delete\_study](./persistence/groups.py#L729)
 
 ```python
 def delete_study(study_id: str,
@@ -24418,7 +23042,7 @@ Delete a Study's own manifest and, by default, every Run it references.
 
 <a id="fim.persistence.groups.clear_study_runs"></a>
 
-#### [clear\_study\_runs](./persistence/groups.py#L833)
+#### [clear\_study\_runs](./persistence/groups.py#L771)
 
 ```python
 def clear_study_runs(study_id: str,
@@ -24452,7 +23076,7 @@ docstring).
 
 <a id="fim.persistence.groups.shared_run_directories"></a>
 
-#### [shared\_run\_directories](./persistence/groups.py#L876)
+#### [shared\_run\_directories](./persistence/groups.py#L814)
 
 ```python
 def shared_run_directories(study_id: str,
@@ -24469,7 +23093,7 @@ links to, so it can never delete a Run out from under another Study.
 
 <a id="fim.persistence.groups.remove_run_from_study"></a>
 
-#### [remove\_run\_from\_study](./persistence/groups.py#L895)
+#### [remove\_run\_from\_study](./persistence/groups.py#L833)
 
 ```python
 def remove_run_from_study(study_id: str,
@@ -24497,7 +23121,7 @@ Studies remain protected. An already-absent link is an idempotent no-op.
 
 <a id="fim.persistence.groups.remove_run_references"></a>
 
-#### [remove\_run\_references](./persistence/groups.py#L934)
+#### [remove\_run\_references](./persistence/groups.py#L872)
 
 ```python
 def remove_run_references(directories: Sequence[Path | str],
@@ -24515,7 +23139,7 @@ it (readers already skip a missing directory).
 
 <a id="fim.persistence.groups.delete_runs"></a>
 
-#### [delete\_runs](./persistence/groups.py#L962)
+#### [delete\_runs](./persistence/groups.py#L900)
 
 ```python
 def delete_runs(directories: Sequence[Path | str],
@@ -24552,7 +23176,7 @@ rather than half carried out.
 
 <a id="fim.persistence.groups.prune_missing_studies"></a>
 
-#### [prune\_missing\_studies](./persistence/groups.py#L1033)
+#### [prune\_missing\_studies](./persistence/groups.py#L971)
 
 ```python
 def prune_missing_studies(*, results: Path | None = None) -> int
@@ -24572,7 +23196,7 @@ A read-only Experiment is left as it is; re-seeding repairs it.
 
 <a id="fim.persistence.groups.update_study_details"></a>
 
-#### [update\_study\_details](./persistence/groups.py#L1086)
+#### [update\_study\_details](./persistence/groups.py#L1024)
 
 ```python
 def update_study_details(study_id: str,
@@ -24612,7 +23236,7 @@ sweep specification are untouched.
 
 <a id="fim.persistence.groups.copy_study"></a>
 
-#### [copy\_study](./persistence/groups.py#L1133)
+#### [copy\_study](./persistence/groups.py#L1071)
 
 ```python
 def copy_study(study_id: str,
@@ -24638,7 +23262,7 @@ either affecting the other or the underlying Run data at all.
 
 <a id="fim.persistence.groups.create_experiment"></a>
 
-#### [create\_experiment](./persistence/groups.py#L1178)
+#### [create\_experiment](./persistence/groups.py#L1116)
 
 ```python
 def create_experiment(name: str,
@@ -24653,7 +23277,7 @@ Create a new, empty Experiment and write its manifest.
 
 <a id="fim.persistence.groups.get_experiment"></a>
 
-#### [get\_experiment](./persistence/groups.py#L1212)
+#### [get\_experiment](./persistence/groups.py#L1150)
 
 ```python
 def get_experiment(experiment_id: str,
@@ -24669,7 +23293,7 @@ Read one existing Experiment by id.
 
 <a id="fim.persistence.groups.list_experiments"></a>
 
-#### [list\_experiments](./persistence/groups.py#L1227)
+#### [list\_experiments](./persistence/groups.py#L1165)
 
 ```python
 def list_experiments(*,
@@ -24680,7 +23304,7 @@ Return every Experiment under `results`, oldest first (see `list_studies`).
 
 <a id="fim.persistence.groups.add_study_to_experiment"></a>
 
-#### [add\_study\_to\_experiment](./persistence/groups.py#L1245)
+#### [add\_study\_to\_experiment](./persistence/groups.py#L1183)
 
 ```python
 def add_study_to_experiment(experiment_id: str,
@@ -24703,7 +23327,7 @@ links the Study, it does not change it.
 
 <a id="fim.persistence.groups.ensure_default_experiment"></a>
 
-#### [ensure\_default\_experiment](./persistence/groups.py#L1280)
+#### [ensure\_default\_experiment](./persistence/groups.py#L1218)
 
 ```python
 def ensure_default_experiment(*,
@@ -24728,7 +23352,7 @@ file it did not ask for.
 
 <a id="fim.persistence.groups.ensure_default_study"></a>
 
-#### [ensure\_default\_study](./persistence/groups.py#L1318)
+#### [ensure\_default\_study](./persistence/groups.py#L1256)
 
 ```python
 def ensure_default_study(*,
@@ -24758,7 +23382,7 @@ anything asks for it, rather than staying silently orphaned.
 
 <a id="fim.persistence.groups.write_read_only_study"></a>
 
-#### [write\_read\_only\_study](./persistence/groups.py#L1365)
+#### [write\_read\_only\_study](./persistence/groups.py#L1303)
 
 ```python
 def write_read_only_study(study_id: str,
@@ -24811,7 +23435,7 @@ an app-owned item.
 
 <a id="fim.persistence.groups.write_read_only_experiment"></a>
 
-#### [write\_read\_only\_experiment](./persistence/groups.py#L1443)
+#### [write\_read\_only\_experiment](./persistence/groups.py#L1381)
 
 ```python
 def write_read_only_experiment(experiment_id: str,
@@ -24854,7 +23478,7 @@ since it bypasses the read-only checks. Idempotent in the same way.
 
 <a id="fim.persistence.groups.delete_experiment"></a>
 
-#### [delete\_experiment](./persistence/groups.py#L1526)
+#### [delete\_experiment](./persistence/groups.py#L1464)
 
 ```python
 def delete_experiment(experiment_id: str,
@@ -24896,7 +23520,7 @@ describes, one level up.
 
 <a id="fim.persistence.groups.update_experiment_details"></a>
 
-#### [update\_experiment\_details](./persistence/groups.py#L1581)
+#### [update\_experiment\_details](./persistence/groups.py#L1519)
 
 ```python
 def update_experiment_details(experiment_id: str,
@@ -24919,7 +23543,7 @@ The Experiment-level counterpart to `update_study_details`.
 
 <a id="fim.persistence.groups.experiments_containing_study"></a>
 
-#### [experiments\_containing\_study](./persistence/groups.py#L1617)
+#### [experiments\_containing\_study](./persistence/groups.py#L1555)
 
 ```python
 def experiments_containing_study(
@@ -24935,7 +23559,7 @@ a Study normally belongs to one Experiment, but nothing forbids more.
 
 <a id="fim.persistence.groups.studies_containing_run"></a>
 
-#### [studies\_containing\_run](./persistence/groups.py#L1632)
+#### [studies\_containing\_run](./persistence/groups.py#L1570)
 
 ```python
 def studies_containing_run(run_directory: Path | str,
@@ -24952,7 +23576,7 @@ relative entry: a Study can hold thousands of runs.
 
 <a id="fim.persistence.groups.copy_experiment"></a>
 
-#### [copy\_experiment](./persistence/groups.py#L1658)
+#### [copy\_experiment](./persistence/groups.py#L1596)
 
 ```python
 def copy_experiment(experiment_id: str,
@@ -24973,7 +23597,7 @@ only the `study_ids` reference list, never the Studies themselves.
 
 <a id="fim.persistence.groups.resolve_run_directory"></a>
 
-#### [resolve\_run\_directory](./persistence/groups.py#L1697)
+#### [resolve\_run\_directory](./persistence/groups.py#L1635)
 
 ```python
 def resolve_run_directory(reference: str,
@@ -25013,7 +23637,7 @@ always unambiguous when it resolves at all.
 
 <a id="fim.persistence.groups.find_run_directories"></a>
 
-#### [find\_run\_directories](./persistence/groups.py#L1748)
+#### [find\_run\_directories](./persistence/groups.py#L1686)
 
 ```python
 def find_run_directories(run_id: str,
@@ -25034,7 +23658,7 @@ manifests, so it is linear in the number of runs.
 
 <a id="fim.persistence.groups.find_stale_run_directories"></a>
 
-#### [find\_stale\_run\_directories](./persistence/groups.py#L1773)
+#### [find\_stale\_run\_directories](./persistence/groups.py#L1711)
 
 ```python
 def find_stale_run_directories(run_id: str,
@@ -25047,7 +23671,7 @@ Return runs with this `run_id` that another software version made.
 
 <a id="fim.persistence.groups.run_id_of"></a>
 
-#### [run\_id\_of](./persistence/groups.py#L1785)
+#### [run\_id\_of](./persistence/groups.py#L1723)
 
 ```python
 def run_id_of(run_directory: Path) -> str | None
@@ -25057,7 +23681,7 @@ Return the `run_id` recorded in `run_directory`'s manifest, if readable.
 
 <a id="fim.persistence.groups.run_identity_of"></a>
 
-#### [run\_identity\_of](./persistence/groups.py#L1791)
+#### [run\_identity\_of](./persistence/groups.py#L1729)
 
 ```python
 def run_identity_of(run_directory: Path) -> tuple[str, str] | None
@@ -25067,7 +23691,7 @@ Return `(run_id, software_version)` from a run's manifest, if readable.
 
 <a id="fim.persistence.groups.supersede_run"></a>
 
-#### [supersede\_run](./persistence/groups.py#L1796)
+#### [supersede\_run](./persistence/groups.py#L1734)
 
 ```python
 def supersede_run(old: Path | str,
@@ -25397,26 +24021,16 @@ Read a compact history as generations and one float list per statistic.
 
 # [fim.persistence.manifest](./persistence/manifest.py#L1)
 
-Replayable, verifiable run-manifest representation and JSON I/O.
+Represent and verify run and batch manifests.
 
-A "manifest" is a run's own receipt: a small JSON file
-(`manifest.json`) written once a run finishes, recording everything
-needed to identify it (its `run_id`), reproduce it exactly (its full
-`SimulationParams`, via `RunManifest.params`), and know why it stopped
-(`stop_reason`, `converged`). It also records a cryptographic
-fingerprint of every other durable output file the run produced (a
-SHA-256 digest and byte count, via `hash_file`, below) — the run's own
-way of proving, later, that those files have not been silently edited,
-truncated, or replaced since the run completed (`verify_trajectory_
-integrity`, below, is what actually performs that check).
-
-`RunManifest` describes one scalar run; `BatchManifest`, further down,
-is the parallel structure for a whole replicate batch — see each
-class's own docstring for the details specific to it.
+A run manifest records parameters, run identity, stop status, and digests of
+persisted artifacts. A batch manifest describes a replicate batch. Readers
+and writers validate these versioned JSON records; integrity checks verify
+artifact bytes against the recorded digests.
 
 <a id="fim.persistence.manifest.ArtifactDigest"></a>
 
-## [ArtifactDigest Objects](./persistence/manifest.py#L56)
+## [ArtifactDigest Objects](./persistence/manifest.py#L46)
 
 ```python
 class ArtifactDigest(TypedDict)
@@ -25433,7 +24047,7 @@ previously recorded one has definitely been altered since.
 
 <a id="fim.persistence.manifest.hash_file"></a>
 
-#### [hash\_file](./persistence/manifest.py#L71)
+#### [hash\_file](./persistence/manifest.py#L61)
 
 ```python
 def hash_file(path: Path | str) -> ArtifactDigest
@@ -25461,7 +24075,7 @@ file never requires holding the whole thing in memory simultaneously.
 
 <a id="fim.persistence.manifest.RunManifest"></a>
 
-## [RunManifest Objects](./persistence/manifest.py#L100)
+## [RunManifest Objects](./persistence/manifest.py#L90)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -25470,71 +24084,32 @@ class RunManifest()
 
 Capture everything needed to identify, verify, and replay a run.
 
-`artifacts` is `None` for a manifest as the engine constructs it —
-`fim.engine.lineal.run_one` returns a `RunResult` without ever writing to
-disk, so it cannot yet know a durable file's content digest. A
-manifest actually persisted to disk (`artifacts.write_run_artifacts`)
-is written only once every other artifact (`trajectory.tlog`,
-`report.json`, `scatter.png`) is fully flushed, with `artifacts`
-populated from their real on-disk digests — so `artifacts is not
-None` on a *read* manifest doubles as "every sibling artifact this
-manifest names existed, complete, at the moment this manifest was
-written." `fim stats` (this module's own `verify_trajectory_integrity`)
-uses that digest to refuse a trajectory that was edited, truncated,
-or replaced after the fact.
+`artifacts` is `None` for an in-memory result. Persisted manifests
+contain digests for completed sibling artifacts; these digests
+support integrity checks when files are read later.
 
-`engine_backend`/`jit` record which of `fim.engine`'s own engine
-implementations, and JIT setting, actually produced this run —
-`None` for a manifest built by anything that predates this field
-(an older stored manifest, or a caller building `RunManifest`
-directly without them). Both stay `str | None` here rather than the
-engine's own `Literal` types (`EngineBackendChoice`/`JitOption`):
-this module has no import-time dependency on `fim.engine` today,
-and a manifest is meant to remain readable even if a future engine
-version renames or retires a choice this one recorded — a plain
-string degrades gracefully where a `Literal` reconstruction would
-not. `engine_backend` always records the *resolved* choice: for a
-run built with `engine_backend="auto"`, this is whichever of
-`"generational"`/`"generational-vector"` `"auto"` actually picked,
-never the literal string `"auto"` itself — the whole reason this
-field exists is so a runtime-data-dependent choice is not lost
-(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§7.4).
+`engine_backend` and `jit` record the resolved engine settings, or
+`None` if the manifest predates these fields. They are stored as
+strings so manifests can be read without importing the engine and
+remain readable if an engine option is renamed. For
+`engine_backend="auto"`, the manifest records the selected backend,
+not `"auto"`.
 
-`initial_condition_mode`/`equilibrium_generation_count`/
-`equilibrium_final_heterozygosity` record which strategy
-(`fim.model.initial`) actually produced this run's own generation
-zero, and — for `"equilibrium_split"` only — the ancestral phase's
-own runtime outcome (`20260907-claude-sonnet-5-equilibrium-split-
-design.md`, decision 5). `initial_condition_mode` is deliberately a
-plain string, not a stricter type, for the identical reason
-`engine_backend`/`jit` already are: it always records the
-*resolved* strategy a caller actually got, and a manifest should
-stay readable even if a future strategy's own name is not one this
-module has ever heard of. All three are `None` for a manifest
-written before this field existed, or whenever the run used
-`"dirichlet"`/`"explicit"` instead — the two equilibrium-specific
-fields have no meaning outside `"equilibrium_split"` and are never
-populated for either of the other two.
+`initial_condition_mode` records the resolved initialization
+strategy. `equilibrium_generation_count` and
+`equilibrium_final_heterozygosity` are populated only for
+`"equilibrium_split"`. These fields are `None` for older manifests
+and for other initial-condition modes.
 
-`auto_derived`/`relaxation_time` record whether this run's own
-`convergence_burn_in`/`max_generations` were auto-derived from the
-model's own relaxation time rather than given explicitly
-(`SimulationParams._resolve_convergence_defaults`'s own identically
-named fields, copied here at manifest-construction time) --
-`parameters` above only ever holds the *resolved* concrete integers
-either way (`SimulationParams.to_dict`'s own documented contract:
-reconstructing from it must reproduce an equal `SimulationParams`,
-and `auto_derived`/`relaxation_time` deliberately take no part in
-that equality), so without a dedicated field of its own here, a
-reopened run could never tell a `convergence_burn_in` the botanist
-typed from one this project chose on its own. `auto_derived` is
-empty (not `None`) whenever both were given explicitly; `None` for
-either field only means a manifest written before they existed.
+`auto_derived` and `relaxation_time` record whether convergence
+settings were derived from the model's relaxation time.
+`parameters` contains the resolved integer settings; `auto_derived`
+is empty when both settings were supplied explicitly. `None` in
+these fields indicates a manifest written before they were added.
 
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/manifest.py#L186)
+#### [\_\_post\_init\_\_](./persistence/manifest.py#L137)
 
 ```python
 def __post_init__() -> None
@@ -25544,7 +24119,7 @@ Validate required manifest identity, terminal, and digest fields.
 
 <a id="fim.persistence.manifest.RunManifest.params"></a>
 
-#### [params](./persistence/manifest.py#L205)
+#### [params](./persistence/manifest.py#L156)
 
 ```python
 def params() -> SimulationParams
@@ -25563,7 +24138,7 @@ config file to still exist.
 
 <a id="fim.persistence.manifest.RunManifest.to_dict"></a>
 
-#### [to\_dict](./persistence/manifest.py#L219)
+#### [to\_dict](./persistence/manifest.py#L170)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -25577,7 +24152,7 @@ writes to `manifest.json`, and that `from_dict` reads back.
 
 <a id="fim.persistence.manifest.RunManifest.from_dict"></a>
 
-#### [from\_dict](./persistence/manifest.py#L261)
+#### [from\_dict](./persistence/manifest.py#L212)
 
 ```python
 @classmethod
@@ -25594,7 +24169,7 @@ and well-formed and reconstructs the equivalent `RunManifest`.
 
 <a id="fim.persistence.manifest.read_manifest"></a>
 
-#### [read\_manifest](./persistence/manifest.py#L315)
+#### [read\_manifest](./persistence/manifest.py#L266)
 
 ```python
 def read_manifest(path: Path | str) -> RunManifest
@@ -25609,7 +24184,7 @@ from_dict`, above, which does the actual field-by-field validation
 
 <a id="fim.persistence.manifest.write_manifest"></a>
 
-#### [write\_manifest](./persistence/manifest.py#L332)
+#### [write\_manifest](./persistence/manifest.py#L283)
 
 ```python
 def write_manifest(path: Path | str, manifest: RunManifest) -> None
@@ -25626,7 +24201,7 @@ else in the project works with the in-memory `RunManifest` object.
 
 <a id="fim.persistence.manifest.verify_trajectory_integrity"></a>
 
-#### [verify\_trajectory\_integrity](./persistence/manifest.py#L356)
+#### [verify\_trajectory\_integrity](./persistence/manifest.py#L307)
 
 ```python
 def verify_trajectory_integrity(trajectory_path: Path,
@@ -25635,25 +24210,11 @@ def verify_trajectory_integrity(trajectory_path: Path,
                                 artifact: str = "trajectory") -> None
 ```
 
-Refuse to analyze a trajectory that no longer matches its manifest.
+Raise `ValueError` if a file does not match its recorded digest.
 
-Called by `fim.reanalyze.reanalyze_trajectory` before it trusts
-anything else about the file: recomputes `trajectory_path`'s own
-current SHA-256 digest (via `hash_file`, above) and compares it
-against the digest the run itself recorded, in its own manifest, at
-the moment it finished writing that file durably. A mismatch means
-the file has changed in some way since — accidentally, through
-corruption, or deliberately — and this raises rather than letting
-re-analysis silently produce numbers for a file that is no longer
-what the run actually produced.
-
-Regression fix (`cli.py`'s own history, predating this
-extraction): an edited or truncated trajectory used to re-analyze
-silently under `fim stats`. The run that wrote `trajectory_path`
-also recorded its exact SHA-256 digest and byte count in
-`manifest.json` at the moment the run finished writing it durably;
-recomputing that digest now and comparing catches any edit,
-truncation, or replacement since.
+The manifest's SHA-256 digest and byte count are compared with the
+current file. A missing digest or a mismatch prevents analysis from
+proceeding with an unverified artifact.
 
 **Arguments**:
 
@@ -25666,13 +24227,12 @@ truncation, or replacement since.
 
 **Raises**:
 
-- `ValueError` - If the manifest has no recorded trajectory digest
-  (written before this check existed), or the file no longer
-  matches the digest it does have.
+- `ValueError` - If the manifest has no digest for `artifact`, or the
+  file does not match its recorded digest.
 
 <a id="fim.persistence.manifest.BatchManifest"></a>
 
-## [BatchManifest Objects](./persistence/manifest.py#L420)
+## [BatchManifest Objects](./persistence/manifest.py#L356)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -25681,17 +24241,13 @@ class BatchManifest()
 
 Capture everything needed to identify and verify a replicate batch.
 
-Parallel to `RunManifest`, but describes a whole batch rather than
-one replicate: `replicate_run_ids` names every published
-`replicate-NNN/` subdirectory, and `artifacts` — populated the same
-way as `RunManifest.artifacts`, only once every sibling artifact is
-flushed — digests `summary.json` and each replicate's own
-`manifest.json`, so an edited, truncated, or replaced batch-level
-artifact is detectable the same way a scalar run's is.
+`replicate_run_ids` lists the published `replicate-NNN/`
+subdirectories. Persisted artifact digests cover `summary.json` and
+each replicate's `manifest.json`.
 
 <a id="fim.persistence.manifest.BatchManifest.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/manifest.py#L441)
+#### [\_\_post\_init\_\_](./persistence/manifest.py#L373)
 
 ```python
 def __post_init__() -> None
@@ -25701,7 +24257,7 @@ Validate required batch-manifest identity and digest fields.
 
 <a id="fim.persistence.manifest.BatchManifest.replicate_count"></a>
 
-#### [replicate\_count](./persistence/manifest.py#L458)
+#### [replicate\_count](./persistence/manifest.py#L390)
 
 ```python
 @property
@@ -25717,7 +24273,7 @@ how many of them actually completed and were published.
 
 <a id="fim.persistence.manifest.BatchManifest.params"></a>
 
-#### [params](./persistence/manifest.py#L468)
+#### [params](./persistence/manifest.py#L400)
 
 ```python
 def params() -> SimulationParams
@@ -25730,7 +24286,7 @@ that method's own docstring for what this reconstructs and why.
 
 <a id="fim.persistence.manifest.BatchManifest.to_dict"></a>
 
-#### [to\_dict](./persistence/manifest.py#L476)
+#### [to\_dict](./persistence/manifest.py#L408)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -25742,7 +24298,7 @@ The batch-level counterpart to `RunManifest.to_dict`, above.
 
 <a id="fim.persistence.manifest.BatchManifest.from_dict"></a>
 
-#### [from\_dict](./persistence/manifest.py#L498)
+#### [from\_dict](./persistence/manifest.py#L430)
 
 ```python
 @classmethod
@@ -25755,7 +24311,7 @@ The batch-level counterpart to `RunManifest.from_dict`, above.
 
 <a id="fim.persistence.manifest.read_batch_manifest"></a>
 
-#### [read\_batch\_manifest](./persistence/manifest.py#L537)
+#### [read\_batch\_manifest](./persistence/manifest.py#L469)
 
 ```python
 def read_batch_manifest(path: Path | str) -> BatchManifest
@@ -25767,7 +24323,7 @@ The batch-level counterpart to `read_manifest`, above.
 
 <a id="fim.persistence.manifest.write_batch_manifest"></a>
 
-#### [write\_batch\_manifest](./persistence/manifest.py#L551)
+#### [write\_batch\_manifest](./persistence/manifest.py#L483)
 
 ```python
 def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None
@@ -26186,55 +24742,23 @@ Return whether a finished run holds what a configuration asks it to keep.
 
 # [fim.persistence.report](./persistence/report.py#L1)
 
-Deterministic JSON writing for run-level report and summary artifacts.
+Write deterministic JSON reports and JSON Lines rows.
 
-A run's own results — its final statistics, or a batch's across-
-replicate summary — need to end up in a `.json` file a human can open
-directly or another program can read back reliably; `write_report`,
-below, is the one function that actually writes such a file, in a
-fixed, reproducible format (see its own docstring for exactly what
-"deterministic" means here and why it matters).
-
-Extracted from `fim.cli`'s private `_write_json` (`doc/
-fim-gui-design.md` §12), parallel to
-`fim.persistence.manifest.write_manifest`: one shared, deterministic JSON
-writer for both `report.json` (a `fim.engine.FinalReport`, plus the CLI's
-`fim stats` re-analysis reports and `fim.gui`'s own run reports) and a
-batch's `summary.json` (`fim.engine.replicate_summary`'s across-replicate
-confidence intervals) — every caller needing byte-identical, sorted-key,
-newline-terminated JSON, not just report.json specifically.
-
-`write_jsonl_rows`, below, is the same determinism guarantee applied to
-a *sequence* of small JSON objects, one per line, rather than one large
-object — `convergence.jsonl`'s own per-generation rows, and any future
-artifact shaped the same way, share this one
-writer rather than each hand-rolling its own line-by-line `json.dumps`
-loop.
+The writers use stable key ordering, fixed indentation, and a trailing newline.
+Non-finite values are rejected so output remains valid JSON.
 
 <a id="fim.persistence.report.write_report"></a>
 
-#### [write\_report](./persistence/report.py#L37)
+#### [write\_report](./persistence/report.py#L17)
 
 ```python
 def write_report(path: Path | str, value: Mapping[str, object]) -> None
 ```
 
-Write one JSON report artifact deterministically.
+Write a deterministic, indented JSON report.
 
-"Deterministically" means the exact same bytes are written every
-time for the exact same `value`: keys are always sorted
-alphabetically (``sort_keys=True``), the file always ends with
-exactly one trailing newline, and the same 2-space indentation is
-always used — so two runs with identical results produce byte-
-identical `report.json`/`summary.json` files, letting a plain
-``diff`` (or a version-control system's own diff view) show a real
-change in results, never a spurious change caused only by dict key
-ordering or formatting differing between two writes. ``allow_nan=
-False`` additionally rejects ``NaN``/``Infinity`` outright rather
-than writing them as invalid JSON that most other tools cannot
-parse back — a real bug in the reported values should be caught
-here, not silently written to a file that then fails to load
-somewhere else.
+Keys are sorted, output uses two-space indentation and ends with one
+newline. Non-finite values are rejected.
 
 **Arguments**:
 
@@ -26243,7 +24767,7 @@ somewhere else.
 
 <a id="fim.persistence.report.write_jsonl_rows"></a>
 
-#### [write\_jsonl\_rows](./persistence/report.py#L67)
+#### [write\_jsonl\_rows](./persistence/report.py#L35)
 
 ```python
 def write_jsonl_rows(path: Path | str,
@@ -26467,28 +24991,16 @@ not the length of the run.
 
 # [fim.persistence.run\_checkpoint](./persistence/run_checkpoint.py#L1)
 
-Durable, atomically published Run checkpoints.
+Publish and verify immutable checkpoints for resumable Run objects.
 
-A checkpoint is an immutable directory `checkpoints/<checkpoint_id>/` inside a
-Run object holding `checkpoint.json` (versioned metadata) and `arrays.npz`
-(numeric state). It becomes authoritative only when `run.json` points at it:
-publication writes the files into a hidden staging sibling, flushes them to
-disk, renames the directory into place, and only then asks the execution
-lease to record the pointer. A crash at any step leaves either the previous
-pointer (and its checkpoint, still intact) or the new one; any directory the
-pointer does not name is garbage, never an alternate truth.
-
-The reference digest is the SHA-256 of the exact `checkpoint.json` bytes, and
-that document records the SHA-256 of `arrays.npz`, so one digest verifies
-both files. The archive is written with fixed entry metadata, so identical
-state always produces identical bytes.
-
-Design: `20261011-gpt-6-luna-phase-2-trajectory-persistence-and-run-lifecycle-
-plan.md` (`selby/restricted`), "Checkpoint contents and commit protocol".
+Each checkpoint contains versioned JSON metadata and a NumPy archive. The
+lifecycle record points to the authoritative checkpoint only after the staged
+directory has been flushed and published. Digests verify both files, and
+unreferenced checkpoint directories are not authoritative.
 
 <a id="fim.persistence.run_checkpoint.CheckpointError"></a>
 
-## [CheckpointError Objects](./persistence/run_checkpoint.py#L60)
+## [CheckpointError Objects](./persistence/run_checkpoint.py#L48)
 
 ```python
 class CheckpointError(LifecycleError)
@@ -26498,7 +25010,7 @@ A checkpoint is missing, corrupt, or does not match its reference.
 
 <a id="fim.persistence.run_checkpoint.UnsupportedCheckpointError"></a>
 
-## [UnsupportedCheckpointError Objects](./persistence/run_checkpoint.py#L64)
+## [UnsupportedCheckpointError Objects](./persistence/run_checkpoint.py#L52)
 
 ```python
 class UnsupportedCheckpointError(CheckpointError)
@@ -26508,7 +25020,7 @@ A checkpoint uses a schema version this program cannot execute.
 
 <a id="fim.persistence.run_checkpoint.LoadedCheckpoint"></a>
 
-## [LoadedCheckpoint Objects](./persistence/run_checkpoint.py#L69)
+## [LoadedCheckpoint Objects](./persistence/run_checkpoint.py#L57)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26525,7 +25037,7 @@ A verified checkpoint read back from disk.
 
 <a id="fim.persistence.run_checkpoint.checkpoints_directory"></a>
 
-#### [checkpoints\_directory](./persistence/run_checkpoint.py#L83)
+#### [checkpoints\_directory](./persistence/run_checkpoint.py#L71)
 
 ```python
 def checkpoints_directory(object_directory: Path) -> Path
@@ -26544,7 +25056,7 @@ Return the directory holding an object's checkpoints.
 
 <a id="fim.persistence.run_checkpoint.collect_checkpoint_garbage"></a>
 
-#### [collect\_checkpoint\_garbage](./persistence/run_checkpoint.py#L95)
+#### [collect\_checkpoint\_garbage](./persistence/run_checkpoint.py#L83)
 
 ```python
 def collect_checkpoint_garbage(
@@ -26569,7 +25081,7 @@ no concurrent publication can be mid-flight.
 
 <a id="fim.persistence.run_checkpoint.commit_checkpoint"></a>
 
-#### [commit\_checkpoint](./persistence/run_checkpoint.py#L124)
+#### [commit\_checkpoint](./persistence/run_checkpoint.py#L112)
 
 ```python
 def commit_checkpoint(lease: ExecutionLease,
@@ -26609,7 +25121,7 @@ Publish a checkpoint and make it the object's latest, then prune.
 
 <a id="fim.persistence.run_checkpoint.load_checkpoint"></a>
 
-#### [load\_checkpoint](./persistence/run_checkpoint.py#L177)
+#### [load\_checkpoint](./persistence/run_checkpoint.py#L165)
 
 ```python
 def load_checkpoint(object_directory: Path,
@@ -26636,7 +25148,7 @@ Read and verify the checkpoint a lifecycle record points at.
 
 <a id="fim.persistence.run_checkpoint.new_checkpoint_id"></a>
 
-#### [new\_checkpoint\_id](./persistence/run_checkpoint.py#L220)
+#### [new\_checkpoint\_id](./persistence/run_checkpoint.py#L208)
 
 ```python
 def new_checkpoint_id(committed_generation: int) -> str
@@ -26655,7 +25167,7 @@ Return a fresh checkpoint directory name that sorts by generation.
 
 <a id="fim.persistence.run_checkpoint.publish_checkpoint"></a>
 
-#### [publish\_checkpoint](./persistence/run_checkpoint.py#L232)
+#### [publish\_checkpoint](./persistence/run_checkpoint.py#L220)
 
 ```python
 def publish_checkpoint(object_directory: Path,
@@ -26697,45 +25209,23 @@ reference the new directory is unreferenced garbage.
 
 # [fim.persistence.run\_lifecycle](./persistence/run_lifecycle.py#L1)
 
-Versioned Run lifecycle records, the transition table, and capabilities.
+Define Run object states, lifecycle events, and action capabilities.
 
-A Run object moves through durable lifecycle states that are separate from
-its scientific outcome. This module is the single definition of those
-states, the events that move between them, and the record stored as an
-object's `run.json`. It does no I/O: `fim.persistence.run_objects` reads and
-writes records, and every frontend (CLI, GUI, sweeps) asks this module, never
-its own copy of the rules, whether an action is legal.
-
-Two states hold an editable configuration that has never run:
-
-- `draft`: the saved configuration is invalid or incomplete. It may be
-  edited, cloned, or deleted, but never started.
-- `planned`: the saved configuration is valid and complete, so it may start.
-
-Saving reclassifies the object: a save whose configuration validates moves
-it to `planned`, and a save that does not moves it to `draft`. The user
-never picks between the two directly.
-
-The remaining states follow the Run lifecycle design
-(`20261006-gpt-6.1-sol-run-lifecycle-and-checkpoint-design.md`,
-`selby/restricted`, section 4). `completed` and `cancelled` are terminal.
-Delete is removal of the object, not a state. One event, `recover-completion`,
-is added to that design: a worker that published its completion receipt
-but stopped before committing `completed` is completed by reconciliation
-once the receipt verifies. A release that predates the event cannot read a
-record whose history contains it. Phase, scientific outcome,
-execution kind, and protection are attributes of the record, never extra
-state values.
+The versioned lifecycle record distinguishes configuration readiness from
+execution outcome. Draft and planned objects hold configurations that have not
+started; running, pausing, paused, interrupted, failed, completed, and
+cancelled describe execution. This module defines transitions and validation;
+`fim.persistence.run_objects` performs storage operations.
 
 <a id="fim.persistence.run_lifecycle.CURRENT_RUN_LIFECYCLE_SCHEMA_VERSION"></a>
 
-#### [CURRENT\_RUN\_LIFECYCLE\_SCHEMA\_VERSION](./persistence/run_lifecycle.py#L43)
+#### [CURRENT\_RUN\_LIFECYCLE\_SCHEMA\_VERSION](./persistence/run_lifecycle.py#L21)
 
 Version of the `run.json` shape; bumped on an incompatible change.
 
 <a id="fim.persistence.run_lifecycle.RunState"></a>
 
-## [RunState Objects](./persistence/run_lifecycle.py#L53)
+## [RunState Objects](./persistence/run_lifecycle.py#L31)
 
 ```python
 class RunState(StrEnum)
@@ -26745,7 +25235,7 @@ Durable lifecycle state of one Run object.
 
 <a id="fim.persistence.run_lifecycle.RunEvent"></a>
 
-## [RunEvent Objects](./persistence/run_lifecycle.py#L68)
+## [RunEvent Objects](./persistence/run_lifecycle.py#L46)
 
 ```python
 class RunEvent(StrEnum)
@@ -26755,7 +25245,7 @@ An event that may move a Run object to another lifecycle state.
 
 <a id="fim.persistence.run_lifecycle.RunKind"></a>
 
-## [RunKind Objects](./persistence/run_lifecycle.py#L86)
+## [RunKind Objects](./persistence/run_lifecycle.py#L64)
 
 ```python
 class RunKind(StrEnum)
@@ -26765,7 +25255,7 @@ Whether a Run object executes one replicate or a replicate batch.
 
 <a id="fim.persistence.run_lifecycle.RunPhase"></a>
 
-## [RunPhase Objects](./persistence/run_lifecycle.py#L93)
+## [RunPhase Objects](./persistence/run_lifecycle.py#L71)
 
 ```python
 class RunPhase(StrEnum)
@@ -26775,37 +25265,37 @@ Execution phase within `running`; never a lifecycle state.
 
 <a id="fim.persistence.run_lifecycle.PRE_EXECUTION_STATES"></a>
 
-#### [PRE\_EXECUTION\_STATES](./persistence/run_lifecycle.py#L102)
+#### [PRE\_EXECUTION\_STATES](./persistence/run_lifecycle.py#L80)
 
 States whose configuration is still editable; nothing has executed.
 
 <a id="fim.persistence.run_lifecycle.ACTIVE_STATES"></a>
 
-#### [ACTIVE\_STATES](./persistence/run_lifecycle.py#L105)
+#### [ACTIVE\_STATES](./persistence/run_lifecycle.py#L83)
 
 States in which one attempt owns execution.
 
 <a id="fim.persistence.run_lifecycle.TERMINAL_STATES"></a>
 
-#### [TERMINAL\_STATES](./persistence/run_lifecycle.py#L110)
+#### [TERMINAL\_STATES](./persistence/run_lifecycle.py#L88)
 
 States no event may leave.
 
 <a id="fim.persistence.run_lifecycle.RESUMABLE_STATES"></a>
 
-#### [RESUMABLE\_STATES](./persistence/run_lifecycle.py#L113)
+#### [RESUMABLE\_STATES](./persistence/run_lifecycle.py#L91)
 
 States from which a verified checkpoint may continue execution.
 
 <a id="fim.persistence.run_lifecycle.TRANSITIONS"></a>
 
-#### [TRANSITIONS](./persistence/run_lifecycle.py#L121)
+#### [TRANSITIONS](./persistence/run_lifecycle.py#L99)
 
 Every legal `(state, event)` pair and the state it leads to.
 
 <a id="fim.persistence.run_lifecycle.LifecycleError"></a>
 
-## [LifecycleError Objects](./persistence/run_lifecycle.py#L174)
+## [LifecycleError Objects](./persistence/run_lifecycle.py#L152)
 
 ```python
 class LifecycleError(FimError)
@@ -26815,7 +25305,7 @@ Base class for every lifecycle rule or record violation.
 
 <a id="fim.persistence.run_lifecycle.IllegalTransitionError"></a>
 
-## [IllegalTransitionError Objects](./persistence/run_lifecycle.py#L178)
+## [IllegalTransitionError Objects](./persistence/run_lifecycle.py#L156)
 
 ```python
 class IllegalTransitionError(LifecycleError)
@@ -26831,7 +25321,7 @@ An event is not legal in the object's current state.
 
 <a id="fim.persistence.run_lifecycle.IllegalTransitionError.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/run_lifecycle.py#L187)
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L165)
 
 ```python
 def __init__(state: RunState, event: RunEvent, revision: int) -> None
@@ -26841,7 +25331,7 @@ Record the rejected request and describe it.
 
 <a id="fim.persistence.run_lifecycle.RevisionConflictError"></a>
 
-## [RevisionConflictError Objects](./persistence/run_lifecycle.py#L198)
+## [RevisionConflictError Objects](./persistence/run_lifecycle.py#L176)
 
 ```python
 class RevisionConflictError(LifecycleError)
@@ -26856,7 +25346,7 @@ A request named a lifecycle revision other than the current one.
 
 <a id="fim.persistence.run_lifecycle.RevisionConflictError.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/run_lifecycle.py#L206)
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L184)
 
 ```python
 def __init__(expected: int, actual: int) -> None
@@ -26866,7 +25356,7 @@ Record both revisions and describe the conflict.
 
 <a id="fim.persistence.run_lifecycle.AttemptMismatchError"></a>
 
-## [AttemptMismatchError Objects](./persistence/run_lifecycle.py#L216)
+## [AttemptMismatchError Objects](./persistence/run_lifecycle.py#L194)
 
 ```python
 class AttemptMismatchError(LifecycleError)
@@ -26876,7 +25366,7 @@ An event came from an attempt that no longer owns execution.
 
 <a id="fim.persistence.run_lifecycle.LifecycleRecordError"></a>
 
-## [LifecycleRecordError Objects](./persistence/run_lifecycle.py#L220)
+## [LifecycleRecordError Objects](./persistence/run_lifecycle.py#L198)
 
 ```python
 class LifecycleRecordError(LifecycleError)
@@ -26886,7 +25376,7 @@ A stored lifecycle record is malformed or has an unknown schema.
 
 <a id="fim.persistence.run_lifecycle.CommandKeyReuseError"></a>
 
-## [CommandKeyReuseError Objects](./persistence/run_lifecycle.py#L224)
+## [CommandKeyReuseError Objects](./persistence/run_lifecycle.py#L202)
 
 ```python
 class CommandKeyReuseError(LifecycleError)
@@ -26901,7 +25391,7 @@ An idempotency key was reused for a different command.
 
 <a id="fim.persistence.run_lifecycle.CommandKeyReuseError.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/run_lifecycle.py#L232)
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L210)
 
 ```python
 def __init__(command_key: str, original: TransitionRecord) -> None
@@ -26911,7 +25401,7 @@ Record the key and its original transition, and describe them.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue"></a>
 
-## [ValidationIssue Objects](./persistence/run_lifecycle.py#L243)
+## [ValidationIssue Objects](./persistence/run_lifecycle.py#L221)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26928,7 +25418,7 @@ One reason a saved configuration cannot run.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L255)
+#### [to\_dict](./persistence/run_lifecycle.py#L233)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -26938,7 +25428,7 @@ Return the JSON form of this issue.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L260)
+#### [from\_dict](./persistence/run_lifecycle.py#L238)
 
 ```python
 @classmethod
@@ -26949,7 +25439,7 @@ Parse one stored issue, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo"></a>
 
-## [ErrorInfo Objects](./persistence/run_lifecycle.py#L272)
+## [ErrorInfo Objects](./persistence/run_lifecycle.py#L250)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26968,7 +25458,7 @@ The most recent execution error recorded for a Run object.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L288)
+#### [to\_dict](./persistence/run_lifecycle.py#L266)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -26978,7 +25468,7 @@ Return the JSON form of this error.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L298)
+#### [from\_dict](./persistence/run_lifecycle.py#L276)
 
 ```python
 @classmethod
@@ -26989,7 +25479,7 @@ Parse one stored error, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference"></a>
 
-## [CheckpointReference Objects](./persistence/run_lifecycle.py#L313)
+## [CheckpointReference Objects](./persistence/run_lifecycle.py#L291)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27006,7 +25496,7 @@ Pointer from a lifecycle record to its latest committed checkpoint.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L326)
+#### [to\_dict](./persistence/run_lifecycle.py#L304)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27016,7 +25506,7 @@ Return the JSON form of this reference.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L335)
+#### [from\_dict](./persistence/run_lifecycle.py#L313)
 
 ```python
 @classmethod
@@ -27027,7 +25517,7 @@ Parse one stored reference, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord"></a>
 
-## [TransitionRecord Objects](./persistence/run_lifecycle.py#L348)
+## [TransitionRecord Objects](./persistence/run_lifecycle.py#L326)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27049,7 +25539,7 @@ One lifecycle transition retained in the object's history.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L370)
+#### [to\_dict](./persistence/run_lifecycle.py#L348)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27059,7 +25549,7 @@ Return the JSON form of this transition.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L383)
+#### [from\_dict](./persistence/run_lifecycle.py#L361)
 
 ```python
 @classmethod
@@ -27070,7 +25560,7 @@ Parse one stored transition, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord"></a>
 
-## [RunLifecycleRecord Objects](./persistence/run_lifecycle.py#L402)
+## [RunLifecycleRecord Objects](./persistence/run_lifecycle.py#L380)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27111,7 +25601,7 @@ record that exists is always internally consistent.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L456)
+#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L434)
 
 ```python
 def __post_init__() -> None
@@ -27121,7 +25611,7 @@ Reject a record whose fields contradict each other.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.is_draft"></a>
 
-#### [is\_draft](./persistence/run_lifecycle.py#L500)
+#### [is\_draft](./persistence/run_lifecycle.py#L478)
 
 ```python
 @property
@@ -27132,7 +25622,7 @@ Return whether the saved configuration cannot run yet.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.is_terminal"></a>
 
-#### [is\_terminal](./persistence/run_lifecycle.py#L505)
+#### [is\_terminal](./persistence/run_lifecycle.py#L483)
 
 ```python
 @property
@@ -27143,7 +25633,7 @@ Return whether no event may leave the current state.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L509)
+#### [to\_dict](./persistence/run_lifecycle.py#L487)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27153,7 +25643,7 @@ Return the JSON form stored as `run.json`.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L543)
+#### [from\_dict](./persistence/run_lifecycle.py#L521)
 
 ```python
 @classmethod
@@ -27169,7 +25659,7 @@ Parse a stored `run.json` document.
 
 <a id="fim.persistence.run_lifecycle.Configuration"></a>
 
-## [Configuration Objects](./persistence/run_lifecycle.py#L612)
+## [Configuration Objects](./persistence/run_lifecycle.py#L590)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27189,7 +25679,7 @@ and scientific run ID; an invalid one has at least one issue.
 
 <a id="fim.persistence.run_lifecycle.Configuration.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L628)
+#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L606)
 
 ```python
 def __post_init__() -> None
@@ -27199,7 +25689,7 @@ Reject a configuration that is both or neither valid and invalid.
 
 <a id="fim.persistence.run_lifecycle.Configuration.is_valid"></a>
 
-#### [is\_valid](./persistence/run_lifecycle.py#L639)
+#### [is\_valid](./persistence/run_lifecycle.py#L617)
 
 ```python
 @property
@@ -27210,7 +25700,7 @@ Return whether the configuration may run.
 
 <a id="fim.persistence.run_lifecycle.Configuration.valid"></a>
 
-#### [valid](./persistence/run_lifecycle.py#L644)
+#### [valid](./persistence/run_lifecycle.py#L622)
 
 ```python
 @classmethod
@@ -27221,7 +25711,7 @@ Return a valid configuration outcome.
 
 <a id="fim.persistence.run_lifecycle.Configuration.invalid"></a>
 
-#### [invalid](./persistence/run_lifecycle.py#L649)
+#### [invalid](./persistence/run_lifecycle.py#L627)
 
 ```python
 @classmethod
@@ -27232,7 +25722,7 @@ Return an invalid configuration outcome.
 
 <a id="fim.persistence.run_lifecycle.Capabilities"></a>
 
-## [Capabilities Objects](./persistence/run_lifecycle.py#L655)
+## [Capabilities Objects](./persistence/run_lifecycle.py#L633)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27246,7 +25736,7 @@ has an entry in `reasons` explaining why.
 
 <a id="fim.persistence.run_lifecycle.Capabilities.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L671)
+#### [to\_dict](./persistence/run_lifecycle.py#L649)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27256,7 +25746,7 @@ Return the JSON form sent to frontends.
 
 <a id="fim.persistence.run_lifecycle.apply_event"></a>
 
-#### [apply\_event](./persistence/run_lifecycle.py#L685)
+#### [apply\_event](./persistence/run_lifecycle.py#L663)
 
 ```python
 def apply_event(record: RunLifecycleRecord,
@@ -27308,7 +25798,7 @@ Return the record that results from applying one event.
 
 <a id="fim.persistence.run_lifecycle.capabilities"></a>
 
-#### [capabilities](./persistence/run_lifecycle.py#L770)
+#### [capabilities](./persistence/run_lifecycle.py#L748)
 
 ```python
 def capabilities(record: RunLifecycleRecord,
@@ -27334,7 +25824,7 @@ Return the actions allowed for one Run object, with reasons.
 
 <a id="fim.persistence.run_lifecycle.find_command"></a>
 
-#### [find\_command](./persistence/run_lifecycle.py#L961)
+#### [find\_command](./persistence/run_lifecycle.py#L939)
 
 ```python
 def find_command(record: RunLifecycleRecord,
@@ -27355,7 +25845,7 @@ Return the transition an idempotency key produced, if any.
 
 <a id="fim.persistence.run_lifecycle.format_timestamp"></a>
 
-#### [format\_timestamp](./persistence/run_lifecycle.py#L979)
+#### [format\_timestamp](./persistence/run_lifecycle.py#L957)
 
 ```python
 def format_timestamp(value: datetime) -> str
@@ -27369,7 +25859,7 @@ Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`.
 
 <a id="fim.persistence.run_lifecycle.is_attempt_id"></a>
 
-#### [is\_attempt\_id](./persistence/run_lifecycle.py#L990)
+#### [is\_attempt\_id](./persistence/run_lifecycle.py#L968)
 
 ```python
 def is_attempt_id(value: str) -> bool
@@ -27379,7 +25869,7 @@ Return whether `value` is a well-formed attempt ID.
 
 <a id="fim.persistence.run_lifecycle.is_object_id"></a>
 
-#### [is\_object\_id](./persistence/run_lifecycle.py#L995)
+#### [is\_object\_id](./persistence/run_lifecycle.py#L973)
 
 ```python
 def is_object_id(value: str) -> bool
@@ -27391,7 +25881,7 @@ The fixed form also guarantees an object ID is a safe directory name.
 
 <a id="fim.persistence.run_lifecycle.new_record"></a>
 
-#### [new\_record](./persistence/run_lifecycle.py#L1003)
+#### [new\_record](./persistence/run_lifecycle.py#L981)
 
 ```python
 def new_record(object_id: str,
@@ -27414,7 +25904,7 @@ Return the record for a newly saved object: `planned` or `draft`.
 
 <a id="fim.persistence.run_lifecycle.record_progress"></a>
 
-#### [record\_progress](./persistence/run_lifecycle.py#L1036)
+#### [record\_progress](./persistence/run_lifecycle.py#L1014)
 
 ```python
 def record_progress(
@@ -27459,40 +25949,15 @@ entry is added, but the revision advances so readers see the change.
 
 # [fim.persistence.run\_metadata](./persistence/run_metadata.py#L1)
 
-Optional name/description sidecar for a run, attachable at any time.
+Store editable names, descriptions, and class labels beside run manifests.
 
-A completed run's own `manifest.json` is a fixed, digest-verified
-receipt (`fim.persistence.manifest`) — rewriting it to add a name would
-either break `verify_trajectory_integrity`'s own checksum or require
-recomputing it for no scientific reason. `RunMetadata` instead lives in
-its own small sidecar file, `metadata.json`, beside `manifest.json`:
-attaching, renaming, or clearing a run's name/description never touches
-the manifest at all.
-
-A run with no `metadata.json` is not incomplete — it is exactly what
-every run produced before this file existed already is (`20260917-
-claude-sonnet-5-run-study-experiment-hierarchy-design.md`, `selby/
-restricted`, §3.1/§3.4): callers read it the same graceful-degradation
-way `fim.gui.app._read_json_object` already reads `report.json`/
-`summary.json` — missing or malformed means "no name set," never an
-error for the run itself.
-
-A run's **labels** — `name`, `description`, and `class` — may also be
-written in its configuration file. They never reach the run's
-parameters or its ID (`fim.model.params._LABEL_KEYS`): `RunLabels.
-from_config` reads them, and `fim run` writes them here, unless the run
-already has a `metadata.json` (read-only examples design, 2026-10-05,
-section 1). The class is stored under the JSON key `class` and written
-only when set, so a sidecar without one keeps its earlier shape, and an
-older fim, which ignores keys it does not know, still reads it.
-
-A read-only run (`fim.persistence.groups.is_run_read_only`) cannot be
-renamed, described, or re-classed: `replace_run_metadata` raises
-`fim.persistence.groups.ReadOnlyError` for it.
+Labels are kept in `metadata.json`, separate from the digest-verified run
+manifest and scientific parameters. Metadata is optional; runs without a
+sidecar remain valid. Read-only runs cannot be relabeled.
 
 <a id="fim.persistence.run_metadata._KeepClass"></a>
 
-## [\_KeepClass Objects](./persistence/run_metadata.py#L50)
+## [\_KeepClass Objects](./persistence/run_metadata.py#L25)
 
 ```python
 class _KeepClass()
@@ -27502,7 +25967,7 @@ Type of `KEEP_CLASS`, the "leave the class as it is" default.
 
 <a id="fim.persistence.run_metadata._KeepClass.__repr__"></a>
 
-#### [\_\_repr\_\_](./persistence/run_metadata.py#L53)
+#### [\_\_repr\_\_](./persistence/run_metadata.py#L28)
 
 ```python
 def __repr__() -> str
@@ -27512,13 +25977,13 @@ Return the constant's own name, for readable signatures.
 
 <a id="fim.persistence.run_metadata.KEEP_CLASS"></a>
 
-#### [KEEP\_CLASS](./persistence/run_metadata.py#L58)
+#### [KEEP\_CLASS](./persistence/run_metadata.py#L33)
 
 `replace_run_metadata`'s default: keep the existing sidecar's class.
 
 <a id="fim.persistence.run_metadata.RunLabels"></a>
 
-## [RunLabels Objects](./persistence/run_metadata.py#L87)
+## [RunLabels Objects](./persistence/run_metadata.py#L62)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27542,7 +26007,7 @@ _LABEL_KEYS`). All three are independently optional.
 
 <a id="fim.persistence.run_metadata.RunLabels.is_empty"></a>
 
-#### [is\_empty](./persistence/run_metadata.py#L108)
+#### [is\_empty](./persistence/run_metadata.py#L83)
 
 ```python
 @property
@@ -27553,7 +26018,7 @@ Return whether no label is set at all.
 
 <a id="fim.persistence.run_metadata.RunLabels.from_config"></a>
 
-#### [from\_config](./persistence/run_metadata.py#L113)
+#### [from\_config](./persistence/run_metadata.py#L88)
 
 ```python
 @classmethod
@@ -27591,7 +26056,7 @@ absent key both mean "no label".
 
 <a id="fim.persistence.run_metadata.RunMetadata"></a>
 
-## [RunMetadata Objects](./persistence/run_metadata.py#L146)
+## [RunMetadata Objects](./persistence/run_metadata.py#L121)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27609,7 +26074,7 @@ changes once written; `updated_at` moves forward every time
 
 <a id="fim.persistence.run_metadata.RunMetadata.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/run_metadata.py#L164)
+#### [\_\_post\_init\_\_](./persistence/run_metadata.py#L139)
 
 ```python
 def __post_init__() -> None
@@ -27619,7 +26084,7 @@ Validate schema version, timestamps, and non-blank text fields.
 
 <a id="fim.persistence.run_metadata.RunMetadata.to_dict"></a>
 
-#### [to\_dict](./persistence/run_metadata.py#L177)
+#### [to\_dict](./persistence/run_metadata.py#L152)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -27632,7 +26097,7 @@ sidecar shape every earlier version wrote.
 
 <a id="fim.persistence.run_metadata.RunMetadata.from_dict"></a>
 
-#### [from\_dict](./persistence/run_metadata.py#L195)
+#### [from\_dict](./persistence/run_metadata.py#L170)
 
 ```python
 @classmethod
@@ -27647,7 +26112,7 @@ removed from the tree must not make the run's name unreadable.
 
 <a id="fim.persistence.run_metadata.run_metadata_path"></a>
 
-#### [run\_metadata\_path](./persistence/run_metadata.py#L217)
+#### [run\_metadata\_path](./persistence/run_metadata.py#L192)
 
 ```python
 def run_metadata_path(run_directory: Path | str) -> Path
@@ -27666,7 +26131,7 @@ Return where a run's own metadata sidecar lives.
 
 <a id="fim.persistence.run_metadata.read_run_metadata"></a>
 
-#### [read\_run\_metadata](./persistence/run_metadata.py#L229)
+#### [read\_run\_metadata](./persistence/run_metadata.py#L204)
 
 ```python
 def read_run_metadata(path: Path | str) -> RunMetadata
@@ -27691,7 +26156,7 @@ Read and validate one run metadata JSON file.
 
 <a id="fim.persistence.run_metadata.write_run_metadata"></a>
 
-#### [write\_run\_metadata](./persistence/run_metadata.py#L251)
+#### [write\_run\_metadata](./persistence/run_metadata.py#L226)
 
 ```python
 def write_run_metadata(path: Path | str, metadata: RunMetadata) -> None
@@ -27709,7 +26174,7 @@ its own atomicity here rather than inheriting a caller's.
 
 <a id="fim.persistence.run_metadata.replace_run_metadata"></a>
 
-#### [replace\_run\_metadata](./persistence/run_metadata.py#L271)
+#### [replace\_run\_metadata](./persistence/run_metadata.py#L246)
 
 ```python
 def replace_run_metadata(run_directory: Path | str,
@@ -27759,7 +26224,7 @@ dialog) never clears its class by accident.
 
 <a id="fim.persistence.run_metadata.write_run_labels"></a>
 
-#### [write\_run\_labels](./persistence/run_metadata.py#L333)
+#### [write\_run\_labels](./persistence/run_metadata.py#L308)
 
 ```python
 def write_run_labels(run_directory: Path | str,
@@ -29301,47 +27766,16 @@ Remove every reclaimable orphan staging directory.
 
 # [fim.persistence.store](./persistence/store.py#L1)
 
-Backend-independent trajectory row schema and store protocol.
+Define the trajectory-row schema and storage protocol.
 
-`TrajectoryRow` is the one, single-observation record shape every
-persisted trajectory row uses (see `fim.model.state.ModelState.to_rows`
-for how a state turns into a batch of these), and `TrajectoryStore` is
-the shared interface both `fim.persistence.binary_store.
-BinaryLogStore` (the real, file-backed store) and
-`InMemoryTrajectoryStore`, below (a lighter-weight stand-in for
-library calls and tests that never need an actual file), implement —
-so `fim.engine`'s run loop can write to either without knowing which
-one it actually has.
-
-`write_generation`'s own `validate` keyword (default `True`, unchanged
-behavior for every existing caller): a real, measured cost. Profiling a
-representative Backend V run found `normalize_row` — full schema
-presence/absence checks, then a per-field `isinstance` gauntlet on
-every row of every generation — as the single largest cost center in
-the whole run, ~36% of wall clock, ahead of the actual migrate/mutate/
-drift step. That check earns its cost for a row `normalize_row` cannot
-otherwise vouch for: a hand-edited or externally-produced row, or one
-`BinaryLogStore.read` is decoding back off disk. It earns nothing
-for a row `fim.engine`'s own run loop just built, in the same
-expression, from `ModelState.to_rows`/`fim.model.vectorized.
-vectorized_state_to_rows` — both of which construct every field
-already well-typed and in-bounds by construction (a real, finite
-`float` frequency in `(0, 1]`, a positive `int` id, a nonempty `str`
-run id), from a `ModelState`/`VectorizedState` whose own construction
-already enforced those same invariants. Re-running `normalize_row` on
-such a row cannot find a defect `ModelState`'s/`VectorizedState`'s own
-construction did not already rule out — it can only re-confirm what is
-already known, on every single row, every single generation. `fim.
-engine`'s own internal call sites (including the equilibrium-split
-ancestral phase's, which writes `ModelState.to_rows` rows too) pass
-`validate=False` specifically because each one is provably in this
-position; no other
-caller in this codebase does, and a new one should not either without
-the same proof.
+`TrajectoryStore` is implemented by the binary file-backed store and the
+in-memory store. `write_generation` validates rows by default; the optional
+validation bypass is intended only for rows produced from already-validated
+model state.
 
 <a id="fim.persistence.store.TrajectoryRow"></a>
 
-## [TrajectoryRow Objects](./persistence/store.py#L52)
+## [TrajectoryRow Objects](./persistence/store.py#L21)
 
 ```python
 class TrajectoryRow(TypedDict)
@@ -29360,7 +27794,7 @@ are the observation itself.
 
 <a id="fim.persistence.store.TrajectoryStore"></a>
 
-## [TrajectoryStore Objects](./persistence/store.py#L73)
+## [TrajectoryStore Objects](./persistence/store.py#L42)
 
 ```python
 class TrajectoryStore(Protocol)
@@ -29376,7 +27810,7 @@ interface regardless of which concrete store it is actually given.
 
 <a id="fim.persistence.store.TrajectoryStore.write_generation"></a>
 
-#### [write\_generation](./persistence/store.py#L83)
+#### [write\_generation](./persistence/store.py#L52)
 
 ```python
 def write_generation(run_id: str,
@@ -29405,7 +27839,7 @@ Persist all rows for one generation.
 
 <a id="fim.persistence.store.TrajectoryStore.read"></a>
 
-#### [read](./persistence/store.py#L109)
+#### [read](./persistence/store.py#L78)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -29415,7 +27849,7 @@ Yield rows for one run in stored order.
 
 <a id="fim.persistence.store.TrajectoryStore.discard"></a>
 
-#### [discard](./persistence/store.py#L113)
+#### [discard](./persistence/store.py#L82)
 
 ```python
 def discard(run_id: str) -> None
@@ -29442,7 +27876,7 @@ explain it.
 
 <a id="fim.persistence.store.EquilibriumStoreProvider"></a>
 
-## [EquilibriumStoreProvider Objects](./persistence/store.py#L136)
+## [EquilibriumStoreProvider Objects](./persistence/store.py#L105)
 
 ```python
 @runtime_checkable
@@ -29467,7 +27901,7 @@ without it (`equilibrium_store_for`).
 
 <a id="fim.persistence.store.EquilibriumStoreProvider.equilibrium_store"></a>
 
-#### [equilibrium\_store](./persistence/store.py#L154)
+#### [equilibrium\_store](./persistence/store.py#L123)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -29477,7 +27911,7 @@ Return the store `run_id`'s ancestral-phase rows are written to.
 
 <a id="fim.persistence.store.equilibrium_store_for"></a>
 
-#### [equilibrium\_store\_for](./persistence/store.py#L159)
+#### [equilibrium\_store\_for](./persistence/store.py#L128)
 
 ```python
 def equilibrium_store_for(store: TrajectoryStore,
@@ -29502,7 +27936,7 @@ Return the ancestral-phase companion of `store` for one run.
 
 <a id="fim.persistence.store.FrameStore"></a>
 
-## [FrameStore Objects](./persistence/store.py#L179)
+## [FrameStore Objects](./persistence/store.py#L148)
 
 ```python
 @runtime_checkable
@@ -29525,7 +27959,7 @@ over rows, which is cheaper than converting to a frame and back.
 
 <a id="fim.persistence.store.FrameStore.begin_run"></a>
 
-#### [begin\_run](./persistence/store.py#L195)
+#### [begin\_run](./persistence/store.py#L164)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -29539,7 +27973,7 @@ Record the shape of `run_id`'s frames; repeating it is harmless.
 
 <a id="fim.persistence.store.FrameStore.write_frame"></a>
 
-#### [write\_frame](./persistence/store.py#L203)
+#### [write\_frame](./persistence/store.py#L172)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -29549,7 +27983,7 @@ Persist one generation given as a frame, after `begin_run`.
 
 <a id="fim.persistence.store.FrameStore.wants_frames"></a>
 
-#### [wants\_frames](./persistence/store.py#L207)
+#### [wants\_frames](./persistence/store.py#L176)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -29559,7 +27993,7 @@ Whether the engine should hand `run_id`'s generations over as frames.
 
 <a id="fim.persistence.store.begin_store_run"></a>
 
-#### [begin\_store\_run](./persistence/store.py#L212)
+#### [begin\_store\_run](./persistence/store.py#L181)
 
 ```python
 def begin_store_run(store: TrajectoryStore, run_id: str,
@@ -29577,7 +28011,7 @@ Tell `store` the shape of `run_id`'s frames, when it is a `FrameStore`.
 
 <a id="fim.persistence.store.store_wants_frames"></a>
 
-#### [store\_wants\_frames](./persistence/store.py#L225)
+#### [store\_wants\_frames](./persistence/store.py#L194)
 
 ```python
 def store_wants_frames(store: TrajectoryStore, run_id: str) -> bool
@@ -29597,7 +28031,7 @@ Whether the engine should hand `run_id`'s generations to `store` as frames.
 
 <a id="fim.persistence.store.ClosableStore"></a>
 
-## [ClosableStore Objects](./persistence/store.py#L240)
+## [ClosableStore Objects](./persistence/store.py#L209)
 
 ```python
 @runtime_checkable
@@ -29614,7 +28048,7 @@ closed store re-opens itself if written to again.
 
 <a id="fim.persistence.store.ClosableStore.close"></a>
 
-#### [close](./persistence/store.py#L250)
+#### [close](./persistence/store.py#L219)
 
 ```python
 def close() -> None
@@ -29624,7 +28058,7 @@ Release whatever the store holds open; safe to call repeatedly.
 
 <a id="fim.persistence.store.close_run_store"></a>
 
-#### [close\_run\_store](./persistence/store.py#L255)
+#### [close\_run\_store](./persistence/store.py#L224)
 
 ```python
 def close_run_store(store: TrajectoryStore, run_id: str) -> None
@@ -29640,7 +28074,7 @@ Close the resources one run of a multi-run store holds, if it can.
 
 <a id="fim.persistence.store.close_store"></a>
 
-#### [close\_store](./persistence/store.py#L268)
+#### [close\_store](./persistence/store.py#L237)
 
 ```python
 def close_store(store: TrajectoryStore) -> None
@@ -29654,7 +28088,7 @@ Close `store`'s open resources when it has any; otherwise do nothing.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore"></a>
 
-## [InMemoryTrajectoryStore Objects](./persistence/store.py#L278)
+## [InMemoryTrajectoryStore Objects](./persistence/store.py#L247)
 
 ```python
 class InMemoryTrajectoryStore()
@@ -29682,7 +28116,7 @@ running this.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/store.py#L300)
+#### [\_\_init\_\_](./persistence/store.py#L269)
 
 ```python
 def __init__() -> None
@@ -29692,7 +28126,7 @@ Initialize an empty store.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__getstate__"></a>
 
-#### [\_\_getstate\_\_](./persistence/store.py#L307)
+#### [\_\_getstate\_\_](./persistence/store.py#L276)
 
 ```python
 def __getstate__() -> dict[str, Any]
@@ -29710,7 +28144,7 @@ lock on the other side instead.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__setstate__"></a>
 
-#### [\_\_setstate\_\_](./persistence/store.py#L322)
+#### [\_\_setstate\_\_](./persistence/store.py#L291)
 
 ```python
 def __setstate__(state: dict[str, Any]) -> None
@@ -29720,7 +28154,7 @@ Restore everything but `_lock`, then rebuild a fresh one.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.write_generation"></a>
 
-#### [write\_generation](./persistence/store.py#L327)
+#### [write\_generation](./persistence/store.py#L296)
 
 ```python
 def write_generation(run_id: str,
@@ -29738,7 +28172,7 @@ internal row producers named there.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.begin_run"></a>
 
-#### [begin\_run](./persistence/store.py#L352)
+#### [begin\_run](./persistence/store.py#L321)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -29752,7 +28186,7 @@ Record `run_id`'s layout so `write_frame` can turn frames into rows.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.wants_frames"></a>
 
-#### [wants\_frames](./persistence/store.py#L363)
+#### [wants\_frames](./persistence/store.py#L332)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -29762,7 +28196,7 @@ Return `False`: rows are what this store keeps, so rows are cheaper.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.write_frame"></a>
 
-#### [write\_frame](./persistence/store.py#L368)
+#### [write\_frame](./persistence/store.py#L337)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -29777,7 +28211,7 @@ Append one generation given as a frame, as the rows it stands for.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.read"></a>
 
-#### [read](./persistence/store.py#L384)
+#### [read](./persistence/store.py#L353)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -29792,7 +28226,7 @@ torn read.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.discard"></a>
 
-#### [discard](./persistence/store.py#L396)
+#### [discard](./persistence/store.py#L365)
 
 ```python
 def discard(run_id: str) -> None
@@ -29807,7 +28241,7 @@ another thread can never interleave with this rebuild of `_rows`.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.close"></a>
 
-#### [close](./persistence/store.py#L407)
+#### [close](./persistence/store.py#L376)
 
 ```python
 def close() -> None
@@ -29820,7 +28254,7 @@ kind it has (`ClosableStore`).
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.equilibrium_store"></a>
 
-#### [equilibrium\_store](./persistence/store.py#L414)
+#### [equilibrium\_store](./persistence/store.py#L383)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -29835,7 +28269,7 @@ rows are told apart by `run_id`, exactly like its main rows
 
 <a id="fim.persistence.store.ReplicateFanoutStore"></a>
 
-## [ReplicateFanoutStore Objects](./persistence/store.py#L429)
+## [ReplicateFanoutStore Objects](./persistence/store.py#L398)
 
 ```python
 class ReplicateFanoutStore()
@@ -29870,7 +28304,7 @@ child stores' methods at once.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/store.py#L458)
+#### [\_\_init\_\_](./persistence/store.py#L427)
 
 ```python
 def __init__(store_factory: Callable[[str], TrajectoryStore]) -> None
@@ -29886,7 +28320,7 @@ Wrap a per-replicate store factory as one shared `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__getstate__"></a>
 
-#### [\_\_getstate\_\_](./persistence/store.py#L470)
+#### [\_\_getstate\_\_](./persistence/store.py#L439)
 
 ```python
 def __getstate__() -> dict[str, Any]
@@ -29897,7 +28331,7 @@ own identical method for why.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__setstate__"></a>
 
-#### [\_\_setstate\_\_](./persistence/store.py#L477)
+#### [\_\_setstate\_\_](./persistence/store.py#L446)
 
 ```python
 def __setstate__(state: dict[str, Any]) -> None
@@ -29907,7 +28341,7 @@ Restore everything but `_lock`, then rebuild a fresh one.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.store_for"></a>
 
-#### [store\_for](./persistence/store.py#L482)
+#### [store\_for](./persistence/store.py#L451)
 
 ```python
 def store_for(run_id: str) -> TrajectoryStore
@@ -29917,7 +28351,7 @@ Return `run_id`'s own child store, building it on first use.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.write_generation"></a>
 
-#### [write\_generation](./persistence/store.py#L491)
+#### [write\_generation](./persistence/store.py#L460)
 
 ```python
 def write_generation(run_id: str,
@@ -29931,7 +28365,7 @@ Delegate to `run_id`'s own child store; see `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.begin_run"></a>
 
-#### [begin\_run](./persistence/store.py#L504)
+#### [begin\_run](./persistence/store.py#L473)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -29941,7 +28375,7 @@ Tell `run_id`'s own child store its layout (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.wants_frames"></a>
 
-#### [wants\_frames](./persistence/store.py#L508)
+#### [wants\_frames](./persistence/store.py#L477)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -29951,7 +28385,7 @@ Whether `run_id`'s own child store prefers frames (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.write_frame"></a>
 
-#### [write\_frame](./persistence/store.py#L512)
+#### [write\_frame](./persistence/store.py#L481)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -29965,7 +28399,7 @@ Delegate a frame to `run_id`'s own child store (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.read"></a>
 
-#### [read](./persistence/store.py#L523)
+#### [read](./persistence/store.py#L492)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -29975,7 +28409,7 @@ Delegate to `run_id`'s own child store; see `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.discard"></a>
 
-#### [discard](./persistence/store.py#L527)
+#### [discard](./persistence/store.py#L496)
 
 ```python
 def discard(run_id: str) -> None
@@ -29990,7 +28424,7 @@ child store to create just to immediately discard from.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.close"></a>
 
-#### [close](./persistence/store.py#L539)
+#### [close](./persistence/store.py#L508)
 
 ```python
 def close() -> None
@@ -30000,7 +28434,7 @@ Close every child store built so far (`ClosableStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.close_run"></a>
 
-#### [close\_run](./persistence/store.py#L546)
+#### [close\_run](./persistence/store.py#L515)
 
 ```python
 def close_run(run_id: str) -> None
@@ -30015,7 +28449,7 @@ run this store never saw; the child re-opens if written again.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.equilibrium_store"></a>
 
-#### [equilibrium\_store](./persistence/store.py#L558)
+#### [equilibrium\_store](./persistence/store.py#L527)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -30029,7 +28463,7 @@ own `trajectory.tlog`, in its own directory
 
 <a id="fim.persistence.store.normalize_row"></a>
 
-#### [normalize\_row](./persistence/store.py#L568)
+#### [normalize\_row](./persistence/store.py#L537)
 
 ```python
 def normalize_row(row: Mapping[str, Any],
@@ -32100,53 +30534,34 @@ def read_persisted_convergence_history(
 ) -> tuple[list[int], dict[str, list[float]]] | None
 ```
 
-Return a run's own persisted convergence-monitor history, or `None`.
+Return the persisted convergence history, or `None` if unavailable.
 
-`convergence.jsonl` (`fim.persistence.artifacts.convergence_history_rows`/`fim.gui.
-runner._convergence_history_rows`) holds one row per generation,
-`{"generation": N, "D": ..., ...}` -- reading it back is what lets
-reopening a run restore its own trajectory-vs-generation curve
-instead of having none at all, the prior, deliberate scope boundary
-`fim.gui.app.Api.open_run`'s own docstring used to name. Reshaped
-here into the `(generations, histories)` pair `fim.gui.app`'s own
-`convergenceGenerations`/`convergenceHistories` payload keys need
--- every row written shares the identical key set (`_convergence_
-history_rows`'s own docstring: a statistic is either written for
-every row or none), so `histories[name]` is always exactly as long
-as `generations` with no further alignment check needed here.
-
-`None` (nothing to show) under the identical conditions `_cached_
-final_report`, above, treats as "recompute instead": no digest was
-ever recorded for this artifact (a manifest written before it
-existed), or the file is simply missing -- never an error, since the
-trajectory curve staying absent on an old run is not a regression,
-only unavailable extra context. A digest that *was* recorded but no
-longer matches is different, for the identical reason `_cached_
-final_report` already gives: that means the file changed since the
-run completed, and silently ignoring it would mask that.
+The sibling `convergence.jsonl` contains one row per generation,
+with a generation number and a consistent set of statistic fields.
+Rows are returned as parallel generation and history sequences. A
+missing file or absent manifest digest returns `None`; a recorded
+digest mismatch or invalid row raises `ValueError`.
 
 **Arguments**:
 
-- `trajectory_path` - The run's own `trajectory.tlog` --
-  `convergence.jsonl` is expected as its sibling.
-- `manifest` - The run's own manifest.
+- `trajectory_path` - The trajectory file; `convergence.jsonl` is
+  expected beside it.
+- `manifest` - The run manifest.
 
 
 **Returns**:
 
-  `(generations, histories)`, or `None` to signal "nothing
-  persisted to show."
+  `(generations, histories)`, or `None` if no history is available.
 
 
 **Raises**:
 
-- `ValueError` - If `convergence.jsonl` exists, a digest was
-  recorded for it, and the two no longer match, or a row's
-  own content is not the documented shape.
+- `ValueError` - If the file does not match its recorded digest, or
+  a row has an invalid shape.
 
 <a id="fim.reanalyze.reanalyze_trajectory"></a>
 
-#### [reanalyze\_trajectory](./reanalyze.py#L331)
+#### [reanalyze\_trajectory](./reanalyze.py#L312)
 
 ```python
 def reanalyze_trajectory(
@@ -32205,7 +30620,7 @@ run's own true final one.
 
 <a id="fim.reanalyze.replicate_convergence_history"></a>
 
-#### [replicate\_convergence\_history](./reanalyze.py#L500)
+#### [replicate\_convergence\_history](./reanalyze.py#L481)
 
 ```python
 def replicate_convergence_history(
@@ -34229,87 +32644,36 @@ Require every item to be a non-empty string.
 
 # [fim.statistics](./statistics/__init__.py#L1)
 
-Pure diversity and differentiation statistics for finite-island models.
+Public diversity, differentiation, genetic-distance, and interval APIs.
 
-This package is the project's math library: every function in it takes
-plain numbers in (allele frequencies, sample counts) and returns plain
-numbers out (a diversity index, a confidence interval), with no
-dependency on the simulator itself, the GUI, or how a run happens to be
-stored on disk. That separation is deliberate — it means every formula
-used to describe a population's genetic diversity lives in exactly one
-place, reviewable and testable on its own, independently of the code
-that produces the data or the code that displays it.
-
-It is organized into three modules by subject:
-
-- `fim.statistics.differentiation` — the actual diversity and
-  differentiation formulas (`H_S`, `H_T`, `H_ST`, `G_ST`, Jost's `D`,
-  `E_ST`, `K_ST`, and the general `differentiation_q` family that ties
-  them all together). See that module's own docstring, and the
-  [differentiation-measures guide](../../doc/jost-differentiation-measures.md),
-  for the underlying population-genetics ideas.
-- `fim.statistics.genetic_distance` — pairwise genetic distance and
-  identity statistics between populations (Nei 1972 standard distance
-  `D`, geometric/arithmetic distance `D'`, normalized identity `I`,
-  cross identity `J_XY`, and founder-effect identity `I_0`).
-- `fim.statistics.pairwise` — every deme pair's Nei identities at once,
-  vectorized with numpy (the one module here that needs it), for
-  capturing all-pairs matrices at large deme counts.
-- `fim.statistics.theory` — the closed-form equilibrium predictions of each
-  reported statistic, for a configuration or a sweep point, shared by the
-  Explore screen, the sweep results card and the sweep export.
-- `fim.statistics.interval` — confidence intervals for a sample mean
-  (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
-  independent replicates. See that module's own docstring for what a
-  confidence interval is and why the Student's-t method is used.
-
-Every public name from all modules is re-exported here, so a caller
-elsewhere in the project writes ``from fim.statistics import h_s,
-jost_d, nei_d, confidence_interval`` rather than reaching into any module
-by its own name directly.
+The package re-exports functions from `differentiation`, `genetic_distance`,
+`identity_recursion`, `interval`, `pairwise`, and `theory`. See
+`doc/jost-differentiation-measures.md` for definitions of the differentiation
+measures.
 
 <a id="fim.statistics.catalog"></a>
 
 # [fim.statistics.catalog](./statistics/catalog.py#L1)
 
-The one list of every statistic fim computes, captures or shows.
+Catalog of statistics, computation policies, and display metadata.
 
-Every statistic's name used to be spelled out by hand in a dozen places:
-the engine's tracked sets, the convergence choices, the GUI's result
-list, the Compare history sampler, the statistics table's rows, the
-results tables' columns, the tooltips. Two recorded bugs came from those
-copies drifting apart (`A_CGD` missing from one list raised `KeyError`
-in Compare; `H_ST` missing from another left it with no history). This
-module is the single definition the others now derive from: one
-`StatisticSpec` per statistic, in display order.
+Each `StatisticSpec` defines a statistic's identifier, labels, scope,
+bounds, history policy, and reference anchor. The engine and desktop
+application derive their statistic lists from this catalog.
 
-Each spec answers four separate questions:
+History policies are ``"always"`` (tracked every generation),
+``"opt_in"`` (tracked when requested for display or convergence), and
+``"none"`` (computed for reports and displayed frames). Showing any
+opt-in statistic requests per-generation tracking of all five opt-in
+statistics; hiding them does not suppress a statistic watched for
+convergence.
 
-- **What is it?** `key`, the labels, `description`, `help`.
-- **What does it describe?** `scope`: one value per generation
-  (``"global"``) or one value per pair of demes (``"pair"``).
-- **When is it computed?** `history`: tracked every generation always
-  (``"always"``), every generation only when
-  `SimulationParams.track_expensive_statistics` opts in or the run
-  watches it (``"opt_in"``: the expensive ones, each a real extra cost
-  every generation), or not tracked per generation (``"none"``: computed
-  for each report, each displayed frame and each saved result instead).
-- **Is it shown by default?** `default_shown`. What a researcher
-  actually sees is their own choice (the GUI's "Statistics shown"
-  setting); this is only the starting point. For every statistic but
-  the ``"opt_in"`` ones, showing or hiding it changes only the screen.
-  The desktop app opts a run in exactly when one of the ``"opt_in"``
-  statistics is shown (`expensive_statistics_requested`), so showing one
-  makes its per-generation history real and hiding them all avoids the
-  cost; none of them is shown by default, so a fresh install's runs cost
-  what they always did.
-
-This module imports nothing from the simulator or the GUI. It sits in
-`fim.statistics` beside the formulas it describes.
+The [statistics reference](../../doc/statistics.md) links displayed
+values to mathematical definitions, API entries, and implementations.
 
 <a id="fim.statistics.catalog.StatisticSpec"></a>
 
-## [StatisticSpec Objects](./statistics/catalog.py#L84)
+## [StatisticSpec Objects](./statistics/catalog.py#L65)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -34341,10 +32705,11 @@ One statistic's identity, scope, cost and presentation.
 - `help` - Longer explanation for Settings and Help, or ``""``.
 - `nei` - For the Nei family, ``(measure, denominator, locus_rule)``;
   ``None`` otherwise.
+- `help_anchor` - Heading anchor in the bundled statistics reference.
 
 <a id="fim.statistics.catalog.nei_key"></a>
 
-#### [nei\_key](./statistics/catalog.py#L307)
+#### [nei\_key](./statistics/catalog.py#L294)
 
 ```python
 def nei_key(measure: Measure, scope: Scope, denominator: NeiDenominator,
@@ -34368,13 +32733,13 @@ Return the catalog key of one Nei family member.
 
 <a id="fim.statistics.catalog.CATALOG"></a>
 
-#### [CATALOG](./statistics/catalog.py#L479)
+#### [CATALOG](./statistics/catalog.py#L469)
 
 Every statistic, in display order. Keys are unique.
 
 <a id="fim.statistics.catalog.spec"></a>
 
-#### [spec](./statistics/catalog.py#L489)
+#### [spec](./statistics/catalog.py#L479)
 
 ```python
 def spec(key: str) -> StatisticSpec
@@ -34388,7 +32753,7 @@ Return the spec for `key`.
 
 <a id="fim.statistics.catalog.history_keys"></a>
 
-#### [history\_keys](./statistics/catalog.py#L506)
+#### [history\_keys](./statistics/catalog.py#L496)
 
 ```python
 def history_keys(history: History) -> tuple[str, ...]
@@ -34398,7 +32763,7 @@ Return the keys tracked per generation under one `history` policy.
 
 <a id="fim.statistics.catalog.report_keys"></a>
 
-#### [report\_keys](./statistics/catalog.py#L511)
+#### [report\_keys](./statistics/catalog.py#L501)
 
 ```python
 def report_keys() -> tuple[str, ...]
@@ -34408,7 +32773,7 @@ Return every global statistic a `FinalReport` carries, in catalog order.
 
 <a id="fim.statistics.catalog.pair_keys"></a>
 
-#### [pair\_keys](./statistics/catalog.py#L516)
+#### [pair\_keys](./statistics/catalog.py#L506)
 
 ```python
 def pair_keys() -> tuple[str, ...]
@@ -34418,7 +32783,7 @@ Return every pair-scope statistic, in catalog order.
 
 <a id="fim.statistics.catalog.convergence_statistic_keys"></a>
 
-#### [convergence\_statistic\_keys](./statistics/catalog.py#L521)
+#### [convergence\_statistic\_keys](./statistics/catalog.py#L511)
 
 ```python
 def convergence_statistic_keys() -> tuple[str, ...]
@@ -34428,7 +32793,7 @@ Return every statistic a run may stop on, in catalog order.
 
 <a id="fim.statistics.catalog.unbounded_keys"></a>
 
-#### [unbounded\_keys](./statistics/catalog.py#L526)
+#### [unbounded\_keys](./statistics/catalog.py#L516)
 
 ```python
 def unbounded_keys() -> tuple[str, ...]
@@ -34443,7 +32808,7 @@ overrides it).
 
 <a id="fim.statistics.catalog.default_shown_keys"></a>
 
-#### [default\_shown\_keys](./statistics/catalog.py#L539)
+#### [default\_shown\_keys](./statistics/catalog.py#L529)
 
 ```python
 def default_shown_keys() -> tuple[str, ...]
@@ -34453,7 +32818,7 @@ Return what a fresh install shows, in catalog order.
 
 <a id="fim.statistics.catalog.expensive_statistics_requested"></a>
 
-#### [expensive\_statistics\_requested](./statistics/catalog.py#L544)
+#### [expensive\_statistics\_requested](./statistics/catalog.py#L534)
 
 ```python
 def expensive_statistics_requested(shown: Iterable[str]) -> bool
@@ -34481,7 +32846,7 @@ engine always computes what it watches).
 
 <a id="fim.statistics.catalog.catalog_payload"></a>
 
-#### [catalog\_payload](./statistics/catalog.py#L565)
+#### [catalog\_payload](./statistics/catalog.py#L555)
 
 ```python
 def catalog_payload() -> list[dict[str, object]]
@@ -34496,56 +32861,18 @@ its rows, columns, checkboxes and tooltips from it.
 
 # [fim.statistics.differentiation](./statistics/differentiation.py#L1)
 
-Allele-frequency diversity and differentiation statistics.
+Compute diversity and differentiation statistics from allele frequencies.
 
-This is where the actual mathematics behind this project's own named
-statistics (`D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`) lives —
-every one of the formulas the
-[differentiation-measures guide](../../doc/jost-differentiation-measures.md)
-explains in depth, implemented here exactly as that guide (and the
-paper it summarizes, Jost et al. 2018) defines them. Reading that guide
-first is strongly recommended before this file — it explains, from
-zero, *why* there is more than one way to measure "how different are
-these populations," what each measure actually answers, and why they
-can disagree about the very same data; this file only ever computes,
-never explains, and the brief summaries in each function's own
-docstring below assume the guide's own vocabulary rather than
-re-deriving it every time.
-
-The one-paragraph version, for orientation: every measure here starts
-from **expected heterozygosity** (`heterozygosity`, `h_s`, `h_t`,
-below) — the chance that two gene copies drawn at random are different
-alleles — computed once *within* each deme (`H_S`) and once for all
-demes *pooled together* (`H_T`). Since pooling different demes can only
-add variation, `H_T` is always at least as large as `H_S`; every
-differentiation measure in this file is some way of asking "how much
-bigger is `H_T` than `H_S`, relative to some baseline" — and the
-different measures (`G_ST`, `D`, `E_ST`, `K_ST`) are, precisely, the
-different reasonable choices for what that baseline should be. None of
-them is simply "more correct" than the others; each answers a
-genuinely different question, which is exactly why this project reports
-several side by side rather than picking one.
-
-All functions operate on normalized allele-frequency tables and are
-independent of model state, persistence, and the engine — pure
-mathematics, with no idea that a "finite island model" or a "run" even
-exists; anything with allele frequencies to compare could use this
-module. "Normalized" means each deme's own frequencies already sum to
-exactly 1 (a complete accounting of that deme's own gene pool);
-"table" means a plain sequence with one entry per deme, each entry
-itself a mapping from an allele's identity to its frequency in that
-deme; allele identifiers must be integer-like (whole numbers, or
-values that behave like them) purely as a bookkeeping convention — the
-actual identity of an allele is never mathematically meaningful here,
-only whether two entries share the same identity or not. A frequency
-itself must be an ordinary number — a `float`, or an `int` where that
-reads more naturally (`{0: 1}` for a deme fixed on one allele); see
-`FrequencyTable`'s own comment, below, for exactly what the type
-annotation does and does not promise about either half.
+The module implements expected heterozygosity and measures including Jost's
+D, Nei's G_ST, E_ST, K_ST, H_S, H_T, and H_ST. Within-deme and pooled
+heterozygosity provide the basis for these measures, which use different
+normalizations and are not interchangeable. Inputs are normalized frequency
+tables with integer-like allele identifiers and real-valued frequencies. See
+`doc/jost-differentiation-measures.md` for definitions and comparisons.
 
 <a id="fim.statistics.differentiation.DifferentiationReport"></a>
 
-## [DifferentiationReport Objects](./statistics/differentiation.py#L85)
+## [DifferentiationReport Objects](./statistics/differentiation.py#L47)
 
 ```python
 class DifferentiationReport(TypedDict)
@@ -34587,7 +32914,7 @@ excluded.
 
 <a id="fim.statistics.differentiation.heterozygosity"></a>
 
-#### [heterozygosity](./statistics/differentiation.py#L386)
+#### [heterozygosity](./statistics/differentiation.py#L348)
 
 ```python
 def heterozygosity(frequencies: Mapping[Any, Any]) -> float
@@ -34609,7 +32936,7 @@ of alleles).
 
 <a id="fim.statistics.differentiation.unbiased_heterozygosity"></a>
 
-#### [unbiased\_heterozygosity](./statistics/differentiation.py#L405)
+#### [unbiased\_heterozygosity](./statistics/differentiation.py#L367)
 
 ```python
 def unbiased_heterozygosity(frequencies: Mapping[Any, Any],
@@ -34657,7 +32984,7 @@ because of sampling without replacement; multiplying by
 
 <a id="fim.statistics.differentiation.identity"></a>
 
-#### [identity](./statistics/differentiation.py#L461)
+#### [identity](./statistics/differentiation.py#L423)
 
 ```python
 def identity(frequencies: Mapping[Any, Any]) -> float
@@ -34673,7 +33000,7 @@ simpler to read.
 
 <a id="fim.statistics.differentiation.hill_number"></a>
 
-#### [hill\_number](./statistics/differentiation.py#L474)
+#### [hill\_number](./statistics/differentiation.py#L436)
 
 ```python
 def hill_number(frequencies: Mapping[Any, Any], order: float | int) -> float
@@ -34697,7 +33024,7 @@ each allele by its own actual frequency.
 
 <a id="fim.statistics.differentiation.effective_allele_count"></a>
 
-#### [effective\_allele\_count](./statistics/differentiation.py#L495)
+#### [effective\_allele\_count](./statistics/differentiation.py#L457)
 
 ```python
 def effective_allele_count(heterozygosity_value: float) -> float
@@ -34750,7 +33077,7 @@ exists to make cheap and available everywhere an already-aggregated
 
 <a id="fim.statistics.differentiation.h_s"></a>
 
-#### [h\_s](./statistics/differentiation.py#L570)
+#### [h\_s](./statistics/differentiation.py#L532)
 
 ```python
 def h_s(table: FrequencyTable[AlleleKey],
@@ -34769,7 +33096,7 @@ from.
 
 <a id="fim.statistics.differentiation.h_t"></a>
 
-#### [h\_t](./statistics/differentiation.py#L601)
+#### [h\_t](./statistics/differentiation.py#L563)
 
 ```python
 def h_t(table: FrequencyTable[AlleleKey],
@@ -34789,7 +33116,7 @@ material every differentiation measure in this module works with.
 
 <a id="fim.statistics.differentiation.gd_from_within_and_total"></a>
 
-#### [gd\_from\_within\_and\_total](./statistics/differentiation.py#L620)
+#### [gd\_from\_within\_and\_total](./statistics/differentiation.py#L582)
 
 ```python
 def gd_from_within_and_total(within: float, total: float,
@@ -34815,7 +33142,7 @@ first (`_require_multiple_demes`).
 
 <a id="fim.statistics.differentiation.gs"></a>
 
-#### [gs](./statistics/differentiation.py#L641)
+#### [gs](./statistics/differentiation.py#L603)
 
 ```python
 def gs(table: FrequencyTable[AlleleKey],
@@ -34840,7 +33167,7 @@ need; see `gd`, below, for that.
 
 <a id="fim.statistics.differentiation.gd"></a>
 
-#### [gd](./statistics/differentiation.py#L663)
+#### [gd](./statistics/differentiation.py#L625)
 
 ```python
 def gd(table: FrequencyTable[AlleleKey],
@@ -34855,7 +33182,7 @@ one), the same requirement `g_st`/`h_st` already carry.
 
 <a id="fim.statistics.differentiation.h_st"></a>
 
-#### [h\_st](./statistics/differentiation.py#L719)
+#### [h\_st](./statistics/differentiation.py#L681)
 
 ```python
 def h_st(table: FrequencyTable[AlleleKey],
@@ -34880,7 +33207,7 @@ nothing more than this correctly-partitioned quantity, normalized.
 
 <a id="fim.statistics.differentiation.total_hill_number"></a>
 
-#### [total\_hill\_number](./statistics/differentiation.py#L743)
+#### [total\_hill\_number](./statistics/differentiation.py#L705)
 
 ```python
 def total_hill_number(table: FrequencyTable[AlleleKey],
@@ -34897,7 +33224,7 @@ combined result, at whichever `order` is requested.
 
 <a id="fim.statistics.differentiation.within_hill_number"></a>
 
-#### [within\_hill\_number](./statistics/differentiation.py#L760)
+#### [within\_hill\_number](./statistics/differentiation.py#L722)
 
 ```python
 def within_hill_number(table: FrequencyTable[AlleleKey],
@@ -34918,7 +33245,7 @@ that shows up in this module).
 
 <a id="fim.statistics.differentiation.g_st_from_demes"></a>
 
-#### [g\_st\_from\_demes](./statistics/differentiation.py#L799)
+#### [g\_st\_from\_demes](./statistics/differentiation.py#L761)
 
 ```python
 def g_st_from_demes(total: float, within: float) -> float | None
@@ -34937,7 +33264,7 @@ had already validated once).
 
 <a id="fim.statistics.differentiation.g_st"></a>
 
-#### [g\_st](./statistics/differentiation.py#L816)
+#### [g\_st](./statistics/differentiation.py#L778)
 
 ```python
 def g_st(table: FrequencyTable[AlleleKey],
@@ -34961,7 +33288,7 @@ answer, not a fabricated `0.0` or `1.0`.
 
 <a id="fim.statistics.differentiation.d_m"></a>
 
-#### [d\_m](./statistics/differentiation.py#L842)
+#### [d\_m](./statistics/differentiation.py#L804)
 
 ```python
 def d_m(table: FrequencyTable[AlleleKey]) -> float
@@ -34995,7 +33322,7 @@ there is no `deme_weights` parameter here for the same reason
 
 <a id="fim.statistics.differentiation.r_st"></a>
 
-#### [r\_st](./statistics/differentiation.py#L883)
+#### [r\_st](./statistics/differentiation.py#L845)
 
 ```python
 def r_st(table: FrequencyTable[AlleleKey]) -> float | None
@@ -35017,7 +33344,7 @@ structurally identical zero-denominator case.
 
 <a id="fim.statistics.differentiation.g_st_log"></a>
 
-#### [g\_st\_log](./statistics/differentiation.py#L906)
+#### [g\_st\_log](./statistics/differentiation.py#L868)
 
 ```python
 def g_st_log(table: FrequencyTable[AlleleKey],
@@ -35063,7 +33390,7 @@ are interchangeable because they share a name.
 
 <a id="fim.statistics.differentiation.g_st_max"></a>
 
-#### [g\_st\_max](./statistics/differentiation.py#L958)
+#### [g\_st\_max](./statistics/differentiation.py#L920)
 
 ```python
 def g_st_max(h_s: float, deme_count: int) -> float
@@ -35101,7 +33428,7 @@ dividing by this ceiling is actually for.
 
 <a id="fim.statistics.differentiation.derived_differentiation"></a>
 
-#### [derived\_differentiation](./statistics/differentiation.py#L995)
+#### [derived\_differentiation](./statistics/differentiation.py#L957)
 
 ```python
 def derived_differentiation(h_s: float, h_t: float,
@@ -35151,7 +33478,7 @@ the engine's default ``D`` and ``G_ST`` use.
 
 <a id="fim.statistics.differentiation.g_st_prime"></a>
 
-#### [g\_st\_prime](./statistics/differentiation.py#L1070)
+#### [g\_st\_prime](./statistics/differentiation.py#L1032)
 
 ```python
 def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float
@@ -35199,7 +33526,7 @@ interpreting this statistic, not a defect in computing it.
 
 <a id="fim.statistics.differentiation.jost_d_from_within_and_total"></a>
 
-#### [jost\_d\_from\_within\_and\_total](./statistics/differentiation.py#L1113)
+#### [jost\_d\_from\_within\_and\_total](./statistics/differentiation.py#L1075)
 
 ```python
 def jost_d_from_within_and_total(deme_count: int, within: float,
@@ -35221,7 +33548,7 @@ satisfy this signature.
 
 <a id="fim.statistics.differentiation.jost_d"></a>
 
-#### [jost\_d](./statistics/differentiation.py#L1131)
+#### [jost\_d](./statistics/differentiation.py#L1093)
 
 ```python
 def jost_d(table: FrequencyTable[AlleleKey]) -> float
@@ -35243,7 +33570,7 @@ relative to `E_ST`.
 
 <a id="fim.statistics.differentiation.e_st"></a>
 
-#### [e\_st](./statistics/differentiation.py#L1171)
+#### [e\_st](./statistics/differentiation.py#L1133)
 
 ```python
 def e_st(table: FrequencyTable[AlleleKey],
@@ -35268,7 +33595,7 @@ weight of other, already-differentiating alleles.
 
 <a id="fim.statistics.differentiation.k_st"></a>
 
-#### [k\_st](./statistics/differentiation.py#L1220)
+#### [k\_st](./statistics/differentiation.py#L1182)
 
 ```python
 def k_st(table: FrequencyTable[AlleleKey]) -> float
@@ -35289,7 +33616,7 @@ any measure in this module.
 
 <a id="fim.statistics.differentiation.allelic_distance"></a>
 
-#### [allelic\_distance](./statistics/differentiation.py#L1239)
+#### [allelic\_distance](./statistics/differentiation.py#L1201)
 
 ```python
 def allelic_distance(table: FrequencyTable[AlleleKey]) -> float
@@ -35307,7 +33634,7 @@ unordered deme pairs.
 
 <a id="fim.statistics.differentiation.gregorius_delta"></a>
 
-#### [gregorius\_delta](./statistics/differentiation.py#L1308)
+#### [gregorius\_delta](./statistics/differentiation.py#L1270)
 
 ```python
 def gregorius_delta(table: FrequencyTable[AlleleKey],
@@ -35325,7 +33652,7 @@ of the Manhattan distance between their frequency vectors.
 
 <a id="fim.statistics.differentiation.mutual_information"></a>
 
-#### [mutual\_information](./statistics/differentiation.py#L1345)
+#### [mutual\_information](./statistics/differentiation.py#L1307)
 
 ```python
 def mutual_information(table: FrequencyTable[AlleleKey],
@@ -35342,7 +33669,7 @@ allele identity and deme membership were independent.
 
 <a id="fim.statistics.differentiation.f_st_coancestry_matrix"></a>
 
-#### [f\_st\_coancestry\_matrix](./statistics/differentiation.py#L1363)
+#### [f\_st\_coancestry\_matrix](./statistics/differentiation.py#L1325)
 
 ```python
 def f_st_coancestry_matrix(
@@ -35380,7 +33707,7 @@ for demes ``i`` and ``j`` (Eq. 9 / 11).
 
 <a id="fim.statistics.differentiation.population_specific_f_st"></a>
 
-#### [population\_specific\_f\_st](./statistics/differentiation.py#L1422)
+#### [population\_specific\_f\_st](./statistics/differentiation.py#L1384)
 
 ```python
 def population_specific_f_st(
@@ -35409,7 +33736,7 @@ identity of deme ``i``, and ``theta_B`` is the mean between-deme identity.
 
 <a id="fim.statistics.differentiation.population_pair_f_st"></a>
 
-#### [population\_pair\_f\_st](./statistics/differentiation.py#L1446)
+#### [population\_pair\_f\_st](./statistics/differentiation.py#L1408)
 
 ```python
 def population_pair_f_st(table: FrequencyTable[AlleleKey], i: int,
@@ -35442,7 +33769,7 @@ meaning together they harbor greater diversity than the global background.
 
 <a id="fim.statistics.differentiation.pairwise_f_st"></a>
 
-#### [pairwise\_f\_st](./statistics/differentiation.py#L1479)
+#### [pairwise\_f\_st](./statistics/differentiation.py#L1441)
 
 ```python
 def pairwise_f_st(frequencies_x: Mapping[Any, Any],
@@ -35478,7 +33805,7 @@ and reference point ``theta_{XY}``.
 
 <a id="fim.statistics.differentiation.overall_coancestry_f_st"></a>
 
-#### [overall\_coancestry\_f\_st](./statistics/differentiation.py#L1520)
+#### [overall\_coancestry\_f\_st](./statistics/differentiation.py#L1482)
 
 ```python
 def overall_coancestry_f_st(table: FrequencyTable[AlleleKey]) -> float
@@ -35509,7 +33836,7 @@ unweighted F_ST.
 
 <a id="fim.statistics.differentiation.differentiation_q"></a>
 
-#### [differentiation\_q](./statistics/differentiation.py#L1547)
+#### [differentiation\_q](./statistics/differentiation.py#L1509)
 
 ```python
 def differentiation_q(table: FrequencyTable[AlleleKey],
@@ -35542,7 +33869,7 @@ Jost's ``D`` respectively.
 
 <a id="fim.statistics.differentiation.equilibrium_d"></a>
 
-#### [equilibrium\_d](./statistics/differentiation.py#L1598)
+#### [equilibrium\_d](./statistics/differentiation.py#L1560)
 
 ```python
 def equilibrium_d(m: float, mu: float, d: int) -> float
@@ -35582,7 +33909,7 @@ result the guide discusses at length.
 
 <a id="fim.statistics.differentiation.equilibrium_g_st"></a>
 
-#### [equilibrium\_g\_st](./statistics/differentiation.py#L1634)
+#### [equilibrium\_g\_st](./statistics/differentiation.py#L1596)
 
 ```python
 def equilibrium_g_st(population_size: int, m: float, mu: float,
@@ -35635,7 +33962,7 @@ terms use ``2 * N`` instead — the same quantity, `4 * N_individuals
 
 <a id="fim.statistics.differentiation.identity_recovery_rate"></a>
 
-#### [identity\_recovery\_rate](./statistics/differentiation.py#L1730)
+#### [identity\_recovery\_rate](./statistics/differentiation.py#L1692)
 
 ```python
 def identity_recovery_rate(population_size: int, m: float) -> float
@@ -35677,7 +34004,7 @@ comparison against that recursion across six representative
 
 <a id="fim.statistics.differentiation.identity_recovery_equilibrium"></a>
 
-#### [identity\_recovery\_equilibrium](./statistics/differentiation.py#L1766)
+#### [identity\_recovery\_equilibrium](./statistics/differentiation.py#L1728)
 
 ```python
 def identity_recovery_equilibrium(population_size: int, m: float) -> float
@@ -35703,7 +34030,7 @@ from.
 
 <a id="fim.statistics.differentiation.identity_recovery_trajectory"></a>
 
-#### [identity\_recovery\_trajectory](./statistics/differentiation.py#L1786)
+#### [identity\_recovery\_trajectory](./statistics/differentiation.py#L1748)
 
 ```python
 def identity_recovery_trajectory(f0_initial: float, population_size: int,
@@ -35744,7 +34071,7 @@ see that function's own docstring.
 
 <a id="fim.statistics.differentiation.identity_recovery_half_life"></a>
 
-#### [identity\_recovery\_half\_life](./statistics/differentiation.py#L1841)
+#### [identity\_recovery\_half\_life](./statistics/differentiation.py#L1803)
 
 ```python
 def identity_recovery_half_life(population_size: int, m: float) -> float
@@ -35780,7 +34107,7 @@ than evaluating ``log(0.5) / log(0.0)``, which is the correct limit
 
 <a id="fim.statistics.differentiation.mutation_negligible_transition"></a>
 
-#### [mutation\_negligible\_transition](./statistics/differentiation.py#L1874)
+#### [mutation\_negligible\_transition](./statistics/differentiation.py#L1836)
 
 ```python
 def mutation_negligible_transition(h_s_initial: float, mu: float) -> float
@@ -35827,7 +34154,7 @@ limit rather than a division-by-zero to guard against.
 
 <a id="fim.statistics.differentiation.mutation_negligible_equilibrium"></a>
 
-#### [mutation\_negligible\_equilibrium](./statistics/differentiation.py#L1923)
+#### [mutation\_negligible\_equilibrium](./statistics/differentiation.py#L1885)
 
 ```python
 def mutation_negligible_equilibrium(m: float, mu: float,
@@ -35864,7 +34191,7 @@ value.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated"></a>
 
-#### [equilibrium\_shannon\_entropy\_isolated](./statistics/differentiation.py#L2047)
+#### [equilibrium\_shannon\_entropy\_isolated](./statistics/differentiation.py#L2009)
 
 ```python
 def equilibrium_shannon_entropy_isolated(population_size: int,
@@ -35940,7 +34267,7 @@ exactly, since `within_hill_number` itself already returns
 
 <a id="fim.statistics.differentiation.equilibrium_heterozygosity_isolated"></a>
 
-#### [equilibrium\_heterozygosity\_isolated](./statistics/differentiation.py#L2117)
+#### [equilibrium\_heterozygosity\_isolated](./statistics/differentiation.py#L2079)
 
 ```python
 def equilibrium_heterozygosity_isolated(population_size: int,
@@ -35971,7 +34298,7 @@ gene-copy convention. This is the heterozygosity counterpart to
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated_smm"></a>
 
-#### [equilibrium\_shannon\_entropy\_isolated\_smm](./statistics/differentiation.py#L2142)
+#### [equilibrium\_shannon\_entropy\_isolated\_smm](./statistics/differentiation.py#L2104)
 
 ```python
 def equilibrium_shannon_entropy_isolated_smm(population_size: int,
@@ -36025,7 +34352,7 @@ simulator cross-check.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_total"></a>
 
-#### [equilibrium\_shannon\_entropy\_total](./statistics/differentiation.py#L2191)
+#### [equilibrium\_shannon\_entropy\_total](./statistics/differentiation.py#L2153)
 
 ```python
 def equilibrium_shannon_entropy_total(population_size: int, m: float,
@@ -36078,7 +34405,7 @@ Unbounded above, the same as `equilibrium_shannon_entropy_isolated`
 
 <a id="fim.statistics.differentiation.equilibrium_heterozygosity_total"></a>
 
-#### [equilibrium\_heterozygosity\_total](./statistics/differentiation.py#L2243)
+#### [equilibrium\_heterozygosity\_total](./statistics/differentiation.py#L2205)
 
 ```python
 def equilibrium_heterozygosity_total(population_size: int, m: float, mu: float,
@@ -36111,7 +34438,7 @@ heterozygosity.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_subpopulation"></a>
 
-#### [equilibrium\_shannon\_entropy\_subpopulation](./statistics/differentiation.py#L2293)
+#### [equilibrium\_shannon\_entropy\_subpopulation](./statistics/differentiation.py#L2255)
 
 ```python
 def equilibrium_shannon_entropy_subpopulation(population_size: int, m: float,
@@ -36166,7 +34493,7 @@ population-dependent formula in this module already shares.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_differentiation"></a>
 
-#### [equilibrium\_shannon\_differentiation](./statistics/differentiation.py#L2355)
+#### [equilibrium\_shannon\_differentiation](./statistics/differentiation.py#L2317)
 
 ```python
 def equilibrium_shannon_differentiation(population_size: int, m: float,
@@ -36217,7 +34544,7 @@ not a bug to raise on.
 
 <a id="fim.statistics.differentiation.statistics_report"></a>
 
-#### [statistics\_report](./statistics/differentiation.py#L2403)
+#### [statistics\_report](./statistics/differentiation.py#L2365)
 
 ```python
 def statistics_report(
@@ -36228,88 +34555,30 @@ def statistics_report(
         statistics: Collection[str] | None = None) -> DifferentiationReport
 ```
 
-Return the scalar statistics block consumed by an engine report.
+Compute the statistics report for one normalized frequency table.
 
-The one function that computes every reported statistic for one
-frequency table at once — everywhere this project reports "the
-statistics" for a single locus, this is the function that produced
-them (see `fim.engine.report_for_state`, which calls this once per
-locus and then averages each field across every locus a run
-tracks).
-
-``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, and ``K_ST`` use equal
-deme weighting as specified by their definitions. ``deme_weights`` is
-applied only to ``E_ST``; pass relative deme sizes to request its native
-size-weighted form.
-
-Validates `table` exactly once (unless `validate=False`, see below),
-then computes every field from that one `demes` tuple directly, via
-each statistic's own private `_..._from_demes` core — not by calling
-the public `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which
-would each independently re-validate (and, for `g_st`/`jost_d`,
-re-derive `H_S`/`H_T` a second time) the identical data this
-function already validated at its own top. Measured, not assumed, to
-be a real cost: profiling `_convergence_values_vectorized`'s own
-reference-scale hot path found roughly eleven full validation passes
-over the same table per call before this fix (`20260903-claude-
-sonnet-5-fim-vg-performance-campaign-design.md` §6.1 item 3) — one
-here, plus one inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/
-`k_st`, plus a further two apiece inside `g_st`/`jost_d`'s own
-internal `h_s`/`h_t` calls. Every public statistic function's own
-standalone behavior for a caller who invokes it directly, with
-genuinely unvalidated input, is unchanged by this — only the
-redundant re-validation *through this function* is gone.
+``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``, ``A_CGD``,
+``Gs``, and ``Gd`` use equal deme treatment. ``deme_weights`` applies
+only to ``E_ST``, ``Delta``, and ``MI``; the engine supplies population
+sizes when ``deme_weighting`` is ``"size"``.
 
 **Arguments**:
 
-- `table` - Every deme's own allele-frequency mapping.
-- `deme_weights` - See above.
-- `validate` - Whether `table` is run through `_validate_table`
-  (`True`, the default — always safe, unchanged behavior for
-  every existing caller) or trusted as already exactly
-  `Sequence[dict[int, float]]`, each deme already summing to
-  1, with `False` — an opt-in fast path for a caller that
-  already knows this, the same reasoning and the same
-  measured payoff as `fim.persistence.store.write_generation`'s
-  own `validate` keyword (that module's own top docstring has
-  the general argument). `fim.engine._statistics_for_locus_
-  vectorized` is the one caller that passes `False`: its own
-  `table` is built fresh, in the same expression, directly off
-  a `VectorizedState`'s own dense array (already-normalized by
-  construction, every key already a genuine `int`, every value
-  already a genuine `float`) — re-validating it here cannot
-  find a defect that construction did not already rule out,
-  only re-confirm one, on every locus, every generation.
-- `statistics` - `None` (the default — every existing caller,
-  unaffected) computes every field, exactly as before. Given a
-  collection of field names instead, `E_ST`/`K_ST`/`A_CGD`/
-  `Delta`/`MI`/`Gs`/`Gd` are each computed only when its own
-  name appears in
-  `statistics`; the rest hold `math.nan` (see
-  `DifferentiationReport`'s own docstring for the placeholder
-  contract this relies on). `H_S`/`H_T`/`H_ST`/`G_ST`/`D` are
-  always computed regardless of `statistics` — each is either
-  the shared input every other field derives from (`H_S`,
-  `H_T`) or an O(1) arithmetic step once those two are known
-  (`H_ST`, `G_ST`, `D`), so excluding them would save nothing.
-  `E_ST` (an `_entropy` pass over the pooled table plus one
-  more per deme) and `K_ST` (a set union across every deme's
-  own alleles) are each a real, independent O(total allele
-  entries) pass over `table` in their own right — this
-  parameter exists specifically to skip those two when a
-  caller already knows neither is wanted (Phase 7 item 4,
-  `FIM-24`/`FIM-32`, `dev/doc/apps/selby/jost-finite-island-
-  model/20260904-claude-sonnet-5-fim-engine-review-
-  remediations.md` — this project's own multi-model engine
-  review, 2026-09-04: every generation's own convergence check
-  computed all nine fields even though a run typically watches
-  only `D`). `Gs`/`Gd` are cheap (each an O(1) step off
-  `within`/`total`) but are never watchable for convergence at
-  all (`fim.model.params._CONVERGENCE_STATISTICS`), so the one
-  caller that ever passes `statistics` never asks for them
-  either — gated for the same reason as `E_ST`/`K_ST`, not
-  because computing them costs anything worth avoiding on its
-  own.
+- `table` - One allele-frequency mapping per deme.
+- `deme_weights` - Optional relative deme weights for the weighted
+  statistics listed above.
+- `validate` - Validate the table before calculation. Set to ``False``
+  only when the table is already normalized and has integer
+  allele IDs and floating-point frequencies.
+- `statistics` - Optional field names to calculate. ``None`` requests
+  all fields. The base fields ``H_S``, ``H_T``, ``H_ST``,
+  ``G_ST``, and ``D`` are always computed; unrequested optional
+  fields are set to ``math.nan``.
+
+
+**Returns**:
+
+  A ``DifferentiationReport`` containing one value per statistic.
 
 <a id="fim.statistics.genetic_distance"></a>
 
@@ -36850,53 +35119,18 @@ See `nei_all_demes_identity`: the geometric form can be negative.
 
 # [fim.statistics.identity\_recursion](./statistics/identity_recursion.py#L1)
 
-Expected trajectory of the identity-based statistics, in closed form.
+Compute expected identity-based statistics through time.
 
-`equilibrium_d` and `equilibrium_g_st` say where `D` and `G_ST` settle.
-This module says how they get there: the deterministic (expected) value of
-each statistic at every generation, from a chosen starting state.
-
-Why this is exact for the engine's own model: every quantity here is a
-function of two expected identities,
-
-- `within` = `E[sum_k x_k^2]`, two gene copies drawn from one deme, and
-- `between` = `E[sum_k x_k y_k]`, one copy drawn from each of two demes,
-
-and one generation of the engine (migrate, drift, mutate) maps that pair to
-a new pair by an *affine* rule, `x' = A x + c` with a 2 by 2 matrix `A`. The
-derivation is in the design document `20260911-claude-sonnet-5-derived-
-differentiation-trajectory-design.md` (approach B, iterate the verified
-recursion), and `test/validation/test_simulator_equilibrium.py` carries an
-independent implementation of the same recursion as the engine's oracle.
-
-An affine map has a closed-form solution. With fixed point `x*` and
-eigenpairs `(lambda_k, v_k)` of `A`,
-
-    x_t = x* + sum_k c_k lambda_k^t v_k,   c = V^-1 (x_0 - x*),
-
-so the value at any generation costs a few multiplications, however
-large the generation number is. `IdentityRecursion` holds `x*`, `lambda`, `V`
-and `V^-1` (the "ingredients"), which is exactly what the GUI receives and
-evaluates in the page.
-
-Two solvers share the same recursion:
-
-- `identity_recursion` is the fast 2 by 2 form for `d` equal demes of `N`
-  gene copies with symmetric island migration `m` and one mutation
-  probability. It needs only the run's own `H_S` and `H_T` to start.
-- `matrix_identity_trajectory` keeps the whole `d` by `d` identity matrix,
-  so it handles unequal deme sizes and any migration matrix (a hub, a
-  ring). The price is the state: it starts from the full matrix of
-  identities, `identity_matrix_from_frequencies`, not two averages.
-
-Scope: one shared mutation probability. Expected values are exact for those
-assumptions; a single run scatters around them by drift, and a
-multi-locus run whose `locus_aggregation` is `mean_of_ratios` differs from
-the ratio-of-means form used here by a small amount.
+The recursion evolves within- and between-deme identity expectations with an
+affine transition. `identity_recursion` provides a two-variable solution for
+symmetric island models; `matrix_identity_trajectory` supports unequal deme
+sizes and arbitrary migration matrices. Both use a shared mutation
+probability. Results are expected values; individual trajectories vary due to
+drift. See `doc/finite-island-model-introduction.md` for model context.
 
 <a id="fim.statistics.identity_recursion.IdentityRecursion"></a>
 
-## [IdentityRecursion Objects](./statistics/identity_recursion.py#L73)
+## [IdentityRecursion Objects](./statistics/identity_recursion.py#L38)
 
 ```python
 @dataclass(frozen=True)
@@ -36916,7 +35150,7 @@ The solved two-variable identity recursion for one configuration.
 
 <a id="fim.statistics.identity_recursion.IdentityRecursion.identities_after"></a>
 
-#### [identities\_after](./statistics/identity_recursion.py#L91)
+#### [identities\_after](./statistics/identity_recursion.py#L56)
 
 ```python
 def identities_after(steps: float, within: float,
@@ -36939,7 +35173,7 @@ Return `(within, between)` after `steps` generations.
 
 <a id="fim.statistics.identity_recursion.IdentityRecursion.statistics_after"></a>
 
-#### [statistics\_after](./statistics/identity_recursion.py#L120)
+#### [statistics\_after](./statistics/identity_recursion.py#L85)
 
 ```python
 def statistics_after(steps: float, within: float,
@@ -36961,7 +35195,7 @@ Return the identity-based statistics after `steps` generations.
 
 <a id="fim.statistics.identity_recursion.identities_from_heterozygosities"></a>
 
-#### [identities\_from\_heterozygosities](./statistics/identity_recursion.py#L139)
+#### [identities\_from\_heterozygosities](./statistics/identity_recursion.py#L104)
 
 ```python
 def identities_from_heterozygosities(h_s: float, h_t: float,
@@ -36988,7 +35222,7 @@ starting state relaxes exactly as its symmetrized average does.
 
 <a id="fim.statistics.identity_recursion.identities_to_statistics"></a>
 
-#### [identities\_to\_statistics](./statistics/identity_recursion.py#L162)
+#### [identities\_to\_statistics](./statistics/identity_recursion.py#L127)
 
 ```python
 def identities_to_statistics(within: float, between: float,
@@ -37014,7 +35248,7 @@ of the two identities. A zero denominator (no diversity left) gives
 
 <a id="fim.statistics.identity_recursion.identity_recursion"></a>
 
-#### [identity\_recursion](./statistics/identity_recursion.py#L188)
+#### [identity\_recursion](./statistics/identity_recursion.py#L153)
 
 ```python
 def identity_recursion(population_size: int, m: float, mu: float,
@@ -37061,7 +35295,7 @@ Without migration, and for two *distinct* copies
 
 <a id="fim.statistics.identity_recursion.identity_matrix_from_frequencies"></a>
 
-#### [identity\_matrix\_from\_frequencies](./statistics/identity_recursion.py#L302)
+#### [identity\_matrix\_from\_frequencies](./statistics/identity_recursion.py#L267)
 
 ```python
 def identity_matrix_from_frequencies(
@@ -37087,7 +35321,7 @@ allele. The diagonal is the with-replacement within-deme identity,
 
 <a id="fim.statistics.identity_recursion.matrix_identity_trajectory"></a>
 
-#### [matrix\_identity\_trajectory](./statistics/identity_recursion.py#L333)
+#### [matrix\_identity\_trajectory](./statistics/identity_recursion.py#L298)
 
 ```python
 def matrix_identity_trajectory(
@@ -37134,53 +35368,17 @@ equal deme weights, as the engine's reports do.
 
 # [fim.statistics.interval](./statistics/interval.py#L1)
 
-Confidence intervals for across-replicate sample means.
+Compute confidence intervals for means across independent replicates.
 
-A **confidence interval** is a range around a measured average that
-expresses how much uncertainty is left after averaging only a limited
-number of independent measurements — the same idea a poll reports as
-"52% ± 3%" rather than a single bare number, where the "± 3%" is exactly
-this kind of interval. See `fim.engine.reports_summary`'s own docstring
-for the fuller explanation of what problem this solves in this project
-specifically: each independently seeded replicate run contributes one
-scalar draw (its own final ``D``, ``G_ST``, and so on), and this module
-is what turns a handful of those draws into a mean plus a defensible
-range around it.
-
-The confidence interval of the mean of several such draws is a standard
-Student's-t interval on the sample mean, exactly as for any other
-independent, identically distributed sample — no bootstrap or other
-resampling scheme is needed on top of draws that are already independent
-by construction. "Student's-t" is the standard statistical method for
-exactly this situation: a small number of independent measurements whose
-own true variability is not known in advance and must itself be
-estimated from the measurements at hand (as opposed to the simpler,
-better-known bell-curve method, which assumes that variability is
-already known) — the correction it applies matters most for a handful of
-replicates and fades away as more are added, which is why the "degrees
-of freedom" (one less than the number of values being averaged — see
-`confidence_interval`'s own docstring) appears throughout this file.
-
-The critical value (how many standard errors wide the interval needs to
-be, for the requested confidence level and sample size) comes from a
-standard published Student's-t table (linear interpolation in ``1/df``
-between listed degrees of freedom, the conventional way to read an
-unlisted row off a printed table) rather than an inverse regularized-
-incomplete-beta computation (a more general but numerically delicate way
-of computing the identical values from first principles): every tabled
-degrees of freedom below 120 matches a printed statistics table exactly,
-needs no dependency beyond the standard library, and avoids hand-rolling
-a numerically delicate special function in the one area of this project
-under direct outside statistical review. Above the table's tail, the
-exact standard-normal quantile is used (a t-distribution's
-``degrees_of_freedom -> infinity`` limit — with enough replicates, the
-small-sample correction becomes negligible and the ordinary bell-curve
-answer is exact), computed by the standard library's `statistics.
-NormalDist`, not another approximate table row.
+`confidence_interval` uses the Student's t distribution for finite samples.
+Critical values are read from a published table, with linear interpolation in
+``1/df`` for unlisted degrees of freedom; above the table range, the standard
+normal quantile is used as the limiting value. See `fim.engine.reports_summary`
+for the batch-summary context.
 
 <a id="fim.statistics.interval.ConfidenceInterval"></a>
 
-## [ConfidenceInterval Objects](./statistics/interval.py#L85)
+## [ConfidenceInterval Objects](./statistics/interval.py#L49)
 
 ```python
 class ConfidenceInterval(TypedDict)
@@ -37231,7 +35429,7 @@ Fields:
 
 <a id="fim.statistics.interval.confidence_interval"></a>
 
-#### [confidence\_interval](./statistics/interval.py#L146)
+#### [confidence\_interval](./statistics/interval.py#L110)
 
 ```python
 def confidence_interval(values: Sequence[float],
@@ -37269,7 +35467,7 @@ a handful of independent replicate draws specifically.
 
 <a id="fim.statistics.interval.student_t_critical_value"></a>
 
-#### [student\_t\_critical\_value](./statistics/interval.py#L222)
+#### [student\_t\_critical\_value](./statistics/interval.py#L186)
 
 ```python
 def student_t_critical_value(degrees_of_freedom: int,
@@ -37720,34 +35918,16 @@ Open a saved run.
 
 # [fim.sweep](./sweep.py#L1)
 
-Parameter sweeps: what varies, which points result, and which are valid.
+Define parameter sweeps and enumerate validated configuration points.
 
-A sweep is a Study generated from a specification instead of assembled by
-hand (`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`). This module is the pure half: it turns a
-`SweepSpec` (a complete base configuration plus the axes that vary) into
-an ordered list of validated points, each a whole configuration with a
-deterministic `run_id`. Nothing here runs a simulation, touches disk, or
-imports the GUI, so the command line, the desktop app and any future
-service share it.
-
-Three ideas carry the design:
-
-- **Plan before running.** `enumerate_points` builds and validates every
-  point up front. A combination that cannot be run (a torus whose
-  `rows * columns` differs from `d`) is reported with its reason, never
-  discovered at point 47.
-- **Points are content-addressed.** A point's `run_id` is the hash of its
-  whole configuration (`fim.engine.deterministic_run_id`), so a resumed or
-  overlapping sweep can recognize a point it already computed.
-- **`N` counts individuals.** `N` means individuals per deme in the base
-  configuration and on an axis alike, the number the botanist sees
-  everywhere else in the app; the base's required `ploidy` turns it into
-  gene copies when a point is built (`SimulationParams.from_mapping`).
+A `SweepSpec` combines a base configuration with parameter axes.
+`enumerate_points` validates each combination before execution and assigns a
+deterministic run ID from its complete configuration. This module performs no
+simulation or filesystem operations.
 
 <a id="fim.sweep.SWEEP_SPEC_VERSION"></a>
 
-#### [SWEEP\_SPEC\_VERSION](./sweep.py#L50)
+#### [SWEEP\_SPEC\_VERSION](./sweep.py#L32)
 
 Schema version of the stored `sweep_spec` mapping.
 
@@ -37756,49 +35936,49 @@ spec is a grid and is still read.
 
 <a id="fim.sweep.READABLE_SPEC_VERSIONS"></a>
 
-#### [READABLE\_SPEC\_VERSIONS](./sweep.py#L56)
+#### [READABLE\_SPEC\_VERSIONS](./sweep.py#L38)
 
 Stored spec versions `SweepSpec.from_dict` accepts.
 
 <a id="fim.sweep.SIZE_CONFIRMATION_THRESHOLD"></a>
 
-#### [SIZE\_CONFIRMATION\_THRESHOLD](./sweep.py#L59)
+#### [SIZE\_CONFIRMATION\_THRESHOLD](./sweep.py#L41)
 
 Points at or above which a plan should ask before running.
 
 <a id="fim.sweep.SEED_POLICIES"></a>
 
-#### [SEED\_POLICIES](./sweep.py#L62)
+#### [SEED\_POLICIES](./sweep.py#L44)
 
 `spaced`: independent points; `same`: every point uses the base seed.
 
 <a id="fim.sweep.STRATEGIES"></a>
 
-#### [STRATEGIES](./sweep.py#L65)
+#### [STRATEGIES](./sweep.py#L47)
 
 `grid`: every combination; `zip`: axes advance together; `list`: explicit rows.
 
 <a id="fim.sweep.RECORDING_KEYS"></a>
 
-#### [RECORDING\_KEYS](./sweep.py#L71)
+#### [RECORDING\_KEYS](./sweep.py#L53)
 
 A sweep's `recording:` block keys and the configuration keys they set.
 
 <a id="fim.sweep.SWEEP_DEFAULT_HISTORY"></a>
 
-#### [SWEEP\_DEFAULT\_HISTORY](./sweep.py#L79)
+#### [SWEEP\_DEFAULT\_HISTORY](./sweep.py#L61)
 
 The statistic history format a sweep writes unless it is told otherwise.
 
 <a id="fim.sweep.DISK_CONFIRMATION_BYTES"></a>
 
-#### [DISK\_CONFIRMATION\_BYTES](./sweep.py#L82)
+#### [DISK\_CONFIRMATION\_BYTES](./sweep.py#L64)
 
 Estimated disk (bytes) at or above which a plan should ask before running.
 
 <a id="fim.sweep.AxisDefinition"></a>
 
-## [AxisDefinition Objects](./sweep.py#L150)
+## [AxisDefinition Objects](./sweep.py#L132)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -37835,7 +36015,7 @@ definition survives a process boundary.
 
 <a id="fim.sweep.AxisDefinition.is_boolean"></a>
 
-#### [is\_boolean](./sweep.py#L196)
+#### [is\_boolean](./sweep.py#L178)
 
 ```python
 @property
@@ -37846,7 +36026,7 @@ Return whether this is an on/off switch, written `true` or `false`.
 
 <a id="fim.sweep.AxisDefinition.apply_to"></a>
 
-#### [apply\_to](./sweep.py#L200)
+#### [apply\_to](./sweep.py#L182)
 
 ```python
 def apply_to(mapping: dict[str, Any], value: CoordinateValue) -> None
@@ -37856,7 +36036,7 @@ Write `value` into `mapping`, the configuration of one point.
 
 <a id="fim.sweep.AxisDefinition.to_dict"></a>
 
-#### [to\_dict](./sweep.py#L209)
+#### [to\_dict](./sweep.py#L191)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -37866,7 +36046,7 @@ Return the description of this key as plain JSON-ready values.
 
 <a id="fim.sweep.AxisDefinition.check_base"></a>
 
-#### [check\_base](./sweep.py#L229)
+#### [check\_base](./sweep.py#L211)
 
 ```python
 def check_base(base: Mapping[str, Any]) -> None
@@ -37876,13 +36056,13 @@ Raise `ValueError` if `base` cannot take this axis.
 
 <a id="fim.sweep.SWEEPABLE_KEYS"></a>
 
-#### [SWEEPABLE\_KEYS](./sweep.py#L235)
+#### [SWEEPABLE\_KEYS](./sweep.py#L217)
 
 The curated parameters a sweep may vary, with labels, ranges and rules.
 
 <a id="fim.sweep.GENERIC_KEYS"></a>
 
-#### [GENERIC\_KEYS](./sweep.py#L408)
+#### [GENERIC\_KEYS](./sweep.py#L390)
 
 Every other scalar configuration key a sweep may vary, by key.
 
@@ -37891,7 +36071,7 @@ generic entry has no label beyond its key and no display domain.
 
 <a id="fim.sweep.axis_definition"></a>
 
-#### [axis\_definition](./sweep.py#L416)
+#### [axis\_definition](./sweep.py#L398)
 
 ```python
 def axis_definition(key: str) -> AxisDefinition
@@ -37906,7 +36086,7 @@ Return the definition of a sweepable key, curated or generic.
 
 <a id="fim.sweep.sweepable_key_names"></a>
 
-#### [sweepable\_key\_names](./sweep.py#L436)
+#### [sweepable\_key\_names](./sweep.py#L418)
 
 ```python
 def sweepable_key_names() -> tuple[str, ...]
@@ -37916,7 +36096,7 @@ Return every sweepable key: the curated ones, then the generic ones.
 
 <a id="fim.sweep.SweepAxis"></a>
 
-## [SweepAxis Objects](./sweep.py#L442)
+## [SweepAxis Objects](./sweep.py#L424)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -37927,7 +36107,7 @@ One varied parameter and the exact values it takes, in order.
 
 <a id="fim.sweep.SweepAxis.to_dict"></a>
 
-#### [to\_dict](./sweep.py#L448)
+#### [to\_dict](./sweep.py#L430)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -37939,7 +36119,7 @@ A derived axis also records what its numbers count (`convention`).
 
 <a id="fim.sweep.SweepSpec"></a>
 
-## [SweepSpec Objects](./sweep.py#L461)
+## [SweepSpec Objects](./sweep.py#L443)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -37973,7 +36153,7 @@ What is held fixed (`base`) and what varies (`axes`).
 
 <a id="fim.sweep.SweepSpec.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./sweep.py#L494)
+#### [\_\_post\_init\_\_](./sweep.py#L476)
 
 ```python
 def __post_init__() -> None
@@ -37983,7 +36163,7 @@ Validate the axes against the base and the sweepable-key table.
 
 <a id="fim.sweep.SweepSpec.recording_config"></a>
 
-#### [recording\_config](./sweep.py#L517)
+#### [recording\_config](./sweep.py#L499)
 
 ```python
 def recording_config() -> dict[str, Any]
@@ -37993,7 +36173,7 @@ Return the recording block as configuration keys (`RECORDING_KEYS`).
 
 <a id="fim.sweep.SweepSpec.from_rows"></a>
 
-#### [from\_rows](./sweep.py#L522)
+#### [from\_rows](./sweep.py#L504)
 
 ```python
 @classmethod
@@ -38017,7 +36197,7 @@ the results views plot against.
 
 <a id="fim.sweep.SweepSpec.grid_size"></a>
 
-#### [grid\_size](./sweep.py#L569)
+#### [grid\_size](./sweep.py#L551)
 
 ```python
 @property
@@ -38028,7 +36208,7 @@ Return the number of positions the strategy enumerates.
 
 <a id="fim.sweep.SweepSpec.to_dict"></a>
 
-#### [to\_dict](./sweep.py#L577)
+#### [to\_dict](./sweep.py#L559)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -38038,7 +36218,7 @@ Return the JSON-serializable stored form (without the points).
 
 <a id="fim.sweep.SweepSpec.digest"></a>
 
-#### [digest](./sweep.py#L592)
+#### [digest](./sweep.py#L574)
 
 ```python
 def digest(plan: SweepPlan | None = None) -> str
@@ -38063,7 +36243,7 @@ The order of keys in the base does not matter.
 
 <a id="fim.sweep.SweepSpec.to_sweep_file"></a>
 
-#### [to\_sweep\_file](./sweep.py#L617)
+#### [to\_sweep\_file](./sweep.py#L599)
 
 ```python
 def to_sweep_file(name: str | None = None) -> str
@@ -38087,7 +36267,7 @@ it back gives an equal spec.
 
 <a id="fim.sweep.SweepSpec.from_dict"></a>
 
-#### [from\_dict](./sweep.py#L646)
+#### [from\_dict](./sweep.py#L628)
 
 ```python
 @classmethod
@@ -38102,7 +36282,7 @@ Rebuild a spec from its stored form (`to_dict`).
 
 <a id="fim.sweep.SweepPoint"></a>
 
-## [SweepPoint Objects](./sweep.py#L679)
+## [SweepPoint Objects](./sweep.py#L661)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38122,7 +36302,7 @@ One valid point: a whole configuration and its deterministic id.
 
 <a id="fim.sweep.SweepPoint.to_dict"></a>
 
-#### [to\_dict](./sweep.py#L696)
+#### [to\_dict](./sweep.py#L678)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -38132,7 +36312,7 @@ Return the stored plan entry (the plan, not the parameters).
 
 <a id="fim.sweep.InvalidPoint"></a>
 
-## [InvalidPoint Objects](./sweep.py#L706)
+## [InvalidPoint Objects](./sweep.py#L688)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38143,7 +36323,7 @@ A grid position whose configuration cannot be built, with the reason.
 
 <a id="fim.sweep.SweepPlan"></a>
 
-## [SweepPlan Objects](./sweep.py#L715)
+## [SweepPlan Objects](./sweep.py#L697)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38162,7 +36342,7 @@ Every point of a sweep, valid and not, before anything runs.
 
 <a id="fim.sweep.SweepPlan.needs_confirmation"></a>
 
-#### [needs\_confirmation](./sweep.py#L732)
+#### [needs\_confirmation](./sweep.py#L714)
 
 ```python
 @property
@@ -38173,7 +36353,7 @@ Return whether the plan is large enough to ask before running.
 
 <a id="fim.sweep.enumerate_points"></a>
 
-#### [enumerate\_points](./sweep.py#L737)
+#### [enumerate\_points](./sweep.py#L719)
 
 ```python
 def enumerate_points(spec: SweepSpec) -> SweepPlan
@@ -38194,7 +36374,7 @@ Enumerate and validate every point of `spec`, without running any.
 
 <a id="fim.sweep.derived_values"></a>
 
-#### [derived\_values](./sweep.py#L794)
+#### [derived\_values](./sweep.py#L776)
 
 ```python
 def derived_values(spec: SweepSpec,
@@ -38212,7 +36392,7 @@ For an `Nm` axis that is the migration rate `m` it worked out.
 
 <a id="fim.sweep.enumerate_values"></a>
 
-#### [enumerate\_values](./sweep.py#L810)
+#### [enumerate\_values](./sweep.py#L792)
 
 ```python
 def enumerate_values(spec: SweepSpec) -> Iterator[dict[str, CoordinateValue]]
@@ -38236,7 +36416,7 @@ tools) shares the axes and the ordering through this, and nothing else.
 
 <a id="fim.sweep.point_run_name"></a>
 
-#### [point\_run\_name](./sweep.py#L827)
+#### [point\_run\_name](./sweep.py#L809)
 
 ```python
 def point_run_name(study_name: str, point: SweepPoint) -> str
@@ -38259,7 +36439,7 @@ what tells one point's run from its siblings in the same Study.
 
 <a id="fim.sweep.point_run_description"></a>
 
-#### [point\_run\_description](./sweep.py#L846)
+#### [point\_run\_description](./sweep.py#L828)
 
 ```python
 def point_run_description(study_name: str, spec: SweepSpec, point: SweepPoint,
@@ -38288,7 +36468,7 @@ Study it was copied into, say) still explains itself.
 
 <a id="fim.sweep.expand_axis"></a>
 
-#### [expand\_axis](./sweep.py#L874)
+#### [expand\_axis](./sweep.py#L856)
 
 ```python
 def expand_axis(key: str, definition: object) -> SweepAxis
@@ -38309,7 +36489,7 @@ integers); an explicit list keeps its values and rejects a repeat.
 
 <a id="fim.sweep.spec_from_config"></a>
 
-#### [spec\_from\_config](./sweep.py#L903)
+#### [spec\_from\_config](./sweep.py#L885)
 
 ```python
 def spec_from_config(
@@ -38330,7 +36510,7 @@ and optionally `name`, `seed_policy` and `strategy`.
 
 <a id="fim.sweep.read_points_csv"></a>
 
-#### [read\_points\_csv](./sweep.py#L957)
+#### [read\_points\_csv](./sweep.py#L939)
 
 ```python
 def read_points_csv(path: Path) -> list[dict[str, object]]
@@ -38348,7 +36528,7 @@ and values are then checked like any other list sweep.
 
 <a id="fim.sweep.resolve_points_file"></a>
 
-#### [resolve\_points\_file](./sweep.py#L980)
+#### [resolve\_points\_file](./sweep.py#L962)
 
 ```python
 def resolve_points_file(config: Mapping[str, Any],
@@ -38370,7 +36550,7 @@ Return `config` with a `sweep.points_file` replaced by its `points`.
 
 <a id="fim.sweep.apply_coordinates"></a>
 
-#### [apply\_coordinates](./sweep.py#L1016)
+#### [apply\_coordinates](./sweep.py#L998)
 
 ```python
 def apply_coordinates(
@@ -39542,35 +37722,17 @@ writes them, and a number with no unit is bytes.
 
 # [fim.sweep\_run](./sweep_run.py#L1)
 
-Running a sweep: create its Study, run the points, resume, and report status.
+Create, execute, resume, and inspect parameter-sweep Studies.
 
-The execution half of `fim.sweep`
-(`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`, sections 3 and 4).
-
-- `create_sweep_study` stores the specification and the plan in a new
-  Study's `sweep_spec` *before* any point runs, so an interrupted sweep
-  resumes from what is stored.
-- `run_sweep` walks the stored points. Each point is skipped if the Study
-  already holds a run with its `run_id`, attached if such a run exists
-  anywhere under `results/`, and computed otherwise. Resuming is the same
-  operation as running.
-- Point status is *derived* (a point is done if a member run has its id),
-  never stored, so a manifest cannot disagree with the run directories.
-  Only failures and each point's Run object link are recorded, in a small
-  file beside the Study index.
-- A point dispatched by `LocalPointRunner` or `ProcessPointRunner` is a
-  resumable Run object (`fim.run_service`), created lazily when the point
-  first runs. Cancelling a sweep pauses its points in flight, and the next
-  run resumes them from their checkpoints instead of starting over. Only a
-  completed object is ever counted as a finished point.
-- Points run one after another. A batch already spreads its replicates
-  over the cores; running several batches at once would oversubscribe
-  them. `PointRunner` is the seam a cluster would implement instead.
+Sweep specifications and plans are stored with a Study before execution.
+Completed points are identified from their run IDs; pending points can be
+resumed, and point failures and Run object links are stored separately.
+Execution is sequential across sweep points; batch replicates may use their
+own worker processes.
 
 <a id="fim.sweep_run.PointState"></a>
 
-#### [PointState](./sweep_run.py#L99)
+#### [PointState](./sweep_run.py#L81)
 
 Where a point stands.
 
@@ -39581,7 +37743,7 @@ version); `failed` (recorded before any Run object existed); or `waiting`.
 
 <a id="fim.sweep_run.SweepLockedError"></a>
 
-## [SweepLockedError Objects](./sweep_run.py#L155)
+## [SweepLockedError Objects](./sweep_run.py#L137)
 
 ```python
 class SweepLockedError(StoreError, ValueError)
@@ -39594,7 +37756,7 @@ a plain error, like any other reason a sweep cannot start.
 
 <a id="fim.sweep_run.FailureClass"></a>
 
-#### [FailureClass](./sweep_run.py#L163)
+#### [FailureClass](./sweep_run.py#L145)
 
 Whether trying a failed point again can help: a `transient` failure (a
 worker process that died, a file system error) can pass; a `deterministic`
@@ -39602,7 +37764,7 @@ one (the engine rejected the configuration) happens every time.
 
 <a id="fim.sweep_run.classify_failure"></a>
 
-#### [classify\_failure](./sweep_run.py#L177)
+#### [classify\_failure](./sweep_run.py#L159)
 
 ```python
 def classify_failure(error: BaseException) -> FailureClass
@@ -39622,7 +37784,7 @@ Say whether a point that failed with `error` is worth trying again.
 
 <a id="fim.sweep_run.PointFailure"></a>
 
-## [PointFailure Objects](./sweep_run.py#L194)
+## [PointFailure Objects](./sweep_run.py#L176)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39640,7 +37802,7 @@ Why one point produced no run.
 
 <a id="fim.sweep_run.PointPaused"></a>
 
-## [PointPaused Objects](./sweep_run.py#L210)
+## [PointPaused Objects](./sweep_run.py#L192)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39655,7 +37817,7 @@ A point's Run object stopped, resumable, before it completed.
 
 <a id="fim.sweep_run.SweepEvent"></a>
 
-## [SweepEvent Objects](./sweep_run.py#L221)
+## [SweepEvent Objects](./sweep_run.py#L203)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39675,7 +37837,7 @@ One progress event from `run_sweep`.
 
 <a id="fim.sweep_run.SweepOutcome"></a>
 
-## [SweepOutcome Objects](./sweep_run.py#L242)
+## [SweepOutcome Objects](./sweep_run.py#L224)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39690,7 +37852,7 @@ not start stays waiting, to be resumed.
 
 <a id="fim.sweep_run.PointStatus"></a>
 
-## [PointStatus Objects](./sweep_run.py#L262)
+## [PointStatus Objects](./sweep_run.py#L244)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39701,7 +37863,7 @@ One planned point and where it stands.
 
 <a id="fim.sweep_run.PointRunner"></a>
 
-## [PointRunner Objects](./sweep_run.py#L273)
+## [PointRunner Objects](./sweep_run.py#L255)
 
 ```python
 class PointRunner(Protocol)
@@ -39716,7 +37878,7 @@ identity is its content hash, so no shared state is needed.
 
 <a id="fim.sweep_run.PointRunner.run_point"></a>
 
-#### [run\_point](./sweep_run.py#L282)
+#### [run\_point](./sweep_run.py#L264)
 
 ```python
 def run_point(params: SimulationParams,
@@ -39732,7 +37894,7 @@ batch's replicates); `None` leaves the runner's own default.
 
 <a id="fim.sweep_run.ObjectPointRunner"></a>
 
-## [ObjectPointRunner Objects](./sweep_run.py#L298)
+## [ObjectPointRunner Objects](./sweep_run.py#L280)
 
 ```python
 @runtime_checkable
@@ -39743,7 +37905,7 @@ A runner that can also execute a point as a resumable Run object.
 
 <a id="fim.sweep_run.ObjectPointRunner.run_object_point"></a>
 
-#### [run\_object\_point](./sweep_run.py#L301)
+#### [run\_object\_point](./sweep_run.py#L283)
 
 ```python
 def run_object_point(
@@ -39759,7 +37921,7 @@ A set `cancel_event` pauses the object at its next safe point.
 
 <a id="fim.sweep_run.LocalPointRunner"></a>
 
-## [LocalPointRunner Objects](./sweep_run.py#L335)
+## [LocalPointRunner Objects](./sweep_run.py#L317)
 
 ```python
 class LocalPointRunner()
@@ -39781,7 +37943,7 @@ call from several threads at once, one call per point in flight.
 
 <a id="fim.sweep_run.LocalPointRunner.run_point"></a>
 
-#### [run\_point](./sweep_run.py#L359)
+#### [run\_point](./sweep_run.py#L341)
 
 ```python
 def run_point(params: SimulationParams,
@@ -39794,7 +37956,7 @@ Run `params` synchronously; see `PointRunner.run_point`.
 
 <a id="fim.sweep_run.LocalPointRunner.run_object_point"></a>
 
-#### [run\_object\_point](./sweep_run.py#L381)
+#### [run\_object\_point](./sweep_run.py#L363)
 
 ```python
 def run_object_point(
@@ -39808,7 +37970,7 @@ Execute a point's Run object here; see `ObjectPointRunner`.
 
 <a id="fim.sweep_run.execute_point_object"></a>
 
-#### [execute\_point\_object](./sweep_run.py#L441)
+#### [execute\_point\_object](./sweep_run.py#L423)
 
 ```python
 def execute_point_object(
@@ -39844,7 +38006,7 @@ point: the checkpoint it leaves lets the next sweep resume the point.
 
 <a id="fim.sweep_run.ProcessPointRunner"></a>
 
-## [ProcessPointRunner Objects](./sweep_run.py#L575)
+## [ProcessPointRunner Objects](./sweep_run.py#L557)
 
 ```python
 class ProcessPointRunner()
@@ -39877,7 +38039,7 @@ the sweep ending on the first submit to a dead pool.
 
 <a id="fim.sweep_run.ProcessPointRunner.run_point"></a>
 
-#### [run\_point](./sweep_run.py#L701)
+#### [run\_point](./sweep_run.py#L683)
 
 ```python
 def run_point(params: SimulationParams,
@@ -39890,7 +38052,7 @@ Run `params` in a worker process; see `PointRunner.run_point`.
 
 <a id="fim.sweep_run.ProcessPointRunner.run_object_point"></a>
 
-#### [run\_object\_point](./sweep_run.py#L724)
+#### [run\_object\_point](./sweep_run.py#L706)
 
 ```python
 def run_object_point(
@@ -39904,7 +38066,7 @@ Execute a point's Run object in a worker process.
 
 <a id="fim.sweep_run.ProcessPointRunner.close"></a>
 
-#### [close](./sweep_run.py#L750)
+#### [close](./sweep_run.py#L732)
 
 ```python
 def close() -> None
@@ -39914,7 +38076,7 @@ Stop the worker processes and the shared-event server.
 
 <a id="fim.sweep_run.Concurrency"></a>
 
-## [Concurrency Objects](./sweep_run.py#L759)
+## [Concurrency Objects](./sweep_run.py#L741)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -39933,7 +38095,7 @@ How a sweep spreads its points over the machine.
 
 <a id="fim.sweep_run.resolve_concurrency"></a>
 
-#### [resolve\_concurrency](./sweep_run.py#L775)
+#### [resolve\_concurrency](./sweep_run.py#L757)
 
 ```python
 def resolve_concurrency(*,
@@ -39969,7 +38131,7 @@ point's worker count and shrinks how many fit.
 
 <a id="fim.sweep_run.STORED_PLAN_LIMIT"></a>
 
-#### [STORED\_PLAN\_LIMIT](./sweep_run.py#L824)
+#### [STORED\_PLAN\_LIMIT](./sweep_run.py#L806)
 
 Points up to which a Study stores the whole plan.
 
@@ -39979,7 +38141,7 @@ the digest keeps the check that the plan still matches this version.
 
 <a id="fim.sweep_run.create_sweep_study"></a>
 
-#### [create\_sweep\_study](./sweep_run.py#L846)
+#### [create\_sweep\_study](./sweep_run.py#L828)
 
 ```python
 def create_sweep_study(spec: SweepSpec,
@@ -40016,7 +38178,7 @@ Create the Study for a sweep, its spec and plan stored before any run.
 
 <a id="fim.sweep_run.attach_sweep_to_study"></a>
 
-#### [attach\_sweep\_to\_study](./sweep_run.py#L888)
+#### [attach\_sweep\_to\_study](./sweep_run.py#L870)
 
 ```python
 def attach_sweep_to_study(study_id: str,
@@ -40039,7 +38201,7 @@ already a member counts as done. A Study holds at most one sweep.
 
 <a id="fim.sweep_run.sweep_spec_of"></a>
 
-#### [sweep\_spec\_of](./sweep_run.py#L921)
+#### [sweep\_spec\_of](./sweep_run.py#L903)
 
 ```python
 def sweep_spec_of(study: StudyManifest) -> SweepSpec
@@ -40053,7 +38215,7 @@ Rebuild the `SweepSpec` a sweep Study stored.
 
 <a id="fim.sweep_run.stored_points"></a>
 
-#### [stored\_points](./sweep_run.py#L932)
+#### [stored\_points](./sweep_run.py#L914)
 
 ```python
 def stored_points(study: StudyManifest) -> list[Mapping[str, Any]]
@@ -40067,7 +38229,7 @@ Return the planned points stored in a sweep Study.
 
 <a id="fim.sweep_run.sweep_point_statuses"></a>
 
-#### [sweep\_point\_statuses](./sweep_run.py#L952)
+#### [sweep\_point\_statuses](./sweep_run.py#L934)
 
 ```python
 def sweep_point_statuses(study: StudyManifest,
@@ -40090,7 +38252,7 @@ reported as done.
 
 <a id="fim.sweep_run.completed_run_ids"></a>
 
-#### [completed\_run\_ids](./sweep_run.py#L1054)
+#### [completed\_run\_ids](./sweep_run.py#L1036)
 
 ```python
 def completed_run_ids(*,
@@ -40104,7 +38266,7 @@ See `completed_runs`; this is only the ids.
 
 <a id="fim.sweep_run.completed_runs"></a>
 
-#### [completed\_runs](./sweep_run.py#L1064)
+#### [completed\_runs](./sweep_run.py#L1046)
 
 ```python
 def completed_runs(*,
@@ -40125,7 +38287,7 @@ so a plan can say beforehand which points are already computed.
 
 <a id="fim.sweep_run.SweepBudget"></a>
 
-## [SweepBudget Objects](./sweep_run.py#L1106)
+## [SweepBudget Objects](./sweep_run.py#L1088)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40148,7 +38310,7 @@ did not start stay waiting for `fim sweep resume`.
 
 <a id="fim.sweep_run.SweepBudget.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./sweep_run.py#L1125)
+#### [\_\_post\_init\_\_](./sweep_run.py#L1107)
 
 ```python
 def __post_init__() -> None
@@ -40158,7 +38320,7 @@ Refuse a limit that is not positive.
 
 <a id="fim.sweep_run._LinkedEvent"></a>
 
-## [\_LinkedEvent Objects](./sweep_run.py#L1133)
+## [\_LinkedEvent Objects](./sweep_run.py#L1115)
 
 ```python
 class _LinkedEvent(threading.Event)
@@ -40171,7 +38333,7 @@ mistaken for the user cancelling.
 
 <a id="fim.sweep_run._LinkedEvent.is_set"></a>
 
-#### [is\_set](./sweep_run.py#L1144)
+#### [is\_set](./sweep_run.py#L1126)
 
 ```python
 def is_set() -> bool
@@ -40181,7 +38343,7 @@ Return whether the caller cancelled or the budget stopped the sweep.
 
 <a id="fim.sweep_run._BudgetTracker"></a>
 
-## [\_BudgetTracker Objects](./sweep_run.py#L1149)
+## [\_BudgetTracker Objects](./sweep_run.py#L1131)
 
 ```python
 class _BudgetTracker()
@@ -40191,7 +38353,7 @@ Counts what a call has spent and decides when a budget is reached.
 
 <a id="fim.sweep_run._BudgetTracker.reserve"></a>
 
-#### [reserve](./sweep_run.py#L1164)
+#### [reserve](./sweep_run.py#L1146)
 
 ```python
 def reserve() -> bool
@@ -40201,7 +38363,7 @@ Claim one new point to compute; `False` once a budget is reached.
 
 <a id="fim.sweep_run._BudgetTracker.add_bytes"></a>
 
-#### [add\_bytes](./sweep_run.py#L1177)
+#### [add\_bytes](./sweep_run.py#L1159)
 
 ```python
 def add_bytes(size: int) -> None
@@ -40211,7 +38373,7 @@ Count the bytes of a finished point, then check the budget.
 
 <a id="fim.sweep_run._BudgetTracker.check"></a>
 
-#### [check](./sweep_run.py#L1183)
+#### [check](./sweep_run.py#L1165)
 
 ```python
 def check() -> None
@@ -40221,7 +38383,7 @@ Stop the sweep if the time or disk limit has been reached.
 
 <a id="fim.sweep_run._Context"></a>
 
-## [\_Context Objects](./sweep_run.py#L1223)
+## [\_Context Objects](./sweep_run.py#L1205)
 
 ```python
 @dataclass(slots=True)
@@ -40232,7 +38394,7 @@ What every point of one `run_sweep` call shares.
 
 <a id="fim.sweep_run._Context.emit"></a>
 
-#### [emit](./sweep_run.py#L1257)
+#### [emit](./sweep_run.py#L1239)
 
 ```python
 def emit(kind: EventKind,
@@ -40246,7 +38408,7 @@ Send one event; a finishing event advances the finished count.
 
 <a id="fim.sweep_run.run_sweep"></a>
 
-#### [run\_sweep](./sweep_run.py#L1270)
+#### [run\_sweep](./sweep_run.py#L1252)
 
 ```python
 def run_sweep(study_id: str,
@@ -40347,7 +38509,7 @@ falls back to the runner's `run_point`.
 
 <a id="fim.sweep_run.sweep_lock_held"></a>
 
-#### [sweep\_lock\_held](./sweep_run.py#L1389)
+#### [sweep\_lock\_held](./sweep_run.py#L1371)
 
 ```python
 def sweep_lock_held(study_id: str, *, results: Path | None = None) -> bool
@@ -40368,7 +38530,7 @@ Return whether a process is running the sweep `study_id` right now.
 
 <a id="fim.sweep_run.sweep_lock_path"></a>
 
-#### [sweep\_lock\_path](./sweep_run.py#L1403)
+#### [sweep\_lock\_path](./sweep_run.py#L1385)
 
 ```python
 def sweep_lock_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40381,7 +38543,7 @@ sees it.
 
 <a id="fim.sweep_run.verification_path"></a>
 
-#### [verification\_path](./sweep_run.py#L1610)
+#### [verification\_path](./sweep_run.py#L1592)
 
 ```python
 def verification_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40394,7 +38556,7 @@ see it.
 
 <a id="fim.sweep_run.read_verification"></a>
 
-#### [read\_verification](./sweep_run.py#L1621)
+#### [read\_verification](./sweep_run.py#L1603)
 
 ```python
 def read_verification(study_id: str,
@@ -40411,7 +38573,7 @@ Keys: `verified_at` (UTC text), `software_version`, `plan_digest`,
 
 <a id="fim.sweep_run.failures_path"></a>
 
-#### [failures\_path](./sweep_run.py#L1678)
+#### [failures\_path](./sweep_run.py#L1660)
 
 ```python
 def failures_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40424,7 +38586,7 @@ Kept in a subdirectory of the Study index so the index's own
 
 <a id="fim.sweep_run.read_failures"></a>
 
-#### [read\_failures](./sweep_run.py#L1687)
+#### [read\_failures](./sweep_run.py#L1669)
 
 ```python
 def read_failures(study_id: str,
@@ -40436,7 +38598,7 @@ Return recorded failures by point `run_id`; empty if none or unreadable.
 
 <a id="fim.sweep_run.read_point_objects"></a>
 
-#### [read\_point\_objects](./sweep_run.py#L1695)
+#### [read\_point\_objects](./sweep_run.py#L1677)
 
 ```python
 def read_point_objects(study_id: str,
@@ -40448,7 +38610,7 @@ Return each point's linked Run object ID by point `run_id`.
 
 <a id="fim.sweep_run.Replan"></a>
 
-## [Replan Objects](./sweep_run.py#L1778)
+## [Replan Objects](./sweep_run.py#L1760)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40474,7 +38636,7 @@ What `replan_sweep` changed, or would change.
 
 <a id="fim.sweep_run.replan_sweep"></a>
 
-#### [replan\_sweep](./sweep_run.py#L1811)
+#### [replan\_sweep](./sweep_run.py#L1793)
 
 ```python
 def replan_sweep(study_id: str,
@@ -40518,7 +38680,7 @@ an ordinary run, listed in the result, and its point runs again.
 
 <a id="fim.sweep_run.write_reproducibility_note"></a>
 
-#### [write\_reproducibility\_note](./sweep_run.py#L2222)
+#### [write\_reproducibility\_note](./sweep_run.py#L2204)
 
 ```python
 def write_reproducibility_note(directory: Path,
@@ -40532,7 +38694,7 @@ the run's own record of itself is untouched.
 
 <a id="fim.sweep_run.sweep_point_results"></a>
 
-#### [sweep\_point\_results](./sweep_run.py#L2233)
+#### [sweep\_point\_results](./sweep_run.py#L2215)
 
 ```python
 def sweep_point_results(study: StudyManifest,
@@ -40553,7 +38715,7 @@ nothing.
 
 <a id="fim.sweep_run.health_cache_path"></a>
 
-#### [health\_cache\_path](./sweep_run.py#L2264)
+#### [health\_cache\_path](./sweep_run.py#L2246)
 
 ```python
 def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40563,7 +38725,7 @@ Return the disposable cache of a sweep's point health counts.
 
 <a id="fim.sweep_run.trajectory_cache_path"></a>
 
-#### [trajectory\_cache\_path](./sweep_run.py#L2269)
+#### [trajectory\_cache\_path](./sweep_run.py#L2251)
 
 ```python
 def trajectory_cache_path(study_id: str,
@@ -41638,31 +39800,15 @@ Record the first SIGTERM within the block as a stop request.
 
 # [fim.update](./update.py#L1)
 
-Explicit, opt-in release-check logic shared by every front end.
+Check GitHub for a newer release when explicitly requested.
 
-This is the code behind "Check for updates": it asks GitHub whether a
-newer version of `fim` has been released than the one currently
-installed, and if so, reports the new version's own name and the web
-page describing it — it never downloads or installs anything itself,
-only checks and reports. It is also, deliberately, the *only* code
-anywhere in this entire project that ever makes a network connection to
-anywhere at all (see `SECURITY.md`'s own threat model) — every other
-part of `fim` runs entirely offline, with no network access needed or
-attempted. That single network call happens only when a person
-explicitly asks for it (the command line's own `fim update --check`, or
-the desktop app's own "Check for updates" menu item) — nothing here ever
-runs automatically in the background, on a timer, or as a side effect of
-an ordinary simulation run.
-
-Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
-"Check for updates" action performs exactly the same GitHub Releases
-lookup and version comparison as `fim update --check`, rather than a
-second implementation of the one network operation `SECURITY.md`'s
-threat model permits.
+The update check reports the latest release and its page; it does not download
+or install software. Network access occurs only in response to the command-line
+or desktop update action, not during ordinary simulation or analysis.
 
 <a id="fim.update.compare_versions"></a>
 
-#### [compare\_versions](./update.py#L44)
+#### [compare\_versions](./update.py#L28)
 
 ```python
 def compare_versions(current: str, latest: str) -> int
@@ -41687,7 +39833,7 @@ wrong.
 
 <a id="fim.update.fetch_latest_release"></a>
 
-#### [fetch\_latest\_release](./update.py#L67)
+#### [fetch\_latest\_release](./update.py#L51)
 
 ```python
 def fetch_latest_release() -> Mapping[str, Any]
@@ -41728,7 +39874,7 @@ independent case.
 
 <a id="fim.update.latest_release"></a>
 
-#### [latest\_release](./update.py#L121)
+#### [latest\_release](./update.py#L105)
 
 ```python
 def latest_release(
@@ -41755,7 +39901,7 @@ confusing `TypeError` or `KeyError` somewhere else entirely.
 
 <a id="fim.update.version_parts"></a>
 
-#### [version\_parts](./update.py#L153)
+#### [version\_parts](./update.py#L137)
 
 ```python
 def version_parts(value: str) -> tuple[int, int, int]

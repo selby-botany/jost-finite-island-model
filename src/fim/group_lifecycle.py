@@ -1,16 +1,9 @@
-"""Close and reopen Studies and Experiments, and summarize their Runs.
+"""Validate Study and Experiment lifecycle operations and summaries.
 
-Run lifecycle design §6.3 (`20261006-gpt-6.1-sol-run-lifecycle-and-
-checkpoint-design.md`, `selby/restricted`). A group never has an
-execution state machine of its own: its summary is derived on every
-read from the lifecycle records of the distinct Run objects it reaches,
-plus the sweep points that have no Run object yet. A Run shared by two
-Studies of one Experiment counts once in the Experiment's summary.
-
-Closing a group (`fim.persistence.groups.ClosedGroupError`) freezes its
-organization only. It is refused while any Run the group reaches is
-active, so a group never reads closed while work still lands in it, and
-it never stops, pauses, or freezes a Run.
+Group summaries are derived from the lifecycle records of the Run objects
+and sweep points they reference. Closing a group freezes membership; it does
+not stop or pause runs. A group cannot be closed while referenced work is
+active.
 """
 
 from __future__ import annotations

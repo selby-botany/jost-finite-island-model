@@ -1,15 +1,9 @@
-"""Expert Settings: the policy constants a run's configuration may change.
+"""Validated per-run overrides for convergence and storage policy settings.
 
-Each field is the run-specific form of a policy constant in
-`fim.config.convergence`; its default is that constant. A run's configuration
-can carry an `expert:` mapping of the fields it changes. `SimulationParams`
-validates the mapping here, copies it into the run's parameters (so the
-manifest says exactly what ran, and the run ID changes with it), and only
-non-default entries are written back out, so a run with default Expert Settings
-is byte-for-byte the run it was before the mapping existed.
-
-Numerical guards and derivable constants are not Expert Settings (design
-`20261005-claude-opus-5-5-simplified-convergence-rule-design.md`, 11.1).
+`ExpertSettings` collects eligible policy constants from
+`fim.config.convergence` and `fim.config.storage`. Defaults preserve standard
+behavior; numerical guards and values derived from model parameters are not
+configurable through this mapping.
 """
 
 from __future__ import annotations

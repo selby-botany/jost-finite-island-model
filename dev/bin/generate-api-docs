@@ -47,7 +47,7 @@ When to run this:
 
 Arguments:
   OUTPUT_PATH   Where to write the generated Markdown file.
-                Default: src/fim/API.md (the file actually committed to
+                Default: src/fim/API.md (the file committed to
                 the repository).
 
 Options:

@@ -1,33 +1,8 @@
-"""Optional name/description sidecar for a run, attachable at any time.
+"""Store editable names, descriptions, and class labels beside run manifests.
 
-A completed run's own `manifest.json` is a fixed, digest-verified
-receipt (`fim.persistence.manifest`) — rewriting it to add a name would
-either break `verify_trajectory_integrity`'s own checksum or require
-recomputing it for no scientific reason. `RunMetadata` instead lives in
-its own small sidecar file, `metadata.json`, beside `manifest.json`:
-attaching, renaming, or clearing a run's name/description never touches
-the manifest at all.
-
-A run with no `metadata.json` is not incomplete — it is exactly what
-every run produced before this file existed already is (`20260917-
-claude-sonnet-5-run-study-experiment-hierarchy-design.md`, `selby/
-restricted`, §3.1/§3.4): callers read it the same graceful-degradation
-way `fim.gui.app._read_json_object` already reads `report.json`/
-`summary.json` — missing or malformed means "no name set," never an
-error for the run itself.
-
-A run's **labels** — `name`, `description`, and `class` — may also be
-written in its configuration file. They never reach the run's
-parameters or its ID (`fim.model.params._LABEL_KEYS`): `RunLabels.
-from_config` reads them, and `fim run` writes them here, unless the run
-already has a `metadata.json` (read-only examples design, 2026-10-05,
-section 1). The class is stored under the JSON key `class` and written
-only when set, so a sidecar without one keeps its earlier shape, and an
-older fim, which ignores keys it does not know, still reads it.
-
-A read-only run (`fim.persistence.groups.is_run_read_only`) cannot be
-renamed, described, or re-classed: `replace_run_metadata` raises
-`fim.persistence.groups.ReadOnlyError` for it.
+Labels are kept in `metadata.json`, separate from the digest-verified run
+manifest and scientific parameters. Metadata is optional; runs without a
+sidecar remain valid. Read-only runs cannot be relabeled.
 """
 
 from __future__ import annotations

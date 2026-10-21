@@ -1,49 +1,11 @@
-"""Allele-frequency diversity and differentiation statistics.
+"""Compute diversity and differentiation statistics from allele frequencies.
 
-This is where the actual mathematics behind this project's own named
-statistics (`D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`) lives —
-every one of the formulas the
-[differentiation-measures guide](../../doc/jost-differentiation-measures.md)
-explains in depth, implemented here exactly as that guide (and the
-paper it summarizes, Jost et al. 2018) defines them. Reading that guide
-first is strongly recommended before this file — it explains, from
-zero, *why* there is more than one way to measure "how different are
-these populations," what each measure actually answers, and why they
-can disagree about the very same data; this file only ever computes,
-never explains, and the brief summaries in each function's own
-docstring below assume the guide's own vocabulary rather than
-re-deriving it every time.
-
-The one-paragraph version, for orientation: every measure here starts
-from **expected heterozygosity** (`heterozygosity`, `h_s`, `h_t`,
-below) — the chance that two gene copies drawn at random are different
-alleles — computed once *within* each deme (`H_S`) and once for all
-demes *pooled together* (`H_T`). Since pooling different demes can only
-add variation, `H_T` is always at least as large as `H_S`; every
-differentiation measure in this file is some way of asking "how much
-bigger is `H_T` than `H_S`, relative to some baseline" — and the
-different measures (`G_ST`, `D`, `E_ST`, `K_ST`) are, precisely, the
-different reasonable choices for what that baseline should be. None of
-them is simply "more correct" than the others; each answers a
-genuinely different question, which is exactly why this project reports
-several side by side rather than picking one.
-
-All functions operate on normalized allele-frequency tables and are
-independent of model state, persistence, and the engine — pure
-mathematics, with no idea that a "finite island model" or a "run" even
-exists; anything with allele frequencies to compare could use this
-module. "Normalized" means each deme's own frequencies already sum to
-exactly 1 (a complete accounting of that deme's own gene pool);
-"table" means a plain sequence with one entry per deme, each entry
-itself a mapping from an allele's identity to its frequency in that
-deme; allele identifiers must be integer-like (whole numbers, or
-values that behave like them) purely as a bookkeeping convention — the
-actual identity of an allele is never mathematically meaningful here,
-only whether two entries share the same identity or not. A frequency
-itself must be an ordinary number — a `float`, or an `int` where that
-reads more naturally (`{0: 1}` for a deme fixed on one allele); see
-`FrequencyTable`'s own comment, below, for exactly what the type
-annotation does and does not promise about either half.
+The module implements expected heterozygosity and measures including Jost's
+D, Nei's G_ST, E_ST, K_ST, H_S, H_T, and H_ST. Within-deme and pooled
+heterozygosity provide the basis for these measures, which use different
+normalizations and are not interchangeable. Inputs are normalized frequency
+tables with integer-like allele identifiers and real-valued frequencies. See
+`doc/jost-differentiation-measures.md` for definitions and comparisons.
 """
 
 from __future__ import annotations
@@ -2407,87 +2369,27 @@ def statistics_report[AlleleKey: SupportsIndex](
     validate: bool = True,
     statistics: Collection[str] | None = None,
 ) -> DifferentiationReport:
-    """Return the scalar statistics block consumed by an engine report.
+    """Compute the statistics report for one normalized frequency table.
 
-    The one function that computes every reported statistic for one
-    frequency table at once — everywhere this project reports "the
-    statistics" for a single locus, this is the function that produced
-    them (see `fim.engine.report_for_state`, which calls this once per
-    locus and then averages each field across every locus a run
-    tracks).
-
-    ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, and ``K_ST`` use equal
-    deme weighting as specified by their definitions. ``deme_weights`` is
-    applied only to ``E_ST``; pass relative deme sizes to request its native
-    size-weighted form.
-
-    Validates `table` exactly once (unless `validate=False`, see below),
-    then computes every field from that one `demes` tuple directly, via
-    each statistic's own private `_..._from_demes` core — not by calling
-    the public `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which
-    would each independently re-validate (and, for `g_st`/`jost_d`,
-    re-derive `H_S`/`H_T` a second time) the identical data this
-    function already validated at its own top. Measured, not assumed, to
-    be a real cost: profiling `_convergence_values_vectorized`'s own
-    reference-scale hot path found roughly eleven full validation passes
-    over the same table per call before this fix (`20260903-claude-
-    sonnet-5-fim-vg-performance-campaign-design.md` §6.1 item 3) — one
-    here, plus one inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/
-    `k_st`, plus a further two apiece inside `g_st`/`jost_d`'s own
-    internal `h_s`/`h_t` calls. Every public statistic function's own
-    standalone behavior for a caller who invokes it directly, with
-    genuinely unvalidated input, is unchanged by this — only the
-    redundant re-validation *through this function* is gone.
+    ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``, ``A_CGD``,
+    ``Gs``, and ``Gd`` use equal deme treatment. ``deme_weights`` applies
+    only to ``E_ST``, ``Delta``, and ``MI``; the engine supplies population
+    sizes when ``deme_weighting`` is ``"size"``.
 
     Args:
-        table: Every deme's own allele-frequency mapping.
-        deme_weights: See above.
-        validate: Whether `table` is run through `_validate_table`
-            (`True`, the default — always safe, unchanged behavior for
-            every existing caller) or trusted as already exactly
-            `Sequence[dict[int, float]]`, each deme already summing to
-            1, with `False` — an opt-in fast path for a caller that
-            already knows this, the same reasoning and the same
-            measured payoff as `fim.persistence.store.write_generation`'s
-            own `validate` keyword (that module's own top docstring has
-            the general argument). `fim.engine._statistics_for_locus_
-            vectorized` is the one caller that passes `False`: its own
-            `table` is built fresh, in the same expression, directly off
-            a `VectorizedState`'s own dense array (already-normalized by
-            construction, every key already a genuine `int`, every value
-            already a genuine `float`) — re-validating it here cannot
-            find a defect that construction did not already rule out,
-            only re-confirm one, on every locus, every generation.
-        statistics: `None` (the default — every existing caller,
-            unaffected) computes every field, exactly as before. Given a
-            collection of field names instead, `E_ST`/`K_ST`/`A_CGD`/
-            `Delta`/`MI`/`Gs`/`Gd` are each computed only when its own
-            name appears in
-            `statistics`; the rest hold `math.nan` (see
-            `DifferentiationReport`'s own docstring for the placeholder
-            contract this relies on). `H_S`/`H_T`/`H_ST`/`G_ST`/`D` are
-            always computed regardless of `statistics` — each is either
-            the shared input every other field derives from (`H_S`,
-            `H_T`) or an O(1) arithmetic step once those two are known
-            (`H_ST`, `G_ST`, `D`), so excluding them would save nothing.
-            `E_ST` (an `_entropy` pass over the pooled table plus one
-            more per deme) and `K_ST` (a set union across every deme's
-            own alleles) are each a real, independent O(total allele
-            entries) pass over `table` in their own right — this
-            parameter exists specifically to skip those two when a
-            caller already knows neither is wanted (Phase 7 item 4,
-            `FIM-24`/`FIM-32`, `dev/doc/apps/selby/jost-finite-island-
-            model/20260904-claude-sonnet-5-fim-engine-review-
-            remediations.md` — this project's own multi-model engine
-            review, 2026-09-04: every generation's own convergence check
-            computed all nine fields even though a run typically watches
-            only `D`). `Gs`/`Gd` are cheap (each an O(1) step off
-            `within`/`total`) but are never watchable for convergence at
-            all (`fim.model.params._CONVERGENCE_STATISTICS`), so the one
-            caller that ever passes `statistics` never asks for them
-            either — gated for the same reason as `E_ST`/`K_ST`, not
-            because computing them costs anything worth avoiding on its
-            own.
+        table: One allele-frequency mapping per deme.
+        deme_weights: Optional relative deme weights for the weighted
+            statistics listed above.
+        validate: Validate the table before calculation. Set to ``False``
+            only when the table is already normalized and has integer
+            allele IDs and floating-point frequencies.
+        statistics: Optional field names to calculate. ``None`` requests
+            all fields. The base fields ``H_S``, ``H_T``, ``H_ST``,
+            ``G_ST``, and ``D`` are always computed; unrequested optional
+            fields are set to ``math.nan``.
+
+    Returns:
+        A ``DifferentiationReport`` containing one value per statistic.
     """
     demes = (
         _validate_table(table)

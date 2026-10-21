@@ -1,43 +1,10 @@
 #!/usr/bin/env python3
-"""Characterize the per-replicate spread behind the equilibrium test bands.
+"""Estimate per-replicate variation for equilibrium validation scenarios.
 
-`test/validation/test_simulator_equilibrium.py` asserts four engine-level
-scientific tests (Part VI equilibrium, Dear-Nolan low migration, Dear-Nolan
-high migration, and the Crow & Aoki (1984) toroidal stepping-stone
-scenario) against a band of the form ``k * sigma / sqrt(replicates)``,
-where ``sigma`` is a per-replicate standard deviation. Deriving that
-``sigma`` analytically would require propagating variance through a
-multi-generation Migrate -> Mutate -> Drift recursion's higher moments (a
-delta-method expansion of a ratio-of-means statistic sampled from nested
-binomial/multinomial draws) -- not currently derived, and out of scope for
-this program; see the "Analytic bound" note in this script's report output.
-Absent that, the bands are set from an *empirical characterization pass*:
-run each scenario's exact configuration many times (many more replicates
-than the assertion test itself uses) with a seed range distinct from the
-assertion test's own seed, and take the sample standard deviation of the
-per-replicate ``G_ST``/``D`` estimates.
-
-This was previously done ad hoc -- an unretained, unversioned pass whose
-program, seeds, raw output, and environment were never recorded (R18,
-`doc/dev/20260818-claude-opus-5-project-review-rollup.md`, not committed --
-gitignored review material). This script versions that program; running it
-and committing its `--output` alongside a `CHANGELOG.md` entry versions the
-evidence.
-
-Deliberately NOT wired into `build` or `ci.yml`: this is a maintainer tool
-run manually, on demand, when a scenario's configuration changes enough
-that its previously characterized `_SIGMA_*` constants might no longer be
-a conservative bound -- not a step in the deterministic PR gate, which
-must stay a pure function of the commit (CLAUDE.md). A characterization
-pass is itself stochastic by design (that is the thing it measures); its
-raw output is retained precisely so a future maintainer never has to take
-today's numbers on faith.
-
-Usage:
-    dev/bin/calibrate-statistical-bands \\
-        --replicates-part-vi 30 --replicates-dear-nolan-low 40 \\
-        --replicates-dear-nolan-high 20 --replicates-crow-aoki-torus 10 \\
-        --output test/validation/statistical-calibration-evidence.json
+Runs the configured scenarios with independent seeds and records sample
+standard deviations for the reported `G_ST` and `D` estimates. The output is
+JSON calibration evidence for the validation tests. Run this maintainer tool
+when scenario settings change; it is not part of the deterministic CI gate.
 """
 
 from __future__ import annotations

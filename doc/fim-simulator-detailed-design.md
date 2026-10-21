@@ -30,19 +30,14 @@
     - [8.3 Documentation navigation and link checking](#83-documentation-navigation-and-link-checking)
   - [9. Test strategy summary](#9-test-strategy-summary)
   - [10. Risks and mitigations](#10-risks-and-mitigations)
-  - [Metadata](#metadata)
-    - [Revisions](#revisions)
 
 ## Who this document is for
 
-Written for whoever maintains or extends the simulator. The companion
-[design document](fim-simulator-design.md) answers
-*what* the tool is and *why* it works the way it does; every architectural
-decision, formula, and biological claim used below is settled there and is
-not re-derived here. This document answers the engineering questions the
-design document does not: how the repository is organized, what toolchain
-and quality gates every change passes through, how continuous integration
-and releases work, and how the tool is packaged and distributed.
+This developer reference covers repository organization, quality gates,
+continuous integration, packaging, and releases. The companion
+[design document](fim-simulator-design.md) specifies the model and
+architecture; the [functional API](fim-simulator-functional-api.md)
+and [Python guide](python-api.md) document supported calling interfaces.
 
 Test detail is delegated in full to the companion
 [detailed test plan](fim-simulator-detailed-test-plan.md); §9 here is
@@ -50,9 +45,7 @@ only a summary and a pointer. Section references of the form "design §N"
 point into the design document; bare "§N" references point within this
 document.
 
-The four documentation reader roles this project serves — non-technical
-user, sysops, visiting technician, and developer — are defined in §8. This
-document itself is a developer artifact and does not need the other three.
+Section §8 maps the documentation set by audience and purpose.
 
 ## 1. Scope and ground rules
 
@@ -61,22 +54,13 @@ single symmetric-island core, built so further variations are extensions
 of the parameter set and pipeline rather than rewrites (design §9). Design
 §11's "Out of scope" items are out of scope here too.
 
-Two ground rules shape everything below and are worth stating once:
+Engineering requirements:
 
-- **Single maintainer, built to be inherited.** This is not a
-  multiple-developer repository; there is no team workflow, no review
-  rota, no branch-protection ceremony to design for. What replaces all of
-  that is the durability requirement the design document already carries:
-  write as if the original author is permanently unavailable. The
-  practical consequence is that `CONTRIBUTING.md` is a *maintainer's
-  runbook* — how to set up, build, test, and release — not a guide for
-  soliciting outside pull requests, and the test suite plus the `build`
-  script are the only "reviewer" a lone maintainer reliably has.
-- **A green commit is the unit of progress.** Every commit leaves the tree
-  lint-clean, type-clean, and test-green. There is no "wire it up later"
-  commit whose tests fail until a subsequent commit lands. This is what
-  keeps the history bisectable and what lets the maintainer stop at any
-  commit boundary with a working tool.
+- **Maintainability.** Setup, build, test, and release procedures must be
+  usable without access to the original author. `CONTRIBUTING.md`
+  provides the maintainer runbook.
+- **Valid commit boundaries.** Each commit must pass lint, type, and
+  test gates so history remains bisectable.
 
 ## 2. Engineering decisions
 
@@ -92,28 +76,24 @@ distribution, and reproducibility choices a maintainer needs to know.
 | Language | Python 3.12+ | Design §4.4 confirms Python 3; 3.12 is the floor for `type` aliases and improved error messages, and has stable Windows wheels for every dependency below. |
 | Array backend | NumPy | Design §4.4; the drift/mutation workload is batched multinomial/binomial sampling (design §5). |
 | Plotting | Matplotlib | Design §8; prebuilt Windows wheels, no compiler needed (design §4.5). Rendered with the non-interactive `Agg` backend so plots are reproducible and headless-safe. |
-| Config parsing | PyYAML | The config file is YAML (design §12); pure-Python wheel, trivial to bundle. |
-| Transitive pin | pyparsing | Pinned explicitly, not left to resolution: Matplotlib 3.9 calls aliases that newer pyparsing releases deprecate, and an unpinned resolution turns a clean test run into a warning-laden one on upstream's schedule rather than on a commit. |
-| **Excluded** | SciPy, pandas | Neither is needed: NumPy's `Generator` supplies `dirichlet`/`multinomial`, the persistence row schema is plain dict/JSON, and the across-replicate confidence interval reads its critical values from a published t-table plus the standard library's `NormalDist`. Excluding them keeps the PyInstaller bundle small and the offline constraint (design §4.5) easy to honor. |
+| Config parsing | PyYAML | Parses YAML configuration (design §12). |
+| Desktop interface | pywebview | Uses native webviews; Linux installs the `gtk` extra and requires GTK/WebKitGTK system libraries. |
+| Transitive constraint | pyparsing | The supported range is declared explicitly in `pyproject.toml` for compatibility with Matplotlib. |
+| **Excluded** | SciPy, pandas | NumPy supplies sampling, persistence exposes plain row mappings, and confidence intervals use a t-table plus standard-library `NormalDist`; neither package is a runtime requirement. |
 
-The update pipeline, statistics, and visualization depend only on NumPy
-and Matplotlib; PyYAML is used at the configuration boundary alone. This
-is the whole runtime dependency set, chosen so the one-file executable
-(§6.2) stays small and every dependency has a solid prebuilt Windows
-wheel (design §4.5).
+`pyproject.toml` is authoritative for dependency versions and platform
+markers. NumPy supports the simulation and statistics; Matplotlib
+supports headless plots; PyYAML handles configuration; pywebview supplies
+the desktop interface. The optional `jit` extra provides Numba for compiled
+backends.
 
 ### 2.2 Front-end shape
 
-**The command line is the only front end; there is no GUI.** A config
-file plus a one-file executable satisfies design §4.5's install constraint
-with the smallest possible bundle, and packaging a GUI toolkit into a
-one-file Windows executable is materially heavier to build and test than a
-CLI.
-
-This choice costs nothing if a GUI is wanted later: the design's
-architecture (design §4) keeps every front end strictly outside
-`engine.py` and the modules it calls, so a GUI would be a new consumer of
-`fim.engine.simulate_params()` and the `TrajectoryStore`, not a rewrite.
+The CLI and pywebview desktop application share the model, engine,
+statistics, and persistence APIs. `fim.launcher:main` dispatches CLI
+commands and graphical launches; `fim-gui` invokes the desktop entry
+point directly. Front ends do not implement biological operators.
+See the [GUI design](fim-gui-design.md).
 
 ### 2.3 Distribution and update mechanism
 
@@ -139,20 +119,14 @@ version," never as part of producing a result.
 
 ### 2.4 Determinism and reproducibility contract
 
-The design document's convergence semantics are inherently stochastic
-(design §3.5) and its test strategy leans on stochastic checks (design
-§10). The house rule that a test must be a pure function of its commit is
-therefore load-bearing here, and is stated once as a contract the whole
-codebase obeys:
+Simulation and test reproducibility follow these requirements:
 
-1. **One RNG, explicitly seeded, explicitly threaded.** A single
-   `numpy.random.Generator` (`PCG64`) is constructed from
-   `SimulationParams.seed` and passed into every operator and
-   initial-condition generator as an argument. No module ever calls the
-   global NumPy RNG, `random`, or reseeds mid-run. Given a seed, a run is
-   byte-for-byte reproducible, which is what makes the manifest's "hand a
-   collaborator a run_id and reproduce the trajectory" promise (design
-   §6) true.
+1. **Explicitly seeded random streams.** Streams derive from
+   `SimulationParams.seed` and are supplied to stochastic operators and
+   initialization. Replicates and demes have explicit stream states;
+   checkpoints retain the states needed for continuation. Model code
+   does not use the global NumPy RNG, `random`, or mid-run reseeding.
+   A run is reproducible within the numerical-platform limits in design §4.6.
 2. **No wall-clock or environment in logic.** Timestamps appear only in the
    manifest and in output *filenames*, never in a value that a statistic,
    convergence decision, or persisted row depends on.
@@ -256,7 +230,7 @@ jost-finite-island-model/
 │       ├── viz/
 │       │   ├── scatter.py         # canonical d-dimensional frequency scatter
 │       │   └── diagnostics.py     # convergence trace, per-deme frequency bars
-│       ├── engine.py              # fim(N, m, μ, d, P) — the public entry point
+│       ├── engine/                # run loops and backend selection
 │       └── cli.py                 # command-line entry point
 ├── test/
 │   ├── conftest.py                # shared fixtures, seeded RNG helpers
@@ -296,20 +270,16 @@ rather than a prerequisite.
 
 ## 4. Toolchain and quality gates
 
-Every Python gate below runs identically in the local `build` script (§7)
-and in CI (§5), so "green locally" and "green in CI" cannot diverge. Tool
-versions are pinned — an unpinned linter or formatter makes a passing
-build a function of upstream's release schedule instead of the commit,
-which is the same defect class the determinism contract (§2.4) exists to
-prevent. The Python pins live in `pyproject.toml`'s optional `dev`
-dependency group and are repeated below for reference; the Docker-backed
-wrappers in `bin/` pin an image digest apiece.
+CI invokes the same Python gates as the local `build` script (§7).
+Dependency constraints live in `pyproject.toml`'s optional `dev` group;
+Docker-backed wrappers in `bin/` pin image digests. The table identifies
+the tools; consult the manifest for current version ranges.
 
 | Gate | Tool | Pin (baseline) | What it enforces |
 |---|---|---|---|
-| Lint + format | Ruff | `ruff==0.6.*` | Style, import order, common bugs; `ruff format` is the single formatter (no separate Black). Line length 88, matching the design docs' prose target. |
-| Type check | mypy | `mypy==1.11.*` | `--strict`; every public function typed. `AlleleId` is a `NewType(int)` so the type checker refuses to let an allele be compared by anything but identity (design §3.2). |
-| Unit + property tests | pytest, Hypothesis | `pytest==8.*`, `hypothesis==6.*` | Correctness (§10, test plan). |
+| Lint + format | Ruff | `pyproject.toml` | Style, import order, common bugs; `ruff format` is the formatter. Line length 88. |
+| Type check | mypy | `pyproject.toml` | Strict checking of source and tests; `AlleleId` is a distinct `NewType(int)` (design §3.2). |
+| Unit + property tests | pytest, Hypothesis | `pyproject.toml` | Correctness (§10, test plan). |
 | Coverage | coverage.py | `coverage==7.*` | Branch coverage; gate at the threshold in §5.2. |
 | API reference docs | pydoc-markdown | `pydoc-markdown==4.*` | Regenerates `src/fim/API.md` from module docstrings; dev-only, never a runtime dependency, so it never enters the PyInstaller bundle (§2.1/§8.1). |
 | Secret scan | gitleaks | `gitleaks/gitleaks-action@v2` | No credentials in history (§5.3). |
@@ -324,11 +294,10 @@ rather than inside `ci.yml`; the secret scan is the one of them CI repeats
 on its own, in a separate workflow (§5.3), because a leaked credential
 cannot wait for a maintainer to run a local command.
 
-`mypy --strict` on the model core is not ceremony: the design document's
-single most important representational rule is that an allele carries no
-structure but identity (design §3.2). Encoding `AlleleId` as a distinct
-`NewType` makes "compare two alleles by anything other than equality" a
-type error caught before any test runs.
+`AlleleId` distinguishes allele identifiers from unrelated integers in
+typed interfaces. As an integer-backed `NewType`, it does not itself
+prohibit ordering or arithmetic; identity-only use is a model invariant
+(design §3.2).
 
 The same gate set runs locally *before* CI through repository-managed git
 hooks (§8.2): `pre-commit` auto-formats staged Python and refreshes the
@@ -372,17 +341,12 @@ test suite as two separately named, separately budgeted steps before the
 workflow file's logic bottoms out in `./build`, the one script a
 maintainer runs identically offline (§7). Permissions are `contents: read`.
 
-**Two test steps, not one.** Bundling every stage into a single
-`./build --ci` step would make the `slow`/`statistical` scenario suite's
-own wall-clock cost invisible in the Actions run summary — indistinguishable
-from lint, type-checking, docs, and packaging, all sharing one opaque step
-with no budget bounding any of it individually. The workflow instead runs:
+Two separately named steps expose their durations and enforce independent
+runner budgets:
 
 1. `./build --no-lint --no-type --no-docs --no-package` — the same
-   deterministic layer `--ci` also covers (`pyproject.toml`'s own default
-   marker filter, no coverage), so it fails in seconds if anything
-   obviously broken slipped through, before CI pays for the much larger
-   scenario suite. `timeout-minutes: 5`.
+   deterministic layer `--ci` also covers (`pyproject.toml`'s default
+   marker filter, no coverage). `timeout-minutes: 5`.
 2. `./build --ci` — the authoritative gate (below). `timeout-minutes: 20`.
 
 Each step's own duration is visible in the Actions run summary natively,
@@ -414,26 +378,17 @@ checks both steps stay present, correctly ordered, and budgeted.
    `dev/bin/check-doc-links` (§8.3).
 5. Build the wheel and sdist, install the wheel into a throwaway virtual
    environment outside the checkout, and run `fim --version` and
-   `fim --help` from the installed entry point. This last stage is what
-   keeps `pyproject.toml`'s entry-point wiring from silently breaking
-   between releases.
+   `fim --help` from the installed entry point. This stage checks
+   `pyproject.toml`'s entry-point wiring.
 
-The five `slow`-marked engine-scenario tests
-(`test/validation/test_simulator_equilibrium.py`'s published/theoretical
-literature comparisons, dominated by
-`test_crow_aoki_torus_scenario_via_engine`'s own ~23-minute local cost)
-run separately, in a `slow-tests` job gated to fire only on a daily
-`schedule` or a manual `workflow_dispatch` — never on a push or a pull
-request — with its own 90-minute budget, calling `./build --slow-only`. A
-single sustained, CPU-bound simulation does not fit reliably inside a
-fixed per-push wall-clock window on a shared runner; keeping it out of
-that window entirely, rather than sizing a timeout large enough to always
-survive whatever runner load shows up, is what `doc/
-fim-simulator-detailed-test-plan.md` §3 already documents as this
-marker's intended home ("CI nightly / on demand"). `build` and the
-Homebrew formula check (§6.3) both skip the `schedule`/`workflow_dispatch`
-triggers, so a scheduled or manually dispatched run costs nothing beyond
-that one job.
+The `slow`-marked engine-scenario tests in
+`test/validation/test_simulator_equilibrium.py` run separately through
+`./build --slow-only`. The `slow-tests` job has a 90-minute budget and
+runs on a daily `schedule` or manual `workflow_dispatch`, not on pushes
+or pull requests. These CPU-bound literature comparisons are assigned
+to nightly or on-demand validation
+([test plan §3](fim-simulator-detailed-test-plan.md#3-layout-tooling-and-markers)).
+The `build` and Homebrew formula jobs (§6.3) exclude these triggers.
 
 ### 5.3 The `gitleaks` workflow
 
@@ -445,19 +400,15 @@ mask a test failure or vice versa.
 
 ### 5.4 The release jobs in `ci.yml`
 
-Release publishing lives inside `ci.yml` itself rather than a separate
-workflow file, so GitHub Actions' own `needs:` graph makes the dependency
-on a passing build structural rather than advisory: a tag cannot publish
-a release before CI has run, let alone passed, and the tag itself is
-verified before anything is built from it:
+Release jobs in `ci.yml` use the `needs:` graph to require a passing
+build and verified tag before publishing:
 
 1. **`verify-tag` (`if: startsWith(github.ref, 'refs/tags/v')`, runs
-   alongside `build` rather than after it — cheap, and independent of
-   source).** A full-history checkout, then: `git rev-parse --verify
-   "$GITHUB<sub>REF</sub>_NAME<sup>tag</sup>"` must succeed, which is only true for an
+   alongside `build`).** A full-history checkout, then: `git rev-parse --verify
+   "$GITHUB_REF_NAME^{tag}"` must succeed, which is only true for an
    *annotated* tag (a lightweight tag has no tag object for ^{tag} to
    resolve) — rejecting a `git tag v1.2.3` shorthand that skipped a
-   message entirely; then `git merge-base --is-ancestor "$GITHUB<sub>SHA</sub>"
+   message entirely; then `git merge-base --is-ancestor "$GITHUB_SHA"
    origin/main` must hold, rejecting a tag pushed from a commit `main`
    has never merged.
 2. **Five platform jobs, each `needs: [build, verify-tag]` and
@@ -502,12 +453,10 @@ verified before anything is built from it:
    GitHub Release attaching all of it: both Windows executables, both
    macOS `.dmg` images, the Linux binary, the wheel, and the sdist.
 
-The tag-equals-`version.txt` check is the one guard that makes the version
-string trustworthy everywhere it appears (bundle, manifest, `--version`,
-Homebrew formula); `verify-tag` and the `needs:` chain are what makes the
-release itself trustworthy — built from a commit `main` actually contains,
-from a tag that was deliberately created rather than a stray ref, only
-after every test the project runs has passed for that exact commit.
+The version check keeps bundle, manifest, CLI, and formula versions
+consistent. `verify-tag` and `needs:` require an annotated tag reachable
+from `main` and a passing build before publication. The separately
+scheduled slow tests are not part of the per-tag build gate (§5.2).
 
 Repository-level branch protection on `main` and tag protection on `v*`
 (who may push either) are configured directly in GitHub settings, not in
@@ -525,8 +474,7 @@ images to a digest rather than a floating tag. A trailing `# vN` comment
 keeps the pin human-readable; test/validation/test_workflow_pins.py
 parses every workflow file and fails if any reference is not a full SHA.
 
-`.github/dependabot.yml` tracks both ecosystems that need to move forward
-on their own schedule now that they no longer drift on their own: `pip`
+`.github/dependabot.yml` tracks `pip`
 (the ranges in `pyproject.toml`) and `github-actions` (the SHA pins
 above), each on a weekly cadence, each landing as an ordinary reviewable
 PR rather than an automatic merge.
@@ -540,14 +488,12 @@ specifically for a Windows user's manual verification), which `publish`
 re-verifies against the file that actually arrived before ever
 re-shipping it.
 
-**Deliberately deferred:** a hash-locked constraints file (`pip install
+**Not implemented:** a hash-locked constraints file (`pip install
 --require-hashes` against a lock file covering transitive dependencies,
 so even a version-range match cannot silently substitute compromised
 package content) needs a lock-file tool this project does not currently
 depend on (`pip-tools` or `uv`) and an ongoing regeneration process.
-Introducing that tool is a deliberate choice with its own maintenance
-cost, not a mechanical pin — left as a follow-up rather than adopted
-silently as a side effect of this pass.
+Version constraints alone do not verify package content hashes.
 
 ## 6. Packaging and distribution
 
@@ -555,13 +501,14 @@ silently as a side effect of this pass.
 
 PEP 621 metadata with a `src/` layout and a standard build backend
 (`hatchling`). Key fields: `name = "fim"`, `requires-python = ">=3.12"`,
-runtime dependencies `numpy`, `matplotlib`, `pyyaml`; a `dev` optional group
+runtime dependencies listed in §2.1; a `dev` optional group
 holding the pinned toolchain (§4); dynamic `version` read from
 `version.txt`; and a console entry point:
 
 ```toml
 [project.scripts]
-fim = "fim.cli:main"
+fim = "fim.launcher:main"
+fim-gui = "fim.gui.app:main"
 ```
 
 The `src/` layout guarantees tests run against the installed package, not
@@ -571,17 +518,16 @@ meaningful.
 ### 6.2 The Windows one-file executable
 
 `packaging/fim.spec` drives PyInstaller in one-file mode (design §4.5). The
-spec must: collect Matplotlib's data files and the `Agg` backend as hidden
-imports; exclude the interactive GUI backends (Tk/Qt) so the bundle stays
-small and needs no display; and set `console=True`, since the command line
-is the only front end (§2.2). The build is done in the release workflow on `windows-latest`
+spec collects Matplotlib data, the `Agg` backend, pywebview, and local web
+assets. It excludes Tk/Qt Matplotlib backends and sets `console=True`.
+The launcher supports both CLI and desktop invocation (§2.2).
+The build is done in the release workflow on `windows-latest`
 (§5.4); no cross-compilation, no local Windows machine required of the
 maintainer.
 
-The bundled binary is self-contained: interpreter, NumPy, Matplotlib, and
-PyYAML all inside, so the researcher installs nothing (design §4.5). First
-run creates the run folder and drops a starter config, as design §12
-describes.
+The binary bundles Python and package dependencies. Desktop operation
+also requires the platform webview runtime; `fim init` creates a starter
+configuration. See [installation](../install/README.md).
 
 ### 6.3 Developer installation paths
 
@@ -606,8 +552,7 @@ that every feature commit updates as it lands.
 ## 7. The `build` script — local CI equivalent
 
 A single `build` script at the repository root is the local mirror of CI
-for this Python project. It is what a solo maintainer runs before every
-push and is the exact body of `ci.yml` (§5.2), so the two cannot drift.
+for this Python project. CI invokes it directly (§5.2).
 
 Stages, in order, each skippable by flag for fast iteration:
 
@@ -684,9 +629,7 @@ a CI artifact — for two concrete reasons: it is browsable directly on
 GitHub with no build step, and its diff in a pull request or a `git log` is
 a reviewable signal that the public API surface changed.
 
-Because a generated file can silently drift from the code it documents,
-freshness is enforced in **three layers of defense** (a doc that lies is a
-defect, not a cosmetic lag):
+Generated-reference freshness is checked at three points:
 
 1. **`pre-commit` regenerates and re-stages.** When a staged change touches
    `src/fim/**/*.py`, the hook regenerates `src/fim/API.md` and re-stages
@@ -727,21 +670,17 @@ Three hooks:
   `ruff check src test`, bare `mypy`, the `pytest` subset excluding
   the `statistical`, `slow`, and `packaging` markers, and the API-doc
   freshness check (§8.1). Each gate is bypassable in a genuine emergency
-  through PRE<sub>PUSH</sub>_SKIP<sub>LINT</sub>, PRE<sub>PUSH</sub>_SKIP<sub>TYPE</sub>, PRE<sub>PUSH</sub>_SKIP<sub>TEST</sub>,
-  and PRE<sub>PUSH</sub>_SKIP<sub>DOCS</sub>.
+  through `PRE_PUSH_SKIP_LINT`, `PRE_PUSH_SKIP_TYPE`, `PRE_PUSH_SKIP_TEST`,
+  and `PRE_PUSH_SKIP_DOCS`.
 
-**Graceful degradation is a design requirement, not a nicety.** Each hook
+Each hook
 no-ops with an informational message when its tool or `pyproject.toml` is
 absent, so a fresh clone that has not yet run `pip install` of the `dev`
 group is never blocked by a missing linter.
 
-**The hooks are convenience and first-line defense, never the authority.**
-`--no-verify` bypasses any of them, and that is acceptable precisely
-because CI (§5) re-runs every one of these gates on the server, where it
-cannot be skipped. The hooks exist to catch a mistake in seconds on the
-maintainer's machine rather than minutes later in CI; they are deliberately
-fast (staged-only `pre-commit`, fast-subset `pre-push`) so that speed never
-becomes a reason to disable them.
+`--no-verify` bypasses local hooks. CI (§5) runs its gates independently.
+Local hooks provide earlier feedback through staged-file checks and a
+fast test subset.
 
 ### 8.3 Documentation navigation and link checking
 
@@ -759,7 +698,7 @@ reach every related page and every section within it:
   two design docs ↔ the test plan, `src/README.md` ↔ `src/fim/API.md`). The
   generated `src/fim/API.md` is reachable from `src/README.md` and
   `doc/developer.md`, and links back.
-- **Correctness is machine-checked, not eyeballed.** `dev/bin/check-doc-links`
+- **Link checks.** `dev/bin/check-doc-links`
   validates that every relative link and in-page anchor across all Markdown
   resolves to an existing file/heading, and flags orphan documents (nothing
   links to them). It runs in the `build` docs stage (§7) and in CI (§5.2),
@@ -776,11 +715,11 @@ Full detail is in the
 the shape only. Eight test layers, mapped to where they live:
 
 - **Unit** (`test/<module>/`) — every value object and pure function,
-  including the `Σp ≈ 1` invariant and (de)serialization round-trips.
+  including the $\sum_a p_a\approx1$ invariant and (de)serialization round-trips.
 - **Property-based** (Hypothesis) — the differentiation guide's Part V
   algebraic identities over randomly generated frequency tables.
 - **Golden-value** (`test/data/`) — the Part IV hand-checked scenarios
-  asserted to exact values, including the documented `D = 0.5556` erratum.
+  asserted to exact values, including the documented $D=0.5556$ erratum.
 - **Statistical / asymptotic** (`test/validation/`) — drift variance
   `p(1-p)/N`, and many-replicate equilibria vs. the Part VI formulas; all
   seeded, all tolerance-banded a priori (§2.4).
@@ -799,15 +738,12 @@ the shape only. Eight test layers, mapped to where they live:
 Every layer obeys the determinism contract (§2.4): fixed seeds, bands
 derived before seeds, no wall-clock, no network, order-independent.
 
-**Deliberately absent:** a benchmark/scale-regression layer — wall-clock
+**Not part of the deterministic gate:** a benchmark/scale-regression layer — wall-clock
 and memory guards for large migration matrices, high locus counts, and
-near-degenerate frequency vectors. Nothing today catches a performance
-regression in a computationally intensive package; adding one is a real
-investment (a stable measurement harness, environment-independent
-thresholds, and its own place in CI separate from the deterministic gate
-above) rather than a mechanical ninth entry in the list — tracked as a
-backlog item rather than adopted silently as a side effect of a later
-pass.
+near-degenerate frequency vectors. Performance characterization is
+documented separately in the
+[backend benchmarks](fim-engine-backend-benchmarks.md); it does not
+provide a per-commit performance gate.
 
 **Calibration provenance.** The Statistical/asymptotic
 layer's equilibrium tests band against a per-replicate spread with no
@@ -817,49 +753,17 @@ program, deliberately not wired into `build` or `ci.yml` — a
 characterization pass is itself stochastic by design, so it stays out of
 the deterministic gate the rest of this section describes. Its raw
 output (seeds, per-replicate values, environment fingerprint) is retained
-in `test/validation/statistical-calibration-evidence.json` rather than only summarized
-in a code comment, replacing an earlier, unretained characterization pass
-whose program and evidence were never recorded.
+in `test/validation/statistical-calibration-evidence.json`.
 
 ## 10. Risks and mitigations
 
 | Risk | Consequence if ignored | Mitigation |
 |---|---|---|
-| Stochastic tests that flip color on re-run | A defect indistinguishable from "weather"; erodes trust in the suite | The determinism contract (§2.4) is a hard gate, not a guideline: one seeded RNG, bands derived before seeds, enforced across every statistical test (§9). |
+| Non-deterministic test outcomes | Results do not identify a property of the commit | Explicit seeded streams, independently derived bands, isolated state, and no live-network assertions (§2.4, §9). |
 | PyInstaller + Matplotlib bundle bloat or missing data files | A `.exe` that fails to render or is needlessly large | Exclude GUI backends, bundle only `Agg` + Matplotlib data (§6.2); a release-workflow smoke test renders offline on a clean runner (§5.4). |
-| JSONL cost at large run sizes (design §6) | Slow/large runs | `TrajectoryStore` is a protocol (design §6); a columnar backend is a config change, not a caller change — no rework needed to add it. |
+| Large trajectory histories (design §6) | Storage and I/O costs | Binary logs, configurable retention, and a `TrajectoryStore` protocol that isolates additional storage implementations. |
 | `d > 3` scatter illegible | The canonical output fails its own requirement | Two projection fallbacks with explicit "this is a projection" labeling (design §8). |
 | Version string drift across bundle/manifest/formula | A release that misreports itself | `version.txt` is the single source; the release workflow fails on tag ≠ `version.txt` (§5.4/§6.4). |
-| Generated `API.md` drifts from the code | Documentation that lies about the API | Three-layer freshness gate: `pre-commit` regenerates, `pre-push` verifies the pushed tree, CI re-checks with `git diff --exit-code` (§8.1) — no bypass lands a stale file on `main`. |
+| Generated `API.md` differs from source | Incorrect API reference | `pre-commit` regenerates; `pre-push` checks the working tree; CI verifies the checked-out reference (§8.1). |
 | Git hooks bypassed with `--no-verify` | Un-gated code reaches the branch | Hooks are convenience only; CI (§5) is the authority and re-runs every gate, so a bypass is caught before merge (§8.2). |
-| Solo maintainer, no reviewer | Regressions land unseen | The `build` script (§7) and the git hooks (§8.2) are the standing reviewer. |
-
-## Metadata
-
-```text
-generator-name: Copilot CLI
-generator-version: Claude Opus 4.8
-generator-model-token: claude-opus-4-8
-generator-provider: Anthropic
-generation-date: 2026-08-14
-generator-responsibility: primary
-```
-
-### Revisions
-
-Documentation review. Corrected the `pre-push` description (it gates the
-working tree, not the pushed commits), the markdownlint gate (a
-digest-pinned Docker wrapper run by `dev/bin/validate-repository`, not a
-GitHub action), the §5.2 stage list, and two section references into the
-design document; added the repository's own toolchain boundary (`bin/`,
-`include/dot-bashrc`, the remaining `dev/bin` programs) and
-`statistics/interval.py` to §3.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Opus 5
-generator-model-token: claude-opus-5
-generator-provider: Anthropic
-generation-date: 2026-08-18
-generator-responsibility: revision
-```
+| Limited review availability | Regressions may escape manual inspection | Documented procedures, `build` gates (§7), and local hooks (§8.2) supplement review. |

@@ -33,34 +33,25 @@
   - [12. Illustrated walkthrough](#12-illustrated-walkthrough)
     - [Installing it](#installing-it)
     - [Using it from the command line](#using-it-from-the-command-line)
-  - [Appendix A. Graphical front-end sketches](#appendix-a-graphical-front-end-sketches)
+  - [Appendix A. Graphical front-end reference](#appendix-a-graphical-front-end-reference)
   - [Appendix B. Engine backend benchmark results](#appendix-b-engine-backend-benchmark-results)
   - [Appendix C. Mathematical notation and algebra refresher](#appendix-c-mathematical-notation-and-algebra-refresher)
   - [Appendix D. Probability and sampling refresher](#appendix-d-probability-and-sampling-refresher)
   - [Appendix E. Linear algebra behind the V engine](#appendix-e-linear-algebra-behind-the-v-engine)
   - [Appendix F. Equilibrium, averaging, and uncertainty](#appendix-f-equilibrium-averaging-and-uncertainty)
-  - [Metadata](#metadata)
-    - [Revisions](#revisions)
 
 ## Who this document is for
 
-Primarily written for whoever maintains or extends the simulator:
-comfortable with software architecture; no recent mathematics or
-population-genetics background is assumed. Appendices C–F refresh the
-algebra, probability, linear algebra, and statistical ideas used here,
-including material a reader may last have studied fifty years ago.
-It is also the model and architecture reference for software a botanist
-uses directly, so the prose stays readable for that reader as well. Not
-every section needs to be; the table below says which do.
+This reference specifies the simulator's model, architecture, persistence,
+statistics, and extension boundaries. It includes derivations and worked
+examples for researchers and developers. Appendices C–F define the
+notation and mathematical operations used in those derivations.
 
-| If you are... | Read | Treat as optional |
+| Purpose | Sections | Related detail |
 |---|---|---|
-| The botanist | §1, §2 (what the tool does), §4.5 (how to install and run it), §12 (a plain walkthrough — start here if you want the short version) | §3, §5, §6, §7, §9, §10 — internal architecture, informative but not required |
-| The botanist, curious about a specific design choice | §4.7 (V-engine math), §7 (statistics), §8 (plots); Appendices C–F as needed | §5, §6, §9, §10 — module-level detail |
-| Whoever maintains or extends the simulator | Everything, in order | — |
-
-Sections written for the implementer are marked as such at their start;
-skipping them costs nothing needed to follow §12's walkthrough.
+| Run and inspect a simulation | §1, §2, §4.5, §12 | §3 model definitions; §7 statistics |
+| Interpret calculations and plots | §4.7, §7, §8 | Appendices C–F |
+| Maintain or extend the implementation | §3–§11 | [Developer guide](developer.md), [functional API](fim-simulator-functional-api.md) |
 
 Two companion documents in this directory —
 [the finite island model introduction](finite-island-model-introduction.md)
@@ -94,17 +85,13 @@ values.
 
 ## 1. Purpose and scope
 
-A simulator for the finite island model (FIM) that a botanist — Lou Jost,
-or a collaborator working in that tradition — uses to generate
-known-ground-truth allele-frequency trajectories, then compute and inspect
-population-differentiation statistics against that known history. The
-motivating gap, per the companion introduction (§4 of that document): the
-existing tools in this space
+A simulator for the finite island model (FIM), generating allele-frequency
+trajectories and population-differentiation statistics for analysis against
+the recorded history. The companion introduction (§4) compares related
+tools, including
 [`quantiNemo 2`](https://www2.unil.ch/popgen/softwares/quantinemo/),
-[`hierfstat`](https://github.com/jgx65/hierfstat)) are built to
-answer "what is the equilibrium statistic?", not "show me every
-generation's allele frequencies" — and per-generation history is exactly
-what this project exists to keep.
+[`hierfstat`](https://github.com/jgx65/hierfstat).
+This simulator retains per-generation frequencies for re-analysis.
 
 The core is a single, symmetric-island model ($N$, $m$, $\mu$ shared across
 demes by default; one locus length $L$ shared across loci by default)
@@ -148,8 +135,7 @@ The simulator's functional requirements, restated for reference:
    canonical visual of a scatter plot of allele frequency in $d$-dimensional
    space.
 
-Two places in this list carry real ambiguity, worth naming rather than
-silently resolving:
+Two requirements need explicit interpretation:
 
 - **"Locus" vs. "allele" as the length-bearer** (item 3). The companion
   differentiation-measures document (Part I) defines length as a property
@@ -165,8 +151,8 @@ silently resolving:
 
 ## 3. The formal model
 
-*Implementer detail — optional for the botanist; §12 shows what this
-adds up to in practice.*
+The definitions below specify the state consumed by the engine and
+statistics APIs.
 
 ### 3.1 Signature and state
 
@@ -203,7 +189,7 @@ frequencies are not shared out between loci.
 
 $p_{k,t,l}$ is a probability vector over whatever alleles are actually
 present at locus $l$ in deme $k$ at generation $t$ — not over the whole
-infinite allele universe. This is the load-bearing representational choice
+infinite allele universe. This is the representational constraint
 (§3.2): the universe is unbounded, but after drift the *support* of
 $p_{k,t,l}$ contains at most $n_k$ alleles, where $n_k$ is the deme's
 gene-copy count. Generation 0 is an explicit exception (§3.3): its
@@ -314,11 +300,9 @@ denominator $n_k$ — the only values $n_k$ gene copies can actually realize.
 `DirichletInitialCondition`'s draw has no such constraint: a symmetric
 Dirichlet distribution is continuous, so generation 0's frequencies
 almost surely do *not* land on that lattice (an explicit, user-supplied
-$p_{0}$ is not bound by it either). This is deliberate, not an oversight —
-generation 0 represents the *belief* a starting frequency is drawn from,
-not a sampled population state, and `drift`'s first application (to
-produce generation 1) is what turns that belief into the model's first
-actual $n_k$-gene-copy realization. A statistic computed at generation 0
+$p_{0}$ is not bound by it either). Generation 0 represents a parental frequency distribution, not a sampled
+population state. The first application of `drift` produces the
+$n_k$-gene-copy realization at generation 1. A statistic computed at generation 0
 (`fim stats --generation 0`) describes this continuous prior, not a
 population; treat it accordingly rather than assuming it is comparable,
 lattice-for-lattice, to every later generation.
@@ -339,12 +323,12 @@ not the ever-increasing registry counter. The simulator estimates an
 equilibrium summary empirically; it does not prove convergence by
 observing a short quiet interval (§3.5 and Appendix F).
 
-One labeling detail worth being deliberate about: the founding allele set
+The founding allele set
 at `t = 0` for each locus is assigned small, **locus-relative** IDs (`0,
 1, …` up to initial_allele_count - 1) rather than draws from the same
 global `AlleleRegistry` counter used for mutations. This is what keeps a
 question like "did locus 1 and locus 2 fix on the same starting allele"
-well-defined and cheap to answer — it reduces to comparing two small
+well-defined through comparison of the
 integers — while every allele *born from a mutation event* still gets a
 globally unique ID from the registry, so it can never be mistaken for one
 of the founding alleles or for a mutant at another locus. Founding IDs and
@@ -725,19 +709,14 @@ between-deme identities must also be tracked. Nor does it apply
 unchanged to finite alleles, where independent mutations can match.
 Appendix F solves (3.18) and distinguishes it from observed identity.
 
-(Releases before this order was adopted ran Migrate → Mutate →
-Drift with a mutation step that scaled every allele's frequency down in
-proportion to a deme-wide event count; that is not the textbook model
-and left an $O(\mu/n)$ excess identity each generation.)
-
 Each stage has explicit state and parameter inputs; random stages
 also receive random streams and consume draws from them. No
 stage reads or mutates global simulation state, and each is independently
 unit-testable against the closed-form expectations in the companion
 documents (§10). Keeping the generative model and the statistic
 computation as two separate concerns, and keeping each stage of the
-generative model itself separately testable rather than one fused update
-step, is what makes both halves easy to verify independently.
+generative model separately testable, supports independent checks of
+operators and statistics.
 The V engine fuses execution for speed without changing this logical
 order; §4.7 shows the corresponding algebra objects.
 
@@ -773,9 +752,7 @@ modulo relabeling, not to the literal registry counter.
 
 ### 4.1 Component overview
 
-*§4.1–§4.4 are implementer detail — optional for the botanist; skip
-ahead to §4.5 for what this means for installing and running the
-software.*
+The engine coordinates the components shown below.
 
 ```mermaid
 flowchart TB
@@ -849,12 +826,10 @@ same mathematical object.
 
 ### 4.3 The parameter bag (P)
 
-$\mathsf P$ is deliberately open — the requirement says so, and the pattern
-across every companion document is "the botanist will keep asking to vary
-one more thing." The design response: every value that varies by
-scenario — not just the four named arguments — is a named entry in $\mathsf P$,
-read at the point of use with an explicit default, and never a hardcoded
-literal inside an operator or the run loop.
+$\mathsf P$ holds named scenario parameters beyond the four model inputs.
+Each entry has a documented default or is explicitly required.
+Operators and the run loop consume validated parameters rather than
+hardcoded scenario values.
 
 The table below is the architectural shape of $\mathsf P$, not its full key list;
 [`doc/configuration.md`](configuration.md) is the authoritative reference
@@ -914,9 +889,8 @@ explains. For $N$, $m$, $\mu$, and
 $d$ themselves, Jost's own "Dear Nolan" letter (identified above; see
 [§8](#8-visualization-module) and [§10](#10-validation-and-test-strategy)
 for how it is used there) gives two concrete, real worked scenarios —
-run by Jost's colleagues Anne Chao and T. C. Hsieh specifically to test
-the finite island model at equilibrium — which are a far better source for a
-starting scenario than an arbitrary guess:
+run by Anne Chao and T. C. Hsieh to test the finite island model at
+equilibrium:
 
 | Scenario | $N$ (haploid) | $d$ | $m$ | $\mu$ | $Nm$ | expected $G_{ST}$ | expected $D$ |
 |---|---|---|---|---|---|---|---|
@@ -937,12 +911,8 @@ Both scenarios are explicitly **haploid** in the letter ("`N=100` haploid
 reproductive individuals," "`100` demes of `2000` haploid reproductive
 individuals") — i.e. $N$ there already equals the gene-copy count.
 Configuring `ploidy: haploid` preserves these values (§3.1).
-(Mean *observed*
-values from the letter's own simulations agree closely with the expected
-values shown above — `0.04` observed vs. `0.04` expected $D$ for the
-first scenario, `0.90` observed vs. `0.91` expected $D$ for the second —
-which is itself a small piece of corroborating evidence that the letter's
-worked examples are internally consistent.)
+Mean observed $D$ values in the letter are `0.04` and `0.90`,
+respectively, compared with expected values `0.04` and `0.91`.
 
 These two points sit at opposite ends of the interesting range — one
 nearly fully fixed ($G_{ST}$ near its ceiling, $D$ near zero — the demes
@@ -957,11 +927,11 @@ approximately $d=20$, $m=0.001$, and
 $\mu=3\times10^{-7}$. These are scenario choices, not the geometric
 midpoints of all four columns.
 
-One notational caution, confirmed directly from the letter's own figures
+The letter uses different notation in its figures
 (both plot titles read the parameters back verbatim, e.g. `"L=200 N=100
 d=5 m=0.0001 u=0.000001"`): $L$ there is the number of independent
 **replicate simulation runs** plotted together (`200` and `50`
-respectively) — confirmed, not merely suspected — and is **not** the same
+respectively) and is **not** the same
 $L$ as this document's `LocusSpec.length` (§3.2) despite the shared
 letter; a coincidence of the letter's own notation (which also writes the
 mutation rate as `u`, not $\mu$), not a hint about locus-length defaults.
@@ -982,10 +952,8 @@ smaller value of every differentiation statistic.
 **Python 3, with NumPy as the array backend.** NumPy's `Generator` gives
 vectorized batched binomial/multinomial sampling across loci and replicate
 runs, the natural fit for the drift step's workload. Output formats (§6)
-are chosen to be equally easy to load from R, because the project exists
-to give a researcher per-generation frequencies loadable into their own
-analysis tooling. §4.5 below records the packaging
-consequence of this choice.
+support loading per-generation frequencies into R and other analysis
+tools. Section §4.5 describes packaging.
 
 NumPy arrays organize many frequencies or counts into contiguous
 tables; its random generator supplies explicitly seeded draws.
@@ -998,12 +966,9 @@ not alternative definitions of migration, drift, or mutation.
 
 ### 4.5 Packaging and distribution
 
-A firm, non-tunable constraint, not one of the "what if" knobs elsewhere
-in this document: the tool must be easy for a researcher to install and
-run on a **Windows laptop**, with minimal demands on that researcher to
-set up their own system — no expectation that they separately install
-Python, a package manager, or a compiler toolchain, and no admin-rights
-installer step beyond what "download and run" already requires.
+The Windows distribution must run without a separate Python installation,
+package manager, compiler toolchain, or administrator installation step.
+Desktop operation requires the platform webview runtime.
 
 This constrains, rather than reopens, several choices already made
 above:
@@ -1011,7 +976,7 @@ above:
 - **Single self-contained executable.** Package the simulator as a
   self-contained executable (e.g. via PyInstaller), bundling the Python
   interpreter, native dependencies, and front ends. The researcher's own
-  machine needs nothing pre-installed.
+  machine does not need a separate Python environment.
 - **Dependency footprint stays deliberately small,** and every dependency
   is chosen for having solid, well-maintained prebuilt wheels — NumPy,
   a plotting library (e.g. Matplotlib), and pywebview for the desktop
@@ -1052,10 +1017,10 @@ release reference covers both in full.
 
 ### 4.6 Choosing an engine backend
 
-*Worth reading if a run is taking longer than you'd like, or you plan
-to reproduce someone else's exact numbers — otherwise safe to skip.*
+Backend selection controls execution strategy and performance, subject
+to the reproducibility limits below.
 
-**What.** Everything in §3–§4.5 above describes *what gets computed*: a
+**Computation.** Sections §3–§4.5 specify a
 generation-update pipeline (Migrate → Drift → Mutate) driven by a
 `SimulationParams` config. That computation can be *carried out* three
 different ways, all producing the same science, differing only in how
@@ -1076,14 +1041,9 @@ run` YAML config key, no separate CLI flag — see
 [`doc/configuration.md`'s own reference for
 this](configuration.md#engine-backend-and-jit).
 
-**Why three, not one "fast mode."** A single "just make it faster"
-switch would either have to compromise the reference implementation's
-own simplicity (the thing every other backend is checked against) or
-silently accept a different answer for the same seed — neither is
-acceptable here (§2's own reproducibility requirement). Instead, the
-default engine (`"lineal"`) stays deliberately simple and untouched,
-permanently the reference every other engine's own output is checked
-against, while two faster alternatives sit beside it, opt-in:
+**Implementations.** `"lineal"` is the reference implementation used
+for output-equivalence checks. Two alternatives provide different
+execution strategies:
 
 - **`"generational"`** restructures the *same* computation to advance
   every replicate in a batch one generation at a time, together, spread
@@ -1138,68 +1098,45 @@ against, while two faster alternatives sit beside it, opt-in:
   changes it) is refused at the start with a message naming the
   remedies.
 
-**How to decide — the short version:** if you never touch Python and
-just run `fim run` on a YAML file, set `engine_backend: auto` (the
-desktop app's own starting value) and the right engine is chosen for
-you. If you call `fim.simulate` directly and a run with a lot of demes ($d$)
-or loci feels slow, `"generational-vector"` is worth trying first —
-[§9.1's own table row](#91-variations-reachable-from-configuration) has
-the exact, measured evidence for when it wins and by how much, and that
-evidence is updated as this project re-measures it, not a one-time
-guess. Because all three engines give the same answer for the same seed
-on one machine, you can switch between them freely, even in the middle
-of a project: the numbers do not change, only the time they take. See
-[the functional API reference](fim-simulator-functional-api.md) for the
-precise guarantee each one makes.
+**Selection.** `engine_backend: auto` is the desktop starting value.
+It selects a backend using availability and workload thresholds
+([§9.1](#91-variations-reachable-from-configuration)).
+`"generational-vector"` supports large deme and locus counts through
+compiled array operations. Compare workloads using the
+[backend benchmarks](fim-engine-backend-benchmarks.md), and consult the
+[functional API](fim-simulator-functional-api.md) for output-equivalence
+guarantees.
 
 **Why the three engines agree to the last bit — and what "on one
 machine" means.** Floating-point addition is not perfectly associative —
-`(a + b) + c` and `a + (b + c)` can differ in the very last bit of
+$(a + b) + c$ and $a + (b + c)$ can differ in the very last bit of
 precision — so two programs that add the same numbers in a different
-order can end up one part in `10^15` apart. That would be invisible
+order can end up one part in $10^{15}$ apart. That would be invisible
 anywhere the number is used, except in drift's multinomial draw
 immediately afterward, where a sub-microscopic disagreement can sit
 close enough to a cutoff to flip which count a draw lands on, after
-which the two runs follow different histories. This project's earlier
-vector engine summed with a matrix product whose order the array
-library chose, and visited loci one at a time rather than stage by
-stage, so it matched the other two only statistically (the same mean
-differentiation statistics across many seeds, with no directional bias,
-but not the same individual trajectory). The current one adds in exactly
-the other engines' sequence, so that gap is closed: each trajectory row,
-the report and the final state are identical, bit for bit. The one
-remaining limit is the compiled mathematics: the engine's `lgamma`,
+which the two runs follow different histories. The V engine preserves
+the reference summation and stage order: trajectory rows, reports, and
+final states are bit-identical across backends on one machine.
+Cross-platform compiled mathematics limits that guarantee: the engine's `lgamma`,
 `log`, `log1p` and `exp` are checked against Python's own only on the
 platform this project is developed on. On another operating system or
 processor they may differ in the last bit, so a result reproduces
 exactly across the three engines *on one machine*, and agrees
-statistically, not row for row, across machines (the same caveat
-`jit: numba` has always carried).
+statistically, not necessarily row for row, across machines. The same
+limit applies to `jit: numba`.
 
-**A caution from this project's own history, worth knowing before you
-lean on either faster engine:** the exact same code change that made
-`"generational-vector"`'s own output provably match `"lineal"` (closing
-a real, subtle correctness gap — see the [developer
-guide](developer.md#engine-backends) for the full story) also,
-unexpectedly, cost `"generational"` most of its own threading benefit —
-a real, measured regression this project found by re-benchmarking after
-the fact, not something anyone designed on purpose or has fixed yet.
-Correctness was, and remains, the non-negotiable side of that trade.
-Practically: today, `"generational-vector"` is the one worth reaching
-for when a run is slow; `"generational"`'s own thread count is not
-currently buying much. §9.1's table carries the up-to-date measured
-numbers behind this — check there rather than trusting this paragraph's
-own words to stay current forever.
+**Threading limit.** The measured `"generational"` workloads show little
+benefit from increasing thread count. JIT compilation can reduce
+interpreter overhead without implying parallel scaling. The
+[benchmark tables](fim-engine-backend-benchmarks.md) record the
+workloads, hardware, commits, and observed timings.
 
 ### 4.7 The V engine as algebra on frequency tables
 
-**The change in viewpoint is the important step.** Instead of asking
-"what happens next to this allele in this deme?", collect the
-frequencies for *every* deme at a locus into one object and ask
-"what operation transforms this whole table?" This does not assert
-anything historically novel about population genetics; it explains
-the representational step that makes Backend V understandable.
-Appendix E refreshes the necessary linear algebra from first principles.
+Backend V represents a locus's frequencies as a deme-by-allele table.
+Migration transforms rows; drift samples counts; mutation relabels copies
+and may change table width. Appendix E derives these operations.
 
 Fix a locus and put demes in rows and allele identities in columns.
 The entry in row $k$, column $i$ is still the same scalar probability:
@@ -1478,8 +1415,6 @@ The cross-machine limitation in §4.6 still applies.
 
 ## 5. Module layout
 
-*Implementer detail — optional for the botanist.*
-
 Read the module boundaries as a worked dependency chain.
 To advance a deme, the engine needs a state, model parameters,
 and explicit random streams. It delegates the biological update
@@ -1519,7 +1454,7 @@ jost-finite-island-model/
 │       ├── viz/
 │       │   ├── scatter.py         # canonical d-dimensional frequency scatter
 │       │   └── diagnostics.py     # convergence trace, per-deme frequency bars
-│       ├── engine.py              # fim(N, m, μ, d, P) — the public entry point
+│       ├── engine/                # run loops and backend selection
 │       └── cli.py                 # command-line entry point
 ├── test/
 │   ├── model/
@@ -1534,8 +1469,7 @@ jost-finite-island-model/
     └── fim                        # thin wrapper invoking the CLI
 ```
 
-**`model/allele.py`.** `AlleleId` is a plain integer newtype (or an
-`int`-backed enum-like wrapper if the language's type system rewards it) —
+**`model/allele.py`.** `AlleleId` is an integer `NewType` that
 carries no payload beyond its identity. AlleleRegistry.next_id() hands
 out a fresh globally-unique ID; the registry is the *only* place a new
 `AlleleId` value is ever created under the default infinite-alleles model,
@@ -1622,15 +1556,6 @@ the default — every watched statistic must have reached the precision — or
 `"any"` — stopping as soon as one has), landing as §9's "several statistics
 needed to agree before stopping." A single name is the one-element case.
 
-An earlier revision of this module also shipped `AnyCriterion`/
-`AllCriterion`, a pair of combinators for stacking several stability
-*rules* over one shared history — a different axis from combining several
-*statistics*, above. No configuration surface ever constructed one and no
-production caller ever used them, so they were removed as dead public API
-rather than kept as an unreachable, untested-in-context feature (2026-09-06
-open-issues rollup, item 11). Revisit only if a concrete need for
-multi-rule stacking on a single statistic actually arises.
-
 **`convergence/monitor.py`.** `BurnInMonitor` keeps one history per recorded
 statistic; the engine calls `monitor.record(t, values)` once per generation
 and checks monitor.should_stop(). Nothing can stop a run before its burn-in;
@@ -1638,14 +1563,13 @@ after it, checks at doubling window lengths judge every watched statistic
 (a combinator joins the verdicts). `ConvergenceMonitor` is the replicate
 batch's counterpart, applying the confidence-interval criterion to one value
 per replicate. A single watched statistic
-— the default — is exactly this general mechanism's one-element case: the
+is this mechanism's one-element case: the
 combinator has nothing to combine, and `record()` accepts a bare float
 instead of a per-statistic mapping for convenience. On stop, the monitor
 reports *why* (statistic converged, vs. hard cap
-reached) — a run that hit the cap without converging is still a valid,
-inspectable result, not an error (a botanist probing an edge case where
-the model genuinely does not settle is itself useful information, and the
-run should say so plainly rather than raise).
+reached). A capped, non-converged run is a valid, inspectable result,
+not an exception. Its outcome records that the requested stopping
+conditions were not satisfied.
 
 **`statistics/differentiation.py`.** Pure functions of a frequency table,
 entirely independent of the simulator — the generative model and the
@@ -1758,12 +1682,8 @@ intervals; `doc/usage.md` is the artifact contract in full.
 
 ## 6. Persistence design
 
-*Implementer detail — optional for the botanist.*
-
-Every generation is persisted (requirement 5) by default, as it is produced:
-rows are not batched in memory and flushed at the end, since a botanist's own
-future "what if" is likely to include "run it for a lot longer" long before it
-includes "keep less history." That second case exists as an opt-in
+Every generation is persisted (requirement 5) by default, as it is produced.
+Optional retention controls support long runs
 ([trajectory_retention](configuration.md#trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in)):
 a very long run may thin its file, keeping the transient whole and one
 generation in every stride after it; the per-generation statistics are never
@@ -1807,10 +1727,8 @@ format directly.
 **`BinaryLogStore` (persistence/binary_store.py) is the file-backed
 implementation**: one compact, checksummed binary log per run
 (`trajectory.tlog`), appended block by block as generations are produced.
-The original design wrote one JSON object per line, which is human-readable
-but grew to tens of gigabytes for the large examples, so the log replaced
-it; `fim export` writes the same canonical JSON Lines text on request for
-R, Python or a spreadsheet. See [the trajectory log](trajectory-log.md).
+`fim export` writes canonical JSON Lines on request for R, Python, or a
+spreadsheet. See [the trajectory log](trajectory-log.md).
 Nothing downstream of `TrajectoryStore` needs to know which backend is in
 use.
 
@@ -1936,7 +1854,7 @@ transitions:
 ```
 
 - **Draft state:** Represents an incomplete or invalid configuration. A user
-  fiddling with parameters can save progress without triggering schema
+  editing parameters can save progress without triggering schema
   validation errors.
 - **Planned state:** Represents a complete, valid configuration ready for
   execution. The system transitions bidirectionally between `Draft` and
@@ -1965,7 +1883,7 @@ fencing:
   Orphaned staging directories can be reclaimed safely via
   `reclaim_orphaned_staging` or `fim object reclaim`. Resuming an interrupted
   run restores the latest committed checkpoint from `checkpoints/` and
-  resumes execution without data loss.
+  resumes from that checkpoint; uncommitted work may need to be repeated.
 
 A **run manifest** is written alongside the trajectory: the full
 `SimulationParams` (including seed — this is what makes a run exactly
@@ -1988,15 +1906,11 @@ definition of the experiment.
 
 ## 7. Statistics module
 
-*Implementer detail — optional for the botanist; the numbers it produces
-are what §12's results screen shows.*
-
 These calculations consume a `ModelState` frequency table, or the same
 table read from a trajectory. They do not depend on the engine.
 The definitions follow the
 [differentiation-measures guide](jost-differentiation-measures.md).
-The derivation below explains what is being combined rather than
-presenting the formulas as unexplained ratios.
+The derivation specifies the frequency, identity, and weighting operations.
 
 ### 7.1 From matching pairs to differentiation
 
@@ -2372,10 +2286,6 @@ this engine-independent statistics layer; §12 shows their presentation.
 
 ## 8. Visualization module
 
-*Written for the implementer, but describes the botanist-facing output
-directly: this section explains why the plots take the form they do, and
-§12 shows the result itself.*
-
 **Canonical view (requirement 6, "scatter plot of frequency in
 $d$-dimensional space"):** one point per `(locus, allele)`, with coordinates:
 
@@ -2418,27 +2328,21 @@ the same underlying point set:
   moderate $d$.
 - one explicit deme pair (Deme 1 vs. Deme 2 by default, any pair on
   request) for large $d$ — not a PCA or other dimensionality-reduction
-  projection: keeping faithful, unreduced coordinates matches this
-  section's own precedent argument below better than a projection
-  would (computational cost, cross-frame instability once the GUI
-  animates a run, and interpretability all argue against a projection;
-  none argue for one). PCA remains directly callable in `viz/
-  scatter.py` for whoever wants an exploratory reduction, just no
-  longer the automatic choice at any $d$.
+  projection. Named deme coordinates support direct interpretation and
+  stable axes during animation. PCA remains directly callable in
+  `viz/scatter.py` for exploratory reduction; it is not selected
+  automatically.
 
-**This fallback is confirmed by precedent.** The "Dear Nolan" letter's own two figures (§4.3) are, in the
+**Literature convention.** The "Dear Nolan" letter's two figures (§4.3) are, in the
 letter's own words, built by "plot[ting] the frequency of each allele in
 Deme 1 versus its frequency in Deme 2" — always exactly **two named
 demes** on the two axes, with a $y=x$ reference line drawn in and a
 title stating the run's $N$, $m$, $\mu$, $d$ directly on the figure, even
 at $d=100$ demes (Fig. 2). That is a single panel of exactly the
-pairwise-matrix fallback described above, confirming both that the
-fallback's shape is right and that titling a plot with its own generating
-parameters is worth adopting as a house style for every scatter this
-module produces, not just this one.
+pairwise-matrix layout described above. Scatter titles record the generating
+parameters.
 
-One real difference is worth being precise about, because it changes what
-gets built, not just how it looks: the letter's plots are **not** a single
+The letter's plots are **not** a single
 run's per-locus, per-allele scatter (this document's own primary design,
 above) — they aggregate one point per allele **per independent replicate
 run**, many replicate runs overlaid on the same axes, all drawn from
@@ -2447,11 +2351,10 @@ demes assumed to already be at equilibrium. Where many points coincide
 landing on exactly `(1, 1)`), the letter's rendering scales the marker and
 annotates the count rather than letting the points silently overplot; Fig.
 2 additionally colors points by whether they represent a common or a rare
-allele in their run. Both are good, cheap techniques worth adopting
-directly in `viz/scatter.py` regardless of which mode is rendering.
+allele in their run. Marker scaling and common/rare coloring also apply
+to this simulator's scatter views.
 
-**Both views belong in this module, as two distinct, non-competing
-modes:**
+**Scatter modes:**
 
 - The **single-run, full-$d$-dimensional view** (this section's opening
   paragraph) is what requirement 6 literally asks for — the per-deme
@@ -2462,37 +2365,24 @@ modes:**
   `n_replicates` batching (§4.3): pick two demes (or sweep every pair,
   $\binom d2$ panels), run many replicates to equilibrium, and overlay
   one point per allele per replicate with the letter's own
-  coincidence-count and common/rare-color conventions. This is exactly
-  the view a botanist needs to sanity-check a *distribution* of outcomes
-  against a single reported run, and it costs nothing new
-  architecturally — it consumes the same `TrajectoryStore` rows and the
-  same per-pair projection `viz/scatter.py` already needs for $d>3$.
+  coincidence-count and common/rare-color conventions. It summarizes a
+  distribution of replicate outcomes using the same trajectory schema
+  and deme-pair coordinates.
 
-Because every generation is already persisted (§6), the primary scatter
-function also trivially generalizes to an animation or small-multiples
-view of one run across generations — not a requirement, but effectively
-free given the persistence design, and a natural answer to a future "what
-does this look like *building up* over time" request.
+Recorded generations (§6) also support animation and small-multiples
+views of a run.
 
-**Supporting diagnostic views**, useful for trusting the primary output
-rather than botanist-facing deliverables in their own right: a time
-series of the watched convergence statistic (lets a user visually confirm
-`ConvergenceMonitor`'s decision, and see at a glance whether a
-non-converged run was heading somewhere or genuinely oscillating), and a
+**Supporting diagnostic views:** a time
+series of watched statistics, interpreted alongside burn-in and
+uncertainty diagnostics rather than as proof of equilibrium, and a
 per-deme stacked allele-frequency bar chart (the same information as the
 final report table, in the STRUCTURE-plot style population geneticists
 already read fluently).
 
 ## 9. Extensibility: where the next "what if" lands
 
-*Implementer detail — optional for the botanist, though the tables
-themselves may be worth skimming: they are a direct list of which changes
-are cheap.*
-
-Every companion document ends with some version of "it would be
-interesting to see what happens if you could change X." The architecture
-is built so each such change has a specific, small landing spot rather
-than requiring a redesign.
+The tables map configuration variations and potential extensions to
+their implementation boundaries.
 
 The first table is the answer for changes the simulator already covers:
 each is a configuration change, and
@@ -2511,35 +2401,33 @@ boundary, not permission to omit mathematical validation.
 
 ### 9.1 Variations reachable from configuration
 
-| "What if…" | Where it lives | Why it stayed small |
+| Variation | Configuration | Implementation boundary |
 |---|---|---|
-| …island sizes differed ($N_i$)? | `N` accepts a length-$d$ array of individual counts | The configuration converts each entry to $n_i$ gene copies; `drift()` receives these through `population_size` |
-| …migration were asymmetric, or a full matrix? | `m` accepts a $d\times d$ matrix; its rows are the authoritative weights and are never rescaled by `N` ([`doc/configuration.md`](configuration.md#m)) | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
-| …migration were spatial (stepping-stone)? | `m` accepts a sparse, neighbor-restricted map, or `{topology, rate}` sugar for a 1D ring or bounded chain (`fim.model.topology`) | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
-| …migration counted gene copies rather than blending an idealized continuous fraction? | `migrant_sampling: stochastic` draws each deme's migrant count from $\operatorname{Binomial}(n_i,\text{rate})$; migrant composition stays the deterministic pool average, so `drift()` remains the only operator that resamples every gene copy | `migrate()` separates "how much moves" from "what it is made of"; only the first part becomes random (§3.4) |
-| …locus length varied? | `LocusSpec.length` per locus, driving finite-alleles capacity and the rate derived from $\mu_b$ | a first-class field of the locus (§3.2) |
-| …mutation rate were per base rather than per locus? | `mu` accepts a per-locus tuple; mutually exclusive `mu_b` derives it using (C.13) | `mutate()` reads each locus's rate; `SimulationParams.from_mapping` performs the conversion once |
-| …the mutation model weren't infinite-alleles? | `mutation_model: finite_alleles` bounds locus $l$ to $4^{L_l}$ states (`finite_allele_capacity`) and permits recurrent mutation without ordering alleles | `FiniteAlleleSpace` and `FiniteAlleleRegistry` replace the registry behind the same `mutate()` call |
-| …several statistics had to agree before stopping? | `convergence_statistic` as a list plus `convergence_combinator` (`"all"`/`"any"`) | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
-| …many replicate runs were needed for a confidence interval, without hand-guessing the count? | `precision` with stop_batch_early: once replicate_minimum replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same convergence_combinator used within a run, with `n_replicates` as the hard cap. fim.engine.replicate_summary and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
+| Unequal deme sizes ($N_i$) | `N` accepts a length-$d$ array of individual counts | The configuration converts each entry to $n_i$ gene copies; `drift()` receives these through `population_size` |
+| Asymmetric or matrix migration | `m` accepts a $d\times d$ matrix; rows specify complete weights and are not rescaled by `N` ([configuration](configuration.md#m)) | `migrate()` applies the weighted sum; scalar migration is a structured special case |
+| Spatial migration | `m` accepts a sparse neighbor map or `{topology, rate}` for a 1D ring or bounded chain (`fim.model.topology`) | Topology determines matrix construction, not the migration operator |
+| Stochastic migrant counts | `migrant_sampling: stochastic` draws each deme's count from $\operatorname{Binomial}(n_i,\text{rate})$; composition remains the deterministic pool average | `migrate()` samples the incoming fraction; `drift()` samples the complete parental pool (§3.4) |
+| Unequal locus lengths | `LocusSpec.length` per locus | Length determines finite-alleles capacity and rates derived from $\mu_b$ (§3.2) |
+| Per-base mutation rates | `mu` accepts a per-locus tuple; mutually exclusive `mu_b` derives it using (C.13) | `SimulationParams.from_mapping` converts rates once; `mutate()` consumes them |
+| Finite alleles | `mutation_model: finite_alleles` bounds locus $l$ to $4^{L_l}$ states and permits recurrence without ordering alleles | `FiniteAlleleSpace` and `FiniteAlleleRegistry` provide targets behind `mutate()` |
+| Multiple watched statistics | `convergence_statistic` list and `convergence_combinator` (`"all"`/`"any"`) | Each statistic has its own history; the combinator joins stopping decisions |
+| Adaptive replicate count | `precision`, `stop_batch_early`, `replicate_minimum`, `n_replicates`, and `convergence_combinator` | `ConfidenceIntervalCriterion` checks across-replicate Student's-t half-widths through `ConvergenceMonitor`; `replicate_summary` and `summary.json` report the realized intervals |
 | …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
-| …replicate batches ran faster, without process-per-replicate overhead? | the `engine_backend="generational"` (a config-file field — see doc/configuration.md#engine-backend-and-jit) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency): a real, substantial speedup that comes from removing CPython interpreter overhead rather than from thread-count parallelism — the same speedup is already present at a single worker and does not grow as more workers are added; `jit="off"` shows no speedup at any worker count ([Appendix B.2](fim-engine-backend-benchmarks.md#b2-g-thread-count-sweep) has the measured table). `migrate`'s/`mutate`'s own RNG calls stay unjitted for the matrix-form migration and stochastic migrant-sampling paths, so those two configurations do not see this speedup |
-| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme? | the `engine_backend="generational-vector"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), both mutation models and both `migrant_sampling` modes | a third engine implementation, `VectorizedAdvancer`, keeps each replicate's allele frequencies in one dense table per run (`fim.model.vector_block`) and runs a whole generation, every locus, as one compiled call (`fim.model.vector_kernels`; [§4.6](#46-choosing-an-engine-backend) explains the underlying math for a scientist reader). Identical to the other two backends for the same seed on the same machine: every trajectory row, the report and the final state, bit for bit, with migration on or off (continuous or drawn migrant counts), for any number of loci. Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). Measured 30 to 300 times faster than `"lineal"` on the infinite-alleles worked examples; [Appendix B.1](fim-engine-backend-benchmarks.md#b1-d-deme-count-sweep) has the earlier finite-alleles tables |
-| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | the `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default `2`) and `auto_vector_max_capacity` (default `4096`) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity ($4^{L_l}$ under `finite_alleles`) is at most the capacity ceiling, *and* `jit` is `"off"` and `numba` is importable, `"generational"` otherwise — never `"lineal"`, since no benchmark data yet fully characterizes that boundary (though [Appendix B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05) found `"lineal"` outright winning in two small corners of the grid). Both current defaults come from [Appendix B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05)'s own 104-point joint `d` × locus-length grid, run specifically because [Appendix B.5](fim-engine-backend-benchmarks.md#b5-joint-d--locus-length-sweep-heatmap) found the two axes interact (a diagonal boundary, not a rectangle) — `4096` is the largest capacity at which `"generational-vector"` won at every tested `d`, and `2` is the smallest `d` a config can have at all, since no `d` below that capacity ceiling was ever found losing. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. A real, `d`-dependent losing region still exists above the new capacity ceiling (Appendix B.6 again) — a single rectangular threshold pair cannot reach it without also misrouting the region below `4096`, so it stays outside `"auto"`'s reach, reachable only by overriding `auto_vector_max_capacity` by hand with that risk understood |
+| Threaded replicate advancement | `engine_backend: generational`; optional `jit: numba` ([configuration](configuration.md#engine-backend-and-jit)) | `ReplicaLane`/`run_batch` advances active replicates generation by generation through `ThreadedAdvancer` in one address space. Same-seed trajectories match the reference. JIT reduces interpreter overhead, but the measured speedup does not grow with thread count; `jit: off` shows no threading gain ([B.2](fim-engine-backend-benchmarks.md#b2-g-thread-count-sweep)). Matrix migration and stochastic migrant sampling retain unjitted migration/mutation RNG paths |
+| Compiled dense-array generation updates | `engine_backend: generational-vector`, both mutation models and both `migrant_sampling` modes | `VectorizedAdvancer` uses `vector_block` and `vector_kernels` for whole-generation, multi-locus updates (§4.6–§4.7). Trajectory rows, report, and final state match other backends bit for bit at the same seed on one machine. Numba is required regardless of `jit`. Infinite-alleles worked examples measure 30–300 times faster than `"lineal"`; [B.1](fim-engine-backend-benchmarks.md#b1-d-deme-count-sweep) records finite-alleles measurements |
+| Automatic backend selection | `engine_backend: auto`, `auto_vector_min_d` (default `2`), `auto_vector_max_capacity` (default `4096`) | Selects V when `d` meets the cutover, every applicable locus capacity ($4^{L_l}$ for finite alleles) fits the ceiling, `jit` is `"off"`, and Numba is importable; otherwise selects G, never L. [B.6](fim-engine-backend-benchmarks.md#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05) records the 104-point joint grid supporting the defaults: `4096` is the largest tested capacity where V won at every tested `d`. [B.5](fim-engine-backend-benchmarks.md#b5-joint-d--locus-length-sweep-heatmap) documents interacting axes; rectangular thresholds do not capture all performance regions. Raising the capacity ceiling can select V in a slower region. The manifest records the resolved backend and JIT setting |
 
 ### 9.2 Landing spots for changes that are not built
 
-| "What if…" | Landing spot | Why it's small |
+| Extension | Implementation boundary | Scope |
 |---|---|---|
 | …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is a composition of independent stages, so adding one is additive |
 | …migration were spatial beyond one dimension, or itself changed over a run? | a 2D lattice constructor beside `fim.model.topology`'s existing ones, or a `MigrantPoolStrategy` interface for neighbor selection that does not reduce to a precomputed matrix | anything expressible as a matrix needs only a new constructor; only genuinely dynamic migration needs the interface |
 | …the mutation model needed genuine spatial structure (stepwise mutation for microsatellites, where "how far" one allele is from another matters)? | swap the strategy behind `mutate()` again | a different, distance-based model from finite alleles, deliberately not the direction taken (§3.2) |
-| …a different convergence *rule* were needed, rather than a different statistic to watch? | `ConvergenceCriterion` is a pluggable protocol | `ConvergenceMonitor` accepts any object implementing it; `engine.py` constructs the built-in criteria directly, so selecting one from configuration is the only missing piece |
-| …a study needed run outputs at a scale JSONL does not suit? | a second `TrajectoryStore` implementation, Parquet-backed being the obvious candidate | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
+| Additional across-replicate stopping rule | `ConvergenceCriterion` protocol | `ConvergenceMonitor` accepts a conforming object; configuration-driven construction belongs in the engine |
+| …a study needed a columnar trajectory format? | an additional `TrajectoryStore` implementation, such as Parquet | the store protocol (§6) isolates callers from the physical format |
 
 ## 10. Validation and test strategy
-
-*Implementer detail — optional for the botanist.*
 
 **Golden worked examples.** The differentiation-measures guide's Part IV
 provides several fully worked, hand-checked scenarios with exact expected
@@ -2642,8 +2530,8 @@ precluded, and none of them requires revisiting a decision made above.
 
 ## 12. Illustrated walkthrough
 
-*For the botanist as much as the implementer: installing the tool,
-running it, and reading what it produces.*
+This example covers configuration, execution, and output interpretation.
+See [usage](usage.md) for the full command reference.
 
 ### Installing it
 
@@ -2652,9 +2540,10 @@ package-manager install, no admin rights beyond running a downloaded
 file:
 
 1. Download `fim-windows-x64.exe` from the project's release page.
-2. Double-click it. Windows SmartScreen will likely warn that the file is
-   from an unrecognized publisher (it is a small, unsigned research tool,
-   not commercial software) — click **More info**, then **Run anyway**.
+2. Verify the download against the release checksum. Double-clicking
+   launches the desktop application. If Windows reports an unrecognized
+   publisher, review [the security guidance](../SECURITY.md) before
+   deciding whether to run the unsigned executable.
 3. `fim init` creates project-root\results\ and drops a starter config
    file (`example-run.yaml`) there, pre-filled with the default scenario
    from §4.3.
@@ -2666,9 +2555,8 @@ deleting the `.exe` and, if wanted, that folder.
 
 ### Using it from the command line
 
-A config file (`myrun.yaml`) — every key here is one of §4.3's $\mathsf P$-bag
-entries, plus the four named arguments; this is exactly `fim init`'s own
-starter config:
+A configuration example (`myrun.yaml`), using §4.3's model inputs and
+$\mathsf P$ entries:
 
 ```yaml
 # myrun.yaml
@@ -2700,28 +2588,21 @@ the length of 200 does not multiply that probability again.
 The starting allele count of two says how many founding
 labels to use, not that later mutation can never create a third.
 
-**Historical transcript.** The following recorded output predates
-the current burn-in-and-average stopping policy. It illustrates
-the output files and the distinction between statistics, but
-its generation-49 convergence message is not evidence of
-equilibrium under the current policy. No new run was performed
-to regenerate these historical numbers for this explanation.
-Use [the usage guide](usage.md) and
-[the convergence reference](convergence.md) for current execution
-and stopping behavior.
+Run the configuration with an explicit output directory:
 
-```console
-$ fim run myrun.yaml -o results/example
-Running run-cee6b47ea87691ee (N=450, d=20, m=0.001, mu=3e-07, seed=20260814)
-Statistic converged: generation 49, D=0.238373, G_ST=0.365507
-Trajectory -> results/example/trajectory.tlog
-Manifest   -> results/example/manifest.json
-Report     -> results/example/report.json
-Scatter    -> results/example/scatter.png
+```bash
+fim run myrun.yaml -o results/example
 ```
 
-The historical `report.json` below illustrates requirement 6a,
-the final scalar report; it is not a complete current report schema:
+The output includes `trajectory.tlog`, `manifest.json`, `report.json`,
+and `scatter.png`. With a 10,000-generation cap, the configured run may
+end before burn-in or precision requirements are satisfied; inspect the
+recorded outcome rather than assuming completion establishes equilibrium.
+See [the convergence reference](convergence.md).
+
+The following illustrative scalar values show the arithmetic in a
+`report.json` statistics section. They are not a prediction for the
+example configuration or a complete report schema:
 
 ```json
 {
@@ -2731,12 +2612,7 @@ the final scalar report; it is not a complete current report schema:
   "H_S": 0.2821812345679013,
   "H_ST": 0.2264546640955487,
   "H_T": 0.44473464197530865,
-  "K_ST": 0.024390243902439046,
-  "converged": true,
-  "converged_on": "D",
-  "generation": 49,
-  "reason": "statistic converged",
-  "run_id": "run-cee6b47ea87691ee"
+  "K_ST": 0.024390243902439046
 }
 ```
 
@@ -2749,7 +2625,7 @@ dividing by $1-H_S$ gives $H_{ST}\approx0.22645$.
 Multiplying the latter by $20/19$ gives $D\approx0.23837$.
 Thus the reported numbers can be checked against one another
 without reproducing the random history. This arithmetic check
-does not validate the historical stopping decision.
+does not validate a stopping decision.
 
 `trajectory.jsonl` — produced by `fim export` from the run's binary
 `trajectory.tlog` (`doc/trajectory-log.md`): one line per `(generation, deme,
@@ -2773,51 +2649,18 @@ whole-copy draw.
 
 Exact reproduction requires the software version, parameters,
 seed, and compatible numerical platform that produced the
-data, not just copying these historical output lines.
+data, not just copying illustrative output values.
 See [the reproduction guide](usage.md#reproduce-a-run).
 
-## Appendix A. Graphical front-end sketches
+## Appendix A. Graphical front-end reference
 
-The original sketches below illustrated what a graphical front end could
-look like, drawn from a small illustrative simulation.
+The desktop application uses pywebview and local HTML, CSS, and JavaScript.
+The input view specifies an experiment; results describe recorded
+populations; live curves show changes across generations. A visually flat
+curve does not replace burn-in and uncertainty checks.
 
-Read a sketch as an explanation of a screen's purpose, not
-as a second source of equilibrium evidence. The input screen
-specifies the experiment; the results screen describes one
-recorded population; the live curves show how summaries change
-with generation. A visible curve becoming nearly horizontal
-does not replace the burn-in and uncertainty checks.
-The implemented-screen list below records the realized application,
-whereas the small numeric examples remain illustrative.
-
-**Screen 1 — model input.** The four named arguments and the $\mathsf P$-bag
-entries from §4.3, as a form instead of a YAML file: labeled fields for
-`N`, `d`, `m`, `mu`, seed, convergence statistic, initial condition, and
-loci, with a "Run simulation" button.
-
-**Screen 2 — results.** Requirement 6 in one view: the run summary
-(scalars, requirement 6a) beside the canonical scatter (per-deme allele
-frequencies, requirement 6b). The scenario is a deliberately tiny $d=2$
-one, small enough that its whole trajectory fits on one screen, rather
-than §12's $N=450$, $d=20$ run, which has too many demes for a single
-two-axis scatter (§8's $d>3$ fallback applies there instead). Each
-point is one allele; the axes are the two demes' frequencies for it: a
-run-summary sidebar (converged, generation 50, $D=0.65$, $G_{ST}=0.34$) beside
-a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most
-of them well off the diagonal.
-
-**Screen 3 — watching a run converge.** The same scenario animated across
-its generations: migration and drift pull the four alleles' points away
-from the diagonal as the demes differentiate. Because every generation is
-persisted (§6, §8), this view needs no data a run does not already write:
-the same four-allele scatter plot stepping through generations 0, 5,
-10, … 50, with points starting near the diagonal and drifting apart as
-the demes differentiate.
-
-### Realization: The desktop application (`fim.gui`)
-
-The concepts from these sketches are realized in the desktop GUI
-application (`fim gui`), built with pywebview and a modern web UI:
+See [the GUI design](fim-gui-design.md) for bridge methods, navigation,
+and orchestration details.
 
 1. **Configuration and parameter authoring.** Provides interactive forms
    for all core arguments ($N$, $d$, $m$, $\mu$, loci, seeds) and expert
@@ -2843,15 +2686,11 @@ application (`fim gui`), built with pywebview and a modern web UI:
 
 ## Appendix B. Engine backend benchmark results
 
-The measured benchmark tables that used to live in this appendix now have
-their own standalone document —
-[`doc/fim-engine-backend-benchmarks.md`](fim-engine-backend-benchmarks.md) —
-since they are dated, provenance-stamped reference data (each table stamped
-with the exact commit and hardware that produced it), not part of this
-document's own architectural narrative. See that document for the full B.1
-through B.6 tables; [§4.6](#46-choosing-an-engine-backend) and
-[§9.1](#91-variations-reachable-from-configuration) above still carry the
-present-tense summary of what the evidence shows.
+The [backend benchmark reference](fim-engine-backend-benchmarks.md)
+contains tables B.1–B.6 with commit, hardware, and measurement dates.
+[§4.6](#46-choosing-an-engine-backend) and
+[§9.1](#91-variations-reachable-from-configuration) summarize selection
+and performance constraints.
 
 When reading a benchmark, hold the scientific workload fixed:
 the same deme counts, loci, mutation model, generations, and
@@ -2865,9 +2704,8 @@ so deme count alone does not describe every performance boundary.
 
 ## Appendix C. Mathematical notation and algebra refresher
 
-This appendix assumes remembered arithmetic, not recent coursework.
-Read a symbol's definition before trying to remember what it "usually"
-means: population genetics uses $N$ and $D$ in several different ways.
+This appendix defines the notation used in the model and statistics
+derivations. Symbols such as $N$ and $D$ have context-specific meanings.
 
 The following map collects recurring quantities. It supplements
 their local definitions rather than replacing them.
@@ -3009,8 +2847,7 @@ alleles each have frequency $1/K$, its inner sum becomes:
 There are $K$ identical terms, so replace their sum by $K$ times
 one term. Next write $(1/K)^q=K^{-q}$ and combine powers of the
 same base: $K^1K^{-q}=K^{1-q}$.
-This explains each step rather than treating the exponent as
-an unexplained adjustment.
+The exponent therefore follows from normalization to an effective count.
 
 Raising this result to the stated power undoes the exponent:
 
@@ -4088,232 +3925,3 @@ The same issue applies to $D$. This is why `convergence_estimate`
 distinguishes the mean of values from the value of means; a comparison
 with an analytic prediction must use the quantity that prediction
 actually describes.
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-14
-generator-responsibility: other
-```
-
-### Revisions
-
-Documentation review. Corrected §12's transcript identity against a
-re-run of the documented configuration, added `statistics/interval.py` and
-the replicate-batch layer to §5, split §9 into the variations reachable
-from configuration and the landing spots for changes that are not built,
-moved the graphical front-end sketches to Appendix A, and replaced the
-machine-local citation path in the source note with a self-contained one.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Opus 5
-generator-model-token: claude-opus-5
-generator-provider: Anthropic
-generation-date: 2026-08-18
-generator-responsibility: revision
-```
-
-Corrected §8's own visualization description: `viz/scatter.py` does not
-project large-`d` states through PCA by default; the default is one
-explicit deme pair (Deme 1 vs. Deme 2 by default). This resolves an
-inconsistency §8's own precedent argument already pointed at without
-acting on it — the "Dear Nolan" letter's own $d=100$ figure is "a
-single panel of exactly the pairwise-matrix fallback," not a
-projection, and the same conclusion follows independently from
-computational cost, cross-frame instability once the GUI animates a
-run, and interpretability, all of which argue against a projection.
-PCA remains directly callable in `viz/scatter.py` for an exploratory
-view; it is simply not the automatic choice at any `d`.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-02
-generator-responsibility: revision
-```
-
-Added §4.6, "Choosing an engine backend" — the multi-backend engine
-architecture (§9.1's own table already had the exact, measured
-per-choice detail, but nothing in this document explained what the
-three backends are, why three exist rather than one, or how to decide
-between them, in language aimed at a reader deciding whether to care
-rather than an implementer). Re-measured and corrected all three
-`engine_backend`-related rows in §9.1 against `dev/bin/benchmark-engines`
-(new, this session): a real regression found by direct profiling —
-`"generational"`'s own `ThreadedAdvancer` delivers no measurable
-speedup at any thread count today, a change from what this document
-previously recorded, traced to the same RNG-unification correctness fix
-that made `"generational-vector"`'s own output match the other two
-backends exactly (without migration) — and a consequence of it:
-`"generational-vector"` now measures ahead of the other batch-capable
-engine at every deme count tested, including the smallest, materially
-earlier than the `d≈35` crossover this document previously recorded.
-`auto_vector_min_d`'s shipped default is flagged as likely-stale
-evidence in §9.1's own table; not changed here.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-02
-generator-responsibility: revision
-```
-
-Corrected three now-stale "library only, no CLI flag yet" claims in
-§9.1's table (`engine_backend`/`jit`/`auto_vector_min_d` became real
-`SimulationParams` fields — config-file/CLI reachable — in the same
-session's own separate commit) and §4.6's own matching claim, plus the
-`doc/configuration.md` anchor both pointed at (the target section
-itself was renamed from "Engine backend and JIT (Python only, not a
-YAML key)" to "Engine backend and JIT" in that same commit).
-`doc/fim-simulator-functional-api.md`'s own `fim()` signature entry
-corrected the same way — `engine_backend`/`jit`/`auto_vector_min_d` now
-default to `None` there (falling back to `params`), not to the literal
-values they used to hardcode.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-02
-generator-responsibility: revision
-```
-
-Added `auto_vector_max_capacity` (`SimulationParams`, default `1024`):
-`engine_backend="auto"` now checks every locus's own capacity alongside
-`d`, not `d` alone — a real, previously unaddressed gap this session
-found and closed
-(`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md` §6.1
-item 2, `1121-citrus.main`): a large-`d`, large-capacity config could
-resolve to `"generational-vector"` inside the exact loci-length-sweep
-region already found to lose there. §9.1's own table row updated to
-describe both thresholds and the gap the second one closes;
-`doc/configuration.md` gained a matching `auto_vector_max_capacity`
-entry and validation-summary row.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-03
-generator-responsibility: revision
-```
-
-Added Appendix B.6 (joint `d` × locus-length sweep, post-Phase-7,
-104 points, `citrus-2`) and changed `auto_vector_min_d`/
-`auto_vector_max_capacity`'s own shipped defaults, `35`/`1024` ->
-`2`/`4096` (`FIM-52`, Phase 7 item 6,
-`20260904-claude-sonnet-5-fim-engine-review-remediations.md`) — the
-first time either default has actually been changed rather than merely
-flagged as stale; every prior sweep in this appendix (B.1-B.5) found
-one or the other stale but deliberately left the shipped value alone
-pending a joint characterization, which this sweep is. §9.1's own table
-row updated to cite B.6 instead of B.1/B.3 and describe the new values
-and the real, `d`-dependent losing region that still exists above the
-new capacity ceiling.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-06
-generator-responsibility: revision
-```
-
-Rewrote §4.6's account of `"generational-vector"` and its §9.1 row.
-Backend V now runs the infinite-alleles model and both mutation models
-are bit-identical to `"lineal"`/`"generational"` on one machine
-(`fim.model.vector_block`, `fim.model.vector_kernels`): the paragraphs on
-a column count fixed in advance, on statistical rather than row-for-row
-agreement with migration, and on the multi-locus draw order described the
-earlier per-locus engine and were replaced. The appendix B tables still
-describe the earlier finite-alleles engine's measurements and were not
-re-run here.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5.5
-generator-model-token: claude-sonnet-5-5
-generator-provider: Anthropic
-generation-date: 2026-10-08
-generator-responsibility: revision
-```
-
-Updated §4.5, §5, §6, and Appendix A to reflect the realized desktop GUI
-application (`fim.gui`), binary trajectory store (`trajectory.tlog` via
-`BinaryLogStore`), atomic run checkpointing (`persistence/run_checkpoint.py`),
-run lifecycle state machine (`persistence/run_lifecycle.py`), execution
-fencing (`persistence/run_ownership.py`), saved run objects
-(`persistence/run_objects.py`), and run service coordinator (`run_service.py`):
-
-- Documented the PyWebView desktop application (`fim gui`) providing
-  interactive configuration forms, live trajectory streaming, and batch
-  replicate monitoring alongside the headless CLI.
-- Documented Draft vs. Planned run configuration lifecycle states and run
-  cloning.
-- Documented the binary trajectory log format with checksummed frames, sparse
-  keyframes, and concurrent non-blocking reads.
-- Documented atomic two-phase checkpointing, per-deme PRNG serialization, and
-  configurable checkpoint cadence (`checkpoint_generations` and
-  `checkpoint_seconds`).
-- Documented ownership leases (`active.lease`), execution staging
-  (`staging/<run_id>.<pid>/`), and crash recovery.
-
-```text
-generator-name: Copilot
-generator-version: GPT-5.4
-generator-model-token: gpt-5.4
-generator-provider: OpenAI
-generation-date: 2026-10-12
-generator-responsibility: revision
-```
-
-Applied the backup document's TeX conventions without replacing newer
-architecture content. Added stepwise generation and statistics
-derivations, a complete V-engine table calculation, diagrams, and
-Appendices C–F covering algebra, sampling, linear algebra, and
-equilibrium uncertainty. Distinguished individual and gene-copy
-counts, expected and realized transformations, and mathematical
-equivalence versus bit-exact execution.
-
-The model identifier is not exposed in this session; it is recorded
-as unavailable rather than inferred from an earlier revision.
-
-```text
-generator-name: Copilot SDK in VS Code
-generator-version: unavailable
-generator-model-token: unavailable
-generator-provider: OpenAI
-generation-date: 2026-10-15
-generator-responsibility: revision
-```
-
-Expanded the equation-by-equation explanations throughout the model,
-statistics, and mathematical appendices. Added intermediate arithmetic,
-symbol definitions, and worked interpretations of V-engine arrays,
-sampling, mutation, equilibrium, and uncertainty. Extended the same
-explanatory approach to configuration, module boundaries, persistence,
-visualization, validation, and the walkthrough. Identified historical
-walkthrough output separately from the current stopping policy.
-
-The model identifier remains unavailable in this session.
-
-```text
-generator-name: Copilot SDK in VS Code
-generator-version: unavailable
-generator-model-token: unavailable
-generator-provider: OpenAI
-generation-date: 2026-10-17
-generator-responsibility: revision
-```

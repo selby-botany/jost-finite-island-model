@@ -1,40 +1,9 @@
-"""Backend-independent trajectory row schema and store protocol.
+"""Define the trajectory-row schema and storage protocol.
 
-`TrajectoryRow` is the one, single-observation record shape every
-persisted trajectory row uses (see `fim.model.state.ModelState.to_rows`
-for how a state turns into a batch of these), and `TrajectoryStore` is
-the shared interface both `fim.persistence.binary_store.
-BinaryLogStore` (the real, file-backed store) and
-`InMemoryTrajectoryStore`, below (a lighter-weight stand-in for
-library calls and tests that never need an actual file), implement —
-so `fim.engine`'s run loop can write to either without knowing which
-one it actually has.
-
-`write_generation`'s own `validate` keyword (default `True`, unchanged
-behavior for every existing caller): a real, measured cost. Profiling a
-representative Backend V run found `normalize_row` — full schema
-presence/absence checks, then a per-field `isinstance` gauntlet on
-every row of every generation — as the single largest cost center in
-the whole run, ~36% of wall clock, ahead of the actual migrate/mutate/
-drift step. That check earns its cost for a row `normalize_row` cannot
-otherwise vouch for: a hand-edited or externally-produced row, or one
-`BinaryLogStore.read` is decoding back off disk. It earns nothing
-for a row `fim.engine`'s own run loop just built, in the same
-expression, from `ModelState.to_rows`/`fim.model.vectorized.
-vectorized_state_to_rows` — both of which construct every field
-already well-typed and in-bounds by construction (a real, finite
-`float` frequency in `(0, 1]`, a positive `int` id, a nonempty `str`
-run id), from a `ModelState`/`VectorizedState` whose own construction
-already enforced those same invariants. Re-running `normalize_row` on
-such a row cannot find a defect `ModelState`'s/`VectorizedState`'s own
-construction did not already rule out — it can only re-confirm what is
-already known, on every single row, every single generation. `fim.
-engine`'s own internal call sites (including the equilibrium-split
-ancestral phase's, which writes `ModelState.to_rows` rows too) pass
-`validate=False` specifically because each one is provably in this
-position; no other
-caller in this codebase does, and a new one should not either without
-the same proof.
+`TrajectoryStore` is implemented by the binary file-backed store and the
+in-memory store. `write_generation` validates rows by default; the optional
+validation bypass is intended only for rows produced from already-validated
+model state.
 """
 
 from __future__ import annotations

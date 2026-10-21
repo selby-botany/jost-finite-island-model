@@ -1,12 +1,8 @@
-"""`fim sweep`: plan, run, resume and report a parameter sweep.
+"""Command handlers for planning, running, and reporting parameter sweeps.
 
-The command-line half of the sweep-as-Study feature
-(`20260923-claude-sonnet-5-sweep-as-study-implementation-plan.md`,
-`selby/restricted`, section 5). A sweep file is an ordinary configuration
-plus a `sweep:` block; `fim.sweep.spec_from_config` splits it, so the
-ordinary configuration validator never sees `sweep`. The work itself is in
-`fim.sweep` (what the points are) and `fim.sweep_run` (running them); this
-module parses arguments and prints.
+A sweep configuration combines model settings with a `sweep:` block.
+`fim.sweep` validates the specification and enumerates points;
+`fim.sweep_run` executes and resumes them. This module provides the CLI.
 """
 
 from __future__ import annotations

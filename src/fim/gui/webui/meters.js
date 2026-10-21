@@ -165,6 +165,32 @@ function withStatisticDescription(valueClause, description) {
 }
 
 /**
+ * Build a statistic label with a keyboard-accessible reference link.
+ *
+ * @param {string} name
+ * @returns {HTMLElement}
+ */
+function buildStatisticName(name) {
+    const spec = statisticSpec(name);
+    const anchor = spec ? spec.help_anchor : STATISTIC_REFERENCE_ANCHORS[name];
+    const label = document.createElement(anchor ? "button" : "span");
+    label.innerHTML = formatStatisticLabel(name);
+    if (anchor) {
+        label.type = "button";
+        label.className = "statistic-help-link";
+        label.title = `Definition, interpretation, and implementation of ${plainStatisticLabel(name)}`;
+        label.setAttribute("aria-label", label.title);
+        label.addEventListener("click", (event) => {
+            event.stopPropagation();
+            window.fim.showHelp("statistics", anchor);
+        });
+        // Keep Enter and Space out of the surrounding row's plot toggle.
+        label.addEventListener("keydown", (event) => event.stopPropagation());
+    }
+    return label;
+}
+
+/**
  * Build the two `<td>` cells (name, value) shared by every row shape
  * below, as a `DocumentFragment` -- both slot-based call sites
  * (`replaceChildren` on a pre-existing `<tr>`) and the batch call site
@@ -194,7 +220,7 @@ function buildStatCells(name, valueText) {
     cells.appendChild(toggleCell);
     const nameCell = document.createElement("td");
     nameCell.className = "stat-name";
-    nameCell.innerHTML = formatStatisticLabel(name);
+    nameCell.appendChild(buildStatisticName(name));
     cells.appendChild(nameCell);
     const valueCell = document.createElement("td");
     valueCell.className = "stat-value";
@@ -382,7 +408,7 @@ function applyStatRow(row, cells) {
     // Index 0 is the color-key cell, which its decorator owns.
     for (let index = 1; index < incoming.length; index += 1) {
         if (current[index].innerHTML !== incoming[index].innerHTML) {
-            current[index].innerHTML = incoming[index].innerHTML;
+            current[index].replaceChildren(...incoming[index].childNodes);
         }
     }
 }

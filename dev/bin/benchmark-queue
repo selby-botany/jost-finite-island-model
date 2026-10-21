@@ -1,116 +1,11 @@
 #!/usr/bin/env python3
-"""Run a queue of benchmark jobs -- each stage in isolation, in order.
+"""Run benchmark jobs from a JSON queue in ordered stages.
 
-`dev/bin/benchmark-engines`'s own docstring states its methodology
-plainly: "this tool does not itself pin CPU affinity or launch
-background load -- it assumes the caller runs it on an otherwise-idle
-machine ('run in isolation, no unrelated process competing for CPU')".
-That is a real requirement, not a suggestion -- `ThreadedAdvancer`
-(Backend G) defaults `max_workers` to `os.cpu_count()`, so two jobs
-that each happen to hit their own G-phase at the same moment compete
-for the same finite cores, and the resulting numbers are noise, not
-data. This tool is the thing that actually *keeps* that promise across
-more than one job: given a queue of *stages* -- each stage one or more
-jobs -- it runs stages one at a time, waiting for the machine to
-actually be quiet before starting each stage, rather than a caller
-hand-launching several `benchmark-engines` invocations at once and
-hoping they do not overlap.
-
-Not every job needs the whole machine to itself, though -- on hardware
-with real spare capacity (a many-core server, not the laptop the
-conservative built-in idle threshold was written for; see `settings`
-below), several genuinely independent jobs can safely share it. A
-stage with more than one job runs every one of them concurrently, each
-against its own log file, and only moves on once the whole stage has
-finished -- the *stage* is what waits for isolation and what the next
-stage waits on, not each individual job. A stage of exactly one job is
-how "this one needs to run alone" is expressed: nothing else in the
-queue starts until it finishes.
-
-Built specifically to be kicked off and forgotten for hours or days:
-every job's own stdout/stderr goes to its own log file the moment it is
-produced (not buffered until the whole queue finishes), a summary JSON
-is rewritten after every stage (not only at the end, so a caller
-checking in mid-run — or a process that dies mid-run — still has a
-faithful record of everything that already completed), and one job
-failing or timing out never aborts the rest of the queue by default
-(`--stop-on-failure` opts into that instead, checked once a stage
-finishes -- a stage already running is always let finish in full, never
-cut short partway through).
-
-Deliberately a separate tool from `benchmark-engines` itself, not a new
-flag bolted onto it: that tool's own docstring already states "this
-tool does not attempt a full multi-factor grid (out of scope, and
-combinatorially large)" as a considered decision, not an oversight, and
-its job is characterizing *one* sweep well, not queuing several. This
-tool has no opinion at all about what a job actually measures -- a job
-is just an argv list, run as a subprocess; a two-factor heatmap sweep,
-built from many individual `benchmark-engines --config ...` points, is
-just a queue file with one stage per point (or several points grouped
-into one stage, wherever they are cheap and independent enough to run
-together).
-
-Queue file format (JSON, one object with `stages` and, optionally,
-`settings`):
-
-    {
-      "settings": {
-        "idle_load_fraction": 0.1
-      },
-      "stages": [
-        [
-          {
-            "label": "d10-len4",
-            "command": ["dev/bin/benchmark-engines", "--sweep", "d",
-                         "--values", "10", "--config", "grid.yaml"]
-          },
-          {
-            "label": "d10-len5",
-            "command": ["dev/bin/benchmark-engines", "--sweep", "d",
-                         "--values", "10", "--config", "grid-len5.yaml"]
-          }
-        ],
-        [
-          {
-            "label": "d-fine-grid",
-            "command": ["dev/bin/benchmark-engines", "--sweep", "d",
-                         "--values", "10,35,70,120",
-                         "--replicates", "16", "--generations", "100",
-                         "--trials", "3"],
-            "timeout_seconds": 3600
-          }
-        ]
-      ]
-    }
-
-`stages` is a list of stages, run in order; each stage is a list of one
-or more jobs, run concurrently, with the whole stage waiting to start
-until the machine is idle. `label` names a job (used for its own log
-filename and its entry in the summary -- unique across the *whole*
-queue, not just within one stage); `command` is the argv to run,
-resolved relative to this repository's own root if not absolute;
-`timeout_seconds` is optional, overriding `settings.default_timeout_
-seconds` for that one job.
-
-`settings` is optional and every key in it is optional -- it exists so
-one queue file is portable across very different machines, rather than
-carrying one hardcoded idle threshold that only suits whichever machine
-wrote it. `idle_load_fraction` is the one most worth setting explicitly
-per machine: a 4-8 core laptop competing with a browser and an antivirus
-scanner needs the conservative built-in default (0.1 -- wait for the
-1-minute load average to drop to 10% of core count) to get a trustworthy
-result at all, where a dedicated many-core server sitting at load 5 out
-of 22 cores has 17 genuinely idle cores the same default would wrongly
-call "busy" -- and is exactly the case a multi-job stage is for.
-Recognized keys: `idle_load_fraction`, `idle_poll_seconds`,
-`idle_max_wait_seconds`, `default_timeout_seconds`, `stop_on_failure` --
-one of each of this tool's own `--idle-load-fraction`/etc. CLI flags,
-which still override whatever a queue file's own `settings` says when
-explicitly passed (a CLI flag is the more immediate expression of
-intent than a file two people might share).
-
-Usage:
-    dev/bin/benchmark-queue queue.json --log-dir /tmp/fim-queue
+A queue contains `stages`, each a list of jobs with a label and command
+argument vector, and optional settings. Stages run sequentially after the
+load check; jobs within a stage may run concurrently. Per-job logs and a
+summary are written to the selected output directory. Job failures and
+timeouts are recorded; `--stop-on-failure` stops later stages.
 """
 
 from __future__ import annotations
@@ -647,12 +542,12 @@ def _resolve_settings(
 def main(argv: list[str] | None = None) -> int:
     """Run every stage in a queue file in order, each stage in isolation."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("queue", type=Path, help="Path to the queue's own JSON file.")
+    parser.add_argument("queue", type=Path, help="Path to the queue JSON file.")
     parser.add_argument(
         "--log-dir",
         type=Path,
         default=Path("/tmp/fim-benchmark-queue"),
-        help="Directory for each job's own log file and the summary "
+        help="Directory for each job's log file and the summary "
         "(default: /tmp/fim-benchmark-queue).",
     )
     parser.add_argument(

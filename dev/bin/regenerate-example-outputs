@@ -1,52 +1,10 @@
 #!/usr/bin/env python3
-"""Regenerate the committed output files of the worked examples.
+"""Regenerate committed output artifacts for worked examples.
 
-Each `doc/examples/<id>/` directory with a `config.yaml` is one example.
-For every example named on the command line (default: all of them), this
-script runs exactly
-
-    python -m fim.launcher run doc/examples/<id>/config.yaml \\
-        --output <temporary directory> --quiet
-
-with `FIM_RESULTS_DIRECTORY` pointed at a temporary directory, as
-`test/test_doc_examples.py` does, so the run's Study index never touches
-your real `results/`. It then replaces the example's committed outputs
-with the fresh ones (design doc
-`20261005-claude-opus-5-5-read-only-examples-and-classes-design.md`,
-`selby/restricted`, sections 4.1 and 6):
-
-Every result artifact is retained, including trajectories, convergence
-histories, pairwise matrices, and scatter plots, for each kept replicate
-of a batch too. The trajectories are binary logs (`trajectory.tlog`,
-`equilibrium_trajectory.tlog`), already compact, so they are copied as they
-are; the other JSONL files are losslessly gzip-compressed and split into
-parts of at most 50 MiB. The desktop app restores those automatically
-when opening the completed example; no rerun is required.
-
-Out-of-the-box defaults. The command line carries nothing but the
-configuration, the output directory, and `--quiet`, so every setting the
-configuration leaves out takes `fim run`'s own default. The desktop app
-submits the same values for every example: the example survey
-(2026-10-05) found the command-line and GUI defaults identical for all of
-them once the GUI's Settings fallback for a preset's engine was fixed.
-
-Determinism. A run is a pure function of its configuration (the seed is
-in the file), so running this script twice writes identical files except
-for each manifest's `started_at` and `ended_at` time stamps and the
-digests that cover them. `--workers N` sets the process count of a
-`lineal` batch for speed only; it never changes a result, and it is not
-passed to any other engine, which has no process pool.
-
-Usage:
-    dev/bin/regenerate-example-outputs                    # every example
-    dev/bin/regenerate-example-outputs golden-part-vi     # just one
-    dev/bin/regenerate-example-outputs --list             # show examples
-    dev/bin/regenerate-example-outputs --dry-run          # show commands
-    dev/bin/regenerate-example-outputs --jobs 3 --workers 2
-
-Some examples take a long time: Dear-Nolan low runs about 2.6 million
-generations of 30 loci (a few minutes under `auto`, nearly two hours on `lineal`), and
-Jost (2008) Part VI about 130,000 generations. Each example's README states its own running time.
+Runs each selected example configuration with current simulator defaults and
+replaces its committed outputs. Runs use an isolated results location.
+`--list` and `--dry-run` inspect the work without regenerating artifacts;
+example runtimes are documented in their READMEs.
 """
 
 from __future__ import annotations

@@ -1,23 +1,9 @@
-"""Central logging configuration for both front ends (`doc/fim-logging-
-design.md` §3.2).
+"""Configure logging for the command-line interface and desktop application.
 
-Every module under `fim` logs via `logging.getLogger(__name__)` alone
-and never touches handler or level configuration itself (`fim/__init__.
-py`'s own `NullHandler` is what keeps that safe by default). This is
-the one place that configuration actually happens — called once, with
-already-parsed values, by each of the three real entry points:
-`fim.cli.main` (from its own `-l`/`-L` arguments), `fim.launcher.main`
-and `fim.gui.app.main` (from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`).
-`configure` is idempotent: calling it more than once replaces the
-`fim` logger's own handlers rather than accumulating them, so a test
-(or a future caller) that calls it twice never sees doubled output.
-
-`apply_logging_config_file`, below, is each entry point's alternative
-to `configure` — not a layer on top of it — for the one thing `-l`/`-L`
-cannot express at all: a full, reusable, multiple-handler logging
-configuration read from an external YAML file (`--logging-config`/
-`FIM_LOGGING_CONFIG`, `20260918-claude-sonnet-5-configurable-storage-
-root-design.md`, `selby/restricted`, §9).
+`configure` applies the standard stream and file handlers from parsed options.
+`apply_logging_config_file` loads a complete `logging.config.dictConfig`
+configuration from YAML. Application entry points select one configuration
+path; the module does not configure loggers during import.
 """
 
 from __future__ import annotations

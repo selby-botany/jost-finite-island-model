@@ -1,41 +1,9 @@
-"""Pure diversity and differentiation statistics for finite-island models.
+"""Public diversity, differentiation, genetic-distance, and interval APIs.
 
-This package is the project's math library: every function in it takes
-plain numbers in (allele frequencies, sample counts) and returns plain
-numbers out (a diversity index, a confidence interval), with no
-dependency on the simulator itself, the GUI, or how a run happens to be
-stored on disk. That separation is deliberate — it means every formula
-used to describe a population's genetic diversity lives in exactly one
-place, reviewable and testable on its own, independently of the code
-that produces the data or the code that displays it.
-
-It is organized into three modules by subject:
-
-- `fim.statistics.differentiation` — the actual diversity and
-  differentiation formulas (`H_S`, `H_T`, `H_ST`, `G_ST`, Jost's `D`,
-  `E_ST`, `K_ST`, and the general `differentiation_q` family that ties
-  them all together). See that module's own docstring, and the
-  [differentiation-measures guide](../../doc/jost-differentiation-measures.md),
-  for the underlying population-genetics ideas.
-- `fim.statistics.genetic_distance` — pairwise genetic distance and
-  identity statistics between populations (Nei 1972 standard distance
-  `D`, geometric/arithmetic distance `D'`, normalized identity `I`,
-  cross identity `J_XY`, and founder-effect identity `I_0`).
-- `fim.statistics.pairwise` — every deme pair's Nei identities at once,
-  vectorized with numpy (the one module here that needs it), for
-  capturing all-pairs matrices at large deme counts.
-- `fim.statistics.theory` — the closed-form equilibrium predictions of each
-  reported statistic, for a configuration or a sweep point, shared by the
-  Explore screen, the sweep results card and the sweep export.
-- `fim.statistics.interval` — confidence intervals for a sample mean
-  (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
-  independent replicates. See that module's own docstring for what a
-  confidence interval is and why the Student's-t method is used.
-
-Every public name from all modules is re-exported here, so a caller
-elsewhere in the project writes ``from fim.statistics import h_s,
-jost_d, nei_d, confidence_interval`` rather than reaching into any module
-by its own name directly.
+The package re-exports functions from `differentiation`, `genetic_distance`,
+`identity_recursion`, `interval`, `pairwise`, and `theory`. See
+`doc/jost-differentiation-measures.md` for definitions of the differentiation
+measures.
 """
 
 from .differentiation import (
