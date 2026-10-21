@@ -23,7 +23,6 @@ unique tag beginning with $\text{N}$ for this document.
 - [A short mathematical refresher](#a-short-mathematical-refresher)
 - [Formula sheet](#formula-sheet)
 - [References](#references)
-- [Metadata](#metadata)
 
 ## Who this is for
 
@@ -539,29 +538,3 @@ pair and all-demes calculations are implemented by
   *Molecular Ecology* 17(18):4015–4026.
   DOI: [10.1111/j.1365-294X.2008.03887.x](https://doi.org/10.1111/j.1365-294X.2008.03887.x)
 - Jost, L. (2026) private communication: the arithmetic-mean denominator.
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Opus 5.5
-generator-model-token: claude-opus-5-5
-generator-provider: Anthropic
-generation-date: 2026-10-03
-generator-responsibility: documentation
-```
-
-This revision adds tagged TeX derivations, step-by-step examples for
-within- and between-deme identities, pooled and per-locus aggregation,
-and the all-demes negative-distance case. It clarifies the zero-identity
-conditions and relates the pooled arithmetic distance to Jost's
-differentiation statistic.
-
-```text
-generator-name: Copilot SDK in VS Code
-generator-version: gpt-6-luna
-generator-model-token: gpt-6-luna
-generator-provider: OpenAI
-generation-date: 2026-10-18
-generator-responsibility: revision
-```
