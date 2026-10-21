@@ -424,6 +424,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_scatter\_style](#fim.gui.app.Api.set_scatter_style)
     * [set\_trajectory\_display](#fim.gui.app.Api.set_trajectory_display)
     * [set\_trajectory\_band\_width](#fim.gui.app.Api.set_trajectory_band_width)
+    * [set\_show\_identity\_recovery\_trajectory](#fim.gui.app.Api.set_show_identity_recovery_trajectory)
     * [get\_default\_ploidy](#fim.gui.app.Api.get_default_ploidy)
     * [set\_default\_ploidy](#fim.gui.app.Api.set_default_ploidy)
     * [validate\_form](#fim.gui.app.Api.validate_form)
@@ -10345,14 +10346,18 @@ Return how the Run card shows its graphs.
 **Returns**:
 
 - ``{"graphs"` - [...], "columns": int, "scatterStyle": str,
-- `"trajectoryDisplay"` - str}`: the graph keys the user wants
-  shown together (`DEFAULT_RUN_GRAPHS` until they choose), how
-  many columns they are laid out in, how the scatter plot draws
-  its points, and how the trajectory graph draws each statistic.
+- `"trajectoryDisplay"` - str, "bandWidth": int,
+- `"showIdentityRecoveryTrajectory"` - bool}`: the graph keys the
+  user wants shown together (`DEFAULT_RUN_GRAPHS` until they
+  choose), how many columns they are laid out in, how the
+  scatter plot draws its points, how the trajectory graph draws
+  each statistic, and whether it also draws the opt-in f_0
+  identity-recovery overlay (`set_show_identity_recovery_
+  trajectory`).
 
 <a id="fim.gui.app.Api.set_run_graphs"></a>
 
-#### [set\_run\_graphs](./gui/app.py#L3577)
+#### [set\_run\_graphs](./gui/app.py#L3584)
 
 ```python
 @_log_bridge_call
@@ -10374,7 +10379,7 @@ Remember which graphs the Run card shows together.
 
 <a id="fim.gui.app.Api.set_run_graph_columns"></a>
 
-#### [set\_run\_graph\_columns](./gui/app.py#L3596)
+#### [set\_run\_graph\_columns](./gui/app.py#L3603)
 
 ```python
 @_log_bridge_call
@@ -10395,7 +10400,7 @@ Set how many columns the Run card lays its graphs out in.
 
 <a id="fim.gui.app.Api.set_scatter_style"></a>
 
-#### [set\_scatter\_style](./gui/app.py#L3622)
+#### [set\_scatter\_style](./gui/app.py#L3629)
 
 ```python
 @_log_bridge_call
@@ -10416,7 +10421,7 @@ Choose how the scatter plot draws its points.
 
 <a id="fim.gui.app.Api.set_trajectory_display"></a>
 
-#### [set\_trajectory\_display](./gui/app.py#L3639)
+#### [set\_trajectory\_display](./gui/app.py#L3646)
 
 ```python
 @_log_bridge_call
@@ -10444,7 +10449,7 @@ either way.
 
 <a id="fim.gui.app.Api.set_trajectory_band_width"></a>
 
-#### [set\_trajectory\_band\_width](./gui/app.py#L3665)
+#### [set\_trajectory\_band\_width](./gui/app.py#L3672)
 
 ```python
 @_log_bridge_call
@@ -10467,9 +10472,37 @@ window) and the standard-error band of the averaged displays.
 - ``{"ok"` - True, "width": width}`, or `{"ok": False, "message":
   ...}`.
 
+<a id="fim.gui.app.Api.set_show_identity_recovery_trajectory"></a>
+
+#### [set\_show\_identity\_recovery\_trajectory](./gui/app.py#L3695)
+
+```python
+@_log_bridge_call
+def set_show_identity_recovery_trajectory(shown: Any) -> dict[str, Any]
+```
+
+Choose whether the trajectory graph draws the f_0 overlay.
+
+Display only, and off by default: Whitlock's (1992) theoretical
+identity-recovery curve after a founder event (`doc/statistics.md`,
+"Identity recovery") is a closed-form reference computed from this
+configuration's `N` and `m` alone, not a measurement of this run,
+so unlike `set_shown_statistics` it never changes what a run
+tracks or saves.
+
+**Arguments**:
+
+- `shown` - Whether to draw the overlay.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "shown": shown}`, or `{"ok": False, "message":
+  ...}` if `shown` is not a plain boolean.
+
 <a id="fim.gui.app.Api.get_default_ploidy"></a>
 
-#### [get\_default\_ploidy](./gui/app.py#L3688)
+#### [get\_default\_ploidy](./gui/app.py#L3721)
 
 ```python
 @_log_bridge_call
@@ -10480,7 +10513,7 @@ Return the default ploidy: `"2"` unless changed; `""` asks each time.
 
 <a id="fim.gui.app.Api.set_default_ploidy"></a>
 
-#### [set\_default\_ploidy](./gui/app.py#L3693)
+#### [set\_default\_ploidy](./gui/app.py#L3726)
 
 ```python
 @_log_bridge_call
@@ -10502,7 +10535,7 @@ Set the ploidy a fresh configuration's form starts on.
 
 <a id="fim.gui.app.Api.validate_form"></a>
 
-#### [validate\_form](./gui/app.py#L3714)
+#### [validate\_form](./gui/app.py#L3747)
 
 ```python
 @_log_bridge_call
@@ -10535,7 +10568,7 @@ Validate the form exactly as "Run simulation" would.
 
 <a id="fim.gui.app.Api.get_initial_state_panels"></a>
 
-#### [get\_initial\_state\_panels](./gui/app.py#L3751)
+#### [get\_initial\_state\_panels](./gui/app.py#L3784)
 
 ```python
 @_log_bridge_call
@@ -10567,7 +10600,7 @@ state would show at generation 0.
 
 <a id="fim.gui.app.Api.get_initial_state_deme_pair_panel"></a>
 
-#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L3803)
+#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L3836)
 
 ```python
 @_log_bridge_call
@@ -10595,7 +10628,7 @@ pair as separate panels (`d > 6`).
 
 <a id="fim.gui.app.Api.get_equilibrium_predictions"></a>
 
-#### [get\_equilibrium\_predictions](./gui/app.py#L3840)
+#### [get\_equilibrium\_predictions](./gui/app.py#L3873)
 
 ```python
 @_log_bridge_call
@@ -10640,7 +10673,7 @@ of how large `N`/`d` are.
 
 <a id="fim.gui.app.Api.get_equilibrium_grid"></a>
 
-#### [get\_equilibrium\_grid](./gui/app.py#L3890)
+#### [get\_equilibrium\_grid](./gui/app.py#L3923)
 
 ```python
 @_log_bridge_call
@@ -10688,7 +10721,7 @@ integer value, not an interpolated blur (`_grid_axis_values`).
 
 <a id="fim.gui.app.Api.get_equilibrium_curve"></a>
 
-#### [get\_equilibrium\_curve](./gui/app.py#L3977)
+#### [get\_equilibrium\_curve](./gui/app.py#L4010)
 
 ```python
 @_log_bridge_call
@@ -10717,7 +10750,7 @@ samples an interval densely and spaces its points by the response.
 
 <a id="fim.gui.app.Api.get_equilibrium_sweep"></a>
 
-#### [get\_equilibrium\_sweep](./gui/app.py#L4022)
+#### [get\_equilibrium\_sweep](./gui/app.py#L4055)
 
 ```python
 @_log_bridge_call
@@ -10777,7 +10810,7 @@ the marker moves, with no extra bridge round trip per tick.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 
-#### [load\_yaml](./gui/app.py#L4146)
+#### [load\_yaml](./gui/app.py#L4179)
 
 ```python
 @_log_bridge_call
@@ -10803,7 +10836,7 @@ changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.list_examples"></a>
 
-#### [list\_examples](./gui/app.py#L4179)
+#### [list\_examples](./gui/app.py#L4212)
 
 ```python
 @_log_bridge_call
@@ -10837,7 +10870,7 @@ example's form values once the user loads it.
 
 <a id="fim.gui.app.Api.load_example"></a>
 
-#### [load\_example](./gui/app.py#L4228)
+#### [load\_example](./gui/app.py#L4261)
 
 ```python
 @_log_bridge_call
@@ -10870,7 +10903,7 @@ saved Settings are not changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.open_saved_example"></a>
 
-#### [open\_saved\_example](./gui/app.py#L4266)
+#### [open\_saved\_example](./gui/app.py#L4299)
 
 ```python
 @_log_bridge_call
@@ -10899,7 +10932,7 @@ again first. The page then opens it like any run, which takes
 
 <a id="fim.gui.app.Api.load_run_configuration"></a>
 
-#### [load\_run\_configuration](./gui/app.py#L4310)
+#### [load\_run\_configuration](./gui/app.py#L4343)
 
 ```python
 @_log_bridge_call
@@ -10938,7 +10971,7 @@ cleared, and the name and description come from the run's
 
 <a id="fim.gui.app.Api.list_presets"></a>
 
-#### [list\_presets](./gui/app.py#L4374)
+#### [list\_presets](./gui/app.py#L4407)
 
 ```python
 @_log_bridge_call
@@ -10987,7 +11020,7 @@ only once the user actually picks it.
 
 <a id="fim.gui.app.Api.get_preset_form_values"></a>
 
-#### [get\_preset\_form\_values](./gui/app.py#L4439)
+#### [get\_preset\_form\_values](./gui/app.py#L4472)
 
 ```python
 @_log_bridge_call
@@ -11023,7 +11056,7 @@ Return one preset's own form values, ready for `applyFormValues`.
 
 <a id="fim.gui.app.Api.load_preset"></a>
 
-#### [load\_preset](./gui/app.py#L4481)
+#### [load\_preset](./gui/app.py#L4514)
 
 ```python
 @_log_bridge_call
@@ -11053,7 +11086,7 @@ user's Settings (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.get_preset_yaml"></a>
 
-#### [get\_preset\_yaml](./gui/app.py#L4506)
+#### [get\_preset\_yaml](./gui/app.py#L4539)
 
 ```python
 @_log_bridge_call
@@ -11099,7 +11132,7 @@ saved preset).
 
 <a id="fim.gui.app.Api.save_current_as_preset"></a>
 
-#### [save\_current\_as\_preset](./gui/app.py#L4570)
+#### [save\_current\_as\_preset](./gui/app.py#L4603)
 
 ```python
 @_log_bridge_call
@@ -11131,7 +11164,7 @@ Save `values` as a user preset named `name`, persisted immediately.
 
 <a id="fim.gui.app.Api.delete_user_preset"></a>
 
-#### [delete\_user\_preset](./gui/app.py#L4605)
+#### [delete\_user\_preset](./gui/app.py#L4638)
 
 ```python
 @_log_bridge_call
@@ -11146,7 +11179,7 @@ affordance only ever offers a name it just listed.
 
 <a id="fim.gui.app.Api.save_yaml"></a>
 
-#### [save\_yaml](./gui/app.py#L4617)
+#### [save\_yaml](./gui/app.py#L4650)
 
 ```python
 @_log_bridge_call
@@ -11170,7 +11203,7 @@ Validate the form, then save it as a `fim run`-compatible YAML file.
 
 <a id="fim.gui.app.Api.export_graph_image"></a>
 
-#### [export\_graph\_image](./gui/app.py#L4654)
+#### [export\_graph\_image](./gui/app.py#L4687)
 
 ```python
 @_log_bridge_call
@@ -11207,7 +11240,7 @@ gap `save_yaml`'s own config export, just above, does not cover.
 
 <a id="fim.gui.app.Api.get_default_max_workers"></a>
 
-#### [get\_default\_max\_workers](./gui/app.py#L4707)
+#### [get\_default\_max\_workers](./gui/app.py#L4740)
 
 ```python
 @_log_bridge_call
@@ -11223,7 +11256,7 @@ workers` directly rather than inventing a second default.
 
 <a id="fim.gui.app.Api.get_engine_backend_availability"></a>
 
-#### [get\_engine\_backend\_availability](./gui/app.py#L4718)
+#### [get\_engine\_backend\_availability](./gui/app.py#L4751)
 
 ```python
 @_log_bridge_call
@@ -11265,7 +11298,7 @@ bind a copy at import time and quietly defeat exactly that hook.
 
 <a id="fim.gui.app.Api.get_significant_digits"></a>
 
-#### [get\_significant\_digits](./gui/app.py#L4754)
+#### [get\_significant\_digits](./gui/app.py#L4787)
 
 ```python
 @_log_bridge_call
@@ -11284,7 +11317,7 @@ back).
 
 <a id="fim.gui.app.Api.set_significant_digits"></a>
 
-#### [set\_significant\_digits](./gui/app.py#L4768)
+#### [set\_significant\_digits](./gui/app.py#L4801)
 
 ```python
 @_log_bridge_call
@@ -11316,7 +11349,7 @@ ever about a *run's own* output, never this GUI-local setting.
 
 <a id="fim.gui.app.Api.get_dark_mode_override"></a>
 
-#### [get\_dark\_mode\_override](./gui/app.py#L4805)
+#### [get\_dark\_mode\_override](./gui/app.py#L4838)
 
 ```python
 @_log_bridge_call
@@ -11334,7 +11367,7 @@ dark_mode_override` is already the one place this value lives.
 
 <a id="fim.gui.app.Api.set_dark_mode_override"></a>
 
-#### [set\_dark\_mode\_override](./gui/app.py#L4818)
+#### [set\_dark\_mode\_override](./gui/app.py#L4851)
 
 ```python
 @_log_bridge_call
@@ -11359,7 +11392,7 @@ Change the saved dark-mode override (Configure's own field).
 
 <a id="fim.gui.app.Api.get_default_run_settings"></a>
 
-#### [get\_default\_run\_settings](./gui/app.py#L4844)
+#### [get\_default\_run\_settings](./gui/app.py#L4877)
 
 ```python
 @_log_bridge_call
@@ -11393,7 +11426,7 @@ value for that one field and reported at launch
 
 <a id="fim.gui.app.Api.get_expert_settings_info"></a>
 
-#### [get\_expert\_settings\_info](./gui/app.py#L4912)
+#### [get\_expert\_settings\_info](./gui/app.py#L4945)
 
 ```python
 @_log_bridge_call
@@ -11413,7 +11446,7 @@ Return how Settings lists the Expert Settings.
 
 <a id="fim.gui.app.Api.set_default_run_settings"></a>
 
-#### [set\_default\_run\_settings](./gui/app.py#L4926)
+#### [set\_default\_run\_settings](./gui/app.py#L4959)
 
 ```python
 @_log_bridge_call
@@ -11458,7 +11491,7 @@ form no longer submits at all.
 
 <a id="fim.gui.app.Api.get_results_location"></a>
 
-#### [get\_results\_location](./gui/app.py#L4975)
+#### [get\_results\_location](./gui/app.py#L5008)
 
 ```python
 @_log_bridge_call
@@ -11488,7 +11521,7 @@ identical field (§5, Option D4).
 
 <a id="fim.gui.app.Api.set_results_location"></a>
 
-#### [set\_results\_location](./gui/app.py#L5008)
+#### [set\_results\_location](./gui/app.py#L5041)
 
 ```python
 @_log_bridge_call
@@ -11521,7 +11554,7 @@ location_override` is what applies a saved value, once, the
 
 <a id="fim.gui.app.Api.browse_for_results_location"></a>
 
-#### [browse\_for\_results\_location](./gui/app.py#L5044)
+#### [browse\_for\_results\_location](./gui/app.py#L5077)
 
 ```python
 @_log_bridge_call
@@ -11541,7 +11574,7 @@ Browse for a results/logs directory via the OS's own native folder picker.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 
-#### [get\_welcome\_dismissed](./gui/app.py#L5064)
+#### [get\_welcome\_dismissed](./gui/app.py#L5097)
 
 ```python
 @_log_bridge_call
@@ -11557,7 +11590,7 @@ at all.
 
 <a id="fim.gui.app.Api.dismiss_welcome"></a>
 
-#### [dismiss\_welcome](./gui/app.py#L5075)
+#### [dismiss\_welcome](./gui/app.py#L5108)
 
 ```python
 @_log_bridge_call
@@ -11572,7 +11605,7 @@ actions the user picks, never un-called.
 
 <a id="fim.gui.app.Api.get_statistics_catalog"></a>
 
-#### [get\_statistics\_catalog](./gui/app.py#L5086)
+#### [get\_statistics\_catalog](./gui/app.py#L5119)
 
 ```python
 @_log_bridge_call
@@ -11594,7 +11627,7 @@ statistic is defined.
 
 <a id="fim.gui.app.Api.set_shown_statistics"></a>
 
-#### [set\_shown\_statistics](./gui/app.py#L5107)
+#### [set\_shown\_statistics](./gui/app.py#L5140)
 
 ```python
 @_log_bridge_call
@@ -11622,7 +11655,7 @@ text`). A saved run's results never change.
 
 <a id="fim.gui.app.Api.get_pairwise_max_demes"></a>
 
-#### [get\_pairwise\_max\_demes](./gui/app.py#L5138)
+#### [get\_pairwise\_max\_demes](./gui/app.py#L5171)
 
 ```python
 @_log_bridge_call
@@ -11633,7 +11666,7 @@ Return the largest deme count whose runs save `pairwise.json` in full.
 
 <a id="fim.gui.app.Api.set_pairwise_max_demes"></a>
 
-#### [set\_pairwise\_max\_demes](./gui/app.py#L5143)
+#### [set\_pairwise\_max\_demes](./gui/app.py#L5176)
 
 ```python
 @_log_bridge_call
@@ -11657,7 +11690,7 @@ Set the largest deme count whose runs save every pair's statistics.
 
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
-#### [get\_startup\_warnings](./gui/app.py#L5167)
+#### [get\_startup\_warnings](./gui/app.py#L5200)
 
 ```python
 @_log_bridge_call
@@ -11677,7 +11710,7 @@ own docstring on why this exists instead of one).
 
 <a id="fim.gui.app.Api.get_live_deme_pair"></a>
 
-#### [get\_live\_deme\_pair](./gui/app.py#L5183)
+#### [get\_live\_deme\_pair](./gui/app.py#L5216)
 
 ```python
 @_log_bridge_call
@@ -11695,7 +11728,7 @@ unlike `_significant_digits`'s own thread-start snapshot.
 
 <a id="fim.gui.app.Api.set_live_deme_pair"></a>
 
-#### [set\_live\_deme\_pair](./gui/app.py#L5196)
+#### [set\_live\_deme\_pair](./gui/app.py#L5229)
 
 ```python
 @_log_bridge_call
@@ -11745,7 +11778,7 @@ than crash the whole push).
 
 <a id="fim.gui.app.Api.list_recent_runs"></a>
 
-#### [list\_recent\_runs](./gui/app.py#L5243)
+#### [list\_recent\_runs](./gui/app.py#L5276)
 
 ```python
 @_log_bridge_call
@@ -11767,7 +11800,7 @@ no single trajectory of its own to open.
 
 <a id="fim.gui.app.Api.list_home_runs"></a>
 
-#### [list\_home\_runs](./gui/app.py#L5278)
+#### [list\_home\_runs](./gui/app.py#L5311)
 
 ```python
 @_log_bridge_call
@@ -11801,7 +11834,7 @@ asked for this heavier per-row read, so neither pays for it.
 
 <a id="fim.gui.app.Api.list_studies"></a>
 
-#### [list\_studies](./gui/app.py#L5309)
+#### [list\_studies](./gui/app.py#L5342)
 
 ```python
 @_log_bridge_call
@@ -11833,7 +11866,7 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 
 <a id="fim.gui.app.Api.list_experiments"></a>
 
-#### [list\_experiments](./gui/app.py#L5364)
+#### [list\_experiments](./gui/app.py#L5397)
 
 ```python
 @_log_bridge_call
@@ -11858,7 +11891,7 @@ List every Experiment, oldest first.
 
 <a id="fim.gui.app.Api.get_study_run_summary"></a>
 
-#### [get\_study\_run\_summary](./gui/app.py#L5403)
+#### [get\_study\_run\_summary](./gui/app.py#L5436)
 
 ```python
 @_log_bridge_call
@@ -11886,7 +11919,7 @@ its own runs' config summaries and statistics.
 
 <a id="fim.gui.app.Api.create_study"></a>
 
-#### [create\_study](./gui/app.py#L5435)
+#### [create\_study](./gui/app.py#L5468)
 
 ```python
 @_log_bridge_call
@@ -11908,7 +11941,7 @@ Blank `description`/`documentation` are stored as unset.
 
 <a id="fim.gui.app.Api.create_experiment"></a>
 
-#### [create\_experiment](./gui/app.py#L5468)
+#### [create\_experiment](./gui/app.py#L5501)
 
 ```python
 @_log_bridge_call
@@ -11921,7 +11954,7 @@ Create a new, empty Experiment. See `create_study`.
 
 <a id="fim.gui.app.Api.get_details"></a>
 
-#### [get\_details](./gui/app.py#L5483)
+#### [get\_details](./gui/app.py#L5516)
 
 ```python
 @_log_bridge_call
@@ -11948,7 +11981,7 @@ read fresh from disk each time.
 
 <a id="fim.gui.app.Api.update_study_details"></a>
 
-#### [update\_study\_details](./gui/app.py#L5522)
+#### [update\_study\_details](./gui/app.py#L5555)
 
 ```python
 @_log_bridge_call
@@ -11969,7 +12002,7 @@ The details dialog's Save (`webui/screens/details.js`). Blank
 
 <a id="fim.gui.app.Api.update_experiment_details"></a>
 
-#### [update\_experiment\_details](./gui/app.py#L5547)
+#### [update\_experiment\_details](./gui/app.py#L5580)
 
 ```python
 @_log_bridge_call
@@ -11983,7 +12016,7 @@ See `update_study_details`.
 
 <a id="fim.gui.app.Api.update_run_details"></a>
 
-#### [update\_run\_details](./gui/app.py#L5566)
+#### [update\_run\_details](./gui/app.py#L5599)
 
 ```python
 @_log_bridge_call
@@ -12004,7 +12037,7 @@ Blank text clears a field; a run may have neither. The run's own
 
 <a id="fim.gui.app.Api.get_run_context"></a>
 
-#### [get\_run\_context](./gui/app.py#L5594)
+#### [get\_run\_context](./gui/app.py#L5627)
 
 ```python
 @_log_bridge_call
@@ -12038,7 +12071,7 @@ description (`webui/screens/details.js`).
 
 <a id="fim.gui.app.Api.ensure_default_study"></a>
 
-#### [ensure\_default\_study](./gui/app.py#L5654)
+#### [ensure\_default\_study](./gui/app.py#L5687)
 
 ```python
 @_log_bridge_call
@@ -12061,7 +12094,7 @@ never gains this call at all.
 
 <a id="fim.gui.app.Api.ensure_examples"></a>
 
-#### [ensure\_examples](./gui/app.py#L5673)
+#### [ensure\_examples](./gui/app.py#L5706)
 
 ```python
 @_log_bridge_call
@@ -12085,7 +12118,7 @@ brought it up to date.
 
 <a id="fim.gui.app.Api.add_run_to_study"></a>
 
-#### [add\_run\_to\_study](./gui/app.py#L5697)
+#### [add\_run\_to\_study](./gui/app.py#L5730)
 
 ```python
 @_log_bridge_call
@@ -12101,7 +12134,7 @@ Add one existing Run directory to a Study; idempotent.
 
 <a id="fim.gui.app.Api.add_study_to_experiment"></a>
 
-#### [add\_study\_to\_experiment](./gui/app.py#L5711)
+#### [add\_study\_to\_experiment](./gui/app.py#L5744)
 
 ```python
 @_log_bridge_call
@@ -12118,7 +12151,7 @@ Add one existing Study to an Experiment; idempotent.
 
 <a id="fim.gui.app.Api.set_experiment_closed"></a>
 
-#### [set\_experiment\_closed](./gui/app.py#L5727)
+#### [set\_experiment\_closed](./gui/app.py#L5760)
 
 ```python
 @_log_bridge_call
@@ -12138,7 +12171,7 @@ Closing is refused while a Run of one of its Studies is running
 
 <a id="fim.gui.app.Api.set_study_closed"></a>
 
-#### [set\_study\_closed](./gui/app.py#L5750)
+#### [set\_study\_closed](./gui/app.py#L5783)
 
 ```python
 @_log_bridge_call
@@ -12160,7 +12193,7 @@ a Run.
 
 <a id="fim.gui.app.Api.delete_study"></a>
 
-#### [delete\_study](./gui/app.py#L5771)
+#### [delete\_study](./gui/app.py#L5804)
 
 ```python
 @_log_bridge_call
@@ -12187,7 +12220,7 @@ A read-only example Run the Study holds is kept too
 
 <a id="fim.gui.app.Api.delete_study_runs"></a>
 
-#### [delete\_study\_runs](./gui/app.py#L5808)
+#### [delete\_study\_runs](./gui/app.py#L5841)
 
 ```python
 @_log_bridge_call
@@ -12212,7 +12245,7 @@ A read-only example Run stays in the Study and counts as kept.
 
 <a id="fim.gui.app.Api.delete_experiment"></a>
 
-#### [delete\_experiment](./gui/app.py#L5837)
+#### [delete\_experiment](./gui/app.py#L5870)
 
 ```python
 @_log_bridge_call
@@ -12232,7 +12265,7 @@ A read-only Study the Experiment holds is kept
 
 <a id="fim.gui.app.Api.copy_study"></a>
 
-#### [copy\_study](./gui/app.py#L5868)
+#### [copy\_study](./gui/app.py#L5901)
 
 ```python
 @_log_bridge_call
@@ -12249,7 +12282,7 @@ Copy a Study's own run list into a new, independent Study.
 
 <a id="fim.gui.app.Api.get_sweepable_keys"></a>
 
-#### [get\_sweepable\_keys](./gui/app.py#L5883)
+#### [get\_sweepable\_keys](./gui/app.py#L5916)
 
 ```python
 @_log_bridge_call
@@ -12260,7 +12293,7 @@ Return every parameter a sweep may vary, with its axis metadata.
 
 <a id="fim.gui.app.Api.plan_sweep"></a>
 
-#### [plan\_sweep](./gui/app.py#L5888)
+#### [plan\_sweep](./gui/app.py#L5921)
 
 ```python
 @_log_bridge_call
@@ -12285,7 +12318,7 @@ Enumerate and validate a sweep without running anything.
 
 <a id="fim.gui.app.Api.start_sweep"></a>
 
-#### [start\_sweep](./gui/app.py#L5949)
+#### [start\_sweep](./gui/app.py#L5982)
 
 ```python
 @_log_bridge_call
@@ -12315,7 +12348,7 @@ at or over the size threshold, until `confirmed` is true.
 
 <a id="fim.gui.app.Api.resume_sweep"></a>
 
-#### [resume\_sweep](./gui/app.py#L6024)
+#### [resume\_sweep](./gui/app.py#L6057)
 
 ```python
 @_log_bridge_call
@@ -12347,7 +12380,7 @@ Run the points of an existing sweep Study that are still missing.
 
 <a id="fim.gui.app.Api.cancel_sweep"></a>
 
-#### [cancel\_sweep](./gui/app.py#L6079)
+#### [cancel\_sweep](./gui/app.py#L6112)
 
 ```python
 @_log_bridge_call
@@ -12358,7 +12391,7 @@ Stop the running sweep: the current point is cancelled, the rest skipped.
 
 <a id="fim.gui.app.Api.get_sweep_status"></a>
 
-#### [get\_sweep\_status](./gui/app.py#L6085)
+#### [get\_sweep\_status](./gui/app.py#L6118)
 
 ```python
 @_log_bridge_call
@@ -12369,7 +12402,7 @@ Return a sweep Study's planned points with their derived states.
 
 <a id="fim.gui.app.Api.get_sweep_results"></a>
 
-#### [get\_sweep\_results](./gui/app.py#L6097)
+#### [get\_sweep\_results](./gui/app.py#L6130)
 
 ```python
 @_log_bridge_call
@@ -12380,7 +12413,7 @@ Return a sweep Study's finished points and their statistics.
 
 <a id="fim.gui.app.Api.estimate_sweep_cost"></a>
 
-#### [estimate\_sweep\_cost](./gui/app.py#L6105)
+#### [estimate\_sweep\_cost](./gui/app.py#L6138)
 
 ```python
 @_log_bridge_call
@@ -12410,7 +12443,7 @@ run already exists cost nothing and are left out.
 
 <a id="fim.gui.app.Api.get_sweep_eta"></a>
 
-#### [get\_sweep\_eta](./gui/app.py#L6172)
+#### [get\_sweep\_eta](./gui/app.py#L6205)
 
 ```python
 @_log_bridge_call
@@ -12430,7 +12463,7 @@ goes, and read from files, so it works while the sweep runs.
 
 <a id="fim.gui.app.Api.get_sweep_series"></a>
 
-#### [get\_sweep\_series](./gui/app.py#L6197)
+#### [get\_sweep\_series](./gui/app.py#L6230)
 
 ```python
 @_log_bridge_call
@@ -12457,7 +12490,7 @@ Return a statistic as response curves across a sweep's axes.
 
 <a id="fim.gui.app.Api.get_sweep_trajectories"></a>
 
-#### [get\_sweep\_trajectories](./gui/app.py#L6224)
+#### [get\_sweep\_trajectories](./gui/app.py#L6257)
 
 ```python
 @_log_bridge_call
@@ -12484,7 +12517,7 @@ Return how each point approached equilibrium, for the overlay chart.
 
 <a id="fim.gui.app.Api.compare_sweeps"></a>
 
-#### [compare\_sweeps](./gui/app.py#L6250)
+#### [compare\_sweeps](./gui/app.py#L6283)
 
 ```python
 @_log_bridge_call
@@ -12514,7 +12547,7 @@ Nothing is stored; the comparison is worked out on each call.
 
 <a id="fim.gui.app.Api.get_sweep_theory"></a>
 
-#### [get\_sweep\_theory](./gui/app.py#L6279)
+#### [get\_sweep\_theory](./gui/app.py#L6312)
 
 ```python
 @_log_bridge_call
@@ -12541,7 +12574,7 @@ every statistic, never an error.
 
 <a id="fim.gui.app.Api.export_sweep_table"></a>
 
-#### [export\_sweep\_table](./gui/app.py#L6305)
+#### [export\_sweep\_table](./gui/app.py#L6338)
 
 ```python
 @_log_bridge_call
@@ -12574,7 +12607,7 @@ overwritten once the researcher has chosen it.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
-#### [copy\_experiment](./gui/app.py#L6475)
+#### [copy\_experiment](./gui/app.py#L6508)
 
 ```python
 @_log_bridge_call
@@ -12591,7 +12624,7 @@ Copy an Experiment's own study list into a new, independent Experiment.
 
 <a id="fim.gui.app.Api.delete_runs"></a>
 
-#### [delete\_runs](./gui/app.py#L6490)
+#### [delete\_runs](./gui/app.py#L6523)
 
 ```python
 @_log_bridge_call
@@ -12622,7 +12655,7 @@ nothing at all is deleted and the refusal is reported.
 
 <a id="fim.gui.app.Api.delete_selected"></a>
 
-#### [delete\_selected](./gui/app.py#L6519)
+#### [delete\_selected](./gui/app.py#L6552)
 
 ```python
 @_log_bridge_call
@@ -12676,7 +12709,7 @@ policy) rather than double-counted or treated as a failure.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 
-#### [get\_batch\_replicate\_summary](./gui/app.py#L6607)
+#### [get\_batch\_replicate\_summary](./gui/app.py#L6640)
 
 ```python
 @_log_bridge_call
@@ -12718,7 +12751,7 @@ already uses — no second naming scheme.
 
 <a id="fim.gui.app.Api.get_batch_pair_statistics"></a>
 
-#### [get\_batch\_pair\_statistics](./gui/app.py#L6670)
+#### [get\_batch\_pair\_statistics](./gui/app.py#L6703)
 
 ```python
 @_log_bridge_call
@@ -12752,7 +12785,7 @@ existed, or above its deme-count limit).
 
 <a id="fim.gui.app.Api.open_run"></a>
 
-#### [open\_run](./gui/app.py#L6720)
+#### [open\_run](./gui/app.py#L6753)
 
 ```python
 @_log_bridge_call
@@ -12825,7 +12858,7 @@ reuse, not a second rendering path.
 
 <a id="fim.gui.app.Api.open_batch"></a>
 
-#### [open\_batch](./gui/app.py#L6905)
+#### [open\_batch](./gui/app.py#L6938)
 
 ```python
 @_log_bridge_call
@@ -12885,7 +12918,7 @@ Home screen's own reopen spinner (`open-run.js`'s own
 
 <a id="fim.gui.app.Api.open_study"></a>
 
-#### [open\_study](./gui/app.py#L7033)
+#### [open\_study](./gui/app.py#L7066)
 
 ```python
 @_log_bridge_call
@@ -12952,7 +12985,7 @@ refuse," not a bug).
 
 <a id="fim.gui.app.Api.compare_runs"></a>
 
-#### [compare\_runs](./gui/app.py#L7176)
+#### [compare\_runs](./gui/app.py#L7209)
 
 ```python
 @_log_bridge_call
@@ -13005,7 +13038,7 @@ animation screen's own frame sampler already computes.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 
-#### [get\_animation\_frames](./gui/app.py#L7262)
+#### [get\_animation\_frames](./gui/app.py#L7295)
 
 ```python
 @_log_bridge_call
@@ -13045,7 +13078,7 @@ any kind during playback.
 
 <a id="fim.gui.app.Api.get_animation_deme_pair_frames"></a>
 
-#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L7329)
+#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L7362)
 
 ```python
 @_log_bridge_call
@@ -13089,7 +13122,7 @@ shape the default view's own frames already arrived in.
 
 <a id="fim.gui.app.Api.get_deme_pair_panel"></a>
 
-#### [get\_deme\_pair\_panel](./gui/app.py#L7394)
+#### [get\_deme\_pair\_panel](./gui/app.py#L7427)
 
 ```python
 @_log_bridge_call
@@ -13131,7 +13164,7 @@ small `d`).
 
 <a id="fim.gui.app.Api.get_batch_deme_pair_panel"></a>
 
-#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L7440)
+#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L7473)
 
 ```python
 @_log_bridge_call
@@ -13170,7 +13203,7 @@ itself.
 
 <a id="fim.gui.app.Api.get_batch_animation_frames"></a>
 
-#### [get\_batch\_animation\_frames](./gui/app.py#L7483)
+#### [get\_batch\_animation\_frames](./gui/app.py#L7516)
 
 ```python
 @_log_bridge_call
@@ -13217,7 +13250,7 @@ recent_runs`/`open_run` already use.
 
 <a id="fim.gui.app.Api.ping"></a>
 
-#### [ping](./gui/app.py#L7555)
+#### [ping](./gui/app.py#L7588)
 
 ```python
 @_log_bridge_call
@@ -13232,7 +13265,7 @@ context, before any real screen is built on top of it.
 
 <a id="fim.gui.app.Api.ping_from_worker"></a>
 
-#### [ping\_from\_worker](./gui/app.py#L7565)
+#### [ping\_from\_worker](./gui/app.py#L7598)
 
 ```python
 @_log_bridge_call
@@ -13252,7 +13285,7 @@ inside a real batch run.
 
 <a id="fim.gui.app.Api.open_external_link"></a>
 
-#### [open\_external\_link](./gui/app.py#L7584)
+#### [open\_external\_link](./gui/app.py#L7617)
 
 ```python
 @_log_bridge_call
@@ -13271,7 +13304,7 @@ module already follows for another OS-dispatched action.
 
 <a id="fim.gui.app.Api.check_for_updates"></a>
 
-#### [check\_for\_updates](./gui/app.py#L7598)
+#### [check\_for\_updates](./gui/app.py#L7631)
 
 ```python
 @_log_bridge_call
@@ -13301,7 +13334,7 @@ own equivalent action called the same module the same way.
 
 <a id="fim.gui.app.Api.get_about_info"></a>
 
-#### [get\_about\_info](./gui/app.py#L7634)
+#### [get\_about\_info](./gui/app.py#L7667)
 
 ```python
 @_log_bridge_call
@@ -13348,7 +13381,7 @@ three-part parsing).
 
 <a id="fim.gui.app.RunDetails"></a>
 
-## [RunDetails Objects](./gui/app.py#L7882)
+## [RunDetails Objects](./gui/app.py#L7915)
 
 ```python
 class RunDetails(NamedTuple)
@@ -13358,7 +13391,7 @@ The optional name and description Configure gives a run before it starts.
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 
-#### [in\_flight\_bridge\_threads](./gui/app.py#L9455)
+#### [in\_flight\_bridge\_threads](./gui/app.py#L9488)
 
 ```python
 def in_flight_bridge_threads(
@@ -13386,7 +13419,7 @@ flakiness.
 
 <a id="fim.gui.app.await_bridge_threads"></a>
 
-#### [await\_bridge\_threads](./gui/app.py#L9490)
+#### [await\_bridge\_threads](./gui/app.py#L9523)
 
 ```python
 def await_bridge_threads(
@@ -13439,7 +13472,7 @@ seconds later.
 
 <a id="fim.gui.app.initial_window_size"></a>
 
-#### [initial\_window\_size](./gui/app.py#L9724)
+#### [initial\_window\_size](./gui/app.py#L9757)
 
 ```python
 def initial_window_size(screen_width: int,
@@ -13466,7 +13499,7 @@ edges), between `_MIN_WINDOW_SIZE` and `_MAX_WINDOW_SIZE`.
 
 <a id="fim.gui.app.create_window"></a>
 
-#### [create\_window](./gui/app.py#L9765)
+#### [create\_window](./gui/app.py#L9798)
 
 ```python
 def create_window(*,
@@ -13517,7 +13550,7 @@ pywebview's own API instead of Tk's.
 
 <a id="fim.gui.app.shutdown_timeout"></a>
 
-#### [shutdown\_timeout](./gui/app.py#L9987)
+#### [shutdown\_timeout](./gui/app.py#L10020)
 
 ```python
 def shutdown_timeout() -> float
@@ -13542,7 +13575,7 @@ outcome than the hang it guards against.
 
 <a id="fim.gui.app.main"></a>
 
-#### [main](./gui/app.py#L10299)
+#### [main](./gui/app.py#L10332)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -15432,6 +15465,15 @@ One loaded (or default) snapshot of the GUI's own preferences.
 - `scatter_style` - One of `SCATTER_STYLES`.
 - `trajectory_display` - One of `TRAJECTORY_DISPLAYS`.
 - `trajectory_band_width` - One of `TRAJECTORY_BAND_WIDTHS`.
+- `show_identity_recovery_trajectory` - Whether the trajectory graph
+  draws Whitlock's (1992) theoretical identity-recovery curve,
+  `f_0` after a founder event — off by default. Unlike `shown_
+  statistics`, this is not a catalog entry: the curve is a
+  closed-form reference computed from `N`/`m` alone, not a
+  measurement this run's own report carries, so it is a Run-
+  card display choice (like `trajectory_display`) rather than
+  a statistic to show or hide (`doc/statistics.md`, "Identity
+  recovery").
 - `shown_statistics` - The statistics shown (Settings, "Statistics
   shown"), as catalog keys in catalog order, or `None` for the
   catalog's own defaults. Every statistic is saved in each
@@ -15453,7 +15495,7 @@ One loaded (or default) snapshot of the GUI's own preferences.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
-#### [to\_dict](./gui/preferences.py#L296)
+#### [to\_dict](./gui/preferences.py#L308)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -15463,7 +15505,7 @@ Return the on-disk JSON shape this preference set writes as.
 
 <a id="fim.gui.preferences.GuiPreferences.from_dict"></a>
 
-#### [from\_dict](./gui/preferences.py#L327)
+#### [from\_dict](./gui/preferences.py#L339)
 
 ```python
 @staticmethod
@@ -15483,7 +15525,7 @@ Parse the on-disk JSON shape `to_dict` writes.
 
 <a id="fim.gui.preferences.GuiPreferences.with_form_values"></a>
 
-#### [with\_form\_values](./gui/preferences.py#L433)
+#### [with\_form\_values](./gui/preferences.py#L448)
 
 ```python
 def with_form_values(form_values: Mapping[str, str]) -> GuiPreferences
@@ -15493,7 +15535,7 @@ Return a copy with `form_values` replaced — the common `start_run` update.
 
 <a id="fim.gui.preferences.GuiPreferences.with_named_preset"></a>
 
-#### [with\_named\_preset](./gui/preferences.py#L437)
+#### [with\_named\_preset](./gui/preferences.py#L452)
 
 ```python
 def with_named_preset(name: str, form_values: Mapping[str,
@@ -15514,7 +15556,7 @@ Return a copy with one named preset added, or overwritten by the same name.
 
 <a id="fim.gui.preferences.GuiPreferences.without_named_preset"></a>
 
-#### [without\_named\_preset](./gui/preferences.py#L455)
+#### [without\_named\_preset](./gui/preferences.py#L470)
 
 ```python
 def without_named_preset(name: str) -> GuiPreferences
@@ -15530,7 +15572,7 @@ surfacing.
 
 <a id="fim.gui.preferences.GuiPreferences.with_significant_digits"></a>
 
-#### [with\_significant\_digits](./gui/preferences.py#L470)
+#### [with\_significant\_digits](./gui/preferences.py#L485)
 
 ```python
 def with_significant_digits(significant_digits: int) -> GuiPreferences
@@ -15542,7 +15584,7 @@ The `set_significant_digits` bridge method's own update.
 
 <a id="fim.gui.preferences.GuiPreferences.with_dark_mode_override"></a>
 
-#### [with\_dark\_mode\_override](./gui/preferences.py#L477)
+#### [with\_dark\_mode\_override](./gui/preferences.py#L492)
 
 ```python
 def with_dark_mode_override(dark_mode_override: str | None) -> GuiPreferences
@@ -15557,7 +15599,7 @@ stay set forever), not merely "clear an error."
 
 <a id="fim.gui.preferences.GuiPreferences.with_welcome_dismissed"></a>
 
-#### [with\_welcome\_dismissed](./gui/preferences.py#L487)
+#### [with\_welcome\_dismissed](./gui/preferences.py#L502)
 
 ```python
 def with_welcome_dismissed() -> GuiPreferences
@@ -15573,7 +15615,7 @@ the OS."
 
 <a id="fim.gui.preferences.GuiPreferences.with_startup_behavior"></a>
 
-#### [with\_startup\_behavior](./gui/preferences.py#L498)
+#### [with\_startup\_behavior](./gui/preferences.py#L513)
 
 ```python
 def with_startup_behavior(startup_behavior: str) -> GuiPreferences
@@ -15588,7 +15630,7 @@ Return a copy with `startup_behavior` replaced.
 
 <a id="fim.gui.preferences.GuiPreferences.with_default_run_settings"></a>
 
-#### [with\_default\_run\_settings](./gui/preferences.py#L507)
+#### [with\_default\_run\_settings](./gui/preferences.py#L522)
 
 ```python
 def with_default_run_settings(values: Mapping[str, str]) -> GuiPreferences
@@ -15604,7 +15646,7 @@ reaches here (the same division of labor `with_form_values` and
 
 <a id="fim.gui.preferences.GuiPreferences.with_results_location_override"></a>
 
-#### [with\_results\_location\_override](./gui/preferences.py#L518)
+#### [with\_results\_location\_override](./gui/preferences.py#L533)
 
 ```python
 def with_results_location_override(path: str | None) -> GuiPreferences
@@ -15623,7 +15665,7 @@ rather than silently only ever growing.
 
 <a id="fim.gui.preferences.GuiPreferences.with_run_card_layout"></a>
 
-#### [with\_run\_card\_layout](./gui/preferences.py#L532)
+#### [with\_run\_card\_layout](./gui/preferences.py#L547)
 
 ```python
 def with_run_card_layout(
@@ -15632,18 +15674,20 @@ def with_run_card_layout(
         run_graph_columns: int | None = None,
         scatter_style: str | None = None,
         trajectory_display: str | None = None,
-        trajectory_band_width: int | None = None) -> GuiPreferences
+        trajectory_band_width: int | None = None,
+        show_identity_recovery_trajectory: bool | None = None
+) -> GuiPreferences
 ```
 
 Return a copy with any of the Run card's display choices replaced.
 
-The `Api.set_run_*`/`set_scatter_style`/`set_trajectory_display`
-bridge methods' own update:
-each argument left `None` keeps the current value.
+The `Api.set_run_*`/`set_scatter_style`/`set_trajectory_display`/
+`set_show_identity_recovery_trajectory` bridge methods' own
+update: each argument left `None` keeps the current value.
 
 <a id="fim.gui.preferences.GuiPreferences.with_shown_statistics"></a>
 
-#### [with\_shown\_statistics](./gui/preferences.py#L570)
+#### [with\_shown\_statistics](./gui/preferences.py#L591)
 
 ```python
 def with_shown_statistics(keys: tuple[str, ...] | None) -> GuiPreferences
@@ -15653,7 +15697,7 @@ Return a copy with the shown statistics replaced (`None`: defaults).
 
 <a id="fim.gui.preferences.GuiPreferences.with_pairwise_max_demes"></a>
 
-#### [with\_pairwise\_max\_demes](./gui/preferences.py#L574)
+#### [with\_pairwise\_max\_demes](./gui/preferences.py#L595)
 
 ```python
 def with_pairwise_max_demes(max_demes: int) -> GuiPreferences
@@ -15663,7 +15707,7 @@ Return a copy with the `pairwise.json` deme-count limit replaced.
 
 <a id="fim.gui.preferences.GuiPreferences.with_default_ploidy"></a>
 
-#### [with\_default\_ploidy](./gui/preferences.py#L578)
+#### [with\_default\_ploidy](./gui/preferences.py#L599)
 
 ```python
 def with_default_ploidy(default_ploidy: str) -> GuiPreferences
@@ -15680,7 +15724,7 @@ The `Api.set_default_ploidy` bridge method's own update.
 
 <a id="fim.gui.preferences.load_preferences"></a>
 
-#### [load\_preferences](./gui/preferences.py#L625)
+#### [load\_preferences](./gui/preferences.py#L646)
 
 ```python
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]
@@ -15705,7 +15749,7 @@ Load `path`, quarantining and defaulting on any unreadable content.
 
 <a id="fim.gui.preferences.set_preferences_file_override"></a>
 
-#### [set\_preferences\_file\_override](./gui/preferences.py#L659)
+#### [set\_preferences\_file\_override](./gui/preferences.py#L680)
 
 ```python
 def set_preferences_file_override(path: Path | None) -> None
@@ -15731,7 +15775,7 @@ the identical "never pay for it unless actually used" reason.
 
 <a id="fim.gui.preferences.preferences_file_override"></a>
 
-#### [preferences\_file\_override](./gui/preferences.py#L681)
+#### [preferences\_file\_override](./gui/preferences.py#L702)
 
 ```python
 def preferences_file_override() -> Path | None
@@ -15741,7 +15785,7 @@ The current `preferences_file_path()` override, if any.
 
 <a id="fim.gui.preferences.preferences_file_path"></a>
 
-#### [preferences\_file\_path](./gui/preferences.py#L686)
+#### [preferences\_file\_path](./gui/preferences.py#L707)
 
 ```python
 def preferences_file_path(*,
@@ -15786,7 +15830,7 @@ configurable-storage-root-design.md` (`selby/restricted`).
 
 <a id="fim.gui.preferences.save_preferences"></a>
 
-#### [save\_preferences](./gui/preferences.py#L741)
+#### [save\_preferences](./gui/preferences.py#L762)
 
 ```python
 def save_preferences(path: Path, preferences: GuiPreferences) -> None

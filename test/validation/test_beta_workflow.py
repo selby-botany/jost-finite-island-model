@@ -97,7 +97,7 @@ def test_linux_beta_job_matches_ci_ymls_own_gtk_dependency_list() -> None:
         "gcc",
         "libgirepository1.0-dev",
         "libcairo2-dev",
-        "libwebkit2gtk-4.0-37",
+        "libwebkit2gtk-4.1-0",
         "xvfb",
         "xauth",
     ):
