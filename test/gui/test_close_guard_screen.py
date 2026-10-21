@@ -14,6 +14,7 @@ on a page flag or a Python-side state the code under test sets, never a delay.
 from __future__ import annotations
 
 import queue
+import threading
 from collections.abc import Callable
 
 import pytest
@@ -194,6 +195,50 @@ def test_discarding_closes_without_saving() -> None:
     assert api._close_gate.closing is True
 
 
+def test_quitting_from_home_lists_hidden_dirty_documents_and_the_running_job() -> None:
+    def steps(window: webview.Window, api: Api) -> bool:
+        dirty_tab = window.evaluate_js("window.fim.workspace.selectedId()")
+        window.evaluate_js(_EDIT_DEMES)
+        _wait_for_unsaved(api, True)
+        clean_tab = window.evaluate_js(
+            "window.fim.workspace.createDocument();"
+            "window.fim.markFormClean();"
+            "window.fim.workspace.selectedId();"
+        )
+        window.evaluate_js(f"window.fim.workspace.select('{dirty_tab}');")
+        window.evaluate_js(f"window.fim.workspace.select('{clean_tab}');")
+        window.evaluate_js("window.fim.showOpenRunScreen(); true;")
+        api._run_in_flight = True
+        api._cancel_event = threading.Event()
+        api._job_id = "job-close-test"
+
+        assert _start_close(window) is True
+        poll_page(window, _DIALOG_OPEN, what="the close dialog to open from Home")
+        state = window.evaluate_js(
+            "(function(){"
+            "return {"
+            "screen: document.querySelector('.screen:not([hidden])').id,"
+            "dirty: [...document.querySelectorAll("
+            "'#confirm-close-dirty-documents li')].map(item => item.textContent),"
+            "job: document.getElementById('confirm-close-active-job').textContent"
+            "};"
+            "})()"
+        )
+        assert state["screen"] == "screen-open-run"
+        assert state["dirty"] == [f"New configuration (draft) — {dirty_tab}"]
+        assert state["job"] == "Active job: run — job-close-test"
+        _click(window, "confirm-close-discard-button")
+        poll_or_fail(
+            lambda: api._close_gate.closing,
+            lambda closing: closing is True,
+            "the window to close after the close dialog is answered",
+            interval=_POLL_INTERVAL_SECONDS,
+        )
+        return True
+
+    _drive(steps)
+
+
 def test_saving_keeps_the_form_as_a_saved_run_and_closes() -> None:
     def steps(window: webview.Window, api: Api) -> bool:
         window.evaluate_js(_EDIT_DEMES)
@@ -214,6 +259,37 @@ def test_saving_keeps_the_form_as_a_saved_run_and_closes() -> None:
     _drive(steps)
     [row] = object_bridge.list_rows()["runs"]
     assert row["state"] in {"draft", "planned"}
+
+
+def test_failed_save_keeps_the_close_dialog_open() -> None:
+    def steps(window: webview.Window, api: Api) -> None:
+        window.evaluate_js(_EDIT_DEMES)
+        _wait_for_unsaved(api, True)
+        window.evaluate_js(
+            "window.pywebview.api.save_run_object = async () => ({"
+            "ok: false, message: 'The disk is not writable.'"
+            "}); true;"
+        )
+        assert _start_close(window) is True
+        poll_page(window, _DIALOG_OPEN, what="the close dialog to open")
+        _click(window, "confirm-close-primary-button")
+        poll_page(
+            window,
+            "document.getElementById('confirm-close-error').textContent === "
+            "'The disk is not writable.'",
+            what="the save failure to be shown",
+        )
+        assert api._close_gate.closing is False
+        assert api._close_gate.unsaved_edits is True
+        assert (
+            window.evaluate_js(
+                "document.getElementById('confirm-close-primary-button').disabled"
+            )
+            is False
+        )
+        assert window.evaluate_js(_DIALOG_OPEN) is True
+
+    _drive(steps)
 
 
 def test_keeping_working_leaves_the_window_open_and_the_edits_unsaved() -> None:

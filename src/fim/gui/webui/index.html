@@ -2157,6 +2157,11 @@
   <dialog class="config-modal" id="modal-confirm-close" aria-labelledby="confirm-close-title">
     <h2 id="confirm-close-title">Close fim?</h2>
     <ul id="confirm-close-reasons"></ul>
+    <section id="confirm-close-dirty-documents-section" hidden>
+      <h3>Unsaved documents</h3>
+      <ul id="confirm-close-dirty-documents"></ul>
+    </section>
+    <p id="confirm-close-active-job" hidden></p>
     <p class="hint" id="confirm-close-error" role="alert" hidden></p>
     <div class="actions">
       <button type="button" id="confirm-close-keep-button" tabindex="0">Keep working</button>

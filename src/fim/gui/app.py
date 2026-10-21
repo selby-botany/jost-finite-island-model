@@ -358,11 +358,14 @@ class _CloseGate:
       directly. From then on the page's bridge calls are declined.
     - `unsaved_edits`: the Configure form differs from what was last loaded
       or saved, as the page last reported (`Api.report_unsaved_edits`).
+    - `dirty_documents`: the page's current per-document labels for drafts
+      that would be lost on close.
     """
 
     def __init__(self) -> None:
         self.closing = False
         self.unsaved_edits = False
+        self.dirty_documents: list[dict[str, str]] = []
 
 
 def _log_bridge_call[ApiMethod: Callable[..., Any]](method: ApiMethod) -> ApiMethod:
@@ -3108,14 +3111,31 @@ class Api:
         """Return whether closing now would lose edits or interrupt work."""
         return any(self._close_requirements().values())
 
-    def _close_requirements(self) -> dict[str, bool]:
-        """Return what closing now would affect, by the keys the dialog reads."""
+    def _close_requirements(self) -> dict[str, Any]:
+        """Return the documents and active job affected by closing."""
         saved_run = self._active_object_id is not None
+        active_job: dict[str, str] | None = None
+        if self._sweep_cancel_event is not None:
+            active_job = {
+                "kind": "sweep",
+                "id": self._sweep_study_id or self._job_id or "unknown",
+            }
+        elif self._run_in_flight:
+            active_job = {
+                "kind": "saved run" if saved_run else "run",
+                "id": self._active_object_id or self._job_id or "unknown",
+            }
         return {
-            "unsavedEdits": self._close_gate.unsaved_edits,
+            "unsavedEdits": (
+                self._close_gate.unsaved_edits or bool(self._close_gate.dirty_documents)
+            ),
             "savedRun": saved_run,
             "run": self._run_in_flight and not saved_run,
             "sweep": self._sweep_cancel_event is not None,
+            "dirtyDocuments": [
+                dict(document) for document in self._close_gate.dirty_documents
+            ],
+            "activeJob": active_job,
         }
 
     def _ask_page_to_confirm_close(self, window: _EvaluatesJs) -> None:
@@ -3165,10 +3185,10 @@ class Api:
         """Return what closing the window now would affect, for its dialog.
 
         Returns:
-            `{"ok": True, "unsavedEdits", "savedRun", "run", "sweep"}`, each
-            a bool: the Configure form has unsaved edits, a saved run is
-            executing (it pauses and resumes later), a run or batch that
-            cannot be resumed is executing, a sweep is executing.
+            `{"ok": True, "unsavedEdits", "savedRun", "run", "sweep",
+            "dirtyDocuments", "activeJob"}`. The first four values describe
+            the close requirements; `dirtyDocuments` identifies every
+            unsaved document and `activeJob` identifies the work affected.
         """
         return {"ok": True, **self._close_requirements()}
 
@@ -3193,17 +3213,67 @@ class Api:
         return {"ok": True}
 
     @_log_bridge_call
-    def report_unsaved_edits(self, unsaved: bool) -> None:
-        """Record whether the Configure form has edits that are not saved.
+    def report_unsaved_edits(
+        self,
+        unsaved: bool,
+        dirty_documents: object | None = None,
+    ) -> dict[str, Any]:
+        """Record the page's unsaved-document summary for the close dialog.
 
-        Sent by the page only when the answer changes. Closing the window
-        consults it (`on_window_closing`).
+        The boolean remains supported for callers that report only aggregate
+        state. The web page also sends the document IDs and labels so closing
+        from Home can name every dirty document, including hidden ones.
 
         Args:
-            unsaved: Whether the form differs from what was last loaded or
+            unsaved: Whether at least one document has changes that are not
                 saved.
+            dirty_documents: Optional page-provided document summaries.
+
+        Returns:
+            `{"ok": True}` or a validation error.
         """
+        checked: list[dict[str, str]] | None = None
+        if dirty_documents is not None:
+            if not isinstance(dirty_documents, list):
+                return {
+                    "ok": False,
+                    "message": "dirty_documents must be a list",
+                }
+            validated_documents: list[dict[str, str]] = []
+            seen_ids: set[str] = set()
+            for document in dirty_documents:
+                if (
+                    not isinstance(document, dict)
+                    or set(document) != {"tabId", "label"}
+                    or not all(
+                        isinstance(document[key], str) and document[key].strip()
+                        for key in ("tabId", "label")
+                    )
+                ):
+                    return {
+                        "ok": False,
+                        "message": "each dirty document needs a tabId and label",
+                    }
+                tab_id = document["tabId"]
+                if tab_id in seen_ids:
+                    return {
+                        "ok": False,
+                        "message": "dirty document IDs must be unique",
+                    }
+                seen_ids.add(tab_id)
+                validated_documents.append(
+                    {"tabId": tab_id, "label": document["label"].strip()}
+                )
+            if bool(unsaved) != bool(validated_documents):
+                return {
+                    "ok": False,
+                    "message": "unsaved must match the dirty document list",
+                }
+            checked = validated_documents
         self._close_gate.unsaved_edits = bool(unsaved)
+        if checked is not None:
+            self._close_gate.dirty_documents = checked
+        return {"ok": True}
 
     @_log_bridge_call
     def open_output_folder(self, path: str) -> None:

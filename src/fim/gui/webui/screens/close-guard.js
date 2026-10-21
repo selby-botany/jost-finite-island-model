@@ -30,6 +30,7 @@ const closeRunDescriptionInput = document.getElementById("run-description-input"
 
 // What Python was last told, so a bridge call is made only on a change.
 let reportedUnsavedEdits = false;
+let reportedDirtyDocuments = null;
 
 // The words for each thing a close would affect, in the order shown.
 const CLOSE_REASONS = [
@@ -92,6 +93,7 @@ function sweepSnapshot(tabId) {
 function reportUnsavedEdits() {
     let unsaved = false;
     let changed = false;
+    const dirtyDocuments = [];
     for (const tabId of window.fim.workspace.ids()) {
         const state = window.fim.workspace.get(tabId);
         const wasDirty = state.formDirty === true;
@@ -105,17 +107,43 @@ function reportUnsavedEdits() {
             sweepSnapshot(tabId) !== state.cleanSweepSnapshot;
         changed ||= wasDirty !== state.formDirty;
         unsaved ||= state.formDirty;
+        if (state.formDirty) {
+            const controls = runControlsState(tabId) || {};
+            const label =
+                controls.runName?.trim() ||
+                state.runTitle?.state?.runName ||
+                (state.label === "Untitled" ? "New configuration" : state.label);
+            dirtyDocuments.push({
+                tabId,
+                label: `${label}${state.kind ? ` (${state.kind})` : ""}`,
+            });
+        }
     }
     if (changed) {
         window.fim.workspace.notifyChange();
     }
-    if (unsaved === reportedUnsavedEdits) {
+    const dirtyDocumentsSnapshot = JSON.stringify(dirtyDocuments);
+    if (
+        unsaved === reportedUnsavedEdits &&
+        dirtyDocumentsSnapshot === reportedDirtyDocuments
+    ) {
         return;
     }
     reportedUnsavedEdits = unsaved;
-    window.pywebview.api.report_unsaved_edits(unsaved).catch(() => {
-        // Closing, or the bridge is gone: nothing left to protect.
-    });
+    reportedDirtyDocuments = dirtyDocumentsSnapshot;
+    window.pywebview.api
+        .report_unsaved_edits(unsaved, dirtyDocuments)
+        .then((result) => {
+            if (!result || !result.ok) {
+                console.error(
+                    "Could not update the close dialog's unsaved documents:",
+                    result?.message || "unknown bridge error"
+                );
+            }
+        })
+        .catch((error) => {
+            console.error("Could not update the close dialog's unsaved documents", error);
+        });
 }
 
 /** Treat one document as saved, as it is right now. */
@@ -186,6 +214,30 @@ function describeClose(needs) {
             return item;
         })
     );
+    const dirtyDocumentsList = document.getElementById(
+        "confirm-close-dirty-documents"
+    );
+    const dirtyDocumentsSection = document.getElementById(
+        "confirm-close-dirty-documents-section"
+    );
+    dirtyDocumentsList.replaceChildren(
+        ...(needs.dirtyDocuments || []).map((item) => {
+            const node = document.createElement("li");
+            node.textContent = `${item.label} — ${item.tabId}`;
+            return node;
+        })
+    );
+    dirtyDocumentsSection.hidden =
+        !needs.dirtyDocuments || needs.dirtyDocuments.length === 0;
+    const activeJob = document.getElementById("confirm-close-active-job");
+    if (needs.activeJob) {
+        activeJob.textContent =
+            `Active job: ${needs.activeJob.kind} — ${needs.activeJob.id}`;
+        activeJob.hidden = false;
+    } else {
+        activeJob.textContent = "";
+        activeJob.hidden = true;
+    }
     closeDiscardButton.hidden = !needs.unsavedEdits;
     if (needs.unsavedEdits) {
         closePrimaryButton.textContent = "Save and close";

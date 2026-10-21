@@ -1630,7 +1630,9 @@ This happens when:
 - A run, batch, or sweep that you started with **Run simulation** or
   **Sweep** is in progress.
 
-The dialog tells you what is at stake and offers these choices:
+The dialog lists every unsaved document by name, including documents that
+are not currently open on screen. It also identifies the run or sweep that
+will be paused or stopped. The dialog offers these choices:
 
 | Button | What it does |
 |---|---|

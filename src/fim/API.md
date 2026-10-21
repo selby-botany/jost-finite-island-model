@@ -10737,10 +10737,10 @@ Return what closing the window now would affect, for its dialog.
 
 **Returns**:
 
-- ``{"ok"` - True, "unsavedEdits", "savedRun", "run", "sweep"}`, each
-  a bool: the Configure form has unsaved edits, a saved run is
-  executing (it pauses and resumes later), a run or batch that
-  cannot be resumed is executing, a sweep is executing.
+- ``{"ok"` - True, "unsavedEdits", "savedRun", "run", "sweep",
+  "dirtyDocuments", "activeJob"}`. The first four values describe
+  the close requirements; `dirtyDocuments` identifies every
+  unsaved document and `activeJob` identifies the work affected.
 
 <a id="fim.gui.app.Api.finish_close"></a>
 
@@ -10767,18 +10767,27 @@ the window from a helper thread so this call can return first.
 
 ```python
 @_log_bridge_call
-def report_unsaved_edits(unsaved: bool) -> None
+def report_unsaved_edits(
+        unsaved: bool,
+        dirty_documents: object | None = None) -> dict[str, Any]
 ```
 
-Record whether the Configure form has edits that are not saved.
+Record the page's unsaved-document summary for the close dialog.
 
-Sent by the page only when the answer changes. Closing the window
-consults it (`on_window_closing`).
+The boolean remains supported for callers that report only aggregate
+state. The web page also sends the document IDs and labels so closing
+from Home can name every dirty document, including hidden ones.
 
 **Arguments**:
 
-- `unsaved` - Whether the form differs from what was last loaded or
+- `unsaved` - Whether at least one document has changes that are not
   saved.
+- `dirty_documents` - Optional page-provided document summaries.
+
+
+**Returns**:
+
+- ``{"ok"` - True}` or a validation error.
 
 <a id="fim.gui.app.Api.open_output_folder"></a>
 
