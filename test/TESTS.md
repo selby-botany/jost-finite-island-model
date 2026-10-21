@@ -25191,6 +25191,17 @@ def test_details_dialog_and_run_title_show_a_read_only_run_as_locked(
 
 The details dialog cannot save, and the opened run's title has the lock.
 
+<a id="gui.test_read_only_screen.test_cloning_a_read_only_result_opens_an_editable_copy_in_another_tab"></a>
+
+#### test\_cloning\_a\_read\_only\_result\_opens\_an\_editable\_copy\_in\_another\_tab
+
+```python
+def test_cloning_a_read_only_result_opens_an_editable_copy_in_another_tab(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Clone keeps the source result locked and opens a separate draft.
+
 <a id="gui.test_recent_runs"></a>
 
 # gui.test\_recent\_runs
@@ -28981,6 +28992,28 @@ def test_job_and_resource_indexes_follow_document_lifecycle(
 ```
 
 Indexes resolve to their owner and are cleared when it closes.
+
+<a id="gui.test_workspace.test_open_resource_reuses_its_tab_without_merging_drafts"></a>
+
+#### test\_open\_resource\_reuses\_its\_tab\_without\_merging\_drafts
+
+```python
+def test_open_resource_reuses_its_tab_without_merging_drafts(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Resource identity deduplicates results, not identical editable drafts.
+
+<a id="gui.test_workspace.test_closing_selects_the_right_neighbor_then_left_and_routes_home"></a>
+
+#### test\_closing\_selects\_the\_right\_neighbor\_then\_left\_and\_routes\_home
+
+```python
+def test_closing_selects_the_right_neighbor_then_left_and_routes_home(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A selected close picks right, then left, then Home when no tabs remain.
 
 <a id="gui.test_workspace.test_scrubber_and_graph_state_restore_for_each_document"></a>
 

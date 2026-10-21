@@ -293,10 +293,10 @@ window.fim.workspace.onSelectionChange((selectedId, previousId) => {
     if (!state) {
         return;
     }
-    if (!state.formValues && outgoingValues) {
+    if (!state.readOnly && !state.formValues && outgoingValues) {
         state.formValues = { ...outgoingValues };
     }
-    if (state.formValues) {
+    if (!state.readOnly && state.formValues) {
         applyFormValues(state.formValues, {
             expectLoaded: false,
             tabId: selectedId,

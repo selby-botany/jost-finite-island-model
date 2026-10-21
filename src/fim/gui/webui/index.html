@@ -106,7 +106,10 @@
 
   <div id="workspace">
     <div id="document-switcher" role="toolbar"
-         aria-label="Open documents" hidden></div>
+         aria-label="Open documents" hidden>
+      <button type="button" id="document-new-button" aria-label="New configuration"
+              title="New configuration">+</button>
+    </div>
     <!-- The always-visible N/d/m/mu parameter strip (design §3.2):
          read-only, always current; clicking any value jumps to
          Configure (design's own click-through behavior). `screens/
@@ -2167,6 +2170,24 @@
       <button type="button" id="confirm-close-keep-button" tabindex="0">Keep working</button>
       <button type="button" id="confirm-close-discard-button" tabindex="0" hidden>Close without saving</button>
       <button type="button" id="confirm-close-primary-button" class="primary-action" tabindex="0">Save and close</button>
+    </div>
+  </dialog>
+  <dialog class="config-modal" id="modal-confirm-close-document"
+          aria-labelledby="confirm-close-document-title">
+    <h2 id="confirm-close-document-title">Close document?</h2>
+    <p id="confirm-close-document-message"></p>
+    <p class="hint" id="confirm-close-document-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" id="confirm-close-document-keep-button" tabindex="0">
+        Keep open
+      </button>
+      <button type="button" id="confirm-close-document-discard-button" tabindex="0" hidden>
+        Discard and close
+      </button>
+      <button type="button" id="confirm-close-document-save-button" class="primary-action"
+              tabindex="0" hidden>Save and close</button>
+      <button type="button" id="confirm-close-document-job-button" class="primary-action"
+              tabindex="0" hidden></button>
     </div>
   </dialog>
 

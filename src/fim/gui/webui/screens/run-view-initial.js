@@ -520,6 +520,10 @@ window.fim.enterInitialState = enterInitialState;
  * shows the new value.
  */
 window.fim.menu.newConfiguration = async function newConfiguration() {
+    const workspace = window.fim.workspace;
+    if (workspace.documentTabsEnabled()) {
+        workspace.createDocument({ kind: "draft", label: "Untitled" });
+    }
     window.fim.showScreen("screen-run");
     window.__fimRunViewReady = false;
     // The reset below supplies the values for the preview. Starting one

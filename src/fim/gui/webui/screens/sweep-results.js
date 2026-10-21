@@ -60,6 +60,7 @@ const SWEEP_STATE_LABELS = { stale: "older version (rerun to update)" };
 let sweepResultsData = null;
 let sweepResultsStudyId = null;
 let sweepResultsRenderSequence = 0;
+let sweepResultsPending = 0;
 // What the canvas currently shows, for hover and click: pixel points for a
 // line chart, or a heat-map layout with the run each cell holds.
 let sweepResultsHit = null;
@@ -67,6 +68,86 @@ let sweepResultsHit = null;
 // new request) and the point the keyboard is on: `{curve, position}`.
 let sweepResultsLastSpec = null;
 let sweepFocus = null;
+function sweepResultsControlState() {
+    return {
+        view: sweepResultsViewSelect.value,
+        statistic: sweepResultsStatistic.value,
+        x: sweepResultsX.value,
+        y: sweepResultsY.value,
+        mode: sweepResultsMode.value,
+        theory: sweepResultsTheory.checked,
+        by: sweepResultsBy.value,
+        interval: sweepResultsInterval.value,
+        xScale: sweepResultsXScale.value,
+        yScale: sweepResultsYScale.value,
+    };
+}
+
+function saveSweepResultsDocumentState(tabId) {
+    const state = window.fim.workspace.get(tabId);
+    if (!state || !sweepResultsData || !sweepResultsStudyId) {
+        return;
+    }
+    state.sweepResultsData = sweepResultsData;
+    state.sweepResultsStudyId = sweepResultsStudyId;
+    state.sweepResultsControls = sweepResultsControlState();
+}
+
+function restoreSweepResultsControls(controls) {
+    if (!controls) {
+        return;
+    }
+    for (const [control, value] of [
+        [sweepResultsViewSelect, controls.view],
+        [sweepResultsStatistic, controls.statistic],
+        [sweepResultsX, controls.x],
+        [sweepResultsY, controls.y],
+        [sweepResultsMode, controls.mode],
+        [sweepResultsBy, controls.by],
+        [sweepResultsInterval, controls.interval],
+        [sweepResultsXScale, controls.xScale],
+        [sweepResultsYScale, controls.yScale],
+    ]) {
+        if (value !== undefined && [...control.options].some((item) => item.value === value)) {
+            control.value = value;
+        }
+    }
+    if (controls.theory !== undefined) {
+        sweepResultsTheory.checked = controls.theory;
+    }
+}
+
+async function showSweepResultsDocument(state) {
+    sweepResultsData = state.sweepResultsData;
+    sweepResultsStudyId = state.sweepResultsStudyId;
+    sweepResultsSummary.textContent = sweepResultsSummaryText(sweepResultsData);
+    populateSweepResultsControls(sweepResultsData);
+    restoreSweepResultsControls(state.sweepResultsControls);
+    sweepTitle.textContent = sweepResultsData.name;
+    window.fim.attachDetails(sweepTitle, sweepStudyDetails(sweepResultsData));
+    sweepProgressView.hidden = true;
+    sweepResultsView.hidden = false;
+    window.fim.showScreen("screen-sweep");
+    await renderSweepResults();
+}
+
+window.fim.workspace.onSelectionChange((tabId, previousId) => {
+    if (previousId !== null && sweepResultsData) {
+        saveSweepResultsDocumentState(previousId);
+    }
+    sweepResultsRenderSequence += 1;
+    const state = tabId === null ? null : window.fim.workspace.get(tabId);
+    if (!state?.sweepResultsData) {
+        sweepResultsData = null;
+        sweepResultsStudyId = null;
+        sweepResultsView.hidden = true;
+        if (sweepResultsPending === 0) {
+            window.__fimSweepResultsReady = true;
+        }
+        return;
+    }
+    void showSweepResultsDocument(state);
+});
 
 window.__fimSweepResultsReady = false;
 
@@ -175,24 +256,60 @@ function sweepHeldValues() {
  * @param {string} studyId
  */
 window.fim.showSweepResults = async function showSweepResults(studyId) {
+    sweepResultsPending += 1;
     window.__fimSweepResultsReady = false;
-    const data = await window.pywebview.api.get_sweep_results(studyId);
-    if (!data.ok) {
-        window.fim.showScreen("screen-sweep");
-        showSweepBanner(data.message);
-        return;
+    try {
+        const workspace = window.fim.workspace;
+        let tabId = workspace.selectedId();
+        let created = false;
+        if (workspace.documentTabsEnabled()) {
+            const opened = workspace.openResource(`sweep-results:${studyId}`, {
+                kind: "sweep-results",
+                label: "Sweep results",
+                readOnly: true,
+                history: ["screen-sweep"],
+            });
+            tabId = opened.tabId;
+            created = opened.created;
+            if (!created) {
+                activateWorkspaceDocument(tabId);
+                return;
+            }
+        }
+        const documentState = workspace.get(tabId);
+        const data = await window.pywebview.api.get_sweep_results(studyId);
+        if (workspace.get(tabId) !== documentState) {
+            return;
+        }
+        if (!data.ok) {
+            if (created) {
+                workspace.closeDocument(tabId);
+            }
+            if (
+                !workspace.documentTabsEnabled() ||
+                workspace.selectedId() === tabId
+            ) {
+                window.fim.showScreen("screen-sweep");
+                showSweepBanner(data.message);
+            }
+            return;
+        }
+        documentState.sweepResultsData = data;
+        documentState.sweepResultsStudyId = studyId;
+        documentState.readOnly = true;
+        documentState.kind = "sweep-results";
+        documentState.label = data.name || "Sweep results";
+        documentState.sweepResultsControls = null;
+        if (workspace.selectedId() === tabId) {
+            showSweepBanner("");
+            await showSweepResultsDocument(documentState);
+        }
+    } finally {
+        sweepResultsPending -= 1;
+        if (sweepResultsPending === 0) {
+            window.__fimSweepResultsReady = true;
+        }
     }
-    showSweepBanner("");
-    sweepResultsData = data;
-    sweepResultsStudyId = studyId;
-    sweepResultsSummary.textContent = sweepResultsSummaryText(data);
-    populateSweepResultsControls(data);
-    sweepTitle.textContent = data.name;
-    window.fim.attachDetails(sweepTitle, sweepStudyDetails(data));
-    sweepProgressView.hidden = true;
-    sweepResultsView.hidden = false;
-    window.fim.showScreen("screen-sweep");
-    await renderSweepResults();
 };
 
 /**
@@ -333,6 +450,14 @@ function refreshSweepHeldControls() {
 async function renderSweepResults() {
     const sequence = (sweepResultsRenderSequence += 1);
     window.__fimSweepResultsReady = false;
+    const tabId = window.fim.workspace.selectedId();
+    if (tabId !== null && sweepResultsData) {
+        saveSweepResultsDocumentState(tabId);
+    }
+    if (!sweepResultsData) {
+        window.__fimSweepResultsReady = true;
+        return;
+    }
     const statistic = sweepResultsStatistic.value;
     const trajectory = sweepShowsTrajectories();
     const xKey = sweepResultsX.value;

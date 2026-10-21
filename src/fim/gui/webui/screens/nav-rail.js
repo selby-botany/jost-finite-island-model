@@ -46,7 +46,30 @@ const railButtons = document.querySelectorAll(".rail-item");
 const configureBackButton = document.getElementById("configure-back-button");
 const configureBanner = document.getElementById("configure-banner");
 const documentSwitcher = document.getElementById("document-switcher");
+const documentNewButton = document.getElementById("document-new-button");
+const closeDocumentDialog = document.getElementById(
+    "modal-confirm-close-document"
+);
+const closeDocumentMessage = document.getElementById(
+    "confirm-close-document-message"
+);
+const closeDocumentError = document.getElementById(
+    "confirm-close-document-error"
+);
+const closeDocumentKeepButton = document.getElementById(
+    "confirm-close-document-keep-button"
+);
+const closeDocumentDiscardButton = document.getElementById(
+    "confirm-close-document-discard-button"
+);
+const closeDocumentSaveButton = document.getElementById(
+    "confirm-close-document-save-button"
+);
+const closeDocumentJobButton = document.getElementById(
+    "confirm-close-document-job-button"
+);
 let documentSwitcherFocusId = null;
+let closeDocumentRequestId = null;
 
 /** Describe a document without treating its label as an identity. */
 function documentSwitcherLabel(state) {
@@ -77,6 +100,228 @@ function activateWorkspaceDocument(tabId) {
     });
 }
 
+function closeDocumentHasActiveJob(state) {
+    return (
+        state.attachedJobId !== null &&
+        state.attachedJobId !== undefined &&
+        state.jobState !== "finished"
+    );
+}
+
+function renderCloseDocumentDialog(tabId) {
+    const state = window.fim.workspace.get(tabId);
+    if (!state) {
+        closeDocumentDialog.close();
+        closeDocumentRequestId = null;
+        return;
+    }
+    closeDocumentRequestId = tabId;
+    closeDocumentError.hidden = true;
+    closeDocumentError.textContent = "";
+    closeDocumentDiscardButton.hidden = !state.formDirty;
+    closeDocumentSaveButton.hidden = !state.formDirty;
+    closeDocumentJobButton.hidden =
+        !closeDocumentHasActiveJob(state) && !state.closeReleaseFailed;
+    if (state.closeReleaseFailed) {
+        closeDocumentJobButton.textContent = "Retry close";
+    }
+    if (state.jobState === "starting") {
+        closeDocumentMessage.textContent =
+            "This document is starting a job. It will stay open until the start is accepted or refused.";
+        closeDocumentDiscardButton.hidden = true;
+        closeDocumentSaveButton.hidden = true;
+        closeDocumentJobButton.hidden = true;
+    } else if (closeDocumentHasActiveJob(state)) {
+        const savedRun = state.jobKind === "saved-run";
+        closeDocumentMessage.textContent = savedRun
+            ? "A saved run is active. Pause it at a checkpoint before closing this document."
+            : state.jobKind === "sweep"
+              ? "A sweep is active. Stop it before closing this document; its Study will remain available."
+              : "A run is active. Stop it before closing this document.";
+        closeDocumentJobButton.textContent = savedRun
+            ? "Pause and close"
+            : "Stop and close";
+    } else if (state.closeReleaseFailed) {
+        closeDocumentMessage.textContent =
+            "The job has stopped, but its document could not be released. Retry closing it.";
+        closeDocumentJobButton.textContent = "Retry close";
+    } else if (state.formDirty) {
+        closeDocumentMessage.textContent =
+            "This configuration has unsaved changes. Save it as a saved run, discard the changes, or keep working.";
+    } else {
+        closeDocumentMessage.textContent = "Close this document?";
+        closeDocumentRequestId = null;
+        void finishClosingDocument(tabId);
+        return;
+    }
+    if (!closeDocumentDialog.open) {
+        closeDocumentDialog.showModal();
+    }
+}
+
+async function finishClosingDocument(tabId) {
+    const state = window.fim.workspace.get(tabId);
+    if (!state) {
+        return;
+    }
+    const jobId = state.attachedJobId;
+    try {
+        if (jobId) {
+            await window.fim.jobs.closeDocument(jobId);
+        }
+        state.closeReleaseFailed = false;
+        const wasSelected = window.fim.workspace.selectedId() === tabId;
+        window.fim.workspace.closeDocument(tabId);
+        if (closeDocumentRequestId === tabId) {
+            closeDocumentRequestId = null;
+            closeDocumentDialog.close();
+        }
+        if (wasSelected) {
+            const nextId = window.fim.workspace.selectedId();
+            if (nextId === null) {
+                window.fim.menu.openRun();
+            } else {
+                activateWorkspaceDocument(nextId);
+            }
+        }
+        window.fim.refreshUnsavedEdits();
+    } catch (error) {
+        if (jobId && state.jobState === "finished") {
+            state.closeReleaseFailed = true;
+            closeDocumentJobButton.hidden = false;
+            closeDocumentJobButton.textContent = "Retry close";
+        }
+        closeDocumentJobButton.disabled = false;
+        closeDocumentKeepButton.disabled = false;
+        closeDocumentSaveButton.disabled = false;
+        closeDocumentError.textContent =
+            error instanceof Error ? error.message : String(error);
+        closeDocumentError.hidden = false;
+    }
+}
+
+async function waitForJobFinished(jobId) {
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+        const snapshot = await window.pywebview.api.get_job_snapshot(jobId);
+        if (!snapshot.ok) {
+            throw new Error(snapshot.message || "Could not check the job state.");
+        }
+        if (snapshot.snapshot?.type === "finished") {
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error("The job did not stop before the close wait expired.");
+}
+
+async function closeDocumentWithJob(tabId) {
+    const state = window.fim.workspace.get(tabId);
+    if (!state || !state.attachedJobId) {
+        return;
+    }
+    closeDocumentJobButton.disabled = true;
+    closeDocumentKeepButton.disabled = true;
+    closeDocumentError.hidden = true;
+    try {
+        if (state.jobState !== "finished" && state.jobState !== "terminal") {
+            let result;
+            if (state.jobKind === "saved-run") {
+                result = await window.pywebview.api.pause_run();
+                if (!result.ok) {
+                    throw new Error(result.message || "Could not pause the saved run.");
+                }
+            } else if (state.jobKind === "sweep") {
+                await window.pywebview.api.cancel_sweep();
+            } else {
+                await window.pywebview.api.cancel_run();
+            }
+        }
+        if (state.jobState !== "finished") {
+            await waitForJobFinished(state.attachedJobId);
+            state.jobState = "finished";
+        }
+        state.closeReleaseFailed = false;
+        await finishClosingDocument(tabId);
+    } catch (error) {
+        closeDocumentError.textContent =
+            error instanceof Error ? error.message : String(error);
+        closeDocumentError.hidden = false;
+        closeDocumentJobButton.disabled = false;
+        closeDocumentKeepButton.disabled = false;
+    }
+}
+
+window.fim.requestCloseDocument = function requestCloseDocument(tabId) {
+    const state = window.fim.workspace.get(tabId);
+    if (!state) {
+        return;
+    }
+    if (state.jobState === "starting") {
+        state.closeAfterStart = true;
+        renderCloseDocumentDialog(tabId);
+        return;
+    }
+    if (!state.formDirty && !closeDocumentHasActiveJob(state)) {
+        void finishClosingDocument(tabId);
+        return;
+    }
+    renderCloseDocumentDialog(tabId);
+};
+
+window.fim.resolveCloseDocument = async function resolveCloseDocument(action) {
+    const tabId = closeDocumentRequestId;
+    const state = tabId === null ? null : window.fim.workspace.get(tabId);
+    if (!state) {
+        closeDocumentDialog.close();
+        closeDocumentRequestId = null;
+        return;
+    }
+    if (action === "keep") {
+        closeDocumentRequestId = null;
+        closeDocumentDialog.close();
+        return;
+    }
+    if (action === "save") {
+        closeDocumentSaveButton.disabled = true;
+        try {
+            window.fim.workspace.select(tabId);
+            const result = await window.fim.saveFormForLater();
+            if (!result.ok) {
+                throw new Error(result.message || "Could not save this configuration.");
+            }
+            if (state.formDirty) {
+                throw new Error(
+                    "The sweep setup is not saved with the run. Discard it or keep working."
+                );
+            }
+            if (closeDocumentHasActiveJob(state)) {
+                renderCloseDocumentDialog(tabId);
+                return;
+            }
+            await finishClosingDocument(tabId);
+        } catch (error) {
+            closeDocumentError.textContent =
+                error instanceof Error ? error.message : String(error);
+            closeDocumentError.hidden = false;
+        } finally {
+            closeDocumentSaveButton.disabled = false;
+        }
+        return;
+    }
+    if (action === "discard") {
+        if (closeDocumentHasActiveJob(state)) {
+            state.formDirty = false;
+            renderCloseDocumentDialog(tabId);
+            return;
+        }
+        await finishClosingDocument(tabId);
+        return;
+    }
+    if (action === "job") {
+        await closeDocumentWithJob(tabId);
+    }
+};
+
 /** Render keyed buttons so model updates never discard keyboard focus. */
 function renderDocumentSwitcher() {
     const workspace = window.fim.workspace;
@@ -91,7 +336,9 @@ function renderDocumentSwitcher() {
     ) {
         documentSwitcherFocusId = workspace.selectedId() ?? ids[0] ?? null;
     }
-    for (const item of [...documentSwitcher.children]) {
+    for (const item of documentSwitcher.querySelectorAll(
+        ".document-switcher-item"
+    )) {
         if (!ids.includes(item.dataset.tabId)) {
             item.remove();
         }
@@ -117,11 +364,13 @@ function renderDocumentSwitcher() {
             close.type = "button";
             close.className = "document-close";
             close.textContent = "\u00d7";
-            // Guarded close actions arrive in A18; never discard a draft here.
-            close.disabled = true;
-            close.title = "Closing documents is not available in this development preview";
+            close.title = "Close this document";
+            close.addEventListener("click", (event) => {
+                event.stopPropagation();
+                window.fim.requestCloseDocument(tabId);
+            });
             item.append(button, close);
-            documentSwitcher.append(item);
+            documentSwitcher.insertBefore(item, documentNewButton);
         }
         const state = workspace.get(tabId);
         const label = labels.filter((value) => value === labels[index]).length > 1
@@ -380,6 +629,24 @@ window.fim.showConfigureScreen = showConfigureScreen;
  */
 function wireNavRail() {
     documentSwitcher.addEventListener("keydown", onDocumentSwitcherKeydown);
+    documentNewButton.addEventListener("click", () => {
+        window.fim.menu.newConfiguration();
+    });
+    closeDocumentKeepButton.addEventListener("click", () => {
+        window.fim.resolveCloseDocument("keep");
+    });
+    closeDocumentDiscardButton.addEventListener("click", () => {
+        window.fim.resolveCloseDocument("discard");
+    });
+    closeDocumentSaveButton.addEventListener("click", () => {
+        window.fim.resolveCloseDocument("save");
+    });
+    closeDocumentJobButton.addEventListener("click", () => {
+        window.fim.resolveCloseDocument("job");
+    });
+    closeDocumentDialog.addEventListener("cancel", () => {
+        closeDocumentRequestId = null;
+    });
     documentSwitcher.addEventListener("focusin", (event) => {
         const button = event.target.closest(".document-select");
         if (button) {

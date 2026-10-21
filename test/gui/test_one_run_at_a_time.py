@@ -401,7 +401,7 @@ def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     for state in (seen["afterClick"], seen["afterMenu"]):
         assert state["view"] == "running"
         assert state["screenRunHidden"] is False
-        assert state["banner"] == _IN_PROGRESS
+        assert state["banner"] == f"Untitled: {_IN_PROGRESS}"
         assert state["cancelDisabled"] is False
     assert seen["startsWhileRunning"] == 1
     assert len(held_runs.started) == 2

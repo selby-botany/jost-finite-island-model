@@ -68,7 +68,7 @@ def test_document_switcher_is_opt_in_and_has_toolbar_semantics(
     assert state["tabIndexes"] == [0, -1]
     assert state["closeNames"] == [f"Close {label}" for label in state["labels"]]
     assert state["nestedCloses"] == 0
-    assert state["guarded"] is True
+    assert state["guarded"] is False
 
 
 def test_document_switcher_keyboard_focus_and_selection_are_separate(
@@ -361,6 +361,103 @@ def test_job_and_resource_indexes_follow_document_lifecycle(
     assert state["jobAfterClose"] is None
     assert state["selected"] == state["second"] == "document-2"
     assert state["remaining"] == ["document-2"]
+
+
+def test_open_resource_reuses_its_tab_without_merging_drafts(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Resource identity deduplicates results, not identical editable drafts."""
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const firstDraft = workspace.selectedId();
+            const secondDraft = workspace.createDocument({
+                formValues: {N: "20", d: "2"},
+            });
+            const thirdDraft = workspace.createDocument({
+                formValues: {N: "20", d: "2"},
+            });
+            const opened = workspace.openResource("run:/results/run-one", {
+                kind: "result",
+                readOnly: true,
+            });
+            workspace.select(secondDraft);
+            const reused = workspace.openResource("run:/results/run-one");
+            return {
+                ids: workspace.ids(),
+                firstDraft,
+                secondDraft,
+                thirdDraft,
+                opened,
+                reused,
+                selected: workspace.selectedId(),
+                resourceOwner:
+                    workspace.documentForResource("run:/results/run-one"),
+                drafts: [firstDraft, secondDraft, thirdDraft].map(
+                    (tabId) => workspace.get(tabId).resourceKey
+                ),
+                readOnly: workspace.get(reused.tabId).readOnly,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert len(state["ids"]) == 4
+    assert len({state["firstDraft"], state["secondDraft"], state["thirdDraft"]}) == 3
+    assert state["opened"]["created"] is True
+    assert state["reused"] == {
+        "tabId": state["opened"]["tabId"],
+        "created": False,
+    }
+    assert state["selected"] == state["resourceOwner"] == state["opened"]["tabId"]
+    assert state["drafts"] == [None, None, None]
+    assert state["readOnly"] is True
+
+
+def test_closing_selects_the_right_neighbor_then_left_and_routes_home(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A selected close picks right, then left, then Home when no tabs remain."""
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            workspace.setDocumentTabsEnabled(true);
+            const first = workspace.selectedId();
+            const second = workspace.createDocument();
+            const third = workspace.createDocument();
+            let homeOpened = 0;
+            window.fim.menu.openRun = () => {
+                homeOpened += 1;
+                window.fim.showScreen("screen-open-run");
+            };
+            workspace.select(second);
+            window.fim.requestCloseDocument(second);
+            const afterRight = workspace.selectedId();
+            workspace.select(third);
+            window.fim.requestCloseDocument(third);
+            const afterLeft = workspace.selectedId();
+            workspace.select(first);
+            window.fim.requestCloseDocument(first);
+            return {
+                afterRight,
+                afterLeft,
+                remaining: workspace.ids(),
+                selected: workspace.selectedId(),
+                homeOpened,
+                shown: document.querySelector(".screen:not([hidden])").id,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["afterRight"] == "document-3"
+    assert state["afterLeft"] == "document-1"
+    assert state["remaining"] == []
+    assert state["selected"] is None
+    assert state["homeOpened"] == 1
+    assert state["shown"] == "screen-open-run"
 
 
 def test_scrubber_and_graph_state_restore_for_each_document(

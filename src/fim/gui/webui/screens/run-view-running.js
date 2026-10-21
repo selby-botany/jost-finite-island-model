@@ -243,14 +243,22 @@ window.fim.applyRunKind = applyRunKind;
  *
  * @param {boolean} isBatch
  */
-function enterRunningState(isBatch = false) {
-    window.fim.setRunViewState("running");
-    activeLiveRunState = liveRunStateFor(
-        window.fim.workspace.selectedId()
-    );
-    Object.assign(activeLiveRunState, createLiveRunState(), {
+function enterRunningState(
+    isBatch = false,
+    tabId = window.fim.workspace.selectedId()
+) {
+    const liveRunState = liveRunStateFor(tabId);
+    if (!liveRunState) {
+        return;
+    }
+    Object.assign(liveRunState, createLiveRunState(), {
         isBatch,
     });
+    if (window.fim.workspace.selectedId() !== tabId) {
+        return;
+    }
+    activeLiveRunState = liveRunState;
+    window.fim.setRunViewState("running");
     // `Api.start_run` has not resolved yet at this point; its reference
     // payloads are set for real once that bridge call resolves.
     // A genuinely new run starting is one of the two points the
@@ -329,9 +337,13 @@ window.fim.enterRunningState = enterRunningState;
  * @param {Object<string, string>|null|undefined} equilibrium
  */
 window.fim.setLiveEquilibriumReference = function setLiveEquilibriumReference(
-    equilibrium
+    equilibrium,
+    tabId = window.fim.workspace.selectedId()
 ) {
-    activeLiveRunState.liveEquilibriumReference = equilibrium ?? null;
+    const state = liveRunStateFor(tabId);
+    if (state) {
+        state.liveEquilibriumReference = equilibrium ?? null;
+    }
 };
 
 /**
@@ -343,10 +355,13 @@ window.fim.setLiveEquilibriumReference = function setLiveEquilibriumReference(
  * @param {{rate: number, equilibrium: number}|null|undefined} identityRecovery
  */
 window.fim.setLiveIdentityRecoveryReference = function setLiveIdentityRecoveryReference(
-    identityRecovery
+    identityRecovery,
+    tabId = window.fim.workspace.selectedId()
 ) {
-    activeLiveRunState.liveIdentityRecoveryReference =
-        identityRecovery ?? null;
+    const state = liveRunStateFor(tabId);
+    if (state) {
+        state.liveIdentityRecoveryReference = identityRecovery ?? null;
+    }
 };
 
 /**
@@ -357,8 +372,14 @@ window.fim.setLiveIdentityRecoveryReference = function setLiveIdentityRecoveryRe
  *
  * @param {object|null|undefined} closedForm
  */
-window.fim.setLiveClosedForm = function setLiveClosedForm(closedForm) {
-    activeLiveRunState.liveClosedForm = closedForm ?? null;
+window.fim.setLiveClosedForm = function setLiveClosedForm(
+    closedForm,
+    tabId = window.fim.workspace.selectedId()
+) {
+    const state = liveRunStateFor(tabId);
+    if (state) {
+        state.liveClosedForm = closedForm ?? null;
+    }
 };
 
 /**
@@ -368,8 +389,14 @@ window.fim.setLiveClosedForm = function setLiveClosedForm(closedForm) {
  *
  * @param {{window: number, burnIn: number, tolerance: number}|null|undefined} convergence
  */
-window.fim.setLiveConvergence = function setLiveConvergence(convergence) {
-    activeLiveRunState.liveConvergence = convergence ?? null;
+window.fim.setLiveConvergence = function setLiveConvergence(
+    convergence,
+    tabId = window.fim.workspace.selectedId()
+) {
+    const state = liveRunStateFor(tabId);
+    if (state) {
+        state.liveConvergence = convergence ?? null;
+    }
     window.fim.setWatchedStatistics(
         activeLiveRunState.liveConvergence
             ? activeLiveRunState.liveConvergence.statistics

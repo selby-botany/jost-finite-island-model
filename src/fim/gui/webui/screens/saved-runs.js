@@ -175,7 +175,12 @@ async function onSavedRunAction(action, run) {
         return;
     }
     if (action === "open") {
-        await window.fim.openComputedRun(run.directory, false);
+        await window.fim.openComputedRun(
+            run.directory,
+            false,
+            null,
+            run.resourceKey
+        );
         return;
     }
     const label = run.name || run.objectId;
@@ -207,20 +212,51 @@ async function onSavedRunAction(action, run) {
  * @param {string} objectId The saved run.
  */
 async function editSavedRun(objectId) {
-    const tabId = window.fim.workspace.selectedId();
+    let tabId = window.fim.workspace.selectedId();
+    const tabsEnabled = window.fim.workspace.documentTabsEnabled();
     const opened = await window.pywebview.api.open_run_object(objectId);
     if (!opened.ok) {
         showSavedRunsBanner(opened.message);
         return;
     }
-    if (window.fim.workspace.selectedId() !== tabId) {
+    if (
+        !tabsEnabled &&
+        window.fim.workspace.selectedId() !== tabId
+    ) {
         return;
+    }
+    if (tabsEnabled) {
+        if (opened.editable) {
+            const resource = window.fim.workspace.openResource(
+                opened.resourceKey || `saved-run:${objectId}`,
+                {
+                    kind: "saved-run",
+                    label: opened.name || objectId,
+                    formValues: opened.values,
+                    readOnly: false,
+                }
+            );
+            tabId = resource.tabId;
+            if (!resource.created) {
+                activateWorkspaceDocument(tabId);
+                return;
+            }
+        } else {
+            tabId = window.fim.workspace.createDocument({
+                kind: "draft",
+                label: `${opened.name || objectId} copy`,
+            });
+        }
     }
     applyFormValues(opened.values);
     window.fim.applyLoadedRunSettings(opened);
     const state = savedRunStateFor(tabId);
     if (state) {
         state.editingObjectId = opened.editable ? objectId : null;
+    }
+    const documentState = window.fim.workspace.get(tabId);
+    if (documentState && opened.resourceKey && opened.editable) {
+        documentState.resourceKey = opened.resourceKey;
     }
     window.fim.setRunDetails(opened.name || "", opened.description || "");
     window.fim.showScreen("screen-run");
@@ -243,7 +279,45 @@ async function editSavedRun(objectId) {
  * @param {object} run The row's saved run.
  */
 async function startSavedRun(run) {
-    await window.fim.startRunExclusively(() => beginSavedRun(run), showSavedRunsBanner);
+    let startTabId = window.fim.workspace.selectedId();
+    let ownerTabId = null;
+    if (window.fim.workspace.documentTabsEnabled()) {
+        const opened = window.fim.workspace.openResource(
+            run.resourceKey || `saved-run:${run.objectId}`,
+            {
+                kind: "saved-run",
+                label: run.name || run.objectId,
+                readOnly: false,
+            }
+        );
+        ownerTabId = opened.tabId;
+        startTabId = opened.tabId;
+        window.fim.showScreen("screen-run");
+    }
+    await window.fim.startRunExclusively(
+        () => beginSavedRun(run, startTabId),
+        (message) => {
+            if (ownerTabId !== null) {
+                const state = window.fim.workspace.get(ownerTabId);
+                if (state) {
+                    state.startRefusal =
+                        `${run.name || run.objectId}: ${message}`;
+                    window.fim.workspace.notifyChange();
+                    if (window.fim.workspace.selectedId() === ownerTabId) {
+                        window.fim.showScreen("screen-run");
+                        showRunBanner(state.startRefusal);
+                    }
+                    if (state.closeAfterStart) {
+                        state.closeAfterStart = false;
+                        window.fim.requestCloseDocument(ownerTabId);
+                    }
+                }
+            } else {
+                showSavedRunsBanner(message);
+            }
+        },
+        { tabId: startTabId, jobKind: "saved-run" }
+    );
 }
 
 /**
@@ -251,25 +325,66 @@ async function startSavedRun(run) {
  * no other run is starting or in flight.
  * @param {object} run The row's saved run.
  */
-async function beginSavedRun(run) {
-    const tabId = window.fim.workspace.selectedId();
-    window.fim.showScreen("screen-run");
-    window.fim.showRunBanner("");
-    window.fim.enterRunningState(false);
-    window.fim.setRunCardTitle({ phase: "running", runName: run.name || null });
+async function beginSavedRun(run, tabId = window.fim.workspace.selectedId()) {
+    const selected = window.fim.workspace.selectedId() === tabId;
+    if (selected) {
+        window.fim.showScreen("screen-run");
+        window.fim.showRunBanner("");
+    }
+    window.fim.enterRunningState(false, tabId);
+    window.fim.setRunCardTitle(
+        { phase: "running", runName: run.name || null },
+        tabId
+    );
     const state = savedRunStateFor(tabId);
+    const documentState = window.fim.workspace.get(tabId);
     if (state) {
         state.activeSavedRunId = run.objectId;
     }
-    renderPauseRunButton();
+    if (documentState) {
+        documentState.jobKind = "saved-run";
+        documentState.jobState = "starting";
+        window.fim.workspace.notifyChange();
+    }
+    if (selected) {
+        renderPauseRunButton();
+    }
     const started = await window.pywebview.api.start_run_object(run.objectId);
     if (!started.ok) {
         if (state) {
             state.activeSavedRunId = null;
         }
-        renderPauseRunButton();
-        window.fim.enterInitialState();
-        window.fim.showRunBanner(started.message);
+        if (window.fim.workspace.selectedId() === tabId) {
+            renderPauseRunButton();
+            window.fim.enterInitialState();
+        }
+        if (documentState) {
+            documentState.jobKind = null;
+            documentState.jobState = null;
+            documentState.startRefusal =
+                `${run.name || run.objectId}: ${started.message}`;
+            window.fim.workspace.notifyChange();
+        }
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.showRunBanner(
+                documentState?.startRefusal || started.message
+            );
+        }
+        if (documentState?.closeAfterStart) {
+            documentState.closeAfterStart = false;
+            window.fim.requestCloseDocument(tabId);
+        }
+        return;
+    }
+    if (documentState && started.jobId) {
+        documentState.jobState = "running";
+        window.fim.workspace.attachJob(tabId, started.jobId);
+    }
+    if (documentState?.closeAfterStart) {
+        documentState.closeAfterStart = false;
+        window.fim.requestCloseDocument(tabId);
+    }
+    if (window.fim.workspace.selectedId() !== tabId) {
         return;
     }
     window.fim.applyRunKind(Boolean(started.isBatch));
@@ -305,6 +420,14 @@ async function saveFormForLater() {
     if (saved.ok) {
         if (state) {
             state.editingObjectId = saved.objectId;
+        }
+        if (saved.resourceKey) {
+            window.fim.workspace.setResourceKey(tabId, saved.resourceKey);
+            const documentState = window.fim.workspace.get(tabId);
+            if (documentState) {
+                documentState.kind = "saved-run";
+                documentState.label = name || saved.objectId;
+            }
         }
         window.fim.markFormClean(tabId);
     }

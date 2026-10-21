@@ -127,10 +127,21 @@ function restoreSweepControls() {
         tabId === null ? null : window.fim.workspace.get(tabId);
     const setup = sweepSetupFor(tabId);
     if (!setup || !documentState) {
+        sweepProgressView.hidden = true;
         return;
     }
     sweepCheckbox.checked = setup.enabled;
     syncSweepControls(tabId);
+    if (documentState.sweepResultsData) {
+        sweepProgressView.hidden = true;
+    } else if (
+        documentState.jobKind === "sweep" &&
+        documentState.sweepStudyId
+    ) {
+        void enterSweepProgress(documentState.sweepStudyId);
+    } else {
+        sweepProgressView.hidden = true;
+    }
 }
 
 window.fim.workspace.onSelectionChange(restoreSweepControls);
@@ -790,6 +801,12 @@ function sweepStudyDetails(status) {
  * @param {string} studyId
  */
 async function enterSweepProgress(studyId) {
+    const tabId = window.fim.workspace.selectedId();
+    const documentState =
+        tabId === null ? null : window.fim.workspace.get(tabId);
+    if (documentState) {
+        documentState.sweepStudyId = studyId;
+    }
     sweepLastStudyId = studyId;
     window.__fimSweepFinished = false;
     sweepTitle.textContent = "Sweep running";
@@ -803,6 +820,13 @@ async function enterSweepProgress(studyId) {
     sweepViewResultsButton.hidden = true;
     document.getElementById("sweep-results").hidden = true;
     const status = await window.pywebview.api.get_sweep_status(studyId);
+    if (
+        tabId === null ||
+        window.fim.workspace.selectedId() !== tabId ||
+        window.fim.workspace.get(tabId) !== documentState
+    ) {
+        return;
+    }
     if (!status.ok) {
         showSweepBanner(status.message);
         return;
@@ -1251,6 +1275,9 @@ window.fim.runConfiguredSweep = async function runConfiguredSweep(
     if (window.fim.workspace.selectedId() === tabId) {
         showRunBanner("");
     }
+    documentState.jobKind = "sweep";
+    documentState.jobState = "starting";
+    window.fim.workspace.notifyChange();
     const result = await window.pywebview.api.start_sweep(
         values,
         config.request,
@@ -1270,10 +1297,30 @@ window.fim.runConfiguredSweep = async function runConfiguredSweep(
         return;
     }
     if (!result.ok) {
+        documentState.jobKind = null;
+        documentState.jobState = null;
+        window.fim.workspace.notifyChange();
         if (window.fim.workspace.selectedId() === tabId) {
-            showRunBanner(result.message);
+            showRunBanner(`${documentState.label}: ${result.message}`);
+        } else {
+            documentState.startRefusal =
+                `${documentState.label}: ${result.message}`;
+            window.fim.workspace.notifyChange();
+        }
+        if (documentState.closeAfterStart) {
+            documentState.closeAfterStart = false;
+            window.fim.requestCloseDocument(tabId);
         }
         return;
+    }
+    documentState.jobState = "running";
+    documentState.sweepStudyId = result.studyId;
+    if (result.jobId) {
+        window.fim.workspace.attachJob(tabId, result.jobId);
+    }
+    if (documentState.closeAfterStart) {
+        documentState.closeAfterStart = false;
+        window.fim.requestCloseDocument(tabId);
     }
     setup.confirmArmed = false;
     if (window.fim.workspace.selectedId() !== tabId) {

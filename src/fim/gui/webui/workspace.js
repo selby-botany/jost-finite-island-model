@@ -135,6 +135,19 @@ const workspace = (() => {
         return tabId;
     }
 
+    function openResource(resourceKey, initialState = {}) {
+        if (typeof resourceKey !== "string" || resourceKey.length === 0) {
+            throw new Error("A resource document needs a resource key");
+        }
+        const existingId = documentByResource.get(resourceKey);
+        if (existingId !== undefined) {
+            select(existingId);
+            return { tabId: existingId, created: false };
+        }
+        const tabId = createDocument({ ...initialState, resourceKey });
+        return { tabId, created: true };
+    }
+
     function closeDocument(tabId) {
         const state = documentFor(tabId);
         const index = orderedIds.indexOf(tabId);
@@ -152,6 +165,7 @@ const workspace = (() => {
         } else {
             notifyChange();
         }
+        return state;
     }
 
     function select(tabId) {
@@ -208,6 +222,19 @@ const workspace = (() => {
         state.attachedJobId = jobId;
         if (jobId !== null) {
             documentByJob.set(jobId, tabId);
+            const snapshot = window.fim.jobs?.snapshotFor(jobId);
+            if (snapshot) {
+                state.jobState =
+                    snapshot.type === "finished"
+                        ? "finished"
+                        : snapshot.type === "terminal"
+                          ? "terminal"
+                          : "running";
+                if (state.jobState === "finished" && state.closeAfterStart) {
+                    state.closeAfterStart = false;
+                    window.fim.requestCloseDocument(tabId);
+                }
+            }
         }
     }
 
@@ -251,6 +278,7 @@ const workspace = (() => {
 
     const api = {
         createDocument,
+        openResource,
         closeDocument,
         select,
         onSelectionChange,

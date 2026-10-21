@@ -62,14 +62,18 @@ function runTitleKey(state, tabId) {
  *     and `directoryName` describe a finished run; `studyId` a reopened
  *     Study; `runName` the name typed for a run in progress.
  */
-window.fim.setRunCardTitle = function setRunCardTitle(state) {
-    const tabId = window.fim.workspace.selectedId();
+window.fim.setRunCardTitle = function setRunCardTitle(
+    state,
+    tabId = window.fim.workspace.selectedId()
+) {
     const title = runTitleStateFor(tabId);
     if (!title) {
         return;
     }
     title.state = { ...state };
-    renderRunTitle();
+    if (window.fim.workspace.selectedId() === tabId) {
+        renderRunTitle();
+    }
     window.fim.workspace.notifyChange();
     refreshRunTitleContext(tabId);
 };

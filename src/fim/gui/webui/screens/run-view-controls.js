@@ -101,14 +101,36 @@ function showRunBanner(message) {
  *     Python says a run can start now.
  * @param {(message: string) => void} [showRefusal] Shows why not, where
  *     the request came from (default: the Run card's banner).
+ * @param {{tabId: string, jobKind: string}|null} [startingDocument]
+ *     The document whose start is waiting for admission.
  * @returns {Promise<void>}
  */
-async function startRunExclusively(start, showRefusal = showRunBanner) {
+async function startRunExclusively(
+    start,
+    showRefusal = showRunBanner,
+    startingDocument = null
+) {
     if (runStartPending) {
         return;
     }
     runStartPending = true;
-    window.__fimRunStartSettled = false;
+    if (
+        startingDocument &&
+        window.fim.workspace.get(startingDocument.tabId)
+    ) {
+        window.fim.workspace.settle(startingDocument.tabId, "runStart", false);
+    } else {
+        window.__fimRunStartSettled = false;
+    }
+    const documentState = startingDocument
+        ? window.fim.workspace.get(startingDocument.tabId)
+        : null;
+    if (documentState) {
+        documentState.jobKind = startingDocument.jobKind;
+        documentState.jobState = "starting";
+        documentState.startRefusal = null;
+        window.fim.workspace.notifyChange();
+    }
     try {
         const allowed = await window.pywebview.api.can_start_run();
         // `null` once the window is committed to closing: start nothing.
@@ -116,13 +138,41 @@ async function startRunExclusively(start, showRefusal = showRunBanner) {
             return;
         }
         if (!allowed.ok) {
+            clearPendingRunStart(startingDocument, documentState);
             showRefusal(allowed.message);
             return;
         }
         await start();
     } finally {
+        clearPendingRunStart(startingDocument, documentState);
         runStartPending = false;
-        window.__fimRunStartSettled = true;
+        if (
+            startingDocument &&
+            window.fim.workspace.get(startingDocument.tabId)
+        ) {
+            window.fim.workspace.settle(
+                startingDocument.tabId,
+                "runStart",
+                true
+            );
+        } else {
+            window.__fimRunStartSettled = true;
+        }
+    }
+}
+
+function clearPendingRunStart(startingDocument, documentState) {
+    if (!startingDocument || !documentState) {
+        return;
+    }
+    if (documentState.jobState === "starting") {
+        documentState.jobKind = null;
+        documentState.jobState = null;
+        window.fim.workspace.notifyChange();
+    }
+    if (documentState.closeAfterStart) {
+        documentState.closeAfterStart = false;
+        window.fim.requestCloseDocument(startingDocument.tabId);
     }
 }
 
@@ -135,22 +185,54 @@ async function startRunExclusively(start, showRefusal = showRunBanner) {
  * (`startRunExclusively`).
  */
 async function onRunClicked() {
-    await startRunExclusively(startConfiguredRun);
+    const tabId = window.fim.workspace.selectedId();
+    await startRunExclusively(
+        () => startConfiguredRun(tabId),
+        (message) => showStartRefusal(tabId, message),
+        {
+            tabId,
+            jobKind: window.fim.isSweepEnabled(tabId) ? "sweep" : "run",
+        }
+    );
+}
+
+function showStartRefusal(tabId, message) {
+    const state = window.fim.workspace.get(tabId);
+    if (!state) {
+        return;
+    }
+    const label =
+        runControlsState(tabId)?.runName?.trim() ||
+        state.runTitle?.state?.runName ||
+        state.label ||
+        "Configuration";
+    state.startRefusal = `${label}: ${message}`;
+    window.fim.workspace.notifyChange();
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner(state.startRefusal);
+    }
+    if (state.closeAfterStart) {
+        state.closeAfterStart = false;
+        window.fim.requestCloseDocument(tabId);
+    }
 }
 
 /**
- * Start the run Configure describes, once `onRunClicked` knows that no
- * other run is starting or in flight.
+ * Start the document's configuration after admission.
+ * @param {string} [tabId]
+ * @returns {Promise<void>}
  */
-async function startConfiguredRun() {
-    const tabId = window.fim.workspace.selectedId();
+async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
     const controls = runControlsState(tabId);
     if (!controls) {
         return;
     }
-    controls.runName = runNameInput.value;
-    controls.runDescription = runDescriptionInput.value;
-    controls.studySelection = runStudySelect.value;
+    const selected = window.fim.workspace.selectedId() === tabId;
+    if (selected) {
+        controls.runName = runNameInput.value;
+        controls.runDescription = runDescriptionInput.value;
+        controls.studySelection = runStudySelect.value;
+    }
     const studyId = controls.studySelection || null;
     const runName = controls.runName.trim();
     const runDescription = controls.runDescription.trim();
@@ -161,19 +243,23 @@ async function startConfiguredRun() {
     // below so this reads as its own, more specific message rather
     // than piggybacking on the form's own field-level errors.
     if (studyId === "__new__") {
-        showRunBanner("create or cancel the new study first");
-        runStudyNewNameInput.focus();
+        if (selected) {
+            showRunBanner("create or cancel the new study first");
+            runStudyNewNameInput.focus();
+        }
         return;
     }
-    const result = await revalidate();
+    const result = await revalidate(tabId);
     if (!result.ok) {
-        window.fim.focusInvalidField(result.field);
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.focusInvalidField(result.field);
+        }
         return;
     }
     // Configure's Sweep box: Run means Run, so with it on this same button
     // starts the sweep (`sweep.js`) into the same study choice.
-    if (window.fim.isSweepEnabled()) {
-        await window.fim.runConfiguredSweep(studyId || null);
+    if (window.fim.isSweepEnabled(tabId)) {
+        await window.fim.runConfiguredSweep(studyId || null, tabId);
         return;
     }
     // Design §3.1: "clicking 'Run simulation' anywhere in Configure
@@ -199,8 +285,10 @@ async function startConfiguredRun() {
     // uniform backstop for any draw path that still lands on a hidden
     // section (an opened run's own `enterCompletedState` draws before
     // its own `showScreen`).
-    window.fim.showScreen("screen-run");
-    const values = collectFormValues();
+    if (window.fim.workspace.selectedId() === tabId) {
+        window.fim.showScreen("screen-run");
+    }
+    const values = collectFormValues(tabId);
     // Enter `running` now, synchronously, before awaiting the bridge
     // call -- not after it resolves. `Api.start_run` starts the run
     // and returns as soon as the worker thread is launched, so for a
@@ -214,7 +302,9 @@ async function startConfiguredRun() {
     // "the state a click causes has to be visible before its own
     // bridge round-trip, not after" fix already needed for Cancel's
     // button-enable timing.
-    showRunBanner("");
+    if (window.fim.workspace.selectedId() === tabId) {
+        showRunBanner("");
+    }
     // `n_replicates` is a Settings-only default now (Configure's own
     // `<form>` never submits it), so `values` alone cannot say whether
     // this is a batch -- entering a provisional scalar-shaped `running`
@@ -226,7 +316,7 @@ async function startConfiguredRun() {
     // already established server-side (`Api._start_batch_run`'s own
     // dispatch), reported back explicitly since this caller can no
     // longer compute it locally.
-    window.fim.enterRunningState(false);
+    window.fim.enterRunningState(false, tabId);
     // `run-study-select`'s own current value (Run/Study/Experiment
     // workflow-ergonomics design `20260917-claude-sonnet-5-run-study-
     // experiment-workflow-ergonomics.md`, `selby/restricted`, item 3)
@@ -239,7 +329,17 @@ async function startConfiguredRun() {
     // `--study` flag at the CLI layer.
     // The run's own optional name and description: shown in the Run
     // card's title while it runs, then stored with it once it finishes.
-    window.fim.setRunCardTitle({ phase: "running", runName: runName || null });
+    window.fim.setRunCardTitle(
+        { phase: "running", runName: runName || null },
+        tabId
+    );
+    const documentState = window.fim.workspace.get(tabId);
+    if (documentState) {
+        documentState.jobKind = "run";
+        documentState.jobState = "starting";
+        documentState.startRefusal = null;
+        window.fim.workspace.notifyChange();
+    }
     const started = await window.pywebview.api.start_run(
         values,
         studyId,
@@ -252,8 +352,15 @@ async function startConfiguredRun() {
         // revert to `initial` so the form stays editable and the
         // error is visible, matching the pre-Phase-E behavior of
         // never leaving the input screen on a failed start.
-        window.fim.enterInitialState();
-        showRunBanner(started.message);
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.enterInitialState();
+        }
+        if (documentState) {
+            documentState.jobKind = null;
+            documentState.jobState = null;
+            window.fim.workspace.notifyChange();
+        }
+        showStartRefusal(tabId, started.message);
         return;
     }
     // Started (or reused): the name belonged to this run, not the next.
@@ -269,15 +376,40 @@ async function startConfiguredRun() {
     // The configuration now belongs to a run, so it is nothing left to save.
     window.fim.markFormClean(tabId);
     if (started.reused) {
+        if (documentState) {
+            documentState.jobKind = null;
+            documentState.jobState = null;
+        }
         // Already computed: nothing was started. Show the existing run the
         // way Home opens it, and say so.
-        window.fim.enterInitialState();
-        await window.fim.openComputedRun(started.directory, Boolean(started.isBatch));
-        showRunBanner(
-            "This configuration was already computed, so nothing was run. " +
-                "Showing the existing result."
+        if (window.fim.workspace.selectedId() === tabId) {
+            window.fim.enterInitialState();
+        }
+        await window.fim.openComputedRun(
+            started.directory,
+            Boolean(started.isBatch),
+            tabId,
+            started.resourceKey
         );
+        if (window.fim.workspace.selectedId() === tabId) {
+            showRunBanner(
+                "This configuration was already computed, so nothing was run. " +
+                    "Showing the existing result."
+            );
+        }
+        if (documentState?.closeAfterStart) {
+            documentState.closeAfterStart = false;
+            window.fim.requestCloseDocument(tabId);
+        }
         return;
+    }
+    if (documentState && started.jobId) {
+        documentState.jobState = "running";
+        window.fim.workspace.attachJob(tabId, started.jobId);
+    }
+    if (documentState?.closeAfterStart) {
+        documentState.closeAfterStart = false;
+        window.fim.requestCloseDocument(tabId);
     }
     // Only the run-kind-dependent panels, not the whole running state:
     // the run has been going since `start_run` executed server-side, so
@@ -286,6 +418,9 @@ async function startConfiguredRun() {
     // would throw those away -- see `applyRunKind`'s own comment
     // (`run-view-running.js`) for the list, and for the intermittent CI
     // failure that surfaced it.
+    if (window.fim.workspace.selectedId() !== tabId) {
+        return;
+    }
     window.fim.applyRunKind(Boolean(started.isBatch));
     // The live trajectory panel's own predicted-equilibrium reference
     // line (design §6.2) -- `started.equilibrium` is `undefined` for a
@@ -294,14 +429,14 @@ async function startConfiguredRun() {
     // `setLiveEquilibriumReference` treats both the same as "nothing to
     // overlay," matching `renderTrajectory`'s own "nothing to show,
     // don't draw anything" discipline.
-    window.fim.setLiveEquilibriumReference(started.equilibrium);
+    window.fim.setLiveEquilibriumReference(started.equilibrium, tabId);
     // The live trajectory panel's own identity-recovery curve overlay
     // (design §6.2) -- same reasoning and the same `undefined`-for-a-
     // batch/`null`-for-a-non-scalar-configuration shape as `started.
     // equilibrium` immediately above.
-    window.fim.setLiveIdentityRecoveryReference(started.identityRecovery);
-    window.fim.setLiveClosedForm(started.closedForm);
-    window.fim.setLiveConvergence(started.convergence);
+    window.fim.setLiveIdentityRecoveryReference(started.identityRecovery, tabId);
+    window.fim.setLiveClosedForm(started.closedForm, tabId);
+    window.fim.setLiveConvergence(started.convergence, tabId);
 }
 
 async function onLoadYamlClicked() {

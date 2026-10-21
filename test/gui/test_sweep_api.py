@@ -434,7 +434,10 @@ def test_a_sweep_runs_into_the_study_chosen_and_keeps_its_runs(
 
     started = api.start_sweep(_form(), _request(_D_AXIS), study_id)
 
-    assert started == {"ok": True, "studyId": study_id, "total": 2}
+    assert started["ok"] is True
+    assert started["studyId"] == study_id
+    assert started["total"] == 2
+    assert isinstance(started["jobId"], str) and started["jobId"]
     _wait_until_idle(api)
     assert window.finished.is_set()
     (study,) = api.list_studies()
@@ -1001,7 +1004,9 @@ def test_resume_sweep_passes_the_retry_and_recompute_flags_on(
     assert api._sweep_thread is not None
     api._sweep_thread.join(30)
 
-    assert reply == {"ok": True, "studyId": study_id}
+    assert reply["ok"] is True
+    assert reply["studyId"] == study_id
+    assert isinstance(reply["jobId"], str) and reply["jobId"]
     assert len(calls) == 1
     assert (calls[0]["retry_failed"], calls[0]["rerun"]) == (retry, rerun)
 

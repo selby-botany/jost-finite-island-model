@@ -12936,9 +12936,9 @@ at or over the size threshold, until `confirmed` is true.
 
 **Returns**:
 
-- ``{"ok"` - True, "studyId": ..., "total": N}`; or `{"ok": False,
-- `"message"` - ...}`, with `"needsConfirmation": True` (and
-  `"total"`) for an unconfirmed large plan.
+- ``{"ok"` - True, "studyId": ..., "total": N, "jobId": ...}`; or
+- ``{"ok"` - False, "message": ...}`, with `"needsConfirmation":
+  True (and `"total"`) for an unconfirmed large plan.
 
 <a id="fim.gui.app.Api.resume_sweep"></a>
 
@@ -12968,9 +12968,9 @@ Run the points of an existing sweep Study that are still missing.
 
 **Returns**:
 
-- ``{"ok"` - True, "studyId": ...}`, or `{"ok": False, "message":
-  ...}` if a run or another sweep is in progress or the Study is
-  not a sweep.
+- ``{"ok"` - True, "studyId": ..., "jobId": ...}`, or `{"ok":
+  False, "message": ...}` if a run or another sweep is in
+  progress or the Study is not a sweep.
 
 <a id="fim.gui.app.Api.cancel_sweep"></a>
 

@@ -37,6 +37,7 @@ const latestAppliedJobEventPayload = new Map();
 const latestJobSnapshot = new Map();
 const jobViewLevel = new Map();
 const closedJobIds = new Set();
+const closingJobDocuments = new Map();
 
 window.fim = window.fim || {};
 window.fim.jobs = window.fim.jobs || {};
@@ -96,20 +97,34 @@ window.fim.jobs.setView = function setView(jobId, level) {
     });
 };
 window.fim.jobs.closeDocument = function closeDocument(jobId) {
+    const pending = closingJobDocuments.get(jobId);
+    if (pending) {
+        return pending;
+    }
+    if (closedJobIds.has(jobId)) {
+        return Promise.resolve({ ok: true });
+    }
     closedJobIds.add(jobId);
-    lastJobEventSequence.delete(jobId);
-    appliedJobEventCount.delete(jobId);
-    latestAppliedJobEventPayload.delete(jobId);
-    latestJobSnapshot.delete(jobId);
-    jobViewLevel.delete(jobId);
-    return window.pywebview.api.close_job_document(jobId).then((result) => {
+    const request = window.pywebview.api.close_job_document(jobId).then((result) => {
         if (!result || !result.ok) {
             throw new Error(
                 result?.message || "could not release the closed job document"
             );
         }
+        lastJobEventSequence.delete(jobId);
+        appliedJobEventCount.delete(jobId);
+        latestAppliedJobEventPayload.delete(jobId);
+        latestJobSnapshot.delete(jobId);
+        jobViewLevel.delete(jobId);
         return result;
+    }).catch((error) => {
+        closedJobIds.delete(jobId);
+        throw error;
+    }).finally(() => {
+        closingJobDocuments.delete(jobId);
     });
+    closingJobDocuments.set(jobId, request);
+    return request;
 };
 window.fim.jobs.isDocumentClosed = function isDocumentClosed(jobId) {
     return closedJobIds.has(jobId);
@@ -156,6 +171,18 @@ window.fim.onJobEvent = function onJobEvent(event) {
     appliedJobEventCount.set(jobId, (appliedJobEventCount.get(jobId) || 0) + 1);
     latestAppliedJobEventPayload.set(jobId, payload);
     latestJobSnapshot.set(jobId, { sequence, type, payload });
+    const tabId = window.fim.workspace?.documentForJob(jobId);
+    const state = tabId === null ? null : window.fim.workspace.get(tabId);
+    if (state) {
+        state.jobState = type === "finished" ? "finished" : type === "terminal"
+            ? "terminal"
+            : "running";
+        window.fim.workspace.notifyChange();
+        if (type === "finished" && state.closeAfterStart) {
+            state.closeAfterStart = false;
+            window.fim.requestCloseDocument(tabId);
+        }
+    }
     if (
         type === "annotation" &&
         typeof window.fim.onJobAnnotation === "function"

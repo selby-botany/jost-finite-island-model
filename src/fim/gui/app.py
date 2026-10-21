@@ -1426,6 +1426,7 @@ def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
         # finding the folder "Open output folder" would reveal.
         "directoryName": run.directory.name,
         "directory": str(run.directory),
+        "resourceKey": _run_resource_key(run.directory),
         "trajectoryPath": (
             None if run.is_batch else str(run.directory / TRAJECTORY_LOG_FILENAME)
         ),
@@ -1942,6 +1943,11 @@ def _reveal_in_file_browser(directory: Path) -> None:
         subprocess.run(["xdg-open", str(directory)], check=False)
 
 
+def _run_resource_key(directory: str | Path) -> str:
+    """Return the stable identity shared by a saved run and its result path."""
+    return f"run:{Path(directory).resolve()}"
+
+
 class Api:
     """The `window.pywebview.api` surface every `webui/*.js` screen calls into.
 
@@ -2240,6 +2246,10 @@ class Api:
         try:
             result = self._start_claimed_run(values, study_id, run_details)
             started = bool(result["ok"]) and not result.get("reused", False)
+            if result["ok"] and not result.get("reused", False):
+                job_id = self._job_id
+                assert job_id is not None
+                result["jobId"] = job_id
             return result
         finally:
             # Nothing started means no drain thread will ever release the
@@ -2297,6 +2307,7 @@ class Api:
                 "reused": True,
                 "isBatch": is_batch,
                 "directory": str(existing[0]),
+                "resourceKey": _run_resource_key(existing[0]),
             }
         self._previous_version_run = next(
             iter(groups.find_stale_run_directories(run_id, fim_version)), None
@@ -2792,6 +2803,7 @@ class Api:
         return {
             "ok": True,
             "objectId": saved.object_id,
+            "resourceKey": _run_resource_key(saved.directory),
             "state": saved.record.state.value,
             "problem": problem,
         }
@@ -2808,6 +2820,8 @@ class Api:
             rows = object_bridge.list_rows()
         except (LifecycleError, OSError) as error:
             return {"ok": False, "message": str(error)}
+        for run in rows["runs"]:
+            run["resourceKey"] = _run_resource_key(run["directory"])
         return {"ok": True, **rows, "activeObjectId": self._active_object_id}
 
     @_log_bridge_call
@@ -2838,6 +2852,7 @@ class Api:
             "description": run_object.labels.description,
             "state": row["state"],
             "objectId": object_id,
+            "resourceKey": _run_resource_key(run_object.directory),
             "editable": row["actions"]["edit"],
             **self._loaded_run_settings(values),
         }
@@ -2933,6 +2948,7 @@ class Api:
             return {
                 "ok": True,
                 "isBatch": True,
+                "jobId": job_id,
                 "objectId": object_id,
                 "name": run_object.labels.name,
                 "equilibrium": None,
@@ -2979,6 +2995,7 @@ class Api:
         return {
             "ok": True,
             "isBatch": False,
+            "jobId": job_id,
             "objectId": object_id,
             "name": run_object.labels.name,
             "equilibrium": equilibrium,
@@ -5267,6 +5284,7 @@ class Api:
                 # name is the directory, not the content-hash `runId`.
                 "directoryName": run.directory.name,
                 "directory": str(run.directory),
+                "resourceKey": _run_resource_key(run.directory),
                 "trajectoryPath": (
                     None
                     if run.is_batch
@@ -5971,9 +5989,9 @@ class Api:
         at or over the size threshold, until `confirmed` is true.
 
         Returns:
-            `{"ok": True, "studyId": ..., "total": N}`; or `{"ok": False,
-            "message": ...}`, with `"needsConfirmation": True` (and
-            `"total"`) for an unconfirmed large plan.
+            `{"ok": True, "studyId": ..., "total": N, "jobId": ...}`; or
+            `{"ok": False, "message": ...}`, with `"needsConfirmation":
+            True (and `"total"`) for an unconfirmed large plan.
         """
         busy = self._claim_sweep()
         if busy is not None:
@@ -6003,6 +6021,8 @@ class Api:
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
             at_once, max_workers = self._sweep_run_options(values, request)
+            job_id = self._job_id
+            assert job_id is not None
             self._start_sweep_thread(
                 window,
                 study.study_id,
@@ -6011,7 +6031,12 @@ class Api:
                 max_workers=max_workers,
             )
             started = True
-            return {"ok": True, "studyId": study.study_id, "total": len(plan.points)}
+            return {
+                "ok": True,
+                "studyId": study.study_id,
+                "total": len(plan.points),
+                "jobId": job_id,
+            }
         finally:
             # Nothing started means no sweep thread will ever release the
             # claim, so release it here (`start_run`'s identical pattern).
@@ -6039,9 +6064,9 @@ class Api:
                 is recorded as the sweep's verification.
 
         Returns:
-            `{"ok": True, "studyId": ...}`, or `{"ok": False, "message":
-            ...}` if a run or another sweep is in progress or the Study is
-            not a sweep.
+            `{"ok": True, "studyId": ..., "jobId": ...}`, or `{"ok":
+            False, "message": ...}` if a run or another sweep is in
+            progress or the Study is not a sweep.
         """
         busy = self._claim_sweep()
         if busy is not None:
@@ -6057,6 +6082,8 @@ class Api:
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
             saved = self._merge_default_run_settings({})
+            job_id = self._job_id
+            assert job_id is not None
             self._start_sweep_thread(
                 window,
                 study_id,
@@ -6066,7 +6093,7 @@ class Api:
                 max_workers=_parse_max_workers(saved.get("max_workers", "")),
             )
             started = True
-            return {"ok": True, "studyId": study_id}
+            return {"ok": True, "studyId": study_id, "jobId": job_id}
         finally:
             if not started:
                 self._release_sweep_claim()
@@ -6829,6 +6856,7 @@ class Api:
         report = reanalyzed.report
         return {
             "ok": True,
+            "resourceKey": _run_resource_key(trajectory_path.parent),
             "runId": reanalyzed.manifest.run_id,
             "directoryName": trajectory_path.parent.name,
             "configSummary": _run_config_summary(reanalyzed.params),
@@ -7018,7 +7046,11 @@ class Api:
             ),
             convergence_note=convergence_note,
         )
-        return {"ok": True, **payload}
+        return {
+            "ok": True,
+            "resourceKey": _run_resource_key(batch_directory),
+            **payload,
+        }
 
     @_log_bridge_call
     def open_study(self, study_id: str) -> dict[str, Any]:
@@ -10478,6 +10510,7 @@ def _report_only_run_payload(directory: Path, digits: int) -> dict[str, Any]:
         }
     return {
         "ok": True,
+        "resourceKey": _run_resource_key(directory),
         "reportOnly": True,
         "readOnly": groups.is_run_read_only(directory),
         "runId": manifest.run_id,
@@ -10573,6 +10606,7 @@ def _report_only_batch_payload(
     return {
         "ok": True,
         **payload,
+        "resourceKey": _run_resource_key(directory),
         "reportOnly": True,
         "readOnly": groups.is_run_read_only(directory),
     }

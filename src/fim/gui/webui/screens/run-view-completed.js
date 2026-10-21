@@ -4600,9 +4600,28 @@ runSavedResultRunButton.addEventListener("click", async () => {
 });
 
 window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) {
-    const state = completedViewStateFor(window.fim.workspace.selectedId());
+    const tabId = window.fim.workspace.selectedId();
+    const state = completedViewStateFor(tabId);
     if (!state) {
         return;
+    }
+    const documentState = window.fim.workspace.get(tabId);
+    if (
+        window.fim.workspace.documentTabsEnabled() &&
+        documentState &&
+        payload.outputDirectory
+    ) {
+        const resourceKey =
+            payload.resourceKey ||
+            `run:${String(payload.outputDirectory).replace(/[\\/]+$/, "")}`;
+        if (documentState.resourceKey !== resourceKey) {
+            window.fim.workspace.setResourceKey(tabId, resourceKey);
+        }
+        documentState.kind = "result";
+        documentState.readOnly = true;
+        documentState.label =
+            payload.directoryName || documentState.label || "Result";
+        window.fim.workspace.notifyChange();
     }
     activeCompletedViewState = state;
     state.hasCompletedResult = true;
