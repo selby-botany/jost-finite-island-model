@@ -2612,6 +2612,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and a resume attempt (from the command line or the desktop app) now both
   say to clone the object, which starts the same configuration over from
   generation 0.
+- **The Linux release and beta builds move off end-of-life Debian 11.**
+  `linux-x64` and `linux-beta-x64` now build inside `python:3.12-slim-
+  bookworm` (Debian 12) instead of `python:3.12-slim-bullseye`, removing
+  the pinned `snapshot.debian.org` mirror and its `Acquire::Check-Valid-
+  Until=false` waiver that stood in for bullseye's own expired package
+  repositories. The packaged executable now links WebKitGTK 4.1/libsoup
+  3.0, the pair `pywebview`'s GTK backend prefers, rather than falling
+  back to the older 4.0/2.4 pair bullseye offered only that one of.
+  Confirmed with real local builds of the frozen executable against the
+  new image (CLI smoke checks, the default batch, a GUI stay-alive check
+  under `xvfb`, and the dependency-purged fail-loudly check).
 
 ---
 

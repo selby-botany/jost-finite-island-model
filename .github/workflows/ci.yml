@@ -709,22 +709,27 @@ jobs:
             fim-macos-x64.dmg.sha256
 
   # The single Linux release artifact install.sh downloads. Built inside
-  # `python:3.12-slim-bullseye`, not a bare `ubuntu-latest` runner and
+  # `python:3.12-slim-bookworm`, not a bare `ubuntu-latest` runner and
   # not a `manylinux`-family image: a bare runner links against whatever
   # glibc that runner happens to ship, which can be newer than a user's
   # own system and fail with `GLIBC_2.XX not found`; manylinux's own
   # bundled Pythons are built without `--enable-shared`, which
   # PyInstaller requires ("Python was built without a shared library")
   # -- confirmed by a real local build attempt against
-  # `manylinux_2_28_x86_64` before switching to this image. Debian 11
-  # (bullseye)'s glibc 2.31 gives the same older-baseline portability
+  # `manylinux_2_28_x86_64` before switching to this image. Debian 12
+  # (bookworm)'s glibc 2.36 gives the same older-baseline portability
   # goal manylinux was chosen for, with a Python build PyInstaller can
-  # actually use.
+  # actually use. Moved here from `python:3.12-slim-bullseye` (Debian
+  # 11) once that release went fully end-of-life (see below) -- real
+  # local builds against this image, including the dependency-purged
+  # fail-loudly check further down, confirmed the move first (`doc/
+  # ISSUES.md`, "Linux build image is pinned to an end-of-life Debian
+  # release").
   linux-x64:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build, verify-tag]
     runs-on: ubuntu-latest
-    container: python:3.12-slim-bullseye
+    container: python:3.12-slim-bookworm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       # PyInstaller requires `objdump` on Linux to analyze shared
@@ -733,43 +738,39 @@ jobs:
       # PyGObject's own build-time requirements (`pyproject.toml`'s
       # `pywebview[gtk]` extra, Linux-only) -- confirmed by a real local
       # build against this exact image failing with "Unknown
-      # compiler(s)" before these were added. `libwebkit2gtk-4.0-37`/
-      # `gir1.2-webkit2-4.0`/`gir1.2-soup-2.4` are bullseye's available
-      # versions -- older than the `4.1`/`3.0` pair a newer distribution
-      # offers, but `pywebview`'s own GTK backend already falls back to
-      # exactly this pair when `4.1` is not found, so this is a real,
-      # supported combination, not a compromise.
+      # compiler(s)" before these were added. `libwebkit2gtk-4.1-0`/
+      # `gir1.2-webkit2-4.1`/`gir1.2-soup-3.0` are bookworm's newer pair
+      # -- the one `pywebview`'s own GTK backend prefers, confirmed by a
+      # real local build and GUI-startup smoke check against this exact
+      # image and package list; bookworm also carries the older `4.0`/
+      # `2.4` pair bullseye had only that one of, but there is no reason
+      # to ask for the fallback when the preferred pair is available.
       #
-      # Debian 11 (bullseye) went fully end-of-life mid-flight during
-      # this project's own use of this image. First `bullseye-security`'s
-      # `InRelease` on `deb.debian.org` simply stopped being refreshed
-      # (`Valid-Until` lapsed, run 34187301462); `-o
-      # Acquire::Check-Valid-Until=false` alone fixed that. Within a day,
-      # `deb.debian.org` stopped serving the security suite's actual
-      # `.deb` files too -- confirmed live: `apt-get update` succeeds
-      # (the index still resolves), but `apt-get install` 404s on every
-      # package apt resolves from `bullseye-security` (run 34236473262).
-      # `archive.debian.org` does not help -- confirmed live, it has no
-      # `bullseye`/`bullseye-security` suite at all yet.
-      #
-      # The image itself already ships the fix, commented out:
-      # `snapshot.debian.org`'s pinned `20250721T000000Z` capture of all
-      # three suites, `.deb` files included -- confirmed live with the
-      # exact package list below (a real `apt-get install`, not just
-      # `update`). A pinned historical snapshot is permanently past its
-      # own `Valid-Until` by construction, so the flag is still required
-      # alongside the repoint, not replaced by it.
+      # Debian 11 (bullseye), used here previously, went fully
+      # end-of-life mid-flight during this project's own use of that
+      # image. First `bullseye-security`'s `InRelease` on
+      # `deb.debian.org` simply stopped being refreshed (`Valid-Until`
+      # lapsed, run 34187301462); `-o Acquire::Check-Valid-Until=false`
+      # alone fixed that. Within a day, `deb.debian.org` stopped serving
+      # the security suite's actual `.deb` files too -- confirmed live:
+      # `apt-get update` succeeded (the index still resolved), but
+      # `apt-get install` 404'd on every package apt resolved from
+      # `bullseye-security` (run 34236473262). `archive.debian.org` did
+      # not help -- confirmed live, it had no `bullseye`/
+      # `bullseye-security` suite at all. The move to bookworm, a
+      # currently supported release, removes the need for the pinned-
+      # snapshot workaround that papered over this entirely -- see the
+      # git history of this file for that workaround's own commented-out
+      # `snapshot.debian.org` source stanza and its
+      # `Acquire::Check-Valid-Until=false` flag, no longer needed because
+      # bookworm's own live repositories resolve normally.
       - run: |
-          sed -i \
-              -e 's|^# deb http://snapshot|deb http://snapshot|' \
-              -e 's|^deb http://deb\.debian\.org|# deb http://deb.debian.org|' \
-              /etc/apt/sources.list
-          apt-get -o Acquire::Check-Valid-Until=false update -qq
+          apt-get update -qq
           apt-get install -qq -y --no-install-recommends \
               binutils gcc pkg-config \
               libgirepository1.0-dev libcairo2-dev \
-              gir1.2-gtk-3.0 gir1.2-webkit2-4.0 gir1.2-soup-2.4 \
-              libwebkit2gtk-4.0-37 xvfb xauth procps
+              gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-soup-3.0 \
+              libwebkit2gtk-4.1-0 xvfb xauth procps
       # `.[dev,jit]` -- see `windows`'s own identical step, above.
       - run: python -m pip install -e ".[dev,jit]"
       - run: >-
@@ -852,7 +853,7 @@ jobs:
           # already-built executable -- the frozen binary under test is
           # the exact same one the CLI smoke check above already
           # verified is otherwise correct.
-          apt-get remove -qq -y libwebkit2gtk-4.0-37 gir1.2-webkit2-4.0
+          apt-get remove -qq -y libwebkit2gtk-4.1-0 gir1.2-webkit2-4.1
           set +e
           timeout 10 dist/fim >gui-startup.log 2>&1
           gui_exit=$?

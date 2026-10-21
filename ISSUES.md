@@ -106,42 +106,6 @@ Relevant source and tests:
 - `test_every_other_builtin_preset_loads_into_form_values` in
   `test/gui/test_app_api.py`
 
-### Linux build image is pinned to an end-of-life Debian release
-
-**Status:** pinned snapshot workaround in use; migration not started
-**Affects:** Linux release and beta packaging infrastructure
-
-#### What happens today
-
-The `linux-x64` and `linux-beta-x64` jobs use
-`python:3.12-slim-bullseye` for its `glibc` 2.31 compatibility baseline and
-the `webkit2gtk-4.0`/`libsoup-2.4` pair used by pywebview's GTK backend.
-
-Package sources point to the `20250721T000000Z` snapshot at
-`snapshot.debian.org`. The jobs pass
-`-o Acquire::Check-Valid-Until=false` to `apt-get update` because the
-snapshot's repository metadata has expired. Package signatures remain
-checked.
-
-#### Why this needs to be revisited
-
-Disabling `Check-Valid-Until` removes the freshness check for every source
-in that update invocation, including any source added later. The frozen
-snapshot also lacks security updates published after 2025-07-21. This is a
-build-environment risk; it does not by itself establish a defect in a
-released executable.
-
-Move the build image to a supported Debian release after verifying its
-WebKitGTK/libsoup package combination and the resulting minimum `glibc`
-requirement. As an interim improvement, a deb822 source stanza with
-`Check-Valid-Until: no` can limit the freshness waiver to the snapshot
-entries.
-
-Relevant workflows:
-
-- [`linux-x64` in `.github/workflows/ci.yml`](.github/workflows/ci.yml)
-- [`linux-beta-x64` in `.github/workflows/beta.yml`](.github/workflows/beta.yml)
-
 ## Metadata
 
 ```text

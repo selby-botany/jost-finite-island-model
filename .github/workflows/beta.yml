@@ -467,49 +467,42 @@ jobs:
   # `ci.yml`'s own `linux-x64` job (same real local-build verification
   # behind both): PyGObject's build-time requirements
   # (`gcc`/`pkg-config`/`libgirepository1.0-dev`/`libcairo2-dev`),
-  # bullseye's own available WebKitGTK/Soup pair (`4.0`/`2.4`, the
-  # version `pywebview`'s own GTK backend falls back to when `4.1` is
-  # not found), and `xvfb`/`xauth` for the two GUI-specific smoke
-  # assertions below -- this job had none of them, unlike every other
-  # platform's own beta job, which already carried a GUI-startup check
-  # from this workflow's very first version.
+  # bookworm's preferred WebKitGTK/Soup pair (`4.1`/`3.0`, the one
+  # `pywebview`'s own GTK backend prefers), and `xvfb`/`xauth` for the
+  # two GUI-specific smoke assertions below -- this job had none of
+  # them, unlike every other platform's own beta job, which already
+  # carried a GUI-startup check from this workflow's very first version.
   linux-beta-x64:
     needs: compute-beta-label
     runs-on: ubuntu-latest
-    container: python:3.12-slim-bullseye
+    container: python:3.12-slim-bookworm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      # Debian 11 (bullseye) went fully end-of-life mid-flight during
-      # this project's own use of this image. First `bullseye-security`'s
-      # `InRelease` on `deb.debian.org` simply stopped being refreshed
-      # (`Valid-Until` lapsed, run 34187301462); `-o
-      # Acquire::Check-Valid-Until=false` alone fixed that. Within a day,
-      # `deb.debian.org` stopped serving the security suite's actual
-      # `.deb` files too -- confirmed live: `apt-get update` succeeds
-      # (the index still resolves), but `apt-get install` 404s on every
-      # package apt resolves from `bullseye-security` (run 34236473262).
-      # `archive.debian.org` does not help -- confirmed live, it has no
-      # `bullseye`/`bullseye-security` suite at all yet.
-      #
-      # The image itself already ships the fix, commented out:
-      # `snapshot.debian.org`'s pinned `20250721T000000Z` capture of all
-      # three suites, `.deb` files included -- confirmed live with the
-      # exact package list below (a real `apt-get install`, not just
-      # `update`). A pinned historical snapshot is permanently past its
-      # own `Valid-Until` by construction, so the flag is still required
-      # alongside the repoint, not replaced by it. Matches `ci.yml`'s own
-      # mirrored `linux-x64` job, fixed there in the same commit.
+      # Debian 11 (bullseye), used here previously, went fully
+      # end-of-life mid-flight during this project's own use of that
+      # image. First `bullseye-security`'s `InRelease` on
+      # `deb.debian.org` simply stopped being refreshed (`Valid-Until`
+      # lapsed, run 34187301462); `-o Acquire::Check-Valid-Until=false`
+      # alone fixed that. Within a day, `deb.debian.org` stopped serving
+      # the security suite's actual `.deb` files too -- confirmed live:
+      # `apt-get update` succeeded (the index still resolved), but
+      # `apt-get install` 404'd on every package apt resolved from
+      # `bullseye-security` (run 34236473262). `archive.debian.org` did
+      # not help -- confirmed live, it had no `bullseye`/
+      # `bullseye-security` suite at all. Moved to bookworm, a currently
+      # supported release, which needs no snapshot-mirror workaround --
+      # real local builds against this exact image and package list,
+      # including the dependency-purged fail-loudly check further down,
+      # confirmed the move first (`doc/ISSUES.md`, "Linux build image is
+      # pinned to an end-of-life Debian release"). Matches `ci.yml`'s own
+      # mirrored `linux-x64` job, moved there in the same commit.
       - run: |
-          sed -i \
-              -e 's|^# deb http://snapshot|deb http://snapshot|' \
-              -e 's|^deb http://deb\.debian\.org|# deb http://deb.debian.org|' \
-              /etc/apt/sources.list
-          apt-get -o Acquire::Check-Valid-Until=false update -qq
+          apt-get update -qq
           apt-get install -qq -y --no-install-recommends \
               binutils gcc pkg-config \
               libgirepository1.0-dev libcairo2-dev \
-              gir1.2-gtk-3.0 gir1.2-webkit2-4.0 gir1.2-soup-2.4 \
-              libwebkit2gtk-4.0-37 xvfb xauth procps
+              gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-soup-3.0 \
+              libwebkit2gtk-4.1-0 xvfb xauth procps
       - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           printf '%s+%s' "${{ needs.compute-beta-label.outputs.label }}"
@@ -588,7 +581,7 @@ jobs:
             exit 1
           fi
           kill "${gui_pid}"
-          apt-get remove -qq -y libwebkit2gtk-4.0-37 gir1.2-webkit2-4.0
+          apt-get remove -qq -y libwebkit2gtk-4.1-0 gir1.2-webkit2-4.1
           set +e
           timeout 10 dist/fim >gui-startup.log 2>&1
           gui_exit=$?

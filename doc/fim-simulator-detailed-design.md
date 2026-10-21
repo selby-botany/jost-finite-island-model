@@ -431,7 +431,7 @@ build and verified tag before publishing:
      then it is wrapped in a `.dmg` (with a symlinked `/Applications`
      for the standard drag-to-install pattern) and hashed.
    - **`linux-x64`** (`ubuntu-latest`, built inside a
-     `python:3.12-slim-bullseye` container rather than a bare runner or
+     `python:3.12-slim-bookworm` container rather than a bare runner or
      a `manylinux` image — a bare runner's glibc can be newer than a
      user's own system, and manylinux's own bundled Pythons lack the
      `--enable-shared` build PyInstaller requires) — the same smoke
