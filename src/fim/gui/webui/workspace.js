@@ -175,6 +175,27 @@ const workspace = (() => {
         notifySelectionChange(previousId);
     }
 
+    function selectRelative(offset) {
+        if (!documentTabsEnabled || selectedId === null || orderedIds.length < 2) {
+            return null;
+        }
+        const index = orderedIds.indexOf(selectedId);
+        if (index < 0) {
+            return null;
+        }
+        const nextIndex = (index + offset + orderedIds.length) % orderedIds.length;
+        const nextId = orderedIds[nextIndex];
+        window.fim.activateWorkspaceDocument(nextId);
+        return nextId;
+    }
+
+    function requestCloseSelected() {
+        if (!documentTabsEnabled || selectedId === null) {
+            return;
+        }
+        window.fim.requestCloseDocument(selectedId);
+    }
+
     function onSelectionChange(listener) {
         selectionListeners.add(listener);
         return () => selectionListeners.delete(listener);
@@ -281,6 +302,8 @@ const workspace = (() => {
         openResource,
         closeDocument,
         select,
+        selectRelative,
+        requestCloseSelected,
         onSelectionChange,
         onChange,
         notifyChange,
@@ -326,3 +349,51 @@ const workspace = (() => {
 })();
 
 window.fimWorkspace = workspace;
+
+function onDocumentShortcut(event) {
+    if (
+        !workspace.documentTabsEnabled() ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.repeat ||
+        event.isComposing
+    ) {
+        return;
+    }
+
+    const platform = `${navigator.platform} ${navigator.userAgent}`;
+    const isMac = /Mac|iPhone|iPad|iPod/i.test(platform);
+    const primaryModifier = isMac
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey;
+    const key = event.key.toLowerCase();
+
+    if (primaryModifier && !event.shiftKey && key === "n") {
+        event.preventDefault();
+        void window.fim.menu.newConfiguration();
+        return;
+    }
+    if (primaryModifier && !event.shiftKey && key === "w") {
+        event.preventDefault();
+        workspace.requestCloseSelected();
+        return;
+    }
+    if (event.ctrlKey && !event.metaKey && event.key === "Tab") {
+        event.preventDefault();
+        workspace.selectRelative(event.shiftKey ? -1 : 1);
+        return;
+    }
+
+    if (!isMac || !event.metaKey || !event.shiftKey) {
+        return;
+    }
+    const next = event.code === "BracketRight" || ["]", "}"].includes(event.key);
+    const previous =
+        event.code === "BracketLeft" || ["[", "{"].includes(event.key);
+    if (next || previous) {
+        event.preventDefault();
+        workspace.selectRelative(next ? 1 : -1);
+    }
+}
+
+document.addEventListener("keydown", onDocumentShortcut);

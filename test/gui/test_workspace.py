@@ -126,6 +126,110 @@ def test_document_switcher_keyboard_focus_and_selection_are_separate(
     assert state["shown"] == "screen-configure"
 
 
+def test_document_shortcuts_and_actions_use_the_selected_document(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """New/close and next/previous shortcuts operate on the selected tab."""
+    state = drive(
+        window,
+        ready="window.__fimRunViewReady === true",
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const first = workspace.selectedId();
+            const second = workspace.createDocument({
+                label: "Second",
+                history: ["screen-help"],
+            });
+            const third = workspace.createDocument({
+                label: "Third",
+                history: ["screen-configure"],
+            });
+            workspace.select(first);
+            workspace.setDocumentTabsEnabled(true);
+            const isMac = /Mac|iPhone|iPad|iPod/i.test(
+                `${navigator.platform} ${navigator.userAgent}`
+            );
+            const primary = isMac ? {metaKey: true} : {ctrlKey: true};
+            function key(value, modifiers = {}) {
+                const event = new KeyboardEvent("keydown", {
+                    key: value,
+                    bubbles: true,
+                    cancelable: true,
+                    ...modifiers,
+                });
+                document.dispatchEvent(event);
+                return event.defaultPrevented;
+            }
+
+            const nextByControlTab = key("Tab", {ctrlKey: true});
+            const selectedAfterControlNext = workspace.selectedId();
+            const nextByPlatformShortcut = isMac
+                ? key("}", {
+                    code: "BracketRight",
+                    metaKey: true,
+                    shiftKey: true,
+                })
+                : key("Tab", {ctrlKey: true});
+            const selectedAfterPlatformNext = workspace.selectedId();
+            const previousByControlTab = key("Tab", {
+                ctrlKey: true,
+                shiftKey: true,
+            });
+            const selectedAfterControlPrevious = workspace.selectedId();
+            const previousByPlatformShortcut = isMac
+                ? key("{", {
+                    code: "BracketLeft",
+                    metaKey: true,
+                    shiftKey: true,
+                })
+                : key("Tab", {ctrlKey: true, shiftKey: true});
+            const selectedAfterPlatformPrevious = workspace.selectedId();
+
+            const originalNew = window.fim.menu.newConfiguration;
+            const originalClose = window.fim.requestCloseDocument;
+            let closeTarget = null;
+            window.fim.menu.newConfiguration = () =>
+                workspace.createDocument({label: "Shortcut"});
+            window.fim.requestCloseDocument = tabId => {
+                closeTarget = tabId;
+            };
+            const newPrevented = key("n", primary);
+            const newId = workspace.selectedId();
+            const closePrevented = key("w", primary);
+            window.fim.menu.newConfiguration = originalNew;
+            window.fim.requestCloseDocument = originalClose;
+
+            return {
+                first, second, third,
+                nextByControlTab,
+                selectedAfterControlNext,
+                nextByPlatformShortcut,
+                selectedAfterPlatformNext,
+                previousByControlTab,
+                selectedAfterControlPrevious,
+                previousByPlatformShortcut,
+                selectedAfterPlatformPrevious,
+                newPrevented, newId,
+                closePrevented, closeTarget,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["nextByControlTab"] is True
+    assert state["selectedAfterControlNext"] == state["second"]
+    assert state["nextByPlatformShortcut"] is True
+    assert state["selectedAfterPlatformNext"] == state["third"]
+    assert state["previousByControlTab"] is True
+    assert state["selectedAfterControlPrevious"] == state["second"]
+    assert state["previousByPlatformShortcut"] is True
+    assert state["selectedAfterPlatformPrevious"] == state["first"]
+    assert state["newPrevented"] is True
+    assert state["newId"] == "document-4"
+    assert state["closePrevented"] is True
+    assert state["closeTarget"] == state["newId"]
+
+
 def test_document_switcher_reaches_overflow_without_starting_or_stopping_jobs(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

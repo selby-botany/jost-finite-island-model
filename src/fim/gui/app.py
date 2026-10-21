@@ -9913,13 +9913,14 @@ def _build_menu(
     on that same screen as an ordinary, non-form field
     (`config-modals.js`'s own `wireSignificantDigitsField`).
 
-    Every item except Quit is a thin closure calling `window.evaluate_js(
-    "fim.menu.X()")` — the identical "no-op stub, overridden by whichever
-    screen owns the real behavior" convention `app.js` already
-    established for `onRunProgress`/`onBatchDone`/etc., extended to a
-    `fim.menu` namespace so no new Python business logic exists anywhere
-    in this menu: every item reuses an `Api` method or JS-side screen
-    state a screen already tracks — a second entry point into logic
+    Every item except Quit is a thin closure calling a page action or
+    workspace operation through `window.evaluate_js` — the identical
+    "no-op stub, overridden by whichever screen owns the real behavior"
+    convention `app.js` already established for
+    `onRunProgress`/`onBatchDone`/etc., extended to a `fim.menu`
+    namespace and the document workspace. No new Python business logic
+    exists anywhere in this menu: every item reuses an `Api` method or
+    JS-side screen/workspace state — a second entry point into logic
     that already exists, not new logic. Quit alone needs no JS round
     trip — `window.destroy()` is a window-level call, not app state —
     and needs no settle wrapper of its own any more either:
@@ -9957,6 +9958,10 @@ def _build_menu(
         "File",
         [
             MenuAction("New configuration", dispatch("fim.menu.newConfiguration()")),
+            MenuAction("Close tab", dispatch("fim.workspace.requestCloseSelected()")),
+            MenuAction("Next tab", dispatch("fim.workspace.selectRelative(1)")),
+            MenuAction("Previous tab", dispatch("fim.workspace.selectRelative(-1)")),
+            MenuSeparator(),
             MenuAction("Open configuration…", dispatch("fim.menu.openConfiguration()")),
             MenuAction("Save configuration…", dispatch("fim.menu.saveConfiguration()")),
             MenuAction("Load example…", dispatch("fim.menu.loadExample()")),

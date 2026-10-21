@@ -5175,8 +5175,11 @@ class _FakeMenuWindow:
     for bridge logic that does not actually touch a live window.
     """
 
-    def evaluate_js(self, script: str) -> None:  # noqa: ARG002 - duck-typed stand-in
-        return None
+    def __init__(self) -> None:
+        self.scripts: list[str] = []
+
+    def evaluate_js(self, script: str) -> None:
+        self.scripts.append(script)
 
     def destroy(self) -> None:
         return None
@@ -5202,6 +5205,9 @@ def test_build_menu_has_exactly_file_run_and_help() -> None:
     file_items = [item.title for item in menus[0].items if hasattr(item, "title")]
     assert file_items == [
         "New configuration",
+        "Close tab",
+        "Next tab",
+        "Previous tab",
         "Open configuration…",
         "Save configuration…",
         "Load example…",
@@ -5222,6 +5228,33 @@ def test_build_menu_has_exactly_file_run_and_help() -> None:
         "Documentation on GitHub",
         "Check for updates",
         "About fim",
+    ]
+
+
+def test_build_menu_dispatches_document_actions_to_workspace() -> None:
+    """Native document menu items dispatch through the workspace API."""
+    window = _FakeMenuWindow()
+    menus = app_module._build_menu(window)  # type: ignore[arg-type]
+    actions = {
+        item.title: item
+        for item in menus[0].items
+        if hasattr(item, "title")
+        and item.title
+        in {
+            "New configuration",
+            "Close tab",
+            "Next tab",
+            "Previous tab",
+        }
+    }
+    for action in actions.values():
+        action.function()
+
+    assert window.scripts == [
+        "setTimeout(() => { fim.menu.newConfiguration() }, 0);",
+        "setTimeout(() => { fim.workspace.requestCloseSelected() }, 0);",
+        "setTimeout(() => { fim.workspace.selectRelative(1) }, 0);",
+        "setTimeout(() => { fim.workspace.selectRelative(-1) }, 0);",
     ]
 
 

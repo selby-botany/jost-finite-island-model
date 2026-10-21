@@ -16810,6 +16810,16 @@ describing a menu bar that no longer matches `_build_menu`'s real
 shape — the same discipline its own prior version (five menus,
 Configure/View included) was written under.
 
+<a id="gui.test_app_api.test_build_menu_dispatches_document_actions_to_workspace"></a>
+
+#### test\_build\_menu\_dispatches\_document\_actions\_to\_workspace
+
+```python
+def test_build_menu_dispatches_document_actions_to_workspace() -> None
+```
+
+Native document menu items dispatch through the workspace API.
+
 <a id="gui.test_app_api.test_no_menu_title_contains_a_paren"></a>
 
 #### test\_no\_menu\_title\_contains\_a\_paren
@@ -28927,6 +28937,17 @@ def test_document_switcher_keyboard_focus_and_selection_are_separate(
 ```
 
 Arrows/Home/End rove; Enter and Space alone activate the focused document.
+
+<a id="gui.test_workspace.test_document_shortcuts_and_actions_use_the_selected_document"></a>
+
+#### test\_document\_shortcuts\_and\_actions\_use\_the\_selected\_document
+
+```python
+def test_document_shortcuts_and_actions_use_the_selected_document(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+New/close and next/previous shortcuts operate on the selected tab.
 
 <a id="gui.test_workspace.test_document_switcher_reaches_overflow_without_starting_or_stopping_jobs"></a>
 

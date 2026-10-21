@@ -100,6 +100,8 @@ function activateWorkspaceDocument(tabId) {
     });
 }
 
+window.fim.activateWorkspaceDocument = activateWorkspaceDocument;
+
 function closeDocumentHasActiveJob(state) {
     return (
         state.attachedJobId !== null &&
