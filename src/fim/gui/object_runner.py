@@ -218,9 +218,7 @@ def _object_worker(
             lane = session.lane
             if throttle.should_report(session.generation, lane.params.max_generations):
                 if run_dir is not None:
-                    write_progress_sidecar(
-                        run_dir / ".progress", session.generation
-                    )
+                    write_progress_sidecar(run_dir / ".progress", session.generation)
                 message_queue.put(
                     progress_message(
                         lane.state,
@@ -265,6 +263,19 @@ def _object_worker(
         message_queue.put(("error", f"this saved run is a draft: {issues}"))
         return
     except LifecycleError as error:
+        try:
+            current = read_run_object(object_id, results=results)
+        except (LifecycleError, OSError, ValueError) as read_error:
+            logger.error(
+                "could not read Run object %s after a lifecycle error: %s",
+                object_id,
+                read_error,
+            )
+            message_queue.put(("error", str(error)))
+            return
+        if current.record.state is RunState.CANCELLED:
+            message_queue.put(("cancelled", current.record.committed_generation or 0))
+            return
         message_queue.put(("error", str(error)))
         return
     except _EXPECTED_ENGINE_ERRORS as error:

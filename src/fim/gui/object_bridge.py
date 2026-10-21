@@ -46,6 +46,7 @@ from fim.persistence.run_objects import (
 from fim.persistence.run_ownership import (
     reconcile_run_object,
     reconcile_run_objects,
+    record_worker_failure,
     request_pause,
 )
 from fim.run_service import cancel_run_object
@@ -240,6 +241,13 @@ def pause(object_id: str, *, results: Path | None = None) -> None:
     """
     current = reconcile_run_object(object_id, results=results)
     request_pause(object_id, expected_revision=current.record.revision, results=results)
+
+
+def fail_worker(
+    object_id: str, message: str, *, results: Path | None = None
+) -> RunObject:
+    """Record an unexpected worker exit as a failed Run object attempt."""
+    return record_worker_failure(object_id, message, results=results)
 
 
 def prepare_start(

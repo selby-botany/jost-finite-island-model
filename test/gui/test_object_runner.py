@@ -23,7 +23,11 @@ from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_objects import create_run_object, read_run_object
 from fim.persistence.run_ownership import request_cancel, request_pause
-from fim.run_service import CheckpointCadence, execute_run_object
+from fim.run_service import (
+    CheckpointCadence,
+    cancel_run_object,
+    execute_run_object,
+)
 
 _CLASSES_FIXTURE = (
     Path(__file__).resolve().parents[1] / "persistence" / "fixtures" / "classes.yaml"
@@ -140,6 +144,26 @@ def test_a_cancelled_run_posts_the_generation_it_stopped_at(tmp_path: Path) -> N
     )
 
     assert posted[-1] == ("cancelled", 10)
+    assert read_run_object(object_id, results=tmp_path).record.state is (
+        RunState.CANCELLED
+    )
+
+
+def test_cancel_before_worker_start_posts_a_cancelled_outcome(
+    tmp_path: Path,
+) -> None:
+    """Cancellation may win the race with a newly spawned worker."""
+    object_id = _create(tmp_path)
+    current = read_run_object(object_id, results=tmp_path)
+    cancel_run_object(
+        object_id,
+        expected_revision=current.record.revision,
+        results=tmp_path,
+    )
+
+    posted = _execute(object_id, tmp_path)
+
+    assert posted == [("cancelled", 0)]
     assert read_run_object(object_id, results=tmp_path).record.state is (
         RunState.CANCELLED
     )

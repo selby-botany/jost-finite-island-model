@@ -217,7 +217,7 @@ def test_run_settings_can_be_edited_restored_and_replaced_with_defaults(
     _isolate_gui_preferences: Path,
     window: webview.Window,
     monkeypatch: pytest.MonkeyPatch,
-    results: Path,
+    results: Path,  # noqa: F811
 ) -> None:
     """Edits reach Run, cancel is inert, and defaults and originals stay separate."""
     del results
@@ -395,7 +395,7 @@ def test_loading_a_lineal_example_runs_it_without_changing_settings(
     _isolate_gui_preferences: Path,
     window: webview.Window,
     monkeypatch: pytest.MonkeyPatch,
-    results: Path,
+    results: Path,  # noqa: F811
 ) -> None:
     """Notice lists the differences; the run uses the example; Settings stay.
 

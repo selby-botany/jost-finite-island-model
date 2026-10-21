@@ -34,11 +34,196 @@ commits add the document lifecycle that removes them.
 
 from __future__ import annotations
 
+import contextlib
+import os
+import queue
+import secrets
+import subprocess
+import sys
 import threading
 import uuid
-from typing import Any, Literal
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
+from multiprocessing.connection import Client, Connection, Listener
+from pathlib import Path
+from typing import Any, BinaryIO, Literal
 
 ViewLevel = Literal["full", "summary"]
+
+
+@dataclass(slots=True)
+class ChildJob:
+    """One child process, its message channel, and its parent lifeline."""
+
+    process: subprocess.Popen[bytes]
+    messages: Listener
+    lifeline: BinaryIO | None
+    _lifeline_lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
+    _lifeline_closed: bool = field(default=False, init=False, repr=False)
+
+    def is_alive(self) -> bool:
+        """Return whether the worker process is still running."""
+        return self.process.poll() is None
+
+    def join(self, timeout: float | None = None) -> None:
+        """Wait up to `timeout` seconds for the worker process."""
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            self.process.wait(timeout)
+
+    def send_lifeline(self, payload: bytes) -> bool:
+        """Send a control message unless the parent pipe has been closed."""
+        with self._lifeline_lock:
+            if self._lifeline_closed or self.lifeline is None:
+                return False
+            self.lifeline.write(payload)
+            self.lifeline.flush()
+            return True
+
+    def close_lifeline(self) -> None:
+        """Tell the worker's lifeline watcher that the GUI is closing."""
+        with self._lifeline_lock:
+            if not self._lifeline_closed:
+                if self.lifeline is not None:
+                    self.lifeline.close()
+                self._lifeline_closed = True
+
+
+def start_child_job(
+    object_id: str,
+    *,
+    results: Path | None,
+    pairwise_max_demes: int,
+    command: Sequence[str] | None = None,
+) -> ChildJob:
+    """Start a worker executable and return its authenticated message channel."""
+    authkey = secrets.token_bytes(32)
+    messages = Listener(("127.0.0.1", 0), authkey=authkey)
+    host, port = messages.address
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "FIM_GUI_JOB_HOST": host,
+            "FIM_GUI_JOB_PORT": str(port),
+            "FIM_GUI_JOB_AUTHKEY": authkey.hex(),
+        }
+    )
+    worker_command = (
+        list(command)
+        if command is not None
+        else [sys.executable, "-m", "fim.launcher", "--gui-job", object_id]
+    )
+    if results is not None:
+        worker_command.extend(("--results-directory", str(results)))
+    worker_command.extend(("--pairwise-max-demes", str(pairwise_max_demes)))
+    try:
+        process = subprocess.Popen(
+            worker_command,
+            stdin=subprocess.PIPE,
+            env=environment,
+        )
+    except BaseException:
+        messages.close()
+        raise
+    return ChildJob(process, messages, process.stdin)
+
+
+def connect_message_channel() -> Connection:
+    """Connect a GUI child worker to its parent's authenticated listener."""
+    host = os.environ["FIM_GUI_JOB_HOST"]
+    port = int(os.environ["FIM_GUI_JOB_PORT"])
+    authkey = bytes.fromhex(os.environ["FIM_GUI_JOB_AUTHKEY"])
+    return Client((host, port), authkey=authkey)
+
+
+def _accept_child_connection(
+    child: ChildJob,
+    accepted: queue.Queue[Connection | OSError],
+    destination: queue.Queue[Any],
+    poll_interval: float,
+) -> Connection | None:
+    """Return the worker's connection, or `None` if it exits before connecting."""
+    while True:
+        try:
+            candidate = accepted.get(timeout=poll_interval)
+        except queue.Empty:
+            if child.process.poll() is None:
+                continue
+            child.messages.close()
+            return None
+        if isinstance(candidate, OSError):
+            if child.process.poll() is None:
+                destination.put(("error", str(candidate)))
+            return None
+        return candidate
+
+
+def _drain_child_connection(
+    connection: Connection,
+    destination: queue.Queue[Any],
+    on_message: Callable[[Any], Any] | None,
+) -> Any:
+    """Forward ordinary child messages and retain its final terminal message."""
+    terminal_message: Any = None
+    while True:
+        try:
+            message = connection.recv()
+        except EOFError:
+            break
+        if message[0] in {"done", "paused", "cancelled", "error"}:
+            terminal_message = message
+            continue
+        if on_message is not None:
+            message = on_message(message)
+            if message is None:
+                continue
+        destination.put(message)
+    return terminal_message
+
+
+def forward_child_messages(
+    child: ChildJob,
+    destination: queue.Queue[Any],
+    *,
+    on_message: Callable[[Any], Any] | None = None,
+    on_exit: Callable[[int | None], Any] | None = None,
+    poll_interval: float = 0.1,
+) -> None:
+    """Forward child messages until it exits, then report an unexpected exit."""
+    accepted: queue.Queue[Connection | OSError] = queue.Queue(maxsize=1)
+
+    def accept_messages() -> None:
+        """Accept the child's connection without blocking process supervision."""
+        try:
+            accepted.put(child.messages.accept())
+        except OSError as error:
+            accepted.put(error)
+
+    accept_thread = threading.Thread(
+        target=accept_messages,
+        name=f"fim-gui-message-accept-{child.process.pid}",
+        daemon=True,
+    )
+    accept_thread.start()
+    try:
+        connection = _accept_child_connection(
+            child, accepted, destination, poll_interval
+        )
+        terminal_message = None
+        if connection is not None:
+            terminal_message = _drain_child_connection(
+                connection, destination, on_message
+            )
+            connection.close()
+        child.process.wait()
+        if terminal_message is not None:
+            destination.put(terminal_message)
+        elif on_exit is not None:
+            destination.put(on_exit(child.process.returncode))
+    finally:
+        child.close_lifeline()
+        child.messages.close()
 
 
 class JobAdmission:

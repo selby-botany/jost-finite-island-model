@@ -82,7 +82,10 @@ def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]:
         logger.debug("scanning recent runs: %s does not exist", root)
         return []
     found: list[RecentRun] = []
-    manifest_paths = (*root.glob("*/manifest.json"), *root.glob("objects/*/manifest.json"))
+    manifest_paths = (
+        *root.glob("*/manifest.json"),
+        *root.glob("objects/*/manifest.json"),
+    )
     for manifest_path in manifest_paths:
         run = _recent_run_from_file(manifest_path)
         if run is not None:

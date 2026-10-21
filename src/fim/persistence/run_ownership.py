@@ -410,6 +410,43 @@ def reconcile_run_object(
     return _with_record(current, record)
 
 
+def record_worker_failure(
+    object_id: str,
+    message: str,
+    *,
+    results: Path | None = None,
+    clock: Clock | None = None,
+) -> RunObject:
+    """Record a child-process exit as a failed attempt when it owns no lock."""
+    with object_locked(object_id, results):
+        current = read_run_object_unlocked(object_id, results)
+        if current.record.state not in ACTIVE_STATES:
+            return current
+        if is_lock_held(attempt_lock_path(object_id, results)):
+            raise OwnershipConflictError(
+                f"Run object {object_id} still has an execution owner"
+            )
+        attempt_id = current.record.active_attempt_id
+        if attempt_id is None:
+            raise LifecycleError(
+                f"Run object {object_id} has no active attempt to fail"
+            )
+        record = apply_event(
+            current.record,
+            RunEvent.FAIL,
+            at=_now(clock),
+            expected_revision=current.record.revision,
+            error=ErrorInfo(
+                category="worker",
+                message=message,
+                attempt_id=attempt_id,
+            ),
+        )
+        write_run_record(current.directory, record)
+    logger.error("GUI worker for Run object %s failed: %s", object_id, message)
+    return _with_record(current, record)
+
+
 def reconcile_run_objects(
     results: Path | None = None, *, clock: Clock | None = None
 ) -> list[RunObject]:

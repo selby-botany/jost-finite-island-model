@@ -41,8 +41,8 @@ from fim.engine import (
 from fim.engine import backends as engine_backends
 from fim.engine import simulate_params as engine_fim
 from fim.gui import app as app_module
-from fim.gui import object_bridge
 from fim.gui import jobs as jobs_module
+from fim.gui import object_bridge
 from fim.gui import presets as presets_module
 from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
@@ -1021,7 +1021,7 @@ def test_start_run_after_a_load_uses_the_loaded_run_settings(
         }
 
     monkeypatch.setattr(Api, "_start_claimed_run_object", capture)
-    monkeypatch.setattr(app_module, "_active_window", lambda: object())
+    monkeypatch.setattr(app_module, "_active_window", object)
     api = Api()
     assert api.set_default_run_settings(
         {**api.get_default_run_settings(), "engine_backend": "lineal"}
@@ -1046,9 +1046,7 @@ def test_start_run_returns_claimed_job_id_when_worker_finishes_immediately(
     """A terminal worker may release the claim before `start_run` returns."""
     claimed_job_ids: list[str] = []
 
-    def finish_immediately(
-        self: Api, *_args: Any, **_kwargs: Any
-    ) -> dict[str, Any]:
+    def finish_immediately(self: Api, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
         """Simulate a worker drain releasing its job before the bridge returns."""
         job_id = self._job_id
         assert job_id is not None

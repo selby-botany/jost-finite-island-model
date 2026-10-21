@@ -74,7 +74,6 @@ from fim.gui import (
     batch_runner,
     jobs,
     object_bridge,
-    object_runner,
     presets,
     recent_runs,
     runner,
@@ -100,6 +99,7 @@ from fim.gui.config_form import (
     tab_for_error,
     validate_run_settings,
 )
+from fim.gui.job_results import GuiRunResult
 from fim.gui.literature_visuals import (
     literature_visual_payload,
     pooled_literature_visual_payload,
@@ -2029,9 +2029,10 @@ class Api:
         # be tagging a different job's pushes with a stale id.
         self._job_id: str | None = None
         # The saved run (`start_run_object`) now executing, if any, and its
-        # worker thread; Pause and Cancel are routed to it.
+        # child process; Pause and Cancel are routed to it.
         self._active_object_id: str | None = None
-        self._object_worker: threading.Thread | None = None
+        self._object_worker: jobs.ChildJob | None = None
+        self._object_supervisor: threading.Thread | None = None
         # The run of this configuration from another software version, if
         # any, that the run now starting is compared with when it finishes.
         self._previous_version_run: Path | None = None
@@ -2039,8 +2040,8 @@ class Api:
         self._sweep_cancel_event: threading.Event | None = None
         self._sweep_study_id: str | None = None
         # The worker threads of the run and sweep now executing, so closing
-        # can ask them to stop and wait (`stop_active_work`). The saved
-        # run's worker is `_object_worker`, above.
+        # can ask them to stop and wait (`stop_active_work`). Saved runs use
+        # `_object_worker` and `_object_supervisor`, above.
         self._run_worker: threading.Thread | None = None
         self._sweep_thread: threading.Thread | None = None
         # `_drain_then_release`'s own thread for whichever run or saved
@@ -2917,17 +2918,23 @@ class Api:
         self._live_deme_pair = None
         job_id = self._job_id
         assert job_id is not None  # `_claim_run` always mints it first
+        run_id = run_object.record.scientific_run_id or deterministic_run_id(params)
+        results_root = run_object.directory.parent.parent
 
         if is_batch:
             batch_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
-            self._object_worker = object_runner.start_object_run(
-                object_id,
-                batch_queue,
-                pairwise_max_demes=self._preferences.pairwise_max_demes,
-                view_level=lambda: self._jobs.view_level(job_id),
-            )
+            try:
+                self._start_object_child(
+                    object_id,
+                    params,
+                    run_id,
+                    job_id,
+                    batch_queue,
+                    results=results_root,
+                )
+            except (OSError, RuntimeError, ValueError) as error:
+                return {"ok": False, "message": str(error)}
             logger.info("saved batch run starting: %s", object_id)
-            run_id = run_object.record.scientific_run_id or deterministic_run_id(params)
             self._drain_thread = threading.Thread(
                 target=self._drain_then_release,
                 args=(
@@ -2972,12 +2979,17 @@ class Api:
         equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
         identity_recovery = _identity_recovery_reference_payload(params)
         closed_form = _closed_form_trajectory_payload(params)
-        self._object_worker = object_runner.start_object_run(
-            object_id,
-            message_queue,
-            pairwise_max_demes=self._preferences.pairwise_max_demes,
-            view_level=lambda: self._jobs.view_level(job_id),
-        )
+        try:
+            self._start_object_child(
+                object_id,
+                params,
+                run_id,
+                job_id,
+                message_queue,
+                results=results_root,
+            )
+        except (OSError, RuntimeError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
         logger.info("saved run starting: %s", object_id)
         self._drain_thread = threading.Thread(
             target=self._drain_then_release,
@@ -3019,6 +3031,68 @@ class Api:
             "closedForm": closed_form,
             "convergence": _convergence_reference_payload(params),
         }
+
+    def _start_object_child(
+        self,
+        object_id: str,
+        params: SimulationParams,
+        run_id: str,
+        job_id: str,
+        destination: queue.Queue[Any],
+        *,
+        results: Path,
+    ) -> None:
+        """Start and supervise one saved-run child process."""
+        child = jobs.start_child_job(
+            object_id,
+            results=results,
+            pairwise_max_demes=self._preferences.pairwise_max_demes,
+        )
+        self._object_worker = child
+
+        def adapt_message(message: Any) -> Any:
+            """Render child progress at this job's current view level."""
+            if message[0] != "progress":
+                return message
+            return runner.progress_message(
+                message[6],
+                message[1],
+                params,
+                run_id,
+                view_level=self._jobs.view_level(job_id),
+            )
+
+        def unexpected_exit(exit_code: int | None) -> tuple[str, str]:
+            """Persist a crash as failed and provide the page's terminal message."""
+            message = (
+                "worker process exited without a terminal result "
+                f"(exit code {exit_code})"
+            )
+            try:
+                failed = object_bridge.fail_worker(object_id, message, results=results)
+                if failed.record.last_error is not None:
+                    message = failed.record.last_error.message
+            except (LifecycleError, OSError, ValueError) as error:
+                logger.error(
+                    "could not record GUI worker failure for %s: %s",
+                    object_id,
+                    error,
+                )
+                message = f"{message}; recording the failure also failed: {error}"
+            return ("error", message)
+
+        supervisor = threading.Thread(
+            target=jobs.forward_child_messages,
+            args=(child, destination),
+            kwargs={
+                "on_message": adapt_message,
+                "on_exit": unexpected_exit,
+            },
+            name=f"fim-gui-supervisor-{object_id}",
+            daemon=True,
+        )
+        self._object_supervisor = supervisor
+        supervisor.start()
 
     @_log_bridge_call
     def cancel_run_object(self, object_id: str) -> dict[str, Any]:
@@ -3072,14 +3146,18 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True}
 
-    def stop_active_work(self, timeout: float) -> None:
-        """Ask whatever is running to stop, and wait up to `timeout` seconds.
+    def stop_active_work(
+        self, timeout: float, *, wait_for_saved_run: bool = True
+    ) -> None:
+        """Stop active work and optionally wait for a saved-run child.
 
         Called after the window closes, so closing never leaves a worker
         thread to hold the process open until the deadman fires: a saved
         run checkpoints and pauses (and resumes later), a run, batch, or
-        sweep is cancelled. A worker that misses the bound is logged, and
-        the deadman still ends the process.
+        sweep is cancelled. A saved-run child receives the pause request
+        and lifeline EOF but is not joined; its next safe point checkpoints
+        and pauses after the GUI exits. In-process workers that miss the
+        bound are logged, and the deadman still ends the process.
 
         `_drain_thread` is joined before the publisher is ever told to
         stop accepting (`self._drain_thread`'s own comment in `__init__`
@@ -3090,20 +3168,36 @@ class Api:
 
         Args:
             timeout: Longest total wait for the workers, in seconds.
+            wait_for_saved_run: Wait for the saved-run child and its
+                publishers; false at application shutdown, where its
+                pause request and lifeline EOF must not delay quitting.
         """
         self._request_stop_active_work()
         deadline = time.monotonic() + timeout
-        for label, worker in (
-            ("saved run", self._object_worker),
+        workers: list[tuple[str, threading.Thread | None]] = [
             ("run", self._run_worker),
             ("sweep", self._sweep_thread),
-            ("drain", self._drain_thread),
-        ):
+        ]
+        if self._object_worker is not None and wait_for_saved_run:
+            self._object_worker.join(max(0.0, deadline - time.monotonic()))
+            if self._object_worker.is_alive():
+                logger.warning("saved run did not stop before exit")
+            workers.append(("saved run supervisor", self._object_supervisor))
+            if self._drain_thread is not None:
+                workers.append(("drain", self._drain_thread))
+        elif self._object_worker is None and self._drain_thread is not None:
+            workers.append(("drain", self._drain_thread))
+        for label, worker in workers:
             if worker is None:
                 continue
             worker.join(max(0.0, deadline - time.monotonic()))
             if worker.is_alive():
                 logger.warning("%s did not stop before exit", label)
+        if self._object_worker is not None and not wait_for_saved_run:
+            logger.debug(
+                "saved run child will pause after GUI exit: %s",
+                self._active_object_id,
+            )
         if not self._publisher.stop(max(0.0, deadline - time.monotonic())):
             logger.warning("publisher did not finish its backlog before exit")
 
@@ -3206,8 +3300,12 @@ class Api:
         """Ask the running saved run to pause, or the run or sweep to cancel."""
         object_id = self._active_object_id
         if object_id is not None:
-            with contextlib.suppress(LifecycleError):
-                object_bridge.pause(object_id)
+            try:
+                with contextlib.suppress(LifecycleError, OSError):
+                    object_bridge.pause(object_id)
+            finally:
+                if self._object_worker is not None:
+                    self._object_worker.close_lifeline()
         elif self._run_in_flight and self._cancel_event is not None:
             self._cancel_event.set()
         if self._sweep_cancel_event is not None:
@@ -8795,7 +8893,7 @@ def _batch_done_payload(
     params: SimulationParams,
     run_id: str,
     output_directory: Path,
-    results: tuple[RunResult, ...],
+    results: tuple[RunResult | GuiRunResult, ...],
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
 ) -> dict[str, Any]:
     """Build `fim.onBatchDone`'s own payload from a batch's final results.
@@ -10420,7 +10518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # should one miss this bound, the deadman still exits. The close
     # dialog has usually asked already, so this is the backstop for every
     # close that skipped it.
-    api.stop_active_work(_STOP_ON_CLOSE_SECONDS)
+    api.stop_active_work(_STOP_ON_CLOSE_SECONDS, wait_for_saved_run=False)
     return 0
 
 

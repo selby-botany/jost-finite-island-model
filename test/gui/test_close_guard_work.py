@@ -16,7 +16,9 @@ be running, and then ask it to stop; nothing waits on a delay.
 from __future__ import annotations
 
 import multiprocessing
+import sys
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -178,6 +180,31 @@ def test_closing_pauses_a_running_saved_run_at_a_checkpoint(
     assert window.calls("onRunPaused")
     assert read_run_object(saved["objectId"]).record.state is RunState.PAUSED
     assert _non_daemon_threads() - before == set()
+
+
+def test_application_shutdown_does_not_join_the_saved_run_child(api: Api) -> None:
+    """Application shutdown closes the lifeline and returns without a join."""
+    saved = api.save_run_object(_form())
+    assert saved["state"] == "planned"
+    child = app_module.jobs.start_child_job(
+        saved["objectId"],
+        results=None,
+        pairwise_max_demes=1,
+        command=[sys.executable, "-c", "import time; time.sleep(30)"],
+    )
+    api._active_object_id = saved["objectId"]
+    api._object_worker = child
+    started_at = time.monotonic()
+    try:
+        api.stop_active_work(0.1, wait_for_saved_run=False)
+
+        assert time.monotonic() - started_at < 2
+        assert child.is_alive()
+        assert child.lifeline is None or child.lifeline.closed
+    finally:
+        child.process.terminate()
+        child.join(5)
+        child.messages.close()
 
 
 def test_closing_pauses_a_running_batch_and_leaves_no_worker_process(

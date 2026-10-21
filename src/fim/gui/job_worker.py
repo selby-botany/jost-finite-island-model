@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import logging
 import os
 import queue
@@ -10,16 +11,43 @@ import sys
 import threading
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
+
+
+class _ProcessMessageSink:
+    """Adapt worker messages to objects safe for the process queue."""
+
+    def __init__(self, connection: Any, snapshot_result: Any) -> None:
+        """Keep the authenticated parent connection and result converter."""
+        self._connection = connection
+        self._snapshot_result = snapshot_result
+        self._connected = True
+
+    def put(self, message: Any) -> None:
+        """Send a pickle-safe message unless the GUI has disconnected."""
+        if not self._connected:
+            return
+        if message[0] == "done":
+            result = message[1]
+            if isinstance(result, tuple):
+                result = tuple(self._snapshot_result(item) for item in result)
+            else:
+                result = self._snapshot_result(result)
+            message = ("done", result)
+        try:
+            self._connection.send(message)
+        except (BrokenPipeError, EOFError, OSError) as error:
+            logger.debug("GUI job message channel closed: %s", error)
+            self._connection.close()
+            self._connected = False
 
 
 def _lower_process_priority() -> None:
     """Lower this process before importing the simulation engine or starting threads."""
     try:
         if sys.platform == "win32":
-            import ctypes
-
             kernel32 = ctypes.windll.kernel32
             process = kernel32.GetCurrentProcess()
             if not kernel32.SetPriorityClass(process, 0x00004000):
@@ -60,23 +88,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--results-directory", type=Path)
     parser.add_argument("--pairwise-max-demes", type=int)
     parser.add_argument("--view-level", choices=("full", "summary"), default="full")
-    arguments = parser.parse_args(
-        sys.argv[1:] if argv is None else list(argv)
-    )
+    arguments = parser.parse_args(sys.argv[1:] if argv is None else list(argv))
     if arguments.pairwise_max_demes is not None and arguments.pairwise_max_demes < 1:
         parser.error("--pairwise-max-demes must be at least 1")
 
     from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES  # noqa: PLC0415
+    from fim.gui.job_results import GuiRunResult  # noqa: PLC0415
+    from fim.gui.jobs import connect_message_channel  # noqa: PLC0415
     from fim.gui.object_runner import start_object_run  # noqa: PLC0415
     from fim.persistence.run_lifecycle import RunState  # noqa: PLC0415
     from fim.persistence.run_objects import read_run_object  # noqa: PLC0415
 
     stop_requested = threading.Event()
     _watch_lifeline(stop_requested)
-    messages: queue.Queue[object] = queue.Queue()
+    connection = connect_message_channel() if "FIM_GUI_JOB_HOST" in os.environ else None
+    messages: Any = (
+        _ProcessMessageSink(connection, GuiRunResult.from_result)
+        if connection is not None
+        else queue.Queue()
+    )
     worker = start_object_run(
         arguments.object_id,
-        messages,
+        cast("queue.Queue[Any]", messages),
         results=arguments.results_directory,
         pairwise_max_demes=(
             arguments.pairwise_max_demes
@@ -86,14 +119,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         view_level=lambda: arguments.view_level,
         stop_requested=stop_requested.is_set,
     )
-    while worker.is_alive():
-        try:
-            messages.get(timeout=0.1)
-        except queue.Empty:
-            continue
+    if connection is None:
+        while worker.is_alive():
+            try:
+                messages.get(timeout=0.1)
+            except queue.Empty:
+                continue
+        while not messages.empty():
+            messages.get_nowait()
     worker.join()
-    while not messages.empty():
-        messages.get_nowait()
+    if connection is not None:
+        connection.close()
 
     run_object = read_run_object(
         arguments.object_id, results=arguments.results_directory

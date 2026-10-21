@@ -1534,9 +1534,9 @@ kept replicate's full results and the shared batch summary.</p>
 This happens when:</p>
 <ul>
 <li>The Configure form has changes you have not saved.</li>
-<li>A saved run is in progress.</li>
-<li>A run, batch, or sweep that you started with <strong>Run simulation</strong> or
-<strong>Sweep</strong> is in progress.</li>
+<li>A saved run is in progress. This includes runs started with
+<strong>Run simulation</strong>; the desktop app saves those as Run objects.</li>
+<li>A sweep is in progress.</li>
 </ul>
 <p>The dialog lists every unsaved document by name, including documents that
 are not currently open on screen. It also identifies the run or sweep that
@@ -1559,11 +1559,11 @@ will be paused or stopped. The dialog offers these choices:</p>
 </tr>
 <tr>
 <td><strong>Pause and close</strong></td>
-<td>Shown when only a saved run is in progress. The run stops at a checkpoint, and you resume it from <strong>Saved runs</strong> on Home.</td>
+<td>Shown when only a saved run is in progress. The run stops at a checkpoint, and you can resume it from the same document's Run button or from <strong>Saved runs</strong> on Home.</td>
 </tr>
 <tr>
 <td><strong>Stop and close</strong></td>
-<td>Shown when only a run or sweep that cannot be resumed is in progress. Closing stops it.</td>
+<td>Shown when only a sweep is in progress. Closing stops it.</td>
 </tr>
 <tr>
 <td><strong>Keep working</strong></td>
@@ -1572,8 +1572,8 @@ will be paused or stopped. The dialog offers these choices:</p>
 </tbody>
 </table>
 <p>Choosing <strong>Save and close</strong> or <strong>Close without saving</strong> also pauses a running
-saved run, or stops any other running work. If the save fails, the dialog
-stays open and shows the reason, so nothing is lost.</p>
+saved run or stops a running sweep. If the save fails, the dialog stays open
+and shows the reason, so nothing is lost.</p>
 <p>If nothing would be lost, the window closes at once.</p>
 <h3 id="if-the-window-closes-but-fim-keeps-running">If the window closes but <code>fim</code> keeps running</h3>
 <p>If shutdown has not completed 20 seconds after the window closes,
@@ -1582,7 +1582,8 @@ stays open and shows the reason, so nothing is lost.</p>
 </code></pre>
 <p>Completed results remain on disk. A saved run resumes from its latest
 committed checkpoint; work since that checkpoint may need to be repeated.
-Unsaved runs stopped before publication do not produce a completed result.</p>
+Command-line runs stopped before publication do not produce a completed
+result.</p>
 <p>A diagnostic report is written at the same time, to <code>logs/fim.log</code> as well
 as to the terminal, including when launched without a terminal.
 Report the section beginning <code>shutdown deadman fired</code>, together with

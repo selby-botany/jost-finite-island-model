@@ -397,11 +397,16 @@ def test_main_stops_running_work_after_the_window_closes(
     monkeypatch.setattr(
         Api,
         "stop_active_work",
-        lambda _self, timeout: events.append(f"stop:{timeout:g}"),
+        lambda _self, timeout, *, wait_for_saved_run: events.append(
+            f"stop:{timeout:g}:{wait_for_saved_run}"
+        ),
     )
 
     assert app_module.main([]) == 0
 
-    assert events == ["closed", f"stop:{app_module._STOP_ON_CLOSE_SECONDS:g}"]
+    assert events == [
+        "closed",
+        f"stop:{app_module._STOP_ON_CLOSE_SECONDS:g}:False",
+    ]
     # The Quit menu item asks the way the close button does.
     assert [action.__name__ for action in menus] == ["request_close"]

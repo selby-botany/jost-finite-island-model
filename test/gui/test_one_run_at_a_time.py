@@ -11,16 +11,17 @@ run slot under a lock (`Api._claim_run`), shared by `start_run` and
 `start_run_object`, and the page asks `Api.can_start_run` before it
 changes anything on screen (`startRunExclusively`).
 
-No run here simulates anything: `fim.gui.object_runner.start_object_run`
-is replaced by `_HeldRuns.start_object_run`, whose run waits until the
-test releases it and then reports a cancellation. A run therefore stays
-in flight for exactly as long as a test needs, whatever the machine, and
-its drain thread pushes nothing to the page until it is released.
+No run here simulates anything: `fim.gui.jobs.start_child_job` is
+replaced with a fake child process that waits for the test to release it
+and then reports a cancellation. A run therefore stays in flight for
+exactly as long as a test needs, whatever the machine, and its drain
+thread pushes nothing to the page until it is released.
 """
 
 from __future__ import annotations
 
-import queue
+import json
+import sys
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -30,10 +31,11 @@ import pytest
 from conftest import poll_or_fail, wait_or_fail
 
 from fim.gui import app as app_module
-from fim.gui import object_runner
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
+from fim.gui.jobs import ChildJob
 from fim.gui.runner import RunMessage
+from fim.persistence.run_objects import read_run_object
 
 from .test_sweep_api import (  # noqa: F401
     _IDLE_POLL_SECONDS,
@@ -61,55 +63,74 @@ _RUN_CARD_STATE = """({
 
 
 class _HeldRuns:
-    """Stand in for `fim.gui.object_runner.start_object_run`.
+    """Stand in for the child worker used by `fim.gui.jobs`.
 
-    A released run reports `("cancelled", 0)`, the terminal message needed
-    by this scalar-run test, so the drain thread releases the run claim.
+    A released process reports `("cancelled", 0)`, the terminal message
+    needed by this scalar-run test, so the drain thread releases the claim.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, factory: Any) -> None:
         self.started: list[str] = []
-        self._releases: list[threading.Event] = []
+        self._factory = factory
+        self._children: list[tuple[ChildJob, Path]] = []
 
-    def start_object_run(
+    def start_child(
         self,
         object_id: str,
-        message_queue: queue.Queue[RunMessage | BatchMessage],
-        **_options: Any,
-    ) -> threading.Thread:
-        """Start a worker thread that waits for `release_all`.
-
-        Args:
-            object_id: Recorded, so a test can count starts.
-            message_queue: Where the run's terminal message goes.
-            **_options: The real runner's keyword options, unused.
-
-        Returns:
-            The started, not yet released, worker thread.
-        """
-        release = threading.Event()
-        self._releases.append(release)
+        **options: Any,
+    ) -> ChildJob:
+        """Start a child that waits for the test's explicit release."""
+        results_root = options["results"]
+        release_file = results_root / f".held-release-{object_id}"
+        child = self._factory(
+            object_id,
+            command=_fake_worker_command("held", object_id, release=release_file),
+            **options,
+        )
+        self._children.append((child, release_file))
         self.started.append(object_id)
-
-        def work() -> None:
-            release.wait()
-            message_queue.put(("cancelled", 0))
-
-        worker = threading.Thread(target=work, name="held-run", daemon=True)
-        worker.start()
-        return worker
+        return child
 
     def release_all(self) -> None:
-        """Let every held run report its cancellation."""
-        for release in self._releases:
-            release.set()
+        """Let every held child report its cancellation."""
+        for _child, release_file in self._children:
+            release_file.touch()
+
+
+def _fake_worker_command(
+    mode: str,
+    object_id: str,
+    *,
+    release: Path | None = None,
+    summary_release: Path | None = None,
+    finish_release: Path | None = None,
+) -> list[str]:
+    """Build a controlled fake-worker command for one supervision test."""
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("fake_gui_job_worker.py")),
+        mode,
+        object_id,
+    ]
+    if release is not None:
+        command.extend(("--release", str(release)))
+    if summary_release is not None:
+        command.extend(("--summary-release", str(summary_release)))
+    if finish_release is not None:
+        command.extend(("--finish-release", str(finish_release)))
+    return command
 
 
 @pytest.fixture
 def held_runs(monkeypatch: pytest.MonkeyPatch) -> Iterator[_HeldRuns]:
-    """Replace the object runner with held runs, then release them all."""
-    held = _HeldRuns()
-    monkeypatch.setattr(object_runner, "start_object_run", held.start_object_run)
+    """Replace child execution with held processes, then release them all."""
+    start_child_job = app_module.jobs.start_child_job
+    held = _HeldRuns(start_child_job)
+
+    def start_held_child(object_id: str, **options: Any) -> Any:
+        return held.start_child(object_id, **options)
+
+    monkeypatch.setattr(app_module.jobs, "start_child_job", start_held_child)
     try:
         yield held
     finally:
@@ -159,6 +180,102 @@ def test_a_second_run_is_refused_while_the_first_is_in_flight(
     assert len(held_runs.started) == 2
     held_runs.release_all()
     _wait_until_no_run(api)
+
+
+def test_child_progress_tracks_full_and_summary_view_levels(
+    api: Api,  # noqa: F811
+    results: Path,  # noqa: F811
+    window: _FakeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The supervisor renders each child tick at the job's current view level."""
+    start_child_job = app_module.jobs.start_child_job
+
+    def start_progress_child(object_id: str, **options: Any) -> ChildJob:
+        return start_child_job(
+            object_id,
+            command=_fake_worker_command(
+                "progress",
+                object_id,
+                summary_release=results / f".summary-release-{object_id}",
+                finish_release=results / f".finish-release-{object_id}",
+            ),
+            **options,
+        )
+
+    monkeypatch.setattr(app_module.jobs, "start_child_job", start_progress_child)
+    started = api.start_run(_form())
+    assert started["ok"] is True
+    summary_release = results / f".summary-release-{started['objectId']}"
+    finish_release = results / f".finish-release-{started['objectId']}"
+    progress_prefix = "fim.onRunProgress("
+    try:
+        poll_or_fail(
+            lambda: [
+                json.loads(script[len(progress_prefix) : -1])
+                for script in window.pushed
+                if script.startswith(progress_prefix)
+            ],
+            bool,
+            "first full-view child progress",
+            interval=_IDLE_POLL_SECONDS,
+        )
+        first_payload = next(
+            json.loads(script[len(progress_prefix) : -1])
+            for script in window.pushed
+            if script.startswith(progress_prefix)
+        )
+        assert "panels" in first_payload
+        assert api.set_job_view(started["jobId"], "summary")["ok"] is True
+        summary_release.touch()
+        poll_or_fail(
+            lambda: [
+                json.loads(script[len(progress_prefix) : -1])
+                for script in window.pushed
+                if script.startswith(progress_prefix)
+            ],
+            lambda payloads: len(payloads) >= 2,
+            "summary-view child progress",
+            interval=_IDLE_POLL_SECONDS,
+        )
+        payloads = [
+            json.loads(script[len(progress_prefix) : -1])
+            for script in window.pushed
+            if script.startswith(progress_prefix)
+        ]
+        assert "panels" not in payloads[-1]
+    finally:
+        summary_release.touch()
+        finish_release.touch()
+    _wait_until_no_run(api)
+
+
+def test_child_crash_is_recorded_as_failed(
+    api: Api,  # noqa: F811
+    results: Path,  # noqa: F811
+    window: _FakeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exited child with an active attempt is recorded as failed."""
+    start_child_job = app_module.jobs.start_child_job
+
+    def start_crashing_child(object_id: str, **options: Any) -> ChildJob:
+        return start_child_job(
+            object_id,
+            command=_fake_worker_command("crash", object_id),
+            **options,
+        )
+
+    monkeypatch.setattr(app_module.jobs, "start_child_job", start_crashing_child)
+    started = api.start_run(_form())
+    assert started["ok"] is True
+    _wait_until_no_run(api)
+
+    run_object = read_run_object(started["objectId"], results=results)
+    assert run_object.record.state.value == "failed"
+    assert run_object.record.last_error is not None
+    assert "exit code 7" in run_object.record.last_error.message
+    assert any(script.startswith("fim.onRunError(") for script in window.pushed)
 
 
 def test_a_start_without_an_active_window_releases_its_reservation(
@@ -337,7 +454,7 @@ def test_the_check_and_the_claim_happen_under_one_lock(
 def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     fast_scalar_run_settings: Path,
     held_runs: _HeldRuns,
-    results: Path,
+    results: Path,  # noqa: F811
 ) -> None:
     """Run and the Run menu, clicked during a run, are refused on the page.
 

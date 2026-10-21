@@ -23,6 +23,7 @@ from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.expert import ExpertSettings
 from fim.engine import RunResult, deterministic_run_id, simulate_params
 from fim.engine.records import format_timestamp, utc_now
+from fim.gui.job_results import GuiRunResult
 from fim.gui.runner import pairwise_status_text
 from fim.gui.store import LIVE_BLOCK_SECONDS, LiveProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
@@ -59,7 +60,7 @@ _EXPECTED_ENGINE_ERRORS: Final = (
 _CANCEL_WATCH_INTERVAL_SECONDS: Final = 0.1
 
 StartedMessage = tuple[Literal["started"], Path]
-DoneMessage = tuple[Literal["done"], tuple[RunResult, ...]]
+DoneMessage = tuple[Literal["done"], tuple[RunResult | GuiRunResult, ...]]
 CancelledMessage = tuple[Literal["cancelled"], int, int]
 PausedMessage = tuple[Literal["paused"], int]
 ErrorMessage = tuple[Literal["error"], str]
