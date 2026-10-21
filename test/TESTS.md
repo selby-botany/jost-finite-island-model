@@ -3742,7 +3742,7 @@ run; no test depends on timing.
 
 <a id="test.test_run_service.checkpointed"></a>
 
-#### [checkpointed](./test_run_service.py#L93)
+#### [checkpointed](./test_run_service.py#L95)
 
 ```python
 @pytest.fixture
@@ -3753,7 +3753,7 @@ Record the generation of every checkpoint a session publishes.
 
 <a id="test.test_run_service._Writer"></a>
 
-## [\_Writer Objects](./test_run_service.py#L106)
+## [\_Writer Objects](./test_run_service.py#L108)
 
 ```python
 class _Writer()
@@ -3763,7 +3763,7 @@ An artifact writer that remembers what it was asked to write.
 
 <a id="test.test_run_service._Writer.__init__"></a>
 
-#### [\_\_init\_\_](./test_run_service.py#L109)
+#### [\_\_init\_\_](./test_run_service.py#L111)
 
 ```python
 def __init__() -> None
@@ -3773,7 +3773,7 @@ Start with nothing written.
 
 <a id="test.test_run_service._Writer.__call__"></a>
 
-#### [\_\_call\_\_](./test_run_service.py#L113)
+#### [\_\_call\_\_](./test_run_service.py#L115)
 
 ```python
 def __call__(result: RunResult, directory: Path) -> None
@@ -3783,7 +3783,7 @@ Remember `result` and write the standard artifacts.
 
 <a id="test.test_run_service.test_a_planned_run_executes_to_completion"></a>
 
-#### [test\_a\_planned\_run\_executes\_to\_completion](./test_run_service.py#L216)
+#### [test\_a\_planned\_run\_executes\_to\_completion](./test_run_service.py#L218)
 
 ```python
 def test_a_planned_run_executes_to_completion(tmp_path: Path,
@@ -3794,7 +3794,7 @@ Start, checkpoint on cadence, finalize, and record completion.
 
 <a id="test.test_run_service.test_pause_then_resume_finishes_as_the_uninterrupted_run"></a>
 
-#### [test\_pause\_then\_resume\_finishes\_as\_the\_uninterrupted\_run](./test_run_service.py#L239)
+#### [test\_pause\_then\_resume\_finishes\_as\_the\_uninterrupted\_run](./test_run_service.py#L241)
 
 ```python
 def test_pause_then_resume_finishes_as_the_uninterrupted_run(
@@ -3805,7 +3805,7 @@ Pause is acknowledged after a checkpoint; resume continues exactly.
 
 <a id="test.test_run_service.test_a_pause_requested_as_the_run_stops_completes_it"></a>
 
-#### [test\_a\_pause\_requested\_as\_the\_run\_stops\_completes\_it](./test_run_service.py#L270)
+#### [test\_a\_pause\_requested\_as\_the\_run\_stops\_completes\_it](./test_run_service.py#L272)
 
 ```python
 def test_a_pause_requested_as_the_run_stops_completes_it(
@@ -3816,7 +3816,7 @@ A run that has stopped completes; no generation is added for a pause.
 
 <a id="test.test_run_service.test_cancel_keeps_the_committed_partial_trajectory"></a>
 
-#### [test\_cancel\_keeps\_the\_committed\_partial\_trajectory](./test_run_service.py#L290)
+#### [test\_cancel\_keeps\_the\_committed\_partial\_trajectory](./test_run_service.py#L292)
 
 ```python
 def test_cancel_keeps_the_committed_partial_trajectory(tmp_path: Path) -> None
@@ -3826,7 +3826,7 @@ Cancel stops at a safe point and leaves the frames written so far.
 
 <a id="test.test_run_service.test_a_draft_is_refused_with_its_validation_issues"></a>
 
-#### [test\_a\_draft\_is\_refused\_with\_its\_validation\_issues](./test_run_service.py#L311)
+#### [test\_a\_draft\_is\_refused\_with\_its\_validation\_issues](./test_run_service.py#L313)
 
 ```python
 def test_a_draft_is_refused_with_its_validation_issues(tmp_path: Path) -> None
@@ -3836,7 +3836,7 @@ A draft never opens an attempt and reports why it cannot start.
 
 <a id="test.test_run_service.test_an_unsupported_configuration_is_refused_before_starting"></a>
 
-#### [test\_an\_unsupported\_configuration\_is\_refused\_before\_starting](./test_run_service.py#L323)
+#### [test\_an\_unsupported\_configuration\_is\_refused\_before\_starting](./test_run_service.py#L325)
 
 ```python
 def test_an_unsupported_configuration_is_refused_before_starting(
@@ -3847,7 +3847,7 @@ A configuration no session can build is reported, not failed.
 
 <a id="test.test_run_service.test_a_completed_run_cannot_execute_again"></a>
 
-#### [test\_a\_completed\_run\_cannot\_execute\_again](./test_run_service.py#L342)
+#### [test\_a\_completed\_run\_cannot\_execute\_again](./test_run_service.py#L344)
 
 ```python
 def test_a_completed_run_cannot_execute_again(tmp_path: Path) -> None
@@ -3857,7 +3857,7 @@ Completion is terminal.
 
 <a id="test.test_run_service.test_a_lost_owner_is_reconciled_and_resumed_exactly"></a>
 
-#### [test\_a\_lost\_owner\_is\_reconciled\_and\_resumed\_exactly](./test_run_service.py#L351)
+#### [test\_a\_lost\_owner\_is\_reconciled\_and\_resumed\_exactly](./test_run_service.py#L353)
 
 ```python
 def test_a_lost_owner_is_reconciled_and_resumed_exactly(
@@ -3868,7 +3868,7 @@ An attempt that dies without recording anything resumes from its checkpoint.
 
 <a id="test.test_run_service.test_a_failure_is_recorded_and_resumable"></a>
 
-#### [test\_a\_failure\_is\_recorded\_and\_resumable](./test_run_service.py#L374)
+#### [test\_a\_failure\_is\_recorded\_and\_resumable](./test_run_service.py#L376)
 
 ```python
 def test_a_failure_is_recorded_and_resumable(tmp_path: Path) -> None
@@ -3878,7 +3878,7 @@ An engine error records `failed`; resuming finishes the same run.
 
 <a id="test.test_run_service.test_elapsed_time_triggers_checkpoints"></a>
 
-#### [test\_elapsed\_time\_triggers\_checkpoints](./test_run_service.py#L396)
+#### [test\_elapsed\_time\_triggers\_checkpoints](./test_run_service.py#L398)
 
 ```python
 def test_elapsed_time_triggers_checkpoints(tmp_path: Path,
@@ -3889,7 +3889,7 @@ Every safe point is a checkpoint when the time interval has passed.
 
 <a id="test.test_run_service.test_cancel_abandons_a_run_without_a_worker"></a>
 
-#### [test\_cancel\_abandons\_a\_run\_without\_a\_worker](./test_run_service.py#L409)
+#### [test\_cancel\_abandons\_a\_run\_without\_a\_worker](./test_run_service.py#L411)
 
 ```python
 def test_cancel_abandons_a_run_without_a_worker(tmp_path: Path) -> None
@@ -3899,7 +3899,7 @@ A planned run has no worker to ask, so it is cancelled at once.
 
 <a id="test.test_run_service.test_cancel_asks_an_executing_worker"></a>
 
-#### [test\_cancel\_asks\_an\_executing\_worker](./test_run_service.py#L420)
+#### [test\_cancel\_asks\_an\_executing\_worker](./test_run_service.py#L422)
 
 ```python
 def test_cancel_asks_an_executing_worker(tmp_path: Path) -> None
@@ -3909,7 +3909,7 @@ A running run is asked to stop and is `cancelling` until it does.
 
 <a id="test.test_run_service.test_a_cadence_that_never_progresses_is_rejected"></a>
 
-#### [test\_a\_cadence\_that\_never\_progresses\_is\_rejected](./test_run_service.py#L445)
+#### [test\_a\_cadence\_that\_never\_progresses\_is\_rejected](./test_run_service.py#L447)
 
 ```python
 @pytest.mark.parametrize(
@@ -3934,7 +3934,7 @@ Zero or negative intervals are refused.
 
 <a id="test.test_run_service._CrashingWriter"></a>
 
-## [\_CrashingWriter Objects](./test_run_service.py#L451)
+## [\_CrashingWriter Objects](./test_run_service.py#L453)
 
 ```python
 class _CrashingWriter(_Writer)
@@ -3944,7 +3944,7 @@ A writer that stops the process (as a kill would) around its work.
 
 <a id="test.test_run_service._CrashingWriter.__init__"></a>
 
-#### [\_\_init\_\_](./test_run_service.py#L454)
+#### [\_\_init\_\_](./test_run_service.py#L456)
 
 ```python
 def __init__(*, before: bool, corrupt_receipt: bool = False) -> None
@@ -3954,7 +3954,7 @@ Crash `before` writing anything, or after the receipt is written.
 
 <a id="test.test_run_service._CrashingWriter.__call__"></a>
 
-#### [\_\_call\_\_](./test_run_service.py#L460)
+#### [\_\_call\_\_](./test_run_service.py#L462)
 
 ```python
 def __call__(result: RunResult, directory: Path) -> None
@@ -3964,7 +3964,7 @@ Write (unless crashing first), then raise `KeyboardInterrupt`.
 
 <a id="test.test_run_service.test_a_completion_receipt_left_by_a_killed_worker_is_recovered"></a>
 
-#### [test\_a\_completion\_receipt\_left\_by\_a\_killed\_worker\_is\_recovered](./test_run_service.py#L469)
+#### [test\_a\_completion\_receipt\_left\_by\_a\_killed\_worker\_is\_recovered](./test_run_service.py#L471)
 
 ```python
 def test_a_completion_receipt_left_by_a_killed_worker_is_recovered(
@@ -3975,7 +3975,7 @@ A verified receipt completes the run without running it again.
 
 <a id="test.test_run_service.test_a_failure_after_the_receipt_is_recovered_as_completion"></a>
 
-#### [test\_a\_failure\_after\_the\_receipt\_is\_recovered\_as\_completion](./test_run_service.py#L492)
+#### [test\_a\_failure\_after\_the\_receipt\_is\_recovered\_as\_completion](./test_run_service.py#L494)
 
 ```python
 def test_a_failure_after_the_receipt_is_recovered_as_completion(
@@ -3986,7 +3986,7 @@ An error raised once every artifact was written loses nothing.
 
 <a id="test.test_run_service.test_a_finalization_killed_before_the_receipt_is_redone"></a>
 
-#### [test\_a\_finalization\_killed\_before\_the\_receipt\_is\_redone](./test_run_service.py#L515)
+#### [test\_a\_finalization\_killed\_before\_the\_receipt\_is\_redone](./test_run_service.py#L517)
 
 ```python
 def test_a_finalization_killed_before_the_receipt_is_redone(
@@ -3997,7 +3997,7 @@ No receipt means interrupted; resuming finalizes from the checkpoint.
 
 <a id="test.test_run_service.test_a_receipt_that_no_longer_verifies_is_replaced"></a>
 
-#### [test\_a\_receipt\_that\_no\_longer\_verifies\_is\_replaced](./test_run_service.py#L537)
+#### [test\_a\_receipt\_that\_no\_longer\_verifies\_is\_replaced](./test_run_service.py#L539)
 
 ```python
 def test_a_receipt_that_no_longer_verifies_is_replaced(tmp_path: Path) -> None
@@ -4007,7 +4007,7 @@ A stale receipt is removed before any artifact is rewritten.
 
 <a id="test.test_run_service.test_a_stop_request_pauses_at_the_next_safe_point"></a>
 
-#### [test\_a\_stop\_request\_pauses\_at\_the\_next\_safe\_point](./test_run_service.py#L561)
+#### [test\_a\_stop\_request\_pauses\_at\_the\_next\_safe\_point](./test_run_service.py#L563)
 
 ```python
 def test_a_stop_request_pauses_at_the_next_safe_point(
@@ -4018,7 +4018,7 @@ SIGTERM's flag pauses the run with a checkpoint; resume is exact.
 
 <a id="test.test_run_service.test_a_stop_request_as_the_run_stops_completes_it"></a>
 
-#### [test\_a\_stop\_request\_as\_the\_run\_stops\_completes\_it](./test_run_service.py#L583)
+#### [test\_a\_stop\_request\_as\_the\_run\_stops\_completes\_it](./test_run_service.py#L585)
 
 ```python
 def test_a_stop_request_as_the_run_stops_completes_it(tmp_path: Path) -> None
@@ -4028,7 +4028,7 @@ A run that has already stopped completes instead of pausing.
 
 <a id="test.test_run_service.test_diagnosis_reports_a_corrupt_checkpoint"></a>
 
-#### [test\_diagnosis\_reports\_a\_corrupt\_checkpoint](./test_run_service.py#L598)
+#### [test\_diagnosis\_reports\_a\_corrupt\_checkpoint](./test_run_service.py#L600)
 
 ```python
 def test_diagnosis_reports_a_corrupt_checkpoint(tmp_path: Path) -> None
@@ -4036,9 +4036,35 @@ def test_diagnosis_reports_a_corrupt_checkpoint(tmp_path: Path) -> None
 
 A damaged checkpoint is named before a resume would trip on it.
 
+<a id="test.test_run_service.test_diagnosis_reports_an_unsupported_checkpoint_version"></a>
+
+#### [test\_diagnosis\_reports\_an\_unsupported\_checkpoint\_version](./test_run_service.py#L634)
+
+```python
+def test_diagnosis_reports_an_unsupported_checkpoint_version(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A checkpoint from an incompatible release names cloning as the fix.
+
+<a id="test.test_run_service.test_resuming_an_unsupported_checkpoint_version_suggests_cloning"></a>
+
+#### [test\_resuming\_an\_unsupported\_checkpoint\_version\_suggests\_cloning](./test_run_service.py#L652)
+
+```python
+def test_resuming_an_unsupported_checkpoint_version_suggests_cloning(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Resuming against an incompatible checkpoint names cloning as the fix.
+
+Before this, the raw `UnsupportedCheckpointError` reached the caller
+unchanged: true, but useless to someone who does not already know that
+cloning is the way out of a format upgrade with no migration path.
+
 <a id="test.test_run_service.test_diagnosis_reports_an_unsupported_configuration"></a>
 
-#### [test\_diagnosis\_reports\_an\_unsupported\_configuration](./test_run_service.py#L621)
+#### [test\_diagnosis\_reports\_an\_unsupported\_configuration](./test_run_service.py#L679)
 
 ```python
 def test_diagnosis_reports_an_unsupported_configuration(
@@ -4049,7 +4075,7 @@ A paused run this release cannot continue says so.
 
 <a id="test.test_run_service.test_cadence_for_params_defaults"></a>
 
-#### [test\_cadence\_for\_params\_defaults](./test_run_service.py#L645)
+#### [test\_cadence\_for\_params\_defaults](./test_run_service.py#L703)
 
 ```python
 def test_cadence_for_params_defaults() -> None
@@ -4059,7 +4085,7 @@ Default simulation parameters produce default checkpoint cadence.
 
 <a id="test.test_run_service.test_cadence_for_params_respects_expert_settings"></a>
 
-#### [test\_cadence\_for\_params\_respects\_expert\_settings](./test_run_service.py#L655)
+#### [test\_cadence\_for\_params\_respects\_expert\_settings](./test_run_service.py#L713)
 
 ```python
 def test_cadence_for_params_respects_expert_settings() -> None
@@ -4069,7 +4095,7 @@ Expert settings configure the checkpoint cadence.
 
 <a id="test.test_run_service.test_cadence_for_params_accepts_explicit_overrides"></a>
 
-#### [test\_cadence\_for\_params\_accepts\_explicit\_overrides](./test_run_service.py#L673)
+#### [test\_cadence\_for\_params\_accepts\_explicit\_overrides](./test_run_service.py#L731)
 
 ```python
 def test_cadence_for_params_accepts_explicit_overrides() -> None
@@ -4079,7 +4105,7 @@ Caller overrides take precedence over expert settings.
 
 <a id="test.test_run_service.test_load_params_reads_configuration_with_expert_settings"></a>
 
-#### [test\_load\_params\_reads\_configuration\_with\_expert\_settings](./test_run_service.py#L693)
+#### [test\_load\_params\_reads\_configuration\_with\_expert\_settings](./test_run_service.py#L751)
 
 ```python
 def test_load_params_reads_configuration_with_expert_settings(
@@ -4090,7 +4116,7 @@ def test_load_params_reads_configuration_with_expert_settings(
 
 <a id="test.test_run_service.test_diagnosis_reports_damaged_published_results"></a>
 
-#### [test\_diagnosis\_reports\_damaged\_published\_results](./test_run_service.py#L708)
+#### [test\_diagnosis\_reports\_damaged\_published\_results](./test_run_service.py#L766)
 
 ```python
 def test_diagnosis_reports_damaged_published_results(tmp_path: Path) -> None

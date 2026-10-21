@@ -26,9 +26,11 @@ from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.manifest import read_manifest, verify_trajectory_integrity
 from fim.persistence.object_lock import is_lock_held
+from fim.persistence.run_checkpoint import UnsupportedCheckpointError
 from fim.persistence.run_lifecycle import (
     CheckpointReference,
     IllegalTransitionError,
+    LifecycleError,
     RunPhase,
     RunState,
 )
@@ -616,6 +618,62 @@ def test_diagnosis_reports_a_corrupt_checkpoint(tmp_path: Path) -> None:
     (problem,) = diagnose_run_object(stopped)
 
     assert problem.startswith("the checkpoint is corrupt: ")
+
+
+def _pause_at_generation_15(tmp_path: Path, writer: _Writer) -> RunObject:
+    """Pause the test object at generation 15, leaving one checkpoint."""
+    pause = _at(
+        15,
+        lambda: request_pause(
+            OBJECT_ID, expected_revision=_revision(tmp_path), results=tmp_path
+        ),
+    )
+    return _execute(tmp_path, writer, observer=pause)
+
+
+def test_diagnosis_reports_an_unsupported_checkpoint_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A checkpoint from an incompatible release names cloning as the fix."""
+    _create(tmp_path)
+    paused = _pause_at_generation_15(tmp_path, _Writer())
+
+    def refuse(_directory: Path, _reference: CheckpointReference) -> None:
+        raise UnsupportedCheckpointError("schema version 2")
+
+    monkeypatch.setattr(run_service, "load_checkpoint", refuse)
+
+    assert diagnose_run_object(paused) == (
+        "the checkpoint needs a different release: schema version 2; "
+        "clone it to run the same configuration from generation 0",
+    )
+
+
+def test_resuming_an_unsupported_checkpoint_version_suggests_cloning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Resuming against an incompatible checkpoint names cloning as the fix.
+
+    Before this, the raw `UnsupportedCheckpointError` reached the caller
+    unchanged: true, but useless to someone who does not already know that
+    cloning is the way out of a format upgrade with no migration path.
+    """
+    writer = _Writer()
+    _create(tmp_path)
+    _pause_at_generation_15(tmp_path, writer)
+
+    def refuse(_directory: Path, _reference: CheckpointReference) -> None:
+        raise UnsupportedCheckpointError("schema version 2")
+
+    monkeypatch.setattr(run_service, "load_checkpoint", refuse)
+
+    with pytest.raises(
+        LifecycleError,
+        match=f"^{OBJECT_ID}'s checkpoint needs a different release: "
+        r"schema version 2; clone it to run the same configuration "
+        "from generation 0$",
+    ):
+        _execute(tmp_path, writer)
 
 
 def test_diagnosis_reports_an_unsupported_configuration(

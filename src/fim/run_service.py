@@ -402,7 +402,16 @@ def execute_run_object(
     if opened.lease is None:
         return opened.run_object
     with opened.lease as lease:
-        session = _open_session(opened.run_object, params, lease, store_factory, clock)
+        try:
+            session = _open_session(
+                opened.run_object, params, lease, store_factory, clock
+            )
+        except UnsupportedCheckpointError as error:
+            raise LifecycleError(
+                f"{object_id}'s checkpoint needs a different release: "
+                f"{error}; clone it to run the same configuration from "
+                "generation 0"
+            ) from error
         with session:
             return _drive(
                 session,
@@ -640,7 +649,10 @@ def _resume_problems(run_object: RunObject) -> list[str]:
     try:
         load_checkpoint(run_object.directory, reference)
     except UnsupportedCheckpointError as error:
-        problems.append(f"the checkpoint needs a different release: {error}")
+        problems.append(
+            f"the checkpoint needs a different release: {error}; clone it "
+            "to run the same configuration from generation 0"
+        )
     except CheckpointError as error:
         problems.append(f"the checkpoint is corrupt: {error}")
     return problems

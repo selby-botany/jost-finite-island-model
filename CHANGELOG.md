@@ -2605,6 +2605,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   real margin instead — the canvas formula's height-subtrahend
   `332px→380px`, the trajectory frame's fixed-width cap `300px→250px`
   — giving roughly 95px of headroom rather than 2px.
+- **Resuming against a checkpoint from an incompatible release now names
+  cloning as the fix.** A format upgrade has no migration path by design,
+  so resuming is correctly refused — but the message only ever said which
+  schema versions disagreed, not what to do about it. `fim object status`
+  and a resume attempt (from the command line or the desktop app) now both
+  say to clone the object, which starts the same configuration over from
+  generation 0.
 
 ---
 
