@@ -496,6 +496,15 @@ measured points at length 7 (`d=50` and `d=70`) favor $G_{\mathrm{jit}}$ by rati
 1.32 and 1.39. The results differ; the measurements do not establish whether
 the difference reflects run variability, workload details, or other factors.
 
+The recorded B.6 sweep supports the shipped `"auto"` policy defaults:
+`auto_vector_min_d=2` and `auto_vector_max_capacity=4096`. These literal
+configuration settings select $V$ when $d \geq 2$ and capacity is at most
+$4096$; otherwise `"auto"` selects the generational backend. This is a
+conservative boundary based on the recorded workload, not a guarantee that
+the selected backend is fastest on every machine or at every grid point.
+The larger-capacity results above do not support extending that simple
+boundary uniformly across deme counts.
+
 `--measure-rss` produced a $V$/G-off/G-jit/$L$ peak-RSS ratio of exactly `1.00`
 at every measured point in this grid. This is a limitation of the measurement
 at this workload scale: `InMemoryTrajectoryStore` retains every generation's

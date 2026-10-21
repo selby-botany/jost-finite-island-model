@@ -145,7 +145,8 @@ def test_benchmark_document_records_its_unmeasured_axes() -> None:
     """
     document = _benchmark_document()
 
-    assert "## Known gaps: axes not yet measured" in document
-    gaps = document.split("## Known gaps: axes not yet measured", 1)[1]
+    heading = "## Unmeasured benchmark dimensions"
+    assert heading in document
+    gaps = document.split(heading, 1)[1]
     assert "max_concurrent_replicates" in gaps
     assert "n_replicates" in gaps
