@@ -745,6 +745,20 @@ class Concurrency:
     cores: int
 
 
+@dataclass(frozen=True, slots=True)
+class _SweepWorkPlan:
+    """Existing and pending point state shared by planning and execution."""
+
+    study: StudyManifest
+    spec: SweepSpec
+    planned: tuple[SweepPoint, ...]
+    todo: list[SweepPoint]
+    already_present: int
+    skipped: int
+    rerun_ids: frozenset[str]
+    older_runs: Mapping[str, Path]
+
+
 def resolve_concurrency(
     *,
     points: int,
@@ -1416,29 +1430,20 @@ def _run_sweep_locked(
     results: Path | None = None,
 ) -> SweepOutcome:
     """Run the sweep; the caller holds the Study's sweep lock."""
-    study = groups.get_study(study_id, results=results)
-    groups.refuse_closed(study, "given more sweep runs")
-    spec = sweep_spec_of(study)
-    planned = _matching_plan(study, enumerate_points(spec))
-    failures = read_failures(study_id, results=results)
-    objects = read_point_objects(study_id, results=results)
-    present, stale = _member_runs(study, software_version, results)
-    # Completed points to recompute: each is compared with the run it has now.
-    rerun_ids = (
-        frozenset(point.run_id for point in planned if point.run_id in present)
-        if rerun
-        else frozenset()
+    work_plan = _prepare_sweep_work(
+        study_id,
+        retry_failed=retry_failed,
+        rerun=rerun,
+        software_version=software_version,
+        only=only,
+        costliest_first=costliest_first,
+        results=results,
     )
-    # A run that kept less than this sweep asks for (a tapered run where full
-    # frames are wanted) is recomputed, and compared on what both kept.
-    short = frozenset(
-        point.run_id
-        for point in planned
-        if point.run_id in present
-        and not run_satisfies(present[point.run_id], point.params)
-    )
-    rerun_ids = rerun_ids | short
-    older_runs = {**stale, **{run_id: present[run_id] for run_id in rerun_ids}}
+    study = work_plan.study
+    spec = work_plan.spec
+    planned = work_plan.planned
+    rerun_ids = work_plan.rerun_ids
+    older_runs = work_plan.older_runs
     tally = dict.fromkeys(
         (
             "done",
@@ -1451,17 +1456,9 @@ def _run_sweep_locked(
         ),
         0,
     )
-    todo, tally["already_present"], tally["skipped"] = _points_to_run(
-        planned,
-        rerun_ids=rerun_ids,
-        present=present,
-        failures=failures,
-        objects=objects,
-        results=results,
-        retry_failed=retry_failed,
-        only=only,
-        costliest_first=costliest_first,
-    )
+    todo = work_plan.todo
+    tally["already_present"] = work_plan.already_present
+    tally["skipped"] = work_plan.skipped
     first_params = SimulationParams.from_mapping(planned[0].params)
     uses_objects = isinstance(runner, ObjectPointRunner) and _object_supported(
         first_params
@@ -1598,6 +1595,82 @@ def _points_to_run(
     if costliest_first:
         todo = order_costliest_first(todo)
     return todo, already_present, skipped
+
+
+def _prepare_sweep_work(
+    study_id: str,
+    *,
+    retry_failed: bool,
+    rerun: bool,
+    software_version: str,
+    only: Collection[str] | None,
+    costliest_first: bool,
+    results: Path | None,
+) -> _SweepWorkPlan:
+    """Resolve the exact pending work a resume request would execute."""
+    study = groups.get_study(study_id, results=results)
+    groups.refuse_closed(study, "given more sweep runs")
+    spec = sweep_spec_of(study)
+    planned = _matching_plan(study, enumerate_points(spec))
+    failures = read_failures(study_id, results=results)
+    objects = read_point_objects(study_id, results=results)
+    present, stale = _member_runs(study, software_version, results)
+    rerun_ids = (
+        frozenset(point.run_id for point in planned if point.run_id in present)
+        if rerun
+        else frozenset()
+    )
+    short = frozenset(
+        point.run_id
+        for point in planned
+        if point.run_id in present
+        and not run_satisfies(present[point.run_id], point.params)
+    )
+    rerun_ids = rerun_ids | short
+    todo, already_present, skipped = _points_to_run(
+        planned,
+        rerun_ids=rerun_ids,
+        present=present,
+        failures=failures,
+        objects=objects,
+        results=results,
+        retry_failed=retry_failed,
+        only=only,
+        costliest_first=costliest_first,
+    )
+    older_runs = {**stale, **{run_id: present[run_id] for run_id in rerun_ids}}
+    return _SweepWorkPlan(
+        study,
+        spec,
+        planned,
+        todo,
+        already_present,
+        skipped,
+        rerun_ids,
+        older_runs,
+    )
+
+
+def pending_sweep_point_count(
+    study_id: str,
+    *,
+    retry_failed: bool = False,
+    rerun: bool = False,
+    software_version: str = __version__,
+    results: Path | None = None,
+) -> int:
+    """Return the exact number of points a sweep resume would execute."""
+    return len(
+        _prepare_sweep_work(
+            study_id,
+            retry_failed=retry_failed,
+            rerun=rerun,
+            software_version=software_version,
+            only=None,
+            costliest_first=False,
+            results=results,
+        ).todo
+    )
 
 
 def verification_path(study_id: str, *, results: Path | None = None) -> Path:

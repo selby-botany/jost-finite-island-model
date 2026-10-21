@@ -134,6 +134,16 @@ def _parse_pairwise_max_demes(gui: Mapping[str, Any]) -> int:
     return value
 
 
+def _parse_reserved_cores(gui: Mapping[str, Any]) -> int:
+    """Read `gui.reserved_cores`: a non-negative integer."""
+    value = gui.get("reserved_cores", 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(
+            "preferences 'gui.reserved_cores' must be a non-negative integer"
+        )
+    return value
+
+
 def _parse_run_graphs(gui: Mapping[str, Any]) -> tuple[str, ...] | None:
     """Read `gui.run_graphs`: a list of known graph keys, or `None` for the default.
 
@@ -273,6 +283,7 @@ class GuiPreferences:
     trajectory_band_width: int = DEFAULT_TRAJECTORY_BAND_WIDTH
     shown_statistics: tuple[str, ...] | None = None
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
+    reserved_cores: int = 0
 
     def _run_card_dict(self) -> dict[str, Any]:
         """The Run card display choices that differ from their defaults."""
@@ -306,6 +317,8 @@ class GuiPreferences:
             gui["startup_behavior"] = self.startup_behavior
         if self.results_location_override is not None:
             gui["results_location_override"] = self.results_location_override
+        if self.reserved_cores != 0:
+            gui["reserved_cores"] = self.reserved_cores
         # Written whenever it differs from the default, including the blank
         # "Ask me each time" choice, which would otherwise be lost and read
         # back as diploid.
@@ -428,6 +441,7 @@ class GuiPreferences:
             trajectory_band_width=_parse_band_width(gui),
             shown_statistics=_parse_shown_statistics(gui),
             pairwise_max_demes=_parse_pairwise_max_demes(gui),
+            reserved_cores=_parse_reserved_cores(gui),
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -574,6 +588,16 @@ class GuiPreferences:
     def with_pairwise_max_demes(self, max_demes: int) -> GuiPreferences:
         """Return a copy with the `pairwise.json` deme-count limit replaced."""
         return replace(self, pairwise_max_demes=max_demes)
+
+    def with_reserved_cores(self, reserved_cores: int) -> GuiPreferences:
+        """Return a copy with the background worker reserve replaced."""
+        if (
+            isinstance(reserved_cores, bool)
+            or not isinstance(reserved_cores, int)
+            or reserved_cores < 0
+        ):
+            raise ValueError("reserved_cores must be a non-negative integer")
+        return replace(self, reserved_cores=reserved_cores)
 
     def with_default_ploidy(self, default_ploidy: str) -> GuiPreferences:
         """Return a copy with `default_ploidy` replaced.

@@ -231,7 +231,7 @@ def test_quitting_from_home_lists_hidden_dirty_documents_and_the_running_job() -
         )
         assert state["screen"] == "screen-open-run"
         assert state["dirty"] == [f"New configuration (draft) — {dirty_tab}"]
-        assert state["job"] == "Active job: run — job-close-test"
+        assert state["job"] == "Active jobs: run — job-close-test"
         _click(window, "confirm-close-discard-button")
         poll_or_fail(
             lambda: api._close_gate.closing,

@@ -108,6 +108,7 @@ def test_unsaved_edits_veto_the_close_and_ask_the_page(
         "sweep": False,
         "dirtyDocuments": [],
         "activeJob": None,
+        "activeJobs": [],
     }
 
 
@@ -130,7 +131,11 @@ def test_close_requirements_include_dirty_documents_and_the_active_job(
         {"tabId": "document-1", "label": "New configuration (draft)"},
         {"tabId": "document-2", "label": "Saved run (planned)"},
     ]
-    assert requirements["activeJob"] == {"kind": "run", "id": "job-123"}
+    assert requirements["activeJob"] == {
+        "kind": "run",
+        "id": "job-123",
+        "jobId": "job-123",
+    }
 
 
 @pytest.mark.parametrize(

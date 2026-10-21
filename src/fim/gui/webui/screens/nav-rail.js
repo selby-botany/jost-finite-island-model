@@ -301,14 +301,20 @@ async function closeDocumentWithJob(tabId) {
         if (state.jobState !== "finished" && state.jobState !== "terminal") {
             let result;
             if (state.jobKind === "saved-run") {
-                result = await window.pywebview.api.pause_run();
+                result = await window.pywebview.api.pause_run(
+                    state.attachedJobId
+                );
                 if (!result.ok) {
                     throw new Error(result.message || "Could not pause the saved run.");
                 }
             } else if (state.jobKind === "sweep") {
-                await window.pywebview.api.cancel_sweep();
+                await window.pywebview.api.cancel_sweep(
+                    state.attachedJobId
+                );
             } else {
-                await window.pywebview.api.cancel_run();
+                await window.pywebview.api.cancel_run(
+                    state.attachedJobId
+                );
             }
         }
         if (state.jobState !== "finished") {

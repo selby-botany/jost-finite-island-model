@@ -433,7 +433,7 @@ function drawProgressPanels(state, payload) {
  *
  * @param {number} demeCount
  */
-function wireLiveDemePairSelector(demeCount, state) {
+function wireLiveDemePairSelector(demeCount, state, jobId = null) {
     runDemePairSelector.hidden = demeCount < DEMES_NEEDED_FOR_PAIR;
     window.fim.wireDemePairSelector({
         xSelect: runXDeme,
@@ -453,7 +453,7 @@ function wireLiveDemePairSelector(demeCount, state) {
             // default panel because the flag itself had not caught up
             // yet.
             state.showingLiveDemePair = true;
-            await window.pywebview.api.set_live_deme_pair(x, y);
+            await window.pywebview.api.set_live_deme_pair(x, y, jobId);
         },
     });
 }
@@ -691,12 +691,12 @@ function recordRunProgress(state, payload) {
     );
 }
 
-function renderRunProgress(state, payload) {
+function renderRunProgress(state, payload, jobId = null) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
     progressLabel.textContent = `${payload.generation} / ${payload.maxGenerations}`;
     if (!state.liveDemeSelectorWired) {
-        wireLiveDemePairSelector(payload.demeCount, state);
+        wireLiveDemePairSelector(payload.demeCount, state, jobId);
         state.liveDemeSelectorWired = true;
     }
 
@@ -795,13 +795,13 @@ function recordBatchProgress(state, payload) {
     );
 }
 
-function renderBatchProgress(state, payload) {
+function renderBatchProgress(state, payload, jobId = null) {
     const meanGeneration = payload.meanReportedGeneration ?? 0;
     progressBar.max = payload.maxGenerations;
     progressBar.value = meanGeneration;
     progressLabel.textContent = `mean completed generation ${meanGeneration}`;
     if (!state.liveDemeSelectorWired) {
-        wireLiveDemePairSelector(payload.demeCount, state);
+        wireLiveDemePairSelector(payload.demeCount, state, jobId);
         state.liveDemeSelectorWired = true;
     }
 
@@ -881,7 +881,7 @@ window.fim.onJobEvent = function onJobEvent(event) {
         state.isBatch = true;
         recordBatchProgress(state, event.payload);
         if (tabId === window.fim.workspace.selectedId()) {
-            renderBatchProgress(state, event.payload);
+            renderBatchProgress(state, event.payload, event.jobId);
         }
         return true;
     }
@@ -890,7 +890,7 @@ window.fim.onJobEvent = function onJobEvent(event) {
         state.isBatch = false;
         recordRunProgress(state, event.payload);
         if (tabId === window.fim.workspace.selectedId()) {
-            renderRunProgress(state, event.payload);
+            renderRunProgress(state, event.payload, event.jobId);
         }
     }
     return true;

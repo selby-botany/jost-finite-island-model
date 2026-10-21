@@ -152,6 +152,9 @@ def test_closing_pauses_a_running_scalar_run_and_leaves_no_thread(
     started = api.start_run(_form())
     assert started["ok"] is True
     _wait_for_progress(window)
+    job = api._jobs.active_job(started["jobId"])
+    assert job is not None and job.child is not None
+    child = job.child
     assert api.close_requirements()["savedRun"] is True
 
     api.stop_active_work(COMPLETION_BACKSTOP_SECONDS)
@@ -159,8 +162,7 @@ def test_closing_pauses_a_running_scalar_run_and_leaves_no_thread(
 
     assert window.calls("onRunPaused")
     assert read_run_object(started["objectId"]).record.state is RunState.PAUSED
-    assert api._object_worker is not None
-    assert not api._object_worker.is_alive()
+    assert not child.is_alive()
     assert _non_daemon_threads() - before == set()
 
 
@@ -222,13 +224,15 @@ def test_closing_pauses_a_running_batch_and_leaves_no_worker_process(
         "the batch's first progress push",
         interval=_POLL_SECONDS,
     )
+    job = api._jobs.active_job(started["jobId"])
+    assert job is not None and job.child is not None
+    child = job.child
 
     api.stop_active_work(COMPLETION_BACKSTOP_SECONDS)
     _wait_until_idle(api)
 
     assert window.calls("onRunPaused")
-    assert api._object_worker is not None
-    assert not api._object_worker.is_alive()
+    assert not child.is_alive()
     assert _non_daemon_threads() - before == set()
     # `ProcessPoolExecutor` workers are children of this process; a worker
     # abandoned by an early exit would still be listed.

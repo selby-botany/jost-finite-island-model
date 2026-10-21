@@ -13,6 +13,8 @@ import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from fim import paths
 from fim.gui import preferences as preferences_module
 from fim.gui.preferences import (
@@ -602,6 +604,37 @@ def test_run_card_layout_defaults_write_nothing() -> None:
     assert "run_graph_columns" not in gui
     assert "scatter_style" not in gui
     assert "trajectory_display" not in gui
+
+
+def test_reserved_cores_default_is_omitted_and_round_trips(tmp_path: Path) -> None:
+    """The default reserve stays implicit; a chosen reserve survives reload."""
+    path = tmp_path / "preferences.json"
+    assert "reserved_cores" not in GuiPreferences().to_dict()["gui"]
+    original = GuiPreferences(startup_behavior="restart").with_reserved_cores(3)
+    save_preferences(path, original)
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded.reserved_cores == 3
+    updated = loaded.with_reserved_cores(2)
+    assert updated.reserved_cores == 2
+    assert updated.startup_behavior == "restart"
+
+
+@pytest.mark.parametrize("value", [-1, True, 1.5, "2"])
+def test_reserved_cores_rejects_invalid_values(value: object) -> None:
+    """The preference requires an actual non-negative integer."""
+    with pytest.raises(ValueError, match="reserved_cores"):
+        GuiPreferences.from_dict(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {"reserved_cores": value},
+            }
+        )
+    if isinstance(value, int):
+        with pytest.raises(ValueError, match="reserved_cores"):
+            GuiPreferences().with_reserved_cores(value)
 
 
 def test_run_card_layout_round_trips_through_save_and_load(tmp_path: Path) -> None:

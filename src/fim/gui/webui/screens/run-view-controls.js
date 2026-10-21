@@ -77,11 +77,9 @@ window.fim.refreshRunButton = function refreshRunButton() {
 window.fim.workspace.onSelectionChange(restoreRunControls);
 restoreRunControls();
 
-// True while a run start is being decided (`startRunExclusively`), so a
-// second request meanwhile -- a double click, the Run menu, Configure's
-// own Run, or a saved run's Start -- is ignored rather than starting a
-// second run.
-let runStartPending = false;
+// Prevent duplicate requests from one document without blocking starts
+// from other documents.
+const runStartPending = new Set();
 
 function showRunBanner(message) {
     if (!message) {
@@ -94,15 +92,14 @@ function showRunBanner(message) {
 }
 
 /**
- * Start a run only when no other run, plain or saved, and no sweep is
- * starting or in flight.
+ * Start a run after checking that its worker slot is available.
  *
  * Asks Python first (`Api.can_start_run`), before anything on screen
  * changes: entering the running state resets the live view, so a start
  * that Python then refused would wipe the view of the run still in
  * flight and leave nothing to watch or cancel it with. `Api.start_run`
- * and `Api.start_run_object` refuse a second run too; this is the page's
- * half of the same rule. `window.__fimRunStartSettled` is false while a
+ * and `Api.start_run_object` recheck admission atomically. `window.
+ * __fimRunStartSettled` is false while a
  * start is being decided and true once it is, for tests (the
  * `__fimCancelRunSettled` pattern).
  *
@@ -119,10 +116,26 @@ async function startRunExclusively(
     showRefusal = showRunBanner,
     startingDocument = null
 ) {
-    if (runStartPending) {
+    const pendingKey = startingDocument?.tabId ?? "__legacy__";
+    if (runStartPending.has(pendingKey)) {
         return;
     }
-    runStartPending = true;
+    const documentState = startingDocument
+        ? window.fim.workspace.get(startingDocument.tabId)
+        : null;
+    if (
+        documentState?.attachedJobId &&
+        documentState.jobState !== "finished" &&
+        documentState.jobState !== "terminal"
+    ) {
+        const message =
+            "a run is in progress; wait for it to finish or cancel it first";
+        documentState.startRefusal = message;
+        window.fim.workspace.notifyChange();
+        showRefusal(message);
+        return;
+    }
+    runStartPending.add(pendingKey);
     if (
         startingDocument &&
         window.fim.workspace.get(startingDocument.tabId)
@@ -131,9 +144,6 @@ async function startRunExclusively(
     } else {
         window.__fimRunStartSettled = false;
     }
-    const documentState = startingDocument
-        ? window.fim.workspace.get(startingDocument.tabId)
-        : null;
     if (documentState) {
         documentState.jobKind = startingDocument.jobKind;
         documentState.jobState = "starting";
@@ -148,13 +158,22 @@ async function startRunExclusively(
         }
         if (!allowed.ok) {
             clearPendingRunStart(startingDocument, documentState);
-            showRefusal(allowed.message);
+            if (documentState) {
+                documentState.startRefusal = allowed.message;
+                window.fim.workspace.notifyChange();
+            }
+            if (
+                !startingDocument ||
+                window.fim.workspace.selectedId() === startingDocument.tabId
+            ) {
+                showRefusal(allowed.message);
+            }
             return;
         }
         await start();
     } finally {
         clearPendingRunStart(startingDocument, documentState);
-        runStartPending = false;
+        runStartPending.delete(pendingKey);
         if (
             startingDocument &&
             window.fim.workspace.get(startingDocument.tabId)
@@ -540,7 +559,9 @@ async function onCancelClicked() {
     // `screens/run-view-running.js`'s own module docstring has the
     // full history.
     window.__fimCancelRunSettled = false;
-    await window.pywebview.api.cancel_run();
+    const tabId = window.fim.workspace.selectedId();
+    const documentState = window.fim.workspace.get(tabId);
+    await window.pywebview.api.cancel_run(documentState?.attachedJobId ?? null);
     window.__fimCancelRunSettled = true;
 }
 

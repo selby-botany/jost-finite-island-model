@@ -526,7 +526,7 @@ async function onPauseClicked() {
     }
     state.pausePending = true;
     renderPauseRunButton();
-    const paused = await window.pywebview.api.pause_run();
+    const paused = await window.pywebview.api.pause_run(state.attachedJobId);
     state.pausePending = false;
     renderPauseRunButton();
     if (!paused.ok) {

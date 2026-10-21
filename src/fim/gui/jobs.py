@@ -1,35 +1,10 @@
-"""The one lock that admits a run, a saved run, or a sweep -- and its jobId/sequence.
+"""Track GUI jobs, worker reservations, and addressed event state.
 
-Before this module existed, `Api._claim_run` (plain and saved runs) and
-`Api.start_sweep`/`resume_sweep` (sweeps) each decided whether they could
-start under a *different* lock: a dedicated lock for the former, and no
-lock at all for the latter, which only ever checked `_busy_message()`
-and set `_sweep_cancel_event` as two separate, unsynchronized steps. A
-run's own claim and a sweep's own admission could therefore interleave:
-each could see the other's slot as free for one instant, and both could
-start (`20261019-claude-opus-5-5-fim-gui-tabs-design-review.md`'s own
-note on this exact gap, left for "the tabs registry's job" to close --
-commit A4 of that design's Release A schedule).
-
-`JobAdmission` is that one lock, shared by every admission decision.
-`fim.gui.app.Api` keeps its own existing, observable fields --
-`_run_in_flight`, `_active_object_id`, `_sweep_cancel_event` -- as the
-state those decisions are made from; nothing here duplicates or
-replaces them, and no bridge method's return shape changes. Only the
-synchronization moves here, so `Api._claim_run`/`_claim_sweep` (and
-their own release counterparts) can never both see a free slot for the
-same instant.
-
-Commit A5 of that same schedule ("addressed job events and controls")
-adds a `jobId` and one sequence per job to every addressed push. Commit
-A7 adds each job's view level and latest event snapshot, so a page
-can switch between full and summary rendering and recover after a gap.
-`Api._job_id` is carried as a plain argument into each drain/push
-function; background threads never read a later claim's id from `Api`.
-
-This Release A registry still admits only one active job. Completed
-snapshots remain available until the owning document closes; later
-commits add the document lifecycle that removes them.
+`JobAdmission` atomically admits concurrent jobs within a shared worker
+budget. Each active job owns its execution state and core reservation;
+completed event snapshots remain available until the owning document
+closes. The same lock protects event sequences and snapshots, but is
+never held while waiting for a worker or delivering to the page.
 """
 
 from __future__ import annotations
@@ -46,9 +21,33 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from multiprocessing.connection import Client, Connection, Listener
 from pathlib import Path
-from typing import IO, Any, Literal
+from typing import IO, Any, Literal, Protocol
 
 ViewLevel = Literal["full", "summary"]
+JobKind = Literal["run", "saved-run", "sweep"]
+
+
+class WindowEvaluator(Protocol):
+    """The one page operation a job's comparison target needs."""
+
+    def evaluate_js(self, script: str) -> Any:
+        """Evaluate one JavaScript expression in the owning page."""
+
+
+def usable_core_count() -> int:
+    """Return the process-visible CPU count, falling back to the machine count."""
+    process_cpu_count = getattr(os, "process_cpu_count", None)
+    count = process_cpu_count() if callable(process_cpu_count) else None
+    return max(1, count or os.cpu_count() or 1)
+
+
+def worker_capacity(usable_cores: int, reserved_cores: int) -> int:
+    """Return the worker budget after the user reserve, with one slot minimum."""
+    if usable_cores < 1:
+        raise ValueError("usable_cores must be at least one")
+    if reserved_cores < 0:
+        raise ValueError("reserved_cores cannot be negative")
+    return max(1, usable_cores - reserved_cores)
 
 
 @dataclass(slots=True)
@@ -88,6 +87,27 @@ class ChildJob:
                 if self.lifeline is not None:
                     self.lifeline.close()
                 self._lifeline_closed = True
+
+
+@dataclass(slots=True)
+class JobRecord:
+    """Execution state and worker reservation for one admitted job."""
+
+    job_id: str
+    kind: JobKind
+    cores: int
+    request: dict[str, Any] = field(default_factory=dict)
+    cancel_event: threading.Event | None = None
+    output_reservation: Path | None = None
+    active_object_id: str | None = None
+    child: ChildJob | None = None
+    supervisor: threading.Thread | None = None
+    worker: threading.Thread | None = None
+    drain: threading.Thread | None = None
+    previous_version_run: Path | None = None
+    comparison_target: tuple[Path, WindowEvaluator] | None = None
+    study_id: str | None = None
+    live_deme_pair: tuple[int, int] | None = None
 
 
 def start_child_job(
@@ -227,17 +247,13 @@ def forward_child_messages(
 
 
 class JobAdmission:
-    """One lock, held only long enough to decide and record one claim.
+    """One lock protects active jobs, reservations, and addressed event state.
 
     Never held across anything that waits on another thread or on the
-    page -- every caller takes it, makes its decision, and releases it
-    again within the same few lines (`Api._claim_run`/`_claim_sweep`,
-    and their own release counterparts). The same lock also guards
-    `_next_sequence`, below: a short enough critical section (one dict
-    read and one write) that sharing it costs nothing worth a second
-    lock, and `JobAdmission`'s own docstring already expects this
-    module to grow into the fuller registry that will need one lock
-    for all of it anyway.
+    page. Admission checks the aggregate worker reservation and records
+    one job atomically, so simultaneous starts cannot exceed the budget.
+    The same lock guards event sequencing and snapshots; those critical
+    sections are short and must not call into the page.
     """
 
     def __init__(self) -> None:
@@ -245,6 +261,62 @@ class JobAdmission:
         self._next_sequence: dict[str, int] = {}
         self._view_levels: dict[str, ViewLevel] = {}
         self._latest_events: dict[str, dict[str, Any]] = {}
+        self._active_jobs: dict[str, JobRecord] = {}
+
+    def admit(
+        self,
+        kind: JobKind,
+        cores: int,
+        capacity: int,
+        *,
+        object_id: str | None = None,
+    ) -> tuple[JobRecord | None, int]:
+        """Atomically reserve worker capacity and create an active job.
+
+        Returns the new record and remaining capacity, or `None` and the
+        unchanged available capacity when this request does not fit.
+        """
+        if cores < 1:
+            raise ValueError("a job must reserve at least one core")
+        with self.lock:
+            remaining = max(
+                0, capacity - sum(job.cores for job in self._active_jobs.values())
+            )
+            if cores > remaining or (
+                object_id is not None
+                and any(
+                    job.request.get("object_id") == object_id
+                    for job in self._active_jobs.values()
+                )
+            ):
+                return None, remaining
+            job_id = self.new_job_id()
+            record = JobRecord(job_id, kind, cores)
+            if object_id is not None:
+                record.request["object_id"] = object_id
+            self._active_jobs[job_id] = record
+            return record, remaining - cores
+
+    def active_job(self, job_id: str) -> JobRecord | None:
+        """Return the active record for `job_id`, if it still reserves capacity."""
+        with self.lock:
+            return self._active_jobs.get(job_id)
+
+    def active_jobs(self) -> tuple[JobRecord, ...]:
+        """Return a stable snapshot of all jobs that still reserve capacity."""
+        with self.lock:
+            return tuple(self._active_jobs.values())
+
+    def available_cores(self, capacity: int) -> int:
+        """Return the unreserved worker capacity under the registry lock."""
+        with self.lock:
+            used = sum(job.cores for job in self._active_jobs.values())
+            return max(0, capacity - used)
+
+    def release(self, job_id: str) -> JobRecord | None:
+        """Release one job's capacity while retaining its event snapshot."""
+        with self.lock:
+            return self._active_jobs.pop(job_id, None)
 
     def new_job_id(self) -> str:
         """Mint a fresh id for one claim, never reused.
@@ -342,6 +414,7 @@ class JobAdmission:
         snapshot, which can still be needed to resynchronize its page.
         """
         with self.lock:
+            self._active_jobs.pop(job_id, None)
             self._next_sequence.pop(job_id, None)
             self._view_levels.pop(job_id, None)
             self._latest_events.pop(job_id, None)

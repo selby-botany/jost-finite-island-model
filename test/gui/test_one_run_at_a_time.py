@@ -1,15 +1,10 @@
-"""One run at a time: a second start is refused while a run is in flight.
+"""Run admission, document-level duplicate prevention, and job isolation.
 
-`Api.start_run` used to refuse only while a sweep ran, and the page kept
-"Run simulation" enabled during a run, so a second click -- or the Run
-menu, or Configure's own Run button -- started a second plain run. The
-second run took over the first's cancel event, worker and comparison
-target, and the first run's drain thread then cleared `_run_in_flight`
-while the second still ran, so closing the window could report nothing
-running. Both halves of the fix are pinned here: Python claims the one
-run slot under a lock (`Api._claim_run`), shared by `start_run` and
-`start_run_object`, and the page asks `Api.can_start_run` before it
-changes anything on screen (`startRunExclusively`).
+The worker budget permits concurrent work when capacity remains, while
+the same document cannot start a second run. Each job's cancel, worker,
+comparison, and live state belongs to its registry record. The page asks
+`Api.can_start_run` before changing its view, and preserves an unstarted
+draft when capacity is exhausted.
 
 No run here simulates anything: `fim.gui.jobs.start_child_job` is
 replaced with a fake child process that waits for the test to release it
@@ -48,7 +43,6 @@ from .test_sweep_api import (  # noqa: F401
 from .test_sweep_screen import Poll, _drive
 
 _IN_PROGRESS = "a run is in progress; wait for it to finish or cancel it first"
-_SWEEP_RUNNING = "a sweep is running; wait for it or cancel it first"
 
 # True once the page has finished deciding its latest run start
 # (`startRunExclusively`), whether it started a run or refused one.
@@ -152,34 +146,44 @@ def _wait_until_no_run(instance: Api) -> None:
     )
 
 
-def test_a_second_run_is_refused_while_the_first_is_in_flight(
+def test_two_runs_reserve_and_control_distinct_jobs(
     api: Api,  # noqa: F811
     window: _FakeWindow,  # noqa: F811
     held_runs: _HeldRuns,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A second start is refused until the first run ends, then allowed again."""
+    """Held runs keep separate records; cancel targets only its selected job."""
     del window
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 2)
     first = api.start_run(_form())
     assert first["ok"] is True, first.get("message")
     first_object_id = held_runs.started[0]
     assert first["objectId"] == first_object_id
-    assert api._active_object_id == first_object_id
 
     second = api.start_run(_form())
 
-    assert second == {"ok": False, "message": _IN_PROGRESS}
-    assert api.can_start_run() == second
-    assert len(held_runs.started) == 1
+    assert second["ok"] is True, second.get("message")
+    assert second["jobId"] != first["jobId"]
+    assert second["objectId"] != first_object_id
+    assert api._jobs.active_job(first["jobId"]).active_object_id == first_object_id
+    assert api._jobs.active_job(second["jobId"]).active_object_id == second["objectId"]
+    assert len(api._jobs.active_jobs()) == 2
+
+    cancelled: list[str] = []
+
+    def record_cancel(object_id: str) -> str:
+        """Record which saved run received the cancellation request."""
+        cancelled.append(object_id)
+        return "cancelling"
+
+    monkeypatch.setattr(app_module.object_bridge, "cancel", record_cancel)
+    api.cancel_run(first["jobId"])
+    assert cancelled == [first_object_id]
+    assert api._jobs.active_job(second["jobId"]).active_object_id == second["objectId"]
 
     held_runs.release_all()
     _wait_until_no_run(api)
-    assert api._active_object_id is None
-    assert api.can_start_run() == {"ok": True}
-    third = api.start_run(_form())
-    assert third["ok"] is True, third.get("message")
-    assert len(held_runs.started) == 2
-    held_runs.release_all()
-    _wait_until_no_run(api)
+    assert api._jobs.active_jobs() == ()
 
 
 def test_child_progress_tracks_full_and_summary_view_levels(
@@ -295,64 +299,77 @@ def test_a_start_without_an_active_window_releases_its_reservation(
 
 def test_a_refused_start_leaves_the_running_saved_run_alone(
     api: Api,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Refusing a plain run must not release the claim the saved run holds."""
-    api._run_in_flight = True
-    api._active_object_id = "saved-run"
+    """A full budget refuses a run without releasing existing reservations."""
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 1)
+    active, refusal = api._admit_run(object_id="saved-run")
+    assert refusal is None
+    assert active is not None
 
     refused = api.start_run(_form())
 
-    assert refused == {"ok": False, "message": _IN_PROGRESS}
-    assert (api._run_in_flight, api._active_object_id) == (True, "saved-run")
+    assert refused["ok"] is False
+    assert "only 0 remain" in refused["message"]
+    assert api._jobs.active_job(active.job_id) is active
 
 
-def test_a_saved_run_cannot_start_while_a_run_is_in_flight(
+def test_a_saved_run_already_active_cannot_be_started_twice(
     api: Api,  # noqa: F811
 ) -> None:
-    """`start_run_object` gives the same refusal, before reading the object."""
-    api._run_in_flight = True
+    """Admission rejects the same saved object while retaining its job."""
+    active, refusal = api._admit_run(kind="saved-run", object_id="saved-run")
+    assert refusal is None
+    assert active is not None
 
-    refused = api.start_run_object("never-read")
+    refused = api.start_run_object("saved-run")
 
-    assert refused == {"ok": False, "message": _IN_PROGRESS}
-    assert api._run_in_flight is True
-
-
-def test_a_sweep_in_flight_is_named_by_every_run_start(
-    api: Api,  # noqa: F811
-) -> None:
-    """The page's check and both run starts agree while a sweep runs."""
-    api._sweep_cancel_event = threading.Event()
-
-    assert api.can_start_run() == {"ok": False, "message": _SWEEP_RUNNING}
-    assert api.start_run(_form()) == {"ok": False, "message": _SWEEP_RUNNING}
-    assert api.start_run_object("never-read") == {
+    assert refused == {
         "ok": False,
-        "message": _SWEEP_RUNNING,
+        "message": "this saved run is already active",
     }
-    assert api._run_in_flight is False
+    assert api._jobs.active_job(active.job_id) is active
 
 
-def test_a_run_claim_and_a_sweep_claim_share_one_lock(
+def test_an_admitted_sweep_consumes_capacity_for_run_starts(
     api: Api,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`_claim_run` and `_claim_sweep` can never both see a free slot.
+    """The run check and both start paths report exhausted sweep capacity."""
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 1)
+    sweep, refusal = api._admit_sweep(1)
+    assert refusal is None
+    assert sweep is not None
 
-    Unlike the test above, which sets `_sweep_cancel_event` directly to
-    stand in for a running sweep, this calls `_claim_sweep` itself, so
-    it exercises the actual claim `start_sweep`/`resume_sweep` make
-    (`fim.gui.jobs.JobAdmission`'s own docstring on the race this
-    closes), not only the refusal a sweep already in flight gives.
-    """
-    assert api._claim_run() is None
-    assert api._claim_sweep() == "a run is in progress; wait for it to finish first"
-    api._release_run_claim()
-    assert api.can_start_run() == {"ok": True}
+    checked = api.can_start_run()
+    plain = api.start_run(_form())
+    saved = api.start_run_object("never-read")
 
-    assert api._claim_sweep() is None
-    assert api._claim_run() == _SWEEP_RUNNING
-    api._release_sweep_claim()
-    assert api.can_start_run() == {"ok": True}
+    for result in (checked, plain, saved):
+        assert result["ok"] is False
+        assert "only 0 remain" in result["message"]
+    assert api._jobs.active_job(sweep.job_id) is sweep
+
+
+def test_run_and_sweep_reservations_share_the_worker_budget(
+    api: Api,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two job kinds may coexist, but each consumes the same capacity."""
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 2)
+    run, refusal = api._admit_run()
+    assert refusal is None
+    assert run is not None
+
+    sweep, refusal = api._admit_sweep(1)
+
+    assert refusal is None
+    assert sweep is not None
+    assert {job.kind for job in api._jobs.active_jobs()} == {"run", "sweep"}
+    assert api._remaining_worker_cores() == 0
+    api._release_run_claim(run.job_id)
+    api._release_sweep_claim(sweep.job_id)
+    assert api._remaining_worker_cores() == 2
 
 
 @pytest.mark.parametrize(
@@ -395,7 +412,7 @@ def test_an_error_while_starting_releases_the_claim(
 ) -> None:
     """An unexpected exception cannot leave the slot claimed for good."""
 
-    def fail(self: Api, *_arguments: Any) -> dict[str, Any]:
+    def fail(self: Api, *_arguments: Any, **_keywords: Any) -> dict[str, Any]:
         """Raise as an unexpected failure partway through a start would."""
         del self
         raise RuntimeError("starting failed")
@@ -426,28 +443,15 @@ def test_a_saved_run_start_that_fails_releases_the_claim(
 
 def test_the_check_and_the_claim_happen_under_one_lock(
     api: Api,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Two starts that arrive together cannot both see a free slot.
+    """A claimed record is visible to the capacity calculation."""
+    record, refusal = api._admit_run()
 
-    Timing two real threads cannot prove this deterministically, so the
-    test checks the property that makes it true: every check made while
-    claiming runs with the claim lock held, and the claim is set before
-    that lock is released (the second claim already sees it).
-    """
-    locked_during_check: list[bool] = []
-    check = Api._run_refusal
-
-    def observed(self: Api) -> str | None:
-        """Record whether the claim lock is held, then check as before."""
-        locked_during_check.append(self._jobs.lock.locked())
-        return check(self)
-
-    monkeypatch.setattr(Api, "_run_refusal", observed)
-
-    assert api._claim_run() is None
-    assert api._claim_run() == _IN_PROGRESS
-    assert locked_during_check == [True, True]
+    assert refusal is None
+    assert record is not None
+    assert api._jobs.active_job(record.job_id) is record
+    assert api._remaining_worker_cores() == api._worker_budget() - 1
+    api._release_run_claim(record.job_id)
 
 
 @pytest.mark.gui

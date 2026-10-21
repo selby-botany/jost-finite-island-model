@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import queue
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +75,73 @@ def test_two_jobs_have_independent_sequences() -> None:
     assert admission.next_sequence(first) == 1
     assert admission.next_sequence(second) == 0
     assert admission.next_sequence(first) == 2
+
+
+@pytest.mark.parametrize(
+    ("usable_cores", "reserved_cores", "expected"),
+    [(1, 0, 1), (8, 0, 8), (8, 3, 5), (2, 9, 1)],
+)
+def test_worker_capacity_respects_reserve_and_one_slot_minimum(
+    usable_cores: int, reserved_cores: int, expected: int
+) -> None:
+    """Injected CPU counts make reserve arithmetic deterministic."""
+    assert jobs_module.worker_capacity(usable_cores, reserved_cores) == expected
+
+
+def test_worker_capacity_rejects_invalid_inputs() -> None:
+    """Invalid budgets fail explicitly instead of producing hidden capacity."""
+    with pytest.raises(ValueError, match="usable_cores"):
+        jobs_module.worker_capacity(0, 0)
+    with pytest.raises(ValueError, match="reserved_cores"):
+        jobs_module.worker_capacity(2, -1)
+
+
+def test_admission_never_reserves_more_than_available_capacity() -> None:
+    """A refused reservation leaves the existing job and remaining budget intact."""
+    admission = jobs_module.JobAdmission()
+    first, remaining = admission.admit("run", cores=3, capacity=5)
+
+    assert first is not None
+    assert remaining == 2
+    refused, unchanged = admission.admit("sweep", cores=3, capacity=5)
+    assert refused is None
+    assert unchanged == 2
+    assert admission.available_cores(5) == 2
+    assert admission.active_jobs() == (first,)
+
+    released = admission.release(first.job_id)
+
+    assert released is first
+    assert admission.available_cores(5) == 5
+
+
+def test_concurrent_admission_cannot_overbook_worker_capacity() -> None:
+    """Simultaneous requests compete atomically for the final worker slot."""
+    admission = jobs_module.JobAdmission()
+    start = threading.Barrier(3)
+    results: queue.Queue[tuple[jobs_module.JobRecord | None, int]] = queue.Queue()
+
+    def reserve() -> None:
+        """Attempt to reserve the only slot after both threads are ready."""
+        start.wait(timeout=2)
+        results.put(admission.admit("run", cores=1, capacity=1))
+
+    threads = [threading.Thread(target=reserve) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    start.wait(timeout=2)
+    for thread in threads:
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+
+    reservations = [results.get_nowait() for _ in threads]
+    admitted = [record for record, _remaining in reservations if record]
+    refused = [remaining for record, remaining in reservations if record is None]
+
+    assert len(admitted) == 1
+    assert refused == [0]
+    assert admission.active_jobs() == tuple(admitted)
+    assert admission.available_cores(1) == 0
 
 
 def test_latest_sequence_is_none_before_any_push() -> None:
