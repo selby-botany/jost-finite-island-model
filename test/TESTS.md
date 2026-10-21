@@ -13122,7 +13122,7 @@ makes one; a test of the estimate itself reads `asked`.
 
 <a id="gui.conftest.examples_seeding"></a>
 
-#### [examples\_seeding](./gui/conftest.py#L1052)
+#### [examples\_seeding](./gui/conftest.py#L1065)
 
 ```python
 @pytest.fixture
@@ -13138,7 +13138,7 @@ test usually also installs a fixture bundle by patching
 
 <a id="gui.conftest.fast_scalar_run_settings"></a>
 
-#### [fast\_scalar\_run\_settings](./gui/conftest.py#L1066)
+#### [fast\_scalar\_run\_settings](./gui/conftest.py#L1079)
 
 ```python
 @pytest.fixture
@@ -13175,7 +13175,7 @@ before `Api()`/`create_window()` ever reads it.
 
 <a id="gui.conftest.short_scalar_run_settings"></a>
 
-#### [short\_scalar\_run\_settings](./gui/conftest.py#L1112)
+#### [short\_scalar\_run\_settings](./gui/conftest.py#L1125)
 
 ```python
 @pytest.fixture
@@ -13190,7 +13190,7 @@ a few thousand generations): the cap is a few hundred generations.
 
 <a id="gui.conftest.unreachable_convergence_run_settings"></a>
 
-#### [unreachable\_convergence\_run\_settings](./gui/conftest.py#L1136)
+#### [unreachable\_convergence\_run\_settings](./gui/conftest.py#L1149)
 
 ```python
 @pytest.fixture
@@ -13231,7 +13231,7 @@ fixture that builds one) in a test's own parameter list.
 
 <a id="gui.conftest.fast_batch_run_settings"></a>
 
-#### [fast\_batch\_run\_settings](./gui/conftest.py#L1182)
+#### [fast\_batch\_run\_settings](./gui/conftest.py#L1195)
 
 ```python
 @pytest.fixture
@@ -13248,7 +13248,7 @@ batch (`n_replicates > 1` is the GUI's own scalar-vs-batch toggle,
 
 <a id="gui.conftest.unreachable_batch_run_settings"></a>
 
-#### [unreachable\_batch\_run\_settings](./gui/conftest.py#L1209)
+#### [unreachable\_batch\_run\_settings](./gui/conftest.py#L1222)
 
 ```python
 @pytest.fixture
@@ -13275,7 +13275,7 @@ reporting.)
 
 <a id="gui.conftest.staggered_batch_run_settings"></a>
 
-#### [staggered\_batch\_run\_settings](./gui/conftest.py#L1245)
+#### [staggered\_batch\_run\_settings](./gui/conftest.py#L1258)
 
 ```python
 @pytest.fixture
@@ -16075,9 +16075,62 @@ def test_background_work_settings_persist_and_apply_to_new_jobs_only(
 
 Admitted jobs retain priority while saved settings affect later jobs.
 
+<a id="gui.test_app_api.test_memory_status_warns_only_below_the_reserve"></a>
+
+#### [test\_memory\_status\_warns\_only\_below\_the\_reserve](./gui/test_app_api.py#L3670)
+
+```python
+@pytest.mark.parametrize(
+    ("available_bytes", "warning"),
+    [
+        (2 * jobs_module.GIB_BYTES + 1, False),
+        (2 * jobs_module.GIB_BYTES, False),
+        (2 * jobs_module.GIB_BYTES - 1, True),
+    ],
+)
+def test_memory_status_warns_only_below_the_reserve(
+        available_bytes: int, warning: bool, tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The warning boundary is strict and names every active job.
+
+<a id="gui.test_app_api.test_memory_status_reports_read_failures_for_active_jobs"></a>
+
+#### [test\_memory\_status\_reports\_read\_failures\_for\_active\_jobs](./gui/test_app_api.py#L3704)
+
+```python
+def test_memory_status_reports_read_failures_for_active_jobs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An unavailable memory reading is explicit rather than success-shaped.
+
+<a id="gui.test_app_api.test_memory_admission_requires_confirmation_below_the_reserved_budget"></a>
+
+#### [test\_memory\_admission\_requires\_confirmation\_below\_the\_reserved\_budget](./gui/test_app_api.py#L3724)
+
+```python
+def test_memory_admission_requires_confirmation_below_the_reserved_budget(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The estimate is confirmed at the threshold and refused one byte below.
+
+<a id="gui.test_app_api.test_confirmed_memory_admission_does_not_probe_again"></a>
+
+#### [test\_confirmed\_memory\_admission\_does\_not\_probe\_again](./gui/test_app_api.py#L3757)
+
+```python
+def test_confirmed_memory_admission_does_not_probe_again(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Confirmation skips a repeated threshold prompt, not other launch guards.
+
 <a id="gui.test_app_api.test_the_shown_set_never_reaches_computation_or_saved_results"></a>
 
-#### [test\_the\_shown\_set\_never\_reaches\_computation\_or\_saved\_results](./gui/test_app_api.py#L3657)
+#### [test\_the\_shown\_set\_never\_reaches\_computation\_or\_saved\_results](./gui/test_app_api.py#L3774)
 
 ```python
 def test_the_shown_set_never_reaches_computation_or_saved_results() -> None
@@ -16092,7 +16145,7 @@ of saved results cannot depend on it.
 
 <a id="gui.test_app_api.test_drain_run_messages_forwards_a_status_note_and_keeps_draining"></a>
 
-#### [test\_drain\_run\_messages\_forwards\_a\_status\_note\_and\_keeps\_draining](./gui/test_app_api.py#L3674)
+#### [test\_drain\_run\_messages\_forwards\_a\_status\_note\_and\_keeps\_draining](./gui/test_app_api.py#L3791)
 
 ```python
 def test_drain_run_messages_forwards_a_status_note_and_keeps_draining(
@@ -16103,7 +16156,7 @@ A "status" message reaches `fim.onRunStatus` and is not terminal.
 
 <a id="gui.test_app_api.test_pairwise_status_text_names_pairs_and_replicates"></a>
 
-#### [test\_pairwise\_status\_text\_names\_pairs\_and\_replicates](./gui/test_app_api.py#L3707)
+#### [test\_pairwise\_status\_text\_names\_pairs\_and\_replicates](./gui/test_app_api.py#L3824)
 
 ```python
 def test_pairwise_status_text_names_pairs_and_replicates() -> None
@@ -16113,7 +16166,7 @@ The status line counts pairs and, for a batch, replicates.
 
 <a id="gui.test_app_api.test_parse_generation_accepts_valid_input"></a>
 
-#### [test\_parse\_generation\_accepts\_valid\_input](./gui/test_app_api.py#L3769)
+#### [test\_parse\_generation\_accepts\_valid\_input](./gui/test_app_api.py#L3886)
 
 ```python
 @pytest.mark.parametrize(
@@ -16133,7 +16186,7 @@ def test_parse_generation_accepts_valid_input(mode: str, text: str,
 
 <a id="gui.test_app_api.test_parse_generation_rejects_invalid_choose_input"></a>
 
-#### [test\_parse\_generation\_rejects\_invalid\_choose\_input](./gui/test_app_api.py#L3777)
+#### [test\_parse\_generation\_rejects\_invalid\_choose\_input](./gui/test_app_api.py#L3894)
 
 ```python
 @pytest.mark.parametrize("text", ["", "not-a-number", "3.5"])
@@ -16144,7 +16197,7 @@ def test_parse_generation_rejects_invalid_choose_input(text: str) -> None
 
 <a id="gui.test_app_api.test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict"></a>
 
-#### [test\_list\_recent\_runs\_reshapes\_every\_recent\_run\_into\_a\_json\_dict](./gui/test_app_api.py#L3804)
+#### [test\_list\_recent\_runs\_reshapes\_every\_recent\_run\_into\_a\_json\_dict](./gui/test_app_api.py#L3921)
 
 ```python
 def test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict(
@@ -16161,7 +16214,7 @@ recent_runs`'s own test suite already covers the real scan directly.
 
 <a id="gui.test_app_api.test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run"></a>
 
-#### [test\_list\_home\_runs\_attaches\_config\_summary\_and\_statistics\_for\_a\_scalar\_run](./gui/test_app_api.py#L3859)
+#### [test\_list\_home\_runs\_attaches\_config\_summary\_and\_statistics\_for\_a\_scalar\_run](./gui/test_app_api.py#L3976)
 
 ```python
 def test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run(
@@ -16178,7 +16231,7 @@ formats every other statistic this project shows.
 
 <a id="gui.test_app_api.test_list_home_runs_attaches_a_confidence_interval_per_statistic_for_a_batch_run"></a>
 
-#### [test\_list\_home\_runs\_attaches\_a\_confidence\_interval\_per\_statistic\_for\_a\_batch\_run](./gui/test_app_api.py#L3912)
+#### [test\_list\_home\_runs\_attaches\_a\_confidence\_interval\_per\_statistic\_for\_a\_batch\_run](./gui/test_app_api.py#L4029)
 
 ```python
 def test_list_home_runs_attaches_a_confidence_interval_per_statistic_for_a_batch_run(
@@ -16189,7 +16242,7 @@ A batch row's own statistics arrive `buildCiMeter`-shaped, not a point value.
 
 <a id="gui.test_app_api.test_list_home_runs_omits_statistics_when_report_json_is_missing"></a>
 
-#### [test\_list\_home\_runs\_omits\_statistics\_when\_report\_json\_is\_missing](./gui/test_app_api.py#L3943)
+#### [test\_list\_home\_runs\_omits\_statistics\_when\_report\_json\_is\_missing](./gui/test_app_api.py#L4060)
 
 ```python
 def test_list_home_runs_omits_statistics_when_report_json_is_missing(
@@ -16205,7 +16258,7 @@ unaffected.
 
 <a id="gui.test_app_api.test_list_home_runs_omits_config_summary_when_manifest_is_unavailable"></a>
 
-#### [test\_list\_home\_runs\_omits\_config\_summary\_when\_manifest\_is\_unavailable](./gui/test_app_api.py#L3969)
+#### [test\_list\_home\_runs\_omits\_config\_summary\_when\_manifest\_is\_unavailable](./gui/test_app_api.py#L4086)
 
 ```python
 def test_list_home_runs_omits_config_summary_when_manifest_is_unavailable(
@@ -16220,7 +16273,7 @@ json_dict`'s own canned-row style — `RecentRun.manifest` defaults to
 
 <a id="gui.test_app_api.test_list_home_runs_reports_a_runs_own_metadata_name"></a>
 
-#### [test\_list\_home\_runs\_reports\_a\_runs\_own\_metadata\_name](./gui/test_app_api.py#L3996)
+#### [test\_list\_home\_runs\_reports\_a\_runs\_own\_metadata\_name](./gui/test_app_api.py#L4113)
 
 ```python
 def test_list_home_runs_reports_a_runs_own_metadata_name(
@@ -16231,7 +16284,7 @@ A run with a `metadata.json` name reports it; one without reports `None`.
 
 <a id="gui.test_app_api.test_create_and_list_studies_round_trips"></a>
 
-#### [test\_create\_and\_list\_studies\_round\_trips](./gui/test_app_api.py#L4067)
+#### [test\_create\_and\_list\_studies\_round\_trips](./gui/test_app_api.py#L4184)
 
 ```python
 def test_create_and_list_studies_round_trips(
@@ -16242,7 +16295,7 @@ def test_create_and_list_studies_round_trips(
 
 <a id="gui.test_app_api.test_create_study_rejects_a_blank_name"></a>
 
-#### [test\_create\_study\_rejects\_a\_blank\_name](./gui/test_app_api.py#L4085)
+#### [test\_create\_study\_rejects\_a\_blank\_name](./gui/test_app_api.py#L4202)
 
 ```python
 def test_create_study_rejects_a_blank_name(
@@ -16253,7 +16306,7 @@ A blank name is a validation failure, not a silently-created Study.
 
 <a id="gui.test_app_api.test_add_run_to_study_and_get_study_run_summary"></a>
 
-#### [test\_add\_run\_to\_study\_and\_get\_study\_run\_summary](./gui/test_app_api.py#L4097)
+#### [test\_add\_run\_to\_study\_and\_get\_study\_run\_summary](./gui/test_app_api.py#L4214)
 
 ```python
 def test_add_run_to_study_and_get_study_run_summary(
@@ -16264,7 +16317,7 @@ A Study's own lazily-fetched runs match `list_home_runs`'s own row shape.
 
 <a id="gui.test_app_api.test_add_run_to_study_reports_an_unknown_study"></a>
 
-#### [test\_add\_run\_to\_study\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4119)
+#### [test\_add\_run\_to\_study\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4236)
 
 ```python
 def test_add_run_to_study_reports_an_unknown_study(
@@ -16275,7 +16328,7 @@ Adding a run to a nonexistent Study is a clean `{"ok": False}`, not a crash.
 
 <a id="gui.test_app_api.test_get_study_run_summary_reports_an_unknown_study"></a>
 
-#### [test\_get\_study\_run\_summary\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4132)
+#### [test\_get\_study\_run\_summary\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4249)
 
 ```python
 def test_get_study_run_summary_reports_an_unknown_study(
@@ -16286,7 +16339,7 @@ Expanding a Study row for an id that no longer exists fails cleanly.
 
 <a id="gui.test_app_api.test_create_experiment_and_add_study_round_trips"></a>
 
-#### [test\_create\_experiment\_and\_add\_study\_round\_trips](./gui/test_app_api.py#L4143)
+#### [test\_create\_experiment\_and\_add\_study\_round\_trips](./gui/test_app_api.py#L4260)
 
 ```python
 def test_create_experiment_and_add_study_round_trips(
@@ -16297,7 +16350,7 @@ def test_create_experiment_and_add_study_round_trips(
 
 <a id="gui.test_app_api.test_add_study_to_experiment_reports_an_unknown_study"></a>
 
-#### [test\_add\_study\_to\_experiment\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4160)
+#### [test\_add\_study\_to\_experiment\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4277)
 
 ```python
 def test_add_study_to_experiment_reports_an_unknown_study(
@@ -16308,7 +16361,7 @@ An Experiment cannot reference a Study that does not exist.
 
 <a id="gui.test_app_api.test_delete_study_removes_it_and_its_runs"></a>
 
-#### [test\_delete\_study\_removes\_it\_and\_its\_runs](./gui/test_app_api.py#L4172)
+#### [test\_delete\_study\_removes\_it\_and\_its\_runs](./gui/test_app_api.py#L4289)
 
 ```python
 def test_delete_study_removes_it_and_its_runs(
@@ -16319,7 +16372,7 @@ Deleting a Study from the GUI cascades to its member Runs (confirmed).
 
 <a id="gui.test_app_api.test_delete_experiment_cascades_to_studies_and_runs"></a>
 
-#### [test\_delete\_experiment\_cascades\_to\_studies\_and\_runs](./gui/test_app_api.py#L4193)
+#### [test\_delete\_experiment\_cascades\_to\_studies\_and\_runs](./gui/test_app_api.py#L4310)
 
 ```python
 def test_delete_experiment_cascades_to_studies_and_runs(
@@ -16330,7 +16383,7 @@ Deleting an Experiment cascades through its Studies to their Runs.
 
 <a id="gui.test_app_api.test_copy_study_creates_an_independent_study"></a>
 
-#### [test\_copy\_study\_creates\_an\_independent\_study](./gui/test_app_api.py#L4212)
+#### [test\_copy\_study\_creates\_an\_independent\_study](./gui/test_app_api.py#L4329)
 
 ```python
 def test_copy_study_creates_an_independent_study(
@@ -16341,7 +16394,7 @@ def test_copy_study_creates_an_independent_study(
 
 <a id="gui.test_app_api.test_copy_experiment_creates_an_independent_experiment"></a>
 
-#### [test\_copy\_experiment\_creates\_an\_independent\_experiment](./gui/test_app_api.py#L4228)
+#### [test\_copy\_experiment\_creates\_an\_independent\_experiment](./gui/test_app_api.py#L4345)
 
 ```python
 def test_copy_experiment_creates_an_independent_experiment(
@@ -16352,7 +16405,7 @@ def test_copy_experiment_creates_an_independent_experiment(
 
 <a id="gui.test_app_api.test_delete_runs_removes_every_directory_and_tolerates_a_missing_one"></a>
 
-#### [test\_delete\_runs\_removes\_every\_directory\_and\_tolerates\_a\_missing\_one](./gui/test_app_api.py#L4242)
+#### [test\_delete\_runs\_removes\_every\_directory\_and\_tolerates\_a\_missing\_one](./gui/test_app_api.py#L4359)
 
 ```python
 def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
@@ -16363,7 +16416,7 @@ The bulk "Select/Delete/Delete all" idiom: one round trip, many directories.
 
 <a id="gui.test_app_api.test_delete_selected_deletes_a_mixed_selection"></a>
 
-#### [test\_delete\_selected\_deletes\_a\_mixed\_selection](./gui/test_app_api.py#L4258)
+#### [test\_delete\_selected\_deletes\_a\_mixed\_selection](./gui/test_app_api.py#L4375)
 
 ```python
 def test_delete_selected_deletes_a_mixed_selection(
@@ -16378,7 +16431,7 @@ generalized from `delete_runs`'s own existing one.
 
 <a id="gui.test_app_api.test_delete_selected_tolerates_an_already_deleted_parent"></a>
 
-#### [test\_delete\_selected\_tolerates\_an\_already\_deleted\_parent](./gui/test_app_api.py#L4316)
+#### [test\_delete\_selected\_tolerates\_an\_already\_deleted\_parent](./gui/test_app_api.py#L4433)
 
 ```python
 def test_delete_selected_tolerates_an_already_deleted_parent(
@@ -16394,7 +16447,7 @@ existing "already gone is not an error" tolerance covers it.
 
 <a id="gui.test_app_api.test_delete_selected_with_nothing_selected_deletes_nothing"></a>
 
-#### [test\_delete\_selected\_with\_nothing\_selected\_deletes\_nothing](./gui/test_app_api.py#L4349)
+#### [test\_delete\_selected\_with\_nothing\_selected\_deletes\_nothing](./gui/test_app_api.py#L4466)
 
 ```python
 def test_delete_selected_with_nothing_selected_deletes_nothing(
@@ -16405,7 +16458,7 @@ An empty selection is a clean no-op, not an error.
 
 <a id="gui.test_app_api.test_start_run_rejects_an_unknown_study_id"></a>
 
-#### [test\_start\_run\_rejects\_an\_unknown\_study\_id](./gui/test_app_api.py#L4365)
+#### [test\_start\_run\_rejects\_an\_unknown\_study\_id](./gui/test_app_api.py#L4482)
 
 ```python
 def test_start_run_rejects_an_unknown_study_id(
@@ -16423,7 +16476,7 @@ unknown `study_id` is exactly as invalid whether or not one exists.
 
 <a id="gui.test_app_api.test_attach_finished_run_to_study_with_none_uses_the_default_study"></a>
 
-#### [test\_attach\_finished\_run\_to\_study\_with\_none\_uses\_the\_default\_study](./gui/test_app_api.py#L4384)
+#### [test\_attach\_finished\_run\_to\_study\_with\_none\_uses\_the\_default\_study](./gui/test_app_api.py#L4501)
 
 ```python
 def test_attach_finished_run_to_study_with_none_uses_the_default_study(
@@ -16441,7 +16494,7 @@ resolution rule.
 
 <a id="gui.test_app_api.test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected"></a>
 
-#### [test\_attach\_finished\_run\_to\_study\_with\_an\_explicit\_id\_is\_unaffected](./gui/test_app_api.py#L4405)
+#### [test\_attach\_finished\_run\_to\_study\_with\_an\_explicit\_id\_is\_unaffected](./gui/test_app_api.py#L4522)
 
 ```python
 def test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected(
@@ -16462,7 +16515,7 @@ unrelated to whatever the CLI already did at write time.
 
 <a id="gui.test_app_api.test_open_run_reanalyzes_the_final_generation_by_default"></a>
 
-#### [test\_open\_run\_reanalyzes\_the\_final\_generation\_by\_default](./gui/test_app_api.py#L4430)
+#### [test\_open\_run\_reanalyzes\_the\_final\_generation\_by\_default](./gui/test_app_api.py#L4547)
 
 ```python
 def test_open_run_reanalyzes_the_final_generation_by_default(
@@ -16473,7 +16526,7 @@ A bare "final" open reproduces the run's own terminal report.
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_equilibrium_prediction"></a>
 
-#### [test\_open\_run\_carries\_the\_real\_equilibrium\_prediction](./gui/test_app_api.py#L4455)
+#### [test\_open\_run\_carries\_the\_real\_equilibrium\_prediction](./gui/test_app_api.py#L4572)
 
 ```python
 def test_open_run_carries_the_real_equilibrium_prediction(
@@ -16490,7 +16543,7 @@ a real prediction is expected here, not `None`.
 
 <a id="gui.test_app_api.test_open_run_echoes_the_trajectory_path_it_was_given"></a>
 
-#### [test\_open\_run\_echoes\_the\_trajectory\_path\_it\_was\_given](./gui/test_app_api.py#L4483)
+#### [test\_open\_run\_echoes\_the\_trajectory\_path\_it\_was\_given](./gui/test_app_api.py#L4600)
 
 ```python
 def test_open_run_echoes_the_trajectory_path_it_was_given(
@@ -16508,7 +16561,7 @@ the identical key for a live-just-finished run
 
 <a id="gui.test_app_api.test_open_run_carries_the_derived_convergence_note"></a>
 
-#### [test\_open\_run\_carries\_the\_derived\_convergence\_note](./gui/test_app_api.py#L4502)
+#### [test\_open\_run\_carries\_the\_derived\_convergence\_note](./gui/test_app_api.py#L4619)
 
 ```python
 def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None
@@ -16535,7 +16588,7 @@ below.
 
 <a id="gui.test_app_api.test_open_run_carries_a_real_convergence_note_and_trajectory_curve"></a>
 
-#### [test\_open\_run\_carries\_a\_real\_convergence\_note\_and\_trajectory\_curve](./gui/test_app_api.py#L4532)
+#### [test\_open\_run\_carries\_a\_real\_convergence\_note\_and\_trajectory\_curve](./gui/test_app_api.py#L4649)
 
 ```python
 @pytest.mark.slow
@@ -16565,7 +16618,7 @@ population size alone.
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_identity_recovery_reference"></a>
 
-#### [test\_open\_run\_carries\_the\_real\_identity\_recovery\_reference](./gui/test_app_api.py#L4582)
+#### [test\_open\_run\_carries\_the\_real\_identity\_recovery\_reference](./gui/test_app_api.py#L4699)
 
 ```python
 def test_open_run_carries_the_real_identity_recovery_reference(
@@ -16580,7 +16633,7 @@ manifest params.
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_closed_form_trajectory"></a>
 
-#### [test\_open\_run\_carries\_the\_real\_closed\_form\_trajectory](./gui/test_app_api.py#L4600)
+#### [test\_open\_run\_carries\_the\_real\_closed\_form\_trajectory](./gui/test_app_api.py#L4717)
 
 ```python
 def test_open_run_carries_the_real_closed_form_trajectory(
@@ -16591,7 +16644,7 @@ A reopened run's own `closedForm` is the solved recursion for its params.
 
 <a id="gui.test_app_api.test_open_run_carries_the_convergence_window_and_tolerance"></a>
 
-#### [test\_open\_run\_carries\_the\_convergence\_window\_and\_tolerance](./gui/test_app_api.py#L4613)
+#### [test\_open\_run\_carries\_the\_convergence\_window\_and\_tolerance](./gui/test_app_api.py#L4730)
 
 ```python
 def test_open_run_carries_the_convergence_window_and_tolerance(
@@ -16602,7 +16655,7 @@ The trailing mean averages over the evidence window, judged by the tolerance.
 
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 
-#### [test\_open\_run\_choose\_reanalyzes\_an\_earlier\_generation\_as\_re\_analysis](./gui/test_app_api.py#L4631)
+#### [test\_open\_run\_choose\_reanalyzes\_an\_earlier\_generation\_as\_re\_analysis](./gui/test_app_api.py#L4748)
 
 ```python
 def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(
@@ -16613,7 +16666,7 @@ A non-final generation reports "re-analysis", not the run's own reason.
 
 <a id="gui.test_app_api.test_open_run_reports_a_missing_trajectory_without_raising"></a>
 
-#### [test\_open\_run\_reports\_a\_missing\_trajectory\_without\_raising](./gui/test_app_api.py#L4687)
+#### [test\_open\_run\_reports\_a\_missing\_trajectory\_without\_raising](./gui/test_app_api.py#L4804)
 
 ```python
 def test_open_run_reports_a_missing_trajectory_without_raising(
@@ -16626,7 +16679,7 @@ method's exception handling originally caught alone.
 
 <a id="gui.test_app_api.test_compare_runs_summarizes_a_genuinely_per_locus_mu"></a>
 
-#### [test\_compare\_runs\_summarizes\_a\_genuinely\_per\_locus\_mu](./gui/test_app_api.py#L4699)
+#### [test\_compare\_runs\_summarizes\_a\_genuinely\_per\_locus\_mu](./gui/test_app_api.py#L4816)
 
 ```python
 def test_compare_runs_summarizes_a_genuinely_per_locus_mu(
@@ -16640,7 +16693,7 @@ it), but a run summary only needs to name it.
 
 <a id="gui.test_app_api.test_compare_runs_rejects_fewer_than_two_paths"></a>
 
-#### [test\_compare\_runs\_rejects\_fewer\_than\_two\_paths](./gui/test_app_api.py#L4720)
+#### [test\_compare\_runs\_rejects\_fewer\_than\_two\_paths](./gui/test_app_api.py#L4837)
 
 ```python
 def test_compare_runs_rejects_fewer_than_two_paths() -> None
@@ -16650,7 +16703,7 @@ A single run has nothing to overlay against.
 
 <a id="gui.test_app_api.test_compare_runs_overlays_two_runs_and_names_the_differing_field"></a>
 
-#### [test\_compare\_runs\_overlays\_two\_runs\_and\_names\_the\_differing\_field](./gui/test_app_api.py#L4728)
+#### [test\_compare\_runs\_overlays\_two\_runs\_and\_names\_the\_differing\_field](./gui/test_app_api.py#L4845)
 
 ```python
 def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
@@ -16661,7 +16714,7 @@ Two runs differing only in `seed` are overlaid, with `seed` the sole diff.
 
 <a id="gui.test_app_api.test_compare_runs_names_no_differing_field_for_identical_configs"></a>
 
-#### [test\_compare\_runs\_names\_no\_differing\_field\_for\_identical\_configs](./gui/test_app_api.py#L4765)
+#### [test\_compare\_runs\_names\_no\_differing\_field\_for\_identical\_configs](./gui/test_app_api.py#L4882)
 
 ```python
 def test_compare_runs_names_no_differing_field_for_identical_configs(
@@ -16672,7 +16725,7 @@ Two runs with the same configuration (different output dirs) report no diff.
 
 <a id="gui.test_app_api.test_compare_runs_reports_a_missing_trajectory_without_raising"></a>
 
-#### [test\_compare\_runs\_reports\_a\_missing\_trajectory\_without\_raising](./gui/test_app_api.py#L4785)
+#### [test\_compare\_runs\_reports\_a\_missing\_trajectory\_without\_raising](./gui/test_app_api.py#L4902)
 
 ```python
 def test_compare_runs_reports_a_missing_trajectory_without_raising(
@@ -16683,7 +16736,7 @@ One unreadable path fails the whole comparison, matching `open_run`'s shape.
 
 <a id="gui.test_app_api.test_get_animation_frames_ships_client_ready_panels"></a>
 
-#### [test\_get\_animation\_frames\_ships\_client\_ready\_panels](./gui/test_app_api.py#L4803)
+#### [test\_get\_animation\_frames\_ships\_client\_ready\_panels](./gui/test_app_api.py#L4920)
 
 ```python
 def test_get_animation_frames_ships_client_ready_panels(
@@ -16694,7 +16747,7 @@ Every sampled frame's points already arrive as `scatter_panels`-shaped panels.
 
 <a id="gui.test_app_api.test_get_animation_deme_pair_frames_names_the_pair_in_every_frame"></a>
 
-#### [test\_get\_animation\_deme\_pair\_frames\_names\_the\_pair\_in\_every\_frame](./gui/test_app_api.py#L4834)
+#### [test\_get\_animation\_deme\_pair\_frames\_names\_the\_pair\_in\_every\_frame](./gui/test_app_api.py#L4951)
 
 ```python
 def test_get_animation_deme_pair_frames_names_the_pair_in_every_frame(
@@ -16711,7 +16764,7 @@ easy comparison between the two.
 
 <a id="gui.test_app_api.test_get_deme_pair_panel_names_the_requested_pair"></a>
 
-#### [test\_get\_deme\_pair\_panel\_names\_the\_requested\_pair](./gui/test_app_api.py#L4894)
+#### [test\_get\_deme\_pair\_panel\_names\_the\_requested\_pair](./gui/test_app_api.py#L5011)
 
 ```python
 def test_get_deme_pair_panel_names_the_requested_pair(tmp_path: Path) -> None
@@ -16721,7 +16774,7 @@ The Screen 3 on-demand pair view names its axes by 1-based deme number.
 
 <a id="gui.test_app_api.test_get_deme_pair_panel_carries_that_pairs_nei_statistics"></a>
 
-#### [test\_get\_deme\_pair\_panel\_carries\_that\_pairs\_nei\_statistics](./gui/test_app_api.py#L4907)
+#### [test\_get\_deme\_pair\_panel\_carries\_that\_pairs\_nei\_statistics](./gui/test_app_api.py#L5024)
 
 ```python
 def test_get_deme_pair_panel_carries_that_pairs_nei_statistics(
@@ -16732,7 +16785,7 @@ The pair rows follow the requested pair: values match the saved matrix.
 
 <a id="gui.test_app_api.test_a_self_comparison_has_identity_one_and_distance_zero"></a>
 
-#### [test\_a\_self\_comparison\_has\_identity\_one\_and\_distance\_zero](./gui/test_app_api.py#L4926)
+#### [test\_a\_self\_comparison\_has\_identity\_one\_and\_distance\_zero](./gui/test_app_api.py#L5043)
 
 ```python
 def test_a_self_comparison_has_identity_one_and_distance_zero(
@@ -16743,7 +16796,7 @@ A deme compared with itself: every identity 1, every distance 0.
 
 <a id="gui.test_app_api.test_animation_frames_carry_history_free_and_default_pair_statistics"></a>
 
-#### [test\_animation\_frames\_carry\_history\_free\_and\_default\_pair\_statistics](./gui/test_app_api.py#L4936)
+#### [test\_animation\_frames\_carry\_history\_free\_and\_default\_pair\_statistics](./gui/test_app_api.py#L5053)
 
 ```python
 def test_animation_frames_carry_history_free_and_default_pair_statistics(
@@ -16754,7 +16807,7 @@ Each frame has Gs/Gd/all-demes Nei and demes 1 and 2's pair values.
 
 <a id="gui.test_app_api.test_animation_pair_frames_carry_the_chosen_pairs_statistics"></a>
 
-#### [test\_animation\_pair\_frames\_carry\_the\_chosen\_pairs\_statistics](./gui/test_app_api.py#L4960)
+#### [test\_animation\_pair\_frames\_carry\_the\_chosen\_pairs\_statistics](./gui/test_app_api.py#L5077)
 
 ```python
 def test_animation_pair_frames_carry_the_chosen_pairs_statistics(
@@ -16765,7 +16818,7 @@ Choosing a pair gives its statistics for every scrubber frame.
 
 <a id="gui.test_app_api.test_reopening_a_run_saved_before_a_statistic_existed_fills_it_in"></a>
 
-#### [test\_reopening\_a\_run\_saved\_before\_a\_statistic\_existed\_fills\_it\_in](./gui/test_app_api.py#L4971)
+#### [test\_reopening\_a\_run\_saved\_before\_a\_statistic\_existed\_fills\_it\_in](./gui/test_app_api.py#L5088)
 
 ```python
 def test_reopening_a_run_saved_before_a_statistic_existed_fills_it_in(
@@ -16780,7 +16833,7 @@ as it would have been at the time. The saved file is not rewritten.
 
 <a id="gui.test_app_api.test_format_report_statistic_tells_infinite_from_missing"></a>
 
-#### [test\_format\_report\_statistic\_tells\_infinite\_from\_missing](./gui/test_app_api.py#L5001)
+#### [test\_format\_report\_statistic\_tells\_infinite\_from\_missing](./gui/test_app_api.py#L5118)
 
 ```python
 def test_format_report_statistic_tells_infinite_from_missing() -> None
@@ -16790,7 +16843,7 @@ A present `None` Nei distance is infinite; an absent key is undefined.
 
 <a id="gui.test_app_api.test_get_deme_pair_panel_permits_a_self_comparison"></a>
 
-#### [test\_get\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5010)
+#### [test\_get\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5127)
 
 ```python
 def test_get_deme_pair_panel_permits_a_self_comparison(tmp_path: Path) -> None
@@ -16802,7 +16855,7 @@ P1 item 6 of the 2026-09-06 open-issues doc.
 
 <a id="gui.test_app_api.test_get_batch_deme_pair_panel_pools_every_replicate"></a>
 
-#### [test\_get\_batch\_deme\_pair\_panel\_pools\_every\_replicate](./gui/test_app_api.py#L5044)
+#### [test\_get\_batch\_deme\_pair\_panel\_pools\_every\_replicate](./gui/test_app_api.py#L5161)
 
 ```python
 def test_get_batch_deme_pair_panel_pools_every_replicate(
@@ -16820,7 +16873,7 @@ size.
 
 <a id="gui.test_app_api.test_get_batch_deme_pair_panel_permits_a_self_comparison"></a>
 
-#### [test\_get\_batch\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5065)
+#### [test\_get\_batch\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5182)
 
 ```python
 def test_get_batch_deme_pair_panel_permits_a_self_comparison(
@@ -16831,7 +16884,7 @@ def test_get_batch_deme_pair_panel_permits_a_self_comparison(
 
 <a id="gui.test_app_api.test_get_batch_pair_statistics_summarizes_across_replicates"></a>
 
-#### [test\_get\_batch\_pair\_statistics\_summarizes\_across\_replicates](./gui/test_app_api.py#L5087)
+#### [test\_get\_batch\_pair\_statistics\_summarizes\_across\_replicates](./gui/test_app_api.py#L5204)
 
 ```python
 def test_get_batch_pair_statistics_summarizes_across_replicates(
@@ -16842,7 +16895,7 @@ Mean and interval of a pair's statistics over the replicates.
 
 <a id="gui.test_app_api.test_get_batch_pair_statistics_reports_an_unreadable_batch"></a>
 
-#### [test\_get\_batch\_pair\_statistics\_reports\_an\_unreadable\_batch](./gui/test_app_api.py#L5102)
+#### [test\_get\_batch\_pair\_statistics\_reports\_an\_unreadable\_batch](./gui/test_app_api.py#L5219)
 
 ```python
 def test_get_batch_pair_statistics_reports_an_unreadable_batch() -> None
@@ -16852,7 +16905,7 @@ A directory with no batch manifest is an error message, not a raise.
 
 <a id="gui.test_app_api.test_get_batch_replicate_summary_lists_every_replicate"></a>
 
-#### [test\_get\_batch\_replicate\_summary\_lists\_every\_replicate](./gui/test_app_api.py#L5108)
+#### [test\_get\_batch\_replicate\_summary\_lists\_every\_replicate](./gui/test_app_api.py#L5225)
 
 ```python
 def test_get_batch_replicate_summary_lists_every_replicate(
@@ -16866,7 +16919,7 @@ enrichment-design.md` (`selby/restricted`), approach B1.
 
 <a id="gui.test_app_api.test_get_batch_replicate_summary_omits_statistics_for_a_missing_report"></a>
 
-#### [test\_get\_batch\_replicate\_summary\_omits\_statistics\_for\_a\_missing\_report](./gui/test_app_api.py#L5128)
+#### [test\_get\_batch\_replicate\_summary\_omits\_statistics\_for\_a\_missing\_report](./gui/test_app_api.py#L5245)
 
 ```python
 def test_get_batch_replicate_summary_omits_statistics_for_a_missing_report(
@@ -16877,7 +16930,7 @@ A replicate whose own `report.json` was removed still appears, blank.
 
 <a id="gui.test_app_api.test_get_batch_replicate_summary_rejects_an_unreadable_directory"></a>
 
-#### [test\_get\_batch\_replicate\_summary\_rejects\_an\_unreadable\_directory](./gui/test_app_api.py#L5155)
+#### [test\_get\_batch\_replicate\_summary\_rejects\_an\_unreadable\_directory](./gui/test_app_api.py#L5272)
 
 ```python
 def test_get_batch_replicate_summary_rejects_an_unreadable_directory(
@@ -16888,7 +16941,7 @@ A directory with no readable `manifest.json` is a clear error, not a crash.
 
 <a id="gui.test_app_api.test_get_initial_state_deme_pair_panel_names_the_requested_pair"></a>
 
-#### [test\_get\_initial\_state\_deme\_pair\_panel\_names\_the\_requested\_pair](./gui/test_app_api.py#L5165)
+#### [test\_get\_initial\_state\_deme\_pair\_panel\_names\_the\_requested\_pair](./gui/test_app_api.py#L5282)
 
 ```python
 def test_get_initial_state_deme_pair_panel_names_the_requested_pair() -> None
@@ -16898,7 +16951,7 @@ The Initial-state preview's on-demand pair view names its own axes.
 
 <a id="gui.test_app_api.test_get_initial_state_deme_pair_panel_permits_a_self_comparison"></a>
 
-#### [test\_get\_initial\_state\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5177)
+#### [test\_get\_initial\_state\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5294)
 
 ```python
 def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None
@@ -16908,7 +16961,7 @@ def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None
 
 <a id="gui.test_app_api.test_get_batch_animation_frames_ships_client_ready_pooled_panels"></a>
 
-#### [test\_get\_batch\_animation\_frames\_ships\_client\_ready\_pooled\_panels](./gui/test_app_api.py#L5211)
+#### [test\_get\_batch\_animation\_frames\_ships\_client\_ready\_pooled\_panels](./gui/test_app_api.py#L5328)
 
 ```python
 def test_get_batch_animation_frames_ships_client_ready_pooled_panels(
@@ -16927,7 +16980,7 @@ logic.
 
 <a id="gui.test_app_api.test_build_menu_has_exactly_file_run_and_help"></a>
 
-#### [test\_build\_menu\_has\_exactly\_file\_run\_and\_help](./gui/test_app_api.py#L5271)
+#### [test\_build\_menu\_has\_exactly\_file\_run\_and\_help](./gui/test_app_api.py#L5388)
 
 ```python
 def test_build_menu_has_exactly_file_run_and_help() -> None
@@ -16948,7 +17001,7 @@ Configure/View included) was written under.
 
 <a id="gui.test_app_api.test_build_menu_dispatches_document_actions_to_workspace"></a>
 
-#### [test\_build\_menu\_dispatches\_document\_actions\_to\_workspace](./gui/test_app_api.py#L5320)
+#### [test\_build\_menu\_dispatches\_document\_actions\_to\_workspace](./gui/test_app_api.py#L5437)
 
 ```python
 def test_build_menu_dispatches_document_actions_to_workspace() -> None
@@ -16958,7 +17011,7 @@ Native document menu items dispatch through the workspace API.
 
 <a id="gui.test_app_api.test_no_menu_title_contains_a_paren"></a>
 
-#### [test\_no\_menu\_title\_contains\_a\_paren](./gui/test_app_api.py#L5371)
+#### [test\_no\_menu\_title\_contains\_a\_paren](./gui/test_app_api.py#L5488)
 
 ```python
 def test_no_menu_title_contains_a_paren() -> None
@@ -16982,7 +17035,7 @@ rather than crashing a real Linux build the same way.
 
 <a id="gui.test_app_api.test_open_external_link_opens_the_os_default_browser"></a>
 
-#### [test\_open\_external\_link\_opens\_the\_os\_default\_browser](./gui/test_app_api.py#L5396)
+#### [test\_open\_external\_link\_opens\_the\_os\_default\_browser](./gui/test_app_api.py#L5513)
 
 ```python
 def test_open_external_link_opens_the_os_default_browser(
@@ -16996,7 +17049,7 @@ follows for OS-dispatched actions — no real browser opens in a test.
 
 <a id="gui.test_app_api.test_get_about_info_reports_the_dev_checkout_commit"></a>
 
-#### [test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit](./gui/test_app_api.py#L5476)
+#### [test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit](./gui/test_app_api.py#L5593)
 
 ```python
 def test_get_about_info_reports_the_dev_checkout_commit(
@@ -17013,7 +17066,7 @@ process's own live value, so the assertion is exact either way.
 
 <a id="gui.test_app_api.test_main_returns_2_on_a_malformed_fim_log_level"></a>
 
-#### [test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level](./gui/test_app_api.py#L5535)
+#### [test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level](./gui/test_app_api.py#L5652)
 
 ```python
 def test_main_returns_2_on_a_malformed_fim_log_level(
@@ -17040,7 +17093,7 @@ testing standard forbids.
 
 <a id="gui.test_app_api.test_main_logging_config_flag_wins_over_fim_logging_config_env_var"></a>
 
-#### [test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var](./gui/test_app_api.py#L5593)
+#### [test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var](./gui/test_app_api.py#L5710)
 
 ```python
 def test_main_logging_config_flag_wins_over_fim_logging_config_env_var(
@@ -17055,7 +17108,7 @@ instead of successfully applying the flag's own valid one.
 
 <a id="gui.test_app_api.test_main_honors_fim_logging_config_env_var_with_no_flag"></a>
 
-#### [test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag](./gui/test_app_api.py#L5630)
+#### [test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag](./gui/test_app_api.py#L5747)
 
 ```python
 def test_main_honors_fim_logging_config_env_var_with_no_flag(
@@ -17074,7 +17127,7 @@ coverage for this exact call path.
 
 <a id="gui.test_app_api.test_main_applies_root_results_directory_log_directory_and_preferences_file"></a>
 
-#### [test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file](./gui/test_app_api.py#L5671)
+#### [test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file](./gui/test_app_api.py#L5788)
 
 ```python
 def test_main_applies_root_results_directory_log_directory_and_preferences_file(
@@ -17091,7 +17144,7 @@ just before that.
 
 <a id="gui.test_app_api.test_initial_window_size_is_the_largest_polite_16_by_9"></a>
 
-#### [test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9](./gui/test_app_api.py#L5719)
+#### [test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9](./gui/test_app_api.py#L5836)
 
 ```python
 @pytest.mark.parametrize(
@@ -17112,7 +17165,7 @@ The window is 16:9, inside the display with a margin, and capped.
 
 <a id="gui.test_app_api.test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing"></a>
 
-#### [test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing](./gui/test_app_api.py#L5731)
+#### [test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing](./gui/test_app_api.py#L5848)
 
 ```python
 def test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing(
@@ -17123,7 +17176,7 @@ After a Study is deleted, its Experiment counts and lists only what exists.
 
 <a id="gui.test_app_api.test_list_studies_reports_closed_and_a_lifecycle_summary"></a>
 
-#### [test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary](./gui/test_app_api.py#L5748)
+#### [test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary](./gui/test_app_api.py#L5865)
 
 ```python
 def test_list_studies_reports_closed_and_a_lifecycle_summary(
@@ -17134,7 +17187,7 @@ Home receives each group's open/closed flag and its derived summary.
 
 <a id="gui.test_app_api.test_set_study_closed_reports_a_refusal_as_a_message"></a>
 
-#### [test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message](./gui/test_app_api.py#L5784)
+#### [test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message](./gui/test_app_api.py#L5901)
 
 ```python
 def test_set_study_closed_reports_a_refusal_as_a_message(
@@ -17145,7 +17198,7 @@ A missing or default group is a message, never an exception.
 
 <a id="gui.test_app_api.test_list_experiments_heals_studies_deleted_by_the_old_behavior"></a>
 
-#### [test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior](./gui/test_app_api.py#L5803)
+#### [test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior](./gui/test_app_api.py#L5920)
 
 ```python
 def test_list_experiments_heals_studies_deleted_by_the_old_behavior(
@@ -17156,7 +17209,7 @@ A manifest left naming a missing Study is repaired when Home lists it.
 
 <a id="gui.test_app_api.test_explore_predictions_count_individuals_and_multiply_by_ploidy"></a>
 
-#### [test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy](./gui/test_app_api.py#L5914)
+#### [test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy](./gui/test_app_api.py#L6031)
 
 ```python
 def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
@@ -17167,7 +17220,7 @@ def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
 
 <a id="gui.test_app_api.test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning"></a>
 
-#### [test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning](./gui/test_app_api.py#L5926)
+#### [test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning](./gui/test_app_api.py#L6043)
 
 ```python
 def test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning(
@@ -17178,7 +17231,7 @@ No ploidy argument means N is the gene-copy count, as before.
 
 <a id="gui.test_app_api.test_explore_rejects_a_ploidy_outside_one_to_four"></a>
 
-#### [test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four](./gui/test_app_api.py#L5938)
+#### [test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four](./gui/test_app_api.py#L6055)
 
 ```python
 @pytest.mark.parametrize("bad", ["0", "5", "diploid", ""])
@@ -17189,7 +17242,7 @@ Every Explore method refuses an unusable ploidy with one message.
 
 <a id="gui.test_app_api.test_explore_sweeps_the_n_axis_in_individuals"></a>
 
-#### [test\_explore\_sweeps\_the\_n\_axis\_in\_individuals](./gui/test_app_api.py#L5953)
+#### [test\_explore\_sweeps\_the\_n\_axis\_in\_individuals](./gui/test_app_api.py#L6070)
 
 ```python
 def test_explore_sweeps_the_n_axis_in_individuals() -> None
@@ -17199,7 +17252,7 @@ The axis values are individuals; each is evaluated at value * ploidy.
 
 <a id="gui.test_app_api.test_explore_grid_and_sweep_evaluate_at_gene_copies"></a>
 
-#### [test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies](./gui/test_app_api.py#L5971)
+#### [test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies](./gui/test_app_api.py#L6088)
 
 ```python
 def test_explore_grid_and_sweep_evaluate_at_gene_copies() -> None
@@ -17209,7 +17262,7 @@ The held N of a sweep or a grid is individuals times ploidy too.
 
 <a id="gui.test_app_api.test_list_studies_counts_only_the_member_runs_that_exist"></a>
 
-#### [test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist](./gui/test_app_api.py#L5986)
+#### [test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist](./gui/test_app_api.py#L6103)
 
 ```python
 def test_list_studies_counts_only_the_member_runs_that_exist(
@@ -17220,7 +17273,7 @@ def test_list_studies_counts_only_the_member_runs_that_exist(
 
 <a id="gui.test_app_api.test_create_study_and_experiment_store_documentation_and_list_it"></a>
 
-#### [test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it](./gui/test_app_api.py#L6017)
+#### [test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it](./gui/test_app_api.py#L6134)
 
 ```python
 def test_create_study_and_experiment_store_documentation_and_list_it(
@@ -17231,7 +17284,7 @@ Documentation given at creation is listed; blank text is stored as unset.
 
 <a id="gui.test_app_api.test_update_study_and_experiment_details_round_trip"></a>
 
-#### [test\_update\_study\_and\_experiment\_details\_round\_trip](./gui/test_app_api.py#L6039)
+#### [test\_update\_study\_and\_experiment\_details\_round\_trip](./gui/test_app_api.py#L6156)
 
 ```python
 def test_update_study_and_experiment_details_round_trip(
@@ -17242,7 +17295,7 @@ The details dialog's Save replaces name, description and documentation.
 
 <a id="gui.test_app_api.test_update_details_reports_a_blank_name_or_unknown_id"></a>
 
-#### [test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id](./gui/test_app_api.py#L6067)
+#### [test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id](./gui/test_app_api.py#L6184)
 
 ```python
 def test_update_details_reports_a_blank_name_or_unknown_id(
@@ -17253,7 +17306,7 @@ A failed save leaves a message for the dialog, and changes nothing.
 
 <a id="gui.test_app_api.test_update_run_details_writes_the_sidecar_and_home_lists_it"></a>
 
-#### [test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it](./gui/test_app_api.py#L6091)
+#### [test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it](./gui/test_app_api.py#L6208)
 
 ```python
 def test_update_run_details_writes_the_sidecar_and_home_lists_it(
@@ -17264,7 +17317,7 @@ A run's name and description are saved and shown in its Home row.
 
 <a id="gui.test_app_api.test_update_run_details_clears_with_blank_text_and_rejects_a_non_run"></a>
 
-#### [test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run](./gui/test_app_api.py#L6118)
+#### [test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run](./gui/test_app_api.py#L6235)
 
 ```python
 def test_update_run_details_clears_with_blank_text_and_rejects_a_non_run(
@@ -17275,7 +17328,7 @@ Blank clears a field; a directory with no manifest is not a run.
 
 <a id="gui.test_app_api.test_get_run_context_names_a_runs_study_and_experiment"></a>
 
-#### [test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment](./gui/test_app_api.py#L6136)
+#### [test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment](./gui/test_app_api.py#L6253)
 
 ```python
 def test_get_run_context_names_a_runs_study_and_experiment(
@@ -17286,7 +17339,7 @@ A run filed in a chosen Study is shown under it, not under the default.
 
 <a id="gui.test_app_api.test_get_run_context_before_a_run_uses_the_selected_or_default_study"></a>
 
-#### [test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study](./gui/test_app_api.py#L6162)
+#### [test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study](./gui/test_app_api.py#L6279)
 
 ```python
 def test_get_run_context_before_a_run_uses_the_selected_or_default_study(
@@ -17297,7 +17350,7 @@ With no run yet, the title names the chosen Study's Experiment.
 
 <a id="gui.test_app_api.test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest"></a>
 
-#### [test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest](./gui/test_app_api.py#L6185)
+#### [test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest](./gui/test_app_api.py#L6302)
 
 ```python
 def test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest(
@@ -22225,7 +22278,7 @@ Three groups of tests:
 
 <a id="gui.test_job_events.test_next_sequence_starts_at_zero_and_counts_up"></a>
 
-#### [test\_next\_sequence\_starts\_at\_zero\_and\_counts\_up](./gui/test_job_events.py#L62)
+#### [test\_next\_sequence\_starts\_at\_zero\_and\_counts\_up](./gui/test_job_events.py#L64)
 
 ```python
 def test_next_sequence_starts_at_zero_and_counts_up() -> None
@@ -22235,7 +22288,7 @@ One job's own sequence: 0, 1, 2, never resetting on its own.
 
 <a id="gui.test_job_events.test_two_jobs_have_independent_sequences"></a>
 
-#### [test\_two\_jobs\_have\_independent\_sequences](./gui/test_job_events.py#L69)
+#### [test\_two\_jobs\_have\_independent\_sequences](./gui/test_job_events.py#L71)
 
 ```python
 def test_two_jobs_have_independent_sequences() -> None
@@ -22245,7 +22298,7 @@ A second job's own counter starts at 0 regardless of the first's.
 
 <a id="gui.test_job_events.test_worker_capacity_respects_reserve_and_one_slot_minimum"></a>
 
-#### [test\_worker\_capacity\_respects\_reserve\_and\_one\_slot\_minimum](./gui/test_job_events.py#L84)
+#### [test\_worker\_capacity\_respects\_reserve\_and\_one\_slot\_minimum](./gui/test_job_events.py#L86)
 
 ```python
 @pytest.mark.parametrize(
@@ -22260,7 +22313,7 @@ Injected CPU counts make reserve arithmetic deterministic.
 
 <a id="gui.test_job_events.test_worker_capacity_rejects_invalid_inputs"></a>
 
-#### [test\_worker\_capacity\_rejects\_invalid\_inputs](./gui/test_job_events.py#L91)
+#### [test\_worker\_capacity\_rejects\_invalid\_inputs](./gui/test_job_events.py#L93)
 
 ```python
 def test_worker_capacity_rejects_invalid_inputs() -> None
@@ -22270,7 +22323,7 @@ Invalid budgets fail explicitly instead of producing hidden capacity.
 
 <a id="gui.test_job_events.test_percentage_reserve_rounds_up_to_whole_cores"></a>
 
-#### [test\_percentage\_reserve\_rounds\_up\_to\_whole\_cores](./gui/test_job_events.py#L103)
+#### [test\_percentage\_reserve\_rounds\_up\_to\_whole\_cores](./gui/test_job_events.py#L105)
 
 ```python
 @pytest.mark.parametrize(
@@ -22284,9 +22337,81 @@ def test_percentage_reserve_rounds_up_to_whole_cores(usable_cores: int,
 
 A fractional core reserve always rounds upward.
 
+<a id="gui.test_job_events.test_memory_reserve_modes_and_rounding"></a>
+
+#### [test\_memory\_reserve\_modes\_and\_rounding](./gui/test_job_events.py#L124)
+
+```python
+@pytest.mark.parametrize(
+    ("total_bytes", "mode", "value", "expected"),
+    [
+        (16 * jobs_module.GIB_BYTES, "auto", 0, 2 * jobs_module.GIB_BYTES),
+        (40 * jobs_module.GIB_BYTES, "auto", 0, 4 * jobs_module.GIB_BYTES),
+        (9 * jobs_module.GIB_BYTES, "gib", 3, 3 * jobs_module.GIB_BYTES),
+        (1001, "percent", 10, 101),
+    ],
+)
+def test_memory_reserve_modes_and_rounding(total_bytes: int,
+                                           mode: jobs_module.MemoryReserveMode,
+                                           value: int, expected: int) -> None
+```
+
+Automatic, GiB, and percentage reserves resolve to whole bytes.
+
+<a id="gui.test_job_events.test_memory_estimate_uses_child_and_vector_cost_per_worker_slot"></a>
+
+#### [test\_memory\_estimate\_uses\_child\_and\_vector\_cost\_per\_worker\_slot](./gui/test_job_events.py#L134)
+
+```python
+def test_memory_estimate_uses_child_and_vector_cost_per_worker_slot() -> None
+```
+
+Batch slots account for child overhead and each known vector block.
+
+<a id="gui.test_job_events.test_child_memory_estimate_uses_largest_rss_or_fallback"></a>
+
+#### [test\_child\_memory\_estimate\_uses\_largest\_rss\_or\_fallback](./gui/test_job_events.py#L139)
+
+```python
+def test_child_memory_estimate_uses_largest_rss_or_fallback(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Measured workers use the largest RSS; unmeasurable workers use fallback.
+
+<a id="gui.test_job_events.test_invalid_memory_reserves_are_rejected"></a>
+
+#### [test\_invalid\_memory\_reserves\_are\_rejected](./gui/test_job_events.py#L170)
+
+```python
+def test_invalid_memory_reserves_are_rejected() -> None
+```
+
+Invalid memory settings cannot silently become a zero reserve.
+
+<a id="gui.test_job_events.test_pause_job_pauses_a_saved_run"></a>
+
+#### [test\_pause\_job\_pauses\_a\_saved\_run](./gui/test_job_events.py#L180)
+
+```python
+def test_pause_job_pauses_a_saved_run(monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A memory warning's Pause action reaches the durable Run lifecycle.
+
+<a id="gui.test_job_events.test_pause_job_stops_a_sweep_at_a_resumable_point"></a>
+
+#### [test\_pause\_job\_stops\_a\_sweep\_at\_a\_resumable\_point](./gui/test_job_events.py#L195)
+
+```python
+def test_pause_job_stops_a_sweep_at_a_resumable_point() -> None
+```
+
+A sweep Pause request sets its cooperative checkpoint event.
+
 <a id="gui.test_job_events.test_admission_retains_effective_priority_in_job_snapshots"></a>
 
-#### [test\_admission\_retains\_effective\_priority\_in\_job\_snapshots](./gui/test_job_events.py#L113)
+#### [test\_admission\_retains\_effective\_priority\_in\_job\_snapshots](./gui/test_job_events.py#L206)
 
 ```python
 def test_admission_retains_effective_priority_in_job_snapshots() -> None
@@ -22296,7 +22421,7 @@ Changing preferences cannot change the priority of an admitted job.
 
 <a id="gui.test_job_events.test_admission_never_reserves_more_than_available_capacity"></a>
 
-#### [test\_admission\_never\_reserves\_more\_than\_available\_capacity](./gui/test_job_events.py#L132)
+#### [test\_admission\_never\_reserves\_more\_than\_available\_capacity](./gui/test_job_events.py#L225)
 
 ```python
 def test_admission_never_reserves_more_than_available_capacity() -> None
@@ -22306,7 +22431,7 @@ A refused reservation leaves the existing job and remaining budget intact.
 
 <a id="gui.test_job_events.test_concurrent_admission_cannot_overbook_worker_capacity"></a>
 
-#### [test\_concurrent\_admission\_cannot\_overbook\_worker\_capacity](./gui/test_job_events.py#L151)
+#### [test\_concurrent\_admission\_cannot\_overbook\_worker\_capacity](./gui/test_job_events.py#L244)
 
 ```python
 def test_concurrent_admission_cannot_overbook_worker_capacity() -> None
@@ -22316,7 +22441,7 @@ Simultaneous requests compete atomically for the final worker slot.
 
 <a id="gui.test_job_events.test_latest_sequence_is_none_before_any_push"></a>
 
-#### [test\_latest\_sequence\_is\_none\_before\_any\_push](./gui/test_job_events.py#L180)
+#### [test\_latest\_sequence\_is\_none\_before\_any\_push](./gui/test_job_events.py#L273)
 
 ```python
 def test_latest_sequence_is_none_before_any_push() -> None
@@ -22326,7 +22451,7 @@ A claimed job that has not pushed anything yet has no latest sequence.
 
 <a id="gui.test_job_events.test_forget_drops_the_bookkeeping"></a>
 
-#### [test\_forget\_drops\_the\_bookkeeping](./gui/test_job_events.py#L191)
+#### [test\_forget\_drops\_the\_bookkeeping](./gui/test_job_events.py#L284)
 
 ```python
 def test_forget_drops_the_bookkeeping() -> None
@@ -22336,7 +22461,7 @@ Forgetting a job's own id lets a later, unrelated use of it start fresh.
 
 <a id="gui.test_job_events.test_claim_run_mints_a_job_id_and_release_clears_it"></a>
 
-#### [test\_claim\_run\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L202)
+#### [test\_claim\_run\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L295)
 
 ```python
 def test_claim_run_mints_a_job_id_and_release_clears_it(
@@ -22347,7 +22472,7 @@ def test_claim_run_mints_a_job_id_and_release_clears_it(
 
 <a id="gui.test_job_events.test_claim_sweep_mints_a_job_id_and_release_clears_it"></a>
 
-#### [test\_claim\_sweep\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L216)
+#### [test\_claim\_sweep\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L309)
 
 ```python
 def test_claim_sweep_mints_a_job_id_and_release_clears_it(
@@ -22358,7 +22483,7 @@ def test_claim_sweep_mints_a_job_id_and_release_clears_it(
 
 <a id="gui.test_job_events.test_a_finished_job_snapshot_survives_claim_release"></a>
 
-#### [test\_a\_finished\_job\_snapshot\_survives\_claim\_release](./gui/test_job_events.py#L229)
+#### [test\_a\_finished\_job\_snapshot\_survives\_claim\_release](./gui/test_job_events.py#L322)
 
 ```python
 def test_a_finished_job_snapshot_survives_claim_release(
@@ -22369,7 +22494,7 @@ Finished jobs remain available for page resynchronization.
 
 <a id="gui.test_job_events.test_closing_a_finished_job_document_forgets_its_snapshot"></a>
 
-#### [test\_closing\_a\_finished\_job\_document\_forgets\_its\_snapshot](./gui/test_job_events.py#L254)
+#### [test\_closing\_a\_finished\_job\_document\_forgets\_its\_snapshot](./gui/test_job_events.py#L347)
 
 ```python
 def test_closing_a_finished_job_document_forgets_its_snapshot(
@@ -22380,7 +22505,7 @@ Closing a document drops the finished job's retained event state.
 
 <a id="gui.test_job_events.test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id"></a>
 
-#### [test\_a\_run\_claim\_and\_a\_sweep\_claim\_each\_mint\_their\_own\_job\_id](./gui/test_job_events.py#L269)
+#### [test\_a\_run\_claim\_and\_a\_sweep\_claim\_each\_mint\_their\_own\_job\_id](./gui/test_job_events.py#L362)
 
 ```python
 def test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id(
@@ -22391,7 +22516,7 @@ A run's own job id and a later sweep's own are never the same value.
 
 <a id="gui.test_job_events.test_get_job_snapshot_before_any_push"></a>
 
-#### [test\_get\_job\_snapshot\_before\_any\_push](./gui/test_job_events.py#L283)
+#### [test\_get\_job\_snapshot\_before\_any\_push](./gui/test_job_events.py#L376)
 
 ```python
 def test_get_job_snapshot_before_any_push(tmp_path: Path) -> None
@@ -22401,7 +22526,7 @@ A snapshot taken before the job has pushed anything reports sequence -1.
 
 <a id="gui.test_job_events.test_get_job_snapshot_reports_the_latest_assigned_sequence"></a>
 
-#### [test\_get\_job\_snapshot\_reports\_the\_latest\_assigned\_sequence](./gui/test_job_events.py#L300)
+#### [test\_get\_job\_snapshot\_reports\_the\_latest\_assigned\_sequence](./gui/test_job_events.py#L393)
 
 ```python
 def test_get_job_snapshot_reports_the_latest_assigned_sequence(
@@ -22412,7 +22537,7 @@ A snapshot reflects however many pushes `next_sequence` has already given out.
 
 <a id="gui.test_job_events.test_set_job_view_returns_latest_event_snapshot"></a>
 
-#### [test\_set\_job\_view\_returns\_latest\_event\_snapshot](./gui/test_job_events.py#L321)
+#### [test\_set\_job\_view\_returns\_latest\_event\_snapshot](./gui/test_job_events.py#L414)
 
 ```python
 def test_set_job_view_returns_latest_event_snapshot(tmp_path: Path) -> None
@@ -22422,7 +22547,7 @@ Changing the active job's view level returns its current event snapshot.
 
 <a id="gui.test_job_events.test_set_job_view_refuses_invalid_level"></a>
 
-#### [test\_set\_job\_view\_refuses\_invalid\_level](./gui/test_job_events.py#L345)
+#### [test\_set\_job\_view\_refuses\_invalid\_level](./gui/test_job_events.py#L438)
 
 ```python
 def test_set_job_view_refuses_invalid_level(tmp_path: Path) -> None
@@ -22432,7 +22557,7 @@ A bad view level is rejected without changing the active job.
 
 <a id="gui.test_job_events.test_get_job_snapshot_refuses_an_unknown_job_id"></a>
 
-#### [test\_get\_job\_snapshot\_refuses\_an\_unknown\_job\_id](./gui/test_job_events.py#L359)
+#### [test\_get\_job\_snapshot\_refuses\_an\_unknown\_job\_id](./gui/test_job_events.py#L452)
 
 ```python
 def test_get_job_snapshot_refuses_an_unknown_job_id(tmp_path: Path) -> None
@@ -22442,7 +22567,7 @@ A `jobId` nobody has claimed is refused, not reported as empty.
 
 <a id="gui.test_job_events.test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released"></a>
 
-#### [test\_get\_job\_snapshot\_refuses\_a\_job\_whose\_claim\_has\_been\_released](./gui/test_job_events.py#L368)
+#### [test\_get\_job\_snapshot\_refuses\_a\_job\_whose\_claim\_has\_been\_released](./gui/test_job_events.py#L461)
 
 ```python
 def test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released(
@@ -22453,7 +22578,7 @@ A released claim's view and snapshot are not active job state.
 
 <a id="gui.test_job_events.test_the_addressed_push_rides_alongside_the_legacy_push_in_order"></a>
 
-#### [test\_the\_addressed\_push\_rides\_alongside\_the\_legacy\_push\_in\_order](./gui/test_job_events.py#L383)
+#### [test\_the\_addressed\_push\_rides\_alongside\_the\_legacy\_push\_in\_order](./gui/test_job_events.py#L476)
 
 ```python
 def test_the_addressed_push_rides_alongside_the_legacy_push_in_order() -> None
@@ -22468,7 +22593,7 @@ delivery order (`fim.gui.publisher`'s own module docstring).
 
 <a id="gui.test_job_events.test_one_sequence_per_job_and_jobs_never_cross"></a>
 
-#### [test\_one\_sequence\_per\_job\_and\_jobs\_never\_cross](./gui/test_job_events.py#L438)
+#### [test\_one\_sequence\_per\_job\_and\_jobs\_never\_cross](./gui/test_job_events.py#L531)
 
 ```python
 @pytest.mark.gui
@@ -22479,7 +22604,7 @@ Two jobs' own sequences are tracked independently, never conflated.
 
 <a id="gui.test_job_events.test_duplicate_and_stale_events_are_ignored"></a>
 
-#### [test\_duplicate\_and\_stale\_events\_are\_ignored](./gui/test_job_events.py#L476)
+#### [test\_duplicate\_and\_stale\_events\_are\_ignored](./gui/test_job_events.py#L569)
 
 ```python
 @pytest.mark.gui
@@ -22490,7 +22615,7 @@ A repeated or older sequence never re-applies, never regresses tracking.
 
 <a id="gui.test_job_events.test_a_jobs_first_ever_event_is_never_treated_as_a_gap"></a>
 
-#### [test\_a\_jobs\_first\_ever\_event\_is\_never\_treated\_as\_a\_gap](./gui/test_job_events.py#L521)
+#### [test\_a\_jobs\_first\_ever\_event\_is\_never\_treated\_as\_a\_gap](./gui/test_job_events.py#L614)
 
 ```python
 @pytest.mark.gui
@@ -22507,7 +22632,7 @@ leaving any other, already-tracked job untouched.
 
 <a id="gui.test_job_events.test_a_progress_gap_never_requests_a_snapshot"></a>
 
-#### [test\_a\_progress\_gap\_never\_requests\_a\_snapshot](./gui/test_job_events.py#L563)
+#### [test\_a\_progress\_gap\_never\_requests\_a\_snapshot](./gui/test_job_events.py#L656)
 
 ```python
 @pytest.mark.gui
@@ -22518,7 +22643,7 @@ A skipped progress sequence is routine (coalescing), not a loss.
 
 <a id="gui.test_job_events.test_a_gap_before_a_status_or_terminal_event_requests_a_snapshot"></a>
 
-#### [test\_a\_gap\_before\_a\_status\_or\_terminal\_event\_requests\_a\_snapshot](./gui/test_job_events.py#L601)
+#### [test\_a\_gap\_before\_a\_status\_or\_terminal\_event\_requests\_a\_snapshot](./gui/test_job_events.py#L694)
 
 ```python
 @pytest.mark.gui
@@ -22532,7 +22657,7 @@ stays at whatever it was before the gap was seen.
 
 <a id="gui.test_job_events.test_a_snapshot_resyncs_the_tracked_sequence"></a>
 
-#### [test\_a\_snapshot\_resyncs\_the\_tracked\_sequence](./gui/test_job_events.py#L646)
+#### [test\_a\_snapshot\_resyncs\_the\_tracked\_sequence](./gui/test_job_events.py#L739)
 
 ```python
 @pytest.mark.gui
@@ -22547,7 +22672,7 @@ docstring describes.
 
 <a id="gui.test_job_events.test_a_late_snapshot_does_not_overwrite_a_newer_event"></a>
 
-#### [test\_a\_late\_snapshot\_does\_not\_overwrite\_a\_newer\_event](./gui/test_job_events.py#L712)
+#### [test\_a\_late\_snapshot\_does\_not\_overwrite\_a\_newer\_event](./gui/test_job_events.py#L805)
 
 ```python
 @pytest.mark.gui
@@ -22558,7 +22683,7 @@ A delayed snapshot cannot move event tracking backward.
 
 <a id="gui.test_job_events.test_an_annotation_for_a_closed_document_is_dropped"></a>
 
-#### [test\_an\_annotation\_for\_a\_closed\_document\_is\_dropped](./gui/test_job_events.py#L771)
+#### [test\_an\_annotation\_for\_a\_closed\_document\_is\_dropped](./gui/test_job_events.py#L864)
 
 ```python
 @pytest.mark.gui
@@ -22569,7 +22694,7 @@ A late annotation cannot reach a document that has closed.
 
 <a id="gui.test_job_events.test_an_annotation_after_coalesced_progress_is_applied"></a>
 
-#### [test\_an\_annotation\_after\_coalesced\_progress\_is\_applied](./gui/test_job_events.py#L822)
+#### [test\_an\_annotation\_after\_coalesced\_progress\_is\_applied](./gui/test_job_events.py#L915)
 
 ```python
 @pytest.mark.gui
@@ -22577,6 +22702,18 @@ def test_an_annotation_after_coalesced_progress_is_applied() -> None
 ```
 
 Progress coalescing does not suppress the following annotation.
+
+<a id="gui.test_job_events.test_memory_warning_names_jobs_and_pause_button_refreshes_the_banner"></a>
+
+#### [test\_memory\_warning\_names\_jobs\_and\_pause\_button\_refreshes\_the\_banner](./gui/test_job_events.py#L982)
+
+```python
+@pytest.mark.gui
+def test_memory_warning_names_jobs_and_pause_button_refreshes_the_banner(
+) -> None
+```
+
+The page names each pressured job and wires Pause to the API.
 
 <a id="gui.test_job_worker"></a>
 
@@ -23442,7 +23579,7 @@ Reusing a computed run, or failing to start one, leaves no run in flight.
 
 <a id="gui.test_one_run_at_a_time.test_an_invalid_form_releases_the_claim"></a>
 
-#### [test\_an\_invalid\_form\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L401)
+#### [test\_an\_invalid\_form\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L403)
 
 ```python
 def test_an_invalid_form_releases_the_claim(api: Api) -> None
@@ -23452,7 +23589,7 @@ A form that does not validate starts nothing and leaves the slot free.
 
 <a id="gui.test_one_run_at_a_time.test_an_error_while_starting_releases_the_claim"></a>
 
-#### [test\_an\_error\_while\_starting\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L409)
+#### [test\_an\_error\_while\_starting\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L411)
 
 ```python
 def test_an_error_while_starting_releases_the_claim(
@@ -23463,7 +23600,7 @@ An unexpected exception cannot leave the slot claimed for good.
 
 <a id="gui.test_one_run_at_a_time.test_a_saved_run_start_that_fails_releases_the_claim"></a>
 
-#### [test\_a\_saved\_run\_start\_that\_fails\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L431)
+#### [test\_a\_saved\_run\_start\_that\_fails\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L433)
 
 ```python
 def test_a_saved_run_start_that_fails_releases_the_claim(
@@ -23474,7 +23611,7 @@ With no window to report to, a saved run starts nothing and frees the slot.
 
 <a id="gui.test_one_run_at_a_time.test_the_check_and_the_claim_happen_under_one_lock"></a>
 
-#### [test\_the\_check\_and\_the\_claim\_happen\_under\_one\_lock](./gui/test_one_run_at_a_time.py#L444)
+#### [test\_the\_check\_and\_the\_claim\_happen\_under\_one\_lock](./gui/test_one_run_at_a_time.py#L446)
 
 ```python
 def test_the_check_and_the_claim_happen_under_one_lock(api: Api) -> None
@@ -23484,7 +23621,7 @@ A claimed record is visible to the capacity calculation.
 
 <a id="gui.test_one_run_at_a_time.test_run_clicked_during_a_run_says_so_and_keeps_the_running_view"></a>
 
-#### [test\_run\_clicked\_during\_a\_run\_says\_so\_and\_keeps\_the\_running\_view](./gui/test_one_run_at_a_time.py#L458)
+#### [test\_run\_clicked\_during\_a\_run\_says\_so\_and\_keeps\_the\_running\_view](./gui/test_one_run_at_a_time.py#L460)
 
 ```python
 @pytest.mark.gui
@@ -24610,11 +24747,11 @@ The preference requires an actual non-negative integer.
 def test_background_work_settings_round_trip(tmp_path: Path) -> None
 ```
 
-Priority and percentage reserve persist and clear the alternate mode.
+Priority and CPU/memory reserve settings survive reloads.
 
 <a id="gui.test_preferences.test_background_work_preferences_reject_invalid_values"></a>
 
-#### [test\_background\_work\_preferences\_reject\_invalid\_values](./gui/test_preferences.py#L679)
+#### [test\_background\_work\_preferences\_reject\_invalid\_values](./gui/test_preferences.py#L690)
 
 ```python
 @pytest.mark.parametrize(
@@ -24625,6 +24762,9 @@ Priority and percentage reserve persist and clear the alternate mode.
         ("reserved_cores_percent", True),
         ("run_priority", "urgent"),
         ("run_priority", 1),
+        ("memory_reserve_mode", "invalid"),
+        ("memory_reserve_value", True),
+        ("memory_reserve_value", -1),
     ],
 )
 def test_background_work_preferences_reject_invalid_values(
@@ -24635,7 +24775,7 @@ Malformed persisted priority and reserve values are rejected.
 
 <a id="gui.test_preferences.test_background_work_settings_reject_invalid_updates"></a>
 
-#### [test\_background\_work\_settings\_reject\_invalid\_updates](./gui/test_preferences.py#L701)
+#### [test\_background\_work\_settings\_reject\_invalid\_updates](./gui/test_preferences.py#L712)
 
 ```python
 @pytest.mark.parametrize(
@@ -24653,9 +24793,24 @@ def test_background_work_settings_reject_invalid_updates(
 
 Interactive setting updates validate the complete setting tuple.
 
+<a id="gui.test_preferences.test_background_work_settings_reject_invalid_memory_reserve_updates"></a>
+
+#### [test\_background\_work\_settings\_reject\_invalid\_memory\_reserve\_updates](./gui/test_preferences.py#L728)
+
+```python
+@pytest.mark.parametrize(
+    ("mode", "value"),
+    [("auto", 1), ("invalid", 0), ("percent", 101), ("gib", -1)],
+)
+def test_background_work_settings_reject_invalid_memory_reserve_updates(
+        mode: str, value: int) -> None
+```
+
+Memory reserve mode and value are validated together.
+
 <a id="gui.test_preferences.test_run_card_layout_round_trips_through_save_and_load"></a>
 
-#### [test\_run\_card\_layout\_round\_trips\_through\_save\_and\_load](./gui/test_preferences.py#L713)
+#### [test\_run\_card\_layout\_round\_trips\_through\_save\_and\_load](./gui/test_preferences.py#L742)
 
 ```python
 def test_run_card_layout_round_trips_through_save_and_load(
@@ -24666,7 +24821,7 @@ Chosen graphs, columns, scatter style and trajectory display survive a reload.
 
 <a id="gui.test_preferences.test_every_trajectory_display_loads"></a>
 
-#### [test\_every\_trajectory\_display\_loads](./gui/test_preferences.py#L733)
+#### [test\_every\_trajectory\_display\_loads](./gui/test_preferences.py#L762)
 
 ```python
 def test_every_trajectory_display_loads(tmp_path: Path) -> None
@@ -24676,7 +24831,7 @@ Each of the three trajectory displays is accepted from disk.
 
 <a id="gui.test_preferences.test_with_run_card_layout_changes_only_what_it_is_given"></a>
 
-#### [test\_with\_run\_card\_layout\_changes\_only\_what\_it\_is\_given](./gui/test_preferences.py#L745)
+#### [test\_with\_run\_card\_layout\_changes\_only\_what\_it\_is\_given](./gui/test_preferences.py#L774)
 
 ```python
 def test_with_run_card_layout_changes_only_what_it_is_given() -> None
@@ -24686,7 +24841,7 @@ Arguments left out keep their current value.
 
 <a id="gui.test_preferences.test_unknown_graph_keys_are_dropped_and_an_empty_list_means_default"></a>
 
-#### [test\_unknown\_graph\_keys\_are\_dropped\_and\_an\_empty\_list\_means\_default](./gui/test_preferences.py#L759)
+#### [test\_unknown\_graph\_keys\_are\_dropped\_and\_an\_empty\_list\_means\_default](./gui/test_preferences.py#L788)
 
 ```python
 def test_unknown_graph_keys_are_dropped_and_an_empty_list_means_default(
@@ -24697,7 +24852,7 @@ A graph a later version removed does not invalidate the file.
 
 <a id="gui.test_preferences.test_malformed_run_card_values_are_quarantined"></a>
 
-#### [test\_malformed\_run\_card\_values\_are\_quarantined](./gui/test_preferences.py#L790)
+#### [test\_malformed\_run\_card\_values\_are\_quarantined](./gui/test_preferences.py#L819)
 
 ```python
 def test_malformed_run_card_values_are_quarantined(tmp_path: Path) -> None
@@ -24707,7 +24862,7 @@ A bad column count, scatter style or trajectory display is rejected.
 
 <a id="gui.test_preferences.test_a_version_one_file_has_its_saved_window_and_cap_reset_to_auto"></a>
 
-#### [test\_a\_version\_one\_file\_has\_its\_saved\_window\_and\_cap\_reset\_to\_auto](./gui/test_preferences.py#L827)
+#### [test\_a\_version\_one\_file\_has\_its\_saved\_window\_and\_cap\_reset\_to\_auto](./gui/test_preferences.py#L856)
 
 ```python
 def test_a_version_one_file_has_its_saved_window_and_cap_reset_to_auto(
@@ -24718,7 +24873,7 @@ The old fixed numbers become auto in every place they were saved.
 
 <a id="gui.test_preferences.test_a_version_one_file_keeps_every_other_preference"></a>
 
-#### [test\_a\_version\_one\_file\_keeps\_every\_other\_preference](./gui/test_preferences.py#L850)
+#### [test\_a\_version\_one\_file\_keeps\_every\_other\_preference](./gui/test_preferences.py#L879)
 
 ```python
 def test_a_version_one_file_keeps_every_other_preference(
@@ -24729,7 +24884,7 @@ Only the two derived fields change; nothing else is touched.
 
 <a id="gui.test_preferences.test_a_saved_file_is_written_at_the_current_version"></a>
 
-#### [test\_a\_saved\_file\_is\_written\_at\_the\_current\_version](./gui/test_preferences.py#L860)
+#### [test\_a\_saved\_file\_is\_written\_at\_the\_current\_version](./gui/test_preferences.py#L889)
 
 ```python
 def test_a_saved_file_is_written_at_the_current_version(
@@ -24740,7 +24895,7 @@ Saving after an upgrade writes version 2, so the reset happens once.
 
 <a id="gui.test_preferences.test_a_current_version_file_keeps_an_explicit_window"></a>
 
-#### [test\_a\_current\_version\_file\_keeps\_an\_explicit\_window](./gui/test_preferences.py#L869)
+#### [test\_a\_current\_version\_file\_keeps\_an\_explicit\_window](./gui/test_preferences.py#L898)
 
 ```python
 def test_a_current_version_file_keeps_an_explicit_window(
@@ -24751,7 +24906,7 @@ Version 2 files hold what the user chose; nothing is reset.
 
 <a id="gui.test_preferences.test_the_preferences_file_is_not_owner_only"></a>
 
-#### [test\_the\_preferences\_file\_is\_not\_owner\_only](./gui/test_preferences.py#L888)
+#### [test\_the\_preferences\_file\_is\_not\_owner\_only](./gui/test_preferences.py#L917)
 
 ```python
 def test_the_preferences_file_is_not_owner_only(tmp_path: Path) -> None
@@ -24761,7 +24916,7 @@ Saved preferences are readable like any other file the user creates.
 
 <a id="gui.test_preferences.test_shown_statistics_and_pairwise_limit_round_trip"></a>
 
-#### [test\_shown\_statistics\_and\_pairwise\_limit\_round\_trip](./gui/test_preferences.py#L896)
+#### [test\_shown\_statistics\_and\_pairwise\_limit\_round\_trip](./gui/test_preferences.py#L925)
 
 ```python
 def test_shown_statistics_and_pairwise_limit_round_trip(
@@ -24772,7 +24927,7 @@ Both statistic preferences survive a save and load.
 
 <a id="gui.test_preferences.test_shown_statistics_drops_unknown_keys_and_keeps_an_empty_choice"></a>
 
-#### [test\_shown\_statistics\_drops\_unknown\_keys\_and\_keeps\_an\_empty\_choice](./gui/test_preferences.py#L908)
+#### [test\_shown\_statistics\_drops\_unknown\_keys\_and\_keeps\_an\_empty\_choice](./gui/test_preferences.py#L937)
 
 ```python
 def test_shown_statistics_drops_unknown_keys_and_keeps_an_empty_choice(
@@ -24783,7 +24938,7 @@ A statistic a later version removed is dropped; hiding all is kept.
 
 <a id="gui.test_preferences.test_defaults_write_neither_statistic_preference"></a>
 
-#### [test\_defaults\_write\_neither\_statistic\_preference](./gui/test_preferences.py#L928)
+#### [test\_defaults\_write\_neither\_statistic\_preference](./gui/test_preferences.py#L957)
 
 ```python
 def test_defaults_write_neither_statistic_preference(tmp_path: Path) -> None
@@ -24793,7 +24948,7 @@ An untouched install stores nothing for either preference.
 
 <a id="gui.test_preferences.test_a_non_positive_pairwise_limit_is_quarantined"></a>
 
-#### [test\_a\_non\_positive\_pairwise\_limit\_is\_quarantined](./gui/test_preferences.py#L935)
+#### [test\_a\_non\_positive\_pairwise\_limit\_is\_quarantined](./gui/test_preferences.py#L964)
 
 ```python
 def test_a_non_positive_pairwise_limit_is_quarantined(tmp_path: Path) -> None
@@ -24803,7 +24958,7 @@ A hand-edited zero limit is rejected like any malformed field.
 
 <a id="gui.test_preferences.test_the_band_width_defaults_to_two_and_writes_nothing_until_changed"></a>
 
-#### [test\_the\_band\_width\_defaults\_to\_two\_and\_writes\_nothing\_until\_changed](./gui/test_preferences.py#L949)
+#### [test\_the\_band\_width\_defaults\_to\_two\_and\_writes\_nothing\_until\_changed](./gui/test_preferences.py#L978)
 
 ```python
 def test_the_band_width_defaults_to_two_and_writes_nothing_until_changed(
@@ -24814,7 +24969,7 @@ Width 2 is the default and stays off disk; 1 is written and survives a reload.
 
 <a id="gui.test_preferences.test_the_band_width_round_trips_and_rejects_anything_but_one_or_two"></a>
 
-#### [test\_the\_band\_width\_round\_trips\_and\_rejects\_anything\_but\_one\_or\_two](./gui/test_preferences.py#L960)
+#### [test\_the\_band\_width\_round\_trips\_and\_rejects\_anything\_but\_one\_or\_two](./gui/test_preferences.py#L989)
 
 ```python
 def test_the_band_width_round_trips_and_rejects_anything_but_one_or_two(
@@ -27567,20 +27722,20 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_saved(
 
 A saved default is shown instead of the true starter values on open.
 
-<a id="gui.test_settings_modal.test_background_work_settings_persist_and_show_the_worker_budget"></a>
+<a id="gui.test_settings_modal.test_background_work_settings_persist_and_show_resource_budgets"></a>
 
-#### [test\_background\_work\_settings\_persist\_and\_show\_the\_worker\_budget](./gui/test_settings_modal.py#L183)
+#### [test\_background\_work\_settings\_persist\_and\_show\_resource\_budgets](./gui/test_settings_modal.py#L183)
 
 ```python
-def test_background_work_settings_persist_and_show_the_worker_budget(
+def test_background_work_settings_persist_and_show_resource_budgets(
         window: webview.Window) -> None
 ```
 
-Settings shows the derived budget and saves priority/reserve on change.
+Settings persists CPU/memory reserves and shows the worker budget.
 
 <a id="gui.test_settings_modal.test_settings_save_button_persists_execution_and_convergence_defaults"></a>
 
-#### [test\_settings\_save\_button\_persists\_execution\_and\_convergence\_defaults](./gui/test_settings_modal.py#L222)
+#### [test\_settings\_save\_button\_persists\_execution\_and\_convergence\_defaults](./gui/test_settings_modal.py#L259)
 
 ```python
 def test_settings_save_button_persists_execution_and_convergence_defaults(
@@ -27602,7 +27757,7 @@ depend on how long the bridge call takes.
 
 <a id="gui.test_settings_modal.test_default_ploidy_select_persists_immediately_and_reloads_on_open"></a>
 
-#### [test\_default\_ploidy\_select\_persists\_immediately\_and\_reloads\_on\_open](./gui/test_settings_modal.py#L268)
+#### [test\_default\_ploidy\_select\_persists\_immediately\_and\_reloads\_on\_open](./gui/test_settings_modal.py#L305)
 
 ```python
 def test_default_ploidy_select_persists_immediately_and_reloads_on_open(
@@ -27618,7 +27773,7 @@ validate together.
 
 <a id="gui.test_settings_modal.test_run_card_columns_and_scatter_style_persist_on_change_and_apply_live"></a>
 
-#### [test\_run\_card\_columns\_and\_scatter\_style\_persist\_on\_change\_and\_apply\_live](./gui/test_settings_modal.py#L300)
+#### [test\_run\_card\_columns\_and\_scatter\_style\_persist\_on\_change\_and\_apply\_live](./gui/test_settings_modal.py#L337)
 
 ```python
 def test_run_card_columns_and_scatter_style_persist_on_change_and_apply_live(
@@ -27634,7 +27789,7 @@ anything.
 
 <a id="gui.test_settings_modal.test_settings_save_button_shows_the_banner_on_an_invalid_value"></a>
 
-#### [test\_settings\_save\_button\_shows\_the\_banner\_on\_an\_invalid\_value](./gui/test_settings_modal.py#L338)
+#### [test\_settings\_save\_button\_shows\_the\_banner\_on\_an\_invalid\_value](./gui/test_settings_modal.py#L375)
 
 ```python
 def test_settings_save_button_shows_the_banner_on_an_invalid_value(
@@ -27645,7 +27800,7 @@ An unparseable value is rejected, surfaced in the banner, not silently saved.
 
 <a id="gui.test_settings_modal.test_settings_save_button_closes_the_dialog_on_success"></a>
 
-#### [test\_settings\_save\_button\_closes\_the\_dialog\_on\_success](./gui/test_settings_modal.py#L378)
+#### [test\_settings\_save\_button\_closes\_the\_dialog\_on\_success](./gui/test_settings_modal.py#L415)
 
 ```python
 def test_settings_save_button_closes_the_dialog_on_success(
@@ -27659,7 +27814,7 @@ indistinguishable at a glance from a save that silently failed.
 
 <a id="gui.test_settings_modal.test_settings_engine_backend_visibility_reveals_jit_and_auto_vector_fields"></a>
 
-#### [test\_settings\_engine\_backend\_visibility\_reveals\_jit\_and\_auto\_vector\_fields](./gui/test_settings_modal.py#L404)
+#### [test\_settings\_engine\_backend\_visibility\_reveals\_jit\_and\_auto\_vector\_fields](./gui/test_settings_modal.py#L441)
 
 ```python
 def test_settings_engine_backend_visibility_reveals_jit_and_auto_vector_fields(
@@ -27677,7 +27832,7 @@ hidden together as one group.
 
 <a id="gui.test_settings_modal.test_engine_backend_selector_lists_all_four_options_recommendation_first"></a>
 
-#### [test\_engine\_backend\_selector\_lists\_all\_four\_options\_recommendation\_first](./gui/test_settings_modal.py#L453)
+#### [test\_engine\_backend\_selector\_lists\_all\_four\_options\_recommendation\_first](./gui/test_settings_modal.py#L490)
 
 ```python
 def test_engine_backend_selector_lists_all_four_options_recommendation_first(
@@ -27699,7 +27854,7 @@ values.
 
 <a id="gui.test_settings_modal.test_engine_backend_selector_accepts_every_legal_value"></a>
 
-#### [test\_engine\_backend\_selector\_accepts\_every\_legal\_value](./gui/test_settings_modal.py#L496)
+#### [test\_engine\_backend\_selector\_accepts\_every\_legal\_value](./gui/test_settings_modal.py#L533)
 
 ```python
 def test_engine_backend_selector_accepts_every_legal_value(
@@ -27718,7 +27873,7 @@ real DOM is what makes that observable.
 
 <a id="gui.test_settings_modal.test_engine_backend_options_are_relabeled_without_numba"></a>
 
-#### [test\_engine\_backend\_options\_are\_relabeled\_without\_numba](./gui/test_settings_modal.py#L531)
+#### [test\_engine\_backend\_options\_are\_relabeled\_without\_numba](./gui/test_settings_modal.py#L568)
 
 ```python
 def test_engine_backend_options_are_relabeled_without_numba(
@@ -27738,7 +27893,7 @@ option.
 
 <a id="gui.test_settings_modal.test_engine_backend_selector_defaults_to_auto"></a>
 
-#### [test\_engine\_backend\_selector\_defaults\_to\_auto](./gui/test_settings_modal.py#L569)
+#### [test\_engine\_backend\_selector\_defaults\_to\_auto](./gui/test_settings_modal.py#L606)
 
 ```python
 def test_engine_backend_selector_defaults_to_auto(
@@ -27759,7 +27914,7 @@ once for Configure's former copy of this field.
 
 <a id="gui.test_settings_modal.test_every_settings_section_separates_its_hint_from_its_first_field"></a>
 
-#### [test\_every\_settings\_section\_separates\_its\_hint\_from\_its\_first\_field](./gui/test_settings_modal.py#L645)
+#### [test\_every\_settings\_section\_separates\_its\_hint\_from\_its\_first\_field](./gui/test_settings_modal.py#L682)
 
 ```python
 def test_every_settings_section_separates_its_hint_from_its_first_field(
@@ -27775,7 +27930,7 @@ before it, the hint ran straight into the first label.
 
 <a id="gui.test_settings_modal.test_the_convergence_section_is_titled_convergence"></a>
 
-#### [test\_the\_convergence\_section\_is\_titled\_convergence](./gui/test_settings_modal.py#L675)
+#### [test\_the\_convergence\_section\_is\_titled\_convergence](./gui/test_settings_modal.py#L712)
 
 ```python
 def test_the_convergence_section_is_titled_convergence(
@@ -27786,7 +27941,7 @@ The section holding the convergence burn-in and precision reads "Convergence".
 
 <a id="gui.test_settings_modal.test_the_expert_section_lists_every_setting_collapsed_with_its_default"></a>
 
-#### [test\_the\_expert\_section\_lists\_every\_setting\_collapsed\_with\_its\_default](./gui/test_settings_modal.py#L699)
+#### [test\_the\_expert\_section\_lists\_every\_setting\_collapsed\_with\_its\_default](./gui/test_settings_modal.py#L736)
 
 ```python
 def test_the_expert_section_lists_every_setting_collapsed_with_its_default(
@@ -27797,7 +27952,7 @@ Settings builds a row per Expert Setting from the bridge, collapsed.
 
 <a id="gui.test_settings_modal.test_a_changed_expert_value_is_marked_saved_and_resettable"></a>
 
-#### [test\_a\_changed\_expert\_value\_is\_marked\_saved\_and\_resettable](./gui/test_settings_modal.py#L736)
+#### [test\_a\_changed\_expert\_value\_is\_marked\_saved\_and\_resettable](./gui/test_settings_modal.py#L773)
 
 ```python
 def test_a_changed_expert_value_is_marked_saved_and_resettable(
@@ -27808,7 +27963,7 @@ Editing marks the row; Save persists it; Reset restores the default.
 
 <a id="gui.test_settings_modal.test_saving_an_invalid_expert_value_shows_the_banner_by_name"></a>
 
-#### [test\_saving\_an\_invalid\_expert\_value\_shows\_the\_banner\_by\_name](./gui/test_settings_modal.py#L785)
+#### [test\_saving\_an\_invalid\_expert\_value\_shows\_the\_banner\_by\_name](./gui/test_settings_modal.py#L822)
 
 ```python
 def test_saving_an_invalid_expert_value_shows_the_banner_by_name(
@@ -27819,7 +27974,7 @@ A bad Expert value is refused by name, and nothing is saved.
 
 <a id="gui.test_settings_modal.test_reset_all_restores_every_default"></a>
 
-#### [test\_reset\_all\_restores\_every\_default](./gui/test_settings_modal.py#L807)
+#### [test\_reset\_all\_restores\_every\_default](./gui/test_settings_modal.py#L844)
 
 ```python
 def test_reset_all_restores_every_default(window: webview.Window) -> None
@@ -27829,7 +27984,7 @@ The section's Reset all puts every input back at its default.
 
 <a id="gui.test_settings_modal.test_settings_holds_the_estimate_method_and_window_defaults"></a>
 
-#### [test\_settings\_holds\_the\_estimate\_method\_and\_window\_defaults](./gui/test_settings_modal.py#L826)
+#### [test\_settings\_holds\_the\_estimate\_method\_and\_window\_defaults](./gui/test_settings_modal.py#L863)
 
 ```python
 def test_settings_holds_the_estimate_method_and_window_defaults(
@@ -27840,7 +27995,7 @@ Estimate, precision method and replicate window seed, save and reload.
 
 <a id="gui.test_settings_modal.test_settings_holds_the_storage_defaults"></a>
 
-#### [test\_settings\_holds\_the\_storage\_defaults](./gui/test_settings_modal.py#L873)
+#### [test\_settings\_holds\_the\_storage\_defaults](./gui/test_settings_modal.py#L910)
 
 ```python
 def test_settings_holds_the_storage_defaults(window: webview.Window) -> None
@@ -45255,9 +45410,19 @@ def test_webview_is_a_declared_hidden_import() -> None
 `launcher.py`'s conditional branch — PyInstaller's static import
 scan does not follow that indirection unassisted.
 
+<a id="validation.test_packaging_spec.test_psutil_memory_probe_is_a_declared_hidden_import"></a>
+
+#### [test\_psutil\_memory\_probe\_is\_a\_declared\_hidden\_import](./validation/test_packaging_spec.py#L81)
+
+```python
+def test_psutil_memory_probe_is_a_declared_hidden_import() -> None
+```
+
+The dynamically imported GUI memory probe is present in frozen builds.
+
 <a id="validation.test_packaging_spec.test_windows_and_linux_build_stays_a_single_onefile_executable"></a>
 
-#### [test\_windows\_and\_linux\_build\_stays\_a\_single\_onefile\_executable](./validation/test_packaging_spec.py#L81)
+#### [test\_windows\_and\_linux\_build\_stays\_a\_single\_onefile\_executable](./validation/test_packaging_spec.py#L88)
 
 ```python
 def test_windows_and_linux_build_stays_a_single_onefile_executable() -> None
@@ -45272,7 +45437,7 @@ all, so the `else` branch's `EXE()` call still receives
 
 <a id="validation.test_packaging_spec.test_macos_bundle_wraps_a_collected_onedir_build"></a>
 
-#### [test\_macos\_bundle\_wraps\_a\_collected\_onedir\_build](./validation/test_packaging_spec.py#L96)
+#### [test\_macos\_bundle\_wraps\_a\_collected\_onedir\_build](./validation/test_packaging_spec.py#L103)
 
 ```python
 def test_macos_bundle_wraps_a_collected_onedir_build() -> None
@@ -45289,7 +45454,7 @@ must sit between the platform-specific `EXE()` (built with
 
 <a id="validation.test_packaging_spec.test_macos_bundle_is_dock_visible_not_background_only"></a>
 
-#### [test\_macos\_bundle\_is\_dock\_visible\_not\_background\_only](./validation/test_packaging_spec.py#L119)
+#### [test\_macos\_bundle\_is\_dock\_visible\_not\_background\_only](./validation/test_packaging_spec.py#L126)
 
 ```python
 def test_macos_bundle_is_dock_visible_not_background_only() -> None
@@ -45306,7 +45471,7 @@ was added, which otherwise silently hid the Dock icon despite
 
 <a id="validation.test_packaging_spec.test_macos_bundle_identifier_and_version_are_set"></a>
 
-#### [test\_macos\_bundle\_identifier\_and\_version\_are\_set](./validation/test_packaging_spec.py#L135)
+#### [test\_macos\_bundle\_identifier\_and\_version\_are\_set](./validation/test_packaging_spec.py#L142)
 
 ```python
 def test_macos_bundle_identifier_and_version_are_set() -> None

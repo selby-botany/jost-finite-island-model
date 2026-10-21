@@ -25,8 +25,10 @@ from __future__ import annotations
 import json
 import queue
 import threading
+import time
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 import webview
@@ -108,6 +110,97 @@ def test_percentage_reserve_rounds_up_to_whole_cores(
         jobs_module.reserved_core_count(usable_cores, reserved_percent=reserved_percent)
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("total_bytes", "mode", "value", "expected"),
+    [
+        (16 * jobs_module.GIB_BYTES, "auto", 0, 2 * jobs_module.GIB_BYTES),
+        (40 * jobs_module.GIB_BYTES, "auto", 0, 4 * jobs_module.GIB_BYTES),
+        (9 * jobs_module.GIB_BYTES, "gib", 3, 3 * jobs_module.GIB_BYTES),
+        (1001, "percent", 10, 101),
+    ],
+)
+def test_memory_reserve_modes_and_rounding(
+    total_bytes: int,
+    mode: jobs_module.MemoryReserveMode,
+    value: int,
+    expected: int,
+) -> None:
+    """Automatic, GiB, and percentage reserves resolve to whole bytes."""
+    assert jobs_module.memory_reserve_bytes(total_bytes, mode, value) == expected
+
+
+def test_memory_estimate_uses_child_and_vector_cost_per_worker_slot() -> None:
+    """Batch slots account for child overhead and each known vector block."""
+    assert jobs_module.estimate_job_memory_bytes(3, 100, 25) == 375
+
+
+def test_child_memory_estimate_uses_largest_rss_or_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Measured workers use the largest RSS; unmeasurable workers use fallback."""
+    admission = jobs_module.JobAdmission()
+    first, _ = admission.admit("run", 1, 3)
+    second, _ = admission.admit("saved-run", 1, 3)
+    assert first is not None
+    assert second is not None
+
+    for record, pid in ((first, 1), (second, 2)):
+        record.child = cast(
+            jobs_module.ChildJob,
+            SimpleNamespace(process=SimpleNamespace(pid=pid, poll=lambda: None)),
+        )
+
+    rss_by_pid = {1: 512, 2: 1024}
+    monkeypatch.setattr(
+        jobs_module.psutil,
+        "Process",
+        lambda pid: SimpleNamespace(
+            memory_info=lambda: SimpleNamespace(rss=rss_by_pid[pid])
+        ),
+    )
+    assert jobs_module.child_memory_estimate_bytes(admission.active_jobs()) == 1024
+    assert (
+        jobs_module.child_memory_estimate_bytes(())
+        == jobs_module.DEFAULT_CHILD_MEMORY_ESTIMATE_BYTES
+    )
+
+
+def test_invalid_memory_reserves_are_rejected() -> None:
+    """Invalid memory settings cannot silently become a zero reserve."""
+    with pytest.raises(ValueError, match="at least one"):
+        jobs_module.memory_reserve_bytes(0)
+    with pytest.raises(ValueError, match="percentage"):
+        jobs_module.memory_reserve_bytes(10, "percent", 101)
+    with pytest.raises(ValueError, match="mode"):
+        jobs_module.memory_reserve_bytes(10, "invalid")  # type: ignore[arg-type]
+
+
+def test_pause_job_pauses_a_saved_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A memory warning's Pause action reaches the durable Run lifecycle."""
+    api = Api()
+    record, _ = api._jobs.admit("run", 1, 1)
+    assert record is not None
+    record.active_object_id = "run-object"
+    paused: list[str] = []
+    monkeypatch.setattr(app_module.object_bridge, "pause", paused.append)
+
+    assert api.pause_job(record.job_id) == {"ok": True}
+    assert paused == ["run-object"]
+
+
+def test_pause_job_stops_a_sweep_at_a_resumable_point() -> None:
+    """A sweep Pause request sets its cooperative checkpoint event."""
+    api = Api()
+    record, _ = api._jobs.admit("sweep", 1, 1)
+    assert record is not None
+    record.cancel_event = threading.Event()
+
+    assert api.pause_job(record.job_id) == {"ok": True}
+    assert record.cancel_event.is_set()
 
 
 def test_admission_retains_effective_priority_in_job_snapshots() -> None:
@@ -883,3 +976,102 @@ def test_an_annotation_after_coalesced_progress_is_applied() -> None:
         "snapshotRequests": 1,
         "lastSequence": 2,
     }
+
+
+@pytest.mark.gui
+def test_memory_warning_names_jobs_and_pause_button_refreshes_the_banner() -> None:
+    """The page names each pressured job and wires Pause to the API."""
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(
+                """
+                window.__fimMemoryWarningReady = false;
+                (async () => {
+                    await window.fim.jobs.refreshMemoryWarning();
+                    window.__fimMemoryStatus = {
+                        ok: true,
+                        warning: true,
+                        availableBytes: 1024 ** 3,
+                        reservedBytes: 2 * 1024 ** 3,
+                        jobs: [
+                            {jobId: "run-1", name: "Long run", kind: "run"},
+                            {jobId: "sweep-2", name: "Migration sweep",
+                             kind: "sweep"}
+                        ]
+                    };
+                    window.__fimPausedJobs = [];
+                    window.pywebview.api.get_memory_status =
+                        () => Promise.resolve(window.__fimMemoryStatus);
+                    window.pywebview.api.pause_job = (jobId) => {
+                        window.__fimPausedJobs.push(jobId);
+                        window.__fimMemoryStatus = {
+                            ok: true, warning: false, jobs: []
+                        };
+                        return Promise.resolve({ok: true});
+                    };
+                    await window.fim.jobs.refreshMemoryWarning();
+                    window.__fimMemoryWarningReady = true;
+                })();
+                """
+            )
+            deadline = time.monotonic() + _OUTCOME_TIMEOUT_SECONDS
+            initial: dict[str, Any] | None = None
+            while time.monotonic() < deadline:
+                initial = window.evaluate_js(
+                    """window.__fimMemoryWarningReady ? ({
+                        hidden:
+                            document.getElementById('memory-warning-banner').hidden,
+                        jobs: Array.from(
+                            document.querySelectorAll('.memory-warning-job')
+                        ).map((item) => ({
+                            name: item.querySelector('span').textContent,
+                            label: item.querySelector('button')
+                                .getAttribute('aria-label'),
+                            text: item.querySelector('button').textContent
+                        }))
+                    }) : null"""
+                )
+                if initial is not None:
+                    break
+                time.sleep(0.05)
+            if initial is None:
+                raise TimeoutError("memory warning did not render")
+            window.evaluate_js(
+                "document.querySelector('.memory-warning-job button').click();"
+            )
+            deadline = time.monotonic() + _OUTCOME_TIMEOUT_SECONDS
+            after: dict[str, Any] | None = None
+            while time.monotonic() < deadline:
+                after = window.evaluate_js(
+                    """({
+                        paused: window.__fimPausedJobs,
+                        hidden:
+                            document.getElementById('memory-warning-banner').hidden
+                    })"""
+                )
+                if after["paused"] and after["hidden"]:
+                    break
+                time.sleep(0.05)
+            outcome.put({"initial": initial, "after": after})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    state = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert state["initial"] == {
+        "hidden": False,
+        "jobs": [
+            {"name": "Long run", "label": "Pause Long run", "text": "Pause"},
+            {
+                "name": "Migration sweep",
+                "label": "Pause Migration sweep",
+                "text": "Pause",
+            },
+        ],
+    }
+    assert state["after"] == {"paused": ["run-1"], "hidden": True}

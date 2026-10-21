@@ -217,6 +217,11 @@
     <p id="startup-warning-text"></p>
     <button type="button" id="startup-warning-dismiss">Dismiss</button>
   </div>
+  <div id="memory-warning-banner" class="banner" role="alert"
+       aria-live="assertive" hidden>
+    <p id="memory-warning-text"></p>
+    <ul id="memory-warning-jobs"></ul>
+  </div>
 
   <!-- The unified run view (unified-run-view design §3.2, §8 Phase E):
        one screen, one shared canvas/selector/scrubber, in exactly one
@@ -2448,6 +2453,21 @@
         </label>
         <input type="number" id="settings-reserve-value" min="0" step="1">
         <p class="hint" id="settings-worker-budget"></p>
+      </div>
+      <div class="field">
+        <label for="settings-memory-reserve-mode">Keep memory free</label>
+        <select id="settings-memory-reserve-mode">
+          <option value="auto">Automatic</option>
+          <option value="gib">GiB</option>
+          <option value="percent">Percentage</option>
+        </select>
+        <label for="settings-memory-reserve-value"
+               id="settings-memory-reserve-value-label">Memory to keep free</label>
+        <input type="number" id="settings-memory-reserve-value"
+               min="0" step="1">
+        <p class="hint" id="settings-memory-reserve-hint">
+          Automatic keeps the larger of 2 GiB and 10% of physical memory free.
+        </p>
       </div>
     </fieldset>
 

@@ -10,6 +10,7 @@ never held while waiting for a worker or delivering to the page.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import queue
 import secrets
@@ -23,10 +24,99 @@ from multiprocessing.connection import Client, Connection, Listener
 from pathlib import Path
 from typing import IO, Any, Literal, Protocol
 
+import psutil
+
 ViewLevel = Literal["full", "summary"]
 JobKind = Literal["run", "saved-run", "sweep"]
 JobPriority = Literal["normal", "lower", "lowest"]
+MemoryReserveMode = Literal["auto", "gib", "percent"]
 MAX_RESERVED_PERCENT = 100
+GIB_BYTES = 1024**3
+DEFAULT_MEMORY_RESERVE_BYTES = 2 * GIB_BYTES
+DEFAULT_MEMORY_RESERVE_PERCENT = 10
+DEFAULT_CHILD_MEMORY_ESTIMATE_BYTES = 256 * 1024**2
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryReading:
+    """Physical memory available to the system at one instant."""
+
+    total_bytes: int
+    available_bytes: int
+
+
+class MemoryReadError(RuntimeError):
+    """A physical-memory reading could not be obtained."""
+
+
+def read_memory() -> MemoryReading:
+    """Read physical memory totals using psutil's portable API."""
+    try:
+        reading = psutil.virtual_memory()
+    except (OSError, psutil.Error) as error:
+        raise MemoryReadError(f"could not read physical memory: {error}") from error
+    return MemoryReading(reading.total, reading.available)
+
+
+def memory_reserve_bytes(
+    total_bytes: int,
+    mode: MemoryReserveMode = "auto",
+    value: int = 0,
+) -> int:
+    """Resolve the configured memory reserve, rounding percentages upward."""
+    if isinstance(total_bytes, bool) or not isinstance(total_bytes, int):
+        raise ValueError("total_bytes must be an integer")
+    if total_bytes < 1:
+        raise ValueError("total_bytes must be at least one")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("memory reserve value must be a non-negative integer")
+    if mode == "auto":
+        if value != 0:
+            raise ValueError("automatic memory reserve does not take a value")
+        percentage = (
+            total_bytes * DEFAULT_MEMORY_RESERVE_PERCENT + MAX_RESERVED_PERCENT - 1
+        ) // MAX_RESERVED_PERCENT
+        return max(DEFAULT_MEMORY_RESERVE_BYTES, percentage)
+    if mode == "gib":
+        return value * GIB_BYTES
+    if mode == "percent" and value <= MAX_RESERVED_PERCENT:
+        return (total_bytes * value + MAX_RESERVED_PERCENT - 1) // MAX_RESERVED_PERCENT
+    if mode == "percent":
+        raise ValueError(
+            f"memory reserve percentage cannot exceed {MAX_RESERVED_PERCENT}"
+        )
+    raise ValueError("memory reserve mode must be auto, gib, or percent")
+
+
+def child_memory_estimate_bytes(active_jobs: Sequence[JobRecord]) -> int:
+    """Use the largest measured child RSS, or the documented first-job estimate."""
+    measurements: list[int] = []
+    for job in active_jobs:
+        child = job.child
+        if child is None or child.process.poll() is not None:
+            continue
+        try:
+            measurements.append(psutil.Process(child.process.pid).memory_info().rss)
+        except (psutil.AccessDenied, psutil.NoSuchProcess) as error:
+            logger.debug(
+                "could not measure active GUI worker memory for %s: %s",
+                job.job_id,
+                error,
+            )
+    return max(measurements, default=DEFAULT_CHILD_MEMORY_ESTIMATE_BYTES)
+
+
+def estimate_job_memory_bytes(
+    cores: int, child_bytes: int, vector_block_bytes: int = 0
+) -> int:
+    """Estimate added memory for a job's worker slots and initial vector blocks."""
+    if isinstance(cores, bool) or not isinstance(cores, int) or cores < 1:
+        raise ValueError("cores must be a positive integer")
+    if child_bytes < 0 or vector_block_bytes < 0:
+        raise ValueError("memory estimates cannot be negative")
+    return cores * (child_bytes + vector_block_bytes)
 
 
 class WindowEvaluator(Protocol):
@@ -125,6 +215,7 @@ class JobRecord:
     kind: JobKind
     cores: int
     priority: JobPriority = "lower"
+    display_name: str | None = None
     request: dict[str, Any] = field(default_factory=dict)
     cancel_event: threading.Event | None = None
     output_reservation: Path | None = None

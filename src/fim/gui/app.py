@@ -134,7 +134,7 @@ from fim.persistence.manifest import (
 from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.run_lifecycle import LifecycleError
 from fim.persistence.run_metadata import replace_run_metadata, run_metadata_path
-from fim.persistence.run_objects import read_run_object
+from fim.persistence.run_objects import RunObject, read_run_object
 from fim.persistence.saved_run import replicate_output_directory
 from fim.reanalyze import (
     read_persisted_convergence_history,
@@ -2137,6 +2137,7 @@ class Api:
         study_id: str | None = None,
         run_name: str = "",
         run_description: str = "",
+        memory_confirmed: bool = False,
     ) -> dict[str, Any]:
         """Validate the form, then start a run pushing live progress to the page.
 
@@ -2225,7 +2226,13 @@ class Api:
         job_id = job.job_id
         started = False
         try:
-            result = self._start_claimed_run(values, study_id, run_details, job_id)
+            result = self._start_claimed_run(
+                values,
+                study_id,
+                run_details,
+                job_id,
+                memory_confirmed=memory_confirmed,
+            )
             started = bool(result["ok"]) and not result.get("reused", False)
             if result["ok"] and not result.get("reused", False):
                 result["jobId"] = job_id
@@ -2243,6 +2250,8 @@ class Api:
         study_id: str | None,
         run_details: RunDetails,
         job_id: str,
+        *,
+        memory_confirmed: bool,
     ) -> dict[str, Any]:
         """Do the work of `start_run` once it holds the run claim.
 
@@ -2296,11 +2305,17 @@ class Api:
             return reused
         job = self._jobs.active_job(job_id)
         assert job is not None
-        job.previous_version_run = next(
-            iter(groups.find_stale_run_directories(run_id, fim_version)), None
+        memory_response = self._memory_admission_response(
+            params, job.cores, confirmed=memory_confirmed
         )
-        if _active_window() is None:
-            return {"ok": False, "message": "no active window"}
+        if memory_response is None:
+            job.previous_version_run = next(
+                iter(groups.find_stale_run_directories(run_id, fim_version)), None
+            )
+            if _active_window() is None:
+                memory_response = {"ok": False, "message": "no active window"}
+        if memory_response is not None:
+            return memory_response
         try:
             saved, problem = object_bridge.save(
                 values,
@@ -2317,8 +2332,9 @@ class Api:
             job_id=job_id,
             study_id=study_id,
             run_details=run_details,
+            memory_confirmed=True,
         )
-        if not result["ok"]:
+        if not result["ok"] and not result.get("needsMemoryConfirmation", False):
             try:
                 object_bridge.delete(saved.object_id)
             except (LifecycleError, OSError) as error:
@@ -2328,6 +2344,75 @@ class Api:
                     error,
                 )
         return result
+
+    @staticmethod
+    def _initial_vector_block_memory_bytes(params: SimulationParams) -> int:
+        """Estimate Backend V's initial dense block when its shape is known."""
+        if (
+            params.engine_backend != "generational-vector"
+            or params.initial_frequencies is not None
+        ):
+            return 0
+        from fim.model.locus import finite_allele_capacity  # noqa: PLC0415
+        from fim.model.vector_block import (  # noqa: PLC0415
+            MINIMUM_WIDTH,
+            estimated_block_bytes,
+        )
+
+        finite = params.mutation_model == "finite_alleles"
+        if finite:
+            width = max(finite_allele_capacity(locus.length) for locus in params.loci)
+        else:
+            target_width = 2 * params.initial_allele_count
+            width = max(
+                MINIMUM_WIDTH,
+                1 << (target_width - 1).bit_length(),
+            )
+        return estimated_block_bytes(len(params.loci), params.d, width, finite=finite)
+
+    def _memory_admission_response(
+        self,
+        params: SimulationParams,
+        cores: int,
+        *,
+        confirmed: bool,
+    ) -> dict[str, Any] | None:
+        """Ask before starting a job whose estimate would cross the reserve."""
+        if confirmed:
+            return None
+        try:
+            reading = jobs.read_memory()
+            reserve = jobs.memory_reserve_bytes(
+                reading.total_bytes,
+                self._preferences.memory_reserve_mode,
+                self._preferences.memory_reserve_value,
+            )
+        except (jobs.MemoryReadError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        estimate = jobs.estimate_job_memory_bytes(
+            cores,
+            jobs.child_memory_estimate_bytes(self._jobs.active_jobs()),
+            self._initial_vector_block_memory_bytes(params),
+        )
+        if reading.available_bytes - estimate >= reserve:
+            return None
+
+        def gibibytes(value: int) -> str:
+            return f"{value / jobs.GIB_BYTES:.1f} GiB"
+
+        return {
+            "ok": False,
+            "needsMemoryConfirmation": True,
+            "availableMemoryBytes": reading.available_bytes,
+            "estimatedJobMemoryBytes": estimate,
+            "reservedMemoryBytes": reserve,
+            "message": (
+                f"Available memory is {gibibytes(reading.available_bytes)}. "
+                f"This job is estimated to use {gibibytes(estimate)}, and "
+                f"your reserve is {gibibytes(reserve)}. Starting may use "
+                "memory you chose to keep free. Start anyway?"
+            ),
+        }
 
     def _worker_budget(self) -> int:
         """Return the user-adjusted worker budget for newly admitted jobs."""
@@ -2824,11 +2909,11 @@ class Api:
 
     @_log_bridge_call
     def pause_run(self, job_id: str | None = None) -> dict[str, Any]:
-        """Ask the saved run now executing to checkpoint and pause.
+        """Ask the run now executing to checkpoint and pause.
 
-        Only a saved run (`start_run_object`) can pause; an ordinary run
-        has no checkpoint to resume from. The worker acknowledges with a
-        pushed `fim.onRunPaused(generation)`.
+        GUI-started runs are Run objects, so both new and saved runs can
+        resume from the checkpoint. The worker acknowledges with a pushed
+        `fim.onRunPaused(generation)`.
 
         Returns:
             `{"ok": True}`, or `{"ok": False, "message": ...}`.
@@ -2842,6 +2927,19 @@ class Api:
         except LifecycleError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True}
+
+    @_log_bridge_call
+    def pause_job(self, job_id: str) -> dict[str, Any]:
+        """Pause one run or stop a sweep at its next resumable point."""
+        record = self._jobs.active_job(job_id)
+        if record is None:
+            return {"ok": False, "message": "job is no longer active"}
+        if record.kind == "sweep":
+            if record.cancel_event is None:
+                return {"ok": False, "message": "sweep cannot be paused"}
+            record.cancel_event.set()
+            return {"ok": True}
+        return self.pause_run(job_id)
 
     def _active_run_record(self, job_id: str | None) -> jobs.JobRecord | None:
         """Resolve a run by id, or only when there is exactly one active run."""
@@ -2956,7 +3054,9 @@ class Api:
         }
 
     @_log_bridge_call
-    def start_run_object(self, object_id: str) -> dict[str, Any]:
+    def start_run_object(
+        self, object_id: str, memory_confirmed: bool = False
+    ) -> dict[str, Any]:
         """Start a planned saved run, or resume a paused or stopped one.
 
         Pushes the same `fim.onRun*` or `fim.onBatch*` calls `start_run` does,
@@ -2976,7 +3076,11 @@ class Api:
             return {"ok": False, "message": refusal}
         started = False
         try:
-            result = self._start_claimed_run_object(object_id, job_id=job.job_id)
+            result = self._start_claimed_run_object(
+                object_id,
+                job_id=job.job_id,
+                memory_confirmed=memory_confirmed,
+            )
             started = bool(result["ok"])
             return result
         finally:
@@ -2991,6 +3095,7 @@ class Api:
         job_id: str,
         study_id: str | None = None,
         run_details: RunDetails | None = None,
+        memory_confirmed: bool = False,
     ) -> dict[str, Any]:
         """Do the work of `start_run_object` once it holds the run claim.
 
@@ -3016,6 +3121,38 @@ class Api:
             return {"ok": False, "message": str(error)}
         job = self._jobs.active_job(job_id)
         assert job is not None
+        memory_response = self._memory_admission_response(
+            params, job.cores, confirmed=memory_confirmed
+        )
+        if memory_response is not None:
+            return memory_response
+        return self._start_prepared_run_object(
+            object_id=object_id,
+            job_id=job_id,
+            run_object=run_object,
+            params=params,
+            window=window,
+            effective_study_id=effective_study_id,
+            run_details=run_details,
+        )
+
+    def _start_prepared_run_object(
+        self,
+        *,
+        object_id: str,
+        job_id: str,
+        run_object: RunObject,
+        params: SimulationParams,
+        window: _EvaluatesJs,
+        effective_study_id: str | None,
+        run_details: RunDetails | None,
+    ) -> dict[str, Any]:
+        """Start a validated Run object after its memory budget is accepted."""
+        job = self._jobs.active_job(job_id)
+        assert job is not None
+        job.display_name = (run_object.labels.name or "").strip() or (
+            f"Run {object_id[:8]}"
+        )
         if run_details is None:
             job.previous_version_run = None
             run_details = RunDetails(
@@ -5487,23 +5624,65 @@ class Api:
             "usableCores": usable_cores,
             "reservedCores": reserved_cores,
             "workerBudget": self._worker_budget(),
+            "memoryReserveMode": self._preferences.memory_reserve_mode,
+            "memoryReserveValue": self._preferences.memory_reserve_value,
         }
 
     @_log_bridge_call
     def set_background_work_settings(
-        self, run_priority: str, reserve_mode: str, reserve_value: int
+        self,
+        run_priority: str,
+        reserve_mode: str,
+        reserve_value: int,
+        memory_reserve_mode: str = "auto",
+        memory_reserve_value: int = 0,
     ) -> dict[str, Any]:
-        """Save priority and CPU reserve for jobs admitted from this point on."""
+        """Save priority and CPU/memory reserves for jobs started afterward."""
         try:
             self._preferences = self._preferences.with_background_work_settings(
                 run_priority=run_priority,
                 reserve_mode=reserve_mode,
                 reserve_value=reserve_value,
+                memory_reserve_mode=memory_reserve_mode,
+                memory_reserve_value=memory_reserve_value,
             )
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True, **self.get_background_work_settings()}
+
+    @_log_bridge_call
+    def get_memory_status(self) -> dict[str, Any]:
+        """Return current memory availability and pause controls when needed."""
+        active_jobs = self._jobs.active_jobs()
+        if not active_jobs:
+            return {"ok": True, "warning": False, "jobs": []}
+        try:
+            reading = jobs.read_memory()
+            reserve = jobs.memory_reserve_bytes(
+                reading.total_bytes,
+                self._preferences.memory_reserve_mode,
+                self._preferences.memory_reserve_value,
+            )
+        except (jobs.MemoryReadError, ValueError) as error:
+            return {"ok": False, "message": str(error), "jobs": []}
+        warning = reading.available_bytes < reserve
+        warning_jobs = [
+            {
+                "jobId": job.job_id,
+                "name": job.display_name or f"{job.kind.capitalize()} {job.job_id[:8]}",
+                "kind": job.kind,
+            }
+            for job in active_jobs
+        ]
+        return {
+            "ok": True,
+            "warning": warning,
+            "availableBytes": reading.available_bytes,
+            "totalBytes": reading.total_bytes,
+            "reservedBytes": reserve,
+            "jobs": warning_jobs if warning else [],
+        }
 
     @_log_bridge_call
     def set_pairwise_max_demes(self, max_demes: int) -> dict[str, Any]:
@@ -6375,6 +6554,7 @@ class Api:
         request: dict[str, Any],
         study_id: str | None = None,
         confirmed: bool = False,
+        memory_confirmed: bool = False,
     ) -> dict[str, Any]:
         """Run the Configure form as a sweep, into a Study, on a background thread.
 
@@ -6413,20 +6593,28 @@ class Api:
                         ),
                     }
                 at_once, max_workers = self._sweep_run_options(values, request)
+                params = SimulationParams.from_mapping(spec.base)
                 _chosen_points, _workers_per_point, required, execution_cores = (
                     self._sweep_required_cores(
-                        SimulationParams.from_mapping(spec.base),
+                        params,
                         len(plan.points),
                         at_once,
                         max_workers,
                     )
                 )
                 remaining = self._remaining_worker_cores()
+                admission_refusal: dict[str, Any] | None
                 if required > remaining:
-                    return {
+                    admission_refusal = {
                         "ok": False,
                         "message": self._capacity_refusal(required, remaining),
                     }
+                else:
+                    admission_refusal = self._memory_admission_response(
+                        params, required, confirmed=memory_confirmed
+                    )
+                if admission_refusal is not None:
+                    return admission_refusal
                 job, refusal = self._admit_sweep(required)
                 if refusal is not None or job is None:
                     return {"ok": False, "message": refusal}
@@ -6434,6 +6622,7 @@ class Api:
                     study = attach_sweep_to_study(study_id, spec, plan)
                 else:
                     study = create_sweep_study(spec, plan, _default_sweep_name(spec))
+                job.display_name = study.name
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
             assert job is not None
@@ -6467,6 +6656,7 @@ class Api:
         retry_failed: bool = False,
         points_at_once: int | None = None,
         rerun: bool = False,
+        memory_confirmed: bool = False,
     ) -> dict[str, Any]:
         """Run the points of an existing sweep Study that are still missing.
 
@@ -6494,6 +6684,7 @@ class Api:
             retry_failed=retry_failed,
             points_at_once=points_at_once,
             rerun=rerun,
+            memory_confirmed=memory_confirmed,
         )
 
     def _resume_sweep_with_window(
@@ -6504,6 +6695,7 @@ class Api:
         retry_failed: bool,
         points_at_once: int | None,
         rerun: bool,
+        memory_confirmed: bool,
     ) -> dict[str, Any]:
         """Admit and start one Study's pending sweep work."""
         started = False
@@ -6529,9 +6721,10 @@ class Api:
             saved = self._merge_default_run_settings({})
             spec = sweep_spec_of(study)
             max_workers = _parse_max_workers(saved.get("max_workers", ""))
+            params = SimulationParams.from_mapping(spec.base)
             _chosen_points, _workers_per_point, required, execution_cores = (
                 self._sweep_required_cores(
-                    SimulationParams.from_mapping(spec.base),
+                    params,
                     pending_points,
                     points_at_once,
                     max_workers,
@@ -6543,9 +6736,15 @@ class Api:
                     "ok": False,
                     "message": self._capacity_refusal(required, remaining),
                 }
+            memory_response = self._memory_admission_response(
+                params, required, confirmed=memory_confirmed
+            )
+            if memory_response is not None:
+                return memory_response
             job, refusal = self._admit_sweep(required)
             if refusal is not None or job is None:
                 return {"ok": False, "message": refusal}
+            job.display_name = study.name
             self._start_sweep_thread(
                 window,
                 study_id,

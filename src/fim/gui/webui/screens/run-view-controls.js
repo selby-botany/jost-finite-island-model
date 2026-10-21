@@ -376,11 +376,9 @@ async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
         documentState.startRefusal = null;
         window.fim.workspace.notifyChange();
     }
-    const started = await window.pywebview.api.start_run(
-        values,
-        studyId,
-        runName,
-        runDescription
+    const started = await window.fim.jobs.startWithMemoryConfirmation(
+        "start_run",
+        [values, studyId, runName, runDescription]
     );
     if (!started.ok) {
         // Rare (an output-directory collision retry timing out, or a

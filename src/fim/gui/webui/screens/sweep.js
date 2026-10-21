@@ -1284,11 +1284,9 @@ window.fim.runConfiguredSweep = async function runConfiguredSweep(
     documentState.jobKind = "sweep";
     documentState.jobState = "starting";
     window.fim.workspace.notifyChange();
-    const result = await window.pywebview.api.start_sweep(
-        values,
-        config.request,
-        studyId,
-        confirmationArmed
+    const result = await window.fim.jobs.startWithMemoryConfirmation(
+        "start_sweep",
+        [values, config.request, studyId, confirmationArmed]
     );
     if (window.fim.workspace.get(tabId) !== documentState) {
         return;

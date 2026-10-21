@@ -3616,12 +3616,14 @@ def test_background_work_settings_persist_and_apply_to_new_jobs_only(
         "usableCores": 5,
         "reservedCores": 0,
         "workerBudget": 5,
+        "memoryReserveMode": "auto",
+        "memoryReserveValue": 0,
     }
     first, refusal = api._admit_run()
     assert refusal is None
     assert first is not None
 
-    updated = api.set_background_work_settings("lowest", "percent", 34)
+    updated = api.set_background_work_settings("lowest", "percent", 34, "gib", 3)
 
     assert updated == {
         "ok": True,
@@ -3631,6 +3633,8 @@ def test_background_work_settings_persist_and_apply_to_new_jobs_only(
         "usableCores": 5,
         "reservedCores": 2,
         "workerBudget": 3,
+        "memoryReserveMode": "gib",
+        "memoryReserveValue": 3,
     }
     assert first.priority == "lower"
     api._release_run_claim(first.job_id)
@@ -3649,9 +3653,122 @@ def test_background_work_settings_persist_and_apply_to_new_jobs_only(
         ("lower", "cores", -1),
         ("lower", "percent", 101),
         ("lower", "invalid", 0),
+        ("lower", "cores", 0, "percent", 101),
     ):
         result = api.set_background_work_settings(*bad)  # type: ignore[arg-type]
         assert result["ok"] is False
+
+
+@pytest.mark.parametrize(
+    ("available_bytes", "warning"),
+    [
+        (2 * jobs_module.GIB_BYTES + 1, False),
+        (2 * jobs_module.GIB_BYTES, False),
+        (2 * jobs_module.GIB_BYTES - 1, True),
+    ],
+)
+def test_memory_status_warns_only_below_the_reserve(
+    available_bytes: int,
+    warning: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The warning boundary is strict and names every active job."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    first, _ = api._jobs.admit("run", 1, 2)
+    second, _ = api._jobs.admit("sweep", 1, 2)
+    assert first is not None
+    assert second is not None
+    first.display_name = "Long run"
+    second.display_name = "Migration sweep"
+    monkeypatch.setattr(
+        jobs_module,
+        "read_memory",
+        lambda: jobs_module.MemoryReading(16 * jobs_module.GIB_BYTES, available_bytes),
+    )
+
+    status = api.get_memory_status()
+
+    assert status["ok"] is True
+    assert status["warning"] is warning
+    assert status["jobs"] == (
+        [
+            {"jobId": first.job_id, "name": "Long run", "kind": "run"},
+            {"jobId": second.job_id, "name": "Migration sweep", "kind": "sweep"},
+        ]
+        if warning
+        else []
+    )
+
+
+def test_memory_status_reports_read_failures_for_active_jobs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unavailable memory reading is explicit rather than success-shaped."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    record, _ = api._jobs.admit("run", 1, 1)
+    assert record is not None
+
+    def fail_reading() -> jobs_module.MemoryReading:
+        raise jobs_module.MemoryReadError("memory probe failed")
+
+    monkeypatch.setattr(jobs_module, "read_memory", fail_reading)
+
+    assert api.get_memory_status() == {
+        "ok": False,
+        "message": "memory probe failed",
+        "jobs": [],
+    }
+
+
+def test_memory_admission_requires_confirmation_below_the_reserved_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The estimate is confirmed at the threshold and refused one byte below."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    params = SimulationParams.from_mapping(
+        form_values_to_payload(_submittable_starter())
+    )
+    monkeypatch.setattr(api, "_initial_vector_block_memory_bytes", lambda _params: 0)
+    estimate = jobs_module.DEFAULT_CHILD_MEMORY_ESTIMATE_BYTES
+    available_bytes = 2 * jobs_module.GIB_BYTES + estimate
+    monkeypatch.setattr(
+        jobs_module,
+        "read_memory",
+        lambda: jobs_module.MemoryReading(16 * jobs_module.GIB_BYTES, available_bytes),
+    )
+
+    assert api._memory_admission_response(params, 1, confirmed=False) is None
+
+    monkeypatch.setattr(
+        jobs_module,
+        "read_memory",
+        lambda: jobs_module.MemoryReading(
+            16 * jobs_module.GIB_BYTES, available_bytes - 1
+        ),
+    )
+    response = api._memory_admission_response(params, 1, confirmed=False)
+    assert response is not None
+    assert response["needsMemoryConfirmation"] is True
+    assert response["estimatedJobMemoryBytes"] == estimate
+    assert response["reservedMemoryBytes"] == 2 * jobs_module.GIB_BYTES
+
+
+def test_confirmed_memory_admission_does_not_probe_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Confirmation skips a repeated threshold prompt, not other launch guards."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    params = SimulationParams.from_mapping(
+        form_values_to_payload(_submittable_starter())
+    )
+
+    def fail_reading() -> jobs_module.MemoryReading:
+        raise AssertionError("confirmed launch must not re-probe memory")
+
+    monkeypatch.setattr(jobs_module, "read_memory", fail_reading)
+
+    assert api._memory_admission_response(params, 1, confirmed=True) is None
 
 
 def test_the_shown_set_never_reaches_computation_or_saved_results() -> None:

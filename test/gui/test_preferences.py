@@ -638,12 +638,14 @@ def test_reserved_cores_rejects_invalid_values(value: object) -> None:
 
 
 def test_background_work_settings_round_trip(tmp_path: Path) -> None:
-    """Priority and percentage reserve persist and clear the alternate mode."""
+    """Priority and CPU/memory reserve settings survive reloads."""
     path = tmp_path / "preferences.json"
     original = GuiPreferences().with_background_work_settings(
         run_priority="lowest",
         reserve_mode="percent",
         reserve_value=34,
+        memory_reserve_mode="percent",
+        memory_reserve_value=25,
     )
     save_preferences(path, original)
 
@@ -654,6 +656,8 @@ def test_background_work_settings_round_trip(tmp_path: Path) -> None:
     assert loaded.run_priority == "lowest"
     assert loaded.reserved_cores == 0
     assert loaded.reserved_cores_percent == 34
+    assert loaded.memory_reserve_mode == "percent"
+    assert loaded.memory_reserve_value == 25
     assert "run_priority" in loaded.to_dict()["gui"]
     assert "reserved_cores" not in loaded.to_dict()["gui"]
 
@@ -661,9 +665,13 @@ def test_background_work_settings_round_trip(tmp_path: Path) -> None:
         run_priority="normal",
         reserve_mode="cores",
         reserve_value=2,
+        memory_reserve_mode="gib",
+        memory_reserve_value=4,
     )
     assert whole_cores.reserved_cores == 2
     assert whole_cores.reserved_cores_percent is None
+    assert whole_cores.memory_reserve_mode == "gib"
+    assert whole_cores.memory_reserve_value == 4
 
 
 @pytest.mark.parametrize(
@@ -674,6 +682,9 @@ def test_background_work_settings_round_trip(tmp_path: Path) -> None:
         ("reserved_cores_percent", True),
         ("run_priority", "urgent"),
         ("run_priority", 1),
+        ("memory_reserve_mode", "invalid"),
+        ("memory_reserve_value", True),
+        ("memory_reserve_value", -1),
     ],
 )
 def test_background_work_preferences_reject_invalid_values(
@@ -707,6 +718,24 @@ def test_background_work_settings_reject_invalid_updates(
             run_priority=priority,
             reserve_mode=mode,
             reserve_value=reserve,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    ("mode", "value"),
+    [("auto", 1), ("invalid", 0), ("percent", 101), ("gib", -1)],
+)
+def test_background_work_settings_reject_invalid_memory_reserve_updates(
+    mode: str, value: int
+) -> None:
+    """Memory reserve mode and value are validated together."""
+    with pytest.raises(ValueError):
+        GuiPreferences().with_background_work_settings(
+            run_priority="lower",
+            reserve_mode="cores",
+            reserve_value=0,
+            memory_reserve_mode=mode,
+            memory_reserve_value=value,
         )
 
 

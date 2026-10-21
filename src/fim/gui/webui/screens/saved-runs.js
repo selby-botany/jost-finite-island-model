@@ -411,7 +411,10 @@ async function beginSavedRun(run, tabId = window.fim.workspace.selectedId()) {
     if (selected) {
         renderPauseRunButton();
     }
-    const started = await window.pywebview.api.start_run_object(run.objectId);
+    const started = await window.fim.jobs.startWithMemoryConfirmation(
+        "start_run_object",
+        [run.objectId]
+    );
     if (!started.ok) {
         if (state) {
             state.activeSavedRunId = null;

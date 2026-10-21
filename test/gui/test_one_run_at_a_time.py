@@ -387,7 +387,9 @@ def test_a_start_that_starts_nothing_releases_the_claim(
 ) -> None:
     """Reusing a computed run, or failing to start one, leaves no run in flight."""
 
-    def started_nothing(self: Api, *_arguments: Any) -> dict[str, Any]:
+    def started_nothing(
+        self: Api, *_arguments: Any, **_keywords: Any
+    ) -> dict[str, Any]:
         """Return `outcome`, as `start_run` would without starting a worker."""
         del self
         return outcome
