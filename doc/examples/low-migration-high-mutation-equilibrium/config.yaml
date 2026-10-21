@@ -1,0 +1,81 @@
+name: Low migration, higher mutation
+description: >-
+  The same five nearly-isolated islands and the same migration rate as
+  Dear-Nolan low migration, with mutation raised so D sits near 1
+  instead of near 0.
+class: statistics-and-convergence
+_read_only: true  # marks the shipped copy read-only; delete it in your own copy
+N: 100
+ploidy: haploid
+d: 5
+m: 0.0001
+mu: 0.0006
+seed: 20260825
+loci:
+  - locus_id: 1
+    length: 200
+  - locus_id: 2
+    length: 200
+  - locus_id: 3
+    length: 200
+  - locus_id: 4
+    length: 200
+  - locus_id: 5
+    length: 200
+  - locus_id: 6
+    length: 200
+  - locus_id: 7
+    length: 200
+  - locus_id: 8
+    length: 200
+  - locus_id: 9
+    length: 200
+  - locus_id: 10
+    length: 200
+  - locus_id: 11
+    length: 200
+  - locus_id: 12
+    length: 200
+  - locus_id: 13
+    length: 200
+  - locus_id: 14
+    length: 200
+  - locus_id: 15
+    length: 200
+  - locus_id: 16
+    length: 200
+  - locus_id: 17
+    length: 200
+  - locus_id: 18
+    length: 200
+  - locus_id: 19
+    length: 200
+  - locus_id: 20
+    length: 200
+  - locus_id: 21
+    length: 200
+  - locus_id: 22
+    length: 200
+  - locus_id: 23
+    length: 200
+  - locus_id: 24
+    length: 200
+  - locus_id: 25
+    length: 200
+  - locus_id: 26
+    length: 200
+  - locus_id: 27
+    length: 200
+  - locus_id: 28
+    length: 200
+  - locus_id: 29
+    length: 200
+  - locus_id: 30
+    length: 200
+initial_allele_count: 2
+initial_concentration: 1.0
+deme_weighting: size
+engine_backend: auto
+convergence_statistic: D
+precision: 0.01
+max_generations: 1000000000   # far above any need: the run stops when it converges

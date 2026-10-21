@@ -1,0 +1,220 @@
+{
+  "artifacts": {
+    "replicate-001": {
+      "bytes": 4102,
+      "sha256": "7bc156778400d0b4552d68fb4f3a7a1858a3ebf6153f8dd20b45aafe682dfe32"
+    },
+    "replicate-002": {
+      "bytes": 4101,
+      "sha256": "4ee5551f8bc78b350cd97f02b87ae2143d8a2a906662ecf270a68f365a37733c"
+    },
+    "replicate-003": {
+      "bytes": 4102,
+      "sha256": "267c89a3b78473418fa6662415d86a1c21df55d7745822008af166c80516291b"
+    },
+    "replicate-004": {
+      "bytes": 4101,
+      "sha256": "8a5d78c79c82256e34d6ee7e05cae63e436ddd392c45c2222d85ec96502e2da9"
+    },
+    "replicate-005": {
+      "bytes": 4101,
+      "sha256": "68e6b912aecd1e44916ea31cbc2d08d6a780fcf365eaffc0d7a8123249cf5118"
+    },
+    "replicate-006": {
+      "bytes": 4102,
+      "sha256": "8352d39dee4e57e0c2994e6a0da4a09910218687e5a8799482a09849db802894"
+    },
+    "replicate-007": {
+      "bytes": 4101,
+      "sha256": "7fdd2935727f70f2bbc028df215aff0397624fabea453f9fdff498c94f9c6134"
+    },
+    "replicate-008": {
+      "bytes": 4101,
+      "sha256": "e858f3a708b44c0c1a9adad7ea20e2cfbf832f5ad5cf8f795500a46ee846643e"
+    },
+    "replicate-009": {
+      "bytes": 4098,
+      "sha256": "f9676e4ad89475fd80d7b83b1256d313a83a59943b27c5ef583d744386c7475c"
+    },
+    "replicate-010": {
+      "bytes": 4098,
+      "sha256": "03bc1c7a80acedef4d14c270baf48f2e8855daec7de69d73b93577ce2eac953c"
+    },
+    "summary": {
+      "bytes": 5404,
+      "sha256": "ba3359aa5af814c52900b85a4b39c102143f05ee43343d6a7a5b368b69c27213"
+    }
+  },
+  "ended_at": "2026-10-21T22:14:29.437895Z",
+  "parameters": {
+    "N": 100,
+    "_read_only": true,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "confidence": 0.95,
+    "convergence_burn_in": 4243,
+    "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
+    "convergence_statistic": "D",
+    "d": 5,
+    "deme_weighting": "size",
+    "engine_backend": "auto",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 200,
+        "locus_id": 1
+      },
+      {
+        "length": 200,
+        "locus_id": 2
+      },
+      {
+        "length": 200,
+        "locus_id": 3
+      },
+      {
+        "length": 200,
+        "locus_id": 4
+      },
+      {
+        "length": 200,
+        "locus_id": 5
+      },
+      {
+        "length": 200,
+        "locus_id": 6
+      },
+      {
+        "length": 200,
+        "locus_id": 7
+      },
+      {
+        "length": 200,
+        "locus_id": 8
+      },
+      {
+        "length": 200,
+        "locus_id": 9
+      },
+      {
+        "length": 200,
+        "locus_id": 10
+      },
+      {
+        "length": 200,
+        "locus_id": 11
+      },
+      {
+        "length": 200,
+        "locus_id": 12
+      },
+      {
+        "length": 200,
+        "locus_id": 13
+      },
+      {
+        "length": 200,
+        "locus_id": 14
+      },
+      {
+        "length": 200,
+        "locus_id": 15
+      },
+      {
+        "length": 200,
+        "locus_id": 16
+      },
+      {
+        "length": 200,
+        "locus_id": 17
+      },
+      {
+        "length": 200,
+        "locus_id": 18
+      },
+      {
+        "length": 200,
+        "locus_id": 19
+      },
+      {
+        "length": 200,
+        "locus_id": 20
+      },
+      {
+        "length": 200,
+        "locus_id": 21
+      },
+      {
+        "length": 200,
+        "locus_id": 22
+      },
+      {
+        "length": 200,
+        "locus_id": 23
+      },
+      {
+        "length": 200,
+        "locus_id": 24
+      },
+      {
+        "length": 200,
+        "locus_id": 25
+      },
+      {
+        "length": 200,
+        "locus_id": 26
+      },
+      {
+        "length": 200,
+        "locus_id": 27
+      },
+      {
+        "length": 200,
+        "locus_id": 28
+      },
+      {
+        "length": 200,
+        "locus_id": 29
+      },
+      {
+        "length": 200,
+        "locus_id": 30
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.0001,
+    "max_generations": 1000000000,
+    "migrant_sampling": "continuous",
+    "mu": 0.0006,
+    "mutation_model": "infinite_alleles",
+    "n_replicates": 200,
+    "ploidy": "haploid",
+    "precision": 0.01,
+    "precision_method": "interval",
+    "replicate_averaging_window": "auto",
+    "replicate_minimum": 10,
+    "seed": 20260825,
+    "stop_batch_early": true,
+    "track_expensive_statistics": false
+  },
+  "replicate_count": 10,
+  "replicate_run_ids": [
+    "run-a51927a3563111ba-r001",
+    "run-a51927a3563111ba-r002",
+    "run-a51927a3563111ba-r003",
+    "run-a51927a3563111ba-r004",
+    "run-a51927a3563111ba-r005",
+    "run-a51927a3563111ba-r006",
+    "run-a51927a3563111ba-r007",
+    "run-a51927a3563111ba-r008",
+    "run-a51927a3563111ba-r009",
+    "run-a51927a3563111ba-r010"
+  ],
+  "run_id": "run-a51927a3563111ba",
+  "schema_version": 1,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-21T22:05:54.217245Z"
+}

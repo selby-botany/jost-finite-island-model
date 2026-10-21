@@ -74,6 +74,17 @@ theory 0.9695. Jost's published targets (200 runs) are D ≈ 0.04 and
 G_ST ≈ 0.97. The example README compares the uncertainty of D and G_ST
 for this scenario.
 
+### [low-migration-high-mutation-equilibrium](low-migration-high-mutation-equilibrium/README.md)
+
+**Low migration, higher mutation** — the same N = 100, d = 5, m = 0.0001
+as Dear-Nolan low migration, with mutation raised from 0.000001 to
+0.0006. D flips from 0.04 to **0.9603 ± 0.0032** (theory 0.96) while
+G_ST falls from 0.97 to **0.8475 ± 0.0022** (theory 0.8466), stopping at
+generation 20,259 (about four minutes under `auto`) with
+`converged_on: D`. Direct evidence that D's low value in Dear-Nolan low
+migration is governed by the migration/mutation ratio, not by migration
+alone — migration (Nm) is unchanged between the two examples.
+
 ### [dear-nolan-high](dear-nolan-high/README.md)
 
 **Dear-Nolan high-migration botanical scenario** — the exact equilibrium
