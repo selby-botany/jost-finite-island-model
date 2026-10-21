@@ -172,7 +172,8 @@ record        padded-4 varint body_len | padded-4 varint rows | u8 kind
   reader can start decoding at any keyframe block.
 - A pair body is `varint h`: `h == 1` is one allele at frequency exactly 1.0;
   otherwise `n = h >> 1` alleles follow, each as its id and either a *count*
-  (`frequency = count / deme size`, used only when `float(count) / float(size)`
+  (mathematically $f=c/n$, where $c$ is the allele count and $n$ the
+  deme's gene-copy count; used only when `float(count) / float(size)`
   reproduces the frequency bit for bit) or, when `h & 1`, the eight raw bytes
   of the float. The format is lossless for any input; compactness depends on
   frequencies being `count / size`. An unknown deme size (0) stores raw floats.

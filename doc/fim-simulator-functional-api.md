@@ -174,7 +174,7 @@ can call it directly.
   tracked locus has fixed, since the statistic is undefined with no
   variation left), `D`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`, plus the
   literature-derived supplemental statistics `A_CGD` (Caballero-
-  García-Dorado allelic distance), `Delta` (Gregorius δ), and `MI`
+  García-Dorado allelic distance), `Delta` (Gregorius $\delta_G$), and `MI`
   (Sherwin mutual information).
 - **`RunResult`** (a frozen dataclass) — everything one finished run
   produced: `run_id`, `params`, `final_state` (a `ModelState`, every
@@ -348,16 +348,3 @@ CLI file output and desktop app screens):
   detailed test plan describes, not part of this API.
 - `fim.gui` — a separate surface for the desktop application; see the
   [GUI test plan](fim-gui-test-plan.md).
-
----
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5.5
-generator-model-token: claude-sonnet-5-5
-generator-provider: Anthropic
-generation-date: 2026-10-15
-generator-responsibility: revision
-```

@@ -30,8 +30,6 @@
     - [8.3 Documentation navigation and link checking](#83-documentation-navigation-and-link-checking)
   - [9. Test strategy summary](#9-test-strategy-summary)
   - [10. Risks and mitigations](#10-risks-and-mitigations)
-  - [Metadata](#metadata)
-    - [Revisions](#revisions)
 
 ## Who this document is for
 
@@ -407,10 +405,10 @@ build and verified tag before publishing:
 
 1. **`verify-tag` (`if: startsWith(github.ref, 'refs/tags/v')`, runs
    alongside `build`).** A full-history checkout, then: `git rev-parse --verify
-   "$GITHUB<sub>REF</sub>_NAME<sup>tag</sup>"` must succeed, which is only true for an
+   "$GITHUB_REF_NAME^{tag}"` must succeed, which is only true for an
    *annotated* tag (a lightweight tag has no tag object for ^{tag} to
    resolve) — rejecting a `git tag v1.2.3` shorthand that skipped a
-   message entirely; then `git merge-base --is-ancestor "$GITHUB<sub>SHA</sub>"
+   message entirely; then `git merge-base --is-ancestor "$GITHUB_SHA"
    origin/main` must hold, rejecting a tag pushed from a commit `main`
    has never merged.
 2. **Five platform jobs, each `needs: [build, verify-tag]` and
@@ -672,8 +670,8 @@ Three hooks:
   `ruff check src test`, bare `mypy`, the `pytest` subset excluding
   the `statistical`, `slow`, and `packaging` markers, and the API-doc
   freshness check (§8.1). Each gate is bypassable in a genuine emergency
-  through PRE<sub>PUSH</sub>_SKIP<sub>LINT</sub>, PRE<sub>PUSH</sub>_SKIP<sub>TYPE</sub>, PRE<sub>PUSH</sub>_SKIP<sub>TEST</sub>,
-  and PRE<sub>PUSH</sub>_SKIP<sub>DOCS</sub>.
+  through `PRE_PUSH_SKIP_LINT`, `PRE_PUSH_SKIP_TYPE`, `PRE_PUSH_SKIP_TEST`,
+  and `PRE_PUSH_SKIP_DOCS`.
 
 Each hook
 no-ops with an informational message when its tool or `pyproject.toml` is
@@ -717,11 +715,11 @@ Full detail is in the
 the shape only. Eight test layers, mapped to where they live:
 
 - **Unit** (`test/<module>/`) — every value object and pure function,
-  including the `Σp ≈ 1` invariant and (de)serialization round-trips.
+  including the $\sum_a p_a\approx1$ invariant and (de)serialization round-trips.
 - **Property-based** (Hypothesis) — the differentiation guide's Part V
   algebraic identities over randomly generated frequency tables.
 - **Golden-value** (`test/data/`) — the Part IV hand-checked scenarios
-  asserted to exact values, including the documented `D = 0.5556` erratum.
+  asserted to exact values, including the documented $D=0.5556$ erratum.
 - **Statistical / asymptotic** (`test/validation/`) — drift variance
   `p(1-p)/N`, and many-replicate equilibria vs. the Part VI formulas; all
   seeded, all tolerance-banded a priori (§2.4).
@@ -769,28 +767,3 @@ in `test/validation/statistical-calibration-evidence.json`.
 | Generated `API.md` differs from source | Incorrect API reference | `pre-commit` regenerates; `pre-push` checks the working tree; CI verifies the checked-out reference (§8.1). |
 | Git hooks bypassed with `--no-verify` | Un-gated code reaches the branch | Hooks are convenience only; CI (§5) is the authority and re-runs every gate, so a bypass is caught before merge (§8.2). |
 | Limited review availability | Regressions may escape manual inspection | Documented procedures, `build` gates (§7), and local hooks (§8.2) supplement review. |
-
-## Metadata
-
-```text
-generator-name: Copilot CLI
-generator-version: Claude Opus 4.8
-generator-model-token: claude-opus-4-8
-generator-provider: Anthropic
-generation-date: 2026-08-14
-generator-responsibility: primary
-```
-
-### Revisions
-
-Revision scope: hook behavior, repository-file validation, CI stages,
-toolchain boundaries, and the confidence-interval module.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Opus 5
-generator-model-token: claude-opus-5
-generator-provider: Anthropic
-generation-date: 2026-08-18
-generator-responsibility: revision
-```

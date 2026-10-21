@@ -10,7 +10,7 @@ monitoring, headless plots, and a thin command-line boundary.
 - [`statistics`](fim/statistics/) — diversity and differentiation formulas, and
   across-replicate confidence intervals
 - [`config`](fim/config/) — named policy constants and numerical guards, with a
-  table ([`config/README`](config/README.md)) and a test that keeps magic numbers out of
+  table ([`config/README`](fim/config/README.md)) and a test that keeps magic numbers out of
   the other modules
 - [`convergence`](fim/convergence/) — stability and confidence-interval criteria, the
   monitor, and stop outcomes

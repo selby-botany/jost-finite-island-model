@@ -21,7 +21,6 @@
   - [11. Testing approach](#11-testing-approach)
   - [12. Configuration integration](#12-configuration-integration)
   - [13. Rejected alternatives](#13-rejected-alternatives)
-  - [Metadata](#metadata)
 
 ## Who this document is for
 
@@ -333,14 +332,3 @@ module instrumentation follow §3 and §10; tests follow §11.
 - **Third-party logging libraries.** Standard-library logging supplies
   levels, handlers, rotation, and warning capture without another runtime
   dependency.
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-31
-generator-responsibility: primary
-```

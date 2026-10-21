@@ -176,14 +176,3 @@ Shannon differentiation: [0.5180, 0.4773, 0.4271, 0.4522, 0.5531, 0.5293, 0.5262
 ```
 
 </details>
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-29
-generator-responsibility: other
-```

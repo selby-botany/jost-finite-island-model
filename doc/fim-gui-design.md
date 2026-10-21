@@ -29,7 +29,6 @@
   - [13. Milestone glossary](#13-milestone-glossary)
   - [14. Testing](#14-testing)
   - [15. Packaging](#15-packaging)
-  - [Metadata](#metadata)
 
 ## Who this document is for
 
@@ -406,12 +405,18 @@ Links to mathematical guides, generated API entries, and source use
 `data-fim-external` and open through the bridge in the system browser.
 The generator and link checker share `dev/lib/docslug.py` for heading IDs.
 
+Inline $\TeX$ and fenced `math` equations are converted to native MathML
+when help is generated. Displayed equation tags remain visible.
+Fractions, sums, and subscripts therefore render offline without a
+JavaScript math library or downloaded fonts.
+
 The native Help menu provides all three references. Statistic names
 in table rows and result-column headings are keyboard-accessible help
 buttons built by [`buildStatisticName`](../src/fim/gui/webui/meters.js).
 Each catalog entry's
-`help_anchor` selects its definition, which links to the mathematical
-guide, API symbol, and implementation. Non-catalog display quantities
+`help_anchor` selects its definition in the statistics reference, which
+links directly to the API symbol; the generated API supplies the source
+link. Non-catalog display quantities
 use `STATISTIC_REFERENCE_ANCHORS` in `statistics-catalog.js`.
 Help-button events do not activate the row's trajectory toggle.
 
@@ -471,32 +476,3 @@ omit it because the pinned dependency set lacks compatible binary
 wheels. The engine selector labels options that require an unavailable
 dependency (§6.3). The dependency declarations and platform constraints
 are recorded in [`pyproject.toml`](../pyproject.toml).
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-30
-generator-responsibility: primary
-```
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-11
-generator-responsibility: revision
-```
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-15
-generator-responsibility: revision
-```

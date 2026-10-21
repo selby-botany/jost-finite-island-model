@@ -16,7 +16,7 @@ identifiers, and reported keys use backticks. Displayed equations have
 unique tags beginning with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mtext>S</mtext></mrow></math>. Section headings retain the
 reported keys so desktop help links continue to identify each entry.</p>
 <p>For one locus, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mrow><mi>i</mi><mo>,</mo><mi>a</mi></mrow></msub></mrow></math> is the frequency of allele <var>a</var> in deme <var>i</var>,
-<var>d</var> is the number of demes, and <var>w_i</var> is a normalized deme weight.
+<var>d</var> is the number of demes, and <var>w</var><sub>i</sub> is a normalized deme weight.
 The weights satisfy <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>w</mi><mi>i</mi></msub><mo>≥</mo><mn>0</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></msubsup><msub><mi>w</mi><mi>i</mi></msub><mo>=</mo><mn>1</mn></mrow></math>.
 Frequencies sum to 1 within each deme. The pooled frequency is:</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>p</mi><mi>a</mi></msub><mo>&#x0003D;</mo><munderover><mo>&#x02211;</mo><mrow><mi>i</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></munderover><msub><mi>w</mi><mi>i</mi></msub><msub><mi>p</mi><mrow><mi>i</mi><mo>&#x0002C;</mo><mi>a</mi></mrow></msub></mrow></math><span class="equation-tag">(S.1)</span></div>
@@ -75,8 +75,8 @@ standardized <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><
 <h2 id="e_st"><code>E_ST</code></h2>
 <p>Entropy differentiation:</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>E</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>S</mi><mi>T</mi></msub><mo>&#x02212;</mo><msub><mi>S</mi><mi>S</mi></msub></mrow><mrow><msub><mi>S</mi><mi>w</mi></msub></mrow></mfrac></mrow></math><span class="equation-tag">(S.8)</span></div>
-<p>Here <var>S_T</var> is pooled Shannon entropy, <var>S_S</var> is the weighted mean
-within-deme entropy, and <var>S_w</var> is the entropy of the deme weights:</p>
+<p>Here <var>S</var><sub>T</sub> is pooled Shannon entropy, <var>S</var><sub>S</sub> is the weighted mean
+within-deme entropy, and <var>S</var><sub>w</sub> is the entropy of the deme weights:</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>S</mi><mi>w</mi></msub><mo>&#x0003D;</mo><mo>&#x02212;</mo><munderover><mo>&#x02211;</mo><mrow><mi>i</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></munderover><msub><mi>w</mi><mi>i</mi></msub><mi>ln</mi><mo stretchy="false">&#x00028;</mo><msub><mi>w</mi><mi>i</mi></msub><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(S.9)</span></div>
 <p>With equal weights, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mi>w</mi></msub><mo>=</mo><mi>ln</mi><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo></mrow></math>.
 Entropy weights rare alleles more strongly than heterozygosity does.
@@ -85,8 +85,8 @@ The <code>deme_weighting</code> setting controls the weights for this measure.</
 <h2 id="k_st"><code>K_ST</code></h2>
 <p>Allele-number differentiation:</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>K</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>A</mi><mi>T</mi></msub><mo>&#x0002F;</mo><msub><mi>A</mi><mi>S</mi></msub><mo>&#x02212;</mo><mn>1</mn></mrow><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(S.10)</span></div>
-<p>Here <var>A_T</var> is the number of distinct
-alleles in the pooled population and <var>A_S</var> is the mean number present
+<p>Here <var>A</var><sub>T</sub> is the number of distinct
+alleles in the pooled population and <var>A</var><sub>S</sub> is the mean number present
 per deme. Presence means strictly positive frequency. These are
 order-zero allele counts, not the effective counts displayed below.
 Equal deme weights are required.</p>
@@ -241,8 +241,8 @@ number of equally frequent alleles with the same heterozygosity, not
 the number of distinct allele labels and not effective population size.</p>
 <p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.effective_allele_count">Python API: effective_allele_count</a></p>
 <h2 id="entropy">Entropy</h2>
-<p>Explore's <code>S_S</code> reports mean within-deme Shannon entropy <var>S_S</var>, and
-<code>S_T</code> reports pooled Shannon entropy <var>S_T</var>. For frequencies <var>p_a</var>,
+<p>Explore's <code>S_S</code> reports mean within-deme Shannon entropy <var>S</var><sub>S</sub>, and
+<code>S_T</code> reports pooled Shannon entropy <var>S</var><sub>T</sub>. For frequencies <var>p</var><sub>a</sub>,
 entropy is:</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>S</mi><mo>&#x0003D;</mo><mo>&#x02212;</mo><munder><mo>&#x02211;</mo><mrow><mi>a</mi><mi>:</mi><msub><mi>p</mi><mi>a</mi></msub><mo>&#x0003E;</mo><mn>0</mn></mrow></munder><msub><mi>p</mi><mi>a</mi></msub><mi>ln</mi><mo stretchy="false">&#x00028;</mo><msub><mi>p</mi><mi>a</mi></msub><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(S.27)</span></div>
 <p>Zero-frequency terms are omitted. Units are nats.

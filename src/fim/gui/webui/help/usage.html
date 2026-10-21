@@ -5,6 +5,9 @@ the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration r
 defaults, and the <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> for definitions,
 interpretation, and implementation links. Return to the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md">project overview</a> for installation and documentation links.</p>
+<p>Mathematical quantities use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math>; configuration keys, report identifiers,
+and commands use backticks. Display equations have unique local
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mtext>U</mtext></mrow></math> tags.</p>
 <h2 id="contents">Contents</h2>
 <ul>
 <li><a href="#create-a-configuration">Create a configuration</a></li>
@@ -224,11 +227,11 @@ alone has greater sampling variation (see the
 and <code>parameters.m</code> record the per-deme sizes and matrix rows used —
 compare them against a run with one shared <code>N/m</code> to see the effect of
 unequal size and asymmetric connectivity on differentiation.</p>
-<p><code>deme_weighting</code> affects E<sub>ST</sub>, δ<sub>G</sub>, and mutual
-information; <code>D</code> and K<sub>ST</sub> weight demes equally by
+<p><code>deme_weighting</code> affects <var>E</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, and mutual
+information; <code>D</code> and <var>K</var><sub>ST</sub> weight demes equally by
 definition, regardless of this setting. With the unequal per-deme <code>N</code> above,
 the default <code>equal</code> weighting and <code>deme_weighting: size</code> give different
-E<sub>ST</sub> — deme 4's 800-gene-copy weight pulls the size-weighted value
+<var>E</var><sub>ST</sub> — deme 4's 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.</p>
 <h3 id="stepping-stone-spatial-migration">Stepping-stone (spatial) migration</h3>
 <p>Six demes arranged on a ring, each migrating only with its two neighbors —
@@ -270,15 +273,15 @@ distance classes.</p>
 <p>Three demes start with partially shared alleles at different frequencies.
 Migration shares alleles, mutation creates private alleles, and drift changes
 their abundance and survival. Compare Caballero-García-Dorado allelic distance
-A<sub>CGD</sub> (presence/absence), Gregorius δ (frequency distance), and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math> (presence/absence), Gregorius <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> (frequency distance), and
 Sherwin mutual information <code>MI</code> (information about population membership)
-with <code>D</code> and G<sub>ST</sub>. The split is imposed, not simulated from an
+with <code>D</code> and <var>G</var><sub>ST</sub>. The split is imposed, not simulated from an
 ancestral population.</p>
 <p>All five measures are watched, so the stopping verdict applies to all of
 them. <code>track_expensive_statistics</code> also records the other supplemental
 measures. In the desktop app that flag follows Settings' <strong>Statistics shown</strong>;
-watched statistics are computed regardless. Show A<sub>CGD</sub>,
-δ<sub>G</sub>, and I there to see their trajectories.</p>
+watched statistics are computed regardless. Show <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, and I there to see their trajectories.</p>
 <!-- worked-example-config: examples/literature-distance-statistics-from-an-explicit-founder-split/config.yaml -->
 <pre><code class="language-yaml">name: Allele sharing after a founder split
 description: &gt;-
@@ -314,11 +317,11 @@ n_replicates: 1   # single run: a one-generation computation from an explicit fo
   --output results/literature-distance-statistics --quiet
 </code></pre>
 <p>The saved run converges at generation 10,499, with evidence-window means
-<code>D = 0.3568</code>, <code>Delta = 0.4528</code>, and <code>A_CGD = 3.7508</code>; these are not its
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0.3568</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub><mo>=</mo><mn>0.4528</mn></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub><mo>=</mo><mn>3.7508</mn></mrow></math>; these are not its
 final-generation values. It uses one replicate and took about 17 seconds
 on the development machine. Choose <strong>Run settings...</strong> on Configure to
 change the replicate count, cap, or precision for your run only.</p>
-<p>Unlike δ and <code>D</code>, <code>A_CGD</code> is not bounded by 1; <code>MI</code> uses natural-log units.
+<p>Unlike <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> and <var>D</var>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math> is not bounded by 1; <code>MI</code> uses natural-log units.
 The implementation averages allelic distance over distinct deme pairs,
 whereas Caballero and García-Dorado's all-pairs equation 6 includes
 self-pairs. See the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/literature-distance-statistics-from-an-explicit-founder-split/README.md">example's explanation and literature references</a>
@@ -383,9 +386,12 @@ Initial frequencies are derived without an explicit <code>p_0</code>. The exampl
 eight loci and sets <code>precision: 0.03</code>, because one locus here
 needs about 30,000 generations to settle (see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/equilibrium-split-founding/README.md">example's README</a>). How long the ancestral phase runs is worked out from
-the model: about ln(1 / equilibrium_convergence_tolerance) times the time the
-ancestral population takes to forget its starting state, 1/(2μ + 1/N)
-generations for its N gene copies. Loosen the tolerance for a shorter
+the model. Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math> for <code>equilibrium_convergence_tolerance</code>
+and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub></mrow></math> for the ancestral gene-copy count. The approximate
+relaxation time in generations is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>2</mn><mi>&#x003BC;</mi><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002F;</mo><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(U.1)</span></div>
+<p>The phase lasts about <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mi>ε</mi><mo stretchy="false">)</mo></mrow></math> times that relaxation time.
+Loosen the tolerance for a shorter
 ancestral phase (founded from a population a little further from
 equilibrium), or tighten it for a longer one; either way, a phase needing
 more than equilibrium_max_generations is a hard error, reported before the
@@ -399,7 +405,8 @@ equilibrium_max_generations</a>.</p>
 <p>By default, migration blends each deme's frequencies with an exact
 <code>rate * N</code> fraction of its neighbors' — a deterministic step given that
 generation's frequencies. migrant_sampling: stochastic instead draws the
-migrant count from <code>Binomial(N, rate)</code>, adding variation in migrant number:</p>
+migrant count from <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">B</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow><mo stretchy="false">(</mo><mi>N</mi><mo>,</mo><mi>r</mi><mo stretchy="false">)</mo></mrow></math>, where <var>N</var> is the gene-copy count
+and <var>r</var> the migrant fraction, adding variation in migrant number:</p>
 <!-- worked-example-config: examples/stochastic-migrant-counts/config.yaml -->
 <pre><code class="language-yaml">name: Stochastic migrant counts
 description: &gt;-
@@ -434,9 +441,9 @@ average D of 0.077 ± 0.010.</p>
 globally unique identity — the standard population-genetics idealization
 for a locus long enough that two independent mutations essentially never
 land on the same state. finite_alleles instead bounds a locus to
-4<sup>length</sup> states and lets a mutation recur to one already present
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mi>ℓ</mi></msup></mrow></math> states, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math> is the locus's <code>length</code>, and lets a mutation recur to one already present
 elsewhere in the run. This example uses a 3-base locus
-(4<sup>3</sup> = 64 states) and high <code>mu</code> to make recurrent mutation likely:</p>
+(<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mn>3</mn></msup><mo>=</mo><mn>64</mn></mrow></math> states) and high <code>mu</code> to make recurrent mutation likely:</p>
 <!-- worked-example-config: examples/finite-length-alleles-the-k-allele-model/config.yaml -->
 <pre><code class="language-yaml">name: Finite-length alleles
 description: &gt;-
@@ -475,7 +482,7 @@ implement.</p>
 <p>Wright's finite-island model and Takahata's multiallelic identity treatment
 carry an explicit finite-<code>d</code> correction. This example keeps <code>d</code> small enough
 that the correction matters; increasing <code>d</code> while holding <code>N</code>, <code>m</code>, and <code>mu</code>
-fixed moves G<sub>ST</sub> toward the infinite-island approximation.</p>
+fixed moves <var>G</var><sub>ST</sub> toward the infinite-island approximation.</p>
 <!-- worked-example-config: examples/wright-takahata-finite-deme-correction/config.yaml -->
 <pre><code class="language-yaml">name: Wright-Takahata finite-island correction
 description: &gt;-
@@ -500,15 +507,15 @@ precision: 0.02   # looser than the 0.01 default: under a minute
   --output results/finite-deme-correction --quiet
 </code></pre>
 <p>The batch of 10 replicates takes about nine minutes and gives an average
-G<sub>ST</sub> of 0.193 ± 0.003 across replicates
+<var>G</var><sub>ST</sub> of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.193</mn><mi>±</mi><mn>0.003</mn></mrow></math> across replicates
 (<code>precision: 0.02</code> keeps the batch short; see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/wright-takahata-finite-deme-correction/README.md">example's README</a>).
 The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
 about 0.238 because the <code>d / (d - 1)</code> correction is retained. A single locus
 scatters widely around that expectation (the exact expectation for this
-model is G<sub>ST</sub> 0.195 and D 0.319); the batch averages it out, and its
-interval for G<sub>ST</sub> contains 0.195.</p>
+model is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>=</mo><mn>0.195</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0.319</mn></mrow></math>); the batch averages it out, and its
+interval for <var>G</var><sub>ST</sub> contains 0.195.</p>
 <h3 id="kimura-weiss-isolation-by-distance">Kimura-Weiss isolation by distance</h3>
 <p>A 20-deme ring gives enough graph-distance classes for the GUI's
 isolation-by-distance panel to show the short-distance decay pattern from
@@ -545,17 +552,19 @@ trajectory_thinning_start: 5000
 <pre><code class="language-console">fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 </code></pre>
-<p>The batch of 10 replicates takes about six minutes and gives averages D =
-0.563 and G<sub>ST</sub> = 0.122 across replicates. <code>precision: 0.05</code> is
+<p>The batch of 10 replicates takes about six minutes and gives averages
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0.563</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>=</mo><mn>0.122</mn></mrow></math> across replicates. <code>precision: 0.05</code> is
 loose to limit runtime; the default 0.01 would take hours in this example (see
 the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/kimura-weiss-isolation-by-distance/README.md">example's README</a>).
 Open the result in <code>fim-gui</code> and inspect the Literature visualizations panel:
 the identity-decay plot groups deme pairs by shortest-path distance over the
 non-zero migration edges and overlays a log-linear fit.</p>
 <h3 id="per-base-mutation-rate-across-unequal-locus-lengths">Per-base mutation rate across unequal locus lengths</h3>
-<p>μ<sub>b</sub> (mutually exclusive with <code>mu</code>) is a single per-base-pair mutation
-probability. Each locus derives <code>mu</code> from its <code>length</code> through
-mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup>:</p>
+<p><code>mu_b</code> (mutually exclusive with <code>mu</code>) configures a single per-base-pair
+mutation probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mi>b</mi></msub></mrow></math>. Each locus derives its <code>mu</code> from its
+<code>length</code>, written <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math>, through:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003BC;</mi><mi>&#x02113;</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>&#x003BC;</mi><mi>b</mi></msub><msup><mo stretchy="false">&#x00029;</mo><mi>&#x02113;</mi></msup></mrow></math><span class="equation-tag">(U.2)</span></div>
+<p>The exponent is the number of bases that must all avoid mutation.</p>
 <!-- worked-example-config: examples/per-base-mutation-rate-across-unequal-locus-lengths/config.yaml -->
 <pre><code class="language-yaml">name: Per-base mutation rate
 description: &gt;-
@@ -623,8 +632,8 @@ n_replicates: 1   # single run: this example is about one run's own stopping rul
 <pre><code class="language-console">fim run multi-statistic.yaml --output results/multi-statistic --quiet
 </code></pre>
 <p>Converges at generation 2,327, after a few seconds. <code>report.json</code>'s
-converged_on lists the watched statistics that had settled when the
-run stopped: here [&quot;G<sub>ST</sub>&quot;] alone, because G<sub>ST</sub>'s
+<code>converged_on</code> lists the watched statistics that had settled when the
+run stopped: here <code>[&quot;G_ST&quot;]</code> alone, because <var>G</var><sub>ST</sub>'s
 average was already known precisely (0.0606 ± 0.0047) while D's
 was not (0.151 ± 0.020), and <code>any</code> needs only one. A run that reaches its cap
 records <code>null</code>, since it converged on nothing.</p>
@@ -632,7 +641,7 @@ records <code>null</code>, since it converged on nothing.</p>
 <p>A run burns in and then averages; everything after the burn-in is its
 evidence window. The report gives, for the window, both the precision of the
 average (the standard error) and generation-to-generation variation
-(the standard deviation, <code>σ</code>). The across-replicate confidence interval
+(the standard deviation, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi></mrow></math>). The across-replicate confidence interval
 in the next example instead measures uncertainty in a mean across
 independent replicates:</p>
 <!-- worked-example-config: examples/within-run-sigma-band/config.yaml -->
@@ -681,12 +690,13 @@ n_replicates: 1   # single run: this example is about one run's own sigma band o
 </code></pre>
 <p>Converges at generation 19,984, after about a minute and a half. The evidence
 window starts at the burn-in (generation 1,522) and holds 18,463 generations:
-D = 0.127 ± 0.004 (one standard error), with <code>σ</code> = 0.035, so a single
-generation's D lies within 0.127 ± 0.071 about 95% of the time (2σ). The example
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0.127</mn><mi>±</mi><mn>0.004</mn></mrow></math> (one standard error), with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi><mo>=</mo><mn>0.035</mn></mrow></math>, so a single
+generation's <var>D</var> lies within <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.127</mn><mi>±</mi><mn>0.071</mn></mrow></math> about 95% of the time
+(<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>σ</mi></mrow></math>). The example
 pools eight loci: with one locus, a stretch near fixation can look steady for
 the wrong reason (see the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/within-run-sigma-band/README.md">example's README</a>). In the app, the
-trajectory graph draws <code>σ</code> as a shaded band over the window in the &quot;Every
+trajectory graph draws <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi></mrow></math> as a shaded band over the window in the &quot;Every
 generation&quot; display, and the standard error as a band around the running mean
 in the two averaged displays; the Band control chooses ±1 or ±2. The numbers
 are in <code>report.json</code> under <code>window_statistics</code>.</p>
@@ -1091,8 +1101,8 @@ orders without re-running the simulation:</p>
 <pre><code class="language-console">fim stats run/trajectory.tlog --q 0 --q 1 --q 2
 </code></pre>
 <p>JSON is printed to standard output. <code>--output</code> also writes the same result.
-<code>--q 0</code> and <code>--q 2</code> match the report's K<sub>ST</sub> and <code>D</code>; <code>--q 1</code>
-matches E<sub>ST</sub> using the recorded <code>deme_weighting</code>.
+<code>--q 0</code> and <code>--q 2</code> match the report's <var>K</var><sub>ST</sub> and <code>D</code>; <code>--q 1</code>
+matches <var>E</var><sub>ST</sub> using the recorded <code>deme_weighting</code>.
 See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">differentiation measures</a> for the
 Hill-number family and <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics</a> for implementation links.</p>
 <h2 id="check-for-updates">Check for updates</h2>
@@ -1153,12 +1163,12 @@ About.</p>
 </tr>
 <tr>
 <td>Run view — completed</td>
-<td>Inspect reports, stop outcomes, scatter plots, and persisted histories. Scalar runs show within-run σ bands and playback/scrubbing when multiple generations are retained. Batch results pool final-state scatter and list each replicate's status, final generation, and statistics, with intervals labeled “uncertainty across N independent replicates”. <strong>Open</strong> on a replicate displays scalar results; <strong>Open output folder</strong> reveals artifacts. Deme selectors (initially 1 versus 2) update scatter and pairwise statistics during execution, completion, and scrubbing. Frequency axes span 0–1. <strong>Statistics shown</strong>/<strong>Choose…</strong> controls visible statistics, not saved final reports; supplementary histories can add computation. Statistic names open their <a href="#" data-fim-help="statistics" data-fim-anchor="">reference sections</a></td>
+<td>Inspect reports, stop outcomes, scatter plots, and persisted histories. Scalar runs show within-run <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi></mrow></math> bands and playback/scrubbing when multiple generations are retained. Batch results pool final-state scatter and list each replicate's status, final generation, and statistics, with intervals labeled “uncertainty across N independent replicates”. <strong>Open</strong> on a replicate displays scalar results; <strong>Open output folder</strong> reveals artifacts. Deme selectors (initially 1 versus 2) update scatter and pairwise statistics during execution, completion, and scrubbing. Frequency axes span 0–1. <strong>Statistics shown</strong>/<strong>Choose…</strong> controls visible statistics, not saved final reports; supplementary histories can add computation. Statistic names open their <a href="#" data-fim-help="statistics" data-fim-anchor="">reference sections</a></td>
 <td><a href="#output-schemas">Output schemas</a>, <a href="#" data-fim-help="configuration" data-fim-anchor="track_expensive_statistics">Supplementary histories</a></td>
 </tr>
 <tr>
 <td>Explore</td>
-<td>Evaluate analytic predictions from <code>N</code> (individuals), <code>d</code>, <code>m</code>, and <code>mu</code>, converting by the form's ploidy. The table includes differentiation, diversity, entropy, effective allele counts, identity-recovery metrics, and mutation-negligibility information. Typical-deme entropy is approximate, especially at <code>d = 2</code>. Committing a field updates predictions without simulation. Select a statistic row to chart it over any parameter range; charts group compatible units (proportions, nats, allele counts, generations). Parameter-independent predictions appear flat: analytic <code>D</code> is independent of <code>N</code>, and recovery metrics of mutation rate. The slider evaluates along the range without changing inputs. <strong>Run this for real</strong> copies inputs to Configure with a new Study selected</td>
+<td>Evaluate analytic predictions from <code>N</code> (individuals), <code>d</code>, <code>m</code>, and <code>mu</code>, converting by the form's ploidy. The table includes differentiation, diversity, entropy, effective allele counts, identity-recovery metrics, and mutation-negligibility information. Typical-deme entropy is approximate, especially at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>2</mn></mrow></math>. Committing a field updates predictions without simulation. Select a statistic row to chart it over any parameter range; charts group compatible units (proportions, nats, allele counts, generations). Parameter-independent predictions appear flat: analytic <code>D</code> is independent of <code>N</code>, and recovery metrics of mutation rate. The slider evaluates along the range without changing inputs. <strong>Run this for real</strong> copies inputs to Configure with a new Study selected</td>
 <td><a href="#" data-fim-help="statistics" data-fim-anchor="">Statistics reference</a>, <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-functional-api.md#4-fimstatistics--differentiation-and-diversity-measures">Python statistics API</a></td>
 </tr>
 <tr>
@@ -1205,9 +1215,10 @@ a mean that has not met that precision requirement.
 The first-order autoregressive standard-error estimate accounts for
 neighboring-generation correlation, but can underestimate uncertainty when
 relaxation involves several time scales.</p>
-<p>The row also shows Δ<sub>p</sub> (observed minus predicted at the selected
+<p>The row also shows <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>Δ</mi><mi>p</mi></msub></mrow></math> (observed minus predicted at the selected
 generation) and trajectory mean squared error, for example
-<code>ΔDₚ = +0.012, MSE = 4.1e-5</code>. Both update during execution and scrubbing.
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>Δ</mi><msub><mi>D</mi><mi>p</mi></msub><mo>=</mo><mo>+</mo><mn>0.012</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">M</mi><mi mathvariant="normal">S</mi><mi mathvariant="normal">E</mi></mrow><mo>=</mo><mn>4.1</mn><mi>×</mi><msup><mn>10</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow></math>.
+Both update during execution and scrubbing.
 The prediction uses the expected trajectory when supported, otherwise
 the equilibrium line (including <code>E_ST</code>). The tooltip identifies which
 reference applies. See the <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> for
@@ -1469,8 +1480,8 @@ settings come from your Settings, not from that configuration.</p>
 <p>The GUI saves display preferences, startup behavior, execution defaults,
 and the last submitted configuration between launches:</p>
 <ul>
-<li>Significant digits and <strong>Statistics shown</strong>. Showing E<sub>ST</sub>,
-K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub>, or I enables computation
+<li>Significant digits and <strong>Statistics shown</strong>. Showing <var>E</var><sub>ST</sub>,
+<var>K</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, or I enables computation
 of all five each generation; see
 <a href="#" data-fim-help="configuration" data-fim-anchor="track_expensive_statistics"><code>track_expensive_statistics</code></a>.</li>
 <li>The pairwise-output deme limit and light/dark choice. An absent or
@@ -1708,21 +1719,21 @@ to get a manifest this version can read and verify.</p>
 <p>The final report contains:</p>
 <ul>
 <li>run identity, generation, convergence flag, watched statistic, and reason;</li>
-<li>H<sub>S</sub>, H<sub>T</sub>, and the correctly partitioned H<sub>ST</sub>;</li>
-<li>G<sub>ST</sub> (<code>null</code> only when <em>every</em> tracked locus is fixed for the same
+<li><var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, and the correctly partitioned <var>H</var><sub>ST</sub>;</li>
+<li><var>G</var><sub>ST</sub> (<code>null</code> only when <em>every</em> tracked locus is fixed for the same
 allele in every deme; under per-locus ratio averaging, undefined loci
 are excluded rather than replacing defined values);</li>
-<li>Jost's <code>D</code>, entropy differentiation E<sub>ST</sub>, and allele-number
-differentiation K<sub>ST</sub>;</li>
+<li>Jost's <code>D</code>, entropy differentiation <var>E</var><sub>ST</sub>, and allele-number
+differentiation <var>K</var><sub>ST</sub>;</li>
 <li>literature-derived supplemental statistics:
-Caballero-García-Dorado allelic distance A<sub>CGD</sub>, Gregorius
-δ, and Sherwin mutual information <code>MI</code>;</li>
-<li>the within- and between-deme gene identities G<sub>s</sub> (<code>Gs</code>) and
-G<sub>d</sub> (<code>Gd</code>);</li>
-<li>Nei's (1973) D<sub>m</sub> (<code>D_m</code>) and R<sub>ST</sub> (<code>R_ST</code>), Nei's
-logarithmic G'<sub>ST</sub> (<code>G_ST_NEI_LOG</code>), Hedrick's standardized
-G'<sub>ST</sub> (<code>G_ST_HEDRICK</code>), and coancestry F<sub>ST</sub> (<code>F_ST</code>),
-each computed from the pooled H<sub>S</sub>/H<sub>T</sub> and <code>null</code> where
+Caballero-García-Dorado allelic distance <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, Gregorius
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, and Sherwin mutual information <code>MI</code>;</li>
+<li>the within- and between-deme gene identities <var>G</var><sub>s</sub> (<code>Gs</code>) and
+<var>G</var><sub>d</sub> (<code>Gd</code>);</li>
+<li>Nei's (1973) <var>D</var><sub>m</sub> (<code>D_m</code>) and <var>R</var><sub>ST</sub> (<code>R_ST</code>), Nei's
+logarithmic <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math> (<code>G_ST_NEI_LOG</code>), Hedrick's standardized
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math> (<code>G_ST_HEDRICK</code>), and coancestry <var>F</var><sub>ST</sub> (<code>F_ST</code>),
+each computed from the pooled <var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> and <code>null</code> where
 undefined;</li>
 <li>Nei's genetic distance across all demes in four forms, and the matching
 identities: <code>NEI_D_ALL_GEO</code>, <code>NEI_D_ALL_GEO_LOCUS_MEAN</code>, <code>NEI_D_ALL_ARITH</code>,
@@ -1733,17 +1744,17 @@ identity is always a number.</li>
 <p>A <code>report.json</code> may lack statistics added after its software version.
 Opening the run computes missing values from its saved trajectory
 without rewriting the file.</p>
-<p>Multiple loci are independent repeats. H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>,
-and K<sub>ST</sub> are arithmetic means across loci. <code>D</code> and G<sub>ST</sub>
+<p>Multiple loci are independent repeats. <var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>H</var><sub>ST</sub>, <var>E</var><sub>ST</sub>,
+and <var>K</var><sub>ST</sub> are arithmetic means across loci. <code>D</code> and <var>G</var><sub>ST</sub>
 instead follow <a href="#" data-fim-help="configuration" data-fim-anchor="locus_aggregation">locus_aggregation</a>:
-by default (<code>ratio_of_means</code>), H<sub>S</sub>/H<sub>T</sub> are pooled across loci
-first and one <code>D</code>/G<sub>ST</sub> is computed from those pooled values, not
+by default (<code>ratio_of_means</code>), <var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> are pooled across loci
+first and one <code>D</code>/<var>G</var><sub>ST</sub> is computed from those pooled values, not
 averaged per-locus ratios; the opt-in <code>mean_of_ratios</code> restores the
-per-locus-ratio-then-average behavior. <code>D</code> and K<sub>ST</sub> always use equal
-deme weighting. <code>deme_weighting</code> affects E<sub>ST</sub>, δ<sub>G</sub>,
+per-locus-ratio-then-average behavior. <code>D</code> and <var>K</var><sub>ST</sub> always use equal
+deme weighting. <code>deme_weighting</code> affects <var>E</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>,
 and mutual information.</p>
 <h3 id="pairwisejson"><code>pairwise.json</code></h3>
-<p>Every pair of demes' Nei identities and pairwise F<sub>ST</sub> at the run's
+<p>Every pair of demes' Nei identities and pairwise <var>F</var><sub>ST</sub> at the run's
 final generation, so any pair can be compared later or analyzed outside
 <code>fim</code>. Written for every scalar run and every batch replicate, and digested
 in the manifest.</p>
@@ -1765,8 +1776,8 @@ in the manifest.</p>
 <p>(The empty lists stand for lists of the same length.) Each list is the upper
 triangle of a symmetric matrix, row by row: pairs (1, 2), (1, 3), (1, 4),
 (2, 3), (2, 4), (3, 4) for four demes, numbered from 1 as everywhere else in
-<code>fim</code>. The diagonal is not stored (identity 1, F<sub>ST</sub> 0). Each
-distance is <code>-ln</code> of its identity; a pairwise F<sub>ST</sub> is <code>null</code> where
+<code>fim</code>. The diagonal is not stored (identity 1, <var>F</var><sub>ST</sub> 0). Each
+distance is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mi>I</mi><mo stretchy="false">)</mo></mrow></math> for its identity <var>I</var>; a pairwise <var>F</var><sub>ST</sub> is <code>null</code> where
 undefined (both demes fixed for the same allele). With more demes than
 <a href="#run-a-simulation"><code>--pairwise-max-demes</code></a>, <code>&quot;mode&quot;</code> is <code>&quot;skipped&quot;</code>, the
 limit is recorded as <code>&quot;max_demes&quot;</code>, and there are no matrices.</p>
@@ -1787,18 +1798,18 @@ divides the average between-deme identity by the <em>geometric</em> mean of the
 within-deme identities, which one very diverse deme can drag far down.
 It signals strongly unequal within-deme diversity: compare the arithmetic
 form beside it, which stays non-negative, and the within-deme diversity
-(H<sub>S</sub>, effective number of alleles). Pair forms and arithmetic forms
+(<var>H</var><sub>S</sub>, effective number of alleles). Pair forms and arithmetic forms
 are never negative.</li>
 </ul>
-<p>The arithmetic all-demes distance equals <code>-ln(1 - D)</code> for Jost's <code>D</code>.
+<p>The arithmetic all-demes distance equals <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>D</mi><mo stretchy="false">)</mo></mrow></math> for Jost's <var>D</var>.
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/nei-distances.md">Nei distances in fim</a> has the full explanation, a worked
 example of a negative value, and the formulas.</p>
 <h3 id="scatterpng"><code>scatter.png</code></h3>
 <ul>
-<li><code>d = 2</code>: direct Deme 1 versus Deme 2 scatter with a diagonal reference.</li>
-<li><code>d = 3</code>: direct three-dimensional scatter.</li>
-<li><code>4 &lt;= d &lt;= 6</code>: every pairwise deme projection.</li>
-<li><code>d &gt; 6</code>: direct Deme 1 versus Deme 2 scatter, same as <code>d = 2</code> — not a
+<li><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>2</mn></mrow></math>: direct Deme 1 versus Deme 2 scatter with a diagonal reference.</li>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>3</mn></mrow></math>: direct three-dimensional scatter.</li>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>4</mn><mo>≤</mo><mi>d</mi><mo>≤</mo><mn>6</mn></mrow></math>: every pairwise deme projection.</li>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>&gt;</mo><mn>6</mn></mrow></math>: direct Deme 1 versus Deme 2 scatter, same as <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>2</mn></mrow></math> — not a
 PCA projection.</li>
 </ul>
 <p>One point represents one <code>(locus, allele)</code> pair. Coincident points are enlarged
@@ -1834,9 +1845,9 @@ frequency threshold.</p>
 <code>replicate-NNN/</code> subdirectories, each of which holds the scalar-run files
 above.</p>
 <p><code>summary.json</code> maps each reported statistic name (every global statistic in
-<a href="#reportjson"><code>report.json</code></a>: <code>D</code>, G<sub>ST</sub>, E<sub>ST</sub>,
-K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, A<sub>CGD</sub>,
-Gregorius δ, <code>MI</code>, G<sub>s</sub>, G<sub>d</sub>, the pooled-heterozygosity
+<a href="#reportjson"><code>report.json</code></a>: <code>D</code>, <var>G</var><sub>ST</sub>, <var>E</var><sub>ST</sub>,
+<var>K</var><sub>ST</sub>, <var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>H</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>,
+Gregorius <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, <code>MI</code>, <var>G</var><sub>s</sub>, <var>G</var><sub>d</sub>, the pooled-heterozygosity
 measures and the all-demes Nei forms) to its across-replicate confidence
 interval:</p>
 <pre><code class="language-json">{
@@ -1868,12 +1879,12 @@ Student's-t form and report a numeric <code>sample_std</code>.</p>
 <p>A <code>summary.json</code> written by an older version of this program has no
 <code>sample_std</code> field at all. Nothing needs converting: every tool here
 reads such a file as though the value were <code>null</code>.</p>
-<p>G<sub>ST</sub> can have a smaller sample_count than the other statistics: a
-replicate whose locus is monomorphic across every deme reports G<sub>ST</sub> as
+<p><var>G</var><sub>ST</sub> can have a smaller sample_count than the other statistics: a
+replicate whose locus is monomorphic across every deme reports <var>G</var><sub>ST</sub> as
 <code>null</code> in <code>report.json</code>, and that replicate is excluded from
-G<sub>ST</sub>'s interval. The
-other statistics that can be <code>null</code> because they are undefined (R<sub>ST</sub>,
-both G'<sub>ST</sub>, F<sub>ST</sub>) are treated the same way. A Nei distance
+<var>G</var><sub>ST</sub>'s interval. The
+other statistics that can be <code>null</code> because they are undefined (<var>R</var><sub>ST</sub>,
+both <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math>, <var>F</var><sub>ST</sub>) are treated the same way. A Nei distance
 is different: <code>null</code> there means <em>infinite</em>, and a mean that includes an
 infinite value has no finite value, so a Nei distance infinite in any
 replicate is omitted from <code>summary.json</code>; its identity is still summarized.

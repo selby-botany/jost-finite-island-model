@@ -80,7 +80,7 @@ default `pytest` run.
 | `test_presets.py` | 6 | no | `fim.gui.presets` — `list_presets`/`get_preset` reading plain HTML files from disk, no display. |
 | `test_presets_screen.py` | 8 | yes | The Presets picker: loading an example, saving/deleting a user preset, "View YAML"/"Copy to clipboard," and "Duplicate current configuration." |
 | `test_recent_runs.py` | 7 | no | `fim.gui.recent_runs` — real manifests, written by a real `cli.main(["run", ...])` call, not hand-constructed. |
-| `test_results_screen.py` | 7 | yes | The run view's `completed` state for a single scalar run, including the σ-band and predicted-equilibrium overlays. |
+| `test_results_screen.py` | 7 | yes | The run view's `completed` state for a single scalar run, including the $\sigma$-band and predicted-equilibrium overlays. |
 | `test_runner.py` | 9 | no | `fim.gui.runner` — `ProgressThrottle`'s clock-driven predicate, and a real background thread running a real `fim.engine.simulate_params` call. |
 | `test_running_screen.py` | 6 | yes | The running screen: starting a real background run and the page reacting to its progress/done/cancelled messages, including the live-updating trajectory panel. |
 | `test_shutdown_deadman.py` | 14 | no | The GUI's own shutdown deadman timer (`fim.gui.app`) — window-free; armed only after `webview.start()` has already returned. |
@@ -192,31 +192,3 @@ functional surface `doc/fim-simulator-functional-api.md` and `doc/
 fim-simulator-detailed-test-plan.md` cover. `fim.gui` calls `fim.viz`
 directly rather than re-implementing any plotting logic of its own, so
 the two are related but distinctly tested.
-
----
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-30
-generator-responsibility: primary
-```
-
-### Revisions
-
-The 2026-09-11 inventory covers 37 files and 446 tests, including
-tooltips, grid editors, navigation, Explore, Compare, presets, appearance,
-welcome, and branding checks.
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-11
-generator-responsibility: revision
-```

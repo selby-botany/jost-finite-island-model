@@ -4,6 +4,10 @@
 out-of-range values are errors. See [Using `fim`](usage.md) for commands and
 the [project overview](../README.md) for installation.
 
+Mathematical quantities use $\TeX$; YAML keys, literal values, and API
+identifiers use backticks. Display equations have unique local
+$\text{CFG}$ tags.
+
 ## Contents
 
 - [Settings index](#settings-index)
@@ -109,7 +113,7 @@ every statistic and the analytic formulas, works in gene copies.
 
 Per-deme lists model unequal island sizes: every stage of the update
 pipeline (`migrate`, `drift`, `mutate`), the founding-allele-count bound
-(checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
+(checked against the smallest $N_i$), and deme_weighting: size (when chosen) all use
 each deme's gene-copy count.
 
 ```yaml
@@ -294,11 +298,14 @@ loci:
 
 `mu` specifies per-locus probabilities independently of length.
 Alternatively, `mu_b` specifies a shared per-base-pair mutation probability.
-Each locus's probability is then derived from its `length` using the
-[differentiation-measures guide](jost-differentiation-measures.md), Eq. 5:
+Write $\mu_b$ for the probability configured by `mu_b`, $\ell$ for
+the positive integer `length`, and $\mu_\ell$ for the derived per-locus
+probability. Each base avoids mutation with probability $1-\mu_b$;
+all $\ell$ bases avoid it with probability $(1-\mu_b)^\ell$.
+Taking the complement gives:
 
 ```math
-\mathit{mu} = 1 - (1 - \mathit{mu\_b})^{\mathit{length}}
+\mu_\ell=1-(1-\mu_b)^\ell \tag{CFG.1}
 ```
 
 ```yaml
@@ -311,7 +318,7 @@ loci:
 ```
 
 This uses the full probability relation, not the linear approximation
-`mu_b * length`. At load time, `mu_b` expands to a per-locus `mu` list.
+$\ell\mu_b$. At load time, `mu_b` expands to a per-locus `mu` list.
 `to_dict()` and `manifest.json` record that list, not `mu_b`.
 
 By default, every mutation produces a globally novel allele identity; see
@@ -337,9 +344,9 @@ defaults to its one-based position. IDs must be unique.
 
 As an alternative to `loci`, use:
 
-- n<sub>loci</sub> — positive locus count, default `1`;
+- `n_loci` — positive locus count, default `1`;
 - locus_lengths — one positive integer shared by all loci, or exactly
-  n<sub>loci</sub> integers, default `200`.
+  `n_loci` integers, default `200`.
 
 Do not combine the two forms. Differentiation statistics never read
 `length` directly; it acts only through the mutation model, below.
@@ -379,7 +386,7 @@ Controls what a mutation event turns an allele *into*, independently of
   but increasingly unrealistic for a short locus, where the same state
   can plausibly arise more than once by chance (a *recurrence*).
 - finite_alleles: each locus gets a bounded state space of exactly
-  4<sup>length</sup> possible states, corresponding to four bases per sequence
+  $4^\ell$ possible states, where $\ell$ is its `length`, corresponding to four bases per sequence
   position. A mutation target is drawn uniformly from the other
   `capacity - 1` states — never its current state, but possibly one
   already present elsewhere in the run. This still imposes no ordering or
@@ -398,7 +405,7 @@ loci:
 finite_alleles interacts with `length`, initial_allele_count, and
 p_0: every locus's starting allele IDs — the founding range
 0 .. initial_allele_count - 1, or an explicit p_0's specific IDs —
-must fit inside that locus's 4<sup>length</sup> capacity, checked
+must fit inside that locus's $4^{\ell}$ capacity, checked
 independently per locus. The default `initial_allele_count: 2` fits any
 positive length; explicit `p_0` IDs must also satisfy the capacity bound.
 
@@ -463,21 +470,36 @@ This sampling introduces founder variation at generation 0.
 
 The first-phase duration is derived from the model, not detected from a
 flat trajectory. At equilibrium, population diversity
-(H<sub>S</sub>, which equals H<sub>T</sub> when there is only one deme) keeps
+($H_S$, which equals $H_T$ when there is only one deme)
 fluctuates around its expectation. The model describes the rate at which
-dependence on the initial state decays. With N ancestral gene copies and
-mutation rate μ, this decay has a
-time scale of about 1/(2μ + 1/N) generations, its relaxation time (the same
-idea as [Convergence defaults](convergence.md), for one deme). The first phase
+dependence on the initial state decays. With $N_{\mathrm{anc}}$ ancestral
+gene copies and mutation rate $\mu$, its approximate relaxation time is:
+
+```math
+\tau_{\mathrm{anc}}\approx\frac{1}{2\mu+1/N_{\mathrm{anc}}} \tag{CFG.2}
+```
+
+This is the same idea as [Convergence defaults](convergence.md), for one deme. The first phase
 runs until the population's expected diversity, from any starting frequencies,
-is within your tolerance of its equilibrium value, which is close to
-θ/(1 + θ) with θ = 2Nμ: about ln(1 / tolerance) relaxation times. With
-several loci, the locus with the smallest μ decides.
+is within your tolerance of its equilibrium value. Define:
+
+```math
+\theta=2N_{\mathrm{anc}}\mu \tag{CFG.3}
+```
+
+The approximate equilibrium diversity is:
+
+```math
+H_{\mathrm{eq}}\approx\frac{\theta}{1+\theta} \tag{CFG.4}
+```
+
+For tolerance $\varepsilon$, reaching it takes about $\ln(1/\varepsilon)$
+relaxation times. With several loci, the locus with the smallest $\mu$ decides.
 
 The three keys control only the first phase:
 
 - **equilibrium_convergence_tolerance** — how close to equilibrium the
-  ancestral population must be, in H<sub>S</sub> units: the largest
+  ancestral population must be, in $H_S$ units: the largest
   expected difference between its diversity and the equilibrium value. It
   sets how long the first phase runs; 0.01 means about 4.6 relaxation times,
   0.05 about 3. It must be greater than 0.
@@ -492,7 +514,8 @@ Unlike the main `max_generations` cap, an ancestral duration exceeding
 `equilibrium_max_generations` is an error. The run stops before the phase
 begins and reports the required generation count.
 
-For example, three demes of 200 haploid individuals (N = 600) with μ = 0.001
+For example, three demes of 200 haploid individuals ($N_{\mathrm{anc}}=600$)
+with $\mu=0.001$
 relax in about 273 generations, so a tolerance of 0.01 needs 1,256
 generations, and the example below (tolerance 0.005) needs 1,445.
 
@@ -524,7 +547,7 @@ equilibrium_max_generations: 5000
   `Gs`, `Gd`, `D_m`, `R_ST`, `G_ST_NEI_LOG`, `G_ST_HEDRICK`, `F_ST` and the
   all-demes Nei identities and distances (`NEI_I_ALL_GEO`, `NEI_D_ALL_ARITH`,
   and so on). Allele-spectrum statistics: `E_ST`, `K_ST`, `A_CGD`, `Delta`
-  (Gregorius's δ), `MI` (Sherwin mutual information).
+  (Gregorius's $\delta_G$), `MI` (Sherwin mutual information).
 - **Default:** `[D, G_ST]`
 
 By default a run watches both and stops when both have settled
@@ -694,18 +717,18 @@ precision: 0.02
 - **Type:** boolean
 - **Default:** `false`
 
-Controls whether E<sub>ST</sub>/K<sub>ST</sub>/A<sub>CGD</sub>/Delta/MI are
+Controls whether $E_{ST}$/$K_{ST}$/$A_{\mathrm{CGD}}$/Delta/MI are
 computed every generation for display, even when none of them is being
-watched for convergence. D, G<sub>ST</sub>, H<sub>S</sub>, and H<sub>T</sub>
+watched for convergence. D, $G_{ST}$, $H_S$, and $H_T$
 are always tracked and available for display regardless of this setting
 and regardless of convergence_statistic — each is either the shared
-H<sub>S</sub>/H<sub>T</sub> input every other statistic derives from, or an
+$H_S$/$H_T$ input every other statistic derives from, or an
 O(1) step once those are known, so computing them costs nothing extra.
-E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, Delta, and MI each require
+$E_{ST}$, $K_{ST}$, $A_{\mathrm{CGD}}$, Delta, and MI each require
 an additional pass over frequency tables. Enabling this setting computes
 all five every generation for live plots and tables, increasing runtime.
-The cost grows with deme and allele counts; omitting E<sub>ST</sub> and
-K<sub>ST</sub> reduced convergence-check time by about 38% in a
+The cost grows with deme and allele counts; omitting $E_{ST}$ and
+$K_{ST}$ reduced convergence-check time by about 38% in a
 many-allele reference configuration.
 
 Statistics named in `convergence_statistic` are always computed, regardless
@@ -719,7 +742,7 @@ track_expensive_statistics: true
 In the desktop app there is no control for this key on Configure. The app
 sets it on every run, batch and sweep it starts, and in every preset or
 YAML file it saves, from Settings' "Statistics shown": `true` while
-E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub> or I is
+$E_{ST}$, $K_{ST}$, $A_{\mathrm{CGD}}$, $\delta_G$ or I is
 shown, `false` once all five are hidden. Showing any one of them computes
 all five every generation, so runs take longer; the extra time is small
 for a few demes and grows with the deme count (in one measurement, about a
@@ -786,7 +809,7 @@ do not. See [run identity](python-api.md#what-decides-a-runs-identity).
 
 | Setting | Default | Range | Controls |
 |---|---|---|---|
-| `burn_in_minimum_relaxation_times` | `5` | at least 1 | Floor of the burn-in multiple `k = max(floor, ln(2 / precision))` |
+| `burn_in_minimum_relaxation_times` | `5` | at least 1 | Floor $k_{\min}$ of the burn-in multiple $k=\max(k_{\min},\ln(2/\varepsilon))$, where $\varepsilon$ is `precision` |
 | `first_check_relaxation_times` | `2` | greater than 0 | First check, in relaxation times after the burn-in |
 | `first_check_minimum` | `50` | whole number, at least 3 | Fewest generations after the burn-in before the first check |
 | `minimum_effective_sample_size` | `50` | at least 10 | Effective independent values a window needs before its standard error is trusted |
@@ -796,7 +819,7 @@ do not. See [run identity](python-api.md#what-decides-a-runs-identity).
 | `cap_minimum` | `200000` | whole number, at least 1 | Smallest derived `max_generations` |
 | `cap_maximum` | `10000000` | whole number, at least `cap_minimum` | Largest derived `max_generations` |
 | `start_drift_alert_z` | `3` | greater than 0 | Absolute start-of-window `z` above which the report says the burn-in may have been too short |
-| `estimate_auto_denominator` | `0.01` | between 0 and 1, exclusive | Denominator (`H_T` for `G_ST`, `1 - H_S` for `D`) below which a generation is degenerate for `convergence_estimate: auto` |
+| `estimate_auto_denominator` | `0.01` | between 0 and 1, exclusive | Denominator ($H_T$ for `G_ST`, $1-H_S$ for `D`) below which a generation is degenerate for `convergence_estimate: auto` |
 | `estimate_auto_fraction` | `0.01` | between 0 and 1, exclusive | Share of window generations that may be degenerate before `auto` uses the value of means |
 | `batch_width` | `8` | whole number, at least 1 | Replicates assumed to run at once when `max_concurrent_replicates` is unset: the width of the first wave a batch matches its windows from |
 | `spectrum_burn_in_multiplier` | `1` | at least 1 | Factor on the burn-in when an allele-spectrum statistic (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) is watched |
@@ -832,13 +855,13 @@ yours lists the expert ones too.
 - **Type:** `size` or `equal`
 - **Default:** `equal`
 
-This setting controls E<sub>ST</sub>, δ<sub>G</sub> (`Delta`), and mutual
+This setting controls $E_{ST}$, $\delta_G$ (`Delta`), and mutual
 information (`MI`). Choose `size` to weight each deme by its gene-copy count;
 `equal` gives every deme the same weight. The settings agree when all demes
 have the same size.
 
 Other reported measures use equal deme treatment, including
-H<sub>S</sub>, H<sub>T</sub>, G<sub>ST</sub>, Jost's `D`, and K<sub>ST</sub>.
+$H_S$, $H_T$, $G_{ST}$, Jost's `D`, and $K_{ST}$.
 See the [statistics reference](statistics.md) for definitions and
 implementation links.
 
@@ -847,23 +870,23 @@ implementation links.
 - **Type:** `ratio_of_means` or `mean_of_ratios`
 - **Default:** `ratio_of_means`
 
-Controls how `D` and G<sub>ST</sub> combine across loci in the final report,
+Controls how `D` and $G_{ST}$ combine across loci in the final report,
 when more than one locus is tracked. Every other reported statistic
-(H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>) is unaffected — each is already a
+($H_S$, $H_T$, $H_{ST}$, $E_{ST}$, $K_{ST}$) is unaffected — each is already a
 linear mean across loci, with no such ambiguity to resolve.
 
-- `ratio_of_means` (the default): average H<sub>S</sub>/H<sub>T</sub> across loci
-  first, then compute one `D`/G<sub>ST</sub> from those pooled values. This
+- `ratio_of_means` (the default): average $H_S$/$H_T$ across loci
+  first, then compute one `D`/$G_{ST}$ from those pooled values. This
   matches what the exact gene-identity recursion predicts and avoids a
   small-denominator instability a per-locus ratio can have.
-- `mean_of_ratios`: compute `D`/G<sub>ST</sub> at each locus independently,
+- `mean_of_ratios`: compute `D`/$G_{ST}$ at each locus independently,
   then average the ratios. Use this when matching an analysis or publication
   that applies this estimator. The mean of ratios generally differs from
   the ratio of means; see
   [differentiation measures](jost-differentiation-measures.md) for formulas.
 
 The convergence monitor uses the same locus-aggregation setting for watched
-`D`/G<sub>ST</sub> as the final report.
+`D`/$G_{ST}$ as the final report.
 
 ```yaml
 n_loci: 2
@@ -944,10 +967,25 @@ as run at once: `max_concurrent_replicates`, else the Expert Setting
 `batch_width`, 8 by default) averages for `first_wave_averaging_multiple`
 relaxation times, 20 by default. When the wave ends, its windows give each
 watched statistic's standard deviation `sigma` and integrated autocorrelation
-time `tau_int`. The window that gives one replicate the standard error
-`SE = precision * sqrt(R) / t(R - 1)`, where `R` is the number of replicates
-the batch aims for (the larger of `replicate_minimum` and `replicate_wave_multiple`
-times the wave width), is `tau_int * (sigma / SE)^2`. The slowest watched
+time `tau_int`. Write $\sigma$ and $\tau_{\mathrm{int}}$ for these estimates,
+$\varepsilon$ for the requested `precision`, and $R$ for the number of
+replicates the batch aims for (the larger of `replicate_minimum` and
+`replicate_wave_multiple` times the wave width). The standard error needed
+for one replicate is:
+
+```math
+\operatorname{SE}=\frac{\varepsilon\sqrt{R}}{t_{R-1}} \tag{CFG.5}
+```
+
+Here $t_{R-1}$ is the two-sided Student critical value for the configured
+`confidence` and $R-1$ degrees of freedom. The estimated generation window
+required to achieve that error is:
+
+```math
+W=\tau_{\mathrm{int}}\left(\frac{\sigma}{\operatorname{SE}}\right)^2 \tag{CFG.6}
+```
+
+The slowest watched
 statistic decides, and the window is held between `averaging_multiple_minimum`
 and `averaging_multiple_maximum` relaxation times (5 and 100). Every later
 replicate uses it; replicates with different windows are pooled with equal
@@ -1020,11 +1058,11 @@ Controls how many gene copies migrate each generation, independently of
 which `m` shape is configured above.
 
 - `continuous` (the default): each deme's migrant count is exactly
-  N<sub>i</sub> * rate
-  (or, for a matrix row, N<sub>i</sub> times that row's non-self weight) — a fixed
+  $N_i r_i$, where $N_i$ is its gene-copy count and $r_i$ its migrant fraction
+  (or, for a matrix row, $N_i$ times that row's non-self weight) — a fixed
   fraction, not a random draw.
 - `stochastic`: each deme's migrant count is instead drawn fresh every
-  generation from Binomial(N<sub>i</sub>, rate) — mean N<sub>i</sub> * rate, matching the
+  generation from $\mathrm{Binomial}(N_i,r_i)$ — mean $N_i r_i$, matching the
   continuous case in expectation, but varying generation to generation.
   Migrant *composition* is unaffected either way: migrants still carry
   exactly the deterministic, weighted pool average. Requires a concrete
@@ -1173,7 +1211,7 @@ on the target hardware.
 The per-locus capacity ceiling `engine_backend: auto` uses alongside
 `auto_vector_min_d`, **under `mutation_model: finite_alleles` only** —
 `generational-vector` is chosen only when `d` meets its threshold
-and every locus's capacity (4<sup>length</sup>) is at most this
+and every locus's capacity ($4^{\ell}$) is at most this
 value; a single locus above it falls back to `generational` regardless
 of `d`. A finite-alleles table is `capacity` columns wide however few
 states are in use, which is why it needs a ceiling; an infinite-alleles
@@ -1328,10 +1366,10 @@ with `_read_only: false`, uses the ordinary editable-run identity.
 | `m` ring topology with `d < 3` | rejected |
 | migrant_sampling not `continuous` or `stochastic` | rejected |
 | mutation_model not infinite_alleles or finite_alleles | rejected |
-| finite_alleles with a locus's starting allele IDs exceeding its 4<sup>length</sup> capacity | rejected |
-| both `mu` and μ<sub>b</sub> given, or neither | rejected |
+| finite_alleles with a locus's starting allele IDs exceeding its $4^{\ell}$ capacity | rejected |
+| both `mu` and `mu_b` given, or neither | rejected |
 | `mu` list length not matching the locus count | rejected |
-| μ<sub>b</sub> outside `[0, 1]` | rejected |
+| `mu_b` outside `[0, 1]` | rejected |
 | precision negative or non-finite | rejected |
 | statistic_precision naming an unwatched statistic, or a negative value | rejected |
 | stop_batch_early not a boolean | rejected |

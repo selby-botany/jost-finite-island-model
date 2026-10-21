@@ -16,7 +16,6 @@
   - [Appendix A: Open issues](#appendix-a-open-issues)
   - [Appendix B: Testing opportunities considered and deferred](#appendix-b-testing-opportunities-considered-and-deferred)
   - [Appendix C: Citations and references](#appendix-c-citations-and-references)
-  - [Metadata](#metadata)
 
 ## Who this document is for
 
@@ -161,16 +160,16 @@ sampling uncertainty or turn an approximate band into a proof.
 Two validation gaps remain:
 
 **The Crow & Aoki (1984) stepping-stone comparison remains unresolved.**
-Crow & Aoki's Table 1 reports `G_ST =
-0.172` for their stepping-stone (nearest-neighbor-migration) scenario.
+Crow & Aoki's Table 1 reports $G_{ST}=0.172$ for their stepping-stone
+(nearest-neighbor-migration) scenario.
 The simulator and exact identity recursion give approximately
-`G_ST = 0.27–0.32` under the documented migration-rate interpretation.
+$G_{ST}$ between 0.27 and 0.32 under the documented migration-rate interpretation.
 Agreement between the stochastic simulation and deterministic recursion
 indicates that sampling noise does not explain the discrepancy.
 The paper attributes the stepping-stone values to unpublished
 "numerical calculations" without specifying how migrant counts are
 divided among four neighbors. An alternative scalar-rate interpretation
-near `m = 0.12` reproduces `0.172` more closely. The paper does not settle
+near $m=0.12$ reproduces 0.172 more closely. The paper does not settle
 which reading the authors used. The implementation retains its documented
 migration convention rather than fitting the rate to the published result.
 Resolving the discrepancy requires additional evidence about the
@@ -267,16 +266,3 @@ The following checks are outside current validation coverage:
   statistics (Jost's `D`, `G_ST`, and the wider family), and
   [the model introduction](finite-island-model-introduction.md), §4, for independent-software
   citations (quantiNemo 2, hierfstat).
-
----
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-30
-generator-responsibility: primary
-```

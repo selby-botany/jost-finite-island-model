@@ -163,7 +163,7 @@ checkpoint format versions are rejected.
 ### Cost of a checkpoint
 
 On an Apple M4 laptop, a
-single replicate with d = 20 and N = 225 takes about 20–35 ms per checkpoint
+single replicate with $d=20$ and $N=225$ takes about 20–35 ms per checkpoint
 and keeps about 350 KB on disk. A 16-replicate vector-engine batch with large
 d takes about 135 ms per checkpoint and keeps about 19 MB. Only the latest
 checkpoint is kept, so disk use does not grow with run length.

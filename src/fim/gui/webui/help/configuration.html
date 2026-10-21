@@ -2,6 +2,9 @@
 <p><code>fim run</code> accepts one YAML mapping. Unknown keys, incompatible shapes, and
 out-of-range values are errors. See <a href="#" data-fim-help="usage" data-fim-anchor="">Using <code>fim</code></a> for commands and
 the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md">project overview</a> for installation.</p>
+<p>Mathematical quantities use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math>; YAML keys, literal values, and API
+identifiers use backticks. Display equations have unique local
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mtext>CFG</mtext></mrow></math> tags.</p>
 <h2 id="contents">Contents</h2>
 <ul>
 <li><a href="#settings-index">Settings index</a></li>
@@ -239,7 +242,7 @@ happens once, when the configuration is read; everything after it, including
 every statistic and the analytic formulas, works in gene copies.</p>
 <p>Per-deme lists model unequal island sizes: every stage of the update
 pipeline (<code>migrate</code>, <code>drift</code>, <code>mutate</code>), the founding-allele-count bound
-(checked against the smallest N<sub>i</sub>), and deme_weighting: size (when chosen) all use
+(checked against the smallest <var>N</var><sub>i</sub>), and deme_weighting: size (when chosen) all use
 each deme's gene-copy count.</p>
 <pre><code class="language-yaml">N: [120, 450, 60]   # three demes, unequal individual counts
 ploidy: haploid
@@ -400,9 +403,12 @@ loci:
 <h4 id="deriving-mu-from-a-per-base-rate">Deriving <code>mu</code> from a per-base rate</h4>
 <p><code>mu</code> specifies per-locus probabilities independently of length.
 Alternatively, <code>mu_b</code> specifies a shared per-base-pair mutation probability.
-Each locus's probability is then derived from its <code>length</code> using the
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">differentiation-measures guide</a>, Eq. 5:</p>
-<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi mathvariant="italic">m</mi><mi mathvariant="italic">u</mi></mrow><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mrow><mi mathvariant="italic">m</mi><mi mathvariant="italic">u</mi><mi mathvariant="italic">&#x0005F;</mi><mi mathvariant="italic">b</mi></mrow><msup><mo stretchy="false">&#x00029;</mo><mrow><mrow><mi mathvariant="italic">l</mi><mi mathvariant="italic">e</mi><mi mathvariant="italic">n</mi><mi mathvariant="italic">g</mi><mi mathvariant="italic">t</mi><mi mathvariant="italic">h</mi></mrow></mrow></msup></mrow></math></div>
+Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mi>b</mi></msub></mrow></math> for the probability configured by <code>mu_b</code>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math> for
+the positive integer <code>length</code>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mi>ℓ</mi></msub></mrow></math> for the derived per-locus
+probability. Each base avoids mutation with probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>μ</mi><mi>b</mi></msub></mrow></math>;
+all <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math> bases avoid it with probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msub><mi>μ</mi><mi>b</mi></msub><msup><mo stretchy="false">)</mo><mi>ℓ</mi></msup></mrow></math>.
+Taking the complement gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003BC;</mi><mi>&#x02113;</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>&#x003BC;</mi><mi>b</mi></msub><msup><mo stretchy="false">&#x00029;</mo><mi>&#x02113;</mi></msup></mrow></math><span class="equation-tag">(CFG.1)</span></div>
 <pre><code class="language-yaml">mu_b: 0.00003
 loci:
   - locus_id: 1
@@ -411,7 +417,7 @@ loci:
     length: 8000      # mu ≈ 0.216 here — the same mu_b, a much higher mu
 </code></pre>
 <p>This uses the full probability relation, not the linear approximation
-<code>mu_b * length</code>. At load time, <code>mu_b</code> expands to a per-locus <code>mu</code> list.
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi><msub><mi>μ</mi><mi>b</mi></msub></mrow></math>. At load time, <code>mu_b</code> expands to a per-locus <code>mu</code> list.
 <code>to_dict()</code> and <code>manifest.json</code> record that list, not <code>mu_b</code>.</p>
 <p>By default, every mutation produces a globally novel allele identity; see
 <a href="#mutation_model">mutation_model</a> below for the opt-in alternative.</p>
@@ -432,9 +438,9 @@ loci:
 defaults to its one-based position. IDs must be unique.</p>
 <p>As an alternative to <code>loci</code>, use:</p>
 <ul>
-<li>n<sub>loci</sub> — positive locus count, default <code>1</code>;</li>
+<li><code>n_loci</code> — positive locus count, default <code>1</code>;</li>
 <li>locus_lengths — one positive integer shared by all loci, or exactly
-n<sub>loci</sub> integers, default <code>200</code>.</li>
+<code>n_loci</code> integers, default <code>200</code>.</li>
 </ul>
 <p>Do not combine the two forms. Differentiation statistics never read
 <code>length</code> directly; it acts only through the mutation model, below.</p>
@@ -466,7 +472,7 @@ spans many base pairs — see
 but increasingly unrealistic for a short locus, where the same state
 can plausibly arise more than once by chance (a <em>recurrence</em>).</li>
 <li>finite_alleles: each locus gets a bounded state space of exactly
-4<sup>length</sup> possible states, corresponding to four bases per sequence
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mi>ℓ</mi></msup></mrow></math> possible states, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math> is its <code>length</code>, corresponding to four bases per sequence
 position. A mutation target is drawn uniformly from the other
 <code>capacity - 1</code> states — never its current state, but possibly one
 already present elsewhere in the run. This still imposes no ordering or
@@ -483,7 +489,7 @@ loci:
 <p>finite_alleles interacts with <code>length</code>, initial_allele_count, and
 p_0: every locus's starting allele IDs — the founding range
 0 .. initial_allele_count - 1, or an explicit p_0's specific IDs —
-must fit inside that locus's 4<sup>length</sup> capacity, checked
+must fit inside that locus's <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mrow><mi>ℓ</mi></mrow></msup></mrow></math> capacity, checked
 independently per locus. The default <code>initial_allele_count: 2</code> fits any
 positive length; explicit <code>p_0</code> IDs must also satisfy the capacity bound.</p>
 <h2 id="initial-conditions">Initial conditions</h2>
@@ -538,20 +544,23 @@ without replacement, allocating each deme its configured gene-copy count.
 This sampling introduces founder variation at generation 0.</p>
 <p>The first-phase duration is derived from the model, not detected from a
 flat trajectory. At equilibrium, population diversity
-(H<sub>S</sub>, which equals H<sub>T</sub> when there is only one deme) keeps
+(<var>H</var><sub>S</sub>, which equals <var>H</var><sub>T</sub> when there is only one deme)
 fluctuates around its expectation. The model describes the rate at which
-dependence on the initial state decays. With N ancestral gene copies and
-mutation rate μ, this decay has a
-time scale of about 1/(2μ + 1/N) generations, its relaxation time (the same
-idea as <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence defaults</a>, for one deme). The first phase
+dependence on the initial state decays. With <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub></mrow></math> ancestral
+gene copies and mutation rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>, its approximate relaxation time is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>2</mn><mi>&#x003BC;</mi><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002F;</mo><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(CFG.2)</span></div>
+<p>This is the same idea as <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence defaults</a>, for one deme. The first phase
 runs until the population's expected diversity, from any starting frequencies,
-is within your tolerance of its equilibrium value, which is close to
-θ/(1 + θ) with θ = 2Nμ: about ln(1 / tolerance) relaxation times. With
-several loci, the locus with the smallest μ decides.</p>
+is within your tolerance of its equilibrium value. Define:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B8;</mi><mo>&#x0003D;</mo><mn>2</mn><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mi>&#x003BC;</mi></mrow></math><span class="equation-tag">(CFG.3)</span></div>
+<p>The approximate equilibrium diversity is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">q</mi></mrow></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mi>&#x003B8;</mi></mrow><mrow><mn>1</mn><mo>&#x0002B;</mo><mi>&#x003B8;</mi></mrow></mfrac></mrow></math><span class="equation-tag">(CFG.4)</span></div>
+<p>For tolerance <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math>, reaching it takes about <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mi>ε</mi><mo stretchy="false">)</mo></mrow></math>
+relaxation times. With several loci, the locus with the smallest <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> decides.</p>
 <p>The three keys control only the first phase:</p>
 <ul>
 <li><strong>equilibrium_convergence_tolerance</strong> — how close to equilibrium the
-ancestral population must be, in H<sub>S</sub> units: the largest
+ancestral population must be, in <var>H</var><sub>S</sub> units: the largest
 expected difference between its diversity and the equilibrium value. It
 sets how long the first phase runs; 0.01 means about 4.6 relaxation times,
 0.05 about 3. It must be greater than 0.</li>
@@ -565,7 +574,8 @@ equilibrium_max_generations.</li>
 <p>Unlike the main <code>max_generations</code> cap, an ancestral duration exceeding
 <code>equilibrium_max_generations</code> is an error. The run stops before the phase
 begins and reports the required generation count.</p>
-<p>For example, three demes of 200 haploid individuals (N = 600) with μ = 0.001
+<p>For example, three demes of 200 haploid individuals (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mo>=</mo><mn>600</mn></mrow></math>)
+with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>=</mo><mn>0.001</mn></mrow></math>
 relax in about 273 generations, so a tolerance of 0.01 needs 1,256
 generations, and the example below (tolerance 0.005) needs 1,445.</p>
 <p>The run saves every generation of the first phase in
@@ -591,7 +601,7 @@ per-pair ones). Identity statistics: <code>D</code>, <code>G_ST</code>, <code>H_
 <code>Gs</code>, <code>Gd</code>, <code>D_m</code>, <code>R_ST</code>, <code>G_ST_NEI_LOG</code>, <code>G_ST_HEDRICK</code>, <code>F_ST</code> and the
 all-demes Nei identities and distances (<code>NEI_I_ALL_GEO</code>, <code>NEI_D_ALL_ARITH</code>,
 and so on). Allele-spectrum statistics: <code>E_ST</code>, <code>K_ST</code>, <code>A_CGD</code>, <code>Delta</code>
-(Gregorius's δ), <code>MI</code> (Sherwin mutual information).</li>
+(Gregorius's <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>), <code>MI</code> (Sherwin mutual information).</li>
 <li><strong>Default:</strong> <code>[D, G_ST]</code></li>
 </ul>
 <p>By default a run watches both and stops when both have settled
@@ -751,18 +761,18 @@ stop_batch_early).</li>
 <li><strong>Type:</strong> boolean</li>
 <li><strong>Default:</strong> <code>false</code></li>
 </ul>
-<p>Controls whether E<sub>ST</sub>/K<sub>ST</sub>/A<sub>CGD</sub>/Delta/MI are
+<p>Controls whether <var>E</var><sub>ST</sub>/<var>K</var><sub>ST</sub>/<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>/Delta/MI are
 computed every generation for display, even when none of them is being
-watched for convergence. D, G<sub>ST</sub>, H<sub>S</sub>, and H<sub>T</sub>
+watched for convergence. D, <var>G</var><sub>ST</sub>, <var>H</var><sub>S</sub>, and <var>H</var><sub>T</sub>
 are always tracked and available for display regardless of this setting
 and regardless of convergence_statistic — each is either the shared
-H<sub>S</sub>/H<sub>T</sub> input every other statistic derives from, or an
+<var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> input every other statistic derives from, or an
 O(1) step once those are known, so computing them costs nothing extra.
-E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, Delta, and MI each require
+<var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, Delta, and MI each require
 an additional pass over frequency tables. Enabling this setting computes
 all five every generation for live plots and tables, increasing runtime.
-The cost grows with deme and allele counts; omitting E<sub>ST</sub> and
-K<sub>ST</sub> reduced convergence-check time by about 38% in a
+The cost grows with deme and allele counts; omitting <var>E</var><sub>ST</sub> and
+<var>K</var><sub>ST</sub> reduced convergence-check time by about 38% in a
 many-allele reference configuration.</p>
 <p>Statistics named in <code>convergence_statistic</code> are always computed, regardless
 of this setting. Leave it <code>false</code> unless supplementary live histories are
@@ -772,7 +782,7 @@ needed. See the <a href="#" data-fim-help="statistics" data-fim-anchor="">statis
 <p>In the desktop app there is no control for this key on Configure. The app
 sets it on every run, batch and sweep it starts, and in every preset or
 YAML file it saves, from Settings' &quot;Statistics shown&quot;: <code>true</code> while
-E<sub>ST</sub>, K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub> or I is
+<var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> or I is
 shown, <code>false</code> once all five are hidden. Showing any one of them computes
 all five every generation, so runs take longer; the extra time is small
 for a few demes and grows with the deme count (in one measurement, about a
@@ -844,7 +854,7 @@ do not. See <a href="#" data-fim-external="https://github.com/selby-botany/jost-
 <td><code>burn_in_minimum_relaxation_times</code></td>
 <td><code>5</code></td>
 <td>at least 1</td>
-<td>Floor of the burn-in multiple <code>k = max(floor, ln(2 / precision))</code></td>
+<td>Floor <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>k</mi><mrow><mo>min</mo></mrow></msub></mrow></math> of the burn-in multiple <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi><mo>=</mo><mo>max</mo><mo stretchy="false">(</mo><msub><mi>k</mi><mrow><mo>min</mo></mrow></msub><mo>,</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>2</mn><mo>/</mo><mi>ε</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math>, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math> is <code>precision</code></td>
 </tr>
 <tr>
 <td><code>first_check_relaxation_times</code></td>
@@ -904,7 +914,7 @@ do not. See <a href="#" data-fim-external="https://github.com/selby-botany/jost-
 <td><code>estimate_auto_denominator</code></td>
 <td><code>0.01</code></td>
 <td>between 0 and 1, exclusive</td>
-<td>Denominator (<code>H_T</code> for <code>G_ST</code>, <code>1 - H_S</code> for <code>D</code>) below which a generation is degenerate for <code>convergence_estimate: auto</code></td>
+<td>Denominator (<var>H</var><sub>T</sub> for <code>G_ST</code>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math> for <code>D</code>) below which a generation is degenerate for <code>convergence_estimate: auto</code></td>
 </tr>
 <tr>
 <td><code>estimate_auto_fraction</code></td>
@@ -997,12 +1007,12 @@ yours lists the expert ones too.</p>
 <li><strong>Type:</strong> <code>size</code> or <code>equal</code></li>
 <li><strong>Default:</strong> <code>equal</code></li>
 </ul>
-<p>This setting controls E<sub>ST</sub>, δ<sub>G</sub> (<code>Delta</code>), and mutual
+<p>This setting controls <var>E</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> (<code>Delta</code>), and mutual
 information (<code>MI</code>). Choose <code>size</code> to weight each deme by its gene-copy count;
 <code>equal</code> gives every deme the same weight. The settings agree when all demes
 have the same size.</p>
 <p>Other reported measures use equal deme treatment, including
-H<sub>S</sub>, H<sub>T</sub>, G<sub>ST</sub>, Jost's <code>D</code>, and K<sub>ST</sub>.
+<var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>G</var><sub>ST</sub>, Jost's <code>D</code>, and <var>K</var><sub>ST</sub>.
 See the <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> for definitions and
 implementation links.</p>
 <h3 id="locus_aggregation">locus_aggregation</h3>
@@ -1010,23 +1020,23 @@ implementation links.</p>
 <li><strong>Type:</strong> <code>ratio_of_means</code> or <code>mean_of_ratios</code></li>
 <li><strong>Default:</strong> <code>ratio_of_means</code></li>
 </ul>
-<p>Controls how <code>D</code> and G<sub>ST</sub> combine across loci in the final report,
+<p>Controls how <code>D</code> and <var>G</var><sub>ST</sub> combine across loci in the final report,
 when more than one locus is tracked. Every other reported statistic
-(H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>) is unaffected — each is already a
+(<var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>H</var><sub>ST</sub>, <var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>) is unaffected — each is already a
 linear mean across loci, with no such ambiguity to resolve.</p>
 <ul>
-<li><code>ratio_of_means</code> (the default): average H<sub>S</sub>/H<sub>T</sub> across loci
-first, then compute one <code>D</code>/G<sub>ST</sub> from those pooled values. This
+<li><code>ratio_of_means</code> (the default): average <var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> across loci
+first, then compute one <code>D</code>/<var>G</var><sub>ST</sub> from those pooled values. This
 matches what the exact gene-identity recursion predicts and avoids a
 small-denominator instability a per-locus ratio can have.</li>
-<li><code>mean_of_ratios</code>: compute <code>D</code>/G<sub>ST</sub> at each locus independently,
+<li><code>mean_of_ratios</code>: compute <code>D</code>/<var>G</var><sub>ST</sub> at each locus independently,
 then average the ratios. Use this when matching an analysis or publication
 that applies this estimator. The mean of ratios generally differs from
 the ratio of means; see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">differentiation measures</a> for formulas.</li>
 </ul>
 <p>The convergence monitor uses the same locus-aggregation setting for watched
-<code>D</code>/G<sub>ST</sub> as the final report.</p>
+<code>D</code>/<var>G</var><sub>ST</sub> as the final report.</p>
 <pre><code class="language-yaml">n_loci: 2
 locus_lengths: [50, 500]
 locus_aggregation: mean_of_ratios   # average per-locus ratios
@@ -1095,10 +1105,17 @@ as run at once: <code>max_concurrent_replicates</code>, else the Expert Setting
 <code>batch_width</code>, 8 by default) averages for <code>first_wave_averaging_multiple</code>
 relaxation times, 20 by default. When the wave ends, its windows give each
 watched statistic's standard deviation <code>sigma</code> and integrated autocorrelation
-time <code>tau_int</code>. The window that gives one replicate the standard error
-<code>SE = precision * sqrt(R) / t(R - 1)</code>, where <code>R</code> is the number of replicates
-the batch aims for (the larger of <code>replicate_minimum</code> and <code>replicate_wave_multiple</code>
-times the wave width), is <code>tau_int * (sigma / SE)^2</code>. The slowest watched
+time <code>tau_int</code>. Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math> for these estimates,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math> for the requested <code>precision</code>, and <var>R</var> for the number of
+replicates the batch aims for (the larger of <code>replicate_minimum</code> and
+<code>replicate_wave_multiple</code> times the wave width). The standard error needed
+for one replicate is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>SE</mo><mo>&#x0003D;</mo><mfrac><mrow><mi>&#x003B5;</mi><msqrt><mrow><mi>R</mi></mrow></msqrt></mrow><mrow><msub><mi>t</mi><mrow><mi>R</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(CFG.5)</span></div>
+<p>Here <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>t</mi><mrow><mi>R</mi><mo>−</mo><mn>1</mn></mrow></msub></mrow></math> is the two-sided Student critical value for the configured
+<code>confidence</code> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>R</mi><mo>−</mo><mn>1</mn></mrow></math> degrees of freedom. The estimated generation window
+required to achieve that error is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>W</mi><mo>&#x0003D;</mo><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mfrac><mrow><mi>&#x003C3;</mi></mrow><mrow><mo>SE</mo></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mn>2</mn></msup></mrow></math><span class="equation-tag">(CFG.6)</span></div>
+<p>The slowest watched
 statistic decides, and the window is held between <code>averaging_multiple_minimum</code>
 and <code>averaging_multiple_maximum</code> relaxation times (5 and 100). Every later
 replicate uses it; replicates with different windows are pooled with equal
@@ -1160,11 +1177,11 @@ Applies only when <code>stop_batch_early</code> is enabled. Values above
 which <code>m</code> shape is configured above.</p>
 <ul>
 <li><code>continuous</code> (the default): each deme's migrant count is exactly
-N<sub>i</sub> * rate
-(or, for a matrix row, N<sub>i</sub> times that row's non-self weight) — a fixed
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mi>i</mi></msub><msub><mi>r</mi><mi>i</mi></msub></mrow></math>, where <var>N</var><sub>i</sub> is its gene-copy count and <var>r</var><sub>i</sub> its migrant fraction
+(or, for a matrix row, <var>N</var><sub>i</sub> times that row's non-self weight) — a fixed
 fraction, not a random draw.</li>
 <li><code>stochastic</code>: each deme's migrant count is instead drawn fresh every
-generation from Binomial(N<sub>i</sub>, rate) — mean N<sub>i</sub> * rate, matching the
+generation from <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">B</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow><mo stretchy="false">(</mo><msub><mi>N</mi><mi>i</mi></msub><mo>,</mo><msub><mi>r</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></math> — mean <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mi>i</mi></msub><msub><mi>r</mi><mi>i</mi></msub></mrow></math>, matching the
 continuous case in expectation, but varying generation to generation.
 Migrant <em>composition</em> is unaffected either way: migrants still carry
 exactly the deterministic, weighted pool average. Requires a concrete
@@ -1299,7 +1316,7 @@ on the target hardware.</p>
 <p>The per-locus capacity ceiling <code>engine_backend: auto</code> uses alongside
 <code>auto_vector_min_d</code>, <strong>under <code>mutation_model: finite_alleles</code> only</strong> —
 <code>generational-vector</code> is chosen only when <code>d</code> meets its threshold
-and every locus's capacity (4<sup>length</sup>) is at most this
+and every locus's capacity (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mrow><mi>ℓ</mi></mrow></msup></mrow></math>) is at most this
 value; a single locus above it falls back to <code>generational</code> regardless
 of <code>d</code>. A finite-alleles table is <code>capacity</code> columns wide however few
 states are in use, which is why it needs a ceiling; an infinite-alleles
@@ -1498,11 +1515,11 @@ with <code>_read_only: false</code>, uses the ordinary editable-run identity.</p
 <td>rejected</td>
 </tr>
 <tr>
-<td>finite_alleles with a locus's starting allele IDs exceeding its 4<sup>length</sup> capacity</td>
+<td>finite_alleles with a locus's starting allele IDs exceeding its <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mrow><mi>ℓ</mi></mrow></msup></mrow></math> capacity</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td>both <code>mu</code> and μ<sub>b</sub> given, or neither</td>
+<td>both <code>mu</code> and <code>mu_b</code> given, or neither</td>
 <td>rejected</td>
 </tr>
 <tr>
@@ -1510,7 +1527,7 @@ with <code>_read_only: false</code>, uses the ordinary editable-run identity.</p
 <td>rejected</td>
 </tr>
 <tr>
-<td>μ<sub>b</sub> outside <code>[0, 1]</code></td>
+<td><code>mu_b</code> outside <code>[0, 1]</code></td>
 <td>rejected</td>
 </tr>
 <tr>

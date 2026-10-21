@@ -62,7 +62,7 @@ The supported maintainer environment is Unix-like and requires:
 - Python 3.12 or newer
 
 The root `build` script and Git hooks assume Unix paths. They use Bash arrays,
-`[[ ... ]]`, and BASH<sub>SOURCE</sub>, so plain POSIX `sh` is not sufficient, but
+`[[ ... ]]`, and `BASH_SOURCE`, so plain POSIX `sh` is not sufficient, but
 they avoid modern-only Bash features and work with the Bash 3.2 bundled with
 macOS. The Python build itself does not need Docker.
 
@@ -70,7 +70,7 @@ Create `.venv` with Python 3.12 or newer and install `.[dev]`. Shell activation
 is optional: `build`, the Git hooks, and the commands in `bin/` automatically
 select `.venv/bin/python`. A versioned `.venv-*` is accepted as a fallback.
 `PYTHON=/path/to/python` overrides build selection, while
-FIM<sub>PYTHON</sub>=/path/to/python overrides the local command wrappers. Source
+`FIM_PYTHON=/path/to/python` overrides the local command wrappers. Source
 `include/dot-bashrc` to make those wrappers available as direct commands.
 
 Docker Engine is required for the complete repository-file checks. It runs the
@@ -98,8 +98,9 @@ and smoke-tested by the tag-driven GitHub Actions release workflow.
 3. **Mutation:** each of those `N` new gene copies mutates independently
    with its locus's probability (`mu`: a shared scalar, an explicit
    per-locus list, or one derived per locus from a per-base rate,
-   μ<sub>b</sub>), so an allele carried by `n` copies loses
-   `Binomial(n, mu)` of them. By default (mutation_model:
+   `mu_b`), so an allele carried by $n$ copies loses
+   $\mathrm{Binomial}(n,\mu)$ of them, with $\mu$ its mutation probability.
+   By default (mutation_model:
    infinite_alleles) each mutant copy receives a globally novel ID; under
    the opt-in finite_alleles model, its target is drawn uniformly from the
    other states of its locus's bounded state space and can recur.
@@ -109,7 +110,7 @@ next generation are identical only if their parental copies were and
 neither mutated, so the identity recursions behind the closed-form
 trajectories (`fim.statistics.identity_recursion`) and the
 equilibrium-split burn-in (`fim.convergence.defaults.
-panmictic_equilibration`) carry the factor `(1 − μ)²`.
+panmictic_equilibration`) carry the factor $(1-\mu)^2$.
 See [migration conventions](migration-conventions.md) for the identity
 recursions and their relationship to published models.
 
@@ -389,11 +390,11 @@ may read the GUI's shown set; a test enforces that.
 
 | Requested change | Extension point |
 |---|---|
-| Unequal deme size | Pass per-deme `N`; operators and E<sub>ST</sub> support it |
+| Unequal deme size | Pass per-deme `N`; operators and $E_{ST}$ support it |
 | Asymmetric migration | Pass a validated `d` by `d` matrix |
 | Stepping-stone topology (1D) | `fim.model.topology`: `m: {topology: ring\|linear, rate}` or a hand-written sparse map |
 | Spatial migration beyond 1D or a fixed matrix | 2D lattice topology, or a `MigrantPoolStrategy` interface — neither built yet |
-| Random, rather than fixed, migrant counts | migrant_sampling: stochastic; `migrate()` accepts `rng` and draws Binomial(N<sub>i</sub>, rate) |
+| Random, rather than fixed, migrant counts | `migrant_sampling: stochastic`; `migrate()` accepts `rng` and draws $\mathrm{Binomial}(N_i,r_i)$, where $r_i$ is the migrant fraction |
 | Per-locus mutation rate from length | `mu_b` derives each locus's `mu` from its `length`; alternatively, pass a per-locus `mu` list |
 | Finite-length alleles (remove infinite-length artifacts) | mutation_model: finite_alleles; `LocusSpec.length` bounds each locus to `4 ** length` states, and mutation can recur |
 | Selection | Add a pure `select` operator before drift |

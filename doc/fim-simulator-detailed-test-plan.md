@@ -34,8 +34,6 @@
     - [10.1 Repository-tooling checks: git hooks, doc freshness, release notes](#101-repository-tooling-checks-git-hooks-doc-freshness-release-notes)
   - [11. Coverage targets and CI gating](#11-coverage-targets-and-ci-gating)
   - [12. Requirement traceability matrix](#12-requirement-traceability-matrix)
-  - [Metadata](#metadata)
-    - [Revisions](#revisions)
 
 ## Who this document is for
 
@@ -223,8 +221,10 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   hand-computed values exactly.
 - Ring wraps its two end demes together; linear leaves them at `0.0` — the
   one property that actually distinguishes the two topologies.
-- Both topologies are row-stochastic (`Σrow == 1`) for every `d` tested
-  (`@pytest.mark.parametrize`, `d ∈ {2,3,4,10,25}`), including the linear
+- Both topologies are row-stochastic ($\sum_j M_{ij}=1$ for each row $i$)
+  for every deme count $d$ tested, where $M_{ij}$ is the migration
+  weight in row $i$, column $j$
+  (`@pytest.mark.parametrize`, $d\in\{2,3,4,10,25\}$), including the linear
   chain's boundary case, where the two end demes send their whole `rate`
   to their single neighbor instead of splitting it.
 - stepping_stone_neighbors rejects invalid `d`, an unrecognized
@@ -238,7 +238,7 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
 
 - total_frequency() returns `1.0` within tolerance for every
   (deme, locus); a state that violates this is rejected/flagged.
-- The support of any p<sub>k,t,l</sub> never exceeds `N` (design §3.1).
+- The support of any $p_{k,t,l}$ never exceeds the gene-copy count $N$ (design §3.1).
 - Serialization round-trip: `state → rows → state` is exact for sparse
   states, including states with a single fixed allele and states at full
   `N`-allele support.
@@ -259,9 +259,9 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
 
 ### 4.5 `model/params.py`
 
-- Valid scalar `(N, m, μ, d)` construct; `seed` is required (no default —
+- Valid scalar $(N,m,\mu,d)$ construct; `seed` is required (no default —
   design §4.3); invalid inputs raise with a clear message naming the
-  offending field (`m ∉ [0,1]`, `μ ∉ [0,1]`, `d < 2`, `N < 1`, empty
+  offending field ($m\notin[0,1]$, $\mu\notin[0,1]$, $d<2$, $N<1$, empty
   `loci`, unknown `P`-bag key, deme_weighting outside
   `{"equal","size"}`, and the fields
   below), and an unknown top-level config key is rejected by name.
@@ -269,7 +269,7 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   test parses the schema and asserts the documented defaults are the applied
   defaults (guards against silent drift between the two).
 - Array-typed `N` and matrix-typed `m` are accepted and shape-validated
-  (`N` length `d`; `m` `d×d`, each row summing to 1); initial_allele_count
+  (`N` length $d$; `m` shape $d\times d$, each row summing to 1); initial_allele_count
   is bounded by the smallest deme `N`; the full mapping round-trips
   losslessly through to_dict()/from_mapping().
 - **Multiple convergence statistics** (design §9): convergence_statistic
@@ -281,16 +281,16 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   documented value (`"continuous"`, "infinite_alleles") and round-trip;
   invalid values are rejected by name.
 - **Finite-alleles capacity**: a configuration is rejected if
-  initial_allele_count, or any allele ID an explicit p<sub>0</sub> uses, exceeds
+  initial_allele_count, or any allele ID an explicit `p_0` uses, exceeds
   finite_allele_capacity(length) at *any* locus, not only the first one
   checked.
 - **Per-locus mutation rate** (design §9): `mu` accepts an explicit list
   with one rate per locus; a list of equal values collapses to the scalar
-  form. μ<sub>b</sub> (mutually exclusive with `mu`, and exactly one of the two is
+  form. `mu_b` (mutually exclusive with `mu`, and exactly one of the two is
   required) derives each locus's own `mu` from its `length` via the exact
   Eq. 5 relation and is itself validated as a probability.
 - **Locus configuration shapes**: both the explicit `loci` list and the
-  n<sub>loci</sub>/locus_lengths shorthand are accepted; malformed shapes are
+  `n_loci`/locus_lengths shorthand are accepted; malformed shapes are
   rejected; a scalar locus_lengths expands to every locus while explicit
   locus_ids round-trip, and a list of distinct per-locus
   lengths is preserved (not collapsed).
@@ -301,7 +301,7 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   and a hand-authored one-based sparse neighbor map (`{deme: {neighbor:
   weight}}`) is accepted directly; both malformed-shape variants are
   validated with field-naming errors.
-- **Replicate-batch keys** (design §9): n<sub>replicates</sub> defaults to
+- **Replicate-batch keys** (design §9): `n_replicates` defaults to
   `200`, precision to `0.01` and stop_batch_early to on — not `1`/unset —
   so an unconfigured run computes a real
   confidence interval by default rather than a single point estimate;
@@ -315,17 +315,17 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   is a valid fixed-horizon configuration. The run ends as capped, with
   no post-burn-in evidence window. A finite cap is not a guarantee
   that requested precision is reachable.
-- **replicate_minimum above n<sub>replicates</sub> is clamped, not
+- **replicate_minimum above `n_replicates` is clamped, not
   rejected**: `SimulationParams.__post_init__` clamps the minimum to
   the replicate cap, allowing small batches without a separate minimum
-  override. At n<sub>replicates</sub> == 1, adaptive batching is inactive.
+  override. At `n_replicates: 1`, adaptive batching is inactive.
   Covered by [`test_replicate_minimum_above_n_replicates_is_clamped_not_rejected`](../test/TESTS.md#model.test_params.test_replicate_minimum_above_n_replicates_is_clamped_not_rejected)
   and, end to end, by [`test/engine/test_engine.py::test_replicate_minimum_above_n_replicates_runs_to_completion`](../test/TESTS.md#engine.test_engine.test_replicate_minimum_above_n_replicates_runs_to_completion),
   which also documents the *legal* neighbor this behavior is
   distinguished from — [`test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic`](../test/TESTS.md#engine.test_engine.test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic),
   where the criterion is evaluable but never satisfied rather than
   never evaluable at all.
-- **Explicit initial frequencies (p<sub>0</sub>)**: normalized and losslessly
+- **Explicit initial frequencies (`p_0`)**: normalized and losslessly
   serialized; the parser names malformed inputs precisely; shape and
   probability-vector validation is exercised per deme/locus; support
   exceeding the deme's `N` is rejected.
@@ -334,10 +334,10 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
 
 - Default Dirichlet generator: same seed ⇒ identical initial state; each
   (deme, locus) sums to 1; initial_concentration visibly changes evenness
-  (a low-`α` draw is more skewed than a high-`α` draw, asserted via a
+  (a low-$\alpha$ draw is more skewed than a high-$\alpha$ draw, asserted via a
   Gini/entropy comparison at fixed seed).
-- Explicit-p<sub>0</sub> override: the supplied distribution is used verbatim and
-  validated (`Σp == 1`).
+- Explicit-`p_0` override: the supplied distribution is used verbatim and
+  validated ($\sum_a p_a=1$).
 - Founding alleles use locus-relative IDs `0..K-1` (design §3.3).
 
 ### 4.7 `model/operators.py`
@@ -357,16 +357,16 @@ form.
   neighbors and a linear chain never wraps.
 - **migrate, stochastic sampling** (migrant_sampling="stochastic", design
   §9): requires an explicit population size; a scalar-rate and a
-  matrix-rate migrant count each match `Binomial(N, rate)` theory within a
+  matrix-rate migrant count each match $\mathrm{Binomial}(N,r)$, with $r$ the migrant fraction, theory within a
   pre-derived band (`@pytest.mark.statistical`, §7.1); migrant pool
   *composition* is unaffected by the sampling mode (only how many copies
   move is stochastic, not what they carry); a matrix with self-weight `1`
   (no migration) matches the continuous path exactly.
-- **mutate**: at rate `μ`, the expected count of mutated copies is `Nμ`;
-  every mutated copy gets a fresh registry ID; `μ=0` is identity; a
+- **mutate**: at rate $\mu$, the expected count of mutated copies is $N\mu$;
+  every mutated copy gets a fresh registry ID; $\mu=0$ is identity; a
   per-locus rate only mutates its own configured locus, and a uniform
   per-locus tuple matches the scalar-broadcast case. A seeded test checks
-  the mutated-count mean over many draws against `Nμ` within a binomial
+  the mutated-count mean over many draws against $N\mu$ within a binomial
   band (§7.1).
 - **mutate, finite alleles** (mutation_model="finite_alleles", design §9):
   respects each locus's own capacity independently; recurrent targets
@@ -375,7 +375,7 @@ form.
   behavior is unchanged; the seeded recurrence rate matches
   `FiniteAlleleSpace`'s own theoretical rate (§4.1) end-to-end through the
   operator.
-- **drift**: `Σp == 1` post-resample; support ≤ `N`; `μ=0` runs drive toward
+- **drift**: $\sum_a p_a=1$ post-resample; support at most $N$; $\mu=0$ runs drive toward
   fixation (trailing-window variance → 0); the per-generation variance
   matches `p(1-p)/N` (§7.2), checked both with a shared `N` and per-deme
   when `N` is unequal across demes. The dense fast path and the sparse
@@ -485,22 +485,22 @@ without the engine:
 - The report computed live at `t=T` equals the report re-computed from the
   persisted trajectory (design §4.1 — statistics never depend on the
   engine).
-- Replicate batching: n<sub>replicates</sub> runs are independent and each
+- Replicate batching: `n_replicates` runs are independent and each
   individually reproducible from the run seed; the scalar (`n=1`) case
   returns a single `RunResult`, not a one-element batch; an explicit
   caller-supplied run_id receives deterministic one-based suffixes
   (`"batch-r001"`, `"batch-r002"`, …).
 - **Adaptive replicate batching** (precision and stop_batch_early, design §9): with
-  stop_batch_early off, exactly n<sub>replicates</sub> replicates run; with a tolerance
+  stop_batch_early off, exactly `n_replicates` replicates run; with a tolerance
   no bounded statistic can miss, the batch stops at replicate_minimum
   exactly — a deterministic stop, not a lucky one, since every reported
   statistic lies in `[0, 1]`; with an unreachable replicate_minimum, the
-  n<sub>replicates</sub> cap still ends the batch. A replicate whose G<sub>ST</sub> is
-  undefined (every tracked locus monomorphic) is dropped from G<sub>ST</sub>'s
+  `n_replicates` cap still ends the batch. A replicate whose $G_{ST}$ is
+  undefined (every tracked locus monomorphic) is dropped from $G_{ST}$'s
   own stopping-criterion window for that round — never raised, never
   substituted — exactly the sample replicate_summary reports from; a
-  batch watching only G<sub>ST</sub> where it stays undefined for every replicate
-  runs to the full n<sub>replicates</sub> cap rather than reporting a fabricated
+  batch watching only $G_{ST}$ where it stays undefined for every replicate
+  runs to the full `n_replicates` cap rather than reporting a fabricated
   early stop.
 - **replicate_summary**: reports an interval for every statistic with at
   least two defined samples, each `low <= mean <= high` at the configured
@@ -520,12 +520,12 @@ without the engine:
 - Positional `(N, m, mu, d)` arguments are validated against the
   parameter bag they must agree with, each mismatch reported by name.
 - A manifest `clock` without an explicit timezone is rejected.
-- A run watching only G<sub>ST</sub> at total shared fixation (every locus
+- A run watching only $G_{ST}$ at total shared fixation (every locus
   permanently monomorphic) never fabricates stability from a value that
   does not exist; its trailing window never fills, so the run falls back
   to max_generations rather than reporting a spurious immediate
   "converged". A locus that is monomorphic alongside a polymorphic one
-  drops out of that generation's G<sub>ST</sub> average instead — see the
+  drops out of that generation's $G_{ST}$ average instead — see the
   differentiation-statistics golden-value tests (§6) for the same rule
   applied to the final report.
 - **Several watched statistics** (design §9): the single-statistic report
@@ -539,12 +539,12 @@ without the engine:
   is undefined throughout reports only the other), and is `None` for a
   run that hit its cap.
 - Mutation IDs never collide with allele labels already supplied through
-  an explicit p<sub>0</sub>, even when that label sits above the registry's own
+  an explicit `p_0`, even when that label sits above the registry's own
   starting point.
 - **Per-deme population sizes, asymmetric migration, and multi-locus runs**
   (design §9): an unequal-per-deme `N` run is reproducible and keeps every
   deme's support within its own `N`; deme_weighting="size" vs.
-  `"equal"` on the same unequal-`N` run changes the reported E<sub>ST</sub> while
+  `"equal"` on the same unequal-`N` run changes the reported $E_{ST}$ while
   leaving `D` unaffected (the config-level counterpart to §5/§6's
   statistics-primitive-level weighting checks); an asymmetric migration
   matrix run is
@@ -558,8 +558,8 @@ without the engine:
   the default (continuous) sampling is unaffected by the option's mere
   existence; a finite-alleles run is reproducible and keeps every locus
   within its own capacity, and the default (infinite-alleles) model is
-  unaffected; a μ<sub>b</sub>-configured run matches the equivalent explicit
-  per-locus `mu` run bit-for-bit, and μ<sub>b</sub> combines correctly with the
+  unaffected; a `mu_b`-configured run matches the equivalent explicit
+  per-locus `mu` run bit-for-bit, and `mu_b` combines correctly with the
   finite-alleles model in the same run.
 
 ### 4.12 `cli.py`
@@ -610,21 +610,26 @@ locally defined frequency_tables() strategy (derandomized in CI — §3).
 These are the differentiation-measures guide's Part V identities, asserted
 as properties rather than point cases:
 
-- H<sub>T</sub> ≥ H<sub>S</sub> for every table.
-- G<sub>ST</sub> ≤ 1 − H<sub>S</sub> — the ceiling identity (Part V).
-- H<sub>T</sub> = H<sub>S</sub> + H<sub>ST</sub> − H<sub>S</sub> · H<sub>ST</sub> — the correct subadditive partition, with
-  H<sub>ST</sub> equal to `D`'s own first bracket (Part V).
-- `D ∈ [0, 1]`; E<sub>ST</sub>, K<sub>ST</sub>, and (when defined) G<sub>ST</sub> are also in
-  `[0, 1]` for valid tables; `D = 1` for two fully disjoint demes and
-  `D = 0` for two identical demes (the endpoints, asserted exactly).
+- $H_T\geq H_S$ for every table.
+- $G_{ST}\leq1-H_S$ — the ceiling identity (Part V).
+- The correct subadditive partition (Part V) is:
+
+  ```math
+  H_T=H_S+H_{ST}-H_S H_{ST} \tag{TP.1}
+  ```
+
+  Here $H_{ST}$ is the normalized between-deme component used in $D$.
+- $D\in[0,1]$; $E_{ST}$, $K_{ST}$, and (when defined) $G_{ST}$ are also in
+  $[0,1]$ for valid tables; $D=1$ for two fully disjoint demes and
+  $D=0$ for two identical demes (the endpoints, asserted exactly).
 - **Replication principle**: pooling two equally sized, equally diverse,
-  completely disjoint groups exactly doubles ^HD<sub>T</sub> / ^HD<sub>S</sub> (Part V).
+  completely disjoint groups exactly doubles ${}^{H}D_T/{}^{H}D_S$ (Part V).
 
 Deme-weighting is exercised at two levels, neither of them property-based:
-the statistics module's own optional per-deme `weights` argument (E<sub>ST</sub>
+the statistics module's own optional per-deme `weights` argument ($E_{ST}$
 accepts it, `D` never does — a focused check, §6), and the
 SimulationParams.deme_weighting config setting's effect on an actual
-engine report, where `"size"` vs. `"equal"` visibly changes E<sub>ST</sub> for the
+engine report, where `"size"` vs. `"equal"` visibly changes $E_{ST}$ for the
 same run while leaving `D` unaffected (§4.11).
 
 ## 6. Golden worked examples and focused statistics checks
@@ -637,21 +642,21 @@ decimal places):
 
 | Fixture file | Scenario | Selected expected values | Note |
 |---|---|---|---|
-| fixed_nine_one.json | Nine demes fixed for allele A, one for B | `D = 0.20`, G<sub>ST</sub> = 1.0 | |
-| fixed_five_five.json | Five demes fixed for A, five for B | `D = 0.5556`, E<sub>ST</sub> = 0.3010, K<sub>ST</sub> = 0.1111 | The erratum's canonical case: documents `D = 0.5556` against the paper's printed `0.5`. |
-| fixed_all_different.json | Ten demes, each fixed for its own private allele | `D = 1.0`, H<sub>T</sub> = 0.9 | |
-| reversed_frequencies.json | Two demes, each 95% one allele and 5% spread over ten shared rare ones | `D = 0.9892`, K<sub>ST</sub> = 0.0 | `D` and K<sub>ST</sub> diverge sharply on the same table. |
-| shared_all.json | Two demes with an identical 20-allele distribution | `D = 0.0`, G<sub>ST</sub> = 0.0 | The "demes are identical" endpoint, exercised as a golden value in addition to the property-test endpoint (§5). |
-| shared_and_private.json | Two demes sharing half their alleles, each private in the rest | `D = 0.5`, G<sub>ST</sub> = 0.0476 | The "G<sub>ST</sub> hides differentiation" case: a near-zero G<sub>ST</sub> alongside a mid-range `D`. |
-| shared_none.json | Two demes with disjoint 20-allele supports | `D = 1.0`, G<sub>ST</sub> = 0.0256 | G<sub>ST</sub> stays small even though the demes share nothing — the "98% within demes" trap in miniature. |
+| fixed_nine_one.json | Nine demes fixed for allele A, one for B | $D=0.20$, $G_{ST}=1.0$ | |
+| fixed_five_five.json | Five demes fixed for A, five for B | $D=0.5556$, $E_{ST}=0.3010$, $K_{ST}=0.1111$ | The erratum's canonical case: documents $D=0.5556$ against the paper's printed `0.5`. |
+| fixed_all_different.json | Ten demes, each fixed for its own private allele | $D=1.0$, $H_T=0.9$ | |
+| reversed_frequencies.json | Two demes, each 95% one allele and 5% spread over ten shared rare ones | $D=0.9892$, $K_{ST}=0.0$ | `D` and $K_{ST}$ diverge sharply on the same table. |
+| shared_all.json | Two demes with an identical 20-allele distribution | $D=0.0$, $G_{ST}=0.0$ | The "demes are identical" endpoint, exercised as a golden value in addition to the property-test endpoint (§5). |
+| shared_and_private.json | Two demes sharing half their alleles, each private in the rest | $D=0.5$, $G_{ST}=0.0$476 | The "$G_{ST}$ hides differentiation" case: a near-zero $G_{ST}$ alongside a mid-range `D`. |
+| shared_none.json | Two demes with disjoint 20-allele supports | $D=1.0$, $G_{ST}=0.0$256 | $G_{ST}$ stays small even though the demes share nothing — the "98% within demes" trap in miniature. |
 
 Each fixture's `expected` object lists every statistic the test checks for
 that table, not just `D`; the loader (`_fixture`/_frequency_table, §3)
 reads the JSON directly rather than through a shared conftest fixture.
 The same file also carries focused (non-property, non-golden-fixture)
-checks: `q = 0, 1, 2` Hill-number endpoints against `D`/E<sub>ST</sub>/K<sub>ST</sub> and
-against `H`'s own partition; G<sub>ST</sub> reporting `None` (not `NaN`) at total
-shared fixation; E<sub>ST</sub> accepting optional deme-size weights while `D`
+checks: $q\in\{0,1,2\}$ Hill-number endpoints against `D`/$E_{ST}$/$K_{ST}$ and
+against `H`'s own partition; $G_{ST}$ reporting `None` (not `NaN`) at total
+shared fixation; $E_{ST}$ accepting optional deme-size weights while `D`
 stays equal-weighted regardless (the deme-weighting separation named in
 §5); and malformed-input validation for frequency tables, weights, and
 Hill-number orders.
@@ -666,11 +671,11 @@ directly governs.
 
 The procedure every test in this section follows, in order:
 
-1. Fix the parameters `(N, m, μ, d)` and the replicate/sample count `R`.
+1. Fix the parameters $(N,m,\mu,d)$ and the replicate/sample count $R$.
 2. Derive the expected value from the closed form (drift variance, or the
    Part VI equilibrium formulas) and the standard error of the sample
-   estimate analytically from `R` (e.g. a binomial/normal band, or a
-   `k·SE` band for a chosen `k` such as 4–5 σ).
+   estimate analytically from $R$ (e.g. a binomial/normal band, or a
+   $k\operatorname{SE}$ band for a chosen multiplier $k$ such as 4 or 5).
 3. *Then* fix one literal seed. Run once. The test asserts the sample
    estimate falls inside the pre-derived band.
 
@@ -681,12 +686,19 @@ realization reproducible.
 
 **Where step 2's standard error is empirical, not closed-form.** The
 three [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)
-equilibrium tests (§7.3, §7.4) use a `k·sigma/sqrt(R)` band whose `sigma`
+equilibrium tests (§7.3, §7.4) use a band with half-width:
+
+```math
+h=\frac{k\sigma}{\sqrt{R}} \tag{TP.2}
+```
+
+Here $R$ is the replicate count, $k$ is the fixed multiplier, and $\sigma$
+is the per-replicate standard deviation. This $\sigma$
 has no known closed form (see that file's module docstring): the
-per-replicate G<sub>ST</sub>/`D` estimate is a ratio-of-means statistic sampled
+per-replicate $G_{ST}$/`D` estimate is a ratio-of-means statistic sampled
 from a multi-generation stochastic recursion, and a closed-form variance
 would need delta-method propagation through that recursion's higher
-moments, not currently derived. `sigma` is instead set from a **versioned
+moments, not currently derived. The code's `sigma` is instead set from a **versioned
 empirical characterization pass** — `dev/bin/calibrate-statistical-bands`,
 a maintainer tool deliberately not wired into `build` or `ci.yml` (a
 characterization pass is itself stochastic by design, so it stays out of
@@ -694,14 +706,14 @@ the deterministic PR gate) — whose raw per-replicate output, seeds, and
 environment fingerprint are retained in the
 [calibration evidence document](statistical-calibration-evidence.md), not
 only summarized in a code comment. The retained sample supports the
-spread constants, including _SIGMA<sub>PART</sub>_VI<sub>D</sub> and
-_SIGMA<sub>DEAR</sub>_NOLAN<sub>LOW</sub>_G.
+spread constants, including `_SIGMA_PART_VI_D` and
+`_SIGMA_DEAR_NOLAN_LOW_G`.
 
 ### 7.2 Drift variance
 
 Home: [`test/model/test_operators.py`](../test/TESTS.md#model.test_operators). A single-locus, single-deme drift
-step starting from a known `p` has per-generation sampling variance
-`p(1−p)/N` (design §3.1's gene-copy-count `N`). Over `R` seeded replicates
+step starting from a known frequency $p$ has per-generation sampling variance
+$p(1-p)/N$ (design §3.1's gene-copy-count `N`). Over $R$ seeded replicates
 of one step, the sample variance of the resulting frequency is asserted
 within its analytically derived band, checked both with a single shared
 `N` and per-deme when `N` differs across demes (design §9's per-deme
@@ -718,7 +730,7 @@ latter file's module docstring, and cross-checked before the engine
 comparison:
 
 1. The closed-form diffusion equilibria equilibrium_g_st/equilibrium_d
-   (differentiation guide Part VI Eq. 2/Eq. 4) — `O(1/N)` approximations.
+   (differentiation guide Part VI Eq. 2/Eq. 4) — $O(1/N)$ approximations.
 2. An exact per-generation identity recursion for the engine's own
    Migrate → Drift → Mutate pipeline, built from first principles rather
    than fitted to the simulator. This is the finite-`N` expectation of the
@@ -730,7 +742,7 @@ comparison:
 the two oracles and the published Dear-Nolan values agree with each other
 before either is used as a ruler. [`test_engine_reproduces_part_vi_equilibrium`](../test/TESTS.md#validation.test_simulator_equilibrium.test_engine_reproduces_part_vi_equilibrium)
 then runs the real engine to stochastic equilibrium and checks its
-sample-mean G<sub>ST</sub> and `D` land in a `k = 5`-standard-error band (derived
+sample-mean $G_{ST}$ and `D` land in a $k=5$-standard-error band (derived
 analytically from an independent replicate-spread characterization pass,
 never tuned to a realized draw) around the identity-recursion oracle.
 
@@ -741,7 +753,7 @@ The two haploid Dear-Nolan scenarios (design §4.3), asserted as
 themselves simulation output from a colleague's independent tool, not
 analytic values (design §10):
 
-| Scenario | `N` | `d` | `m` | `μ` | Expected G<sub>ST</sub> | Expected `D` (observed) |
+| Scenario | `N` | `d` | `m` | $\mu$ | Expected $G_{ST}$ | Expected `D` (observed) |
 |---|---|---|---|---|---|---|
 | Low migration, low mutation | 100 | 5 | 0.0001 | 0.000001 | 0.97 | 0.04 (0.04) |
 | Higher migration, higher mutation | 2000 | 100 | 0.01 | 0.001 | 0.02 | 0.91 (0.90) |
@@ -749,15 +761,15 @@ analytic values (design §10):
 Both use `ploidy: haploid`, so individual counts equal gene-copy counts
 (design §4.3). Each is checked at two levels:
 
-- [`test_equilibrium.py`](../test/TESTS.md#validation.test_equilibrium) plugs the scenario's `(N, m, μ, d)` directly into
+- [`test_equilibrium.py`](../test/TESTS.md#validation.test_equilibrium) plugs the scenario's $(N,m,\mu,d)$ directly into
   the closed-form formulas and checks them against the published values.
 - [`test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium) goes further: it runs the *real* engine,
   started from a derived near-equilibrium state built from the identity
   recursion (§7.3) — a 26-locus ensemble for the low-migration scenario,
   a direct derived start for the high-migration one — and shows the
-  engine's own pooled G<sub>ST</sub> and `D` directly reproduce both published
+  engine's own pooled $G_{ST}$ and `D` directly reproduce both published
   values, a stationarity property a biased operator would fail. The
-  letter's own closed-form H<sub>S</sub>/H<sub>T</sub> approximations provide an
+  letter's own closed-form $H_S$/$H_T$ approximations provide an
   additional independent analytic cross-check, used the same way.
 
 ### 7.5 Literature-grounded scenarios beyond Dear-Nolan
@@ -774,7 +786,7 @@ test docstrings contain the worked derivations.
   model), and from an author with no connection to the Jost/Chao
   citation cluster the rest of this section traces back to. **Fully
   fim functional**: the sole assertion compares the engine directly
-  against the literal published `G_ST = 0.172`, with no internal-
+  against the literal published $G_{ST}=0.172$, with no internal-
   recursion oracle involved (this project's own exact-recursion
   oracle, extended to a general migration matrix
   (`_pairwise_identity_fixed_point`), was independently found not to
@@ -810,8 +822,8 @@ test docstrings contain the worked derivations.
   from every other formula in `fim.statistics`: how fast a disturbed
   population's identity by descent returns toward equilibrium, not what
   value it settles to. Shown to be an exact algebraic reduction of this
-  project's own `_iterate_identities` recursion in the `d -> infinity`,
-  `mu = 0` limit — confirmed by a deterministic test at `d = 100,000`
+  project's own `_iterate_identities` recursion in the $d\to\infty$,
+  $\mu=0$ limit — confirmed by a deterministic test at $d=100{,}000$
   ([`test_identity_recursion_reduces_to_whitlock_infinite_island_trajectory`](../test/TESTS.md#validation.test_simulator_equilibrium.test_identity_recursion_reduces_to_whitlock_infinite_island_trajectory)), an internal-taxonomy test by construction (it is
   specifically about validating the internal recursion's own large-`d`
   limit, not the engine). No engine-level empirical convergence-speed
@@ -859,7 +871,7 @@ documented separately in `doc/fim-gui-test-plan.md`, not here.
   `trajectory.tlog` and `report.json`; a run that would collide with an
   existing output directory is rejected. Progress output describes the
   run's outcome.
-- **A batch (n<sub>replicates</sub> greater than one) produces exactly the
+- **A batch (`n_replicates` greater than one) produces exactly the
   documented batch artifacts** (`doc/usage.md`): one `replicate-NNN/`
   subdirectory per replicate, each holding that same four-file scalar
   contract and nothing else, plus a batch `summary.json` whose
@@ -878,7 +890,7 @@ documented separately in `doc/fim-gui-test-plan.md`, not here.
   §4.11): per-deme population sizes; an asymmetric migration matrix;
   loci with unequal lengths; several convergence statistics; stepping-stone
   topology sugar for `m`; stochastic migrant sampling; the finite-alleles
-  mutation model; and a per-base mutation rate (μ<sub>b</sub>).
+  mutation model; and a per-base mutation rate ($\mu_b$).
 - **Config validation**: malformed configs fail with a message naming the
   offending key/value; a config whose YAML root is not a mapping is
   rejected; a valid config round-trips into `SimulationParams`.
@@ -908,11 +920,11 @@ are headless and reproducible.
 
 - Plots are asserted by **structure, not pixels**: the figure exists, has
   the expected number of axes/panels, the axis labels name the demes, and
-  the title carries the run's `N, m, μ, d` (the house style — design §8).
+  the title carries the run's $N,m,\mu,d$ (the house style — design §8).
   Pixel-diffing is avoided because it is brittle across Matplotlib patch
   versions; structural assertions plus a pinned Matplotlib (detailed design
   §4) give reproducibility without fragility.
-- `d ≤ 3` renders the direct scatter; `d > 3` dispatches to the pairwise
+- $d\leq3$ renders the direct scatter; $d>3$ dispatches to the pairwise
   matrix (moderate `d`) or one explicit deme pair, Deme 1 vs. Deme 2 by
   default (large `d` — design §8). `_plot_pca` is tested directly;
   `plot_frequency_scatter` does not select it automatically.
@@ -931,8 +943,8 @@ are headless and reproducible.
   special case (skipping `numpy.linalg.svd` entirely) is exercised by
   calling the module-private projection function directly, since no
   public dispatch selects it automatically;
-  a locus with more alleles than MAX<sub>LEGEND</sub>_ALLELES renders without
-  a legend. One guard in _frequency_points (an empty point matrix)
+  a locus with more alleles than `MAX_LEGEND_ALLELES` renders without
+  a legend. One guard in `_frequency_points` (an empty point matrix)
   is unreachable through any validly constructed `ModelState` — marked
   `# pragma: no cover` with the invariant it depends on stated inline,
   rather than covered by a contrived, non-representative fixture.
@@ -1066,7 +1078,7 @@ it:
 
 | Requirement | Proven by |
 |---|---|
-| 1. `fim(N,m,μ,d;P)` yields per-generation state; ends on convergence | §4.11 engine reproducibility; §4.8 convergence; §8 end-to-end run |
+| 1. $\mathrm{fim}(N,m,\mu,d;P)$ yields per-generation state; ends on convergence | §4.11 engine reproducibility; §4.8 convergence; §8 end-to-end run |
 | 2. Alleles are identity-only (`same` = integer equality) | §4.1 registry uniqueness + equality-only contract |
 | 3. Locus carries `length`; per-locus `L` is future-ready | §4.2 `LocusSpec`, finite_allele_capacity; §4.5 array-typed params |
 | 4. Random initial conditions; convergence is a modeling assumption | §4.6 initial conditions; §4.8 stochastic-equilibrium detection |
@@ -1082,59 +1094,8 @@ coverage rather than riding along on the requirements above:
 | Per-deme population sizes (`N` as an array) | §4.5 shape validation; §4.7 per-deme drift variance; §4.11 unequal-`N` run |
 | Asymmetric/matrix migration, incl. stepping-stone topology sugar and a hand-authored sparse map | §4.3 `topology.py`; §4.5 config-sugar parsing; §4.7 operator-level checks; §4.11 engine run; §8 CLI config |
 | Stochastic migrant-count sampling | §4.5 migrant_sampling; §4.7 binomial-theory check; §4.11 engine run; §8 CLI config |
-| Per-locus mutation rate, incl. μ<sub>b</sub> per-base derivation | §4.5 `mu`/μ<sub>b</sub> parsing; §4.7 per-locus mutate; §4.11 engine run; §8 CLI config |
+| Per-locus mutation rate, incl. $\mu_b$ per-base derivation | §4.5 `mu`/`mu_b` parsing; §4.7 per-locus mutate; §4.11 engine run; §8 CLI config |
 | Finite-alleles (K-allele) mutation model | §4.1 `FiniteAlleleSpace`/`FiniteAlleleRegistry`; §4.5 capacity validation; §4.7 operator-level checks; §4.11 engine run; §8 CLI config |
 | Several convergence statistics with a combinator | §4.5 convergence_statistic parsing; §4.8 monitor combinator; §4.11 engine run |
 | Adaptive replicate batching on a confidence interval | §4.5 precision/stop_batch_early/replicate_minimum/confidence validation; §4.8 `ConfidenceIntervalCriterion`; §4.9 the interval itself; §4.11 adaptive stop and replicate_summary; §8 batch artifacts |
 | Parallel replicate execution | §4.11 worker-count equivalence, argument validation, and per-replicate stores; §4.12 CLI flags; §8 batch artifacts under each execution mode |
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-18
-generator-responsibility: primary
-```
-
-### Revisions
-
-Revision scope: confidence intervals (§4.8–§4.9), batch parameters
-(§4.5), adaptive stopping and parallel execution (§4.11–§4.12),
-batch artifacts (§8), and traceability (§12).
-
-```text
-generator-name: Claude Code
-generator-version: Claude Opus 5
-generator-model-token: claude-opus-5
-generator-provider: Anthropic
-generation-date: 2026-08-18
-generator-responsibility: revision
-```
-
-Revision scope: scatter dispatch and direct testing of the PCA
-single-point path (§9).
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-23
-generator-responsibility: revision
-```
-
-Revision scope: scientific and developer test-plan organization,
-functional API and GUI companion references, test taxonomy (§2), GUI
-marker (§3), and literature scenarios (§7.5).
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-08-30
-generator-responsibility: revision
-```

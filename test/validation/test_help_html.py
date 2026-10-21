@@ -189,6 +189,25 @@ def test_help_math_preserves_code_examples_and_literal_identifiers() -> None:
     assert "<var>H</var><sub>ST</sub>" in rendered
 
 
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        ("H_S", "<var>H</var><sub>S</sub>"),
+        ("H_{ST}", "<var>H</var><sub>ST</sub>"),
+        ("N_i", "<var>N</var><sub>i</sub>"),
+        ("L_1", "<var>L</var><sub>1</sub>"),
+        ("n_replicates", "<var>n_replicates</var>"),
+        ("initial_allele_count", "<var>initial_allele_count</var>"),
+    ],
+)
+def test_inline_tex_subscripts_do_not_split_literal_identifiers(
+    expression: str, expected: str
+) -> None:
+    """Single-character TeX subscripts render without mangling legacy names."""
+    namespace = runpy.run_path(str(GENERATOR))
+    assert namespace["render_math"](expression) == expected
+
+
 def test_help_rejects_unsupported_tex_commands() -> None:
     """A new macro cannot silently degrade to visible backslash text."""
     namespace = runpy.run_path(str(GENERATOR))

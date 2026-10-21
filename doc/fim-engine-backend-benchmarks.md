@@ -25,27 +25,33 @@ with the command shown in its section.
 
 ## Reading the tables
 
+Timing symbols and ratios use $\TeX$; configuration fields and literal
+backend names use backticks. Subscripts distinguish measured series,
+not API identifiers. Units appear beside the timing symbols; ratio columns
+are dimensionless.
+
 Every table sweeps exactly one `SimulationParams` field, holding all other
 parameters at the reference values stated in its setup. Every number in a row
 is a wall-clock median of three
 independent runs at that one swept value:
 
-- **`L_1`** — a single-replicate `"lineal"` run (`n_replicates=1`),
+- **$L_1$** — a single-replicate `"lineal"` run (`n_replicates=1`),
   the reference implementation running once, with no batching of any
   kind. It is a normalization baseline for every `/L1` column, so that a
   number stays comparable across different machines and sessions —
   the number of single-run equivalents represented by a batch,
   independent of how fast or slow the underlying hardware happens to
   be.
-- **`L_b`** — `"lineal"` run at the *same batch size* (same
+- **$L_b$** — `"lineal"` run at the *same batch size* (same
   `n_replicates`) as every other engine in that row: a fourth data series
-  showing how the reference engine scales.
-- **`G-off`** / **`G-jit`** — `"generational"` (`ThreadedAdvancer`,
+  showing how the reference engine scales. The tables label this series
+  $L_x$.
+- **$G_{\mathrm{off}}$** / **$G_{\mathrm{jit}}$** — `"generational"` (`ThreadedAdvancer`,
   `max_workers=` every logical CPU the benchmark host has) with
   `jit="off"` and `jit="numba"` respectively.
-- **`V`** — `"generational-vector"` (always effectively JIT-compiled;
+- **$V$** — `"generational-vector"` (always effectively JIT-compiled;
   it has no `jit="off"` mode).
-- **`fastest`** — which of `L_b`/`G-off`/`G-jit`/`V` had the lowest
+- **`fastest`** — which of $L_b$/$G_{\mathrm{off}}$/$G_{\mathrm{jit}}$/$V$ had the lowest
   raw wall-clock time at the row's swept value.
 
 **Fixed across B.1 and B.3** (both produced by `dev/bin/benchmark-engines`):
@@ -57,7 +63,7 @@ independent runs at that one swept value:
 count, so simulation duration is fixed across runs). **B.2 uses a separate
 standalone script rather than `benchmark-engines`**. Its default
 `mutation_model="infinite_alleles"` is unsupported by
-`"generational-vector"`, so B.2 has no `V` column. Its fixed parameters are
+`"generational-vector"`, so B.2 has no $V$ column. Its fixed parameters are
 listed in the section below.
 
 ### B.1 `d` (deme count) sweep
@@ -84,39 +90,43 @@ dev/bin/benchmark-engines --sweep d --values 4,10,20,35,50,80,120 \
     --replicates 16 --generations 100 --trials 3
 ```
 
-#### Results: d ∈ {2,3,4,6,8}
+<a id="results-d--23468"></a>
 
-| `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
+#### Results: $d\in\{2,3,4,6,8\}$
+
+| `d` | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$ | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|--:|--:|--:|--:|--:|--:|--:|:--:|
-| 2 | 0.026 | 0.351 | 13.56 | 0.487 | 18.80 | 0.683 | 26.38 | 0.236 | 9.11 | `V` |
-| 3 | 0.034 | 0.535 | 15.67 | 0.722 | 21.13 | 0.859 | 25.14 | 0.315 | 9.22 | `V` |
-| 4 | 0.044 | 0.745 | 17.00 | 0.944 | 21.54 | 0.924 | 21.08 | 0.434 | 9.91 | `V` |
-| 6 | 0.078 | 1.179 | 15.14 | 1.366 | 17.53 | 1.424 | 18.28 | 0.514 | 6.60 | `V` |
-| 8 | 0.101 | 1.695 | 16.73 | 2.079 | 20.52 | 1.845 | 18.21 | 0.676 | 6.67 | `V` |
+| 2 | 0.026 | 0.351 | 13.56 | 0.487 | 18.80 | 0.683 | 26.38 | 0.236 | 9.11 | $V$ |
+| 3 | 0.034 | 0.535 | 15.67 | 0.722 | 21.13 | 0.859 | 25.14 | 0.315 | 9.22 | $V$ |
+| 4 | 0.044 | 0.745 | 17.00 | 0.944 | 21.54 | 0.924 | 21.08 | 0.434 | 9.91 | $V$ |
+| 6 | 0.078 | 1.179 | 15.14 | 1.366 | 17.53 | 1.424 | 18.28 | 0.514 | 6.60 | $V$ |
+| 8 | 0.101 | 1.695 | 16.73 | 2.079 | 20.52 | 1.845 | 18.21 | 0.676 | 6.67 | $V$ |
 
 ![Time and L₁ normalized time by Deme Size (d)](img/fim-benchmark-b1-1-deme-sweep-graph.png)
 
-#### Results: d ∈ {4,10,20,35,50,80,120}
+<a id="results-d--41020355080120"></a>
 
-| `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
+#### Results: $d\in\{4,10,20,35,50,80,120\}$
+
+| `d` | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$ | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|--:|--:|--:|--:|--:|--:|--:|:--:|
-| 4 | 0.043 | 0.754 | 17.65 | 0.951 | 22.24 | 1.062 | 24.84 | 0.372 | 8.69 | `V` |
-| 10 | 0.138 | 2.368 | 17.15 | 2.525 | 18.29 | 2.283 | 16.54 | 0.818 | 5.93 | `V` |
-| 20 | 0.366 | 5.907 | 16.16 | 6.018 | 16.46 | 5.113 | 13.99 | 1.581 | 4.32 | `V` |
-| 35 | 0.724 | 12.894 | 17.81 | 13.566 | 18.74 | 9.645 | 13.33 | 2.831 | 3.91 | `V` |
-| 50 | 1.349 | 22.537 | 16.70 | 23.196 | 17.19 | 14.834 | 10.99 | 4.192 | 3.11 | `V` |
-| 80 | 2.854 | 45.126 | 15.81 | 47.602 | 16.68 | 27.163 | 9.52 | 7.062 | 2.47 | `V` |
-| 120 | 5.071 | 79.941 | 15.77 | 85.891 | 16.94 | 45.650 | 9.00 | 11.196 | 2.21 | `V` |
+| 4 | 0.043 | 0.754 | 17.65 | 0.951 | 22.24 | 1.062 | 24.84 | 0.372 | 8.69 | $V$ |
+| 10 | 0.138 | 2.368 | 17.15 | 2.525 | 18.29 | 2.283 | 16.54 | 0.818 | 5.93 | $V$ |
+| 20 | 0.366 | 5.907 | 16.16 | 6.018 | 16.46 | 5.113 | 13.99 | 1.581 | 4.32 | $V$ |
+| 35 | 0.724 | 12.894 | 17.81 | 13.566 | 18.74 | 9.645 | 13.33 | 2.831 | 3.91 | $V$ |
+| 50 | 1.349 | 22.537 | 16.70 | 23.196 | 17.19 | 14.834 | 10.99 | 4.192 | 3.11 | $V$ |
+| 80 | 2.854 | 45.126 | 15.81 | 47.602 | 16.68 | 27.163 | 9.52 | 7.062 | 2.47 | $V$ |
+| 120 | 5.071 | 79.941 | 15.77 | 85.891 | 16.94 | 45.650 | 9.00 | 11.196 | 2.21 | $V$ |
 
 ![Time and L₁ normalized time by Deme Size (d)](img/fim-benchmark-b1-2-deme-sweep-graph.png)
 
 #### Summary
 
-`V` (`"generational-vector"`) has the lowest median runtime at every point in
+$V$ (`"generational-vector"`) has the lowest median runtime at every point in
 both tables across the measured range, `d=2` through `d=120`. No lower
 crossover was observed. The
-<code>G<sub>off</sub>/L<sub>1</sub></code> ratio stays roughly flat (16–22×)
-across the range; the <code>G<sub>jit</sub>/L<sub>1</sub></code> ratio falls as `d` grows (26× at `d=2`
+$G_{\mathrm{off}}/L_{1}$ ratio stays roughly flat (16–22×)
+across the range; the $G_{\mathrm{jit}}/L_{1}$ ratio falls as `d` grows (26× at `d=2`
 down to 9x at `d=120`).
 
 ![Time and L₁ normalized time by Deme Size (d)](img/fim-benchmark-b1-deme-sweep-graph.png)
@@ -136,8 +146,8 @@ down to 9x at `d=120`).
   - `mu=0.02`
   - `replicates=8`
   - `convergence_window=150`
-  - `workers ∈ {1,2,4,6,8,10}`
-  - `jit ∈ {"off", "numba"}`
+  - `workers` values: 1, 2, 4, 6, 8, 10
+  - `jit` values: `"off"` and `"numba"`
   - `trials=3`
 
 Trials were scheduled against the host's core budget rather than run
@@ -150,7 +160,7 @@ Not captured.
 
 #### Results
 
-| Workers | <code>G<sub>jit=off</sub>(s)</code> | <code><code>G<sub>jit=off,w</sub>/G<sub>jit=off,w=1</sub></code> | <code>G<sub>jit=numba</sub></code> | <code>G<sub>jit=numba,w</sub>/G<sub>jit=off,w=1</sub></code> |
+| Workers | $G_{\mathrm{jit}=\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{jit}=\mathrm{off},w}/G_{\mathrm{jit}=\mathrm{off},w=1}$ | $G_{\mathrm{jit}=\mathrm{numba}}$ | $G_{\mathrm{jit}=\mathrm{numba},w}/G_{\mathrm{jit}=\mathrm{off},w=1}$ |
 |---:|---:|---:|--:|--:|
 | 1 | 250.87 | 1.00 | 134.80 | 1.86 |
 | 2 | 241.28 | 1.04 | 120.45 | 2.08 |
@@ -183,7 +193,8 @@ count.
   - `mu=0.001`
   - `replicates=16`
   - `generations=100`
-  - `lengths ∈ {2,4,5,6,7,8}` (capacity is `4 ** length`; see §3.2's
+  - `length` values: 2, 4, 5, 6, 7, 8 (capacity is $4^\ell$, where $\ell$
+    is `length`; see §3.2's
     finite-alleles state space)
   - `trials=3`
 
@@ -196,7 +207,7 @@ dev/bin/benchmark-engines --sweep loci-length --values 2,4,5,6,7,8 \
 
 #### Results
 
-| length | capacity | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
+| length | capacity | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$ | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
 | 2 | 16 | 0.831 | 10.963 | 13.20 | 11.089 | 13.35 | 10.066 | 12.12 | 3.636 | 4.38 | V |
 | 4 | 256 | 1.887 | 29.095 | 15.42 | 30.237 | 16.03 | 18.649 | 9.88 | 5.017 | 2.66 | V |
@@ -251,7 +262,7 @@ dev/bin/benchmark-engines --sweep d --values 150,200,300,500 \
 
 First run, isolated (no other benchmark work sharing the host at the time):
 
-| `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
+| `d` | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$ | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
 | 150 | 7.092 | 112.691 | 15.89 | 121.633 | 17.15 | 63.344 | 8.93 | 14.368 | 2.03 | V |
 | 200 | 9.956 | 166.283 | 16.70 | 177.703 | 17.85 | 87.545 | 8.79 | 19.058 | 1.91 | V |
@@ -264,7 +275,7 @@ Second run, a repeat of the same sweep a few hours later. It overlapped the
 first five minutes of the four-job B.5 heatmap queue (§B.5) and ran
 concurrently with that queue for about 40 of its 47 minutes:
 
-| `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
+| `d` | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$ | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
 | 150 | 6.545 | 111.316 | 17.01 | 146.274 | 22.35 | 68.672 | 10.49 | 10.964 | 1.68 | V |
 | 200 | 10.307 | 167.829 | 16.28 | 188.367 | 18.28 | 87.467 | 8.49 | 14.205 | 1.38 | V |
@@ -275,8 +286,8 @@ concurrently with that queue for about 40 of its 47 minutes:
 
 #### Summary
 
-`V` had the lowest median runtime at every measured `d` through 500 in
-both runs. The `V`-to-`G-jit` runtime ratios differ between the runs
+$V$ had the lowest median runtime at every measured `d` through 500 in
+both runs. The $V$-to-$G_{\mathrm{jit}}$ runtime ratios differ between the runs
 (1.86–2.03 versus 1.24–1.68) despite functionally identical simulation
 code. The second run overlapped with four other benchmark jobs on the same
 22-thread host, so host contention is a potential confound. The results
@@ -321,7 +332,7 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 - Length 5 (capacity 1024):
 
-| `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
+| `d` | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$ | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
 | 10 | 0.153 | 2.359 | 15.39 | 2.931 | 19.12 | 2.213 | 14.43 | 1.381 | 9.01 | V |
 | 35 | 1.720 | 30.083 | 17.49 | 19.831 | 11.53 | 12.451 | 7.24 | 2.801 | 1.63 | V |
@@ -333,7 +344,7 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 - Length 6 (capacity 4096):
 
-| `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
+| `d` | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$ | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
 | 10 | 0.136 | 2.422 | 17.85 | 2.916 | 21.49 | 2.345 | 17.28 | 2.720 | 20.05 | G-jit |
 | 35 | 2.635 | 35.205 | 13.36 | 19.932 | 7.57 | 13.980 | 5.31 | 8.871 | 3.37 | V |
@@ -345,7 +356,7 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 - Length 7 (capacity 16384):
 
-| `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
+| `d` | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$ | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
 | 10 | 0.181 | 2.397 | 13.23 | 2.896 | 15.98 | 2.274 | 12.55 | 5.093 | 28.10 | G-jit |
 | 35 | 1.963 | 35.020 | 17.84 | 19.719 | 10.04 | 13.810 | 7.04 | 33.764 | 17.20 | G-jit |
@@ -355,19 +366,19 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 ![Time and L₁ normalized time by Deme Size (d) for Locus Length 7](img/fim-benchmark-b5-l7-deme-by-locus-length-sweep-graph.png)
 
-Fastest backend, and the `V`/<code>G<sub>jit</sub>(s)</code> wall-clock
-ratio (below 1.0 means `V` is still ahead), across all three completed
+Fastest backend, and the $V$/$G_{\mathrm{jit}}\;(\mathrm{s})$ wall-clock
+ratio (below 1.0 means $V$ is still ahead), across all three completed
 lengths:
 
 ##### Fastest backend
 
 | `deme x capacity` | **1024** | **4096** | **16384** |
 |---:|---:|---:|---:|
-| **10** | `V` | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>(s)</code> |
-| **35** | `V` | `V` | <code>G<sub>jit</sub>(s)</code> |
-| **70** | `V` | `V` | <code>G<sub>jit</sub>(s)</code> |
-| **120** | `V` | `V` | `V` |
-| **300** | `V` | `V` | `V` |
+| **10** | $V$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ |
+| **35** | $V$ | $V$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ |
+| **70** | $V$ | $V$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ |
+| **120** | $V$ | $V$ | $V$ |
+| **300** | $V$ | $V$ | $V$ |
 
 ##### G-jit / V wall-clock ratio (below 1.0 = V still ahead)
 
@@ -375,8 +386,8 @@ lengths:
 
 #### Summary
 
-The measured `V`/`G`-jit boundary depends on both deme count and locus length.
-At length 7, `V` had the lower median runtime at `d >= 120`; at length 5, it
+The measured $V$/$G$-jit boundary depends on both deme count and locus length.
+At length 7, $V$ had the lower median runtime at `d >= 120`; at length 5, it
 had the lower median at every sampled `d`. The automatic backend thresholds
 documented for this benchmark use independent scalar conditions. Such
 thresholds cannot represent a diagonal boundary exactly, so configurations
@@ -429,19 +440,19 @@ length 1 finished in 2412s, length 8 in 39350s).
 
 | `deme x loci-length` | **1** | **2** | **3** |  **4** |  **5** |  **6** |  **7** | **8** |
 |:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| **2** | `L` | `V` | `V` | `V` | `V` | `L` | `L` | `L` |
-| **4** | `V` | `V` | `V` | `V` | `V` | `V` | `L` | `L` |
-| **8** | `V` | `V` | `V` | `V` | `V` | `V` | `L` | `L` |
-| **16** | `V` | `V` | `V` | `V` | `V` | `V` | <code>G<sub>jit</sub></code> | <code>G<sub>jit</sub></code> |
-| **25** | `V` | `V` | `V` | `V` | `V` | `V` | `L` | <code>G<sub>jit</sub></code> |
-| **35** | `V` | `V` | `V` | `V` | `V` | `V` | `L` | <code>G<sub>jit</sub></code> |
-| **50** | `V` | `V` | `V` | `V` | `V` | `V` | `L` | <code>G<sub>jit</sub></code> |
-| **70** | `V` | `V` | `V` | `V` | `V` | `V` | `V` | <code>G<sub>jit</sub></code> |
-| **100** | `V` | `V` | `V` | `V` | `V` | `V` | `V` | <code>G<sub>jit</sub></code> |
-| **150** | `V` | `V` | `V` | `V` | `V` | `V` | `V` | <code>G<sub>jit</sub></code> |
-| **250** | `V` | `V` | `V` | `V` | `V` | `V` | `V` | <code>G<sub>jit</sub></code> |
-| **350** | `V` | `V` | `V` | `V` | `V` | `V` | `V` | `V`|
-| **500** | `V` | `V` | `V` | `V` | `V` | `V` | `V` | `V`|
+| **2** | $L$ | $V$ | $V$ | $V$ | $V$ | $L$ | $L$ | $L$ |
+| **4** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $L$ | $L$ |
+| **8** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $L$ | $L$ |
+| **16** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $G_{\mathrm{jit}}$ | $G_{\mathrm{jit}}$ |
+| **25** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $L$ | $G_{\mathrm{jit}}$ |
+| **35** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $L$ | $G_{\mathrm{jit}}$ |
+| **50** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $L$ | $G_{\mathrm{jit}}$ |
+| **70** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $G_{\mathrm{jit}}$ |
+| **100** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $G_{\mathrm{jit}}$ |
+| **150** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $G_{\mathrm{jit}}$ |
+| **250** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $G_{\mathrm{jit}}$ |
+| **350** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $V$|
+| **500** | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $V$ | $V$|
 
 ##### G-jit:V Wall-Clock Ratio
 
@@ -469,23 +480,23 @@ Note: *Below 1.0 means V is still ahead.*
 
 The grid yields the following backend-runtime patterns:
 
-- Through capacity 4096 (length 6), `V` has the lowest median runtime at
+- Through capacity 4096 (length 6), $V$ has the lowest median runtime at
   every tested `d`.
-- At capacity 16384 (length 7), `G-jit` has the lowest median runtime for
-  `16 <= d <= 70`; `V` has the lowest median for `d >= 100`.
-- At capacity 65536 (length 8), `G-jit` has the lowest median through
-  `d=250`; `V` has the lowest median at `d >= 350`.
+- At capacity 16384 (length 7), $G_{\mathrm{jit}}$ has the lowest median runtime for
+  `16 <= d <= 70`; $V$ has the lowest median for `d >= 100`.
+- At capacity 65536 (length 8), $G_{\mathrm{jit}}$ has the lowest median through
+  `d=250`; $V$ has the lowest median at `d >= 350`.
 - `"lineal"` has the lowest median at `d=2`, length 1 (capacity 4), and at
   `d <= 8`, length 7 (capacity 16384). The `"auto"` policy does not select
   `"lineal"`; see §4.6 of the [simulator design document](fim-simulator-design.md).
 
-B.3 measured `V` at length 7 and `d=60` with a median of 29.629 s, compared
-with 30.135 s for `G-jit` (ratio 0.98). In this joint sweep, the nearest
-measured points at length 7 (`d=50` and `d=70`) favor `G-jit` by ratios
+B.3 measured $V$ at length 7 and `d=60` with a median of 29.629 s, compared
+with 30.135 s for $G_{\mathrm{jit}}$ (ratio 0.98). In this joint sweep, the nearest
+measured points at length 7 (`d=50` and `d=70`) favor $G_{\mathrm{jit}}$ by ratios
 1.32 and 1.39. The results differ; the measurements do not establish whether
 the difference reflects run variability, workload details, or other factors.
 
-`--measure-rss` produced a `V`/G-off/G-jit/`L` peak-RSS ratio of exactly `1.00`
+`--measure-rss` produced a $V$/G-off/G-jit/$L$ peak-RSS ratio of exactly `1.00`
 at every measured point in this grid. This is a limitation of the measurement
 at this workload scale: `InMemoryTrajectoryStore` retains every generation's
 full state for the whole run. At up to 75 generations and `d=500`/capacity
@@ -526,24 +537,24 @@ dev/bin/benchmark-engines --sweep max-concurrent-replicates \
 
 #### Reading the first row
 
-The window's first row is **not** an <code>L<sub>1</sub></code> run. Every cell in
+The window's first row is **not** an $L_{1}$ run. Every cell in
 this table runs a batch of 64 replicates; the window only limits how many are
-alive at once. <code>L<sub>x</sub></code> (`lineal`, which ignores the window) is
-therefore about `64` times <code>L<sub>1</sub></code> in every row
-(`64.84` in the first). The one-replicate case, where <code>L<sub>x</sub></code>
-equals <code>L<sub>1</sub></code>, is B.8's first row.
+alive at once. $L_x$ (`lineal`, which ignores the window) is
+therefore about `64` times $L_{1}$ in every row
+(`64.84` in the first). The one-replicate case, where $L_x$
+equals $L_{1}$, is B.8's first row.
 
 #### Latency results
 
-| Window | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V`(s) | <code>V/L<sub>1</sub></code> | `fastest` |
+| Window | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$(s) | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|--:|--:|--:|--:|--:|--:|--:|:--:|
-| 1 | 4.031 | 261.371 | 64.84 | 269.208 | 66.78 | 109.297 | 27.11 | 13.673 | 3.39 | `V` |
-| 2 | 4.028 | 259.794 | 64.50 | 261.821 | 65.00 | 106.344 | 26.40 | 13.462 | 3.34 | `V` |
-| 4 | 4.076 | 258.301 | 63.37 | 265.558 | 65.15 | 141.144 | 34.63 | 13.839 | 3.40 | `V` |
-| 8 | 4.221 | 266.565 | 63.15 | 269.768 | 63.91 | 163.900 | 38.83 | 13.810 | 3.27 | `V` |
-| 16 | 4.233 | 258.938 | 61.17 | 276.625 | 65.35 | 176.081 | 41.60 | 13.388 | 3.16 | `V` |
-| 32 | 4.119 | 260.966 | 63.36 | 283.370 | 68.80 | 176.661 | 42.89 | 13.401 | 3.25 | `V` |
-| 64 | 4.142 | 260.852 | 62.98 | 284.898 | 68.78 | 173.073 | 41.78 | 13.303 | 3.21 | `V` |
+| 1 | 4.031 | 261.371 | 64.84 | 269.208 | 66.78 | 109.297 | 27.11 | 13.673 | 3.39 | $V$ |
+| 2 | 4.028 | 259.794 | 64.50 | 261.821 | 65.00 | 106.344 | 26.40 | 13.462 | 3.34 | $V$ |
+| 4 | 4.076 | 258.301 | 63.37 | 265.558 | 65.15 | 141.144 | 34.63 | 13.839 | 3.40 | $V$ |
+| 8 | 4.221 | 266.565 | 63.15 | 269.768 | 63.91 | 163.900 | 38.83 | 13.810 | 3.27 | $V$ |
+| 16 | 4.233 | 258.938 | 61.17 | 276.625 | 65.35 | 176.081 | 41.60 | 13.388 | 3.16 | $V$ |
+| 32 | 4.119 | 260.966 | 63.36 | 283.370 | 68.80 | 176.661 | 42.89 | 13.401 | 3.25 | $V$ |
+| 64 | 4.142 | 260.852 | 62.98 | 284.898 | 68.78 | 173.073 | 41.78 | 13.303 | 3.21 | $V$ |
 
 ![Time and L₁ normalized time by lane window](img/fim-benchmark-b7-latency-graph.png)
 
@@ -551,10 +562,10 @@ equals <code>L<sub>1</sub></code>, is B.8's first row.
 
 Memory is the peak resident set size of one fresh process per cell, read from
 `VmHWM` (see B.6's correction for why the benchmark's own memory columns were
-re-measured alone). <code>L<sub>1</sub></code> for memory is the peak of a
+re-measured alone). $L_{1}$ for memory is the peak of a
 one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
 
-| Window | <code>L<sub>x</sub>(MiB)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(MiB)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(MiB)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V`(MiB) | <code>V/L<sub>1</sub></code> |
+| Window | $L_x(MiB)$ | $L_x/L_{1}$ | $G_{\mathrm{off}}(MiB)$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}(MiB)$ | $G_{\mathrm{jit}}/L_{1}$ | $V$(MiB) | $V/L_{1}$ |
 |---:|--:|--:|--:|--:|--:|--:|--:|--:|
 | 1 | 119.2 | 1.10 | 121.4 | 1.12 | 168.8 | 1.56 | 167.6 | 1.55 |
 | 2 | 119.0 | 1.10 | 138.5 | 1.28 | 171.3 | 1.58 | 167.8 | 1.55 |
@@ -568,16 +579,16 @@ one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
 
 #### Summary
 
-- **Latency.** `V` runtime is similar across the tested window sizes:
+- **Latency.** $V$ runtime is similar across the tested window sizes:
   `13.3`–`13.8` s, within the
-  run-to-run spread the `lineal` control shows (<code>L<sub>x</sub>/L<sub>1</sub></code>
-  `61`–`65`). <code>G<sub>jit</sub></code> is faster with a small window
-  (<code>G<sub>jit</sub>/L<sub>1</sub></code> `26`–`27` at windows 1 and 2, `42`–`43`
-  from 16 up); <code>G<sub>off</sub></code> slows about 6% as the window opens.
-- **Memory.** In this workload, the window has a small effect. `V` grows from
+  run-to-run spread the `lineal` control shows ($L_x/L_{1}$
+  `61`–`65`). $G_{\mathrm{jit}}$ is faster with a small window
+  ($G_{\mathrm{jit}}/L_{1}$ `26`–`27` at windows 1 and 2, `42`–`43`
+  from 16 up); $G_{\mathrm{off}}$ slows about 6% as the window opens.
+- **Memory.** In this workload, the window has a small effect. $V$ grows from
   `1.55` to `1.68` times
-  <code>L<sub>1</sub></code> from window 1 to unbounded (+8%), <code>G<sub>off</sub></code>
-  `1.12` to `1.42`. <code>L<sub>x</sub></code> remains near `1.10`.
+  $L_{1}$ from window 1 to unbounded (+8%), $G_{\mathrm{off}}$
+  `1.12` to `1.42`. $L_x$ remains near `1.10`.
 - At this scale (`d=60`, capacity `256`) every working set is tens of MiB. A
   window should matter where a lane's cached state is large (high `d` with a
   large capacity), which this table does not reach. Leave
@@ -608,17 +619,17 @@ dev/bin/benchmark-engines --sweep replicates --values 1,4,16,64,128 \
 
 #### Latency results
 
-The first row (one replicate) is where <code>L<sub>x</sub></code> equals
-<code>L<sub>1</sub></code>; the ratio columns read as "how many one-replicate
+The first row (one replicate) is where $L_x$ equals
+$L_{1}$; the ratio columns read as "how many one-replicate
 `lineal` runs does this batch cost".
 
-| Replicates | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V`(s) | <code>V/L<sub>1</sub></code> | `fastest` |
+| Replicates | $L_{1}\;(\mathrm{s})$ | $L_x\;(\mathrm{s})$ | $L_x/L_{1}$ | $G_{\mathrm{off}}\;(\mathrm{s})$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}\;(\mathrm{s})$ | $G_{\mathrm{jit}}/L_{1}$ | $V$(s) | $V/L_{1}$ | `fastest` |
 |---:|---:|---:|--:|--:|--:|--:|--:|--:|--:|:--:|
-| 1 | 4.178 | 4.164 | 1.00 | 4.264 | 1.02 | 1.683 | 0.40 | 0.198 | 0.05 | `V` |
-| 4 | 4.153 | 16.833 | 4.05 | 16.736 | 4.03 | 8.718 | 2.10 | 0.815 | 0.20 | `V` |
-| 16 | 4.382 | 67.241 | 15.34 | 68.780 | 15.70 | 42.036 | 9.59 | 3.350 | 0.76 | `V` |
-| 64 | 4.238 | 262.928 | 62.04 | 286.308 | 67.56 | 174.536 | 41.18 | 13.866 | 3.27 | `V` |
-| 128 | 4.266 | 534.583 | 125.31 | 586.742 | 137.54 | 362.799 | 85.04 | 27.866 | 6.53 | `V` |
+| 1 | 4.178 | 4.164 | 1.00 | 4.264 | 1.02 | 1.683 | 0.40 | 0.198 | 0.05 | $V$ |
+| 4 | 4.153 | 16.833 | 4.05 | 16.736 | 4.03 | 8.718 | 2.10 | 0.815 | 0.20 | $V$ |
+| 16 | 4.382 | 67.241 | 15.34 | 68.780 | 15.70 | 42.036 | 9.59 | 3.350 | 0.76 | $V$ |
+| 64 | 4.238 | 262.928 | 62.04 | 286.308 | 67.56 | 174.536 | 41.18 | 13.866 | 3.27 | $V$ |
+| 128 | 4.266 | 534.583 | 125.31 | 586.742 | 137.54 | 362.799 | 85.04 | 27.866 | 6.53 | $V$ |
 
 ![Time and L₁ normalized time by batch size](img/fim-benchmark-b8-latency-graph.png)
 
@@ -626,10 +637,10 @@ The first row (one replicate) is where <code>L<sub>x</sub></code> equals
 
 Memory is the peak resident set size of one fresh process per cell, read from
 `VmHWM` (see B.6's correction for why the benchmark's own memory columns were
-re-measured alone). <code>L<sub>1</sub></code> for memory is the peak of a
+re-measured alone). $L_{1}$ for memory is the peak of a
 one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
 
-| Replicates | <code>L<sub>x</sub>(MiB)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(MiB)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(MiB)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V`(MiB) | <code>V/L<sub>1</sub></code> |
+| Replicates | $L_x(MiB)$ | $L_x/L_{1}$ | $G_{\mathrm{off}}(MiB)$ | $G_{\mathrm{off}}/L_{1}$ | $G_{\mathrm{jit}}(MiB)$ | $G_{\mathrm{jit}}/L_{1}$ | $V$(MiB) | $V/L_{1}$ |
 |---:|--:|--:|--:|--:|--:|--:|--:|--:|
 | 1 | 108.3 | 1.00 | 108.7 | 1.00 | 155.4 | 1.43 | 155.5 | 1.44 |
 | 4 | 109.1 | 1.01 | 124.4 | 1.15 | 172.2 | 1.59 | 156.9 | 1.45 |
@@ -641,14 +652,14 @@ one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
 
 #### Summary
 
-- **Latency.** `V` is fastest at every batch size, from one replicate
-  (<code>V/L<sub>1</sub></code> `0.05`, about 20 times faster) to `128` (`6.53`).
-  All four engines grow linearly with the batch, so the `V`-versus-`G` boundary
+- **Latency.** $V$ is fastest at every batch size, from one replicate
+  ($V/L_{1}$ `0.05`, about 20 times faster) to `128` (`6.53`).
+  All four engines grow linearly with the batch, so the $V$-versus-$G$ boundary
   does not move with batch size at this configuration.
-- `L_b` here is the benchmark's sequential batch, not `fim run`'s multi-process
+- $L_b$ here is the benchmark's sequential batch, not `fim run`'s multi-process
   batch, so it is not what a user's `lineal` batch costs.
 - **Memory.** It grows with the batch for every engine, from `1.00`
-  (<code>L<sub>x</sub></code>) and `1.44` (`V`) times <code>L<sub>1</sub></code> at one
+  ($L_x$) and `1.44` ($V$) times $L_{1}$ at one
   replicate to `1.19` and `1.93` at 128, about `0.15` to `0.8` MiB per replicate.
 
 ## Unmeasured benchmark dimensions

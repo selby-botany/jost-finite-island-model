@@ -43172,6 +43172,28 @@ def test_help_math_preserves_code_examples_and_literal_identifiers() -> None
 
 Math conversion never interprets the contents of code spans or fences.
 
+<a id="validation.test_help_html.test_inline_tex_subscripts_do_not_split_literal_identifiers"></a>
+
+#### test\_inline\_tex\_subscripts\_do\_not\_split\_literal\_identifiers
+
+```python
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        ("H_S", "<var>H</var><sub>S</sub>"),
+        ("H_{ST}", "<var>H</var><sub>ST</sub>"),
+        ("N_i", "<var>N</var><sub>i</sub>"),
+        ("L_1", "<var>L</var><sub>1</sub>"),
+        ("n_replicates", "<var>n_replicates</var>"),
+        ("initial_allele_count", "<var>initial_allele_count</var>"),
+    ],
+)
+def test_inline_tex_subscripts_do_not_split_literal_identifiers(
+        expression: str, expected: str) -> None
+```
+
+Single-character TeX subscripts render without mangling legacy names.
+
 <a id="validation.test_help_html.test_help_rejects_unsupported_tex_commands"></a>
 
 #### test\_help\_rejects\_unsupported\_tex\_commands

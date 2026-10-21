@@ -169,14 +169,11 @@ _CODE_SPAN_PATTERN = re.compile(r"`[^`]*`")
 _MATH_PATTERN = re.compile(r"\$([^$\n]+)\$")
 _IDENTIFIER = r"[A-Za-z]\w*"
 _BARE_IDENTIFIER_PATTERN = re.compile(rf"^{_IDENTIFIER}$")
-# Braces are required, not optional: every real subscript in these two
-# docs is written `X_{sub}` (`N_{i}`, `mu_{b}`, `H_{ST}`); a brace-less
-# `X_sub` shape is, every time it actually occurs, a snake_case code
-# identifier in its own right (`$max_generations$`, `$n_replicates$`) --
-# treating it as base-plus-subscript would wrongly split a single
-# variable name in two. Confirmed by grepping every real `$expr$` in
-# both embedded docs before choosing this rule, not assumed.
-_SUBSCRIPTED_IDENTIFIER_PATTERN = re.compile(rf"^({_IDENTIFIER})_\{{(\w+)\}}$")
+# TeX permits an unbraced single-character subscript; longer subscripts
+# require braces. Keep legacy snake_case identifiers such as n_replicates whole.
+_SUBSCRIPTED_IDENTIFIER_PATTERN = re.compile(
+    rf"^({_IDENTIFIER})_(\{{\w+\}}|[A-Za-z0-9])$"
+)
 
 _EQUATION_TAG_PATTERN = re.compile(r"\\tag\{([^{}]+)\}\s*$")
 
@@ -215,6 +212,7 @@ def render_math(expr: str) -> str:
     subscripted = _SUBSCRIPTED_IDENTIFIER_PATTERN.fullmatch(stripped)
     if subscripted:
         base, subscript = subscripted.groups()
+        subscript = subscript.strip("{}")
         return f"<var>{html.escape(base)}</var><sub>{html.escape(subscript)}</sub>"
     if _BARE_IDENTIFIER_PATTERN.fullmatch(stripped):
         return f"<var>{html.escape(stripped)}</var>"

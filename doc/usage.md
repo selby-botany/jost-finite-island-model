@@ -7,6 +7,10 @@ defaults, and the [statistics reference](statistics.md) for definitions,
 interpretation, and implementation links. Return to the
 [project overview](../README.md) for installation and documentation links.
 
+Mathematical quantities use $\TeX$; configuration keys, report identifiers,
+and commands use backticks. Display equations have unique local
+$\text{U}$ tags.
+
 ## Contents
 
 - [Create a configuration](#create-a-configuration)
@@ -260,11 +264,11 @@ and `parameters.m` record the per-deme sizes and matrix rows used —
 compare them against a run with one shared `N/m` to see the effect of
 unequal size and asymmetric connectivity on differentiation.
 
-`deme_weighting` affects E<sub>ST</sub>, δ<sub>G</sub>, and mutual
-information; `D` and K<sub>ST</sub> weight demes equally by
+`deme_weighting` affects $E_{ST}$, $\delta_G$, and mutual
+information; `D` and $K_{ST}$ weight demes equally by
 definition, regardless of this setting. With the unequal per-deme `N` above,
 the default `equal` weighting and `deme_weighting: size` give different
-E<sub>ST</sub> — deme 4's 800-gene-copy weight pulls the size-weighted value
+$E_{ST}$ — deme 4's 800-gene-copy weight pulls the size-weighted value
 down, since it is both the largest deme and the best-connected one.
 
 ### Stepping-stone (spatial) migration
@@ -315,16 +319,16 @@ distance classes.
 Three demes start with partially shared alleles at different frequencies.
 Migration shares alleles, mutation creates private alleles, and drift changes
 their abundance and survival. Compare Caballero-García-Dorado allelic distance
-A<sub>CGD</sub> (presence/absence), Gregorius δ (frequency distance), and
+$A_{\mathrm{CGD}}$ (presence/absence), Gregorius $\delta_G$ (frequency distance), and
 Sherwin mutual information `MI` (information about population membership)
-with `D` and G<sub>ST</sub>. The split is imposed, not simulated from an
+with `D` and $G_{ST}$. The split is imposed, not simulated from an
 ancestral population.
 
 All five measures are watched, so the stopping verdict applies to all of
 them. `track_expensive_statistics` also records the other supplemental
 measures. In the desktop app that flag follows Settings' **Statistics shown**;
-watched statistics are computed regardless. Show A<sub>CGD</sub>,
-δ<sub>G</sub>, and I there to see their trajectories.
+watched statistics are computed regardless. Show $A_{\mathrm{CGD}}$,
+$\delta_G$, and I there to see their trajectories.
 
 <!-- worked-example-config: examples/literature-distance-statistics-from-an-explicit-founder-split/config.yaml -->
 ```yaml
@@ -365,12 +369,12 @@ fim run literature-distance-statistics.yaml \
 ```
 
 The saved run converges at generation 10,499, with evidence-window means
-`D = 0.3568`, `Delta = 0.4528`, and `A_CGD = 3.7508`; these are not its
+$D=0.3568$, $\delta_G=0.4528$, and $A_{\mathrm{CGD}}=3.7508$; these are not its
 final-generation values. It uses one replicate and took about 17 seconds
 on the development machine. Choose **Run settings...** on Configure to
 change the replicate count, cap, or precision for your run only.
 
-Unlike δ and `D`, `A_CGD` is not bounded by 1; `MI` uses natural-log units.
+Unlike $\delta_G$ and $D$, $A_{\mathrm{CGD}}$ is not bounded by 1; `MI` uses natural-log units.
 The implementation averages allelic distance over distinct deme pairs,
 whereas Caballero and García-Dorado's all-pairs equation 6 includes
 self-pairs. See the [example's explanation and literature references](
@@ -443,9 +447,16 @@ Initial frequencies are derived without an explicit `p_0`. The example pools
 eight loci and sets `precision: 0.03`, because one locus here
 needs about 30,000 generations to settle (see the
 [example's README](examples/equilibrium-split-founding/README.md)). How long the ancestral phase runs is worked out from
-the model: about ln(1 / equilibrium_convergence_tolerance) times the time the
-ancestral population takes to forget its starting state, 1/(2μ + 1/N)
-generations for its N gene copies. Loosen the tolerance for a shorter
+the model. Write $\varepsilon$ for `equilibrium_convergence_tolerance`
+and $N_{\mathrm{anc}}$ for the ancestral gene-copy count. The approximate
+relaxation time in generations is:
+
+```math
+\tau_{\mathrm{anc}}\approx\frac{1}{2\mu+1/N_{\mathrm{anc}}} \tag{U.1}
+```
+
+The phase lasts about $\ln(1/\varepsilon)$ times that relaxation time.
+Loosen the tolerance for a shorter
 ancestral phase (founded from a population a little further from
 equilibrium), or tighten it for a longer one; either way, a phase needing
 more than equilibrium_max_generations is a hard error, reported before the
@@ -461,7 +472,8 @@ equilibrium_max_generations](configuration.md#equilibrium_convergence_window-equ
 By default, migration blends each deme's frequencies with an exact
 `rate * N` fraction of its neighbors' — a deterministic step given that
 generation's frequencies. migrant_sampling: stochastic instead draws the
-migrant count from `Binomial(N, rate)`, adding variation in migrant number:
+migrant count from $\mathrm{Binomial}(N,r)$, where $N$ is the gene-copy count
+and $r$ the migrant fraction, adding variation in migrant number:
 
 <!-- worked-example-config: examples/stochastic-migrant-counts/config.yaml -->
 ```yaml
@@ -503,9 +515,9 @@ By default (mutation_model: infinite_alleles), every mutation receives a
 globally unique identity — the standard population-genetics idealization
 for a locus long enough that two independent mutations essentially never
 land on the same state. finite_alleles instead bounds a locus to
-4<sup>length</sup> states and lets a mutation recur to one already present
+$4^\ell$ states, where $\ell$ is the locus's `length`, and lets a mutation recur to one already present
 elsewhere in the run. This example uses a 3-base locus
-(4<sup>3</sup> = 64 states) and high `mu` to make recurrent mutation likely:
+($4^3=64$ states) and high `mu` to make recurrent mutation likely:
 
 <!-- worked-example-config: examples/finite-length-alleles-the-k-allele-model/config.yaml -->
 ```yaml
@@ -551,7 +563,7 @@ implement.
 Wright's finite-island model and Takahata's multiallelic identity treatment
 carry an explicit finite-`d` correction. This example keeps `d` small enough
 that the correction matters; increasing `d` while holding `N`, `m`, and `mu`
-fixed moves G<sub>ST</sub> toward the infinite-island approximation.
+fixed moves $G_{ST}$ toward the infinite-island approximation.
 
 <!-- worked-example-config: examples/wright-takahata-finite-deme-correction/config.yaml -->
 ```yaml
@@ -581,15 +593,15 @@ fim run finite-deme-correction.yaml \
 ```
 
 The batch of 10 replicates takes about nine minutes and gives an average
-G<sub>ST</sub> of 0.193 ± 0.003 across replicates
+$G_{ST}$ of $0.193\pm0.003$ across replicates
 (`precision: 0.02` keeps the batch short; see the
 [example's README](examples/wright-takahata-finite-deme-correction/README.md)).
 The closed-form finite-deme prediction for these parameters
 is about 0.141, below the corresponding infinite-island approximation of
 about 0.238 because the `d / (d - 1)` correction is retained. A single locus
 scatters widely around that expectation (the exact expectation for this
-model is G<sub>ST</sub> 0.195 and D 0.319); the batch averages it out, and its
-interval for G<sub>ST</sub> contains 0.195.
+model is $G_{ST}=0.195$ and $D=0.319$); the batch averages it out, and its
+interval for $G_{ST}$ contains 0.195.
 
 ### Kimura-Weiss isolation by distance
 
@@ -633,8 +645,8 @@ fim run kimura-weiss-isolation-by-distance.yaml \
   --output results/kimura-weiss-isolation-by-distance --quiet
 ```
 
-The batch of 10 replicates takes about six minutes and gives averages D =
-0.563 and G<sub>ST</sub> = 0.122 across replicates. `precision: 0.05` is
+The batch of 10 replicates takes about six minutes and gives averages
+$D=0.563$ and $G_{ST}=0.122$ across replicates. `precision: 0.05` is
 loose to limit runtime; the default 0.01 would take hours in this example (see
 the [example's README](examples/kimura-weiss-isolation-by-distance/README.md)).
 Open the result in `fim-gui` and inspect the Literature visualizations panel:
@@ -643,9 +655,15 @@ non-zero migration edges and overlays a log-linear fit.
 
 ### Per-base mutation rate across unequal locus lengths
 
-μ<sub>b</sub> (mutually exclusive with `mu`) is a single per-base-pair mutation
-probability. Each locus derives `mu` from its `length` through
-mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup>:
+`mu_b` (mutually exclusive with `mu`) configures a single per-base-pair
+mutation probability $\mu_b$. Each locus derives its `mu` from its
+`length`, written $\ell$, through:
+
+```math
+\mu_\ell=1-(1-\mu_b)^\ell \tag{U.2}
+```
+
+The exponent is the number of bases that must all avoid mutation.
 
 <!-- worked-example-config: examples/per-base-mutation-rate-across-unequal-locus-lengths/config.yaml -->
 ```yaml
@@ -726,8 +744,8 @@ fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
 Converges at generation 2,327, after a few seconds. `report.json`'s
-converged_on lists the watched statistics that had settled when the
-run stopped: here ["G<sub>ST</sub>"] alone, because G<sub>ST</sub>'s
+`converged_on` lists the watched statistics that had settled when the
+run stopped: here `["G_ST"]` alone, because $G_{ST}$'s
 average was already known precisely (0.0606 ± 0.0047) while D's
 was not (0.151 ± 0.020), and `any` needs only one. A run that reaches its cap
 records `null`, since it converged on nothing.
@@ -737,7 +755,7 @@ records `null`, since it converged on nothing.
 A run burns in and then averages; everything after the burn-in is its
 evidence window. The report gives, for the window, both the precision of the
 average (the standard error) and generation-to-generation variation
-(the standard deviation, `σ`). The across-replicate confidence interval
+(the standard deviation, $\sigma$). The across-replicate confidence interval
 in the next example instead measures uncertainty in a mean across
 independent replicates:
 
@@ -791,12 +809,13 @@ fim run sigma-band.yaml --output results/sigma-band --quiet
 
 Converges at generation 19,984, after about a minute and a half. The evidence
 window starts at the burn-in (generation 1,522) and holds 18,463 generations:
-D = 0.127 ± 0.004 (one standard error), with `σ` = 0.035, so a single
-generation's D lies within 0.127 ± 0.071 about 95% of the time (2σ). The example
+$D=0.127\pm0.004$ (one standard error), with $\sigma=0.035$, so a single
+generation's $D$ lies within $0.127\pm0.071$ about 95% of the time
+($2\sigma$). The example
 pools eight loci: with one locus, a stretch near fixation can look steady for
 the wrong reason (see the
 [example's README](examples/within-run-sigma-band/README.md)). In the app, the
-trajectory graph draws `σ` as a shaded band over the window in the "Every
+trajectory graph draws $\sigma$ as a shaded band over the window in the "Every
 generation" display, and the standard error as a band around the running mean
 in the two averaged displays; the Band control chooses ±1 or ±2. The numbers
 are in `report.json` under `window_statistics`.
@@ -1241,8 +1260,8 @@ fim stats run/trajectory.tlog --q 0 --q 1 --q 2
 ```
 
 JSON is printed to standard output. `--output` also writes the same result.
-`--q 0` and `--q 2` match the report's K<sub>ST</sub> and `D`; `--q 1`
-matches E<sub>ST</sub> using the recorded `deme_weighting`.
+`--q 0` and `--q 2` match the report's $K_{ST}$ and `D`; `--q 1`
+matches $E_{ST}$ using the recorded `deme_weighting`.
 See [differentiation measures](jost-differentiation-measures.md) for the
 Hill-number family and [statistics](statistics.md) for implementation links.
 
@@ -1294,8 +1313,8 @@ About.
 | Home | Browse Experiments, Studies, runs, and batch replicates. Open results, clone configurations, and manage membership. Rows show summaries from `report.json`/`summary.json`; batch results are reconstructed from saved replicates. Default Study/Experiment groups are created when needed. A Study's pooled results can combine different parameters, identified by a “varies across members” note. The protected Examples experiment appears last. **Select** exposes deletion checkboxes; confirmation names runs affected by group deletion. Opening a trajectory supports retained-generation analysis and differentiation-`q` sweeps | [Re-analyze a trajectory](#re-analyze-a-trajectory), [Read-only items](#read-only-items) |
 | Configure | Edit parameters and structure in independently scrolling panels with hover/focus help. Parameters include ploidy, `N` in individuals (scalar or per-deme), `d`, `m`, `mu`, and seed. Both YAML and the form use individuals; the engine converts to gene copies. Ploidy starts from Settings (initially diploid); “Ask me each time” requires selection before running. Structure covers initial conditions, sampling/mutation models, weighting, loci, watched statistics, and batch stopping. Settings supplies execution, convergence, storage, Expert, plot, and concurrency defaults; **Run settings...** edits the pending run. Load/save YAML, select an example, or open the File menu's preset picker (with YAML copying and duplication). **Run**/**Explore** use current inputs; invalid input returns here and marks the field | [Create a configuration](#create-a-configuration), [Loading settings](#loading-a-configuration-does-not-change-your-settings) |
 | Run view — running | Follow live allele frequencies, statistic trajectories, progress, and cancellation. **Graphs** selects visible graphs; Settings controls columns. The statistics table is the trajectory legend and line-visibility control. Batch scatter plots pool advancing replicates. Deme selectors apply to subsequent updates. Cancellation or an error preserves the last view with a status banner | [Run a simulation](#run-a-simulation), [Batches](#batches-n_replicates-greater-than-one) |
-| Run view — completed | Inspect reports, stop outcomes, scatter plots, and persisted histories. Scalar runs show within-run σ bands and playback/scrubbing when multiple generations are retained. Batch results pool final-state scatter and list each replicate's status, final generation, and statistics, with intervals labeled “uncertainty across N independent replicates”. **Open** on a replicate displays scalar results; **Open output folder** reveals artifacts. Deme selectors (initially 1 versus 2) update scatter and pairwise statistics during execution, completion, and scrubbing. Frequency axes span 0–1. **Statistics shown**/**Choose…** controls visible statistics, not saved final reports; supplementary histories can add computation. Statistic names open their [reference sections](statistics.md) | [Output schemas](#output-schemas), [Supplementary histories](configuration.md#track_expensive_statistics) |
-| Explore | Evaluate analytic predictions from `N` (individuals), `d`, `m`, and `mu`, converting by the form's ploidy. The table includes differentiation, diversity, entropy, effective allele counts, identity-recovery metrics, and mutation-negligibility information. Typical-deme entropy is approximate, especially at `d = 2`. Committing a field updates predictions without simulation. Select a statistic row to chart it over any parameter range; charts group compatible units (proportions, nats, allele counts, generations). Parameter-independent predictions appear flat: analytic `D` is independent of `N`, and recovery metrics of mutation rate. The slider evaluates along the range without changing inputs. **Run this for real** copies inputs to Configure with a new Study selected | [Statistics reference](statistics.md), [Python statistics API](fim-simulator-functional-api.md#4-fimstatistics--differentiation-and-diversity-measures) |
+| Run view — completed | Inspect reports, stop outcomes, scatter plots, and persisted histories. Scalar runs show within-run $\sigma$ bands and playback/scrubbing when multiple generations are retained. Batch results pool final-state scatter and list each replicate's status, final generation, and statistics, with intervals labeled “uncertainty across N independent replicates”. **Open** on a replicate displays scalar results; **Open output folder** reveals artifacts. Deme selectors (initially 1 versus 2) update scatter and pairwise statistics during execution, completion, and scrubbing. Frequency axes span 0–1. **Statistics shown**/**Choose…** controls visible statistics, not saved final reports; supplementary histories can add computation. Statistic names open their [reference sections](statistics.md) | [Output schemas](#output-schemas), [Supplementary histories](configuration.md#track_expensive_statistics) |
+| Explore | Evaluate analytic predictions from `N` (individuals), `d`, `m`, and `mu`, converting by the form's ploidy. The table includes differentiation, diversity, entropy, effective allele counts, identity-recovery metrics, and mutation-negligibility information. Typical-deme entropy is approximate, especially at $d=2$. Committing a field updates predictions without simulation. Select a statistic row to chart it over any parameter range; charts group compatible units (proportions, nats, allele counts, generations). Parameter-independent predictions appear flat: analytic `D` is independent of `N`, and recovery metrics of mutation rate. The slider evaluates along the range without changing inputs. **Run this for real** copies inputs to Configure with a new Study selected | [Statistics reference](statistics.md), [Python statistics API](fim-simulator-functional-api.md#4-fimstatistics--differentiation-and-diversity-measures) |
 | Compare | Select at least two completed runs. Scatter panels identify differing parameters, and a trajectory overlay shows one statistic with one color per run. No rerun is required | No direct CLI equivalent; compare exported trajectories and reports in an analysis tool |
 | Help | Read this guide, the [configuration reference](configuration.md), and the [statistics reference](statistics.md) offline with cross-links. Other documents open on GitHub in the default browser. Available from the rail or Help menu; Back/Forward uses screen history | The same three Markdown guides are available in the repository |
 
@@ -1337,9 +1356,10 @@ The first-order autoregressive standard-error estimate accounts for
 neighboring-generation correlation, but can underestimate uncertainty when
 relaxation involves several time scales.
 
-The row also shows Δ<sub>p</sub> (observed minus predicted at the selected
+The row also shows $\Delta_p$ (observed minus predicted at the selected
 generation) and trajectory mean squared error, for example
-`ΔDₚ = +0.012, MSE = 4.1e-5`. Both update during execution and scrubbing.
+$\Delta D_p=+0.012$, $\mathrm{MSE}=4.1\times10^{-5}$.
+Both update during execution and scrubbing.
 The prediction uses the expected trajectory when supported, otherwise
 the equilibrium line (including `E_ST`). The tooltip identifies which
 reference applies. See the [statistics reference](statistics.md) for
@@ -1591,8 +1611,8 @@ settings come from your Settings, not from that configuration.
 The GUI saves display preferences, startup behavior, execution defaults,
 and the last submitted configuration between launches:
 
-- Significant digits and **Statistics shown**. Showing E<sub>ST</sub>,
-  K<sub>ST</sub>, A<sub>CGD</sub>, δ<sub>G</sub>, or I enables computation
+- Significant digits and **Statistics shown**. Showing $E_{ST}$,
+  $K_{ST}$, $A_{\mathrm{CGD}}$, $\delta_G$, or I enables computation
   of all five each generation; see
   [`track_expensive_statistics`](configuration.md#track_expensive_statistics).
 - The pairwise-output deme limit and light/dark choice. An absent or
@@ -1787,21 +1807,21 @@ to get a manifest this version can read and verify.
 The final report contains:
 
 - run identity, generation, convergence flag, watched statistic, and reason;
-- H<sub>S</sub>, H<sub>T</sub>, and the correctly partitioned H<sub>ST</sub>;
-- G<sub>ST</sub> (`null` only when *every* tracked locus is fixed for the same
+- $H_S$, $H_T$, and the correctly partitioned $H_{ST}$;
+- $G_{ST}$ (`null` only when *every* tracked locus is fixed for the same
   allele in every deme; under per-locus ratio averaging, undefined loci
   are excluded rather than replacing defined values);
-- Jost's `D`, entropy differentiation E<sub>ST</sub>, and allele-number
-  differentiation K<sub>ST</sub>;
+- Jost's `D`, entropy differentiation $E_{ST}$, and allele-number
+  differentiation $K_{ST}$;
 - literature-derived supplemental statistics:
-  Caballero-García-Dorado allelic distance A<sub>CGD</sub>, Gregorius
-  δ, and Sherwin mutual information `MI`;
-- the within- and between-deme gene identities G<sub>s</sub> (`Gs`) and
-  G<sub>d</sub> (`Gd`);
-- Nei's (1973) D<sub>m</sub> (`D_m`) and R<sub>ST</sub> (`R_ST`), Nei's
-  logarithmic G'<sub>ST</sub> (`G_ST_NEI_LOG`), Hedrick's standardized
-  G'<sub>ST</sub> (`G_ST_HEDRICK`), and coancestry F<sub>ST</sub> (`F_ST`),
-  each computed from the pooled H<sub>S</sub>/H<sub>T</sub> and `null` where
+  Caballero-García-Dorado allelic distance $A_{\mathrm{CGD}}$, Gregorius
+  $\delta_G$, and Sherwin mutual information `MI`;
+- the within- and between-deme gene identities $G_s$ (`Gs`) and
+  $G_d$ (`Gd`);
+- Nei's (1973) $D_m$ (`D_m`) and $R_{ST}$ (`R_ST`), Nei's
+  logarithmic $G'_{ST}$ (`G_ST_NEI_LOG`), Hedrick's standardized
+  $G'_{ST}$ (`G_ST_HEDRICK`), and coancestry $F_{ST}$ (`F_ST`),
+  each computed from the pooled $H_S$/$H_T$ and `null` where
   undefined;
 - Nei's genetic distance across all demes in four forms, and the matching
   identities: `NEI_D_ALL_GEO`, `NEI_D_ALL_GEO_LOCUS_MEAN`, `NEI_D_ALL_ARITH`,
@@ -1813,19 +1833,19 @@ A `report.json` may lack statistics added after its software version.
 Opening the run computes missing values from its saved trajectory
 without rewriting the file.
 
-Multiple loci are independent repeats. H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>,
-and K<sub>ST</sub> are arithmetic means across loci. `D` and G<sub>ST</sub>
+Multiple loci are independent repeats. $H_S$, $H_T$, $H_{ST}$, $E_{ST}$,
+and $K_{ST}$ are arithmetic means across loci. `D` and $G_{ST}$
 instead follow [locus_aggregation](configuration.md#locus_aggregation):
-by default (`ratio_of_means`), H<sub>S</sub>/H<sub>T</sub> are pooled across loci
-first and one `D`/G<sub>ST</sub> is computed from those pooled values, not
+by default (`ratio_of_means`), $H_S$/$H_T$ are pooled across loci
+first and one `D`/$G_{ST}$ is computed from those pooled values, not
 averaged per-locus ratios; the opt-in `mean_of_ratios` restores the
-per-locus-ratio-then-average behavior. `D` and K<sub>ST</sub> always use equal
-deme weighting. `deme_weighting` affects E<sub>ST</sub>, δ<sub>G</sub>,
+per-locus-ratio-then-average behavior. `D` and $K_{ST}$ always use equal
+deme weighting. `deme_weighting` affects $E_{ST}$, $\delta_G$,
 and mutual information.
 
 ### `pairwise.json`
 
-Every pair of demes' Nei identities and pairwise F<sub>ST</sub> at the run's
+Every pair of demes' Nei identities and pairwise $F_{ST}$ at the run's
 final generation, so any pair can be compared later or analyzed outside
 `fim`. Written for every scalar run and every batch replicate, and digested
 in the manifest.
@@ -1850,8 +1870,8 @@ in the manifest.
 (The empty lists stand for lists of the same length.) Each list is the upper
 triangle of a symmetric matrix, row by row: pairs (1, 2), (1, 3), (1, 4),
 (2, 3), (2, 4), (3, 4) for four demes, numbered from 1 as everywhere else in
-`fim`. The diagonal is not stored (identity 1, F<sub>ST</sub> 0). Each
-distance is `-ln` of its identity; a pairwise F<sub>ST</sub> is `null` where
+`fim`. The diagonal is not stored (identity 1, $F_{ST}$ 0). Each
+distance is $-\ln(I)$ for its identity $I$; a pairwise $F_{ST}$ is `null` where
 undefined (both demes fixed for the same allele). With more demes than
 [`--pairwise-max-demes`](#run-a-simulation), `"mode"` is `"skipped"`, the
 limit is recorded as `"max_demes"`, and there are no matrices.
@@ -1875,19 +1895,19 @@ Two results need a word of explanation:
   within-deme identities, which one very diverse deme can drag far down.
   It signals strongly unequal within-deme diversity: compare the arithmetic
   form beside it, which stays non-negative, and the within-deme diversity
-  (H<sub>S</sub>, effective number of alleles). Pair forms and arithmetic forms
+  ($H_S$, effective number of alleles). Pair forms and arithmetic forms
   are never negative.
 
-The arithmetic all-demes distance equals `-ln(1 - D)` for Jost's `D`.
+The arithmetic all-demes distance equals $-\ln(1 - D)$ for Jost's $D$.
 [Nei distances in fim](nei-distances.md) has the full explanation, a worked
 example of a negative value, and the formulas.
 
 ### `scatter.png`
 
-- `d = 2`: direct Deme 1 versus Deme 2 scatter with a diagonal reference.
-- `d = 3`: direct three-dimensional scatter.
-- `4 <= d <= 6`: every pairwise deme projection.
-- `d > 6`: direct Deme 1 versus Deme 2 scatter, same as `d = 2` — not a
+- $d=2$: direct Deme 1 versus Deme 2 scatter with a diagonal reference.
+- $d=3$: direct three-dimensional scatter.
+- $4 \le d \le 6$: every pairwise deme projection.
+- $d>6$: direct Deme 1 versus Deme 2 scatter, same as $d=2$ — not a
   PCA projection.
 
 One point represents one `(locus, allele)` pair. Coincident points are enlarged
@@ -1918,9 +1938,9 @@ Written only for n_replicates greater than one, alongside the
 above.
 
 `summary.json` maps each reported statistic name (every global statistic in
-[`report.json`](#reportjson): `D`, G<sub>ST</sub>, E<sub>ST</sub>,
-K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, A<sub>CGD</sub>,
-Gregorius δ, `MI`, G<sub>s</sub>, G<sub>d</sub>, the pooled-heterozygosity
+[`report.json`](#reportjson): `D`, $G_{ST}$, $E_{ST}$,
+$K_{ST}$, $H_S$, $H_T$, $H_{ST}$, $A_{\mathrm{CGD}}$,
+Gregorius $\delta_G$, `MI`, $G_s$, $G_d$, the pooled-heterozygosity
 measures and the all-demes Nei forms) to its across-replicate confidence
 interval:
 
@@ -1957,12 +1977,12 @@ A `summary.json` written by an older version of this program has no
 `sample_std` field at all. Nothing needs converting: every tool here
 reads such a file as though the value were `null`.
 
-G<sub>ST</sub> can have a smaller sample_count than the other statistics: a
-replicate whose locus is monomorphic across every deme reports G<sub>ST</sub> as
+$G_{ST}$ can have a smaller sample_count than the other statistics: a
+replicate whose locus is monomorphic across every deme reports $G_{ST}$ as
 `null` in `report.json`, and that replicate is excluded from
-G<sub>ST</sub>'s interval. The
-other statistics that can be `null` because they are undefined (R<sub>ST</sub>,
-both G'<sub>ST</sub>, F<sub>ST</sub>) are treated the same way. A Nei distance
+$G_{ST}$'s interval. The
+other statistics that can be `null` because they are undefined ($R_{ST}$,
+both $G'_{ST}$, $F_{ST}$) are treated the same way. A Nei distance
 is different: `null` there means *infinite*, and a mean that includes an
 infinite value has no finite value, so a Nei distance infinite in any
 replicate is omitted from `summary.json`; its identity is still summarized.

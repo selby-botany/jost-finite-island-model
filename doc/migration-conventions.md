@@ -9,7 +9,6 @@
   - [2.1 Ryman & Leimar (2008)](#21-ryman--leimar-2008)
   - [2.2 Crow & Aoki (1984)](#22-crow--aoki-1984)
 - [3. Comparison protocol](#3-comparison-protocol)
-- [Metadata](#metadata)
 
 Mathematical symbols and operations use $\TeX$; literal configuration
 keys, Python names, and report fields use backticks. For example,
@@ -467,33 +466,3 @@ and [`migrate()`](../src/fim/model/operators.py). The
 [Python API guide](python-api.md) and generated
 [API reference](../src/fim/API.md) document programmatic access; the
 [statistics reference](statistics.md) lists result identifiers.
-
----
-
-## Metadata
-
-```text
-generator-name: Claude Code
-generator-version: Claude Sonnet 5
-generator-model-token: claude-sonnet-5
-generator-provider: Anthropic
-generation-date: 2026-09-04
-generator-responsibility: design
-```
-
-Expanded the literature-mapping reference with TeX notation,
-numbered derivations, and worked examples for units, migration
-source weights, and identity sampling. Restated the Ryman & Leimar
-recursion mapping without relying on private notes, clarified the
-unresolved Crow & Aoki result, and added explicit comparison
-guidance. Checked equations and parameter claims against the
-repository's identity-recursion tests and migration operators.
-
-```text
-generator-name: Copilot SDK in VS Code
-generator-version: gpt-6-luna
-generator-model-token: gpt-6-luna
-generator-provider: OpenAI
-generation-date: 2026-10-18
-generator-responsibility: revision
-```
