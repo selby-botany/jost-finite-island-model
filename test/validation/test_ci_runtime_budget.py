@@ -99,11 +99,13 @@ def test_each_test_step_has_a_nonflaky_wall_clock_budget() -> None:
 
 
 def test_artifact_assembly_has_its_own_budget_after_the_ci_checks() -> None:
-    """Artifact assembly cannot exhaust the test step's 30-minute budget.
+    """Artifact assembly cannot exhaust the test step's 40-minute budget.
 
     Run 39280427237 passed every Python 3.13 test and documentation check,
     then timed out building the sdist. Keep every check, the packaging test,
-    and installed-wheel smoke, but budget final assembly separately.
+    and installed-wheel smoke, but budget final assembly separately. Run
+    39612914339 later exhausted the step's own 30-minute budget outright
+    (not during packaging) as the GUI-tabs test layer grew; raised to 40.
     """
     run_steps = _run_steps()
     full_step = next(
@@ -117,7 +119,7 @@ def test_artifact_assembly_has_its_own_budget_after_the_ci_checks() -> None:
         for step in run_steps
         if str(step["run"]).strip() == "./build --no-lint --no-type --no-test --no-docs"
     )
-    assert full_step["timeout-minutes"] == 30
+    assert full_step["timeout-minutes"] == 40
     assert package_step["timeout-minutes"] == 15
     assert run_steps.index(full_step) < run_steps.index(package_step)
     assert "if" not in package_step

@@ -43211,15 +43211,17 @@ five-minute allowance before step overhead.
 def test_artifact_assembly_has_its_own_budget_after_the_ci_checks() -> None
 ```
 
-Artifact assembly cannot exhaust the test step's 30-minute budget.
+Artifact assembly cannot exhaust the test step's 40-minute budget.
 
 Run 39280427237 passed every Python 3.13 test and documentation check,
 then timed out building the sdist. Keep every check, the packaging test,
-and installed-wheel smoke, but budget final assembly separately.
+and installed-wheel smoke, but budget final assembly separately. Run
+39612914339 later exhausted the step's own 30-minute budget outright
+(not during packaging) as the GUI-tabs test layer grew; raised to 40.
 
 <a id="validation.test_ci_runtime_budget.test_full_lineal_example_replays_belong_to_the_slow_layer"></a>
 
-#### [test\_full\_lineal\_example\_replays\_belong\_to\_the\_slow\_layer](./validation/test_ci_runtime_budget.py#L128)
+#### [test\_full\_lineal\_example\_replays\_belong\_to\_the\_slow\_layer](./validation/test_ci_runtime_budget.py#L130)
 
 ```python
 @pytest.mark.parametrize("marker", ["slow", "not slow"])
@@ -43235,7 +43237,7 @@ run per push; every full replay, including future examples, is slow.
 
 <a id="validation.test_ci_runtime_budget.test_slow_tests_job_never_runs_for_a_push_or_pull_request"></a>
 
-#### [test\_slow\_tests\_job\_never\_runs\_for\_a\_push\_or\_pull\_request](./validation/test_ci_runtime_budget.py#L179)
+#### [test\_slow\_tests\_job\_never\_runs\_for\_a\_push\_or\_pull\_request](./validation/test_ci_runtime_budget.py#L181)
 
 ```python
 def test_slow_tests_job_never_runs_for_a_push_or_pull_request() -> None
@@ -43252,7 +43254,7 @@ reintroduce the exact problem this job exists to close.
 
 <a id="validation.test_ci_runtime_budget.test_slow_tests_job_runs_slow_only_with_its_own_budget"></a>
 
-#### [test\_slow\_tests\_job\_runs\_slow\_only\_with\_its\_own\_budget](./validation/test_ci_runtime_budget.py#L199)
+#### [test\_slow\_tests\_job\_runs\_slow\_only\_with\_its\_own\_budget](./validation/test_ci_runtime_budget.py#L201)
 
 ```python
 def test_slow_tests_job_runs_slow_only_with_its_own_budget() -> None
@@ -43262,7 +43264,7 @@ def test_slow_tests_job_runs_slow_only_with_its_own_budget() -> None
 
 <a id="validation.test_ci_runtime_budget.test_build_and_homebrew_jobs_never_run_on_schedule_or_dispatch"></a>
 
-#### [test\_build\_and\_homebrew\_jobs\_never\_run\_on\_schedule\_or\_dispatch](./validation/test_ci_runtime_budget.py#L212)
+#### [test\_build\_and\_homebrew\_jobs\_never\_run\_on\_schedule\_or\_dispatch](./validation/test_ci_runtime_budget.py#L214)
 
 ```python
 def test_build_and_homebrew_jobs_never_run_on_schedule_or_dispatch() -> None
@@ -43276,7 +43278,7 @@ needlessly re-run the entire ordinary per-push pipeline alongside
 
 <a id="validation.test_ci_runtime_budget.test_ci_workflow_declares_schedule_and_workflow_dispatch_triggers"></a>
 
-#### [test\_ci\_workflow\_declares\_schedule\_and\_workflow\_dispatch\_triggers](./validation/test_ci_runtime_budget.py#L227)
+#### [test\_ci\_workflow\_declares\_schedule\_and\_workflow\_dispatch\_triggers](./validation/test_ci_runtime_budget.py#L229)
 
 ```python
 def test_ci_workflow_declares_schedule_and_workflow_dispatch_triggers(

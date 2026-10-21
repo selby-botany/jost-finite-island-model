@@ -153,10 +153,24 @@ jobs:
       # Keep the test budget unchanged and give artifact assembly its
       # own bounded step. --no-package defers only final assembly and
       # wheel smoke; the packaging tests and coverage still run here.
+      #
+      # Run 39612914339 (2026-10-21 UTC, 3.12) then hit the 30-minute
+      # step limit itself, with --no-package already in effect: mypy
+      # 23s, packaging tests 4m43s, parallel tests 13m51s, GUI tests
+      # 10m23s, then every test passed (93.73% coverage) and every doc
+      # check succeeded in the ~30s remaining before the runner killed
+      # the step on its own 30-minute clock -- not a hang, the test
+      # layer's own total cost (the parallel suite alone grew from
+      # 9m47s/11m46s to 13m51s as GUI-tabs work landed, matching the
+      # `gui-tabs-release-a`/`-release-b` branches' own test growth) had
+      # simply grown to consume the entire budget with no slack left for
+      # ordinary runner-speed variance. Raise to 40 minutes, restoring
+      # comparable headroom (~10 minutes) to what 30 gave the 18m40s
+      # measured at the time it was set.
       - name: Run the CI checks (lint, type, docs, and the
           full test suite incl. statistical/gui scenarios, excl. slow)
         run: xvfb-run --auto-servernum ./build --ci --no-package
-        timeout-minutes: 30
+        timeout-minutes: 40
       - name: Build distributions and smoke-test the installed wheel
         run: ./build --no-lint --no-type --no-test --no-docs
         timeout-minutes: 15
