@@ -7,7 +7,7 @@ const workspace = (() => {
     const documentByResource = new Map();
     const selectionListeners = new Set();
     const changeListeners = new Set();
-    let documentTabsEnabled = false;
+    let documentTabsEnabled = true;
     let selectedId = null;
     let nextId = 1;
 
@@ -206,7 +206,7 @@ const workspace = (() => {
         return () => changeListeners.delete(listener);
     }
 
-    /** Enable the development-only document switcher until Release A is complete. */
+    /** Set whether document workspace behavior is active. */
     function setDocumentTabsEnabled(enabled) {
         documentTabsEnabled = enabled === true;
         notifyChange();

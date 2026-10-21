@@ -5208,6 +5208,8 @@ def test_build_menu_has_exactly_file_run_and_help() -> None:
         "Close tab",
         "Next tab",
         "Previous tab",
+        "Close other tabs",
+        "Close all results",
         "Open configuration…",
         "Save configuration…",
         "Load example…",
@@ -5245,6 +5247,8 @@ def test_build_menu_dispatches_document_actions_to_workspace() -> None:
             "Close tab",
             "Next tab",
             "Previous tab",
+            "Close other tabs",
+            "Close all results",
         }
     }
     for action in actions.values():
@@ -5255,6 +5259,8 @@ def test_build_menu_dispatches_document_actions_to_workspace() -> None:
         "setTimeout(() => { fim.workspace.requestCloseSelected() }, 0);",
         "setTimeout(() => { fim.workspace.selectRelative(1) }, 0);",
         "setTimeout(() => { fim.workspace.selectRelative(-1) }, 0);",
+        "setTimeout(() => { fim.closeOtherDocuments() }, 0);",
+        "setTimeout(() => { fim.closeAllResultDocuments() }, 0);",
     ]
 
 

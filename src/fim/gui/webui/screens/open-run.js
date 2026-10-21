@@ -1911,7 +1911,11 @@ function prepareRunResource(directory, sourceTabId = null, resourceKey = null) {
             }
         }
         activateWorkspaceDocument(existingId);
-        return { tabId: existingId, created: false, reused: true };
+        return {
+            tabId: existingId,
+            created: false,
+            reused: sourceTabId !== existingId,
+        };
     }
     if (sourceTabId !== null && window.fim.workspace.get(sourceTabId)) {
         window.fim.workspace.setResourceKey(sourceTabId, stableResourceKey);

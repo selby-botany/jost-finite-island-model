@@ -13,16 +13,17 @@ import webview
 pytestmark = pytest.mark.gui
 
 
-def test_document_switcher_is_opt_in_and_has_toolbar_semantics(
+def test_document_switcher_is_enabled_and_has_toolbar_semantics(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Development-only controls expose stable names and separate close buttons."""
+    """Enabled document controls expose stable names and separate close buttons."""
     state = drive(
         window,
         ready="window.__fimRunViewReady === true",
         trigger="""window.__fimTestResult = (() => {
             const workspace = window.fim.workspace;
             const toolbar = document.getElementById("document-switcher");
+            const enabledByDefault = workspace.documentTabsEnabled();
             const hiddenBefore = toolbar.hidden;
             const first = workspace.selectedId();
             workspace.get(first).label = "Same name";
@@ -33,6 +34,7 @@ def test_document_switcher_is_opt_in_and_has_toolbar_semantics(
             const buttons = [...toolbar.querySelectorAll(".document-select")];
             const closes = [...toolbar.querySelectorAll(".document-close")];
             const result = {
+                enabledByDefault,
                 hiddenBefore,
                 hiddenAfter: toolbar.hidden,
                 role: toolbar.getAttribute("role"),
@@ -51,7 +53,8 @@ def test_document_switcher_is_opt_in_and_has_toolbar_semantics(
         })();""",
         read="window.__fimTestResult",
     )
-    assert state["hiddenBefore"] is True
+    assert state["enabledByDefault"] is True
+    assert state["hiddenBefore"] is False
     assert state["hiddenAfter"] is False
     assert state["hiddenAgain"] is True
     assert state["role"] == "toolbar"
@@ -101,9 +104,23 @@ def test_document_switcher_keyboard_focus_and_selection_are_separate(
             const home = key("Home");
             const wrapLeft = key("ArrowLeft");
             const wrapRight = key("ArrowRight");
+            const originalClose = window.fim.requestCloseDocument;
+            let closeTarget = null;
+            window.fim.requestCloseDocument = tabId => {
+                closeTarget = tabId;
+            };
+            const deleteEvent = new KeyboardEvent("keydown", {
+                key: "Delete",
+                bubbles: true,
+                cancelable: true,
+            });
+            document.activeElement.dispatchEvent(deleteEvent);
+            window.fim.requestCloseDocument = originalClose;
             return {
                 right, selectionAfterArrow, selectionAfterEnter, end,
                 selectionAfterSpace, home, wrapLeft, wrapRight,
+                deletePrevented: deleteEvent.defaultPrevented,
+                closeTarget,
                 roving: document.querySelectorAll(
                     "#document-switcher .document-select[tabindex='0']"
                 ).length,
@@ -122,6 +139,8 @@ def test_document_switcher_keyboard_focus_and_selection_are_separate(
     assert state["home"] == f"document-select-{first}"
     assert state["wrapLeft"] == f"document-select-{third}"
     assert state["wrapRight"] == f"document-select-{first}"
+    assert state["deletePrevented"] is True
+    assert state["closeTarget"] == first
     assert state["roving"] == 1
     assert state["shown"] == "screen-configure"
 
@@ -1142,3 +1161,200 @@ def test_configure_form_and_composite_editors_restore_per_document(
     assert state["secondView"]["matrixCell"] == "0.6"
     assert state["secondView"]["locusId"] == "4"
     assert state["secondView"]["p0Cell"] == "1:1"
+
+
+def test_close_other_documents_uses_close_guard_and_keeps_the_chosen_document(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Bulk close asks about dirty tabs and continues when one is kept."""
+    state = drive(
+        window,
+        ready="window.__fimRunViewReady === true",
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const keepId = workspace.selectedId();
+            const dirtyId = workspace.createDocument({label: "Unsaved"});
+            window.fim.markFormClean(dirtyId);
+            const field = document.getElementById("field-d");
+            field.value = "3";
+            field.dispatchEvent(new Event("input", {bubbles: true}));
+            const cleanId = workspace.createDocument(
+                {kind: "result", label: "Result"}, {select: false}
+            );
+            window.fim.closeOtherDocuments(keepId);
+            const prompted = {
+                open: document.getElementById(
+                    "modal-confirm-close-document"
+                ).open,
+                ids: workspace.ids(),
+                dirty: workspace.get(dirtyId).formDirty,
+            };
+            window.fim.resolveCloseDocument("keep");
+            return {
+                keepId,
+                dirtyId,
+                cleanId,
+                prompted,
+                remaining: workspace.ids(),
+                selectedId: workspace.selectedId(),
+                dialogOpen: document.getElementById(
+                    "modal-confirm-close-document"
+                ).open,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["prompted"]["open"] is True
+    assert state["prompted"]["dirty"] is True
+    assert state["prompted"]["ids"] == [
+        state["keepId"],
+        state["dirtyId"],
+        state["cleanId"],
+    ]
+    assert state["remaining"] == [state["keepId"], state["dirtyId"]]
+    assert state["selectedId"] == state["keepId"]
+    assert state["dialogOpen"] is False
+
+
+def test_close_all_results_closes_run_and_sweep_results_only(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Close all results preserves drafts and saved-run documents."""
+    state = drive(
+        window,
+        ready="window.__fimRunViewReady === true",
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const draftId = workspace.selectedId();
+            const runId = workspace.createDocument(
+                {kind: "result", label: "Run result"}, {select: false}
+            );
+            const sweepId = workspace.createDocument(
+                {kind: "sweep-results", label: "Sweep results"},
+                {select: false}
+            );
+            const savedRunId = workspace.createDocument(
+                {kind: "saved-run", label: "Saved run"}, {select: false}
+            );
+            window.fim.closeAllResultDocuments();
+            return {draftId, runId, sweepId, savedRunId, remaining: workspace.ids()};
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["remaining"] == [state["draftId"], state["savedRunId"]]
+    assert state["runId"] not in state["remaining"]
+    assert state["sweepId"] not in state["remaining"]
+
+
+def test_document_context_menu_and_soft_limit_close_actions(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The 12-document notice and tab context menu run the bulk actions."""
+    state = drive(
+        window,
+        ready="window.__fimRunViewReady === true",
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            const firstId = workspace.selectedId();
+            const runId = workspace.createDocument(
+                {kind: "result", label: "Run result"}, {select: false}
+            );
+            for (let index = 0; index < 11; index += 1) {
+                workspace.createDocument(
+                    {label: `Draft ${index}`}, {select: false}
+                );
+            }
+            const notice = document.getElementById("document-limit-notice");
+            const aboveLimit = {
+                visible: !notice.hidden,
+                count: workspace.ids().length,
+                closeResultsDisabled: document.getElementById(
+                    "document-close-results-button"
+                ).disabled,
+            };
+            document.getElementById("document-close-results-button").click();
+            const atLimit = {
+                visible: !notice.hidden,
+                count: workspace.ids().length,
+                runClosed: !workspace.get(runId),
+            };
+            const contextId = workspace.createDocument(
+                {kind: "result", label: "Context result"}, {select: false}
+            );
+            const button = document.getElementById(
+                `document-select-${contextId}`
+            );
+            button.dispatchEvent(new MouseEvent("contextmenu", {
+                bubbles: true, cancelable: true, clientX: 20, clientY: 20,
+            }));
+            const menu = document.getElementById("document-context-menu");
+            const contextMenu = {
+                visible: !menu.hidden,
+                label: menu.getAttribute("aria-label"),
+                actions: [...menu.querySelectorAll('[role="menuitem"]')]
+                    .map(item => item.textContent.trim()),
+                focused: document.activeElement.id,
+                count: workspace.ids().length,
+            };
+            menu.dispatchEvent(new KeyboardEvent("keydown", {
+                key: "ArrowDown", bubbles: true,
+            }));
+            const arrowFocus = document.activeElement.id;
+            document.dispatchEvent(new KeyboardEvent("keydown", {
+                key: "Escape", bubbles: true, cancelable: true,
+            }));
+            const escaped = {
+                hidden: menu.hidden,
+                focus: document.activeElement.id,
+            };
+            button.dispatchEvent(new MouseEvent("contextmenu", {
+                bubbles: true, cancelable: true, clientX: 20, clientY: 20,
+            }));
+            document.getElementById("document-close-all-results").click();
+            const resultsClosed = !workspace.get(contextId);
+            const keepId = workspace.ids()[1];
+            const keepButton = document.getElementById(
+                `document-select-${keepId}`
+            );
+            keepButton.dispatchEvent(new MouseEvent("contextmenu", {
+                bubbles: true, cancelable: true, clientX: 20, clientY: 20,
+            }));
+            document.getElementById("document-close-other-tabs").click();
+            return {
+                firstId, aboveLimit, atLimit, contextMenu, arrowFocus, escaped,
+                contextId, resultsClosed,
+                keepId, remaining: workspace.ids(), selectedId: workspace.selectedId(),
+                noticeHidden: notice.hidden,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["aboveLimit"] == {
+        "visible": True,
+        "count": 13,
+        "closeResultsDisabled": False,
+    }
+    assert state["atLimit"] == {
+        "visible": False,
+        "count": 12,
+        "runClosed": True,
+    }
+    assert state["contextMenu"] == {
+        "visible": True,
+        "label": "Document actions",
+        "actions": ["Close other tabs", "Close all results"],
+        "focused": "document-close-other-tabs",
+        "count": 13,
+    }
+    assert state["arrowFocus"] == "document-close-all-results"
+    assert state["escaped"] == {
+        "hidden": True,
+        "focus": f"document-select-{state['contextId']}",
+    }
+    assert state["resultsClosed"] is True
+    assert state["remaining"] == [state["keepId"]]
+    assert state["selectedId"] == state["keepId"]
+    assert state["noticeHidden"] is True

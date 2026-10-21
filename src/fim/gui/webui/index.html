@@ -110,6 +110,22 @@
       <button type="button" id="document-new-button" aria-label="New configuration"
               title="New configuration">+</button>
     </div>
+    <div id="document-limit-notice" class="document-limit-notice"
+         role="status" hidden>
+      <span id="document-limit-message"></span>
+      <button type="button" id="document-close-results-button">
+        Close all results
+      </button>
+    </div>
+    <div id="document-context-menu" class="document-context-menu"
+         role="menu" aria-label="Document actions" hidden>
+      <button type="button" role="menuitem" id="document-close-other-tabs">
+        Close other tabs
+      </button>
+      <button type="button" role="menuitem" id="document-close-all-results">
+        Close all results
+      </button>
+    </div>
     <!-- The always-visible N/d/m/mu parameter strip (design §3.2):
          read-only, always current; clicking any value jumps to
          Configure (design's own click-through behavior). `screens/

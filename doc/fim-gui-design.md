@@ -478,7 +478,30 @@ and Compare are their own destinations (theoretical-prediction lookup and
 multi-run overlay, respectively — see [`doc/usage.md`'s own GUI
 table](usage.md#desktop-gui-fim-gui) for what each shows). A read-only
 parameter strip beneath the title bar always shows the current N/d/m/mu;
-clicking any of the four jumps straight to Configure.
+clicking any of the four jumps straight to Configure. The document toolbar
+below it lists the open configurations, runs, and studies. Each document
+owns its form values, view history, dirty state, and job association;
+switching selects another document without starting, stopping, or pausing
+work. Results already open are selected rather than duplicated, while new
+drafts remain separate. Open documents are session-only and are not
+restored after a restart. Closing a document runs the save/discard or
+job-stop/pause flow for that document; it never deletes saved results.
+
+Right-click a document for **Close other tabs** or **Close all results**;
+both actions are also in the File menu. Close other tabs keeps the chosen
+document. Close all results closes completed run and sweep-result documents,
+not configurations or saved runs. Dirty documents and active jobs use the
+ordinary close dialog one at a time. **Keep** skips that document and
+continues; Escape cancels the remaining bulk close. Above 12 open documents,
+a notice suggests closing all results; 12 is a soft limit, not a cap.
+
+The document toolbar is keyboard reachable. Arrow keys, Home, and End move
+focus; Enter or Space selects the focused document; Delete requests its
+closure. File menu actions and shortcuts target the selected document:
+Command+N/Control+N creates a configuration, Command+W/Control+W closes the
+selected tab, and Control+Tab cycles tabs. On macOS, Command+Shift+] and
+Command+Shift+[ also cycle forward and backward. The close dialog remains
+the authority for dirty documents and active jobs.
 
 Three native menus, built once in `fim.gui.app._build_menu` and stable
 across the whole window's lifetime, duplicate the everyday rail/mouse
@@ -486,8 +509,9 @@ actions for a keyboard-shortcut user — every item reuses the exact same
 action the matching on-screen control already performs, none of it new
 business logic:
 
-- **File** — New/Open/Save configuration, Load example…, Open run…,
-  Reveal output folder, Quit.
+- **File** — New configuration, Close tab, Next tab, Previous tab,
+  Close other tabs, Close all results, Open/Save configuration, Load
+  example…, Open run…, Reveal output folder, Quit.
 - **Run** — Run simulation, Cancel run.
 - **Help** — the in-app help screen (§11), "Documentation on GitHub,"
   Check for updates, and About.

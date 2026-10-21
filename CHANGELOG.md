@@ -8,6 +8,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Independent documents in the desktop GUI.** Open configurations, saved
+  runs, completed results, and studies side by side. Switching documents
+  preserves each document's state without stopping its work; closing one
+  uses the save/discard and job controls already provided by its close
+  guard. New, close, and tab-cycling shortcuts are available from the
+  keyboard and File menu. Close other tabs and Close all results are
+  available from the File menu and each tab's context menu; a notice appears
+  above 12 open documents.
+
 - **The benchmark tools share the sweep layer's axes and grid.**
   `dev/bin/benchmark-engines` reads `--values` through the sweep layer, so a
   value that does not fit its axis (a fractional deme count, a repeated value)

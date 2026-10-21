@@ -28916,16 +28916,16 @@ read race the save it was meant to observe.
 
 Tests for the browser document store and its compatibility signals.
 
-<a id="gui.test_workspace.test_document_switcher_is_opt_in_and_has_toolbar_semantics"></a>
+<a id="gui.test_workspace.test_document_switcher_is_enabled_and_has_toolbar_semantics"></a>
 
-#### test\_document\_switcher\_is\_opt\_in\_and\_has\_toolbar\_semantics
+#### test\_document\_switcher\_is\_enabled\_and\_has\_toolbar\_semantics
 
 ```python
-def test_document_switcher_is_opt_in_and_has_toolbar_semantics(
+def test_document_switcher_is_enabled_and_has_toolbar_semantics(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Development-only controls expose stable names and separate close buttons.
+Enabled document controls expose stable names and separate close buttons.
 
 <a id="gui.test_workspace.test_document_switcher_keyboard_focus_and_selection_are_separate"></a>
 
@@ -29101,6 +29101,39 @@ def test_configure_form_and_composite_editors_restore_per_document(
 ```
 
 Form values and composite-editor modes follow the selected document.
+
+<a id="gui.test_workspace.test_close_other_documents_uses_close_guard_and_keeps_the_chosen_document"></a>
+
+#### test\_close\_other\_documents\_uses\_close\_guard\_and\_keeps\_the\_chosen\_document
+
+```python
+def test_close_other_documents_uses_close_guard_and_keeps_the_chosen_document(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Bulk close asks about dirty tabs and continues when one is kept.
+
+<a id="gui.test_workspace.test_close_all_results_closes_run_and_sweep_results_only"></a>
+
+#### test\_close\_all\_results\_closes\_run\_and\_sweep\_results\_only
+
+```python
+def test_close_all_results_closes_run_and_sweep_results_only(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Close all results preserves drafts and saved-run documents.
+
+<a id="gui.test_workspace.test_document_context_menu_and_soft_limit_close_actions"></a>
+
+#### test\_document\_context\_menu\_and\_soft\_limit\_close\_actions
+
+```python
+def test_document_context_menu_and_soft_limit_close_actions(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The 12-document notice and tab context menu run the bulk actions.
 
 
 

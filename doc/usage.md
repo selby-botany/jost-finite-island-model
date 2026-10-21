@@ -1443,6 +1443,43 @@ no separate "batch mode" toggle. Every screen calls the identical underlying
 function this guide already documents; nothing here is a second
 implementation.
 
+### Open documents
+
+The toolbar below the title lists open configurations, runs, and studies.
+Select a document to return to its own form, results, or sweep view. Switching
+does not stop work in another document. Opening a result that is already open
+selects its existing document; a new configuration starts as a separate
+draft. Open documents are kept in memory for this window and are not restored
+after a restart.
+
+Use the **+** button or **File > New configuration** to start a draft. Use
+the **×** on a document, **File > Close tab**, or **Delete** while a document
+button has focus to close it. Closing a dirty configuration asks whether to
+save, discard, or keep it open. Closing an active run, saved run, or sweep
+offers the appropriate stop or pause action. Closing a document does not
+delete its saved results.
+
+Right-click a document for **Close other tabs** and **Close all results**.
+The same actions are in the File menu. Close other tabs keeps the chosen
+document open; Close all results closes completed run and sweep-result
+documents, not configurations or saved runs. Dirty documents and active jobs
+use the usual close dialog one at a time. **Keep** skips that document and
+continues; pressing Escape cancels the remaining bulk close.
+
+When more than 12 documents are open, a notice offers **Close all results**.
+The limit is a reminder, not a cap; you can keep opening documents.
+
+| Action | macOS | Windows and Linux |
+|---|---|---|
+| New configuration | Command+N | Control+N |
+| Close selected tab | Command+W | Control+W |
+| Next tab | Control+Tab or Command+Shift+] | Control+Tab |
+| Previous tab | Control+Shift+Tab or Command+Shift+[ | Control+Shift+Tab |
+
+The File menu also has **Next tab**, **Previous tab**, **Close other tabs**,
+and **Close all results**. Quit remains an application-wide action and uses
+the separate window-close guard described below.
+
 The run view — where a configuration is built, a run proceeds, and its
 result is shown — is one screen in exactly one of three states at a time,
 not three separate screens reached by navigating away from each other:

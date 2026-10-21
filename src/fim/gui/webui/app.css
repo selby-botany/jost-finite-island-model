@@ -361,6 +361,65 @@ textarea::placeholder {
     outline-offset: 1px;
 }
 
+.document-limit-notice {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    color: var(--fim-warning-mark);
+    background: var(--fim-warning-background);
+    border-bottom: 1px solid var(--fim-border);
+}
+
+.document-limit-notice[hidden],
+.document-context-menu[hidden] {
+    display: none;
+}
+
+.document-limit-notice button,
+.document-context-menu button {
+    color: var(--fim-foreground);
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 5px;
+    font: inherit;
+    padding: 0.35rem 0.6rem;
+    cursor: pointer;
+}
+
+.document-limit-notice button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.document-context-menu {
+    position: fixed;
+    z-index: 1000;
+    display: flex;
+    min-width: 12rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.35rem;
+    border: 1px solid var(--fim-border);
+    border-radius: 6px;
+    background: var(--fim-background);
+    box-shadow: 0 4px 14px var(--fim-shadow);
+}
+
+.document-context-menu button {
+    text-align: left;
+    border: 0;
+}
+
+.document-context-menu button:hover,
+.document-context-menu button:focus-visible {
+    background: var(--fim-surface-soft);
+    outline: 2px solid var(--fim-accent);
+    outline-offset: -2px;
+}
+
 /* Read-only, always-current N/d/m/mu (design §3.2) -- each value is its
  * own button so clicking it jumps straight to Configure (`nav-rail.js`),
  * styled to read as text with a click affordance rather than as a form

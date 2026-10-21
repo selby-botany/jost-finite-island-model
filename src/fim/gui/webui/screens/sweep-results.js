@@ -275,6 +275,7 @@ window.fim.showSweepResults = async function showSweepResults(studyId) {
                 activateWorkspaceDocument(tabId);
                 return;
             }
+            window.__fimSweepResultsReady = false;
         }
         const documentState = workspace.get(tabId);
         const data = await window.pywebview.api.get_sweep_results(studyId);

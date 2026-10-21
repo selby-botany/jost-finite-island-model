@@ -68,8 +68,23 @@ const closeDocumentSaveButton = document.getElementById(
 const closeDocumentJobButton = document.getElementById(
     "confirm-close-document-job-button"
 );
+const documentLimitNotice = document.getElementById("document-limit-notice");
+const documentLimitMessage = document.getElementById("document-limit-message");
+const documentCloseResultsButton = document.getElementById(
+    "document-close-results-button"
+);
+const documentContextMenu = document.getElementById("document-context-menu");
+const documentCloseOtherTabsButton = document.getElementById(
+    "document-close-other-tabs"
+);
+const documentContextCloseResultsButton = document.getElementById(
+    "document-close-all-results"
+);
+const DOCUMENT_SOFT_LIMIT = 12;
 let documentSwitcherFocusId = null;
 let closeDocumentRequestId = null;
+let documentContextTabId = null;
+let bulkCloseQueue = null;
 
 /** Describe a document without treating its label as an identity. */
 function documentSwitcherLabel(state) {
@@ -109,6 +124,60 @@ function closeDocumentHasActiveJob(state) {
         state.jobState !== "finished"
     );
 }
+
+function advanceBulkCloseQueue() {
+    if (bulkCloseQueue === null || bulkCloseQueue.currentId !== null) {
+        return;
+    }
+    while (bulkCloseQueue.index < bulkCloseQueue.tabIds.length) {
+        const tabId = bulkCloseQueue.tabIds[bulkCloseQueue.index];
+        bulkCloseQueue.index += 1;
+        if (!window.fim.workspace.get(tabId)) {
+            continue;
+        }
+        bulkCloseQueue.currentId = tabId;
+        window.fim.requestCloseDocument(tabId);
+        return;
+    }
+    bulkCloseQueue = null;
+}
+
+function startBulkClose(tabIds) {
+    if (bulkCloseQueue !== null) {
+        return;
+    }
+    bulkCloseQueue = {
+        tabIds: [...new Set(tabIds)],
+        index: 0,
+        currentId: null,
+    };
+    advanceBulkCloseQueue();
+}
+
+window.fim.closeOtherDocuments = function closeOtherDocuments(keepTabId) {
+    const workspace = window.fim.workspace;
+    if (!workspace.documentTabsEnabled()) {
+        return;
+    }
+    const preservedId = keepTabId ?? workspace.selectedId();
+    if (preservedId === null || !workspace.get(preservedId)) {
+        return;
+    }
+    activateWorkspaceDocument(preservedId);
+    startBulkClose(workspace.ids().filter((tabId) => tabId !== preservedId));
+};
+
+window.fim.closeAllResultDocuments = function closeAllResultDocuments() {
+    const workspace = window.fim.workspace;
+    if (!workspace.documentTabsEnabled()) {
+        return;
+    }
+    const resultIds = workspace.ids().filter((tabId) => {
+        const kind = workspace.get(tabId).kind;
+        return kind === "result" || kind === "sweep-results";
+    });
+    startBulkClose(resultIds);
+};
 
 function renderCloseDocumentDialog(tabId) {
     const state = window.fim.workspace.get(tabId);
@@ -187,6 +256,10 @@ async function finishClosingDocument(tabId) {
             }
         }
         window.fim.refreshUnsavedEdits();
+        if (bulkCloseQueue?.currentId === tabId) {
+            bulkCloseQueue.currentId = null;
+            advanceBulkCloseQueue();
+        }
     } catch (error) {
         if (jobId && state.jobState === "finished") {
             state.closeReleaseFailed = true;
@@ -281,6 +354,10 @@ window.fim.resolveCloseDocument = async function resolveCloseDocument(action) {
     if (action === "keep") {
         closeDocumentRequestId = null;
         closeDocumentDialog.close();
+        if (bulkCloseQueue?.currentId === tabId) {
+            bulkCloseQueue.currentId = null;
+            advanceBulkCloseQueue();
+        }
         return;
     }
     if (action === "save") {
@@ -328,10 +405,24 @@ window.fim.resolveCloseDocument = async function resolveCloseDocument(action) {
 function renderDocumentSwitcher() {
     const workspace = window.fim.workspace;
     documentSwitcher.hidden = !workspace.documentTabsEnabled();
+    const ids = workspace.ids();
+    const resultCount = ids.filter((tabId) => {
+        const kind = workspace.get(tabId).kind;
+        return kind === "result" || kind === "sweep-results";
+    }).length;
+    documentLimitNotice.hidden =
+        documentSwitcher.hidden || ids.length <= DOCUMENT_SOFT_LIMIT;
+    documentLimitMessage.textContent =
+        `${ids.length} documents are open. Close all results to reduce the count.`;
+    documentCloseResultsButton.disabled = resultCount === 0;
+    documentCloseResultsButton.title =
+        resultCount === 0 ? "There are no result documents to close." : "";
+    if (documentContextTabId !== null && !ids.includes(documentContextTabId)) {
+        closeDocumentContextMenu();
+    }
     if (documentSwitcher.hidden) {
         return;
     }
-    const ids = workspace.ids();
     if (
         !ids.includes(documentSwitcherFocusId) ||
         !documentSwitcher.contains(document.activeElement)
@@ -387,6 +478,27 @@ function renderDocumentSwitcher() {
     });
 }
 
+function closeDocumentContextMenu(restoreFocus = false) {
+    documentContextMenu.hidden = true;
+    const tabId = documentContextTabId;
+    documentContextTabId = null;
+    if (restoreFocus && tabId && window.fim.workspace.get(tabId)) {
+        document.getElementById(`document-select-${tabId}`).focus();
+    }
+}
+
+function showDocumentContextMenu(event, tabId) {
+    event.preventDefault();
+    documentContextTabId = tabId;
+    documentContextMenu.hidden = false;
+    const bounds = documentContextMenu.getBoundingClientRect();
+    documentContextMenu.style.left =
+        `${Math.max(8, Math.min(event.clientX, window.innerWidth - bounds.width - 8))}px`;
+    documentContextMenu.style.top =
+        `${Math.max(8, Math.min(event.clientY, window.innerHeight - bounds.height - 8))}px`;
+    documentCloseOtherTabsButton.focus();
+}
+
 /** Rove focus without changing selection; native Enter/Space activate buttons. */
 function onDocumentSwitcherKeydown(event) {
     const button = event.target.closest(".document-select");
@@ -398,6 +510,11 @@ function onDocumentSwitcherKeydown(event) {
     if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         button.click();
+        return;
+    }
+    if (event.key === "Delete") {
+        event.preventDefault();
+        window.fim.requestCloseDocument(button.parentElement.dataset.tabId);
         return;
     }
     const targets = {
@@ -648,6 +765,56 @@ function wireNavRail() {
     });
     closeDocumentDialog.addEventListener("cancel", () => {
         closeDocumentRequestId = null;
+        bulkCloseQueue = null;
+    });
+    documentSwitcher.addEventListener("contextmenu", (event) => {
+        const item = event.target.closest(".document-switcher-item");
+        if (item) {
+            showDocumentContextMenu(event, item.dataset.tabId);
+        }
+    });
+    document.addEventListener("pointerdown", (event) => {
+        if (
+            !documentContextMenu.hidden &&
+            !documentContextMenu.contains(event.target)
+        ) {
+            closeDocumentContextMenu();
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (documentContextMenu.hidden) {
+            return;
+        }
+        const items = [
+            documentCloseOtherTabsButton,
+            documentContextCloseResultsButton,
+        ];
+        const index = items.indexOf(document.activeElement);
+        if (event.key === "Escape") {
+            event.preventDefault();
+            closeDocumentContextMenu(true);
+        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            const offset = event.key === "ArrowDown" ? 1 : -1;
+            items[(index + offset + items.length) % items.length].focus();
+        } else if (event.key === "Home" || event.key === "End") {
+            event.preventDefault();
+            items[event.key === "Home" ? 0 : items.length - 1].focus();
+        } else if (event.key === "Tab") {
+            closeDocumentContextMenu(true);
+        }
+    });
+    documentCloseResultsButton.addEventListener("click", () => {
+        window.fim.closeAllResultDocuments();
+    });
+    documentCloseOtherTabsButton.addEventListener("click", () => {
+        const tabId = documentContextTabId;
+        closeDocumentContextMenu();
+        window.fim.closeOtherDocuments(tabId);
+    });
+    documentContextCloseResultsButton.addEventListener("click", () => {
+        closeDocumentContextMenu();
+        window.fim.closeAllResultDocuments();
     });
     documentSwitcher.addEventListener("focusin", (event) => {
         const button = event.target.closest(".document-select");

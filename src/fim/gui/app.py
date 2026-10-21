@@ -9961,6 +9961,8 @@ def _build_menu(
             MenuAction("Close tab", dispatch("fim.workspace.requestCloseSelected()")),
             MenuAction("Next tab", dispatch("fim.workspace.selectRelative(1)")),
             MenuAction("Previous tab", dispatch("fim.workspace.selectRelative(-1)")),
+            MenuAction("Close other tabs", dispatch("fim.closeOtherDocuments()")),
+            MenuAction("Close all results", dispatch("fim.closeAllResultDocuments()")),
             MenuSeparator(),
             MenuAction("Open configuration…", dispatch("fim.menu.openConfiguration()")),
             MenuAction("Save configuration…", dispatch("fim.menu.saveConfiguration()")),
