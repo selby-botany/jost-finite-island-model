@@ -66,6 +66,8 @@ EXPECTED: dict[str, str | None] = {
     "per-base-mutation-rate-across-unequal-locus-lengths": NONE,
     "several-convergence-statistics": ISLAND,
     "within-run-sigma-band": ISLAND,
+    # Equal sizes, scalar m, infinite alleles: the two-variable form.
+    "low-migration-high-mutation-equilibrium": ISLAND,
     "an-adaptive-replicate-batch-with-a-confidence-interval": ISLAND,
     # mutation_model: finite_alleles
     "a-large-d-batch-under-generational-vector": NONE,

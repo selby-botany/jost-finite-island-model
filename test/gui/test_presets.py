@@ -46,6 +46,7 @@ _EXPECTED_PRESET_IDS = (
     "wright-takahata-finite-deme-correction",
     "several-convergence-statistics",
     "within-run-sigma-band",
+    "low-migration-high-mutation-equilibrium",
     # Replicates and engines.
     "an-adaptive-replicate-batch-with-a-confidence-interval",
     "a-large-d-batch-under-generational-vector",

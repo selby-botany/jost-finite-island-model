@@ -1225,7 +1225,7 @@ Every inline worked-example config matches its canonical YAML file.
 
 <a id="test.test_doc_snippets.test_worked_examples_use_derived_convergence_unless_deliberately_pinned"></a>
 
-#### [test\_worked\_examples\_use\_derived\_convergence\_unless\_deliberately\_pinned](./test_doc_snippets.py#L80)
+#### [test\_worked\_examples\_use\_derived\_convergence\_unless\_deliberately\_pinned](./test_doc_snippets.py#L81)
 
 ```python
 def test_worked_examples_use_derived_convergence_unless_deliberately_pinned(
@@ -18390,7 +18390,7 @@ engine, evaluating the payload the way the page does.
 
 <a id="gui.test_closed_form_examples.test_the_table_names_every_shipped_configuration"></a>
 
-#### [test\_the\_table\_names\_every\_shipped\_configuration](./gui/test_closed_form_examples.py#L118)
+#### [test\_the\_table\_names\_every\_shipped\_configuration](./gui/test_closed_form_examples.py#L120)
 
 ```python
 def test_the_table_names_every_shipped_configuration() -> None
@@ -18400,7 +18400,7 @@ A configuration missing from `EXPECTED` (or stale in it) fails here.
 
 <a id="gui.test_closed_form_examples.test_each_preset_matches_its_example_directory"></a>
 
-#### [test\_each\_preset\_matches\_its\_example\_directory](./gui/test_closed_form_examples.py#L123)
+#### [test\_each\_preset\_matches\_its\_example\_directory](./gui/test_closed_form_examples.py#L125)
 
 ```python
 def test_each_preset_matches_its_example_directory() -> None
@@ -18410,7 +18410,7 @@ A preset listed once stands for its example directory's identical config.
 
 <a id="gui.test_closed_form_examples.test_payload_shape_matches_the_model_for_every_configuration"></a>
 
-#### [test\_payload\_shape\_matches\_the\_model\_for\_every\_configuration](./gui/test_closed_form_examples.py#L134)
+#### [test\_payload\_shape\_matches\_the\_model\_for\_every\_configuration](./gui/test_closed_form_examples.py#L136)
 
 ```python
 @pytest.mark.parametrize("name", sorted(EXPECTED))
@@ -18422,7 +18422,7 @@ Each shipped configuration gets exactly the payload the table says.
 
 <a id="gui.test_closed_form_examples.test_payload_is_finite_bounded_and_settles_for_every_curve"></a>
 
-#### [test\_payload\_is\_finite\_bounded\_and\_settles\_for\_every\_curve](./gui/test_closed_form_examples.py#L146)
+#### [test\_payload\_is\_finite\_bounded\_and\_settles\_for\_every\_curve](./gui/test_closed_form_examples.py#L148)
 
 ```python
 @pytest.mark.parametrize(
@@ -18436,7 +18436,7 @@ Every offered curve is finite, in range, and ends at the recursion's limit.
 
 <a id="gui.test_closed_form_examples.test_engine_agrees_with_the_payload_for_every_example"></a>
 
-#### [test\_engine\_agrees\_with\_the\_payload\_for\_every\_example](./gui/test_closed_form_examples.py#L245)
+#### [test\_engine\_agrees\_with\_the\_payload\_for\_every\_example](./gui/test_closed_form_examples.py#L247)
 
 ```python
 @pytest.mark.slow
@@ -24538,7 +24538,7 @@ package's other tests need.
 
 <a id="gui.test_presets.test_list_presets_returns_every_example_with_a_configuration"></a>
 
-#### [test\_list\_presets\_returns\_every\_example\_with\_a\_configuration](./gui/test_presets.py#L70)
+#### [test\_list\_presets\_returns\_every\_example\_with\_a\_configuration](./gui/test_presets.py#L71)
 
 ```python
 def test_list_presets_returns_every_example_with_a_configuration() -> None
@@ -24548,7 +24548,7 @@ Every bundled example with a `config.yaml` is a preset, in catalog order.
 
 <a id="gui.test_presets.test_presets_use_the_canonical_example_configs"></a>
 
-#### [test\_presets\_use\_the\_canonical\_example\_configs](./gui/test_presets.py#L78)
+#### [test\_presets\_use\_the\_canonical\_example\_configs](./gui/test_presets.py#L79)
 
 ```python
 def test_presets_use_the_canonical_example_configs() -> None
@@ -24558,7 +24558,7 @@ Each preset's text is its `doc/examples/<id>/config.yaml`, unmodified.
 
 <a id="gui.test_presets.test_the_script_derived_example_is_a_preset_with_an_explicit_start"></a>
 
-#### [test\_the\_script\_derived\_example\_is\_a\_preset\_with\_an\_explicit\_start](./gui/test_presets.py#L89)
+#### [test\_the\_script\_derived\_example\_is\_a\_preset\_with\_an\_explicit\_start](./gui/test_presets.py#L90)
 
 ```python
 def test_the_script_derived_example_is_a_preset_with_an_explicit_start(
@@ -24569,7 +24569,7 @@ def test_the_script_derived_example_is_a_preset_with_an_explicit_start(
 
 <a id="gui.test_presets.test_every_catalog_example_names_a_class_in_the_tree"></a>
 
-#### [test\_every\_catalog\_example\_names\_a\_class\_in\_the\_tree](./gui/test_presets.py#L98)
+#### [test\_every\_catalog\_example\_names\_a\_class\_in\_the\_tree](./gui/test_presets.py#L99)
 
 ```python
 def test_every_catalog_example_names_a_class_in_the_tree() -> None
@@ -24579,7 +24579,7 @@ The bundled class tree covers every example's class.
 
 <a id="gui.test_presets.test_get_preset_returns_the_matching_preset"></a>
 
-#### [test\_get\_preset\_returns\_the\_matching\_preset](./gui/test_presets.py#L111)
+#### [test\_get\_preset\_returns\_the\_matching\_preset](./gui/test_presets.py#L112)
 
 ```python
 def test_get_preset_returns_the_matching_preset() -> None
@@ -24589,7 +24589,7 @@ def test_get_preset_returns_the_matching_preset() -> None
 
 <a id="gui.test_presets.test_get_preset_returns_none_for_an_unknown_id"></a>
 
-#### [test\_get\_preset\_returns\_none\_for\_an\_unknown\_id](./gui/test_presets.py#L120)
+#### [test\_get\_preset\_returns\_none\_for\_an\_unknown\_id](./gui/test_presets.py#L121)
 
 ```python
 def test_get_preset_returns_none_for_an_unknown_id() -> None
@@ -24599,7 +24599,7 @@ An id naming no real preset is `None`, not a raised exception.
 
 <a id="gui.test_presets.test_list_presets_returns_empty_for_a_directory_with_no_catalog"></a>
 
-#### [test\_list\_presets\_returns\_empty\_for\_a\_directory\_with\_no\_catalog](./gui/test_presets.py#L125)
+#### [test\_list\_presets\_returns\_empty\_for\_a\_directory\_with\_no\_catalog](./gui/test_presets.py#L126)
 
 ```python
 def test_list_presets_returns_empty_for_a_directory_with_no_catalog(
@@ -24610,7 +24610,7 @@ A missing `examples/catalog.json` (a stale install) is `[]`, not a crash.
 
 <a id="gui.test_presets.test_malformed_catalog_reads_as_empty"></a>
 
-#### [test\_malformed\_catalog\_reads\_as\_empty](./gui/test_presets.py#L133)
+#### [test\_malformed\_catalog\_reads\_as\_empty](./gui/test_presets.py#L134)
 
 ```python
 def test_malformed_catalog_reads_as_empty(tmp_path: Path) -> None
@@ -24620,7 +24620,7 @@ A catalog missing its keys is treated as no examples at all.
 
 <a id="gui.test_presets.test_load_catalog_reads_classes_and_examples"></a>
 
-#### [test\_load\_catalog\_reads\_classes\_and\_examples](./gui/test_presets.py#L140)
+#### [test\_load\_catalog\_reads\_classes\_and\_examples](./gui/test_presets.py#L141)
 
 ```python
 def test_load_catalog_reads_classes_and_examples(tmp_path: Path) -> None
@@ -24630,7 +24630,7 @@ A fixture catalog round-trips into `ExampleClass`/`Example` values.
 
 <a id="gui.test_presets.test_split_configuration_separates_labels_and_drops_internal_keys"></a>
 
-#### [test\_split\_configuration\_separates\_labels\_and\_drops\_internal\_keys](./gui/test_presets.py#L194)
+#### [test\_split\_configuration\_separates\_labels\_and\_drops\_internal\_keys](./gui/test_presets.py#L195)
 
 ```python
 def test_split_configuration_separates_labels_and_drops_internal_keys(
@@ -24641,7 +24641,7 @@ Labels come out; `_` keys vanish; every model key stays.
 
 <a id="gui.test_presets.test_strip_internal_yaml_keys"></a>
 
-#### [test\_strip\_internal\_yaml\_keys](./gui/test_presets.py#L226)
+#### [test\_strip\_internal\_yaml\_keys](./gui/test_presets.py#L227)
 
 ```python
 @pytest.mark.parametrize(
