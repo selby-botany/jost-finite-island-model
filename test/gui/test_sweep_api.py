@@ -657,7 +657,7 @@ def test_gui_one_point_sweep_uses_process_runner_and_half_core_budget(
 ) -> None:
     """Explicit sweep execution receives all currently available capacity."""
     _PROCESS_COUNTS.clear()
-    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(jobs, "usable_core_count", lambda: 8)
     original_run_sweep = run_sweep
     captured: dict[str, Any] = {}
 
