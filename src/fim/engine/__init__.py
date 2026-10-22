@@ -26,6 +26,9 @@ from fim.engine.backends import (
 from fim.engine.batch import (
     run_batch,
 )
+from fim.engine.concurrency import (
+    default_replicate_concurrency,
+)
 from fim.engine.identity import (
     deterministic_run_id,
 )
@@ -81,6 +84,7 @@ __all__ = [
     "VectorizedAdvancer",
     "bootstrap_replicate_summary",
     "build_engine_backend",
+    "default_replicate_concurrency",
     "deterministic_run_id",
     "history_free_statistic_values",
     "pair_statistic_values",

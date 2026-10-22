@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import functools
 import logging
-import os
 import queue
 import shutil
 import tempfile
@@ -19,9 +18,14 @@ from pathlib import Path
 from typing import Final, Literal
 
 from fim import paths
-from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.config.defaults import DEFAULT_N_REPLICATES, DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.expert import ExpertSettings
-from fim.engine import RunResult, deterministic_run_id, simulate_params
+from fim.engine import (
+    RunResult,
+    default_replicate_concurrency,
+    deterministic_run_id,
+    simulate_params,
+)
 from fim.engine.records import format_timestamp, utc_now
 from fim.gui.job_results import GuiRunResult
 from fim.gui.runner import pairwise_status_text
@@ -78,15 +82,26 @@ BatchMessage = (
 logger = logging.getLogger(__name__)
 
 
-def default_max_workers() -> int:
+def default_max_workers(n_replicates: int = DEFAULT_N_REPLICATES) -> int:
     """Return the GUI's own default batch worker count.
 
-    Matches `cli._cpu_count()` — the CLI's own default (non-`--sequential`)
-    parallel batch worker count — so the GUI's default batch behavior is
-    never silently weaker than the CLI's own. Still
-    overridable per call via `start_batch_run`'s `max_workers` argument.
+    Delegates to `fim.engine.default_replicate_concurrency` — the same
+    function `cli._cpu_count()` now delegates to — so the GUI's default
+    batch behavior is never silently weaker than, or inconsistent with,
+    the CLI's own. Still overridable per call via `start_batch_run`'s
+    own `max_workers` argument.
+
+    Args:
+        n_replicates: The pending batch's own replicate count, when
+            known (`start_batch_run` passes `params.n_replicates`).
+            `Api.get_default_max_workers` calls this with no batch in
+            mind yet — just to show the Settings screen's own default
+            worker count — so it keeps this parameter's own default,
+            the adaptive ceiling every batch starts from
+            (`DEFAULT_N_REPLICATES`), which clamps nothing in practice
+            since it comfortably exceeds any real core count.
     """
-    return os.cpu_count() or 1
+    return default_replicate_concurrency("lineal", n_replicates, batch_width=0)
 
 
 def start_batch_run(
@@ -143,7 +158,11 @@ def start_batch_run(
     if output_directory.exists():
         raise FileExistsError(f"output directory already exists: {output_directory}")
     run_id = deterministic_run_id(params)
-    resolved_workers = max_workers if max_workers is not None else default_max_workers()
+    resolved_workers = (
+        max_workers
+        if max_workers is not None
+        else default_max_workers(params.n_replicates)
+    )
     thread = threading.Thread(
         target=_batch_worker,
         args=(

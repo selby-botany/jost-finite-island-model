@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import pickle
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -24,11 +23,13 @@ import yaml
 from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.cli_objects import add_object_subcommands, command_object
 from fim.cli_sweep import add_sweep_subcommands, command_sweep
+from fim.config.convergence import BATCH_WIDTH
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.config.expert import expert_template
 from fim.convergence.defaults import describe_derived_convergence
 from fim.engine import (
     FinalReport,
+    default_replicate_concurrency,
     deterministic_run_id,
 )
 from fim.group_lifecycle import (
@@ -605,7 +606,11 @@ def _command_run_batch(
     max_workers = (
         None
         if params.engine_backend != "lineal" or arguments.sequential
-        else (arguments.workers if arguments.workers is not None else _cpu_count())
+        else (
+            arguments.workers
+            if arguments.workers is not None
+            else _cpu_count(params.n_replicates)
+        )
     )
     logger.info(
         "starting batch run %s %s", run_id, _batch_description(params, max_workers)
@@ -1020,7 +1025,7 @@ def _batch_description(params: SimulationParams, max_workers: int | None) -> str
     )
 
 
-def _cpu_count() -> int:
+def _cpu_count(n_replicates: int) -> int:
     """Return the default parallel worker count for a CLI batch run.
 
     Used as the default `max_workers` for a batch run when neither
@@ -1030,9 +1035,13 @@ def _cpu_count() -> int:
     on the theory that using every available core (and no more, which
     would just make separate processes compete with each other for the
     same limited cores) gets the most work done in the least wall-clock
-    time.
+    time. Delegates to `fim.engine.default_replicate_concurrency`
+    (`"lineal"`'s own worker processes get the identical, genuine,
+    hardware-scaled fan-out benefit `"generational"`'s thread pool
+    does), rather than computing `os.cpu_count()` a second, separate
+    way — `fim.gui.batch_runner.default_max_workers` does the same.
     """
-    return os.cpu_count() or 1
+    return default_replicate_concurrency("lineal", n_replicates, BATCH_WIDTH)
 
 
 def _terminable(command: Callable[[], int]) -> int:
