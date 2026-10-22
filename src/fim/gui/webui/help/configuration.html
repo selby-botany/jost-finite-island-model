@@ -1399,12 +1399,23 @@ this axis too (<code>--sweep loci-length</code>).</p>
 <h3 id="max_concurrent_replicates">max_concurrent_replicates</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 1, or omitted</li>
-<li><strong>Default:</strong> unset (every replicate advances together)</li>
+<li><strong>Default:</strong> unset — resolves to this machine's CPU count under
+<code>generational</code>, or 8 (the batch-width design assumes, below) under
+<code>generational-vector</code>, never to every requested replicate at once</li>
 </ul>
 <p>Caps active replicate lanes for <code>generational</code> and <code>generational-vector</code>.
-When unset, every lane is built before the first generation. With a cap,
-lanes are built as slots become available.
-The <code>lineal</code> backend uses worker processes rather than this lane window.</p>
+With a cap, lanes are built as slots become available. When unset, the
+resolved default above is used instead; <code>generational-vector</code> has no
+way to run more than one lane's own work at a time regardless (its
+<code>advance</code> steps every active lane in a single loop), so a wider window
+there buys no throughput, only memory — see the maintainer design
+<code>20261022-claude-sonnet-5-replicate-concurrency-unification-design.md</code>
+(<code>selby/restricted</code>) for the full reasoning. <code>--workers</code>/<code>--sequential</code>
+(not a <code>SimulationParams</code> field — see
+<a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">usage.md</a>) is the <code>lineal</code> backend's own,
+separate concurrency control: it uses worker processes rather than
+this lane window, with its own, independently-resolved default
+(this machine's CPU count).</p>
 <p>This matters most under <code>generational-vector</code>: that backend keeps a
 dense, per-locus array cached for every currently active replicate at
 once, so an unbounded batch's memory use scales directly with

@@ -186,8 +186,9 @@ const FIELD_HELP = {
     max_concurrent_replicates: "Caps how many replicate lanes run at once " +
         "under the generational/generational-vector engines. Unlike " +
         "parallel workers, this is a real model parameter, and has no " +
-        "effect under lineal. Blank means every requested replicate at " +
-        "once.",
+        "effect under lineal. Blank defaults to this machine's CPU " +
+        "count under generational, or 8 (the batch-width design " +
+        "assumes) under generational-vector — not unlimited.",
     jit: "Whether the generational engine JIT-compiles its inner loop " +
         "with numba. lineal never accepts anything but off; " +
         "generational-vector always uses numba regardless of this " +

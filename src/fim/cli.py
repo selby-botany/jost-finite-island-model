@@ -1210,8 +1210,10 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "cap how many replicate lanes are advanced at once under "
             "engine_backend='generational'/'generational-vector' (default: "
-            "every requested replicate at once; ignored for a scalar run "
-            "or under 'lineal', which has no such lane concept — see "
+            "this machine's CPU count under 'generational', or 8 under "
+            "'generational-vector' (no fan-out to feed, so a wider window "
+            "buys no throughput); ignored for a scalar run or under "
+            "'lineal', which has no such lane concept — see "
             "max_concurrent_replicates in doc/configuration.md); "
             "overrides the loaded configuration for this run only"
         ),
