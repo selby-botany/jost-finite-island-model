@@ -1231,8 +1231,10 @@ def test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs(
                 "window.__fimBusyProbe = null;"
                 "window.pywebview.api.open_batch = function () {"
                 "  const busy = document.getElementById('open-run-busy');"
+                "  const screen = busy.closest('.screen');"
                 "  window.__fimBusyProbe = {"
                 "    hiddenDuring: busy.hidden,"
+                "    containingScreenHiddenDuring: screen !== null && screen.hidden,"
                 "    label: document.getElementById("
                 "      'open-run-busy-label').textContent"
                 "  };"
@@ -1248,6 +1250,8 @@ def test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs(
                 window,
                 "(window.__fimBusyProbe === null ? null : {"
                 "hiddenDuring: window.__fimBusyProbe.hiddenDuring, "
+                "containingScreenHiddenDuring: "
+                "window.__fimBusyProbe.containingScreenHiddenDuring, "
                 "label: window.__fimBusyProbe.label, "
                 "hiddenAfter: document.getElementById('open-run-busy').hidden"
                 "})",
@@ -1262,6 +1266,13 @@ def test_reopening_shows_a_busy_indicator_while_the_bridge_call_runs(
 
     assert settled is not None, "the reopen bridge call was never reached"
     assert settled["hiddenDuring"] is False
+    # Regression guard: `#open-run-busy` once lived inside
+    # `#screen-open-run`, which `prepareRunResource`'s own
+    # `showScreen("screen-run")` had already hidden by the time this
+    # toggle ran -- `busy.hidden is False` was passing then too, while
+    # the indicator stayed invisible the whole time, nested inside an
+    # already-hidden ancestor `.screen` section.
+    assert settled["containingScreenHiddenDuring"] is False
     assert settled["label"] == "Opening batch\u2026"
     # Cleared on the failure path too, so a failed open leaves the
     # screen usable rather than permanently "opening".

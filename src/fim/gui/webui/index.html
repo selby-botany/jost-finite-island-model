@@ -234,6 +234,24 @@
        below, unchanged) are not state-conditional. -->
   <section id="screen-run" class="screen" hidden>
     <div id="run-banner" class="banner" hidden></div>
+    <!-- Shown while a reopen is in flight (`open-run.js`'s own
+         `withOpenRunBusy`). Reopening a large batch or Study is
+         measurably multi-second: every member replicate's own
+         trajectory is re-read from disk and its convergence history
+         recomputed (`Api._rebuilt_pooled_histories`), so without this
+         the window simply sits still with no sign it heard the click.
+         Lives here, not in `#screen-open-run` (where this element used
+         to sit): `openBatch`/`openTrajectory` both switch to this
+         screen (`prepareRunResource`'s own `showScreen("screen-run")`)
+         *before* `withOpenRunBusy` ever toggles its `hidden` attribute,
+         so inside `#screen-open-run` that toggle had no visible effect
+         at all -- `showScreen` had already hidden that whole section's
+         own parent by the time it ran. -->
+    <div id="open-run-busy" class="open-run-busy" hidden role="status"
+         aria-live="polite">
+      <span class="open-run-busy-spinner" aria-hidden="true"></span>
+      <span id="open-run-busy-label"></span>
+    </div>
     <!-- A loaded configuration's run settings that differ from Settings
          (`screens/run-settings-notice.js`); Configure has the same
          notice. Shown here before a run starts only. -->
@@ -783,16 +801,6 @@
 
   <section id="screen-open-run" class="screen">
     <div id="open-run-banner" class="banner" hidden></div>
-    <!-- Shown while a reopen is in flight. Reopening a large batch or
-         Study is measurably multi-second: every member replicate's own
-         trajectory is re-read from disk and its convergence history
-         recomputed (`Api._rebuilt_pooled_histories`), so without this
-         the window simply sits still with no sign it heard the click. -->
-    <div id="open-run-busy" class="open-run-busy" hidden role="status"
-         aria-live="polite">
-      <span class="open-run-busy-spinner" aria-hidden="true"></span>
-      <span id="open-run-busy-label"></span>
-    </div>
     <header class="home-identity">
       <img
         src="assets/selby-orchid-logo.jpeg"
@@ -2097,6 +2105,22 @@
           <p class="examples-load-error" id="examples-load-error" role="alert" hidden></p>
         </section>
       </div>
+    </div>
+    <!-- Shown while "Open saved result" is in flight: a batch example's
+         own `Api.open_batch` re-reads every member replicate's own
+         trajectory and recomputes its pooled convergence history
+         (`open-run.js`'s own `withOpenRunBusy` docstring has the full
+         "measurably multi-second" rationale), so without this the
+         dialog closes and the window behind it sits still with no sign
+         the click was heard. Not `open-run-busy` itself: that element
+         lives in the Home screen's own markup, not guaranteed visible
+         while this dialog can be opened from any screen -- styled
+         identically (`.open-run-busy`/`.open-run-busy-spinner`) rather
+         than introduced as a second, divergent look. -->
+    <div id="examples-open-busy" class="open-run-busy" hidden role="status"
+         aria-live="polite">
+      <span class="open-run-busy-spinner" aria-hidden="true"></span>
+      <span id="examples-open-busy-label"></span>
     </div>
     <div class="actions">
       <button

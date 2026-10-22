@@ -24125,7 +24125,7 @@ measurement.
 
 <a id="gui.test_open_run_screen.test_clicking_a_column_header_sorts_that_studys_own_runs"></a>
 
-#### [test\_clicking\_a\_column\_header\_sorts\_that\_studys\_own\_runs](./gui/test_open_run_screen.py#L1271)
+#### [test\_clicking\_a\_column\_header\_sorts\_that\_studys\_own\_runs](./gui/test_open_run_screen.py#L1282)
 
 ```python
 def test_clicking_a_column_header_sorts_that_studys_own_runs(
@@ -24143,7 +24143,7 @@ touches.
 
 <a id="gui.test_open_run_screen.test_dragging_a_column_resize_handle_widens_it_for_the_whole_table"></a>
 
-#### [test\_dragging\_a\_column\_resize\_handle\_widens\_it\_for\_the\_whole\_table](./gui/test_open_run_screen.py#L1389)
+#### [test\_dragging\_a\_column\_resize\_handle\_widens\_it\_for\_the\_whole\_table](./gui/test_open_run_screen.py#L1400)
 
 ```python
 def test_dragging_a_column_resize_handle_widens_it_for_the_whole_table(
@@ -24156,7 +24156,7 @@ row share the identical underlying columns (item 4).
 
 <a id="gui.test_open_run_screen.test_selecting_a_study_checkbox_also_checks_its_own_run_rows"></a>
 
-#### [test\_selecting\_a\_study\_checkbox\_also\_checks\_its\_own\_run\_rows](./gui/test_open_run_screen.py#L1445)
+#### [test\_selecting\_a\_study\_checkbox\_also\_checks\_its\_own\_run\_rows](./gui/test_open_run_screen.py#L1456)
 
 ```python
 def test_selecting_a_study_checkbox_also_checks_its_own_run_rows(
@@ -24169,7 +24169,7 @@ still being included in a bulk delete.
 
 <a id="gui.test_open_run_screen.test_result_table_cells_are_user_selectable_for_copy"></a>
 
-#### [test\_result\_table\_cells\_are\_user\_selectable\_for\_copy](./gui/test_open_run_screen.py#L1495)
+#### [test\_result\_table\_cells\_are\_user\_selectable\_for\_copy](./gui/test_open_run_screen.py#L1506)
 
 ```python
 def test_result_table_cells_are_user_selectable_for_copy(
@@ -24189,7 +24189,7 @@ both.
 
 <a id="gui.test_open_run_screen.test_a_reopened_runs_graphs_repaint_at_the_real_pane_size"></a>
 
-#### [test\_a\_reopened\_runs\_graphs\_repaint\_at\_the\_real\_pane\_size](./gui/test_open_run_screen.py#L1543)
+#### [test\_a\_reopened\_runs\_graphs\_repaint\_at\_the\_real\_pane\_size](./gui/test_open_run_screen.py#L1554)
 
 ```python
 def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
@@ -24214,7 +24214,7 @@ pane's own CSS size, and content really was drawn across that width
 
 <a id="gui.test_open_run_screen.test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row"></a>
 
-#### [test\_multiple\_graph\_panes\_do\_not\_push\_the\_stats\_table\_off\_the\_row](./gui/test_open_run_screen.py#L1611)
+#### [test\_multiple\_graph\_panes\_do\_not\_push\_the\_stats\_table\_off\_the\_row](./gui/test_open_run_screen.py#L1622)
 
 ```python
 def test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row(

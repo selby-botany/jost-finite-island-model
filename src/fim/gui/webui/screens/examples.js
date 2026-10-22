@@ -40,6 +40,8 @@ const examplesLoadError = document.getElementById("examples-load-error");
 const examplesLoadButton = document.getElementById("examples-load-button");
 const examplesViewYamlButton = document.getElementById("examples-view-yaml-button");
 const examplesOpenSavedButton = document.getElementById("examples-open-saved-button");
+const examplesOpenBusy = document.getElementById("examples-open-busy");
+const examplesOpenBusyLabel = document.getElementById("examples-open-busy-label");
 const examplesCancelButton = document.getElementById("examples-cancel-button");
 const examplesRunNameInput = document.getElementById("run-name-input");
 const examplesRunDescriptionInput = document.getElementById("run-description-input");
@@ -223,6 +225,17 @@ async function examplesLoadSelected() {
 /**
  * Open the selected example's saved result on the Results card, closing
  * the dialog. A refusal is shown inside the dialog, which stays open.
+ *
+ * `Api.open_saved_example` is usually near-instant (`Api.ensure_examples`'s
+ * own module docstring: seeding now runs in its own background thread,
+ * started before the window even opens), except the rare case a user
+ * opens this very example before that thread gets to it -- then it
+ * seeds this one example synchronously, right here, as its own
+ * documented fallback. `examples-open-busy` covers exactly that window;
+ * the much larger cost one step later, re-reading every replicate's own
+ * trajectory (`openComputedRun` -> `openBatch`/`openTrajectory`), has
+ * its own busy indicator already (`open-run.js`'s own `withOpenRunBusy`,
+ * now correctly visible on the destination screen it switches to).
  */
 async function examplesOpenSaved() {
     const example = examplesSelectedExample();
@@ -231,8 +244,15 @@ async function examplesOpenSaved() {
     }
     window.__fimExampleOpenSettled = false;
     examplesOpenSavedButton.disabled = true;
+    if (examplesOpenBusy !== null && examplesOpenBusyLabel !== null) {
+        examplesOpenBusyLabel.textContent = "Opening saved result…";
+        examplesOpenBusy.hidden = false;
+    }
     try {
         const result = await window.pywebview.api.open_saved_example(example.id);
+        if (examplesOpenBusy !== null) {
+            examplesOpenBusy.hidden = true;
+        }
         if (!result.ok) {
             examplesShowError(`This example's saved result could not be opened: ${result.message}`);
             return;
@@ -240,6 +260,9 @@ async function examplesOpenSaved() {
         examplesDialog.close();
         await window.fim.openComputedRun(result.directory, result.isBatch);
     } finally {
+        if (examplesOpenBusy !== null) {
+            examplesOpenBusy.hidden = true;
+        }
         examplesOpenSavedButton.disabled = !example.has_saved_result;
         window.__fimExampleOpenSettled = true;
     }
