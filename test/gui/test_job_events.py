@@ -1114,3 +1114,70 @@ def test_memory_warning_names_jobs_and_pause_button_refreshes_the_banner() -> No
         ],
     }
     assert state["after"] == {"paused": ["run-1"], "hidden": True}
+
+
+@pytest.mark.gui
+def test_legacy_terminal_pushes_are_suppressed_with_a_second_document_open() -> None:
+    """The legacy single-document channel must not paint a background job's
+    banner onto whichever document happens to be selected.
+
+    `onRunError`/`onRunCancelled`/`onBatchError`/`onBatchCancelled` are the
+    legacy single-document channel (`jobs.js`'s own module docstring: with
+    multiple documents, live progress uses the addressed channel instead,
+    "to avoid changing the selected document by mistake") -- `onRunProgress`/
+    `onBatchProgress` already bail out once a second document exists, but
+    these four terminal-event siblings did not, so a different document's
+    own error bled onto the shared `#run-banner` of whatever document was
+    on screen. Each is called here exactly as a real push would.
+    """
+    window = create_window(hidden=True)
+    outcome: queue.Queue[bool | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(
+                "window.fim.workspace.createDocument({}, {select: false}); true;"
+            )
+            window.evaluate_js(
+                """
+                window.fim.onRunError("boom");
+                window.fim.onRunCancelled(3);
+                window.fim.onBatchError("batch boom");
+                window.fim.onBatchCancelled({replicateIndex: 0, generation: 3});
+                """
+            )
+            outcome.put(
+                window.evaluate_js("document.getElementById('run-banner').hidden")
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    banner_hidden = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert banner_hidden is True
+
+
+@pytest.mark.gui
+def test_legacy_terminal_pushes_still_show_the_banner_with_one_document() -> None:
+    """The same four pushes still reach the banner with only one document --
+    the ordinary, pre-concurrent-jobs case the suppression guard above must
+    not break."""
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js('window.fim.onRunError("boom"); true;')
+            outcome.put(
+                window.evaluate_js("document.getElementById('run-banner').textContent")
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    banner_text = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert banner_text == "boom"

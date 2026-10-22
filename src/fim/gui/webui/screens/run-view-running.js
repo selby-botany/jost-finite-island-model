@@ -772,6 +772,13 @@ window.fim.onRunDone = function onRunDone(payload) {
 };
 
 window.fim.onRunCancelled = function onRunCancelled(generation) {
+    // Legacy single-document channel (jobs.js's own module docstring):
+    // ambiguous once a second document is open, same as `onRunProgress`/
+    // `onBatchProgress` just above -- the addressed `onJobEvent` terminal
+    // event already reached the right tab's own `jobState` in that case.
+    if (window.fim.workspace.ids().length > 1) {
+        return;
+    }
     // Interruption is not a state transition (design §3.2.1): the
     // scatter/progress indicator simply stop updating and stay exactly
     // as they last rendered, with a banner overlaid on top.
@@ -782,6 +789,9 @@ window.fim.onRunCancelled = function onRunCancelled(generation) {
 };
 
 window.fim.onRunError = function onRunError(message) {
+    if (window.fim.workspace.ids().length > 1) {
+        return;
+    }
     window.fim.showRunBanner(message);
     cancelButton.disabled = true;
 };
@@ -903,6 +913,10 @@ window.fim.onBatchDone = function onBatchDone(payload) {
 };
 
 window.fim.onBatchCancelled = function onBatchCancelled(payload) {
+    // Same legacy-channel guard as `onRunCancelled`, above.
+    if (window.fim.workspace.ids().length > 1) {
+        return;
+    }
     window.fim.showRunBanner(
         `Batch cancelled (replicate ${payload.replicateIndex}, ` +
             `generation ${payload.generation}); no artifacts were written.`
@@ -911,6 +925,9 @@ window.fim.onBatchCancelled = function onBatchCancelled(payload) {
 };
 
 window.fim.onBatchError = function onBatchError(message) {
+    if (window.fim.workspace.ids().length > 1) {
+        return;
+    }
     window.fim.showRunBanner(message);
     cancelButton.disabled = true;
 };
