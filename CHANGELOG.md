@@ -17,6 +17,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   control child priority and the CPU and memory reserves. The app asks before
   a start that is estimated to cross the memory reserve and warns when
   available memory later falls below it, with a Pause action for each job.
+- **`dear-nolan-high` now validates the approach from founders, as the
+  default adaptive batch.** The worked example evolves the ordinary
+  seeded two-allele founder population instead of starting at a prepared
+  equilibrium, and runs like every other default-batch example rather
+  than a fixed single run: the batch stopped at 10 replicates with mean
+  `G_ST` 0.02193 ± 0.00004 and mean `D` 0.9016 ± 0.0055, matching the
+  published targets. A separate functional test
+  (`test/validation/test_dear_nolan_founder.py`) evolves the same
+  population as one fixed-horizon, fixed-seed 5000-generation run and
+  checks both published values in the final state and the trailing
+  window; it pins its own horizon since the example itself no longer
+  pins one. The derived-start stationarity test remains separate and
+  internal, under its original name and fixed-point bands, and now uses
+  `auto` to avoid paying lineal-engine latency when Numba is available.
+
 - **Source-line links in generated references.** API and test-suite headings
   now link modules, classes, functions, methods, tests, and documented data
   to their Python declarations on GitHub, preserving section anchors.

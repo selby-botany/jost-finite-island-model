@@ -718,9 +718,8 @@ def test_list_examples_mirrors_the_bundled_catalog() -> None:
 
     `loadable` is computed, not assumed: the per-base `mu_b` example,
     once refused for its per-locus rates, now loads, and so does the
-    Dear-Nolan high example, whose explicit `p_0` is derived by a
-    script. The path for an example without a configuration is tested
-    with a fixture catalog below.
+    Dear-Nolan high example. The path for an example without a
+    configuration is tested with a fixture catalog below.
     """
     catalog = presets_module.load_catalog(app_module._webui_directory())
 

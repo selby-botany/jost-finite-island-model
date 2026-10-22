@@ -763,14 +763,22 @@ Both use `ploidy: haploid`, so individual counts equal gene-copy counts
 
 - [`test_equilibrium.py`](../test/TESTS.md#validation.test_equilibrium) plugs the scenario's $(N,m,\mu,d)$ directly into
   the closed-form formulas and checks them against the published values.
-- [`test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium) goes further: it runs the *real* engine,
-  started from a derived near-equilibrium state built from the identity
-  recursion (§7.3) — a 26-locus ensemble for the low-migration scenario,
-  a direct derived start for the high-migration one — and shows the
-  engine's own pooled $G_{ST}$ and `D` directly reproduce both published
-  values, a stationarity property a biased operator would fail. The
-  letter's own closed-form $H_S$/$H_T$ approximations provide an
-  additional independent analytic cross-check, used the same way.
+- [`test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)
+  keeps the derived-start checks built from the identity recursion (§7.3):
+  a 26-locus ensemble for the low-migration scenario and a separate internal
+  stationarity test for the high-migration fixed point. The latter checks
+  that the engine holds the exact-recursion equilibrium, not that it arrives
+  there from founders.
+- [`test_dear_nolan_founder.py`](../test/TESTS.md#validation.test_dear_nolan_founder)
+  is the high-migration functional test: it runs the Dear-Nolan high
+  example's two-allele founder population as one seeded 5000-generation run
+  on the vector backend and checks both published values in the final state
+  and in the mean of the last 500 generations. It takes the population from
+  the example's `config.yaml` and pins its own fixed horizon; it does not use
+  the identity recursion to build its start.
+
+The letter's own closed-form $H_S$/$H_T$ approximations provide an
+additional independent analytic cross-check, used the same way.
 
 ### 7.5 Literature-grounded scenarios beyond Dear-Nolan
 

@@ -152,7 +152,7 @@ def _characterize_dear_nolan_high(
     """Characterize the high-migration Dear-Nolan scenario.
 
     Same configuration as
-    `test_dear_nolan_high_migration_scenario_via_engine` (`N=2000, d=100,
+    `test_dear_nolan_high_stationarity_via_engine` (`N=2000, d=100,
     m=0.01, mu=0.001`, derived near-equilibrium single-locus start,
     horizon 30).
     """

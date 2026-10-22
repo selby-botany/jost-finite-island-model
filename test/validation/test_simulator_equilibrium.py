@@ -25,13 +25,10 @@ internal/deep):
   can validate them precisely -- but that same specificity means these
   checks are expected to need re-deriving, not necessarily to signal an
   engine regression, once a future core refactor changes that internal
-  order. Two of the five engine-level scenario tests (Dear-Nolan-high;
-  see its own docstring) keep one internal, implementation-coupled
-  assertion deliberately alongside a functional one, since it catches a
-  regression class (a biased operator drifting away from a known fixed
-  point) the functional check alone would not; every such assertion is
-  labeled `# INTERNAL:` in place, distinct from the `# FUNCTIONAL:`
-  assertions beside it.
+  order. Dear-Nolan-high's stationarity check is a separate internal test:
+  it catches a biased operator drifting away from a known fixed point.
+  Its functional founder-to-equilibrium test lives in
+  `test/validation/test_dear_nolan_founder.py` and does not use that oracle.
 
 Tolerance bands are derived analytically before any seed is chosen: each band
 is ``k`` standard errors wide (``k = 5``), with the per-replicate spread taken
@@ -965,17 +962,10 @@ def _run_engine_replicates(
         seed: Base seed; replicate ``i`` uses ``seed + i``.
         initial_frequencies: Optional explicit start; otherwise the default
             Dirichlet founding condition is used.
-        engine_backend: Which backend actually runs this scenario —
-            `"lineal"` (every existing caller's own default, unchanged)
-            or `"generational"`. Never `"generational-vector"`/`"auto"`
-            here: every scenario in this file uses the default
-            `mutation_model="infinite_alleles"`, which `Vectorized
-            Advancer` does not support at all (an enforced `ValueError`,
-            not a gap to work around) — `"generational"` is the one
-            other backend actually reachable from this helper's own
-            scenarios, added specifically to let a caller confirm a
-            published-value comparison holds for it too, not just for
-            `"lineal"`.
+        engine_backend: Backend used for this scenario; default `"lineal"`.
+            The Dear-Nolan high stationarity check uses `"auto"` to select
+            the vector backend when Numba is available. All backends now
+            support infinite alleles and share the lineal random stream.
 
     Returns:
         Every replicate's own final `ModelState`, in replicate order.
@@ -1048,8 +1038,9 @@ def _run_engine_pooled(
 def test_engine_reproduces_part_vi_equilibrium_via_generational_backend() -> None:
     """`engine_backend="generational"` reproduces the same published-value comparison.
 
-    Every one of this file's own `@pytest.mark.slow` published-value
-    scenarios below runs through the default `"lineal"` backend only —
+    This file's published-value scenarios below use the default
+    `"lineal"` backend; the separate Dear-Nolan high internal stationarity
+    check uses `"auto"`. The lineal-only scenarios need no duplicate G runs —
     reasonably, since `fim.engine`'s own design already gives Backend L
     and Backend G a *general*, structural bit-identity proof
     (`test_generational_backend_matches_lineal_for_scalar_run`/`_for_
@@ -2529,36 +2520,26 @@ def test_dear_nolan_low_migration_scenario_via_engine() -> None:
 
 @pytest.mark.slow
 @pytest.mark.statistical
-def test_dear_nolan_high_migration_scenario_via_engine() -> None:
-    """The simulator reproduces the high-migration Dear-Nolan equilibrium (7.4).
+def test_dear_nolan_high_stationarity_via_engine() -> None:
+    """Internal: the simulator preserves the high-migration fixed point (7.4).
 
-    **Functional (public-API-only) claim:** ``N=2000, d=100, m=0.01,
-    mu=0.001`` (published ``G_ST ~= 0.02, D ~= 0.90/0.91``) -- the direct
-    comparison against these two published values, at the end of this
-    function, is this test's own implementation-independent pass/fail
-    criterion, expected to survive a future core refactor that preserves
-    the model's own scientific behavior.
-
-    **Internal (implementation-coupled) claim, kept in the same test
-    deliberately rather than deleted:** the engine, started from a
+    The engine, started from a
     *derived* near-equilibrium state (:func:`_dn2_equilibrium_start`),
     is also shown to HOLD that state -- a stationarity check that a
     biased operator (for example the mutation defect regressed in
     ``test/model/test_operators.py``) would fail by drifting away from
-    the fixed point, catching a class of regression the published-value
-    check alone would not (a biased operator could coincidentally still
+    the fixed point, catching a class of regression the separate founder
+    test alone would not (a biased operator could coincidentally still
     land near 0.02/0.90 from a *different* starting point). This check's
     own oracle (`_identity_fixed_point`) assumes today's specific
     Migrate -> Drift -> Mutate pipeline order, so it is expected to need
     re-deriving -- not necessarily to signal an engine regression -- once
     a core refactor changes that order; see the labeled assertions below.
 
-    Forward-integrating to this equilibrium from an undifferentiated start is
-    not compute-feasible: the between-deme identity relaxes over ~1800
-    generations while the infinite-alleles pool grows to ~``10^4`` distinct
-    ids, pushing per-generation cost past 0.4 s (>13 min/replicate). Both
-    checks above therefore start from the same derived near-equilibrium
-    state rather than an undifferentiated one.
+    Founder-to-equilibrium validation now lives separately in
+    ``test_dear_nolan_founder.py``. The vector backend makes a full
+    5000-generation founder run practical, so stationarity is no longer
+    used as a substitute for that functional claim.
 
     Derivation (no tuning): ``(jw*, jb*)`` is the exact identity fixed point of
     the Migrate -> Drift -> Mutate recursion (:func:`_identity_fixed_point`).
@@ -2571,7 +2552,8 @@ def test_dear_nolan_high_migration_scenario_via_engine() -> None:
     transient.
 
     Configuration: 1 locus (``d=100`` already self-averages), 5 replicates,
-    horizon 30, base seed 992000. Runtime ~130 s. Band derivation (before
+    horizon 30, base seed 992000, backend ``auto`` (bit-identical to the
+    calibrated lineal stream). Band derivation (before
     seed selection, from the versioned characterization pass -- module
     docstring, ``test/validation/statistical-calibration-evidence.json``,
     characterization
@@ -2601,19 +2583,14 @@ def test_dear_nolan_high_migration_scenario_via_engine() -> None:
         replicates=replicates,
         seed=992000,
         initial_frequencies=equilibrium_start,
+        engine_backend="auto",
     )
     mean_g = statistics.fmean(g_values)
     mean_d = statistics.fmean(d_values)
 
-    # FUNCTIONAL: direct reproduction of BOTH published headline values --
-    # implementation-independent; this is the assertion pair that must
-    # keep passing after any future core refactor.
-    assert mean_g == pytest.approx(0.02, abs=0.005)
-    assert 0.89 <= mean_d <= 0.92
-
     # INTERNAL: the engine holds today's exact-recursion fixed point
-    # within the derived band -- see the docstring's own "Internal"
-    # paragraph for what this catches and why it is expected to need
+    # within the derived band -- see the docstring for what this catches
+    # and why it is expected to need
     # re-deriving, not necessarily to fail outright, after a future core
     # refactor changes the pipeline's internal operator order.
     oracle_g_st, oracle_d = _identities_to_statistics(within_star, between_star, d)

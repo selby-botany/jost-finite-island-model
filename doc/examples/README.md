@@ -87,14 +87,13 @@ alone — migration (Nm) is unchanged between the two examples.
 
 ### [dear-nolan-high](dear-nolan-high/README.md)
 
-**Dear-Nolan high-migration botanical scenario** — the exact equilibrium
-validation case from `test/validation/test_simulator_equilibrium.py`.
-The test derives a near-equilibrium initial state
-(`_dn2_equilibrium_start`) from the identity-recursion fixed point.
-`reproduce.py` writes that state into `config.yaml` as an explicit `p_0`.
-Five replicates of 30 generations land at mean G_ST 0.0219 ± 0.0001 and
-mean D 0.908 ± 0.003, matching the predicted equilibrium (G_ST 0.0220,
-D 0.909) and the published G_ST ≈ 0.02 and D ≈ 0.90.
+**Dear-Nolan high-migration botanical scenario** — 100 islands run as the
+default adaptive batch from the ordinary two-allele founder population to
+the published high-migration equilibrium. The batch stopped at 10
+replicates with mean G_ST 0.02193 ± 0.00004 and mean D 0.9016 ± 0.0055,
+matching the published G_ST ≈ 0.02 and D ≈ 0.90–0.91. It is no longer an
+example initialized at equilibrium; the derived-start stationarity check
+remains a separate internal test.
 
 ## Configure card examples
 

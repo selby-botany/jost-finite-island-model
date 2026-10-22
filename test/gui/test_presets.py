@@ -87,13 +87,14 @@ def test_presets_use_the_canonical_example_configs() -> None:
     assert {preset.preset_id: preset.yaml_text for preset in _REAL_PRESETS} == configs
 
 
-def test_the_script_derived_example_is_a_preset_with_an_explicit_start() -> None:
-    """`dear-nolan-high`'s `config.yaml` carries its derived start as `p_0`."""
+def test_the_dear_nolan_high_preset_starts_from_founders() -> None:
+    """`dear-nolan-high` loads with the ordinary two-allele founder start."""
     preset = get_preset(_REAL_WEBUI_DIRECTORY, "dear-nolan-high")
 
     assert preset is not None
     configuration = yaml.safe_load(preset.yaml_text)
-    assert len(configuration["p_0"]) == configuration["d"]
+    assert "p_0" not in configuration
+    assert configuration["initial_allele_count"] == 2
 
 
 def test_every_catalog_example_names_a_class_in_the_tree() -> None:

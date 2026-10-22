@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from example_support import archived_report_equal
 
 from fim.examples.artifacts import archive_target, output_files
@@ -167,22 +168,34 @@ def test_founder_sharing_example_has_dynamics_and_evidence_for_every_measure() -
     assert max(entry["A_CGD"] for entry in histories) > 1
 
 
-def test_dear_nolan_high_configuration_matches_its_derivation() -> None:
-    """`dear-nolan-high/config.yaml` is exactly what `reproduce.py` derives.
+def test_dear_nolan_high_configuration_starts_from_founder_population() -> None:
+    """The public example evolves founders rather than a prepared equilibrium.
 
-    The example's `p_0` is the validation suite's near-equilibrium start
-    (`_dn2_equilibrium_start`), written into the file by the script; a
-    change to that derivation fails here until the file is rewritten.
+    It runs as the default adaptive batch, as `dear-nolan-low` does: the
+    burn-in, window and cap are derived from the model, so none is pinned.
     """
-    script = EXAMPLES_DIRECTORY / "dear-nolan-high" / "reproduce.py"
-    completed = subprocess.run(
-        [sys.executable, str(script), "--check"],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
+    config = yaml.safe_load(
+        (EXAMPLES_DIRECTORY / "dear-nolan-high" / "config.yaml").read_text(
+            encoding="utf-8"
+        )
     )
-    assert completed.returncode == 0, completed.stderr
+    assert "p_0" not in config
+    assert config["initial_allele_count"] == 2
+    assert config["N"] == 2000
+    assert config["d"] == 100
+    assert config["m"] == 0.01
+    assert config["mu"] == 0.001
+    assert config["seed"] == 992000
+    assert config["engine_backend"] == "auto"
+    assert config["convergence_statistic"] == ["D", "G_ST"]
+    for pinned in (
+        "convergence_burn_in",
+        "replicate_averaging_window",
+        "max_generations",
+        "n_replicates",
+        "stop_batch_early",
+    ):
+        assert pinned not in config, pinned
 
 
 @pytest.mark.parametrize("example", EXAMPLE_IDS)

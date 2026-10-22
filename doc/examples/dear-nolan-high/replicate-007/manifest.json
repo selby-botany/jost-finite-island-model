@@ -1,0 +1,84 @@
+{
+  "artifacts": {
+    "history": {
+      "bytes": 144593,
+      "sha256": "9e0d6ab08b6baf0ee4b850e76b84f71d980ec46aeefd642da4c79be19558c9d0"
+    },
+    "pairwise": {
+      "bytes": 497303,
+      "sha256": "930569488979dfc58be6dcca773b2a2bcb04b16513c73eeea3f4ed8464a09475"
+    },
+    "report": {
+      "bytes": 4679,
+      "sha256": "207976b32722b91eaa4985d403609e0bd10d32b5867281b21beef89ae01492db"
+    },
+    "scatter": {
+      "bytes": 52586,
+      "sha256": "f5f99d2853d2f3306cc9efe2e7d9501922c21ff125748ede8f7bf76dd93d27ef"
+    }
+  },
+  "auto_derived": [],
+  "convergence": {
+    "converged": true,
+    "generation": 12619,
+    "generation_count": 12620,
+    "reason": "averaging window complete",
+    "statistic": [
+      "D",
+      "G_ST"
+    ]
+  },
+  "ended_at": "2026-10-22T04:52:24.622564Z",
+  "engine_backend": "generational-vector",
+  "equilibrium_final_heterozygosity": null,
+  "equilibrium_generation_count": null,
+  "initial_condition_mode": "dirichlet",
+  "jit": "off",
+  "parameters": {
+    "N": 2000,
+    "_read_only": true,
+    "auto_vector_max_capacity": 4096,
+    "auto_vector_min_d": 2,
+    "confidence": 0.95,
+    "convergence_burn_in": 2643,
+    "convergence_combinator": "all",
+    "convergence_estimate": "mean_of_values",
+    "convergence_statistic": [
+      "D",
+      "G_ST"
+    ],
+    "d": 100,
+    "deme_weighting": "equal",
+    "engine_backend": "auto",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "jit": "off",
+    "loci": [
+      {
+        "length": 400,
+        "locus_id": 1
+      }
+    ],
+    "locus_aggregation": "ratio_of_means",
+    "m": 0.01,
+    "max_generations": 200000,
+    "migrant_sampling": "continuous",
+    "mu": 0.001,
+    "mutation_model": "infinite_alleles",
+    "n_replicates": 1,
+    "ploidy": "haploid",
+    "precision": 0.01,
+    "precision_method": "interval",
+    "replicate_averaging_window": 9976,
+    "replicate_minimum": 10,
+    "seed": 7511446892674850659,
+    "stop_batch_early": true,
+    "track_expensive_statistics": false,
+    "trajectory_retention": "statistics"
+  },
+  "relaxation_time": 498.78315891944516,
+  "run_id": "run-5fc28fabb8911220-r007",
+  "schema_version": 3,
+  "software_version": "1.2.0",
+  "started_at": "2026-10-21T21:14:54.094314Z"
+}
