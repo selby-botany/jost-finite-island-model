@@ -230,9 +230,16 @@ function describeClose(needs) {
     dirtyDocumentsSection.hidden =
         !needs.dirtyDocuments || needs.dirtyDocuments.length === 0;
     const activeJob = document.getElementById("confirm-close-active-job");
-    if (needs.activeJob) {
+    const activeJobs = Array.isArray(needs.activeJobs)
+        ? needs.activeJobs
+        : needs.activeJob
+          ? [needs.activeJob]
+          : [];
+    if (activeJobs.length > 0) {
         activeJob.textContent =
-            `Active job: ${needs.activeJob.kind} — ${needs.activeJob.id}`;
+            `Active jobs: ${activeJobs
+                .map((job) => `${job.kind} — ${job.id}`)
+                .join("; ")}`;
         activeJob.hidden = false;
     } else {
         activeJob.textContent = "";

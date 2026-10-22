@@ -2153,11 +2153,14 @@ function buildCompareSweepsButton(group) {
  * @param {{retryFailed?: boolean, rerun?: boolean}} options
  */
 async function startSweepFromHome(studyId, options) {
-    const result = await window.pywebview.api.resume_sweep(
-        studyId,
-        Boolean(options.retryFailed),
-        null,
-        Boolean(options.rerun)
+    const result = await window.fim.jobs.startWithMemoryConfirmation(
+        "resume_sweep",
+        [
+            studyId,
+            Boolean(options.retryFailed),
+            null,
+            Boolean(options.rerun),
+        ]
     );
     if (!result.ok) {
         showOpenRunBanner(result.message);

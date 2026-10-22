@@ -83,6 +83,7 @@ function createLiveRunState() {
         liveIdentityRecoveryReference: null,
         liveClosedForm: null,
         liveConvergence: null,
+        lastRenderedFrame: null,
         lastProgressSequence: -1,
         isBatch: false,
     };
@@ -343,6 +344,7 @@ window.fim.setLiveEquilibriumReference = function setLiveEquilibriumReference(
     const state = liveRunStateFor(tabId);
     if (state) {
         state.liveEquilibriumReference = equilibrium ?? null;
+        redrawCurrentLiveFrame(state);
     }
 };
 
@@ -361,6 +363,7 @@ window.fim.setLiveIdentityRecoveryReference = function setLiveIdentityRecoveryRe
     const state = liveRunStateFor(tabId);
     if (state) {
         state.liveIdentityRecoveryReference = identityRecovery ?? null;
+        redrawCurrentLiveFrame(state);
     }
 };
 
@@ -379,6 +382,7 @@ window.fim.setLiveClosedForm = function setLiveClosedForm(
     const state = liveRunStateFor(tabId);
     if (state) {
         state.liveClosedForm = closedForm ?? null;
+        redrawCurrentLiveFrame(state);
     }
 };
 
@@ -398,10 +402,11 @@ window.fim.setLiveConvergence = function setLiveConvergence(
         state.liveConvergence = convergence ?? null;
     }
     window.fim.setWatchedStatistics(
-        activeLiveRunState.liveConvergence
-            ? activeLiveRunState.liveConvergence.statistics
-            : []
+        state?.liveConvergence ? state.liveConvergence.statistics : []
     );
+    if (state) {
+        redrawCurrentLiveFrame(state);
+    }
 };
 
 function drawProgressPanels(state, payload) {
@@ -428,7 +433,7 @@ function drawProgressPanels(state, payload) {
  *
  * @param {number} demeCount
  */
-function wireLiveDemePairSelector(demeCount, state) {
+function wireLiveDemePairSelector(demeCount, state, jobId = null) {
     runDemePairSelector.hidden = demeCount < DEMES_NEEDED_FOR_PAIR;
     window.fim.wireDemePairSelector({
         xSelect: runXDeme,
@@ -448,7 +453,7 @@ function wireLiveDemePairSelector(demeCount, state) {
             // default panel because the flag itself had not caught up
             // yet.
             state.showingLiveDemePair = true;
-            await window.pywebview.api.set_live_deme_pair(x, y);
+            await window.pywebview.api.set_live_deme_pair(x, y, jobId);
         },
     });
 }
@@ -511,6 +516,33 @@ function renderLiveStatistics(state, statistics, generation) {
         if (typeof decorateTrajectoryStatisticRow === "function") {
             decorateTrajectoryStatisticRow(element, name);
         }
+    }
+}
+
+function redrawCurrentLiveFrame(state) {
+    const current = state.lastRenderedFrame;
+    if (!current) {
+        return;
+    }
+    renderLiveStatistics(state, current.statistics, current.generation);
+    if (typeof renderTrajectory === "function") {
+        renderTrajectory(
+            state.liveTrajectoryGenerations,
+            state.liveTrajectoryHistories,
+            undefined,
+            undefined,
+            state.liveEquilibriumReference,
+            state.liveIdentityRecoveryReference,
+            state.liveClosedForm,
+            current.isLiveHead ? null : current.generation,
+            state.liveConvergence
+                ? {
+                      window: state.liveConvergence.window,
+                      burnIn: state.liveConvergence.burnIn,
+                      anchors: {},
+                  }
+                : null
+        );
     }
 }
 
@@ -659,12 +691,12 @@ function recordRunProgress(state, payload) {
     );
 }
 
-function renderRunProgress(state, payload) {
+function renderRunProgress(state, payload, jobId = null) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
     progressLabel.textContent = `${payload.generation} / ${payload.maxGenerations}`;
     if (!state.liveDemeSelectorWired) {
-        wireLiveDemePairSelector(payload.demeCount, state);
+        wireLiveDemePairSelector(payload.demeCount, state, jobId);
         state.liveDemeSelectorWired = true;
     }
 
@@ -678,6 +710,11 @@ function renderRunProgress(state, payload) {
     };
 
     window.fim.appendLiveFrame(liveFrame, (f, _index, isLiveHead) => {
+        state.lastRenderedFrame = {
+            generation: f.generation,
+            statistics: f.statistics,
+            isLiveHead,
+        };
         renderLiveStatistics(state, f.statistics, f.generation);
         renderPairStatistics(f.pairStatistics);
         if (typeof renderTrajectory === "function") {
@@ -758,13 +795,13 @@ function recordBatchProgress(state, payload) {
     );
 }
 
-function renderBatchProgress(state, payload) {
+function renderBatchProgress(state, payload, jobId = null) {
     const meanGeneration = payload.meanReportedGeneration ?? 0;
     progressBar.max = payload.maxGenerations;
     progressBar.value = meanGeneration;
     progressLabel.textContent = `mean completed generation ${meanGeneration}`;
     if (!state.liveDemeSelectorWired) {
-        wireLiveDemePairSelector(payload.demeCount, state);
+        wireLiveDemePairSelector(payload.demeCount, state, jobId);
         state.liveDemeSelectorWired = true;
     }
 
@@ -844,7 +881,7 @@ window.fim.onJobEvent = function onJobEvent(event) {
         state.isBatch = true;
         recordBatchProgress(state, event.payload);
         if (tabId === window.fim.workspace.selectedId()) {
-            renderBatchProgress(state, event.payload);
+            renderBatchProgress(state, event.payload, event.jobId);
         }
         return true;
     }
@@ -853,7 +890,7 @@ window.fim.onJobEvent = function onJobEvent(event) {
         state.isBatch = false;
         recordRunProgress(state, event.payload);
         if (tabId === window.fim.workspace.selectedId()) {
-            renderRunProgress(state, event.payload);
+            renderRunProgress(state, event.payload, event.jobId);
         }
     }
     return true;

@@ -217,6 +217,11 @@
     <p id="startup-warning-text"></p>
     <button type="button" id="startup-warning-dismiss">Dismiss</button>
   </div>
+  <div id="memory-warning-banner" class="banner" role="alert"
+       aria-live="assertive" hidden>
+    <p id="memory-warning-text"></p>
+    <ul id="memory-warning-jobs"></ul>
+  </div>
 
   <!-- The unified run view (unified-run-view design §3.2, §8 Phase E):
        one screen, one shared canvas/selector/scrubber, in exactly one
@@ -2433,6 +2438,54 @@
         pair can still be recomputed from the run's saved trajectory.
       </p>
     </div>
+
+    <fieldset class="composite" id="settings-background-work">
+      <legend>Background work</legend>
+      <p class="hint">
+        These settings apply only to jobs started after you save them.
+        A core means a logical CPU core; core performance can vary on
+        systems with simultaneous multithreading or mixed core types.
+      </p>
+      <div class="field">
+        <label for="settings-run-priority">Run priority</label>
+        <select id="settings-run-priority">
+          <option value="normal">Normal</option>
+          <option value="lower">Lower</option>
+          <option value="lowest">Lowest</option>
+        </select>
+        <p class="hint">
+          Lowest can make simulations several times slower on macOS.
+          The GUI itself always keeps normal priority.
+        </p>
+      </div>
+      <div class="field">
+        <label for="settings-reserve-mode">Keep CPU cores free</label>
+        <select id="settings-reserve-mode">
+          <option value="cores">Whole cores</option>
+          <option value="percent">Percentage</option>
+        </select>
+        <label for="settings-reserve-value" id="settings-reserve-value-label">
+          Cores to keep free
+        </label>
+        <input type="number" id="settings-reserve-value" min="0" step="1">
+        <p class="hint" id="settings-worker-budget"></p>
+      </div>
+      <div class="field">
+        <label for="settings-memory-reserve-mode">Keep memory free</label>
+        <select id="settings-memory-reserve-mode">
+          <option value="auto">Automatic</option>
+          <option value="gib">GiB</option>
+          <option value="percent">Percentage</option>
+        </select>
+        <label for="settings-memory-reserve-value"
+               id="settings-memory-reserve-value-label">Memory to keep free</label>
+        <input type="number" id="settings-memory-reserve-value"
+               min="0" step="1">
+        <p class="hint" id="settings-memory-reserve-hint">
+          Automatic keeps the larger of 2 GiB and 10% of physical memory free.
+        </p>
+      </div>
+    </fieldset>
 
     <!-- Storage location (`20260918-claude-sonnet-5-configurable-
          storage-root-design.md`, `selby/restricted`, §7): read-only,

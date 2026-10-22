@@ -10,6 +10,21 @@ const scatterStyleSelect = document.getElementById("settings-scatter-style");
 const statisticsList = document.getElementById("settings-statistics-list");
 const statisticsFilter = document.getElementById("settings-statistics-filter");
 const pairwiseMaxDemesInput = document.getElementById("settings-pairwise-max-demes");
+const runPrioritySelect = document.getElementById("settings-run-priority");
+const reserveModeSelect = document.getElementById("settings-reserve-mode");
+const reserveValueInput = document.getElementById("settings-reserve-value");
+const reserveValueLabel = document.getElementById("settings-reserve-value-label");
+const workerBudgetHint = document.getElementById("settings-worker-budget");
+const memoryReserveModeSelect = document.getElementById(
+    "settings-memory-reserve-mode"
+);
+const memoryReserveValueInput = document.getElementById(
+    "settings-memory-reserve-value"
+);
+const memoryReserveValueLabel = document.getElementById(
+    "settings-memory-reserve-value-label"
+);
+const memoryReserveHint = document.getElementById("settings-memory-reserve-hint");
 
 // The preset buttons. Each returns the keys it shows; a preset replaces
 // the current choice rather than adding to it.
@@ -295,6 +310,88 @@ async function loadSettingsResultsLocation() {
     settingsResultsLocationOverriddenHint.hidden = location.editable;
 }
 
+function applyBackgroundWorkSettings(settings) {
+    runPrioritySelect.value = settings.runPriority;
+    reserveModeSelect.value = settings.reserveMode;
+    reserveValueInput.value = String(settings.reserveValue);
+    const percentage = settings.reserveMode === "percent";
+    reserveValueLabel.textContent = percentage
+        ? "Percentage to keep free"
+        : "Cores to keep free";
+    reserveValueInput.max = percentage ? "100" : "";
+    workerBudgetHint.textContent =
+        `${settings.usableCores} logical cores available; ` +
+        `${settings.reservedCores} reserved; ` +
+        `${settings.workerBudget} worker(s) available.`;
+    memoryReserveModeSelect.value = settings.memoryReserveMode;
+    memoryReserveValueInput.value = String(settings.memoryReserveValue);
+    syncMemoryReserveFields();
+}
+
+function syncMemoryReserveFields() {
+    const mode = memoryReserveModeSelect.value;
+    memoryReserveValueInput.disabled = mode === "auto";
+    memoryReserveValueInput.max = mode === "percent" ? "100" : "";
+    memoryReserveValueLabel.textContent =
+        mode === "percent" ? "Percentage to keep free" : "GiB to keep free";
+    memoryReserveHint.textContent =
+        mode === "auto"
+            ? "Automatic keeps the larger of 2 GiB and 10% of physical memory free."
+            : "This reserve applies to jobs started after you save.";
+}
+
+async function loadBackgroundWorkSettings() {
+    applyBackgroundWorkSettings(
+        await window.pywebview.api.get_background_work_settings()
+    );
+}
+
+async function saveBackgroundWorkSettings() {
+    const reserveValue = reserveValueInput.valueAsNumber;
+    if (!Number.isInteger(reserveValue) || reserveValue < 0) {
+        showSettingsBanner("The CPU reserve must be a non-negative whole number.");
+        await loadBackgroundWorkSettings();
+        return;
+    }
+    const memoryReserveMode = memoryReserveModeSelect.value;
+    const memoryReserveValue =
+        memoryReserveMode === "auto" ? 0 : memoryReserveValueInput.valueAsNumber;
+    if (
+        !Number.isInteger(memoryReserveValue) ||
+        memoryReserveValue < 0 ||
+        (memoryReserveMode === "percent" && memoryReserveValue > 100)
+    ) {
+        showSettingsBanner(
+            "The memory reserve must be a non-negative whole number; " +
+                "percentages cannot exceed 100."
+        );
+        await loadBackgroundWorkSettings();
+        return;
+    }
+    const result = await trackSettingsSave(
+        window.pywebview.api.set_background_work_settings(
+            runPrioritySelect.value,
+            reserveModeSelect.value,
+            reserveValue,
+            memoryReserveMode,
+            memoryReserveValue
+        )
+    );
+    if (!result.ok) {
+        showSettingsBanner(result.message);
+        await loadBackgroundWorkSettings();
+        return;
+    }
+    showSettingsBanner("");
+    applyBackgroundWorkSettings(result);
+}
+
+memoryReserveModeSelect.addEventListener("change", async () => {
+    syncMemoryReserveFields();
+    await saveBackgroundWorkSettings();
+});
+memoryReserveValueInput.addEventListener("change", saveBackgroundWorkSettings);
+
 settingsResultsLocationChangeButton.addEventListener("click", async () => {
     const picked = await window.pywebview.api.browse_for_results_location();
     if (!picked.ok) {
@@ -328,6 +425,7 @@ async function loadSettingsDialog() {
     pairwiseMaxDemesInput.value = String(
         await window.pywebview.api.get_pairwise_max_demes()
     );
+    await loadBackgroundWorkSettings();
     await loadSettingsResultsLocation();
     window.__fimSettingsLoaded = true;
 }
@@ -482,6 +580,16 @@ pairwiseMaxDemesInput.addEventListener("change", async () => {
     );
     showSettingsBanner(result.ok ? "" : result.message);
 });
+
+runPrioritySelect.addEventListener("change", saveBackgroundWorkSettings);
+reserveModeSelect.addEventListener("change", async () => {
+    const nextMode = reserveModeSelect.value;
+    if (nextMode === "percent" && reserveValueInput.valueAsNumber > 100) {
+        reserveValueInput.value = "100";
+    }
+    await saveBackgroundWorkSettings();
+});
+reserveValueInput.addEventListener("change", saveBackgroundWorkSettings);
 
 /**
  * Open Settings scrolled to "Statistics shown" (the statistics panel's

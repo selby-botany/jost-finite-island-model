@@ -146,6 +146,15 @@ def _during_a_live_run(
             wait_for_run_view_ready(window)
             window.evaluate_js("document.getElementById('run-button').click();")
             wait_or_fail(started_event, "run start (on_run_started)")
+            poll_or_fail(
+                lambda: window.evaluate_js(
+                    "window.fim.workspace.settled("
+                    "window.fim.workspace.selectedId(), 'runStart')"
+                ),
+                lambda settled: settled is True,
+                "Run start response",
+                interval=_PROGRESS_POLL_SECONDS,
+            )
             result = body(window, wait_for_progress, lambda: progress_count)
             window.evaluate_js("document.getElementById('cancel-run-button').click();")
             wait_or_fail(cancelled_event, "run cancellation (cancelled message)")

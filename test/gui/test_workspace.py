@@ -30,6 +30,7 @@ def test_document_switcher_is_enabled_and_has_toolbar_semantics(
             const second = workspace.createDocument(
                 {label: "Same name"}, {select: false}
             );
+            workspace.attachJob(second, "job-lowest", "lowest");
             workspace.setDocumentTabsEnabled(true);
             const buttons = [...toolbar.querySelectorAll(".document-select")];
             const closes = [...toolbar.querySelectorAll(".document-close")];
@@ -64,8 +65,8 @@ def test_document_switcher_is_enabled_and_has_toolbar_semantics(
         "document-select-document-2",
     ]
     assert state["labels"] == [
-        "Same name - draft (document-1)",
-        "Same name - draft (document-2)",
+        "Same name - draft",
+        "Same name - draft (Lowest priority)",
     ]
     assert state["current"] == ["true", "false"]
     assert state["tabIndexes"] == [0, -1]

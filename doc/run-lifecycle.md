@@ -26,11 +26,13 @@ Return to the [command reference](usage.md) or the
 
 ## Quick start
 
-**In the desktop app:** fill in the Configure form and choose
-**Save for later** on the Run screen. The run appears under **Saved runs** on
-Home, where **Start**, **Resume**, **Edit**, **Cancel**, and **Delete** appear
-only when they are allowed. While a saved run is running, **Pause** on the Run
-screen stops it at a checkpoint.
+**In the desktop app:** choose **Run simulation** to create and start a Run
+object automatically. While unfinished, the run appears under **Saved runs** on Home, where
+**Resume**, **Edit**, **Cancel**, and **Delete** appear when allowed. After
+completion, it appears with the completed results.
+The Run screen's **Pause** button stops it at a checkpoint; after pausing,
+**Run simulation** becomes **Resume run** in that same document.
+Choose **Save for later** to keep a configuration without starting it.
 
 **On the command line:**
 
@@ -218,9 +220,15 @@ for real data. `fim object reclaim --dry-run` lists them, and
 - **Save for later** on the Run screen keeps the form as a saved run. An
   incomplete or invalid form is saved as a Draft. Saving again while you edit
   a saved run updates it.
-- **Saved runs** on Home lists every saved run. Each row offers only the
-  actions its state allows: Start, Resume, Edit, Open, Cancel, Delete.
-- **Pause** appears on the Run screen while a saved run executes.
+- **Run simulation** creates and starts a Run object. Completed runs appear
+  under **Saved runs** and can be opened again. If the same configuration
+  already has a completed result for the current software version, the app
+  reuses that result instead of computing it again.
+- **Saved runs** on Home lists unfinished saved runs. Each row offers only
+  the actions its state allows: Start, Resume, Edit, Cancel, Delete.
+  Completed results appear in the run list instead.
+- **Pause** appears on the Run screen while a saved run executes. After it
+  pauses, **Run simulation** in that document resumes the same Run object.
 - **Closing the window asks first** when it would lose something: a
   configuration with changes you have not saved, or work that is still
   running. The dialog offers to save the configuration (as a Draft or Planned
@@ -249,10 +257,10 @@ from the command line, and the reverse.
 
 ## What is not a saved run
 
-`fim run`, the desktop app's **Run simulation**, and the Python `simulate_params()`
-function execute without saved-run checkpoints and publish their output
-when they finish. They cannot be paused or resumed. Use a saved run for
-work that may need to continue across sessions.
+The command-line `fim run` command and the Python `simulate_params()` function
+execute without saved-run checkpoints and publish their output when they
+finish. They cannot be paused or resumed. Use a Run object for work that may
+need to continue across sessions.
 
 **Supported configurations.** Every engine backend (`lineal`, `generational`,
 and `generational-vector`) supports saved runs. A configuration is refused at

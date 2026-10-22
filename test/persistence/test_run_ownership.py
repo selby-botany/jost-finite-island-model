@@ -46,6 +46,7 @@ from fim.persistence.run_ownership import (
     attempt_lock_path,
     reconcile_run_object,
     reconcile_run_objects,
+    record_worker_failure,
     request_cancel,
     request_pause,
     resume_run_object,
@@ -120,6 +121,38 @@ def test_start_opens_an_attempt_and_holds_its_lock(tmp_path: Path) -> None:
     assert stored.state is RunState.RUNNING
     assert stored.active_attempt_id == lease.attempt_id
     assert stored.first_started_at is not None
+    lease.release()
+
+
+def test_worker_exit_is_recorded_as_failed_after_ownership_ends(
+    tmp_path: Path,
+) -> None:
+    """A dead child is failed, not merely marked as an ownerless run."""
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    lease.release()
+
+    failed = record_worker_failure(
+        planned.object_id, "worker process exited with code 7", results=tmp_path
+    )
+
+    assert failed.record.state is RunState.FAILED
+    assert failed.record.last_error is not None
+    assert failed.record.last_error.category == "worker"
+    assert failed.record.last_error.message == "worker process exited with code 7"
+    assert failed.record.last_error.attempt_id == lease.attempt_id
+
+
+def test_worker_failure_cannot_be_recorded_while_owner_holds_lock(
+    tmp_path: Path,
+) -> None:
+    """A supervisor cannot fail an attempt that still has a live owner."""
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+
+    with pytest.raises(OwnershipConflictError):
+        record_worker_failure(planned.object_id, "unexpected exit", results=tmp_path)
+
     lease.release()
 
 

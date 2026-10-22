@@ -8,6 +8,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **GUI runs are resumable Run objects.** Starting from **Run simulation**
+  creates a saved Run object, associates completed results with the selected
+  Study, and exposes pause/resume from the same document. Matching completed
+  Run objects are reused rather than recomputed.
+- **Concurrent desktop jobs with CPU and memory safeguards.** Jobs run in
+  separate child processes and share a configurable worker budget. Settings
+  control child priority and the CPU and memory reserves. The app asks before
+  a start that is estimated to cross the memory reserve and warns when
+  available memory later falls below it, with a Pause action for each job.
 - **Source-line links in generated references.** API and test-suite headings
   now link modules, classes, functions, methods, tests, and documented data
   to their Python declarations on GitHub, preserving section anchors.

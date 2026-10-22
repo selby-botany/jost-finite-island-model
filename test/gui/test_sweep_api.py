@@ -19,18 +19,44 @@ from collections.abc import Iterator
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from conftest import join_or_fail, poll_or_fail
 
 from fim import paths
+from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.execution_priority import Priority
 from fim.gui import app as app_module
 from fim.gui.app import Api
 from fim.gui.config_form import DEFAULT_RUN_SETTING_FIELD_NAMES, starter_form_values
 from fim.persistence import groups
-from fim.sweep_run import LocalPointRunner
+from fim.sweep_run import LocalPointRunner, SweepOutcome, run_sweep
 
 _IDLE_POLL_SECONDS = 0.05
+_PROCESS_COUNTS: list[int] = []
+
+
+class _InlineProcessPointRunner(LocalPointRunner):
+    """Use the local point runner while preserving the process-runner API."""
+
+    def __init__(
+        self,
+        processes: int,
+        max_workers: int | None = None,
+        *,
+        pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES,
+        lower_priority: bool = False,
+        priority: Priority | None = None,
+        results: Path | None = None,
+    ) -> None:
+        del lower_priority, priority, results
+        _PROCESS_COUNTS.append(processes)
+        super().__init__(max_workers, pairwise_max_demes=pairwise_max_demes)
+
+    def close(self) -> None:
+        """Match the process runner lifecycle without starting a pool."""
+        return None
 
 
 class _FakeWindow:
@@ -222,25 +248,26 @@ def test_a_large_sweep_needs_confirmation_before_anything_is_created(
     assert api._sweep_cancel_event is None
 
 
-def test_a_sweep_and_a_run_cannot_overlap(api: Api, window: _FakeWindow) -> None:
+def test_a_sweep_is_refused_when_another_job_uses_the_budget(
+    api: Api,
+    window: _FakeWindow,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     del window
-    api._run_in_flight = True
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 1)
+    run, refusal = api._admit_run()
+    assert refusal is None
+    assert run is not None
 
-    refused = api.start_sweep(_form(), _request(_D_AXIS))
+    refused = api.start_sweep(
+        _form(),
+        _request({"key": "N", "values": [16, 20, 24, 28, 32]}, pointsAtOnce="1"),
+    )
 
     assert refused["ok"] is False
-    assert "run is in progress" in refused["message"]
+    assert "only 0 remain" in refused["message"]
     assert groups.list_studies() == []
-
-    api._run_in_flight = False
-    api._sweep_cancel_event = threading.Event()
-
-    also_refused = api.start_sweep(_form(), _request(_D_AXIS))
-    run_refused = api.start_run(_form())
-
-    assert "already running" in also_refused["message"]
-    assert run_refused["ok"] is False
-    assert "sweep is running" in run_refused["message"]
+    assert api._jobs.active_job(run.job_id) is run
 
 
 def test_cancelling_stops_the_sweep_and_resume_finishes_it(
@@ -260,6 +287,7 @@ def test_cancelling_stops_the_sweep_and_resume_finishes_it(
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(LocalPointRunner, "run_object_point", cancel_after_first)
+    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", _InlineProcessPointRunner)
     try:
         started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
         _wait_until_idle(api)
@@ -509,6 +537,7 @@ def test_a_sweep_runs_each_batch_point_as_one_in_process_run_object(
 
     monkeypatch.setattr(LocalPointRunner, "run_object_point", recording)
     monkeypatch.setattr(LocalPointRunner, "run_point", legacy_recording)
+    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", _InlineProcessPointRunner)
     api.set_default_run_settings(
         {
             **api.get_default_run_settings(),
@@ -595,8 +624,9 @@ def _finished_sweep(api: Api, window: _FakeWindow) -> str:
     concurrency starts child interpreters and their engine imports, which
     exceeded the completion backstop under the full slow-suite load.
     """
-    started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
-    _wait_until_idle(api)
+    with patch("fim.sweep_run.ProcessPointRunner", _InlineProcessPointRunner):
+        started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
+        _wait_until_idle(api)
     assert window.finished.is_set()
     job_events = [
         json.loads(script[len("fim.onJobEvent(") : -1])
@@ -610,16 +640,103 @@ def _finished_sweep(api: Api, window: _FakeWindow) -> str:
 
 
 def test_finished_sweep_helper_does_not_spawn_point_processes(
-    api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
+    api: Api, window: _FakeWindow
 ) -> None:
     """Metadata fixtures must not depend on concurrent child-process startup."""
 
-    def unexpected_process_pool(*args: Any, **kwargs: Any) -> None:
-        pytest.fail("the metadata helper must run its points serially")
-
-    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", unexpected_process_pool)
+    _PROCESS_COUNTS.clear()
     study_id = _finished_sweep(api, window)
     assert groups.get_study(study_id).run_count == 2
+    assert _PROCESS_COUNTS == [1]
+
+
+def test_gui_one_point_sweep_uses_process_runner_and_half_core_budget(
+    api: Api, window: _FakeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit sweep execution receives all currently available capacity."""
+    _PROCESS_COUNTS.clear()
+    monkeypatch.setattr(app_module.os, "cpu_count", lambda: 8)
+    original_run_sweep = run_sweep
+    captured: dict[str, Any] = {}
+
+    def capture_run_sweep(*args: Any, **kwargs: Any) -> SweepOutcome:
+        captured.update(kwargs)
+        return original_run_sweep(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "run_sweep", capture_run_sweep)
+    monkeypatch.setattr("fim.sweep_run.ProcessPointRunner", _InlineProcessPointRunner)
+
+    started = api.start_sweep(_form(), _request(_D_AXIS, pointsAtOnce="1"))
+    _wait_until_idle(api)
+
+    assert started["ok"] is True
+    assert captured["process_points"] is True
+    assert captured["priority"] == "lower"
+    assert captured["cores"] == 8
+    assert _PROCESS_COUNTS == [1]
+    assert window.finished.is_set()
+
+
+def test_automatic_sweep_preview_uses_reserved_and_remaining_capacity(
+    api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Automatic sizing applies the reserve, then respects active reservations."""
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 10)
+    api._preferences = api._preferences.with_reserved_cores(2)
+    request = _request({"key": "N", "values": [16, 20, 24, 28, 32, 36, 40, 44, 48, 52]})
+    payload = api.plan_sweep(
+        _form(),
+        request,
+    )
+
+    assert payload["ok"] is True
+    assert payload["concurrency"]["remainingCores"] == 8
+    assert payload["concurrency"]["cores"] == 4
+    assert payload["concurrency"]["pointsAtOnce"] == 4
+
+    run, refusal = api._admit_run(cores=6)
+    assert refusal is None
+    assert run is not None
+    constrained = api.plan_sweep(_form(), request)
+
+    assert constrained["concurrency"]["remainingCores"] == 2
+    assert constrained["concurrency"]["cores"] == 2
+    assert constrained["concurrency"]["pointsAtOnce"] == 2
+
+
+def test_explicit_sweep_demand_above_remaining_budget_is_refused(
+    api: Api,
+    window: _FakeWindow,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A request is never silently clamped to fit the remaining budget."""
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 8)
+    run, refusal = api._admit_run(cores=6)
+    assert refusal is None
+    assert run is not None
+    request = _request({"key": "N", "values": [16, 20, 24, 28, 32]}, pointsAtOnce="3")
+
+    plan = api.plan_sweep(_form(), request)
+    started = api.start_sweep(_form(), request)
+
+    assert plan["concurrency"]["pointsAtOnce"] == 3
+    assert plan["concurrency"]["cores"] == 3
+    assert plan["concurrency"]["remainingCores"] == 2
+    assert plan["concurrency"]["admissible"] is False
+    assert started["ok"] is False
+    assert "needs 3 worker slot(s), but only 2 remain" in started["message"]
+    assert groups.list_studies() == []
+    assert window.pushed == []
+
+
+def test_gui_sweep_budget_prefers_process_cpu_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use the process-visible CPU count when the Python runtime exposes it."""
+    monkeypatch.setattr(app_module.os, "cpu_count", lambda: 12)
+    monkeypatch.setattr(app_module.os, "process_cpu_count", lambda: 6, raising=False)
+
+    assert app_module._gui_sweep_core_budget() == 3
 
 
 def test_export_sweep_table_writes_the_table_and_its_sidecar(
@@ -1001,14 +1118,23 @@ def test_resume_sweep_passes_the_retry_and_recompute_flags_on(
     calls = _capture_run_sweep(monkeypatch)
 
     reply = api.resume_sweep(study_id, **kwargs)
-    assert api._sweep_thread is not None
-    api._sweep_thread.join(30)
-
     assert reply["ok"] is True
     assert reply["studyId"] == study_id
-    assert isinstance(reply["jobId"], str) and reply["jobId"]
-    assert len(calls) == 1
-    assert (calls[0]["retry_failed"], calls[0]["rerun"]) == (retry, rerun)
+    if rerun:
+        assert isinstance(reply["jobId"], str) and reply["jobId"]
+        assert api._sweep_thread is not None
+        api._sweep_thread.join(30)
+        assert len(calls) == 1
+        assert (calls[0]["retry_failed"], calls[0]["rerun"]) == (retry, rerun)
+    else:
+        assert reply == {
+            "ok": True,
+            "studyId": study_id,
+            "jobId": None,
+            "noWork": True,
+        }
+        assert calls == []
+        assert api._jobs.active_jobs() == ()
 
 
 def test_recomputing_all_through_the_app_verifies_the_sweep(

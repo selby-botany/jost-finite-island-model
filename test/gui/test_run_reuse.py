@@ -11,7 +11,6 @@ import pytest
 import webview
 from conftest import poll_or_fail
 
-from fim import paths
 from fim.gui import app as app_module
 from fim.gui.app import Api
 from fim.persistence import groups
@@ -46,15 +45,30 @@ def test_running_the_same_configuration_twice_computes_it_once(
     assert "reused" not in first
     _wait_idle(api)
     assert window.done.is_set()
-    directories = list(results.glob("*/manifest.json"))
+    directories = list(results.glob("objects/*/manifest.json"))
     assert len(directories) == 1
+    assert first["objectId"] == directories[0].parent.name
+    [run_row] = [
+        row
+        for row in api.list_run_objects()["runs"]
+        if row["objectId"] == first["objectId"]
+    ]
+    assert run_row["state"] == "completed"
+    assert run_row["actions"]["open"] is True
+    opened = api.open_run_object(first["objectId"])
+    assert opened["ok"] is True
+    assert opened["state"] == "completed"
+    assert groups.study_run_directories(groups.get_study(study.study_id)) == [
+        directories[0].parent.resolve()
+    ]
 
     second = api.start_run(_form(), study.study_id)
 
     assert second["ok"] is True
     assert second["reused"] is True
+    assert second["objectId"] == first["objectId"]
     assert Path(second["directory"]) == directories[0].parent
-    assert list(results.glob("*/manifest.json")) == directories
+    assert list(results.glob("objects/*/manifest.json")) == directories
     assert groups.get_study(study.study_id).run_count == 1
 
 
@@ -74,14 +88,16 @@ def test_a_reused_run_is_attached_to_the_study_chosen_the_second_time(
     reused = api.start_run(_form(), second_study.study_id)
 
     assert reused["reused"] is True
-    assert len(list(results.glob("*/manifest.json"))) == 1
+    assert len(list(results.glob("objects/*/manifest.json"))) == 1
     assert groups.get_study(second_study.study_id).run_count == 1
     assert groups.get_study(first_study.study_id).run_count == 1
 
 
 @pytest.mark.gui
 def test_clicking_run_on_a_computed_configuration_shows_it_and_says_so(
-    fast_scalar_run_settings: Path, window: webview.Window
+    fast_scalar_run_settings: Path,
+    window: webview.Window,
+    results: Path,  # noqa: F811
 ) -> None:
     from .test_sweep_screen import _SET_TINY_FIELDS, Poll, _drive  # noqa: PLC0415
 
@@ -115,7 +131,7 @@ def test_clicking_run_on_a_computed_configuration_shows_it_and_says_so(
 
     assert second["view"] == "completed"
     assert second["bannerHidden"] is False
-    runs = list(paths.results_directory().glob("*/manifest.json"))
+    runs = list(results.glob("objects/*/manifest.json"))
     assert len(runs) == 1
     assert before == len(groups.list_studies())
 
@@ -180,7 +196,7 @@ def test_a_new_software_version_recomputes_and_a_matching_result_replaces_the_ol
     api.start_run(_form(), study.study_id)
     _wait_idle(api)
     assert window.done.is_set()
-    (old,) = [path.parent for path in results.glob("*/manifest.json")]
+    (old,) = [path.parent for path in results.glob("objects/*/manifest.json")]
     window.done.clear()
     window.scripts.clear()
 
@@ -194,7 +210,7 @@ def test_a_new_software_version_recomputes_and_a_matching_result_replaces_the_ol
     script = window.reproducibility_script()
     assert script is not None
     assert '"identical": true' in script
-    remaining = [path.parent for path in results.glob("*/manifest.json")]
+    remaining = [path.parent for path in results.glob("objects/*/manifest.json")]
     assert len(remaining) == 1
     assert remaining[0] != old
     assert groups.study_run_directories(groups.get_study(study.study_id)) == [
@@ -233,7 +249,7 @@ def test_a_recomputed_result_that_differs_is_reported_and_both_runs_are_kept(
 
     assert script is not None
     assert '"identical": false' in script
-    directories = [path.parent for path in results.glob("*/manifest.json")]
+    directories = [path.parent for path in results.glob("objects/*/manifest.json")]
     assert len(directories) == 2
     notes = [d for d in directories if (d / "reproducibility.json").is_file()]
     assert len(notes) == 1

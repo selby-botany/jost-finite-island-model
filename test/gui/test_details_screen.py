@@ -212,7 +212,7 @@ def test_a_named_run_is_titled_with_its_experiment_and_its_name(
         ),
     )
 
-    assert settled["title"].startswith("Topology — Baseline (run-")
+    assert settled["title"].startswith("Topology — Baseline (obj-")
     assert settled["nameCleared"] is True
     [experiment_tooltip, run_tooltip] = settled["tooltips"]
     assert "Ring vs island." in experiment_tooltip

@@ -13,6 +13,8 @@ import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from fim import paths
 from fim.gui import preferences as preferences_module
 from fim.gui.preferences import (
@@ -602,6 +604,139 @@ def test_run_card_layout_defaults_write_nothing() -> None:
     assert "run_graph_columns" not in gui
     assert "scatter_style" not in gui
     assert "trajectory_display" not in gui
+
+
+def test_reserved_cores_default_is_omitted_and_round_trips(tmp_path: Path) -> None:
+    """The default reserve stays implicit; a chosen reserve survives reload."""
+    path = tmp_path / "preferences.json"
+    assert "reserved_cores" not in GuiPreferences().to_dict()["gui"]
+    original = GuiPreferences(startup_behavior="restart").with_reserved_cores(3)
+    save_preferences(path, original)
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded.reserved_cores == 3
+    updated = loaded.with_reserved_cores(2)
+    assert updated.reserved_cores == 2
+    assert updated.startup_behavior == "restart"
+
+
+@pytest.mark.parametrize("value", [-1, True, 1.5, "2"])
+def test_reserved_cores_rejects_invalid_values(value: object) -> None:
+    """The preference requires an actual non-negative integer."""
+    with pytest.raises(ValueError, match="reserved_cores"):
+        GuiPreferences.from_dict(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {"reserved_cores": value},
+            }
+        )
+    if isinstance(value, int):
+        with pytest.raises(ValueError, match="reserved_cores"):
+            GuiPreferences().with_reserved_cores(value)
+
+
+def test_background_work_settings_round_trip(tmp_path: Path) -> None:
+    """Priority and CPU/memory reserve settings survive reloads."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences().with_background_work_settings(
+        run_priority="lowest",
+        reserve_mode="percent",
+        reserve_value=34,
+        memory_reserve_mode="percent",
+        memory_reserve_value=25,
+    )
+    save_preferences(path, original)
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded == original
+    assert loaded.run_priority == "lowest"
+    assert loaded.reserved_cores == 0
+    assert loaded.reserved_cores_percent == 34
+    assert loaded.memory_reserve_mode == "percent"
+    assert loaded.memory_reserve_value == 25
+    assert "run_priority" in loaded.to_dict()["gui"]
+    assert "reserved_cores" not in loaded.to_dict()["gui"]
+
+    whole_cores = loaded.with_background_work_settings(
+        run_priority="normal",
+        reserve_mode="cores",
+        reserve_value=2,
+        memory_reserve_mode="gib",
+        memory_reserve_value=4,
+    )
+    assert whole_cores.reserved_cores == 2
+    assert whole_cores.reserved_cores_percent is None
+    assert whole_cores.memory_reserve_mode == "gib"
+    assert whole_cores.memory_reserve_value == 4
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("reserved_cores_percent", -1),
+        ("reserved_cores_percent", 101),
+        ("reserved_cores_percent", True),
+        ("run_priority", "urgent"),
+        ("run_priority", 1),
+        ("memory_reserve_mode", "invalid"),
+        ("memory_reserve_value", True),
+        ("memory_reserve_value", -1),
+    ],
+)
+def test_background_work_preferences_reject_invalid_values(
+    key: str, value: object
+) -> None:
+    """Malformed persisted priority and reserve values are rejected."""
+    with pytest.raises(ValueError):
+        GuiPreferences.from_dict(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {key: value},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("priority", "mode", "reserve"),
+    [
+        ("urgent", "cores", 0),
+        ("lower", "invalid", 0),
+        ("lower", "percent", 101),
+        ("lower", "percent", True),
+    ],
+)
+def test_background_work_settings_reject_invalid_updates(
+    priority: str, mode: str, reserve: object
+) -> None:
+    """Interactive setting updates validate the complete setting tuple."""
+    with pytest.raises(ValueError):
+        GuiPreferences().with_background_work_settings(
+            run_priority=priority,
+            reserve_mode=mode,
+            reserve_value=reserve,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    ("mode", "value"),
+    [("auto", 1), ("invalid", 0), ("percent", 101), ("gib", -1)],
+)
+def test_background_work_settings_reject_invalid_memory_reserve_updates(
+    mode: str, value: int
+) -> None:
+    """Memory reserve mode and value are validated together."""
+    with pytest.raises(ValueError):
+        GuiPreferences().with_background_work_settings(
+            run_priority="lower",
+            reserve_mode="cores",
+            reserve_value=0,
+            memory_reserve_mode=mode,
+            memory_reserve_value=value,
+        )
 
 
 def test_run_card_layout_round_trips_through_save_and_load(tmp_path: Path) -> None:

@@ -61,18 +61,25 @@ function restoreRunControls() {
     runStudyNewNameInput.value = state.newStudyName;
     runStudyNewDescriptionInput.value = state.newStudyDescription;
     renderedRunControlsTabId = window.fim.workspace.selectedId();
+    window.fim.refreshRunButton();
     syncRunStudySelectTooltip();
     syncRunStudyNewRowVisibility();
 }
 
+window.fim.refreshRunButton = function refreshRunButton() {
+    const state = window.fim.workspace.get(
+        window.fim.workspace.selectedId()
+    );
+    runButton.textContent =
+        state?.runObjectState === "paused" ? "Resume run" : "Run simulation";
+};
+
 window.fim.workspace.onSelectionChange(restoreRunControls);
 restoreRunControls();
 
-// True while a run start is being decided (`startRunExclusively`), so a
-// second request meanwhile -- a double click, the Run menu, Configure's
-// own Run, or a saved run's Start -- is ignored rather than starting a
-// second run.
-let runStartPending = false;
+// Prevent duplicate requests from one document without blocking starts
+// from other documents.
+const runStartPending = new Set();
 
 function showRunBanner(message) {
     if (!message) {
@@ -85,15 +92,14 @@ function showRunBanner(message) {
 }
 
 /**
- * Start a run only when no other run, plain or saved, and no sweep is
- * starting or in flight.
+ * Start a run after checking that its worker slot is available.
  *
  * Asks Python first (`Api.can_start_run`), before anything on screen
  * changes: entering the running state resets the live view, so a start
  * that Python then refused would wipe the view of the run still in
  * flight and leave nothing to watch or cancel it with. `Api.start_run`
- * and `Api.start_run_object` refuse a second run too; this is the page's
- * half of the same rule. `window.__fimRunStartSettled` is false while a
+ * and `Api.start_run_object` recheck admission atomically. `window.
+ * __fimRunStartSettled` is false while a
  * start is being decided and true once it is, for tests (the
  * `__fimCancelRunSettled` pattern).
  *
@@ -110,10 +116,26 @@ async function startRunExclusively(
     showRefusal = showRunBanner,
     startingDocument = null
 ) {
-    if (runStartPending) {
+    const pendingKey = startingDocument?.tabId ?? "__legacy__";
+    if (runStartPending.has(pendingKey)) {
         return;
     }
-    runStartPending = true;
+    const documentState = startingDocument
+        ? window.fim.workspace.get(startingDocument.tabId)
+        : null;
+    if (
+        documentState?.attachedJobId &&
+        documentState.jobState !== "finished" &&
+        documentState.jobState !== "terminal"
+    ) {
+        const message =
+            "a run is in progress; wait for it to finish or cancel it first";
+        documentState.startRefusal = message;
+        window.fim.workspace.notifyChange();
+        showRefusal(message);
+        return;
+    }
+    runStartPending.add(pendingKey);
     if (
         startingDocument &&
         window.fim.workspace.get(startingDocument.tabId)
@@ -122,9 +144,6 @@ async function startRunExclusively(
     } else {
         window.__fimRunStartSettled = false;
     }
-    const documentState = startingDocument
-        ? window.fim.workspace.get(startingDocument.tabId)
-        : null;
     if (documentState) {
         documentState.jobKind = startingDocument.jobKind;
         documentState.jobState = "starting";
@@ -139,13 +158,22 @@ async function startRunExclusively(
         }
         if (!allowed.ok) {
             clearPendingRunStart(startingDocument, documentState);
-            showRefusal(allowed.message);
+            if (documentState) {
+                documentState.startRefusal = allowed.message;
+                window.fim.workspace.notifyChange();
+            }
+            if (
+                !startingDocument ||
+                window.fim.workspace.selectedId() === startingDocument.tabId
+            ) {
+                showRefusal(allowed.message);
+            }
             return;
         }
         await start();
     } finally {
         clearPendingRunStart(startingDocument, documentState);
-        runStartPending = false;
+        runStartPending.delete(pendingKey);
         if (
             startingDocument &&
             window.fim.workspace.get(startingDocument.tabId)
@@ -186,12 +214,20 @@ function clearPendingRunStart(startingDocument, documentState) {
  */
 async function onRunClicked() {
     const tabId = window.fim.workspace.selectedId();
+    const state = window.fim.workspace.get(tabId);
+    if (
+        state?.runObjectState === "paused" &&
+        typeof window.fim.resumeRunObjectFromTab === "function"
+    ) {
+        await window.fim.resumeRunObjectFromTab(tabId);
+        return;
+    }
     await startRunExclusively(
         () => startConfiguredRun(tabId),
         (message) => showStartRefusal(tabId, message),
         {
             tabId,
-            jobKind: window.fim.isSweepEnabled(tabId) ? "sweep" : "run",
+            jobKind: window.fim.isSweepEnabled(tabId) ? "sweep" : "saved-run",
         }
     );
 }
@@ -335,16 +371,14 @@ async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
     );
     const documentState = window.fim.workspace.get(tabId);
     if (documentState) {
-        documentState.jobKind = "run";
+        documentState.jobKind = "saved-run";
         documentState.jobState = "starting";
         documentState.startRefusal = null;
         window.fim.workspace.notifyChange();
     }
-    const started = await window.pywebview.api.start_run(
-        values,
-        studyId,
-        runName,
-        runDescription
+    const started = await window.fim.jobs.startWithMemoryConfirmation(
+        "start_run",
+        [values, studyId, runName, runDescription]
     );
     if (!started.ok) {
         // Rare (an output-directory collision retry timing out, or a
@@ -404,8 +438,31 @@ async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
         return;
     }
     if (documentState && started.jobId) {
-        documentState.jobState = "running";
-        window.fim.workspace.attachJob(tabId, started.jobId);
+        if (
+            documentState.jobState !== "finished" &&
+            documentState.jobState !== "terminal"
+        ) {
+            documentState.jobState = "running";
+            window.fim.workspace.attachJob(
+                tabId,
+                started.jobId,
+                started.priority
+            );
+        }
+    }
+    if (documentState && started.objectId) {
+        const alreadyFinished =
+            documentState.jobState === "finished" ||
+            documentState.jobState === "terminal";
+        if (!alreadyFinished) {
+            documentState.kind = "saved-run";
+        }
+        documentState.runObjectId = started.objectId;
+        documentState.runObjectState = alreadyFinished ? "finished" : "running";
+        if (started.resourceKey) {
+            window.fim.workspace.setResourceKey(tabId, started.resourceKey);
+        }
+        window.fim.activateRunObjectForDocument(tabId, started.objectId);
     }
     if (documentState?.closeAfterStart) {
         documentState.closeAfterStart = false;
@@ -504,7 +561,9 @@ async function onCancelClicked() {
     // `screens/run-view-running.js`'s own module docstring has the
     // full history.
     window.__fimCancelRunSettled = false;
-    await window.pywebview.api.cancel_run();
+    const tabId = window.fim.workspace.selectedId();
+    const documentState = window.fim.workspace.get(tabId);
+    await window.pywebview.api.cancel_run(documentState?.attachedJobId ?? null);
     window.__fimCancelRunSettled = true;
 }
 

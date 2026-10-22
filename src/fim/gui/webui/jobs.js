@@ -36,6 +36,7 @@ const appliedJobEventCount = new Map();
 const latestAppliedJobEventPayload = new Map();
 const latestJobSnapshot = new Map();
 const jobViewLevel = new Map();
+const jobPriority = new Map();
 const closedJobIds = new Set();
 const closingJobDocuments = new Map();
 
@@ -79,6 +80,15 @@ function applyJobSnapshot(jobId, snapshot) {
     if (snapshot.viewLevel === "full" || snapshot.viewLevel === "summary") {
         jobViewLevel.set(jobId, snapshot.viewLevel);
     }
+    if (["normal", "lower", "lowest"].includes(snapshot.priority)) {
+        jobPriority.set(jobId, snapshot.priority);
+        const tabId = window.fim.workspace?.documentForJob(jobId);
+        const state = tabId ? window.fim.workspace.get(tabId) : null;
+        if (state) {
+            state.effectivePriority = snapshot.priority;
+            window.fim.workspace.notifyChange();
+        }
+    }
     if (snapshot.snapshot) {
         latestJobSnapshot.set(jobId, snapshot.snapshot);
         latestAppliedJobEventPayload.set(
@@ -116,6 +126,7 @@ window.fim.jobs.closeDocument = function closeDocument(jobId) {
         latestAppliedJobEventPayload.delete(jobId);
         latestJobSnapshot.delete(jobId);
         jobViewLevel.delete(jobId);
+        jobPriority.delete(jobId);
         return result;
     }).catch((error) => {
         closedJobIds.delete(jobId);
@@ -129,6 +140,112 @@ window.fim.jobs.closeDocument = function closeDocument(jobId) {
 window.fim.jobs.isDocumentClosed = function isDocumentClosed(jobId) {
     return closedJobIds.has(jobId);
 };
+
+const memoryWarningBanner = document.getElementById("memory-warning-banner");
+const memoryWarningText = document.getElementById("memory-warning-text");
+const memoryWarningJobs = document.getElementById("memory-warning-jobs");
+let memoryStatusRequest = null;
+
+function formatMemoryBytes(bytes) {
+    const gibibytes = bytes / 1024 ** 3;
+    return `${gibibytes.toFixed(1)} GiB`;
+}
+
+function renderMemoryWarning(status) {
+    memoryWarningJobs.replaceChildren();
+    if (!status.ok) {
+        memoryWarningText.textContent = `Memory check failed: ${status.message}`;
+        memoryWarningBanner.hidden = false;
+        return;
+    }
+    if (!status.warning) {
+        memoryWarningBanner.hidden = true;
+        return;
+    }
+    memoryWarningText.textContent =
+        `Available memory (${formatMemoryBytes(status.availableBytes)}) is ` +
+        `below your reserve (${formatMemoryBytes(status.reservedBytes)}). ` +
+        "Pause a job to reduce memory use.";
+    status.jobs.forEach((job) => {
+        const item = document.createElement("li");
+        item.className = "memory-warning-job";
+        const name = document.createElement("span");
+        name.textContent = job.name;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "Pause";
+        button.setAttribute("aria-label", `Pause ${job.name}`);
+        button.addEventListener("click", async () => {
+            button.disabled = true;
+            try {
+                const result = await window.pywebview.api.pause_job(job.jobId);
+                if (!result.ok) {
+                    button.disabled = false;
+                    memoryWarningText.textContent =
+                        `Could not pause ${job.name}: ${result.message}`;
+                    return;
+                }
+                memoryWarningText.textContent =
+                    `Pause requested for ${job.name}.`;
+                await window.fim.jobs.refreshMemoryWarning();
+            } catch (error) {
+                button.disabled = false;
+                memoryWarningText.textContent =
+                    `Could not pause ${job.name}: ${error.message}`;
+            }
+        });
+        item.append(name, button);
+        memoryWarningJobs.append(item);
+    });
+    memoryWarningBanner.hidden = false;
+}
+
+window.fim.jobs.refreshMemoryWarning = function refreshMemoryWarning() {
+    if (memoryStatusRequest) {
+        return memoryStatusRequest;
+    }
+    if (!window.pywebview?.api?.get_memory_status) {
+        return Promise.resolve(null);
+    }
+    memoryStatusRequest = window.pywebview.api.get_memory_status()
+        .then((status) => {
+            renderMemoryWarning(status);
+            return status;
+        })
+        .catch((error) => {
+            renderMemoryWarning({ ok: false, message: error.message });
+            return null;
+        })
+        .finally(() => {
+            memoryStatusRequest = null;
+        });
+    return memoryStatusRequest;
+};
+
+window.fim.jobs.startWithMemoryConfirmation = async function startWithMemoryConfirmation(
+    method,
+    args
+) {
+    const api = window.pywebview.api;
+    let result = await api[method](...args);
+    if (result.needsMemoryConfirmation) {
+        if (!window.confirm(result.message)) {
+            return { ok: false, cancelled: true, message: "Job start cancelled." };
+        }
+        result = await api[method](...args, true);
+    }
+    if (result.ok) {
+        window.fim.jobs.refreshMemoryWarning();
+    }
+    return result;
+};
+
+function scheduleMemoryWarningRefresh() {
+    window.fim.jobs.refreshMemoryWarning().finally(() => {
+        window.setTimeout(scheduleMemoryWarningRefresh, 5000);
+    });
+}
+window.setTimeout(scheduleMemoryWarningRefresh, 0);
 
 /**
  * Receive one addressed job push, in the order the publisher attempted it.
@@ -209,4 +326,7 @@ window.fim.jobs.snapshotFor = function snapshotFor(jobId) {
 };
 window.fim.jobs.viewLevelFor = function viewLevelFor(jobId) {
     return jobViewLevel.has(jobId) ? jobViewLevel.get(jobId) : null;
+};
+window.fim.jobs.priorityFor = function priorityFor(jobId) {
+    return jobPriority.has(jobId) ? jobPriority.get(jobId) : null;
 };

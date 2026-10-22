@@ -303,7 +303,7 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
         f"the drive produced no result (messages received: {messages!r})"
     )
     assert settled["runViewState"] == "completed"
-    assert settled["runId"].startswith("run-")
+    assert settled["runId"].startswith("obj-")
     # Row 0 is the p_0 baseline; rows 1 and 2 are the two replicates.
     assert settled["rowCount"] == 3
     # One bar per shown statistic (a fresh install's defaults) plus the

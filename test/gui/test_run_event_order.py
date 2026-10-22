@@ -74,17 +74,21 @@ class _OrderWindow:
     def __init__(
         self,
         read_claim: Callable[[], bool],
-        read_reservation: Callable[[], bool] = lambda: False,
+        read_object_claim: Callable[[], bool] = lambda: False,
+        read_active_jobs: Callable[[], int] = lambda: 0,
     ) -> None:
         self._read_claim = read_claim
-        self._read_reservation = read_reservation
+        self._read_object_claim = read_object_claim
+        self._read_active_jobs = read_active_jobs
         self.observations: list[tuple[str, bool, bool, str]] = []
+        self.active_job_observations: list[tuple[str, int]] = []
 
     def evaluate_js(self, script: str) -> Any:
         name = script.split("(", 1)[0]
         self.observations.append(
-            (name, self._read_claim(), self._read_reservation(), script)
+            (name, self._read_claim(), self._read_object_claim(), script)
         )
+        self.active_job_observations.append((script, self._read_active_jobs()))
         return None
 
     def names(self) -> list[str]:
@@ -97,12 +101,15 @@ class _OrderWindow:
                 return claim_held
         raise AssertionError(f"{name!r} was never pushed; saw {self.names()}")
 
-    def reservation_held_when(self, name: str) -> bool:
-        """Return whether the output reservation existed at a push."""
-        for observed_name, _, reservation_held, _ in self.observations:
-            if observed_name == name:
-                return reservation_held
-        raise AssertionError(f"{name!r} was never pushed; saw {self.names()}")
+    def active_jobs_when(self, event_type: str) -> int:
+        """Return the registry size while an addressed event is delivered."""
+        for script, count in self.active_job_observations:
+            if not script.startswith("fim.onJobEvent("):
+                continue
+            event = json.loads(script[len("fim.onJobEvent(") : -1])
+            if event["type"] == event_type:
+                return count
+        raise AssertionError(f"{event_type!r} was never pushed")
 
     def scripts(self) -> list[str]:
         """Return the scripts in delivery order."""
@@ -161,7 +168,8 @@ def test_a_stale_version_annotation_and_finished_follow_the_done_push(
     api = _api_with_settings(tmp_path, _FAST_SETTINGS)
     window = _OrderWindow(
         lambda: api._run_in_flight,
-        lambda: api._output_reservation is not None,
+        lambda: api._active_object_id is not None,
+        lambda: len(api._jobs.active_jobs()),
     )
     monkeypatch.setattr(app_module, "_active_window", lambda: window)
     study = groups.create_study("Runs")
@@ -171,6 +179,7 @@ def test_a_stale_version_annotation_and_finished_follow_the_done_push(
     _wait_until_idle(api)
     assert "fim.onRunDone" in window.names()
     window.observations.clear()
+    window.active_job_observations.clear()
 
     # The same configuration, under a different reported software
     # version: `start_run` recomputes it and compares the two, exactly
@@ -210,8 +219,10 @@ def test_a_stale_version_annotation_and_finished_follow_the_done_push(
     assert window.claim_held_when("fim.onRunDone") is True
     assert window.observations[finished_index][1] is True
     assert window.observations[finished_index][2] is True
+    assert window.active_jobs_when("finished") == 1
     assert api._run_in_flight is False
-    assert api._output_reservation is None
+    assert api._active_object_id is None
+    assert api._jobs.active_jobs() == ()
     assert api.get_job_snapshot(events[-1]["jobId"])["snapshot"]["type"] == "finished"
 
 

@@ -17,9 +17,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
+from fim.gui.jobs import MAX_RESERVED_PERCENT, JobPriority, MemoryReserveMode
 from fim.paths import write_text_atomically
 from fim.statistics.catalog import CATALOG
 
@@ -132,6 +133,88 @@ def _parse_pairwise_max_demes(gui: Mapping[str, Any]) -> int:
             "preferences 'gui.pairwise_max_demes' must be a positive integer"
         )
     return value
+
+
+def _parse_reserved_cores(gui: Mapping[str, Any]) -> int:
+    """Read `gui.reserved_cores`: a non-negative integer."""
+    value = gui.get("reserved_cores", 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(
+            "preferences 'gui.reserved_cores' must be a non-negative integer"
+        )
+    return value
+
+
+def _parse_reserved_cores_percent(gui: Mapping[str, Any]) -> int | None:
+    """Read `gui.reserved_cores_percent`: an optional percentage from 0 to 100."""
+    value = gui.get("reserved_cores_percent")
+    if value is None:
+        return None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not 0 <= value <= MAX_RESERVED_PERCENT
+    ):
+        raise ValueError(
+            "preferences 'gui.reserved_cores_percent' must be an integer "
+            f"from 0 to {MAX_RESERVED_PERCENT}"
+        )
+    return value
+
+
+def _parse_run_priority(gui: Mapping[str, Any]) -> JobPriority:
+    """Read `gui.run_priority`: a supported child-worker priority."""
+    value = gui.get("run_priority", "lower")
+    if not isinstance(value, str) or value not in ("normal", "lower", "lowest"):
+        raise ValueError(
+            "preferences 'gui.run_priority' must be 'normal', 'lower', or 'lowest'"
+        )
+    return cast("JobPriority", value)
+
+
+def _parse_memory_reserve(gui: Mapping[str, Any]) -> tuple[MemoryReserveMode, int]:
+    """Read the automatic, GiB, or percentage memory-reserve setting."""
+    mode = gui.get("memory_reserve_mode", "auto")
+    value = gui.get("memory_reserve_value", 0)
+    if mode not in ("auto", "gib", "percent"):
+        raise ValueError(
+            "preferences 'gui.memory_reserve_mode' must be auto, gib, or percent"
+        )
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(
+            "preferences 'gui.memory_reserve_value' must be a non-negative integer"
+        )
+    if mode == "auto" and value != 0:
+        raise ValueError(
+            "preferences 'gui.memory_reserve_value' must be zero in auto mode"
+        )
+    if mode == "percent" and value > MAX_RESERVED_PERCENT:
+        raise ValueError(
+            "preferences 'gui.memory_reserve_value' cannot exceed "
+            f"{MAX_RESERVED_PERCENT} percent"
+        )
+    return cast("MemoryReserveMode", mode), value
+
+
+def _parse_background_work_settings(
+    gui: Mapping[str, Any],
+) -> tuple[int, int | None, JobPriority, MemoryReserveMode, int]:
+    """Read and validate priority and CPU/memory reserve settings."""
+    reserved_cores = _parse_reserved_cores(gui)
+    reserved_cores_percent = _parse_reserved_cores_percent(gui)
+    if reserved_cores and reserved_cores_percent is not None:
+        raise ValueError(
+            "preferences 'gui.reserved_cores' and "
+            "'gui.reserved_cores_percent' cannot both be set"
+        )
+    memory_reserve_mode, memory_reserve_value = _parse_memory_reserve(gui)
+    return (
+        reserved_cores,
+        reserved_cores_percent,
+        _parse_run_priority(gui),
+        memory_reserve_mode,
+        memory_reserve_value,
+    )
 
 
 def _parse_run_graphs(gui: Mapping[str, Any]) -> tuple[str, ...] | None:
@@ -254,6 +337,9 @@ class GuiPreferences:
             later runs (`Api._merge_default_run_settings`).
         pairwise_max_demes: Largest deme count for which a run saves
             every deme pair's Nei identities (`pairwise.json`).
+        memory_reserve_mode: `"auto"`, `"gib"`, or `"percent"`; automatic
+            mode reserves the larger of 2 GiB and 10% of physical memory.
+        memory_reserve_value: Whole GiB or percent, or zero in automatic mode.
         default_ploidy: `"2"` (the default: diploid) or `"1"`-`"4"`, or
             `""` when the botanist chose "Ask me each time" -- the
             ploidy a fresh configuration's form starts on (Settings'
@@ -283,6 +369,11 @@ class GuiPreferences:
     show_identity_recovery_trajectory: bool = False
     shown_statistics: tuple[str, ...] | None = None
     pairwise_max_demes: int = DEFAULT_PAIRWISE_MAX_DEMES
+    reserved_cores: int = 0
+    reserved_cores_percent: int | None = None
+    run_priority: JobPriority = "lower"
+    memory_reserve_mode: MemoryReserveMode = "auto"
+    memory_reserve_value: int = 0
 
     def _run_card_dict(self) -> dict[str, Any]:
         """The Run card display choices that differ from their defaults."""
@@ -305,6 +396,15 @@ class GuiPreferences:
             result["pairwise_max_demes"] = self.pairwise_max_demes
         return result
 
+    def _memory_reserve_dict(self) -> dict[str, Any]:
+        """The memory reserve choices that differ from their defaults."""
+        if self.memory_reserve_mode == "auto":
+            return {}
+        return {
+            "memory_reserve_mode": self.memory_reserve_mode,
+            "memory_reserve_value": self.memory_reserve_value,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
         gui: dict[str, Any] = {}
@@ -318,6 +418,13 @@ class GuiPreferences:
             gui["startup_behavior"] = self.startup_behavior
         if self.results_location_override is not None:
             gui["results_location_override"] = self.results_location_override
+        if self.reserved_cores != 0:
+            gui["reserved_cores"] = self.reserved_cores
+        if self.reserved_cores_percent is not None:
+            gui["reserved_cores_percent"] = self.reserved_cores_percent
+        if self.run_priority != "lower":
+            gui["run_priority"] = self.run_priority
+        gui.update(self._memory_reserve_dict())
         # Written whenever it differs from the default, including the blank
         # "Ask me each time" choice, which would otherwise be lost and read
         # back as diploid.
@@ -416,6 +523,13 @@ class GuiPreferences:
                     "str->str object"
                 )
             default_run_settings = dict(default_run_settings)
+        (
+            reserved_cores,
+            reserved_cores_percent,
+            run_priority,
+            memory_reserve_mode,
+            memory_reserve_value,
+        ) = _parse_background_work_settings(gui)
         return GuiPreferences(
             significant_digits=gui.get("significant_digits"),
             form_values=form_values,
@@ -443,6 +557,11 @@ class GuiPreferences:
             ),
             shown_statistics=_parse_shown_statistics(gui),
             pairwise_max_demes=_parse_pairwise_max_demes(gui),
+            reserved_cores=reserved_cores,
+            reserved_cores_percent=reserved_cores_percent,
+            run_priority=run_priority,
+            memory_reserve_mode=memory_reserve_mode,
+            memory_reserve_value=memory_reserve_value,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -595,6 +714,67 @@ class GuiPreferences:
     def with_pairwise_max_demes(self, max_demes: int) -> GuiPreferences:
         """Return a copy with the `pairwise.json` deme-count limit replaced."""
         return replace(self, pairwise_max_demes=max_demes)
+
+    def with_reserved_cores(self, reserved_cores: int) -> GuiPreferences:
+        """Return a copy with the background worker reserve replaced."""
+        if (
+            isinstance(reserved_cores, bool)
+            or not isinstance(reserved_cores, int)
+            or reserved_cores < 0
+        ):
+            raise ValueError("reserved_cores must be a non-negative integer")
+        return replace(self, reserved_cores=reserved_cores, reserved_cores_percent=None)
+
+    def with_background_work_settings(
+        self,
+        *,
+        run_priority: str,
+        reserve_mode: str,
+        reserve_value: int,
+        memory_reserve_mode: str = "auto",
+        memory_reserve_value: int = 0,
+    ) -> GuiPreferences:
+        """Return a copy with validated background-work settings replaced."""
+        if run_priority not in ("normal", "lower", "lowest"):
+            raise ValueError("run_priority must be normal, lower, or lowest")
+        if reserve_mode not in ("cores", "percent"):
+            raise ValueError("reserve_mode must be cores or percent")
+        if isinstance(reserve_value, bool) or not isinstance(reserve_value, int):
+            raise ValueError("reserve_value must be an integer")
+        if reserve_value < 0 or (
+            reserve_mode == "percent" and reserve_value > MAX_RESERVED_PERCENT
+        ):
+            raise ValueError(
+                "reserve_value must be non-negative and a percentage cannot "
+                f"exceed {MAX_RESERVED_PERCENT}"
+            )
+        if memory_reserve_mode not in ("auto", "gib", "percent"):
+            raise ValueError("memory_reserve_mode must be auto, gib, or percent")
+        if (
+            isinstance(memory_reserve_value, bool)
+            or not isinstance(memory_reserve_value, int)
+            or memory_reserve_value < 0
+        ):
+            raise ValueError("memory_reserve_value must be a non-negative integer")
+        if memory_reserve_mode == "auto" and memory_reserve_value != 0:
+            raise ValueError("memory_reserve_value must be zero in auto mode")
+        if (
+            memory_reserve_mode == "percent"
+            and memory_reserve_value > MAX_RESERVED_PERCENT
+        ):
+            raise ValueError(
+                f"memory_reserve_value cannot exceed {MAX_RESERVED_PERCENT} percent"
+            )
+        return replace(
+            self,
+            run_priority=cast("JobPriority", run_priority),
+            reserved_cores=reserve_value if reserve_mode == "cores" else 0,
+            reserved_cores_percent=(
+                reserve_value if reserve_mode == "percent" else None
+            ),
+            memory_reserve_mode=cast("MemoryReserveMode", memory_reserve_mode),
+            memory_reserve_value=memory_reserve_value,
+        )
 
     def with_default_ploidy(self, default_ploidy: str) -> GuiPreferences:
         """Return a copy with `default_ploidy` replaced.

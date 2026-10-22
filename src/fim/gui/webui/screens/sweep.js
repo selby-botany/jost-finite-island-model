@@ -736,7 +736,8 @@ function drawSweepPlan(plan) {
         sweepPlanSummary.textContent += ` Showing the first ${SWEEP_PLAN_ROW_LIMIT} of ${entries.length} grid positions.`;
     }
     sweepPlanTable.hidden = false;
-    sweepDoneButton.disabled = plan.points.length === 0;
+    sweepDoneButton.disabled =
+        plan.points.length === 0 || plan.concurrency?.admissible === false;
     drawSweepConcurrencyNote(plan.concurrency);
 }
 
@@ -744,7 +745,8 @@ function drawSweepPlan(plan) {
  * Say how the sweep will use the machine: how many points at once and how
  * many worker processes each batch point gets.
  * @param {{pointsAtOnce: number, workersPerPoint: number|null, cores: number,
- *     automatic: boolean}|undefined} concurrency
+ *     automatic: boolean, remainingCores: number, admissible: boolean}|undefined}
+ *     concurrency
  */
 function drawSweepConcurrencyNote(concurrency) {
     if (!concurrency) {
@@ -759,9 +761,13 @@ function drawSweepConcurrencyNote(concurrency) {
                   concurrency.workersPerPoint === 1 ? "" : "s"
               }`;
     const lead = concurrency.automatic ? "Automatic: " : "";
-    sweepConcurrencyNote.textContent =
+    const allocation =
         `${lead}${points} point${points === 1 ? "" : "s"} at once${each} ` +
         `on ${concurrency.cores} cores.`;
+    sweepConcurrencyNote.textContent = concurrency.admissible
+        ? `${allocation} ${concurrency.remainingCores} worker slots remain.`
+        : `${allocation} exceeds the ${concurrency.remainingCores} available ` +
+          "worker slots. Reduce points at once or wait for capacity.";
 }
 
 /**
@@ -1278,11 +1284,9 @@ window.fim.runConfiguredSweep = async function runConfiguredSweep(
     documentState.jobKind = "sweep";
     documentState.jobState = "starting";
     window.fim.workspace.notifyChange();
-    const result = await window.pywebview.api.start_sweep(
-        values,
-        config.request,
-        studyId,
-        confirmationArmed
+    const result = await window.fim.jobs.startWithMemoryConfirmation(
+        "start_sweep",
+        [values, config.request, studyId, confirmationArmed]
     );
     if (window.fim.workspace.get(tabId) !== documentState) {
         return;
@@ -1316,7 +1320,7 @@ window.fim.runConfiguredSweep = async function runConfiguredSweep(
     documentState.jobState = "running";
     documentState.sweepStudyId = result.studyId;
     if (result.jobId) {
-        window.fim.workspace.attachJob(tabId, result.jobId);
+        window.fim.workspace.attachJob(tabId, result.jobId, result.priority);
     }
     if (documentState.closeAfterStart) {
         documentState.closeAfterStart = false;
@@ -1408,7 +1412,9 @@ sweepDialog.addEventListener("close", () => {
 });
 sweepCancelButton.addEventListener("click", async () => {
     sweepCancelButton.disabled = true;
-    await window.pywebview.api.cancel_sweep();
+    const tabId = window.fim.workspace.selectedId();
+    const state = window.fim.workspace.get(tabId);
+    await window.pywebview.api.cancel_sweep(state?.attachedJobId ?? null);
 });
 sweepSetupButton.addEventListener("click", () => window.fim.showConfigureScreen());
 sweepHomeButton.addEventListener("click", () => window.fim.menu.openRun());

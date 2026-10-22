@@ -94,7 +94,10 @@ function documentSwitcherLabel(state) {
         (state.label === "Untitled" ? "New configuration" : state.label);
     const phase = state.runTitle?.state?.phase;
     const status = phase && phase !== "initial" ? phase : state.kind;
-    return `${name} - ${status}${state.formDirty ? " *" : ""}`;
+    const priority = state.effectivePriority
+        ? ` (${state.effectivePriority[0].toUpperCase()}${state.effectivePriority.slice(1)} priority)`
+        : "";
+    return `${name} - ${status}${priority}${state.formDirty ? " *" : ""}`;
 }
 
 /** Select an existing document without starting or stopping its job. */
@@ -301,14 +304,20 @@ async function closeDocumentWithJob(tabId) {
         if (state.jobState !== "finished" && state.jobState !== "terminal") {
             let result;
             if (state.jobKind === "saved-run") {
-                result = await window.pywebview.api.pause_run();
+                result = await window.pywebview.api.pause_run(
+                    state.attachedJobId
+                );
                 if (!result.ok) {
                     throw new Error(result.message || "Could not pause the saved run.");
                 }
             } else if (state.jobKind === "sweep") {
-                await window.pywebview.api.cancel_sweep();
+                await window.pywebview.api.cancel_sweep(
+                    state.attachedJobId
+                );
             } else {
-                await window.pywebview.api.cancel_run();
+                await window.pywebview.api.cancel_run(
+                    state.attachedJobId
+                );
             }
         }
         if (state.jobState !== "finished") {

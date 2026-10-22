@@ -42,6 +42,7 @@ from fim.engine import backends as engine_backends
 from fim.engine import simulate_params as engine_fim
 from fim.gui import app as app_module
 from fim.gui import jobs as jobs_module
+from fim.gui import object_bridge
 from fim.gui import presets as presets_module
 from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
@@ -1016,14 +1017,19 @@ def test_start_run_after_a_load_uses_the_loaded_run_settings(
     """`start_run` builds the run from the loaded run settings, not from Settings."""
     captured: list[SimulationParams] = []
 
-    def capture(
-        self: Api, params: SimulationParams, *_args: Any, **_kwargs: Any
-    ) -> dict[str, Any]:
-        """Record the parameters a scalar run would start with, instead of running."""
+    def capture(self: Api, object_id: str, **_options: Any) -> dict[str, Any]:
+        """Record the saved object's parameters instead of starting the run."""
+        _, params = object_bridge.prepare_start(object_id)
         captured.append(params)
-        return {"ok": True}
+        return {
+            "ok": True,
+            "isBatch": False,
+            "objectId": object_id,
+            "resourceKey": f"run-object:{object_id}",
+        }
 
-    monkeypatch.setattr(Api, "_start_scalar_run", capture)
+    monkeypatch.setattr(Api, "_start_claimed_run_object", capture)
+    monkeypatch.setattr(app_module, "_active_window", object)
     api = Api()
     assert api.set_default_run_settings(
         {**api.get_default_run_settings(), "engine_backend": "lineal"}
@@ -1039,6 +1045,30 @@ def test_start_run_after_a_load_uses_the_loaded_run_settings(
     assert (params.engine_backend, params.n_replicates) == ("auto", 1)
     settings = api.get_default_run_settings()
     assert (settings["engine_backend"], settings["n_replicates"]) == ("lineal", "200")
+    api._release_run_claim()
+
+
+def test_start_run_returns_claimed_job_id_when_worker_finishes_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A terminal worker may release the claim before `start_run` returns."""
+    claimed_job_ids: list[str] = []
+
+    def finish_immediately(self: Api, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        """Simulate a worker drain releasing its job before the bridge returns."""
+        job_id = self._job_id
+        assert job_id is not None
+        claimed_job_ids.append(job_id)
+        self._release_run_claim()
+        return {"ok": True, "isBatch": False}
+
+    monkeypatch.setattr(Api, "_start_claimed_run", finish_immediately)
+    api = Api()
+
+    started = api.start_run({})
+
+    assert started["ok"] is True
+    assert started["jobId"] == claimed_job_ids[0]
 
 
 def test_making_loaded_run_settings_my_settings_updates_settings() -> None:
@@ -3364,8 +3394,8 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     """A `"progress"` push includes `pairPanel` once a live pair is selected.
 
     No test calls `_drain_run_messages` directly elsewhere in this file
-    (its own docstring already notes why: production only ever reaches
-    it via `_start_scalar_run`'s own thread) — this is the first, added
+    (its own docstring already notes why: production reaches it from a
+    run worker's own thread) — this is the first, added
     specifically to prove the new `live_deme_pair` parameter without
     needing a real background thread or a `gui` marker.
     """
@@ -3577,6 +3607,176 @@ def test_set_pairwise_max_demes_validates_and_persists(tmp_path: Path) -> None:
     assert Api(preferences_path=path).get_pairwise_max_demes() == 64
     for bad in (0, -3, True, 2.5):
         assert api.set_pairwise_max_demes(bad)["ok"] is False  # type: ignore[arg-type]
+
+
+def test_background_work_settings_persist_and_apply_to_new_jobs_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Admitted jobs retain priority while saved settings affect later jobs."""
+    path = tmp_path / "preferences.json"
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 5)
+    api = Api(preferences_path=path)
+
+    assert api.get_background_work_settings() == {
+        "runPriority": "lower",
+        "reserveMode": "cores",
+        "reserveValue": 0,
+        "usableCores": 5,
+        "reservedCores": 0,
+        "workerBudget": 5,
+        "memoryReserveMode": "auto",
+        "memoryReserveValue": 0,
+    }
+    first, refusal = api._admit_run()
+    assert refusal is None
+    assert first is not None
+
+    updated = api.set_background_work_settings("lowest", "percent", 34, "gib", 3)
+
+    assert updated == {
+        "ok": True,
+        "runPriority": "lowest",
+        "reserveMode": "percent",
+        "reserveValue": 34,
+        "usableCores": 5,
+        "reservedCores": 2,
+        "workerBudget": 3,
+        "memoryReserveMode": "gib",
+        "memoryReserveValue": 3,
+    }
+    assert first.priority == "lower"
+    api._release_run_claim(first.job_id)
+
+    second, refusal = api._admit_run()
+    assert refusal is None
+    assert second is not None
+    assert second.priority == "lowest"
+    assert second.cores <= updated["workerBudget"]
+    assert Api(preferences_path=path).get_background_work_settings() == {
+        key: value for key, value in updated.items() if key != "ok"
+    }
+
+    for bad in (
+        ("urgent", "cores", 0),
+        ("lower", "cores", -1),
+        ("lower", "percent", 101),
+        ("lower", "invalid", 0),
+        ("lower", "cores", 0, "percent", 101),
+    ):
+        result = api.set_background_work_settings(*bad)  # type: ignore[arg-type]
+        assert result["ok"] is False
+
+
+@pytest.mark.parametrize(
+    ("available_bytes", "warning"),
+    [
+        (2 * jobs_module.GIB_BYTES + 1, False),
+        (2 * jobs_module.GIB_BYTES, False),
+        (2 * jobs_module.GIB_BYTES - 1, True),
+    ],
+)
+def test_memory_status_warns_only_below_the_reserve(
+    available_bytes: int,
+    warning: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The warning boundary is strict and names every active job."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    first, _ = api._jobs.admit("run", 1, 2)
+    second, _ = api._jobs.admit("sweep", 1, 2)
+    assert first is not None
+    assert second is not None
+    first.display_name = "Long run"
+    second.display_name = "Migration sweep"
+    monkeypatch.setattr(
+        jobs_module,
+        "read_memory",
+        lambda: jobs_module.MemoryReading(16 * jobs_module.GIB_BYTES, available_bytes),
+    )
+
+    status = api.get_memory_status()
+
+    assert status["ok"] is True
+    assert status["warning"] is warning
+    assert status["jobs"] == (
+        [
+            {"jobId": first.job_id, "name": "Long run", "kind": "run"},
+            {"jobId": second.job_id, "name": "Migration sweep", "kind": "sweep"},
+        ]
+        if warning
+        else []
+    )
+
+
+def test_memory_status_reports_read_failures_for_active_jobs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unavailable memory reading is explicit rather than success-shaped."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    record, _ = api._jobs.admit("run", 1, 1)
+    assert record is not None
+
+    def fail_reading() -> jobs_module.MemoryReading:
+        raise jobs_module.MemoryReadError("memory probe failed")
+
+    monkeypatch.setattr(jobs_module, "read_memory", fail_reading)
+
+    assert api.get_memory_status() == {
+        "ok": False,
+        "message": "memory probe failed",
+        "jobs": [],
+    }
+
+
+def test_memory_admission_requires_confirmation_below_the_reserved_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The estimate is confirmed at the threshold and refused one byte below."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    params = SimulationParams.from_mapping(
+        form_values_to_payload(_submittable_starter())
+    )
+    monkeypatch.setattr(api, "_initial_vector_block_memory_bytes", lambda _params: 0)
+    estimate = jobs_module.DEFAULT_CHILD_MEMORY_ESTIMATE_BYTES
+    available_bytes = 2 * jobs_module.GIB_BYTES + estimate
+    monkeypatch.setattr(
+        jobs_module,
+        "read_memory",
+        lambda: jobs_module.MemoryReading(16 * jobs_module.GIB_BYTES, available_bytes),
+    )
+
+    assert api._memory_admission_response(params, 1, confirmed=False) is None
+
+    monkeypatch.setattr(
+        jobs_module,
+        "read_memory",
+        lambda: jobs_module.MemoryReading(
+            16 * jobs_module.GIB_BYTES, available_bytes - 1
+        ),
+    )
+    response = api._memory_admission_response(params, 1, confirmed=False)
+    assert response is not None
+    assert response["needsMemoryConfirmation"] is True
+    assert response["estimatedJobMemoryBytes"] == estimate
+    assert response["reservedMemoryBytes"] == 2 * jobs_module.GIB_BYTES
+
+
+def test_confirmed_memory_admission_does_not_probe_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Confirmation skips a repeated threshold prompt, not other launch guards."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+    params = SimulationParams.from_mapping(
+        form_values_to_payload(_submittable_starter())
+    )
+
+    def fail_reading() -> jobs_module.MemoryReading:
+        raise AssertionError("confirmed launch must not re-probe memory")
+
+    monkeypatch.setattr(jobs_module, "read_memory", fail_reading)
+
+    assert api._memory_admission_response(params, 1, confirmed=True) is None
 
 
 def test_the_shown_set_never_reaches_computation_or_saved_results() -> None:

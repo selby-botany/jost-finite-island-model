@@ -180,6 +180,82 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_saved(
     assert result["nReplicates"] == "16"
 
 
+def test_background_work_settings_persist_and_show_resource_budgets(
+    window: webview.Window,
+) -> None:
+    """Settings persists CPU/memory reserves and shows the worker budget."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('settings-button').click();")
+        poll_until("window.__fimSettingsLoaded === true", lambda value: value is True)
+        window.evaluate_js(
+            "document.getElementById('settings-run-priority').value = 'lowest';"
+            "document.getElementById('settings-reserve-mode').value = 'percent';"
+            "document.getElementById('settings-reserve-value').value = '34';"
+            "document.getElementById('settings-reserve-value').dispatchEvent("
+            "new Event('change', {bubbles: true}));"
+        )
+        poll_until(
+            "window.__fimSettingsSavesPending === 0",
+            lambda value: value is True,
+        )
+        window.evaluate_js(
+            "document.getElementById('settings-memory-reserve-mode').value = "
+            "'percent';"
+            "document.getElementById('settings-memory-reserve-value').value = "
+            "'25';"
+            "document.getElementById('settings-memory-reserve-mode').dispatchEvent("
+            "new Event('change', {bubbles: true}));"
+        )
+        poll_until(
+            "window.__fimSettingsSavesPending === 0",
+            lambda value: value is True,
+        )
+        window.evaluate_js(
+            "window.__fimBackgroundWorkResult = null;"
+            "(async () => {"
+            "window.__fimBackgroundWorkResult = "
+            "await window.pywebview.api.get_background_work_settings();"
+            "})();"
+        )
+        mode_saved = poll_until(
+            "window.__fimBackgroundWorkResult",
+            lambda value: value is not None,
+        )
+        window.evaluate_js(
+            "document.getElementById('settings-memory-reserve-value').value = "
+            "'30';"
+            "document.getElementById('settings-memory-reserve-value').dispatchEvent("
+            "new Event('change', {bubbles: true}));"
+        )
+        poll_until(
+            "window.__fimSettingsSavesPending === 0",
+            lambda value: value is True,
+        )
+        window.evaluate_js(
+            "window.__fimBackgroundWorkResult = null;"
+            "(async () => {"
+            "window.__fimBackgroundWorkResult = "
+            "await window.pywebview.api.get_background_work_settings();"
+            "})();"
+        )
+        value_saved = poll_until(
+            "window.__fimBackgroundWorkResult",
+            lambda value: value is not None,
+        )
+        return {"modeSaved": mode_saved, "valueSaved": value_saved}
+
+    result = _drive(window, steps)
+
+    assert result["modeSaved"]["runPriority"] == "lowest"
+    assert result["modeSaved"]["reserveMode"] == "percent"
+    assert result["modeSaved"]["reserveValue"] == 34
+    assert result["modeSaved"]["workerBudget"] >= 1
+    assert result["modeSaved"]["memoryReserveMode"] == "percent"
+    assert result["modeSaved"]["memoryReserveValue"] == 25
+    assert result["valueSaved"]["memoryReserveValue"] == 30
+
+
 def test_settings_save_button_persists_execution_and_convergence_defaults(
     window: webview.Window,
 ) -> None:

@@ -11,6 +11,7 @@ test in this project — rather than a hand-constructed
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -87,6 +88,18 @@ def test_recent_runs_labels_batch_manifests_as_batch(tmp_path: Path) -> None:
     assert runs[0].label == "batch (3/3)"
     assert runs[1].is_batch is False
     assert runs[1].label == "statistic converged"
+
+
+def test_recent_runs_lists_completed_run_object_manifests(tmp_path: Path) -> None:
+    """A completed Run object is listed with ordinary completed results."""
+    source = _write_run(tmp_path, "source", seed=1)
+    object_directory = tmp_path / "results" / "objects" / "obj-example"
+    object_directory.mkdir(parents=True)
+    shutil.copyfile(source / "manifest.json", object_directory / "manifest.json")
+
+    runs = recent_runs.list_recent_runs(tmp_path / "results")
+
+    assert {run.directory for run in runs} == {source, object_directory}
 
 
 def test_recent_runs_carries_the_full_manifest_for_reuse(tmp_path: Path) -> None:

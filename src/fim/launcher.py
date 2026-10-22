@@ -85,30 +85,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     arguments = sys.argv[1:] if argv is None else list(argv)
-    if not arguments:
+    if arguments and arguments[0] == "--gui-job":
+        # Internal only: GUI-owned work runs in an isolated process. Keep
+        # this dispatch ahead of the public CLI parser.
+        from fim.gui.job_worker import main as job_worker_main  # noqa: PLC0415
+
+        result = job_worker_main(arguments[1:])
+    elif not arguments:
         logger.debug("dispatching to the GUI (zero-argument launch)")
-        return launch_gui(detach=False)
-    if arguments == ["--graphical"]:
+        result = launch_gui(detach=False)
+    elif arguments == ["--graphical"]:
         logger.debug("dispatching to the GUI (--graphical)")
-        return launch_gui(detach=False)
-    if arguments in (["--graphical", "--detach"], ["--detach", "--graphical"]):
+        result = launch_gui(detach=False)
+    elif arguments in (["--graphical", "--detach"], ["--detach", "--graphical"]):
         logger.debug("dispatching to the GUI (--graphical --detach)")
-        return launch_gui(detach=True)
-    if "--detach" in arguments and "--graphical" not in arguments:
+        result = launch_gui(detach=True)
+    elif "--detach" in arguments and "--graphical" not in arguments:
         # A clear, argparse-style usage error rather than a silent no-op
         # — the same pattern `run`'s existing `--workers`/`--sequential`
         # mutual-exclusivity check already uses in cli.py.
         print("fim: error: --detach requires --graphical", file=sys.stderr)
-        return 2
-    logger.debug("dispatching to the CLI parser")
-    # Deferred, not because this branch is rare (it is the most common
-    # one — every ordinary `fim run`/`fim init`/... invocation reaches
-    # it) but so that the GUI branches above never pay for importing
-    # `fim.cli` at all, symmetric with `launch_gui` deferring
-    # `fim.gui.app` below for the opposite reason.
-    from fim.cli import main as cli_main  # noqa: PLC0415
+        result = 2
+    else:
+        logger.debug("dispatching to the CLI parser")
+        # Deferred, not because this branch is rare (it is the most common
+        # one — every ordinary `fim run`/`fim init`/... invocation reaches
+        # it) but so that the GUI branches above never pay for importing
+        # `fim.cli` at all, symmetric with `launch_gui` deferring
+        # `fim.gui.app` below for the opposite reason.
+        from fim.cli import main as cli_main  # noqa: PLC0415
 
-    return cli_main(arguments)
+        result = cli_main(arguments)
+    return result
 
 
 def launch_gui(*, detach: bool) -> int:

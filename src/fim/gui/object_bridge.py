@@ -27,6 +27,7 @@ from fim.gui.config_form import (
 from fim.gui.presets import split_configuration
 from fim.model.params import SimulationParams
 from fim.paths import write_text_atomically
+from fim.persistence import groups
 from fim.persistence.run_lifecycle import (
     RESUMABLE_STATES,
     LifecycleError,
@@ -45,6 +46,7 @@ from fim.persistence.run_objects import (
 from fim.persistence.run_ownership import (
     reconcile_run_object,
     reconcile_run_objects,
+    record_worker_failure,
     request_pause,
 )
 from fim.run_service import cancel_run_object
@@ -174,6 +176,41 @@ def form_values(
     return params_to_form_values(params), None
 
 
+def find_completed_run(
+    run_id: str,
+    software_version: str,
+    *,
+    results: Path | None = None,
+) -> RunObject | None:
+    """Find a completed Run object for this scientific run and version.
+
+    Args:
+        run_id: Content-derived scientific run identity.
+        software_version: Version that must match the completed artifacts.
+        results: Results directory (default: `results_directory()`).
+
+    Returns:
+        The matching completed object, or `None`.
+    """
+    for run_object in list_run_objects(results).objects:
+        if (
+            run_object.record.state is RunState.COMPLETED
+            and run_object.record.scientific_run_id == run_id
+            and groups.run_identity_of(run_object.directory)
+            == (run_id, software_version)
+        ):
+            return run_object
+    return None
+
+
+def study_id_for(object_id: str, *, results: Path | None = None) -> str | None:
+    """Return the Study selected when this Run object was started, if any."""
+    run_object = reconcile_run_object(object_id, results=results)
+    saved = _read_sidecar(run_object.directory)
+    study_id = None if saved is None else saved.get("study_id")
+    return study_id if isinstance(study_id, str) and study_id else None
+
+
 def list_rows(results: Path | None = None) -> dict[str, Any]:
     """Return one row per saved run, after recording any lost worker.
 
@@ -204,6 +241,13 @@ def pause(object_id: str, *, results: Path | None = None) -> None:
     """
     current = reconcile_run_object(object_id, results=results)
     request_pause(object_id, expected_revision=current.record.revision, results=results)
+
+
+def fail_worker(
+    object_id: str, message: str, *, results: Path | None = None
+) -> RunObject:
+    """Record an unexpected worker exit as a failed Run object attempt."""
+    return record_worker_failure(object_id, message, results=results)
 
 
 def prepare_start(
@@ -284,6 +328,7 @@ def save(
     object_id: str | None = None,
     name: str = "",
     description: str = "",
+    study_id: str | None = None,
     results: Path | None = None,
     create: Callable[..., RunObject] = create_run_object,
 ) -> tuple[RunObject, str | None]:
@@ -315,7 +360,7 @@ def save(
             expected_revision=current.record.revision,
             results=results,
         )
-    _write_sidecar(saved.directory, text, values)
+    _write_sidecar(saved.directory, text, values, study_id=study_id)
     logger.debug("saved form as %s (%s)", saved.object_id, saved.record.state.value)
     return saved, problem
 
@@ -335,9 +380,15 @@ def _read_sidecar(directory: Path) -> dict[str, Any] | None:
 
 
 def _write_sidecar(
-    directory: Path, config_text: str, values: Mapping[str, str]
+    directory: Path,
+    config_text: str,
+    values: Mapping[str, str],
+    *,
+    study_id: str | None = None,
 ) -> None:
     """Write the form's values for the configuration text just saved."""
     document = {"digest": _digest(config_text), "values": dict(sorted(values.items()))}
+    if study_id is not None:
+        document["study_id"] = study_id
     text = json.dumps(document, indent=2, sort_keys=True)
     write_text_atomically(directory / GUI_FORM_FILE_NAME, text + "\n", prefix=".gui.")

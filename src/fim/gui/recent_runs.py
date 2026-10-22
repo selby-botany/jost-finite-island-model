@@ -65,8 +65,8 @@ def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]:
             `fim.paths.results_directory()`).
 
     Returns:
-        One `RecentRun` per `*/manifest.json` found one level below
-        `results_directory` that parses as either manifest shape,
+        One `RecentRun` per `*/manifest.json` or
+        `objects/*/manifest.json` that parses as either manifest shape,
         sorted by `ended_at` descending (an ISO-8601 string, so lexical
         order already matches chronological order). Any file that
         fails to parse as either shape is skipped rather than failing
@@ -82,7 +82,11 @@ def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]:
         logger.debug("scanning recent runs: %s does not exist", root)
         return []
     found: list[RecentRun] = []
-    for manifest_path in root.glob("*/manifest.json"):
+    manifest_paths = (
+        *root.glob("*/manifest.json"),
+        *root.glob("objects/*/manifest.json"),
+    )
+    for manifest_path in manifest_paths:
         run = _recent_run_from_file(manifest_path)
         if run is not None:
             found.append(run)

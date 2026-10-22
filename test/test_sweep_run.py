@@ -18,6 +18,7 @@ from concurrent.futures import Executor, Future
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -25,6 +26,8 @@ import yaml
 from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message, join_or_fail
 
 from fim import __version__, paths
+from fim import sweep_run as sweep_run_module
+from fim.execution_priority import Priority, initialize_pool_worker
 from fim.gui.sweep_bridge import status_payload
 from fim.model.params import SimulationParams
 from fim.persistence import groups
@@ -1218,6 +1221,65 @@ def test_several_threads_seeing_one_dead_pool_replace_it_once() -> None:
     # every submit reached the dead pool or its single replacement: at most
     # one replacement was built, never one per thread
     assert len(created) == 2
+
+
+def test_pool_priority_initializer_is_gui_only_and_survives_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only GUI sweep pools lower priority, including replacement pools."""
+    created: list[dict[str, Any]] = []
+
+    class FakeManager:
+        def shutdown(self) -> None:
+            return None
+
+    class FakeExecutor:
+        def __init__(self) -> None:
+            self.shut_down = False
+
+        def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+            del wait, cancel_futures
+            self.shut_down = True
+
+    context = SimpleNamespace(Manager=FakeManager)
+    instances: list[FakeExecutor] = []
+
+    def create_executor(*args: Any, **kwargs: Any) -> FakeExecutor:
+        created.append({"args": args, **kwargs})
+        executor = FakeExecutor()
+        instances.append(executor)
+        return executor
+
+    monkeypatch.setattr(
+        sweep_run_module.multiprocessing, "get_context", lambda _method: context
+    )
+    monkeypatch.setattr(sweep_run_module, "ProcessPoolExecutor", create_executor)
+    results = Path("/tmp/test-sweep-results")
+    priorities: tuple[tuple[Priority, bool], ...] = (
+        ("normal", False),
+        ("lower", True),
+        ("lowest", False),
+    )
+    for priority, lower_priority in priorities:
+        start = len(created)
+        runner = ProcessPointRunner(
+            2,
+            lower_priority=lower_priority,
+            priority=priority,
+            results=results,
+        )
+        assert runner._results_directory == results
+        first_pool = instances[-1]
+        runner._replace(first_pool)
+        replacement_pool = instances[-1]
+        runner.close()
+        pools = created[start:]
+        assert len(pools) == 2
+        assert all(pool["initializer"] is initialize_pool_worker for pool in pools)
+        assert all(pool["initargs"] == (priority,) for pool in pools)
+        assert all(pool["mp_context"] is context for pool in pools)
+        assert first_pool.shut_down
+        assert replacement_pool.shut_down
 
 
 class _Flaky:

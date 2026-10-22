@@ -62,7 +62,6 @@ from fim.engine import (
     deterministic_run_id,
     history_free_statistic_values,
     pair_statistic_values,
-    pooled_convergence_histories,
     pooled_convergence_histories_from_pairs,
     report_for_state,
     reports_summary,
@@ -74,7 +73,6 @@ from fim.gui import (
     batch_runner,
     jobs,
     object_bridge,
-    object_runner,
     presets,
     recent_runs,
     runner,
@@ -100,6 +98,7 @@ from fim.gui.config_form import (
     tab_for_error,
     validate_run_settings,
 )
+from fim.gui.job_results import GuiRunResult
 from fim.gui.literature_visuals import (
     literature_visual_payload,
     pooled_literature_visual_payload,
@@ -135,7 +134,7 @@ from fim.persistence.manifest import (
 from fim.persistence.pairwise import pair_value, read_pairwise
 from fim.persistence.run_lifecycle import LifecycleError
 from fim.persistence.run_metadata import replace_run_metadata, run_metadata_path
-from fim.persistence.run_objects import read_run_object
+from fim.persistence.run_objects import RunObject, read_run_object
 from fim.persistence.saved_run import replicate_output_directory
 from fim.reanalyze import (
     read_persisted_convergence_history,
@@ -175,6 +174,7 @@ from fim.sweep_run import (
     SweepEvent,
     attach_sweep_to_study,
     create_sweep_study,
+    pending_sweep_point_count,
     resolve_concurrency,
     run_sweep,
     sweep_point_statuses,
@@ -1925,6 +1925,21 @@ def _run_resource_key(directory: str | Path) -> str:
     return f"run:{Path(directory).resolve()}"
 
 
+def _join_shutdown_worker(
+    worker: threading.Thread | jobs.ChildJob,
+    label: str,
+    deadline: float,
+    job_id: str | None = None,
+) -> None:
+    """Join one shutdown worker and report a missed shared deadline."""
+    worker.join(max(0.0, deadline - time.monotonic()))
+    if worker.is_alive():
+        if job_id is None:
+            logger.warning("%s did not stop before exit", label)
+        else:
+            logger.warning("%s did not stop before exit: %s", label, job_id)
+
+
 class Api:
     """The `window.pywebview.api` surface every `webui/*.js` screen calls into.
 
@@ -2006,32 +2021,20 @@ class Api:
                 collides with — a real user's saved preferences.
         """
         self._cancel_event: threading.Event | None = None
-        # One active thing at a time: two runs, a run and a sweep, or two
-        # sweeps, cannot overlap (`start_run`, `start_run_object`, `start_
-        # sweep`). A run start claims `_run_in_flight`, and a sweep start
-        # claims `_sweep_cancel_event`, under `self._jobs`'s one shared
-        # lock (`_claim_run`/`_claim_sweep`, `fim.gui.jobs.JobAdmission`'s
-        # own docstring), so two starts of any kind that arrive together
-        # cannot both pass their own check. The run's own drain thread
-        # clears `_run_in_flight`, and the sweep's own thread clears
-        # `_sweep_cancel_event`, once each reports its own terminal
-        # outcome.
+        # JobAdmission is the source of truth: it admits multiple jobs
+        # atomically within the worker budget, and each record owns its
+        # cancellation, child, drain, comparison, and live-view state.
         self._run_in_flight = False
         self._jobs = jobs.JobAdmission()
         self._output_reservation: Path | None = None
-        # The one currently-claimed job's own id, minted by `_claim_run`/
-        # `_claim_sweep` the instant their claim succeeds, and cleared by
-        # their own release counterparts -- `fim.gui.jobs`'s own module
-        # docstring (commit A5). Carried into whichever drain/push
-        # function needs to tag its own `fim.onJobEvent` pushes with it,
-        # as a plain argument, exactly like `output_directory` -- never
-        # read back live from a background thread, which could by then
-        # be tagging a different job's pushes with a stale id.
+        # These single-job fields remain compatibility mirrors for older
+        # helpers and tests; active execution uses the registry records.
         self._job_id: str | None = None
         # The saved run (`start_run_object`) now executing, if any, and its
-        # worker thread; Pause and Cancel are routed to it.
+        # child process; Pause and Cancel are routed to it.
         self._active_object_id: str | None = None
-        self._object_worker: threading.Thread | None = None
+        self._object_worker: jobs.ChildJob | None = None
+        self._object_supervisor: threading.Thread | None = None
         # The run of this configuration from another software version, if
         # any, that the run now starting is compared with when it finishes.
         self._previous_version_run: Path | None = None
@@ -2039,8 +2042,8 @@ class Api:
         self._sweep_cancel_event: threading.Event | None = None
         self._sweep_study_id: str | None = None
         # The worker threads of the run and sweep now executing, so closing
-        # can ask them to stop and wait (`stop_active_work`). The saved
-        # run's worker is `_object_worker`, above.
+        # can ask them to stop and wait (`stop_active_work`). Saved runs use
+        # `_object_worker` and `_object_supervisor`, above.
         self._run_worker: threading.Thread | None = None
         self._sweep_thread: threading.Thread | None = None
         # `_drain_then_release`'s own thread for whichever run or saved
@@ -2134,6 +2137,7 @@ class Api:
         study_id: str | None = None,
         run_name: str = "",
         run_description: str = "",
+        memory_confirmed: bool = False,
     ) -> dict[str, Any]:
         """Validate the form, then start a run pushing live progress to the page.
 
@@ -2216,29 +2220,38 @@ class Api:
         run_details = RunDetails(
             run_name.strip() or None, run_description.strip() or None
         )
-        refusal = self._claim_run()
-        if refusal is not None:
+        job, refusal = self._admit_run()
+        if refusal is not None or job is None:
             return {"ok": False, "message": refusal}
+        job_id = job.job_id
         started = False
         try:
-            result = self._start_claimed_run(values, study_id, run_details)
+            result = self._start_claimed_run(
+                values,
+                study_id,
+                run_details,
+                job_id,
+                memory_confirmed=memory_confirmed,
+            )
             started = bool(result["ok"]) and not result.get("reused", False)
             if result["ok"] and not result.get("reused", False):
-                job_id = self._job_id
-                assert job_id is not None
                 result["jobId"] = job_id
+                result["priority"] = job.priority
             return result
         finally:
             # Nothing started means no drain thread will ever release the
             # claim, so release it here.
             if not started:
-                self._release_run_claim()
+                self._release_run_claim(job_id)
 
     def _start_claimed_run(
         self,
         values: dict[str, str],
         study_id: str | None,
         run_details: RunDetails,
+        job_id: str,
+        *,
+        memory_confirmed: bool,
     ) -> dict[str, Any]:
         """Do the work of `start_run` once it holds the run claim.
 
@@ -2266,89 +2279,199 @@ class Api:
         # store's own (`fim.gui.preferences`'s own top docstring).
         self._preferences = self._preferences.with_form_values(values)
         save_preferences(self._preferences_path, self._preferences)
-        # A run is a pure function of its configuration (`deterministic_
-        # run_id` hashes all of it, the seed included) within one software
-        # version, so a configuration already computed by this version is
-        # not computed again: the existing run is attached to the chosen
-        # Study, exactly as a sweep point is, and shown as it is. A run of
-        # the same configuration from another version is not reused: the
-        # configuration is recomputed and compared with it when it
-        # finishes, so a break in bit-for-bit reproducibility is reported.
+        # Completed Run objects are the reusable GUI result now. Resolve
+        # those before legacy result directories so reopening preserves the
+        # lifecycle record and its pause/resume history.
         is_batch = params.n_replicates > 1
         run_id = deterministic_run_id(params)
-        existing = groups.find_run_directories(run_id, software_version=fim_version)
+        existing_object = object_bridge.find_completed_run(run_id, fim_version)
+        existing = (
+            [existing_object.directory]
+            if existing_object is not None
+            else groups.find_run_directories(run_id, software_version=fim_version)
+        )
         if existing:
-            _attach_finished_run_to_study(study_id, existing[0], run_details)
-            return {
+            directory = existing[0]
+            _attach_finished_run_to_study(study_id, directory, run_details)
+            reused = {
                 "ok": True,
                 "reused": True,
                 "isBatch": is_batch,
-                "directory": str(existing[0]),
-                "resourceKey": _run_resource_key(existing[0]),
+                "directory": str(directory),
+                "resourceKey": _run_resource_key(directory),
             }
-        self._previous_version_run = next(
-            iter(groups.find_stale_run_directories(run_id, fim_version)), None
+            if existing_object is not None:
+                reused["objectId"] = existing_object.object_id
+            return reused
+        job = self._jobs.active_job(job_id)
+        assert job is not None
+        memory_response = self._memory_admission_response(
+            params, job.cores, confirmed=memory_confirmed
         )
-        try:
-            output_directory, reservation = paths.allocate_output_directory()
-        except FileExistsError as error:
-            return {"ok": False, "message": str(error)}
-        self._output_reservation = reservation
-        is_batch = params.n_replicates > 1
-        result = (
-            self._start_batch_run(
-                params, output_directory, values, study_id, run_details
+        if memory_response is None:
+            job.previous_version_run = next(
+                iter(groups.find_stale_run_directories(run_id, fim_version)), None
             )
-            if is_batch
-            else self._start_scalar_run(params, output_directory, study_id, run_details)
+            if _active_window() is None:
+                memory_response = {"ok": False, "message": "no active window"}
+        if memory_response is not None:
+            return memory_response
+        try:
+            saved, problem = object_bridge.save(
+                values,
+                name=run_details.name or "",
+                description=run_details.description or "",
+                study_id=study_id,
+            )
+        except (LifecycleError, OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        if problem is not None:
+            return {"ok": False, "message": problem}
+        result = self._start_claimed_run_object(
+            saved.object_id,
+            job_id=job_id,
+            study_id=study_id,
+            run_details=run_details,
+            memory_confirmed=True,
         )
-        # `n_replicates` is no longer a field Configure's own `<form>`
-        # submits (moved to Settings) -- `run-view-controls.js`'s own
-        # `onRunClicked` can no longer infer "batch or scalar" from the
-        # values it already has in hand before this call, so the real,
-        # validated `params.n_replicates` this method computed is
-        # reported back explicitly instead.
-        result["isBatch"] = is_batch
+        if not result["ok"] and not result.get("needsMemoryConfirmation", False):
+            try:
+                object_bridge.delete(saved.object_id)
+            except (LifecycleError, OSError) as error:
+                logger.warning(
+                    "could not remove an unstarted Run object %s: %s",
+                    saved.object_id,
+                    error,
+                )
         return result
 
-    def _claim_run(self) -> str | None:
-        """Claim the one run slot, or return why it is taken.
+    @staticmethod
+    def _initial_vector_block_memory_bytes(params: SimulationParams) -> int:
+        """Estimate Backend V's initial dense block when its shape is known."""
+        if (
+            params.engine_backend != "generational-vector"
+            or params.initial_frequencies is not None
+        ):
+            return 0
+        from fim.model.locus import finite_allele_capacity  # noqa: PLC0415
+        from fim.model.vector_block import (  # noqa: PLC0415
+            MINIMUM_WIDTH,
+            estimated_block_bytes,
+        )
 
-        The check and the claim happen under `self._jobs.lock`, shared
-        with `_claim_sweep` (`fim.gui.jobs.JobAdmission`'s own
-        docstring), so two starts that arrive together -- a double
-        click, Run beside a saved run's Start, or a run racing a sweep --
-        cannot both see a free slot. The claim is released by the run's
-        drain thread (`_drain_then_release`), or by the starting method
-        itself when it starts nothing. Also mints `self._job_id`
-        (`fim.gui.jobs.JobAdmission.new_job_id`) -- the caller reads it
-        back once claimed, exactly as it already reads back `self.
-        _sweep_cancel_event` after `_claim_sweep`.
+        finite = params.mutation_model == "finite_alleles"
+        if finite:
+            width = max(finite_allele_capacity(locus.length) for locus in params.loci)
+        else:
+            target_width = 2 * params.initial_allele_count
+            width = max(
+                MINIMUM_WIDTH,
+                1 << (target_width - 1).bit_length(),
+            )
+        return estimated_block_bytes(len(params.loci), params.d, width, finite=finite)
 
-        Returns:
-            `None` once claimed; otherwise `_run_refusal`'s message.
-        """
-        with self._jobs.lock:
-            refusal = self._run_refusal()
-            if refusal is None:
-                self._run_in_flight = True
-                self._job_id = self._jobs.new_job_id()
-            return refusal
+    def _memory_admission_response(
+        self,
+        params: SimulationParams,
+        cores: int,
+        *,
+        confirmed: bool,
+    ) -> dict[str, Any] | None:
+        """Ask before starting a job whose estimate would cross the reserve."""
+        if confirmed:
+            return None
+        try:
+            reading = jobs.read_memory()
+            reserve = jobs.memory_reserve_bytes(
+                reading.total_bytes,
+                self._preferences.memory_reserve_mode,
+                self._preferences.memory_reserve_value,
+            )
+        except (jobs.MemoryReadError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        estimate = jobs.estimate_job_memory_bytes(
+            cores,
+            jobs.child_memory_estimate_bytes(self._jobs.active_jobs()),
+            self._initial_vector_block_memory_bytes(params),
+        )
+        if reading.available_bytes - estimate >= reserve:
+            return None
 
-    def _release_run_claim(self, *, retain_snapshot: bool = False) -> None:
-        """Release the run slot: no run, plain or saved, is in flight now.
+        def gibibytes(value: int) -> str:
+            return f"{value / jobs.GIB_BYTES:.1f} GiB"
 
-        Clears the saved run first, under the same lock as `_claim_run`,
-        so a run that claims the slot next never has its own saved run
-        cleared by the one that just ended. A completed job retains its
-        snapshot for the owning document; an unsuccessful start has no
-        document to retain and forgets its empty registry entry.
-        """
-        with self._jobs.lock:
-            self._active_object_id = None
-            self._run_in_flight = False
-            job_id, self._job_id = self._job_id, None
-            reservation, self._output_reservation = self._output_reservation, None
+        return {
+            "ok": False,
+            "needsMemoryConfirmation": True,
+            "availableMemoryBytes": reading.available_bytes,
+            "estimatedJobMemoryBytes": estimate,
+            "reservedMemoryBytes": reserve,
+            "message": (
+                f"Available memory is {gibibytes(reading.available_bytes)}. "
+                f"This job is estimated to use {gibibytes(estimate)}, and "
+                f"your reserve is {gibibytes(reserve)}. Starting may use "
+                "memory you chose to keep free. Start anyway?"
+            ),
+        }
+
+    def _worker_budget(self) -> int:
+        """Return the user-adjusted worker budget for newly admitted jobs."""
+        return jobs.worker_capacity(
+            jobs.usable_core_count(),
+            self._preferences.reserved_cores,
+            self._preferences.reserved_cores_percent,
+        )
+
+    def _remaining_worker_cores(self) -> int:
+        """Return currently unreserved worker capacity."""
+        return self._jobs.available_cores(self._worker_budget())
+
+    def _admit_run(
+        self,
+        *,
+        cores: int = 1,
+        kind: jobs.JobKind = "run",
+        object_id: str | None = None,
+    ) -> tuple[jobs.JobRecord | None, str | None]:
+        """Atomically reserve a run's worker cost, or explain the refusal."""
+        if not self._jobs.active_jobs():
+            if self._sweep_cancel_event is not None:
+                return None, "a sweep is running; wait for it or cancel it first"
+            if self._run_in_flight:
+                return (
+                    None,
+                    "a run is in progress; wait for it to finish or cancel it first",
+                )
+        capacity = self._worker_budget()
+        record, remaining = self._jobs.admit(
+            kind,
+            cores,
+            capacity,
+            object_id=object_id,
+            priority=self._preferences.run_priority,
+        )
+        if record is not None:
+            self._refresh_legacy_job_state()
+            return record, None
+        if object_id is not None and any(
+            job.request.get("object_id") == object_id
+            for job in self._jobs.active_jobs()
+        ):
+            return None, "this saved run is already active"
+        return None, self._capacity_refusal(cores, remaining)
+
+    def _release_run_claim(
+        self, job_id: str | None = None, *, retain_snapshot: bool = False
+    ) -> None:
+        """Release one run's capacity after its terminal events are delivered."""
+        job_id = job_id or self._job_id
+        if job_id is None:
+            return
+        record = self._jobs.release(job_id)
+        if record is None:
+            return
+        self._refresh_legacy_job_state()
+        reservation = record.output_reservation
         if reservation is not None:
             try:
                 reservation.rmdir()
@@ -2360,63 +2483,122 @@ class Api:
                     reservation,
                     error,
                 )
-        if job_id is not None and not retain_snapshot:
+        if not retain_snapshot:
             self._jobs.forget(job_id)
+
+    def _admit_sweep(self, cores: int) -> tuple[jobs.JobRecord | None, str | None]:
+        """Atomically reserve a sweep's worker cost."""
+        if not self._jobs.active_jobs():
+            if self._sweep_cancel_event is not None:
+                return None, "a sweep is already running"
+            if self._run_in_flight:
+                return None, "a run is in progress; wait for it to finish first"
+        capacity = self._worker_budget()
+        record, remaining = self._jobs.admit(
+            "sweep", cores, capacity, priority=self._preferences.run_priority
+        )
+        if record is not None:
+            record.cancel_event = threading.Event()
+            self._refresh_legacy_job_state()
+            return record, None
+        return None, self._capacity_refusal(cores, remaining)
+
+    def _release_sweep_claim(
+        self, job_id: str | None = None, *, retain_snapshot: bool = False
+    ) -> None:
+        """Release one sweep's capacity after its terminal event is delivered."""
+        job_id = job_id or self._job_id
+        if job_id is None:
+            return
+        self._jobs.release(job_id)
+        self._refresh_legacy_job_state()
+        if not retain_snapshot:
+            self._jobs.forget(job_id)
+
+    def _claim_run(self) -> str | None:
+        """Compatibility wrapper for tests of the pre-budget single claim."""
+        _, refusal = self._admit_run()
+        return refusal
 
     def _claim_sweep(self) -> str | None:
-        """Claim the one sweep slot, or return why it is taken.
+        """Compatibility wrapper for tests of the pre-budget single claim."""
+        _, refusal = self._admit_sweep(1)
+        return refusal
 
-        The check and the claim happen under `self._jobs.lock`, shared
-        with `_claim_run`, so a sweep's own admission and a run's own
-        admission can never both see a free slot for the same instant
-        (`fim.gui.jobs.JobAdmission`'s own docstring: the exact gap
-        `_busy_message` used to leave open on its own, checked with no
-        lock at all). Claiming creates and assigns the new sweep's own
-        `_sweep_cancel_event`, and mints `self._job_id`
-        (`fim.gui.jobs.JobAdmission.new_job_id`); `_start_sweep_thread`
-        reads both back rather than creating or minting its own. The
-        claim is released by `_release_sweep_claim`, called from the
-        sweep's own thread once it reports its own terminal outcome, or
-        by the starting method itself when it starts nothing.
+    def _refresh_legacy_job_state(self) -> None:
+        """Keep legacy single-job fields aligned while bridges migrate to ids."""
+        active = self._jobs.active_jobs()
+        self._job_id = active[-1].job_id if active else None
+        self._run_in_flight = any(job.kind != "sweep" for job in active)
+        self._sweep_cancel_event = next(
+            (job.cancel_event for job in reversed(active) if job.kind == "sweep"),
+            None,
+        )
+        self._sweep_study_id = next(
+            (job.study_id for job in reversed(active) if job.kind == "sweep"),
+            None,
+        )
+        self._active_object_id = next(
+            (
+                job.active_object_id
+                for job in reversed(active)
+                if job.active_object_id is not None
+            ),
+            None,
+        )
+        self._cancel_event = next(
+            (
+                job.cancel_event
+                for job in reversed(active)
+                if job.kind != "sweep" and job.cancel_event is not None
+            ),
+            None,
+        )
+        self._object_worker = next(
+            (job.child for job in reversed(active) if job.child is not None), None
+        )
+        self._object_supervisor = next(
+            (
+                job.supervisor
+                for job in reversed(active)
+                if job.child is not None and job.supervisor is not None
+            ),
+            None,
+        )
+        self._drain_thread = next(
+            (job.drain for job in reversed(active) if job.drain is not None), None
+        )
+        self._sweep_thread = next(
+            (job.supervisor for job in reversed(active) if job.kind == "sweep"),
+            self._sweep_thread,
+        )
+        self._live_deme_pair = next(
+            (job.live_deme_pair for job in reversed(active) if job.kind != "sweep"),
+            None,
+        )
 
-        Returns:
-            `None` once claimed; otherwise `_busy_message`'s message.
-        """
-        with self._jobs.lock:
-            busy = self._busy_message()
-            if busy is not None:
-                return busy
-            self._sweep_cancel_event = threading.Event()
-            self._job_id = self._jobs.new_job_id()
-            return None
-
-    def _release_sweep_claim(self, *, retain_snapshot: bool = False) -> None:
-        """Release the sweep slot: no sweep is in flight now.
-
-        A completed sweep retains its snapshot for the owning document;
-        an unsuccessful start has no document to retain.
-        """
-        with self._jobs.lock:
-            self._sweep_cancel_event = None
-            job_id, self._job_id = self._job_id, None
-        if job_id is not None and not retain_snapshot:
-            self._jobs.forget(job_id)
+    def _capacity_refusal(self, requested: int, remaining: int) -> str:
+        """Explain why a request cannot fit without changing active jobs."""
+        owners = [
+            job.active_object_id or job.study_id or job.job_id[:8]
+            for job in self._jobs.active_jobs()
+        ]
+        owner_text = f" Active work: {', '.join(owners)}." if owners else ""
+        return (
+            f"this job needs {requested} worker slot(s), but only {remaining} "
+            f"remain in the current budget.{owner_text} Save for later, wait "
+            "for capacity, or reduce points at once for a sweep."
+        )
 
     def _run_refusal(self) -> str | None:
-        """Return why a run cannot start now, or `None` if it can.
-
-        Shared by `start_run`, `start_run_object` and `can_start_run`, so
-        the page's own check before a start and the start itself always
-        give the same answer. `can_start_run` calls this as a plain,
-        unsynchronized snapshot; `_claim_run` calls it with `self._jobs.
-        lock` already held, which is what makes *that* call atomic with
-        the claim it makes from the answer.
-        """
-        if self._sweep_cancel_event is not None:
-            return "a sweep is running; wait for it or cancel it first"
-        if self._run_in_flight:
-            return "a run is in progress; wait for it to finish or cancel it first"
-        return None
+        """Return why a one-slot run cannot start now."""
+        if not self._jobs.active_jobs():
+            if self._sweep_cancel_event is not None:
+                return "a sweep is running; wait for it or cancel it first"
+            if self._run_in_flight:
+                return "a run is in progress; wait for it to finish or cancel it first"
+        remaining = self._remaining_worker_cores()
+        return None if remaining >= 1 else self._capacity_refusal(1, remaining)
 
     @_log_bridge_call
     def can_start_run(self) -> dict[str, Any]:
@@ -2460,9 +2642,8 @@ class Api:
         """Release a finished job's snapshot after its document closes."""
         if self._jobs.snapshot(job_id) is None:
             return {"ok": False, "message": "no such job"}
-        with self._jobs.lock:
-            if job_id == self._job_id:
-                return {"ok": False, "message": "job is still active"}
+        if self._jobs.active_job(job_id) is not None:
+            return {"ok": False, "message": "job is still active"}
         self._jobs.forget(job_id)
         return {"ok": True}
 
@@ -2471,8 +2652,6 @@ class Api:
         """Set an active job's rendering level and return its latest snapshot."""
         if level not in ("full", "summary"):
             return {"ok": False, "message": "view level must be full or summary"}
-        if job_id != self._job_id:
-            return {"ok": False, "message": "no such job"}
         if not self._jobs.set_view_level(job_id, cast("jobs.ViewLevel", level)):
             return {"ok": False, "message": "no such job"}
         return self.get_job_snapshot(job_id)
@@ -2589,9 +2768,11 @@ class Api:
         wrapper and the drain. Remaining keyword arguments belong to the
         drain, such as the batch view-level callback.
         """
-        previous = self._previous_version_run
-        target = self._comparison_target
-        self._previous_version_run = None
+        record = self._jobs.active_job(job_id)
+        previous = record.previous_version_run if record is not None else None
+        target = record.comparison_target if record is not None else None
+        if record is not None:
+            record.previous_version_run = None
         try:
             drain(
                 window,
@@ -2619,7 +2800,7 @@ class Api:
 
             def release_after_finished() -> None:
                 """Release the run slot after the page evaluates `finished`."""
-                self._release_run_claim(retain_snapshot=True)
+                self._release_run_claim(job_id, retain_snapshot=True)
                 delivered.set()
 
             _push_job_event(
@@ -2709,32 +2890,36 @@ class Api:
         return {"ok": True}
 
     @_log_bridge_call
-    def cancel_run(self) -> None:
-        """Request cancellation of whichever scalar run `start_run` last started.
+    def cancel_run(self, job_id: str | None = None) -> None:
+        """Request cancellation of one run, identified by its owning document.
 
         A no-op if no run is currently in flight — mirrors `GuiProgress
         Store.write_generation`'s own tolerance of a `cancel_event` that
         was never going to matter, rather than raising for a Cancel click
         that arrives a moment after the run already finished on its own.
         """
-        if self._cancel_event is not None:
-            self._cancel_event.set()
-        if self._active_object_id is not None:
+        record = self._active_run_record(job_id)
+        if record is None:
+            return
+        if record.cancel_event is not None:
+            record.cancel_event.set()
+        if record.active_object_id is not None:
             with contextlib.suppress(LifecycleError):
-                object_bridge.cancel(self._active_object_id)
+                object_bridge.cancel(record.active_object_id)
 
     @_log_bridge_call
-    def pause_run(self) -> dict[str, Any]:
-        """Ask the saved run now executing to checkpoint and pause.
+    def pause_run(self, job_id: str | None = None) -> dict[str, Any]:
+        """Ask the run now executing to checkpoint and pause.
 
-        Only a saved run (`start_run_object`) can pause; an ordinary run
-        has no checkpoint to resume from. The worker acknowledges with a
-        pushed `fim.onRunPaused(generation)`.
+        GUI-started runs are Run objects, so both new and saved runs can
+        resume from the checkpoint. The worker acknowledges with a pushed
+        `fim.onRunPaused(generation)`.
 
         Returns:
             `{"ok": True}`, or `{"ok": False, "message": ...}`.
         """
-        object_id = self._active_object_id
+        record = self._active_run_record(job_id)
+        object_id = record.active_object_id if record is not None else None
         if object_id is None:
             return {"ok": False, "message": "only a saved run can pause"}
         try:
@@ -2742,6 +2927,28 @@ class Api:
         except LifecycleError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True}
+
+    @_log_bridge_call
+    def pause_job(self, job_id: str) -> dict[str, Any]:
+        """Pause one run or stop a sweep at its next resumable point."""
+        record = self._jobs.active_job(job_id)
+        if record is None:
+            return {"ok": False, "message": "job is no longer active"}
+        if record.kind == "sweep":
+            if record.cancel_event is None:
+                return {"ok": False, "message": "sweep cannot be paused"}
+            record.cancel_event.set()
+            return {"ok": True}
+        return self.pause_run(job_id)
+
+    def _active_run_record(self, job_id: str | None) -> jobs.JobRecord | None:
+        """Resolve a run by id, or only when there is exactly one active run."""
+        active = tuple(
+            job for job in self._jobs.active_jobs() if job.kind in ("run", "saved-run")
+        )
+        if job_id is not None:
+            return next((job for job in active if job.job_id == job_id), None)
+        return active[0] if len(active) == 1 else None
 
     @_log_bridge_call
     def save_run_object(
@@ -2799,7 +3006,19 @@ class Api:
             return {"ok": False, "message": str(error)}
         for run in rows["runs"]:
             run["resourceKey"] = _run_resource_key(run["directory"])
-        return {"ok": True, **rows, "activeObjectId": self._active_object_id}
+        active_objects = {
+            job.active_object_id
+            for job in self._jobs.active_jobs()
+            if job.active_object_id is not None
+        }
+        return {
+            "ok": True,
+            **rows,
+            "activeObjectId": next(iter(active_objects), None)
+            if len(active_objects) == 1
+            else None,
+            "activeObjectIds": sorted(active_objects),
+        }
 
     @_log_bridge_call
     def open_run_object(self, object_id: str) -> dict[str, Any]:
@@ -2835,7 +3054,9 @@ class Api:
         }
 
     @_log_bridge_call
-    def start_run_object(self, object_id: str) -> dict[str, Any]:
+    def start_run_object(
+        self, object_id: str, memory_confirmed: bool = False
+    ) -> dict[str, Any]:
         """Start a planned saved run, or resume a paused or stopped one.
 
         Pushes the same `fim.onRun*` or `fim.onBatch*` calls `start_run` does,
@@ -2850,24 +3071,38 @@ class Api:
             including while another run or a sweep is in flight
             (`_run_refusal`).
         """
-        refusal = self._claim_run()
-        if refusal is not None:
+        job, refusal = self._admit_run(kind="saved-run", object_id=object_id)
+        if refusal is not None or job is None:
             return {"ok": False, "message": refusal}
         started = False
         try:
-            result = self._start_claimed_run_object(object_id)
+            result = self._start_claimed_run_object(
+                object_id,
+                job_id=job.job_id,
+                memory_confirmed=memory_confirmed,
+            )
             started = bool(result["ok"])
             return result
         finally:
             # As in `start_run`: no worker, so no drain thread to release it.
             if not started:
-                self._release_run_claim()
+                self._release_run_claim(job.job_id)
 
-    def _start_claimed_run_object(self, object_id: str) -> dict[str, Any]:
+    def _start_claimed_run_object(
+        self,
+        object_id: str,
+        *,
+        job_id: str,
+        study_id: str | None = None,
+        run_details: RunDetails | None = None,
+        memory_confirmed: bool = False,
+    ) -> dict[str, Any]:
         """Do the work of `start_run_object` once it holds the run claim.
 
         Args:
             object_id: The saved run.
+            study_id: Study to receive the completed run, if supplied.
+            run_details: Optional details to write when it completes.
 
         Returns:
             `start_run_object`'s result.
@@ -2877,29 +3112,77 @@ class Api:
             return {"ok": False, "message": "no active window"}
         try:
             run_object, params = object_bridge.prepare_start(object_id)
+            effective_study_id = (
+                study_id
+                if study_id is not None
+                else object_bridge.study_id_for(object_id)
+            )
         except (LifecycleError, ValueError) as error:
             return {"ok": False, "message": str(error)}
+        job = self._jobs.active_job(job_id)
+        assert job is not None
+        memory_response = self._memory_admission_response(
+            params, job.cores, confirmed=memory_confirmed
+        )
+        if memory_response is not None:
+            return memory_response
+        return self._start_prepared_run_object(
+            object_id=object_id,
+            job_id=job_id,
+            run_object=run_object,
+            params=params,
+            window=window,
+            effective_study_id=effective_study_id,
+            run_details=run_details,
+        )
+
+    def _start_prepared_run_object(
+        self,
+        *,
+        object_id: str,
+        job_id: str,
+        run_object: RunObject,
+        params: SimulationParams,
+        window: _EvaluatesJs,
+        effective_study_id: str | None,
+        run_details: RunDetails | None,
+    ) -> dict[str, Any]:
+        """Start a validated Run object after its memory budget is accepted."""
+        job = self._jobs.active_job(job_id)
+        assert job is not None
+        job.display_name = (run_object.labels.name or "").strip() or (
+            f"Run {object_id[:8]}"
+        )
+        if run_details is None:
+            job.previous_version_run = None
+            run_details = RunDetails(
+                run_object.labels.name or None,
+                run_object.labels.description or None,
+            )
+        job.comparison_target = (run_object.directory, window)
         is_batch = params.n_replicates > 1
-        self._cancel_event = None
-        self._active_object_id = object_id
-        self._run_in_flight = True
-        self._live_deme_pair = None
-        if self._on_run_started is not None:
-            self._on_run_started()
-        job_id = self._job_id
-        assert job_id is not None  # `_claim_run` always mints it first
+        job.active_object_id = object_id
+        job.live_deme_pair = None
+        job.study_id = effective_study_id
+        self._refresh_legacy_job_state()
+        run_id = run_object.record.scientific_run_id or deterministic_run_id(params)
+        results_root = run_object.directory.parent.parent
 
         if is_batch:
             batch_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
-            self._object_worker = object_runner.start_object_run(
-                object_id,
-                batch_queue,
-                pairwise_max_demes=self._preferences.pairwise_max_demes,
-                view_level=lambda: self._jobs.view_level(job_id),
-            )
+            try:
+                self._start_object_child(
+                    object_id,
+                    params,
+                    run_id,
+                    job_id,
+                    batch_queue,
+                    results=results_root,
+                )
+            except (OSError, RuntimeError, ValueError) as error:
+                return {"ok": False, "message": str(error)}
             logger.info("saved batch run starting: %s", object_id)
-            run_id = run_object.record.scientific_run_id or deterministic_run_id(params)
-            self._drain_thread = threading.Thread(
+            drain_thread = threading.Thread(
                 target=self._drain_then_release,
                 args=(
                     _drain_batch_messages,
@@ -2909,7 +3192,7 @@ class Api:
                     run_id,
                     run_object.directory,
                     self._significant_digits,
-                    self.get_live_deme_pair,
+                    lambda: self.get_live_deme_pair(job_id),
                     self._on_message,
                     self._on_batch_progress,
                 ),
@@ -2918,15 +3201,23 @@ class Api:
                     "job_admission": self._jobs,
                     "job_id": job_id,
                     "view_level": lambda: self._jobs.view_level(job_id),
+                    "study_id": effective_study_id,
+                    "run_details": run_details,
                 },
                 daemon=True,
             )
-            self._drain_thread.start()
+            job.drain = drain_thread
+            self._refresh_legacy_job_state()
+            drain_thread.start()
+            if self._on_run_started is not None:
+                self._on_run_started()
             return {
                 "ok": True,
                 "isBatch": True,
                 "jobId": job_id,
+                "priority": job.priority,
                 "objectId": object_id,
+                "resourceKey": _run_resource_key(run_object.directory),
                 "name": run_object.labels.name,
                 "equilibrium": None,
                 "identityRecovery": None,
@@ -2935,17 +3226,22 @@ class Api:
             }
 
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
-        self._object_worker = object_runner.start_object_run(
-            object_id,
-            message_queue,
-            pairwise_max_demes=self._preferences.pairwise_max_demes,
-            view_level=lambda: self._jobs.view_level(job_id),
-        )
-        logger.info("saved run starting: %s", object_id)
         equilibrium = _equilibrium_reference_payload(params, FULL_PRECISION_DIGITS)
         identity_recovery = _identity_recovery_reference_payload(params)
         closed_form = _closed_form_trajectory_payload(params)
-        self._drain_thread = threading.Thread(
+        try:
+            self._start_object_child(
+                object_id,
+                params,
+                run_id,
+                job_id,
+                message_queue,
+                results=results_root,
+            )
+        except (OSError, RuntimeError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        logger.info("saved run starting: %s", object_id)
+        drain_thread = threading.Thread(
             target=self._drain_then_release,
             args=(
                 _drain_run_messages,
@@ -2955,7 +3251,7 @@ class Api:
                 params.d,
                 run_object.directory,
                 self._significant_digits,
-                self.get_live_deme_pair,
+                lambda: self.get_live_deme_pair(job_id),
                 self._on_message,
                 equilibrium,
                 identity_recovery,
@@ -2965,21 +3261,96 @@ class Api:
                 "publisher": self._publisher,
                 "job_admission": self._jobs,
                 "job_id": job_id,
+                "study_id": effective_study_id,
+                "run_details": run_details,
             },
             daemon=True,
         )
-        self._drain_thread.start()
+        job.drain = drain_thread
+        self._refresh_legacy_job_state()
+        drain_thread.start()
+        if self._on_run_started is not None:
+            self._on_run_started()
         return {
             "ok": True,
             "isBatch": False,
             "jobId": job_id,
+            "priority": job.priority,
             "objectId": object_id,
+            "resourceKey": _run_resource_key(run_object.directory),
             "name": run_object.labels.name,
             "equilibrium": equilibrium,
             "identityRecovery": identity_recovery,
             "closedForm": closed_form,
             "convergence": _convergence_reference_payload(params),
         }
+
+    def _start_object_child(
+        self,
+        object_id: str,
+        params: SimulationParams,
+        run_id: str,
+        job_id: str,
+        destination: queue.Queue[Any],
+        *,
+        results: Path,
+    ) -> None:
+        """Start and supervise one saved-run child process."""
+        record = self._jobs.active_job(job_id)
+        assert record is not None
+        child = jobs.start_child_job(
+            object_id,
+            results=results,
+            pairwise_max_demes=self._preferences.pairwise_max_demes,
+            priority=record.priority,
+        )
+        record.child = child
+        self._object_worker = child
+
+        def adapt_message(message: Any) -> Any:
+            """Render child progress at this job's current view level."""
+            if message[0] != "progress":
+                return message
+            return runner.progress_message(
+                message[6],
+                message[1],
+                params,
+                run_id,
+                view_level=self._jobs.view_level(job_id),
+            )
+
+        def unexpected_exit(exit_code: int | None) -> tuple[str, str]:
+            """Persist a crash as failed and provide the page's terminal message."""
+            message = (
+                "worker process exited without a terminal result "
+                f"(exit code {exit_code})"
+            )
+            try:
+                failed = object_bridge.fail_worker(object_id, message, results=results)
+                if failed.record.last_error is not None:
+                    message = failed.record.last_error.message
+            except (LifecycleError, OSError, ValueError) as error:
+                logger.error(
+                    "could not record GUI worker failure for %s: %s",
+                    object_id,
+                    error,
+                )
+                message = f"{message}; recording the failure also failed: {error}"
+            return ("error", message)
+
+        supervisor = threading.Thread(
+            target=jobs.forward_child_messages,
+            args=(child, destination),
+            kwargs={
+                "on_message": adapt_message,
+                "on_exit": unexpected_exit,
+            },
+            name=f"fim-gui-supervisor-{object_id}",
+            daemon=True,
+        )
+        record.supervisor = supervisor
+        self._object_supervisor = supervisor
+        supervisor.start()
 
     @_log_bridge_call
     def cancel_run_object(self, object_id: str) -> dict[str, Any]:
@@ -3033,14 +3404,18 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True}
 
-    def stop_active_work(self, timeout: float) -> None:
-        """Ask whatever is running to stop, and wait up to `timeout` seconds.
+    def stop_active_work(
+        self, timeout: float, *, wait_for_saved_run: bool = True
+    ) -> None:
+        """Stop active work and optionally wait for a saved-run child.
 
         Called after the window closes, so closing never leaves a worker
         thread to hold the process open until the deadman fires: a saved
         run checkpoints and pauses (and resumes later), a run, batch, or
-        sweep is cancelled. A worker that misses the bound is logged, and
-        the deadman still ends the process.
+        sweep is cancelled. A saved-run child receives the pause request
+        and lifeline EOF but is not joined; its next safe point checkpoints
+        and pauses after the GUI exits. In-process workers that miss the
+        bound are logged, and the deadman still ends the process.
 
         `_drain_thread` is joined before the publisher is ever told to
         stop accepting (`self._drain_thread`'s own comment in `__init__`
@@ -3051,22 +3426,62 @@ class Api:
 
         Args:
             timeout: Longest total wait for the workers, in seconds.
+            wait_for_saved_run: Wait for the saved-run child and its
+                publishers; false at application shutdown, where its
+                pause request and lifeline EOF must not delay quitting.
         """
         self._request_stop_active_work()
         deadline = time.monotonic() + timeout
-        for label, worker in (
-            ("saved run", self._object_worker),
-            ("run", self._run_worker),
-            ("sweep", self._sweep_thread),
-            ("drain", self._drain_thread),
-        ):
-            if worker is None:
-                continue
-            worker.join(max(0.0, deadline - time.monotonic()))
-            if worker.is_alive():
-                logger.warning("%s did not stop before exit", label)
+        active_jobs = self._jobs.active_jobs()
+        if active_jobs:
+            for job in active_jobs:
+                self._wait_for_job_shutdown(job, deadline, wait_for_saved_run)
+        else:
+            self._wait_for_legacy_shutdown(deadline, wait_for_saved_run)
         if not self._publisher.stop(max(0.0, deadline - time.monotonic())):
             logger.warning("publisher did not finish its backlog before exit")
+
+    def _wait_for_job_shutdown(
+        self, job: jobs.JobRecord, deadline: float, wait_for_saved_run: bool
+    ) -> None:
+        """Wait for one registered job's workers within the shared deadline."""
+        if job.child is not None and wait_for_saved_run:
+            _join_shutdown_worker(job.child, "saved run", deadline, job.job_id)
+        elif job.child is not None:
+            logger.debug(
+                "saved run child will pause after GUI exit: %s",
+                job.active_object_id,
+            )
+        job_workers = (
+            ("worker", job.worker),
+            ("sweep", job.supervisor if job.kind == "sweep" else None),
+            ("saved run supervisor", job.supervisor if job.child else None),
+            ("drain", job.drain),
+        )
+        for label, worker in job_workers:
+            if worker is not None:
+                _join_shutdown_worker(worker, label, deadline, job.job_id)
+
+    def _wait_for_legacy_shutdown(
+        self, deadline: float, wait_for_saved_run: bool
+    ) -> None:
+        """Wait for pre-registry workers while legacy paths remain supported."""
+        if self._object_worker is not None and wait_for_saved_run:
+            _join_shutdown_worker(self._object_worker, "saved run", deadline)
+        workers = (
+            ("run", self._run_worker),
+            ("sweep", self._sweep_thread),
+            ("saved run supervisor", self._object_supervisor),
+            ("drain", self._drain_thread),
+        )
+        for label, worker in workers:
+            if worker is not None:
+                _join_shutdown_worker(worker, label, deadline)
+        if self._object_worker is not None and not wait_for_saved_run:
+            logger.debug(
+                "saved run child will pause after GUI exit: %s",
+                self._active_object_id,
+            )
 
     def on_window_closing(self, window: _EvaluatesJs) -> bool:
         """Decide a close the user started: let it go, or ask first.
@@ -3107,29 +3522,60 @@ class Api:
 
     def _close_requirements(self) -> dict[str, Any]:
         """Return the documents and active job affected by closing."""
-        saved_run = self._active_object_id is not None
-        active_job: dict[str, str] | None = None
-        if self._sweep_cancel_event is not None:
-            active_job = {
-                "kind": "sweep",
-                "id": self._sweep_study_id or self._job_id or "unknown",
+        active_jobs = self._jobs.active_jobs()
+        jobs_payload = [
+            {
+                "kind": (
+                    "saved run"
+                    if job.kind == "saved-run" or job.active_object_id is not None
+                    else job.kind
+                ),
+                "id": job.active_object_id or job.study_id or job.job_id,
+                "jobId": job.job_id,
             }
-        elif self._run_in_flight:
-            active_job = {
-                "kind": "saved run" if saved_run else "run",
-                "id": self._active_object_id or self._job_id or "unknown",
-            }
+            for job in active_jobs
+        ]
+        if not jobs_payload and self._sweep_cancel_event is not None:
+            jobs_payload.append(
+                {
+                    "kind": "sweep",
+                    "id": self._sweep_study_id or self._job_id or "unknown",
+                    "jobId": self._job_id or "unknown",
+                }
+            )
+        elif not jobs_payload and self._active_object_id is not None:
+            jobs_payload.append(
+                {
+                    "kind": "saved run",
+                    "id": self._active_object_id,
+                    "jobId": self._job_id or "unknown",
+                }
+            )
+        elif not jobs_payload and self._run_in_flight:
+            jobs_payload.append(
+                {
+                    "kind": "saved run" if self._active_object_id else "run",
+                    "id": self._active_object_id or self._job_id or "unknown",
+                    "jobId": self._job_id or "unknown",
+                }
+            )
+        saved_run = any(
+            job["kind"] in ("saved-run", "saved run") for job in jobs_payload
+        )
+        run = any(job["kind"] == "run" for job in jobs_payload)
+        sweep = any(job["kind"] == "sweep" for job in jobs_payload)
         return {
             "unsavedEdits": (
                 self._close_gate.unsaved_edits or bool(self._close_gate.dirty_documents)
             ),
             "savedRun": saved_run,
-            "run": self._run_in_flight and not saved_run,
-            "sweep": self._sweep_cancel_event is not None,
+            "run": run,
+            "sweep": sweep,
             "dirtyDocuments": [
                 dict(document) for document in self._close_gate.dirty_documents
             ],
-            "activeJob": active_job,
+            "activeJob": jobs_payload[0] if len(jobs_payload) == 1 else None,
+            "activeJobs": jobs_payload,
         }
 
     def _ask_page_to_confirm_close(self, window: _EvaluatesJs) -> None:
@@ -3164,15 +3610,28 @@ class Api:
         threading.Thread(target=ask, name="fim-confirm-close", daemon=True).start()
 
     def _request_stop_active_work(self) -> None:
-        """Ask the running saved run to pause, or the run or sweep to cancel."""
-        object_id = self._active_object_id
-        if object_id is not None:
-            with contextlib.suppress(LifecycleError):
-                object_bridge.pause(object_id)
-        elif self._run_in_flight and self._cancel_event is not None:
-            self._cancel_event.set()
-        if self._sweep_cancel_event is not None:
-            self._sweep_cancel_event.set()
+        """Pause saved runs and cancel every other active job."""
+        active_jobs = self._jobs.active_jobs()
+        if not active_jobs:
+            object_id = self._active_object_id
+            if object_id is not None:
+                with contextlib.suppress(LifecycleError, OSError):
+                    object_bridge.pause(object_id)
+                if self._object_worker is not None:
+                    self._object_worker.close_lifeline()
+            elif self._cancel_event is not None:
+                self._cancel_event.set()
+            if self._sweep_cancel_event is not None:
+                self._sweep_cancel_event.set()
+            return
+        for job in active_jobs:
+            if job.active_object_id is not None:
+                with contextlib.suppress(LifecycleError, OSError):
+                    object_bridge.pause(job.active_object_id)
+                if job.child is not None:
+                    job.child.close_lifeline()
+            elif job.cancel_event is not None:
+                job.cancel_event.set()
 
     @_log_bridge_call
     def close_requirements(self) -> dict[str, Any]:
@@ -5173,6 +5632,92 @@ class Api:
         return self._preferences.pairwise_max_demes
 
     @_log_bridge_call
+    def get_background_work_settings(self) -> dict[str, Any]:
+        """Return saved background-work settings and the derived CPU budget."""
+        usable_cores = jobs.usable_core_count()
+        reserved_cores = jobs.reserved_core_count(
+            usable_cores,
+            self._preferences.reserved_cores,
+            self._preferences.reserved_cores_percent,
+        )
+        reserve_mode = (
+            "percent"
+            if self._preferences.reserved_cores_percent is not None
+            else "cores"
+        )
+        reserve_value = (
+            self._preferences.reserved_cores_percent
+            if reserve_mode == "percent"
+            else self._preferences.reserved_cores
+        )
+        return {
+            "runPriority": self._preferences.run_priority,
+            "reserveMode": reserve_mode,
+            "reserveValue": reserve_value,
+            "usableCores": usable_cores,
+            "reservedCores": reserved_cores,
+            "workerBudget": self._worker_budget(),
+            "memoryReserveMode": self._preferences.memory_reserve_mode,
+            "memoryReserveValue": self._preferences.memory_reserve_value,
+        }
+
+    @_log_bridge_call
+    def set_background_work_settings(
+        self,
+        run_priority: str,
+        reserve_mode: str,
+        reserve_value: int,
+        memory_reserve_mode: str = "auto",
+        memory_reserve_value: int = 0,
+    ) -> dict[str, Any]:
+        """Save priority and CPU/memory reserves for jobs started afterward."""
+        try:
+            self._preferences = self._preferences.with_background_work_settings(
+                run_priority=run_priority,
+                reserve_mode=reserve_mode,
+                reserve_value=reserve_value,
+                memory_reserve_mode=memory_reserve_mode,
+                memory_reserve_value=memory_reserve_value,
+            )
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, **self.get_background_work_settings()}
+
+    @_log_bridge_call
+    def get_memory_status(self) -> dict[str, Any]:
+        """Return current memory availability and pause controls when needed."""
+        active_jobs = self._jobs.active_jobs()
+        if not active_jobs:
+            return {"ok": True, "warning": False, "jobs": []}
+        try:
+            reading = jobs.read_memory()
+            reserve = jobs.memory_reserve_bytes(
+                reading.total_bytes,
+                self._preferences.memory_reserve_mode,
+                self._preferences.memory_reserve_value,
+            )
+        except (jobs.MemoryReadError, ValueError) as error:
+            return {"ok": False, "message": str(error), "jobs": []}
+        warning = reading.available_bytes < reserve
+        warning_jobs = [
+            {
+                "jobId": job.job_id,
+                "name": job.display_name or f"{job.kind.capitalize()} {job.job_id[:8]}",
+                "kind": job.kind,
+            }
+            for job in active_jobs
+        ]
+        return {
+            "ok": True,
+            "warning": warning,
+            "availableBytes": reading.available_bytes,
+            "totalBytes": reading.total_bytes,
+            "reservedBytes": reserve,
+            "jobs": warning_jobs if warning else [],
+        }
+
+    @_log_bridge_call
     def set_pairwise_max_demes(self, max_demes: int) -> dict[str, Any]:
         """Set the largest deme count whose runs save every pair's statistics.
 
@@ -5213,7 +5758,7 @@ class Api:
         return warnings
 
     @_log_bridge_call
-    def get_live_deme_pair(self) -> tuple[int, int] | None:
+    def get_live_deme_pair(self, job_id: str | None = None) -> tuple[int, int] | None:
         """Return the deme pair the Progress screen's live selector wants, or `None`.
 
         A bound-method reference to *this*, not a snapshot of its
@@ -5223,11 +5768,17 @@ class Api:
         tick, so a selection made mid-run affects the very next push,
         unlike `_significant_digits`'s own thread-start snapshot.
         """
-        return self._live_deme_pair
+        record = self._active_run_record(job_id)
+        if record is not None:
+            return record.live_deme_pair
+        return self._live_deme_pair if job_id is None else None
 
     @_log_bridge_call
     def set_live_deme_pair(
-        self, first_deme: int | None, second_deme: int | None
+        self,
+        first_deme: int | None,
+        second_deme: int | None,
+        job_id: str | None = None,
     ) -> dict[str, Any]:
         """Set (or clear) the deme pair a running simulation's progress pushes include.
 
@@ -5266,10 +5817,22 @@ class Api:
             `{"ok": True}` always — nothing here can fail validation on
             its own terms; see the docstring above for why.
         """
-        if first_deme is None or second_deme is None:
-            self._live_deme_pair = None
-        else:
-            self._live_deme_pair = (first_deme, second_deme)
+        record = self._active_run_record(job_id)
+        if record is None:
+            if job_id is not None or self._jobs.active_jobs():
+                return {"ok": False, "message": "no active run"}
+            self._live_deme_pair = (
+                None
+                if first_deme is None or second_deme is None
+                else (first_deme, second_deme)
+            )
+            return {"ok": True}
+        record.live_deme_pair = (
+            None
+            if first_deme is None or second_deme is None
+            else (first_deme, second_deme)
+        )
+        self._refresh_legacy_job_state()
         return {"ok": True}
 
     @_log_bridge_call
@@ -5965,18 +6528,57 @@ class Api:
     ) -> dict[str, Any]:
         """Describe how the sweep would spread its points over the machine."""
         at_once, max_workers = self._sweep_run_options(values, request)
+        params = SimulationParams.from_mapping(point_params)
+        budget = self._worker_budget()
+        remaining = self._remaining_worker_cores()
         chosen = resolve_concurrency(
             points=points,
-            params=SimulationParams.from_mapping(point_params),
+            params=params,
             requested=at_once,
             max_workers=max_workers,
+            cores=self._sweep_core_limit(at_once, remaining, budget),
         )
+        required = chosen.points_at_once * (chosen.workers_per_point or 1)
         return {
             "pointsAtOnce": chosen.points_at_once,
             "workersPerPoint": chosen.workers_per_point,
-            "cores": chosen.cores,
+            "cores": required,
             "automatic": at_once is None,
+            "remainingCores": remaining,
+            "admissible": remaining > 0 and required <= remaining,
         }
+
+    @staticmethod
+    def _sweep_core_limit(requested: int | None, remaining: int, budget: int) -> int:
+        """Use half the full budget for auto, all remaining capacity if explicit."""
+        if requested is None:
+            return max(1, min(remaining, budget // 2))
+        return max(1, remaining)
+
+    def _sweep_required_cores(
+        self,
+        params: SimulationParams,
+        points: int,
+        requested: int | None,
+        max_workers: int | None,
+    ) -> tuple[int, int, int, int]:
+        """Return requested points, per-point workers, and total slot demand."""
+        budget = self._worker_budget()
+        remaining = self._remaining_worker_cores()
+        execution_cores = self._sweep_core_limit(requested, remaining, budget)
+        chosen = resolve_concurrency(
+            points=points,
+            params=params,
+            requested=requested,
+            max_workers=max_workers,
+            cores=execution_cores,
+        )
+        return (
+            chosen.points_at_once,
+            chosen.workers_per_point or 1,
+            chosen.points_at_once * (chosen.workers_per_point or 1),
+            execution_cores,
+        )
 
     @_log_bridge_call
     def start_sweep(
@@ -5985,6 +6587,7 @@ class Api:
         request: dict[str, Any],
         study_id: str | None = None,
         confirmed: bool = False,
+        memory_confirmed: bool = False,
     ) -> dict[str, Any]:
         """Run the Configure form as a sweep, into a Study, on a background thread.
 
@@ -6003,10 +6606,8 @@ class Api:
             `{"ok": False, "message": ...}`, with `"needsConfirmation":
             True (and `"total"`) for an unconfirmed large plan.
         """
-        busy = self._claim_sweep()
-        if busy is not None:
-            return {"ok": False, "message": busy}
         started = False
+        job: jobs.JobRecord | None = None
         try:
             window = _active_window()
             if window is None:
@@ -6024,34 +6625,62 @@ class Api:
                             "run again to confirm"
                         ),
                     }
+                at_once, max_workers = self._sweep_run_options(values, request)
+                params = SimulationParams.from_mapping(spec.base)
+                _chosen_points, _workers_per_point, required, execution_cores = (
+                    self._sweep_required_cores(
+                        params,
+                        len(plan.points),
+                        at_once,
+                        max_workers,
+                    )
+                )
+                remaining = self._remaining_worker_cores()
+                admission_refusal: dict[str, Any] | None
+                if required > remaining:
+                    admission_refusal = {
+                        "ok": False,
+                        "message": self._capacity_refusal(required, remaining),
+                    }
+                else:
+                    admission_refusal = self._memory_admission_response(
+                        params, required, confirmed=memory_confirmed
+                    )
+                if admission_refusal is not None:
+                    return admission_refusal
+                job, refusal = self._admit_sweep(required)
+                if refusal is not None or job is None:
+                    return {"ok": False, "message": refusal}
                 if study_id:
                     study = attach_sweep_to_study(study_id, spec, plan)
                 else:
                     study = create_sweep_study(spec, plan, _default_sweep_name(spec))
+                job.display_name = study.name
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
-            at_once, max_workers = self._sweep_run_options(values, request)
-            job_id = self._job_id
-            assert job_id is not None
+            assert job is not None
             self._start_sweep_thread(
                 window,
                 study.study_id,
+                job_id=job.job_id,
                 retry_failed=False,
                 points_at_once=at_once,
                 max_workers=max_workers,
+                cores=execution_cores,
             )
             started = True
             return {
                 "ok": True,
                 "studyId": study.study_id,
                 "total": len(plan.points),
-                "jobId": job_id,
+                "jobId": job.job_id,
+                "priority": job.priority,
             }
         finally:
             # Nothing started means no sweep thread will ever release the
             # claim, so release it here (`start_run`'s identical pattern).
-            if not started:
-                self._release_sweep_claim()
+            if not started and job is not None:
+                self._release_sweep_claim(job.job_id)
 
     @_log_bridge_call
     def resume_sweep(
@@ -6060,6 +6689,7 @@ class Api:
         retry_failed: bool = False,
         points_at_once: int | None = None,
         rerun: bool = False,
+        memory_confirmed: bool = False,
     ) -> dict[str, Any]:
         """Run the points of an existing sweep Study that are still missing.
 
@@ -6074,45 +6704,117 @@ class Api:
                 is recorded as the sweep's verification.
 
         Returns:
-            `{"ok": True, "studyId": ..., "jobId": ...}`, or `{"ok":
-            False, "message": ...}` if a run or another sweep is in
-            progress or the Study is not a sweep.
+            `{"ok": True, "studyId": ..., "jobId": ...}` when work starts,
+            `{"ok": True, "studyId": ..., "jobId": None, "noWork": True}`
+            when nothing needs to run, or `{"ok": False, "message": ...}`.
         """
-        busy = self._claim_sweep()
-        if busy is not None:
-            return {"ok": False, "message": busy}
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
+        return self._resume_sweep_with_window(
+            window,
+            study_id,
+            retry_failed=retry_failed,
+            points_at_once=points_at_once,
+            rerun=rerun,
+            memory_confirmed=memory_confirmed,
+        )
+
+    def _resume_sweep_with_window(
+        self,
+        window: _EvaluatesJs,
+        study_id: str,
+        *,
+        retry_failed: bool,
+        points_at_once: int | None,
+        rerun: bool,
+        memory_confirmed: bool,
+    ) -> dict[str, Any]:
+        """Admit and start one Study's pending sweep work."""
         started = False
+        job: jobs.JobRecord | None = None
         try:
-            window = _active_window()
-            if window is None:
-                return {"ok": False, "message": "no active window"}
             try:
                 study = groups.get_study(study_id)
                 sweep_bridge.status_payload(study)
+                pending_points = pending_sweep_point_count(
+                    study_id,
+                    retry_failed=retry_failed,
+                    rerun=rerun,
+                )
             except ValueError as error:
                 return {"ok": False, "message": str(error)}
+            if pending_points == 0:
+                return {
+                    "ok": True,
+                    "studyId": study_id,
+                    "jobId": None,
+                    "noWork": True,
+                }
             saved = self._merge_default_run_settings({})
-            job_id = self._job_id
-            assert job_id is not None
+            spec = sweep_spec_of(study)
+            max_workers = _parse_max_workers(saved.get("max_workers", ""))
+            params = SimulationParams.from_mapping(spec.base)
+            _chosen_points, _workers_per_point, required, execution_cores = (
+                self._sweep_required_cores(
+                    params,
+                    pending_points,
+                    points_at_once,
+                    max_workers,
+                )
+            )
+            remaining = self._remaining_worker_cores()
+            if required > remaining:
+                return {
+                    "ok": False,
+                    "message": self._capacity_refusal(required, remaining),
+                }
+            memory_response = self._memory_admission_response(
+                params, required, confirmed=memory_confirmed
+            )
+            if memory_response is not None:
+                return memory_response
+            job, refusal = self._admit_sweep(required)
+            if refusal is not None or job is None:
+                return {"ok": False, "message": refusal}
+            job.display_name = study.name
             self._start_sweep_thread(
                 window,
                 study_id,
+                job_id=job.job_id,
                 retry_failed=retry_failed,
                 rerun=rerun,
                 points_at_once=points_at_once,
-                max_workers=_parse_max_workers(saved.get("max_workers", "")),
+                max_workers=max_workers,
+                cores=execution_cores,
             )
             started = True
-            return {"ok": True, "studyId": study_id, "jobId": job_id}
+            return {
+                "ok": True,
+                "studyId": study_id,
+                "jobId": job.job_id,
+                "priority": job.priority,
+            }
         finally:
-            if not started:
-                self._release_sweep_claim()
+            if not started and job is not None:
+                self._release_sweep_claim(job.job_id)
 
     @_log_bridge_call
-    def cancel_sweep(self) -> None:
-        """Stop the running sweep: the current point is cancelled, the rest skipped."""
-        if self._sweep_cancel_event is not None:
-            self._sweep_cancel_event.set()
+    def cancel_sweep(self, job_id: str | None = None) -> None:
+        """Stop one sweep: its current point is cancelled, and the rest skipped."""
+        active = tuple(job for job in self._jobs.active_jobs() if job.kind == "sweep")
+        record = (
+            next((job for job in active if job.job_id == job_id), None)
+            if job_id is not None
+            else active[0]
+            if len(active) == 1
+            else None
+        )
+        cancel_event = record.cancel_event if record is not None else None
+        if not active and job_id is None:
+            cancel_event = self._sweep_cancel_event
+        if cancel_event is not None:
+            cancel_event.set()
 
     @_log_bridge_call
     def get_sweep_status(self, study_id: str) -> dict[str, Any]:
@@ -6121,8 +6823,13 @@ class Api:
             payload = sweep_bridge.status_payload(groups.get_study(study_id))
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        payload["active"] = self._sweep_study_id == study_id and (
-            self._sweep_cancel_event is not None
+        payload["active"] = any(
+            job.kind == "sweep" and job.study_id == study_id
+            for job in self._jobs.active_jobs()
+        ) or (
+            not self._jobs.active_jobs()
+            and self._sweep_cancel_event is not None
+            and self._sweep_study_id == study_id
         )
         return payload
 
@@ -6433,25 +7140,23 @@ class Api:
         window: _EvaluatesJs,
         study_id: str,
         *,
+        job_id: str,
         retry_failed: bool,
         rerun: bool = False,
         points_at_once: int | None = None,
         max_workers: int | None = None,
+        cores: int,
     ) -> None:
         """Run `study_id`'s sweep on a daemon thread, pushing each event.
 
-        `self._sweep_cancel_event` is already set, by `_claim_sweep`, to
-        the exact event this run must watch and `cancel_sweep` must set --
-        read back here, not recreated, or `cancel_sweep`'s own call would
-        set a different event than the one `run_sweep` is actually
-        watching. `self._job_id`, likewise minted by `_claim_sweep`, is
-        read back the same way.
+        The registry record owns this sweep's cancellation event, id, and
+        reservation; the thread never reads mutable state from another job.
         """
-        cancel_event = self._sweep_cancel_event
-        assert cancel_event is not None  # `_claim_sweep` always sets it first
-        job_id = self._job_id
-        assert job_id is not None  # `_claim_sweep` always mints it first
-        self._sweep_study_id = study_id
+        record = self._jobs.active_job(job_id)
+        assert record is not None and record.cancel_event is not None
+        cancel_event = record.cancel_event
+        record.study_id = study_id
+        self._refresh_legacy_job_state()
 
         def push(event: SweepEvent) -> None:
             _push_sweep_event(window, event, self._publisher, self._jobs, job_id)
@@ -6469,6 +7174,9 @@ class Api:
                     rerun=rerun,
                     points_at_once=points_at_once,
                     max_workers=max_workers,
+                    cores=cores,
+                    process_points=True,
+                    priority=record.priority,
                     max_attempts=DEFAULT_SWEEP_MAX_ATTEMPTS,
                 )
             except Exception as error:
@@ -6487,7 +7195,7 @@ class Api:
 
                 def release_after_finished() -> None:
                     """Release the sweep slot after the page evaluates `finished`."""
-                    self._release_sweep_claim(retain_snapshot=True)
+                    self._release_sweep_claim(job_id, retain_snapshot=True)
                     delivered.set()
 
                 _push_job_event(
@@ -6501,8 +7209,10 @@ class Api:
                 )
                 delivered.wait()
 
-        self._sweep_thread = threading.Thread(target=work, daemon=True)
-        self._sweep_thread.start()
+        thread = threading.Thread(target=work, daemon=True)
+        record.supervisor = thread
+        self._refresh_legacy_job_state()
+        thread.start()
 
     @_log_bridge_call
     def copy_experiment(self, experiment_id: str, name: str) -> dict[str, Any]:
@@ -8461,6 +9171,13 @@ def _parse_max_workers(value: str) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def _gui_sweep_core_budget() -> int:
+    """Return the GUI sweep budget, leaving half the cores for other work."""
+    process_cpu_count = getattr(os, "process_cpu_count", None)
+    cpu_count = process_cpu_count() if process_cpu_count is not None else None
+    return max(1, (cpu_count or os.cpu_count() or 1) // 2)
+
+
 def _parse_generation(mode: str, generation_text: str) -> int | None:
     """Parse Screen 6's "final"/"choose" generation selector.
 
@@ -8789,7 +9506,7 @@ def _batch_done_payload(
     params: SimulationParams,
     run_id: str,
     output_directory: Path,
-    results: tuple[RunResult, ...],
+    results: tuple[RunResult | GuiRunResult, ...],
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
 ) -> dict[str, Any]:
     """Build `fim.onBatchDone`'s own payload from a batch's final results.
@@ -8858,7 +9575,12 @@ def _batch_done_payload(
     pooling `panels`, just above, already applies to the scatter panel.
     """
     try:
-        raw_pooled_histories = pooled_convergence_histories(results)
+        raw_pooled_histories = pooled_convergence_histories_from_pairs(
+            [
+                (result.convergence_generations, result.convergence_histories)
+                for result in results
+            ]
+        )
     except ValueError:
         raw_pooled_histories = {}
     pooled_convergence_histories_payload = _pooled_histories_payload(
@@ -10217,10 +10939,8 @@ def _install_shutdown_signal_handlers(api: Api, timeout_seconds: float) -> None:
     (`20260928-claude-sonnet-5-shutdown-signal-handling-design.md`,
     `selby/restricted`).
 
-    The installed handler does exactly what clicking "Cancel" already
-    does — set `api`'s own `_cancel_event`, which every live worker's
-    `LiveProgressStore` already checks before each generation's write
-    (`fim.gui.batch_runner`) — then arms the existing shutdown deadman
+    The installed handler asks every active job to stop through the same
+    per-job controls as window close, then arms the existing shutdown deadman
     (`_start_shutdown_deadman`) so the process still exits in bounded
     time even if cooperative cancellation does not finish, and finally
     asks the active window to close so `webview.start()` returns and
@@ -10258,7 +10978,7 @@ def _install_shutdown_signal_handlers(api: Api, timeout_seconds: float) -> None:
         signal_name = signal.Signals(signum).name
         logger.warning("received %s; requesting shutdown", signal_name)
         print(f"fim: received {signal_name}; shutting down", file=sys.stderr)
-        api.cancel_run()
+        api._request_stop_active_work()
         _start_shutdown_deadman(timeout_seconds)
         window = _active_window()
         if window is not None:
@@ -10414,7 +11134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # should one miss this bound, the deadman still exits. The close
     # dialog has usually asked already, so this is the backstop for every
     # close that skipped it.
-    api.stop_active_work(_STOP_ON_CLOSE_SECONDS)
+    api.stop_active_work(_STOP_ON_CLOSE_SECONDS, wait_for_saved_run=False)
     return 0
 
 

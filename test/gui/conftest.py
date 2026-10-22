@@ -744,6 +744,19 @@ def _no_real_engine_probe(monkeypatch: pytest.MonkeyPatch) -> type[FastEnginePro
 
 
 @pytest.fixture(autouse=True)
+def _stable_memory_reading(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep GUI tests independent of the host's available-memory pressure."""
+    from fim.gui import jobs  # noqa: PLC0415
+
+    gibibyte = jobs.GIB_BYTES
+    monkeypatch.setattr(
+        jobs,
+        "read_memory",
+        lambda: jobs.MemoryReading(64 * gibibyte, 48 * gibibyte),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _reap_leaked_webkit_helpers() -> Iterator[None]:
     """Reap leaked `WebKit*` helper processes, package-wide, across two passes.
 

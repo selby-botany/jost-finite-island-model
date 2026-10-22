@@ -856,6 +856,15 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going(
             window.evaluate_js("document.getElementById('run-button').click();")
             wait_or_fail(started_event, "run start (on_run_started)")
             poll_or_fail(
+                lambda: window.evaluate_js(
+                    "window.fim.workspace.settled("
+                    "window.fim.workspace.selectedId(), 'runStart')"
+                ),
+                lambda settled: settled is True,
+                "Run start response",
+                interval=_READY_POLL_INTERVAL_SECONDS,
+            )
+            poll_or_fail(
                 lambda: progress_count,
                 lambda count: count >= 2,
                 "progress message 2",
@@ -871,7 +880,18 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going(
                 ".map((row) => row.dataset.trajectoryStatistic), "
                 "overlayLegendNames: Array.from("
                 "document.querySelectorAll('#run-trajectory-legend .legend-item'))"
-                ".map((span) => span.textContent).filter((text) => text)"
+                ".map((span) => span.textContent).filter((text) => text), "
+                "liveRun: (() => {"
+                "const state = window.fim.workspace.get("
+                "window.fim.workspace.selectedId()).liveRun; "
+                "return {"
+                "generations: state.liveTrajectoryGenerations.length, "
+                "equilibrium: Boolean(state.liveEquilibriumReference), "
+                "identityRecovery: Boolean(state.liveIdentityRecoveryReference), "
+                "closedForm: Boolean(state.liveClosedForm), "
+                "convergence: Boolean(state.liveConvergence), "
+                "lastFrame: Boolean(state.lastRenderedFrame)"
+                "}; })()"
                 "})"
             )
             settled["frameHiddenBeforeStart"] = frame_hidden_before_start
@@ -901,6 +921,12 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going(
         "K_ST",
         "MI",
     ]
+    assert settled["liveRun"]["generations"] > 0
+    assert settled["liveRun"]["equilibrium"] is True
+    assert settled["liveRun"]["identityRecovery"] is True
+    assert settled["liveRun"]["closedForm"] is True
+    assert settled["liveRun"]["convergence"] is True
+    assert settled["liveRun"]["lastFrame"] is True
     assert settled["overlayLegendNames"] == ["expected trajectory (closed form)"]
 
 

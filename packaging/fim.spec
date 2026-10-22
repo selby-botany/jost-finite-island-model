@@ -34,7 +34,7 @@ analysis = Analysis(
     # carry one) without any `hookspath` entry here, and on Windows that
     # hook additionally collects `webview`'s own `lib` subdirectory (the
     # WebView2 loader) automatically.
-    hiddenimports=["matplotlib.backends.backend_agg", "webview"],
+    hiddenimports=["matplotlib.backends.backend_agg", "psutil", "webview"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

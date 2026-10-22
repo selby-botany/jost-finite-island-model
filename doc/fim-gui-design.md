@@ -84,6 +84,7 @@ as the repository documentation (§11).
 | `fim.gui.config_form` | Pure, pywebview-free marshaling between `SimulationParams`, the form's `dict[str, str]`, and `SimulationParams.from_mapping`'s payload shape (§6). |
 | `fim.gui.runner` | Background-thread orchestration for a single scalar run (§7.1). |
 | `fim.gui.batch_runner` | Background-thread orchestration for a multi-replicate batch, using real OS worker processes (§7.2). |
+| `fim.gui.jobs` | Per-job child-process state, worker reservations, priority, memory estimates, and ordered event snapshots (§7.4). |
 | `fim.gui.store` | `GuiProgressStore`/`LiveProgressStore` — the two `TrajectoryStore`-decorating progress/cancellation mechanisms §7.1/§7.2 use. |
 | `fim.gui.animation` | Samples a persisted trajectory into raw scatter coordinates for client-side playback (§8). |
 | `fim.gui.recent_runs` | Scans `results/` for completed scalar/batch runs (§9). |
@@ -314,6 +315,31 @@ Two calls in one second can select the same path. `start_run` uses a
 bounded wait for a distinct timestamp before reporting a directory
 collision.
 
+### 7.4 Concurrent jobs and memory safeguards
+
+Each GUI job owns a child process and reserves worker slots in the shared
+`JobAdmission` registry. The configured logical-core reserve is rounded up
+when expressed as a percentage; newly admitted work cannot exceed the
+remaining worker budget. Priority is captured when a job starts and applied
+in its child before importing NumPy.
+
+Settings also keeps a physical-memory reserve. **Automatic** reserves the
+larger of 2 GiB and 10% of physical memory. A custom reserve is a whole
+number of GiB or a percentage rounded up to bytes. Before starting, the GUI
+compares current available memory minus the new job's estimate with that
+reserve and asks for confirmation if the estimate would cross it. The
+estimate uses the largest readable RSS among active child workers, or 256
+MiB per worker when no RSS is available, plus the known initial dense
+vector block for Backend V.
+
+While jobs run, the page checks available memory every five seconds. If it
+falls below the reserve, a persistent warning lists each active job by its
+display name and offers **Pause**. A run's pause is a durable Run-object
+request and takes effect at a checkpoint. A sweep stops at its next
+resumable point; its Study retains completed points and can be continued
+later. A confirmation only authorizes the pending start attempt; it does
+not disable later memory warnings or change the saved reserve.
+
 ## 8. Animation
 
 `fim.gui.animation.pre_render_frames` samples at most
@@ -500,3 +526,14 @@ omit it because the pinned dependency set lacks compatible binary
 wheels. The engine selector labels options that require an unavailable
 dependency (§6.3). The dependency declarations and platform constraints
 are recorded in [`pyproject.toml`](../pyproject.toml).
+
+## Metadata
+
+```text
+generator-name: Copilot SDK
+generator-version: Copilot SDK in VS Code
+generator-model-token: copilot-sdk
+generator-provider: GitHub
+generation-date: 2026-10-21
+generator-responsibility: other
+```

@@ -1,26 +1,22 @@
-"""One run at a time: a second start is refused while a run is in flight.
+"""Run admission, document-level duplicate prevention, and job isolation.
 
-`Api.start_run` used to refuse only while a sweep ran, and the page kept
-"Run simulation" enabled during a run, so a second click -- or the Run
-menu, or Configure's own Run button -- started a second plain run. The
-second run took over the first's cancel event, worker and comparison
-target, and the first run's drain thread then cleared `_run_in_flight`
-while the second still ran, so closing the window could report nothing
-running. Both halves of the fix are pinned here: Python claims the one
-run slot under a lock (`Api._claim_run`), shared by `start_run` and
-`start_run_object`, and the page asks `Api.can_start_run` before it
-changes anything on screen (`startRunExclusively`).
+The worker budget permits concurrent work when capacity remains, while
+the same document cannot start a second run. Each job's cancel, worker,
+comparison, and live state belongs to its registry record. The page asks
+`Api.can_start_run` before changing its view, and preserves an unstarted
+draft when capacity is exhausted.
 
-No run here simulates anything: `fim.gui.runner.start_run` is replaced
-by `_HeldRuns.start_run`, whose run waits until the test releases it and
-then reports a cancellation. A run therefore stays in flight for exactly
-as long as a test needs, whatever the machine, and its drain thread
-pushes nothing to the page until it is released.
+No run here simulates anything: `fim.gui.jobs.start_child_job` is
+replaced with a fake child process that waits for the test to release it
+and then reports a cancellation. A run therefore stays in flight for
+exactly as long as a test needs, whatever the machine, and its drain
+thread pushes nothing to the page until it is released.
 """
 
 from __future__ import annotations
 
-import queue
+import json
+import sys
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -30,11 +26,11 @@ import pytest
 from conftest import poll_or_fail, wait_or_fail
 
 from fim.gui import app as app_module
-from fim.gui import runner
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
+from fim.gui.jobs import ChildJob
 from fim.gui.runner import RunMessage
-from fim.model.params import SimulationParams
+from fim.persistence.run_objects import read_run_object
 
 from .test_sweep_api import (  # noqa: F401
     _IDLE_POLL_SECONDS,
@@ -47,7 +43,6 @@ from .test_sweep_api import (  # noqa: F401
 from .test_sweep_screen import Poll, _drive
 
 _IN_PROGRESS = "a run is in progress; wait for it to finish or cancel it first"
-_SWEEP_RUNNING = "a sweep is running; wait for it or cancel it first"
 
 # True once the page has finished deciding its latest run start
 # (`startRunExclusively`), whether it started a run or refused one.
@@ -62,61 +57,74 @@ _RUN_CARD_STATE = """({
 
 
 class _HeldRuns:
-    """Stands in for `fim.gui.runner.start_run`: each run waits to be released.
+    """Stand in for the child worker used by `fim.gui.jobs`.
 
-    A released run reports `("cancelled", 0)`, the one terminal message
-    that needs no result, so its drain thread pushes `fim.onRunCancelled`
-    and then releases the run claim (`Api._drain_then_release`).
+    A released process reports `("cancelled", 0)`, the terminal message
+    needed by this scalar-run test, so the drain thread releases the claim.
     """
 
-    def __init__(self) -> None:
-        self.started: list[Path] = []
-        self._releases: list[threading.Event] = []
+    def __init__(self, factory: Any) -> None:
+        self.started: list[str] = []
+        self._factory = factory
+        self._children: list[tuple[ChildJob, Path]] = []
 
-    def start_run(
+    def start_child(
         self,
-        params: SimulationParams,
-        output_directory: Path,
-        message_queue: queue.Queue[RunMessage],
-        cancel_event: threading.Event,
-        **_options: Any,
-    ) -> threading.Thread:
-        """Start a worker thread that waits for `release_all`.
-
-        Args:
-            params: Unused; the run never simulates.
-            output_directory: Recorded, so a test can count starts.
-            message_queue: Where the run's terminal message goes.
-            cancel_event: Unused; only the test ends a held run.
-            **_options: The real runner's keyword options, unused.
-
-        Returns:
-            The started, not yet released, worker thread.
-        """
-        del params, cancel_event
-        release = threading.Event()
-        self._releases.append(release)
-        self.started.append(output_directory)
-
-        def work() -> None:
-            release.wait()
-            message_queue.put(("cancelled", 0))
-
-        worker = threading.Thread(target=work, name="held-run", daemon=True)
-        worker.start()
-        return worker
+        object_id: str,
+        **options: Any,
+    ) -> ChildJob:
+        """Start a child that waits for the test's explicit release."""
+        results_root = options["results"]
+        release_file = results_root / f".held-release-{object_id}"
+        child = self._factory(
+            object_id,
+            command=_fake_worker_command("held", object_id, release=release_file),
+            **options,
+        )
+        self._children.append((child, release_file))
+        self.started.append(object_id)
+        return child
 
     def release_all(self) -> None:
-        """Let every held run report its cancellation."""
-        for release in self._releases:
-            release.set()
+        """Let every held child report its cancellation."""
+        for _child, release_file in self._children:
+            release_file.touch()
+
+
+def _fake_worker_command(
+    mode: str,
+    object_id: str,
+    *,
+    release: Path | None = None,
+    summary_release: Path | None = None,
+    finish_release: Path | None = None,
+) -> list[str]:
+    """Build a controlled fake-worker command for one supervision test."""
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("fake_gui_job_worker.py")),
+        mode,
+        object_id,
+    ]
+    if release is not None:
+        command.extend(("--release", str(release)))
+    if summary_release is not None:
+        command.extend(("--summary-release", str(summary_release)))
+    if finish_release is not None:
+        command.extend(("--finish-release", str(finish_release)))
+    return command
 
 
 @pytest.fixture
 def held_runs(monkeypatch: pytest.MonkeyPatch) -> Iterator[_HeldRuns]:
-    """Replace the scalar runner with held runs, and release them all at the end."""
-    held = _HeldRuns()
-    monkeypatch.setattr(runner, "start_run", held.start_run)
+    """Replace child execution with held processes, then release them all."""
+    start_child_job = app_module.jobs.start_child_job
+    held = _HeldRuns(start_child_job)
+
+    def start_held_child(object_id: str, **options: Any) -> Any:
+        return held.start_child(object_id, **options)
+
+    monkeypatch.setattr(app_module.jobs, "start_child_job", start_held_child)
     try:
         yield held
     finally:
@@ -138,35 +146,140 @@ def _wait_until_no_run(instance: Api) -> None:
     )
 
 
-def test_a_second_run_is_refused_while_the_first_is_in_flight(
+def test_two_runs_reserve_and_control_distinct_jobs(
     api: Api,  # noqa: F811
     window: _FakeWindow,  # noqa: F811
     held_runs: _HeldRuns,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A second start is refused until the first run ends, then allowed again."""
+    """Held runs keep separate records; cancel targets only its selected job."""
     del window
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 2)
     first = api.start_run(_form())
     assert first["ok"] is True, first.get("message")
-    reservation = held_runs.started[0].parent / (
-        f".reserve-{held_runs.started[0].name}"
-    )
-    assert reservation.is_dir()
+    first_object_id = held_runs.started[0]
+    assert first["objectId"] == first_object_id
 
     second = api.start_run(_form())
 
-    assert second == {"ok": False, "message": _IN_PROGRESS}
-    assert api.can_start_run() == second
-    assert len(held_runs.started) == 1
+    assert second["ok"] is True, second.get("message")
+    assert second["jobId"] != first["jobId"]
+    assert second["objectId"] != first_object_id
+    assert api._jobs.active_job(first["jobId"]).active_object_id == first_object_id
+    assert api._jobs.active_job(second["jobId"]).active_object_id == second["objectId"]
+    assert len(api._jobs.active_jobs()) == 2
+
+    cancelled: list[str] = []
+
+    def record_cancel(object_id: str) -> str:
+        """Record which saved run received the cancellation request."""
+        cancelled.append(object_id)
+        return "cancelling"
+
+    monkeypatch.setattr(app_module.object_bridge, "cancel", record_cancel)
+    api.cancel_run(first["jobId"])
+    assert cancelled == [first_object_id]
+    assert api._jobs.active_job(second["jobId"]).active_object_id == second["objectId"]
 
     held_runs.release_all()
     _wait_until_no_run(api)
-    assert not reservation.exists()
-    assert api.can_start_run() == {"ok": True}
-    third = api.start_run(_form())
-    assert third["ok"] is True, third.get("message")
-    assert len(held_runs.started) == 2
-    held_runs.release_all()
+    assert api._jobs.active_jobs() == ()
+
+
+def test_child_progress_tracks_full_and_summary_view_levels(
+    api: Api,  # noqa: F811
+    results: Path,  # noqa: F811
+    window: _FakeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The supervisor renders each child tick at the job's current view level."""
+    start_child_job = app_module.jobs.start_child_job
+
+    def start_progress_child(object_id: str, **options: Any) -> ChildJob:
+        return start_child_job(
+            object_id,
+            command=_fake_worker_command(
+                "progress",
+                object_id,
+                summary_release=results / f".summary-release-{object_id}",
+                finish_release=results / f".finish-release-{object_id}",
+            ),
+            **options,
+        )
+
+    monkeypatch.setattr(app_module.jobs, "start_child_job", start_progress_child)
+    started = api.start_run(_form())
+    assert started["ok"] is True
+    summary_release = results / f".summary-release-{started['objectId']}"
+    finish_release = results / f".finish-release-{started['objectId']}"
+    progress_prefix = "fim.onRunProgress("
+    try:
+        poll_or_fail(
+            lambda: [
+                json.loads(script[len(progress_prefix) : -1])
+                for script in window.pushed
+                if script.startswith(progress_prefix)
+            ],
+            bool,
+            "first full-view child progress",
+            interval=_IDLE_POLL_SECONDS,
+        )
+        first_payload = next(
+            json.loads(script[len(progress_prefix) : -1])
+            for script in window.pushed
+            if script.startswith(progress_prefix)
+        )
+        assert "panels" in first_payload
+        assert api.set_job_view(started["jobId"], "summary")["ok"] is True
+        summary_release.touch()
+        poll_or_fail(
+            lambda: [
+                json.loads(script[len(progress_prefix) : -1])
+                for script in window.pushed
+                if script.startswith(progress_prefix)
+            ],
+            lambda payloads: len(payloads) >= 2,
+            "summary-view child progress",
+            interval=_IDLE_POLL_SECONDS,
+        )
+        payloads = [
+            json.loads(script[len(progress_prefix) : -1])
+            for script in window.pushed
+            if script.startswith(progress_prefix)
+        ]
+        assert "panels" not in payloads[-1]
+    finally:
+        summary_release.touch()
+        finish_release.touch()
     _wait_until_no_run(api)
+
+
+def test_child_crash_is_recorded_as_failed(
+    api: Api,  # noqa: F811
+    results: Path,  # noqa: F811
+    window: _FakeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exited child with an active attempt is recorded as failed."""
+    start_child_job = app_module.jobs.start_child_job
+
+    def start_crashing_child(object_id: str, **options: Any) -> ChildJob:
+        return start_child_job(
+            object_id,
+            command=_fake_worker_command("crash", object_id),
+            **options,
+        )
+
+    monkeypatch.setattr(app_module.jobs, "start_child_job", start_crashing_child)
+    started = api.start_run(_form())
+    assert started["ok"] is True
+    _wait_until_no_run(api)
+
+    run_object = read_run_object(started["objectId"], results=results)
+    assert run_object.record.state.value == "failed"
+    assert run_object.record.last_error is not None
+    assert "exit code 7" in run_object.record.last_error.message
+    assert any(script.startswith("fim.onRunError(") for script in window.pushed)
 
 
 def test_a_start_without_an_active_window_releases_its_reservation(
@@ -186,64 +299,77 @@ def test_a_start_without_an_active_window_releases_its_reservation(
 
 def test_a_refused_start_leaves_the_running_saved_run_alone(
     api: Api,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Refusing a plain run must not release the claim the saved run holds."""
-    api._run_in_flight = True
-    api._active_object_id = "saved-run"
+    """A full budget refuses a run without releasing existing reservations."""
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 1)
+    active, refusal = api._admit_run(object_id="saved-run")
+    assert refusal is None
+    assert active is not None
 
     refused = api.start_run(_form())
 
-    assert refused == {"ok": False, "message": _IN_PROGRESS}
-    assert (api._run_in_flight, api._active_object_id) == (True, "saved-run")
+    assert refused["ok"] is False
+    assert "only 0 remain" in refused["message"]
+    assert api._jobs.active_job(active.job_id) is active
 
 
-def test_a_saved_run_cannot_start_while_a_run_is_in_flight(
+def test_a_saved_run_already_active_cannot_be_started_twice(
     api: Api,  # noqa: F811
 ) -> None:
-    """`start_run_object` gives the same refusal, before reading the object."""
-    api._run_in_flight = True
+    """Admission rejects the same saved object while retaining its job."""
+    active, refusal = api._admit_run(kind="saved-run", object_id="saved-run")
+    assert refusal is None
+    assert active is not None
 
-    refused = api.start_run_object("never-read")
+    refused = api.start_run_object("saved-run")
 
-    assert refused == {"ok": False, "message": _IN_PROGRESS}
-    assert api._run_in_flight is True
-
-
-def test_a_sweep_in_flight_is_named_by_every_run_start(
-    api: Api,  # noqa: F811
-) -> None:
-    """The page's check and both run starts agree while a sweep runs."""
-    api._sweep_cancel_event = threading.Event()
-
-    assert api.can_start_run() == {"ok": False, "message": _SWEEP_RUNNING}
-    assert api.start_run(_form()) == {"ok": False, "message": _SWEEP_RUNNING}
-    assert api.start_run_object("never-read") == {
+    assert refused == {
         "ok": False,
-        "message": _SWEEP_RUNNING,
+        "message": "this saved run is already active",
     }
-    assert api._run_in_flight is False
+    assert api._jobs.active_job(active.job_id) is active
 
 
-def test_a_run_claim_and_a_sweep_claim_share_one_lock(
+def test_an_admitted_sweep_consumes_capacity_for_run_starts(
     api: Api,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`_claim_run` and `_claim_sweep` can never both see a free slot.
+    """The run check and both start paths report exhausted sweep capacity."""
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 1)
+    sweep, refusal = api._admit_sweep(1)
+    assert refusal is None
+    assert sweep is not None
 
-    Unlike the test above, which sets `_sweep_cancel_event` directly to
-    stand in for a running sweep, this calls `_claim_sweep` itself, so
-    it exercises the actual claim `start_sweep`/`resume_sweep` make
-    (`fim.gui.jobs.JobAdmission`'s own docstring on the race this
-    closes), not only the refusal a sweep already in flight gives.
-    """
-    assert api._claim_run() is None
-    assert api._claim_sweep() == "a run is in progress; wait for it to finish first"
-    api._release_run_claim()
-    assert api.can_start_run() == {"ok": True}
+    checked = api.can_start_run()
+    plain = api.start_run(_form())
+    saved = api.start_run_object("never-read")
 
-    assert api._claim_sweep() is None
-    assert api._claim_run() == _SWEEP_RUNNING
-    api._release_sweep_claim()
-    assert api.can_start_run() == {"ok": True}
+    for result in (checked, plain, saved):
+        assert result["ok"] is False
+        assert "only 0 remain" in result["message"]
+    assert api._jobs.active_job(sweep.job_id) is sweep
+
+
+def test_run_and_sweep_reservations_share_the_worker_budget(
+    api: Api,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two job kinds may coexist, but each consumes the same capacity."""
+    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 2)
+    run, refusal = api._admit_run()
+    assert refusal is None
+    assert run is not None
+
+    sweep, refusal = api._admit_sweep(1)
+
+    assert refusal is None
+    assert sweep is not None
+    assert {job.kind for job in api._jobs.active_jobs()} == {"run", "sweep"}
+    assert api._remaining_worker_cores() == 0
+    api._release_run_claim(run.job_id)
+    api._release_sweep_claim(sweep.job_id)
+    assert api._remaining_worker_cores() == 2
 
 
 @pytest.mark.parametrize(
@@ -261,7 +387,9 @@ def test_a_start_that_starts_nothing_releases_the_claim(
 ) -> None:
     """Reusing a computed run, or failing to start one, leaves no run in flight."""
 
-    def started_nothing(self: Api, *_arguments: Any) -> dict[str, Any]:
+    def started_nothing(
+        self: Api, *_arguments: Any, **_keywords: Any
+    ) -> dict[str, Any]:
         """Return `outcome`, as `start_run` would without starting a worker."""
         del self
         return outcome
@@ -286,7 +414,7 @@ def test_an_error_while_starting_releases_the_claim(
 ) -> None:
     """An unexpected exception cannot leave the slot claimed for good."""
 
-    def fail(self: Api, *_arguments: Any) -> dict[str, Any]:
+    def fail(self: Api, *_arguments: Any, **_keywords: Any) -> dict[str, Any]:
         """Raise as an unexpected failure partway through a start would."""
         del self
         raise RuntimeError("starting failed")
@@ -317,34 +445,22 @@ def test_a_saved_run_start_that_fails_releases_the_claim(
 
 def test_the_check_and_the_claim_happen_under_one_lock(
     api: Api,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Two starts that arrive together cannot both see a free slot.
+    """A claimed record is visible to the capacity calculation."""
+    record, refusal = api._admit_run()
 
-    Timing two real threads cannot prove this deterministically, so the
-    test checks the property that makes it true: every check made while
-    claiming runs with the claim lock held, and the claim is set before
-    that lock is released (the second claim already sees it).
-    """
-    locked_during_check: list[bool] = []
-    check = Api._run_refusal
-
-    def observed(self: Api) -> str | None:
-        """Record whether the claim lock is held, then check as before."""
-        locked_during_check.append(self._jobs.lock.locked())
-        return check(self)
-
-    monkeypatch.setattr(Api, "_run_refusal", observed)
-
-    assert api._claim_run() is None
-    assert api._claim_run() == _IN_PROGRESS
-    assert locked_during_check == [True, True]
+    assert refusal is None
+    assert record is not None
+    assert api._jobs.active_job(record.job_id) is record
+    assert api._remaining_worker_cores() == api._worker_budget() - 1
+    api._release_run_claim(record.job_id)
 
 
 @pytest.mark.gui
 def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     fast_scalar_run_settings: Path,
     held_runs: _HeldRuns,
+    results: Path,  # noqa: F811
 ) -> None:
     """Run and the Run menu, clicked during a run, are refused on the page.
 
@@ -355,11 +471,15 @@ def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     so the page is never polled while a drain thread is pushing to it.
     """
     del fast_scalar_run_settings
+    del results
     run_starts = [threading.Event(), threading.Event()]
     cancellations = [threading.Event(), threading.Event()]
+    run_started_count = 0
 
     def on_run_started() -> None:
-        run_starts[len(held_runs.started) - 1].set()
+        nonlocal run_started_count
+        run_starts[run_started_count].set()
+        run_started_count += 1
 
     def on_message(message: RunMessage | BatchMessage) -> None:
         if message[0] == "cancelled":

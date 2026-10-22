@@ -78,6 +78,13 @@ def test_webview_is_a_declared_hidden_import() -> None:
     assert '"webview"' in spec
 
 
+def test_psutil_memory_probe_is_a_declared_hidden_import() -> None:
+    """The dynamically imported GUI memory probe is present in frozen builds."""
+    spec = SPEC_FILE.read_text(encoding="utf-8")
+
+    assert '"psutil"' in spec.split("hiddenimports=[", 1)[1].split("]", 1)[0]
+
+
 def test_windows_and_linux_build_stays_a_single_onefile_executable() -> None:
     """Non-macOS platforms keep the portable, single-file `fim` build.
 

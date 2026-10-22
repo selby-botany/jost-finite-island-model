@@ -856,6 +856,24 @@ fieldset.combinator-choice label {
     margin: 0;
 }
 
+#memory-warning-text {
+    margin: 0;
+}
+
+#memory-warning-jobs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.5rem 0 0;
+    padding-left: 1.25rem;
+}
+
+.memory-warning-job {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .run-toolbar {
     display: flex;
     align-items: center;

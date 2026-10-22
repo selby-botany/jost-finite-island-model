@@ -25,6 +25,7 @@ from fim.engine import (
     report_for_state,
     simulate_params,
 )
+from fim.gui.job_results import GuiRunResult
 from fim.gui.literature_visuals import (
     allele_composition_payload,
     frequency_spectrum_payload,
@@ -74,7 +75,7 @@ ProgressMessage = tuple[
     dict[str, Any] | None,
     ModelState,
 ]
-DoneMessage = tuple[Literal["done"], RunResult]
+DoneMessage = tuple[Literal["done"], RunResult | GuiRunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
 # A saved Run (`fim.gui.object_runner`) that published a checkpoint at this
 # generation and stopped; it can be resumed later.
