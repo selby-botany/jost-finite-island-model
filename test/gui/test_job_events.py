@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import queue
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -79,6 +80,42 @@ def test_two_jobs_have_independent_sequences() -> None:
     assert admission.next_sequence(first) == 1
     assert admission.next_sequence(second) == 0
     assert admission.next_sequence(first) == 2
+
+
+def test_start_child_job_gives_the_worker_its_own_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The worker must survive a signal sent to the GUI's own process group.
+
+    `start_child_job` spawns a worker meant to keep running after the GUI
+    exits (`Api.stop_active_work`'s own docstring: "its next safe point
+    checkpoints and pauses after the GUI exits") -- it learns of the GUI's
+    own exit from its lifeline pipe reaching EOF, never from a signal.
+    Without its own session it inherits the GUI's process group, so a
+    signal sent to that group (a terminal's Ctrl-C, or a shell killing the
+    GUI's job) reaches it too, at an arbitrary point in its own execution
+    instead of its next safe point -- the gap that once left a `run.json`
+    checkpoint reference naming trajectory bytes an abruptly-killed worker
+    had not actually flushed yet, so a later resume failed with
+    "checkpoint ... cannot be restored: ... the file may be shorter than
+    the checkpoint". Same precedent and assertion shape as
+    `test_launcher.py`'s own `start_new_session` tests for `--detach`.
+    """
+    popen_calls: list[dict[str, object]] = []
+
+    class _FakePopen:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args
+            popen_calls.append(kwargs)
+            self.stdin = None
+
+    monkeypatch.setattr(subprocess, "Popen", _FakePopen)
+
+    child = jobs_module.start_child_job("obj-test", results=None, pairwise_max_demes=64)
+    child.messages.close()
+
+    assert len(popen_calls) == 1
+    assert popen_calls[0]["start_new_session"] is True
 
 
 @pytest.mark.parametrize(

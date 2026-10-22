@@ -264,6 +264,24 @@ def start_child_job(
             worker_command,
             stdin=subprocess.PIPE,
             env=environment,
+            # This worker is meant to outlive the GUI process (`Api.
+            # stop_active_work`'s own docstring: "its next safe point
+            # checkpoints and pauses after the GUI exits") -- it learns
+            # of the GUI's own exit from its lifeline pipe reaching EOF,
+            # never from a signal. Without its own session, it inherits
+            # the GUI's process group and a signal sent to that group
+            # (a terminal's Ctrl-C, or a shell killing the GUI's job)
+            # reaches it too, at an arbitrary point in its own execution
+            # instead of its next safe point -- the exact gap that left
+            # a `run.json` checkpoint reference naming trajectory bytes
+            # an abruptly-killed worker had not actually flushed yet,
+            # so a later resume failed with "checkpoint ... cannot be
+            # restored: ... the file may be shorter than the checkpoint".
+            # Harmless on Windows: the stdlib consults this flag only in
+            # the POSIX child-startup path (confirmed precedent:
+            # `fim.launcher`'s own `--detach` relaunch uses the same
+            # flag for the identical "survive the parent's exit" need).
+            start_new_session=True,
         )
     except BaseException:
         messages.close()
