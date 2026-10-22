@@ -11,6 +11,7 @@ from fim.config.defaults import (
     DEFAULT_AUTO_VECTOR_MIN_D,
 )
 from fim.engine.batch import run_batch
+from fim.engine.concurrency import default_replicate_concurrency
 from fim.engine.lanes import (
     Advancer,
     SequentialAdvancer,
@@ -80,6 +81,7 @@ class GenerationalBackend:
         advancer: Advancer | None = None,
         *,
         store_factory: Callable[[str], TrajectoryStore] | None = None,
+        default_concurrency: int | None = None,
     ) -> None:
         """Configure which `Advancer` drives this backend's own batches.
 
@@ -102,9 +104,17 @@ class GenerationalBackend:
                 or any `Advancer` implementation at all
                 (`20260914-claude-sonnet-5-non-lineal-batch-execution-
                 design.md`, `selby/restricted`, §5.1-§5.2).
+            default_concurrency: Overrides `run`'s own resolved
+                `run_batch(default_concurrency=...)` (see `run`'s own
+                docstring) when given. `None` (the default) lets `run`
+                resolve it itself from the real `params` it receives —
+                the ordinary case; only a caller that already knows a
+                better answer than `run` can compute on its own (none
+                exists yet) would pass this explicitly.
         """
         self._advancer = advancer if advancer is not None else SequentialAdvancer()
         self._store_factory = store_factory
+        self._default_concurrency = default_concurrency
 
     def run(
         self,
@@ -113,7 +123,19 @@ class GenerationalBackend:
         run_id: str | None,
         clock: Clock,
     ) -> SimulationOutput:
-        """Run `params`'s own replicate(s); see `simulate_params()`'s own docstring."""
+        """Run `params`'s own replicate(s); see `simulate_params()`'s own docstring.
+
+        Resolves `run_batch`'s own `default_concurrency` (used only when
+        `params.max_concurrent_replicates` is unset) via `fim.engine.
+        concurrency.default_replicate_concurrency`, unless this backend's
+        own constructor was given one explicitly. `generational-vector`
+        (`self._advancer` a `VectorizedAdvancer`) has no fan-out at all —
+        `advance()` steps every active lane in one Python loop — so a
+        wider window buys it no throughput; every other `Advancer` here
+        (`SequentialAdvancer`, `ThreadedAdvancer`) is treated as
+        `"generational"`, which does get real, hardware-scaled fan-out
+        from `ThreadedAdvancer`'s own thread pool.
+        """
         if store is not None and self._store_factory is not None:
             raise ValueError("store and store_factory are mutually exclusive")
         trajectory_store = (
@@ -121,8 +143,25 @@ class GenerationalBackend:
             if self._store_factory is not None
             else (store if store is not None else InMemoryTrajectoryStore())
         )
+        default_concurrency = self._default_concurrency
+        if default_concurrency is None:
+            resolved_backend: Literal["generational", "generational-vector"] = (
+                "generational-vector"
+                if isinstance(self._advancer, VectorizedAdvancer)
+                else "generational"
+            )
+            default_concurrency = default_replicate_concurrency(
+                resolved_backend, params.n_replicates, params.expert.batch_width
+            )
         try:
-            results = run_batch(params, trajectory_store, run_id, clock, self._advancer)
+            results = run_batch(
+                params,
+                trajectory_store,
+                run_id,
+                clock,
+                self._advancer,
+                default_concurrency=default_concurrency,
+            )
         finally:
             # Every replicate was already closed as it finished; this
             # catches the lanes of a batch that raised partway, and a

@@ -539,20 +539,31 @@ class SimulationParams:
             carries.
         max_concurrent_replicates: Caps how many replicate lanes
             `fim.engine.run_batch` (the `"generational"`/
-            `"generational-vector"` path) advances at once — `None` (the
-            default) advances every requested replicate together,
-            exactly like every prior release. `run_batch` builds each
-            lane lazily now, on demand, rather than all `n_replicates`
-            of them up front: only this many are ever alive
-            simultaneously, and a finished lane's slot is handed to the
-            next not-yet-started replicate rather than every replicate
-            starting at once. Meaningful for any `engine_backend` that
-            reaches `run_batch`; matters most for `"generational-
-            vector"`, whose own per-lane cached `VectorBlock` is a dense
-            `(loci, deme_count, width)` array — held by every
-            concurrently active lane at once, so an unbounded
-            batch's steady-state memory scales with `n_replicates`
-            directly (`dev/doc/apps/selby/jost-finite-island-model/
+            `"generational-vector"` path) advances at once — `None`
+            (the default) resolves to `fim.engine.concurrency.
+            default_replicate_concurrency`'s own backend-aware answer,
+            not to every requested replicate at once:
+            `"generational-vector"` has no fan-out mechanism at all
+            (`VectorizedAdvancer.advance` steps every active lane in
+            one Python loop), so a wide window there buys no
+            throughput, only memory and a slower adaptive stop, and the
+            default is the small, fixed `expert.batch_width` instead;
+            `"generational"` gets genuine fan-out from its own
+            `ThreadedAdvancer` thread pool, so its default tracks the
+            process-visible core count (`20261022-claude-sonnet-5-
+            replicate-concurrency-unification-design.md`, `selby/
+            restricted`). `run_batch` builds each lane lazily, on
+            demand, rather than all `n_replicates` of them up front:
+            only this many are ever alive simultaneously, and a
+            finished lane's slot is handed to the next not-yet-started
+            replicate rather than every replicate starting at once.
+            Meaningful for any `engine_backend` that reaches
+            `run_batch`; matters most for `"generational-vector"`,
+            whose own per-lane cached `VectorBlock` is a dense `(loci,
+            deme_count, width)` array — held by every concurrently
+            active lane at once, so an unbounded batch's steady-state
+            memory scales with `n_replicates` directly
+            (`dev/doc/apps/selby/jost-finite-island-model/
             20260904-claude-sonnet-5-fim-engine-review-remediations.md`,
             `FIM-48`). Silently clamped down to `n_replicates` if given
             larger, the same reasoning `replicate_minimum`'s own clamp

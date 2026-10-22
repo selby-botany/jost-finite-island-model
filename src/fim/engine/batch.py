@@ -46,6 +46,8 @@ def run_batch(
     run_id: str | None,
     clock: Clock,
     advancer: Advancer,
+    *,
+    default_concurrency: int | None = None,
 ) -> tuple[RunResult, ...]:
     """Run every replicate `params` describes, generation-first.
 
@@ -64,8 +66,22 @@ def run_batch(
     become available; no new lane is built after the adaptive monitor
     stops. Limiting active lanes bounds per-lane state and vectorized
     buffers independently of the total replicate count.
+
+    Args:
+        default_concurrency: The lane window to use when `params.
+            max_concurrent_replicates` is unset, resolved by the caller
+            (`GenerationalBackend.run`) via `fim.engine.concurrency.
+            default_replicate_concurrency` — backend-aware, since a
+            wide window helps `generational` keep its own thread pool
+            fed but buys `generational-vector` nothing (it has no
+            fan-out at all). `None` (only ever reached from a direct,
+            backend-agnostic test call) falls back to `params.
+            n_replicates` — every requested replicate at once, this
+            function's own behavior before this parameter existed.
     """
-    window_size = params.max_concurrent_replicates or params.n_replicates
+    window_size = (
+        params.max_concurrent_replicates or default_concurrency or params.n_replicates
+    )
     next_unbuilt_index = min(window_size, params.n_replicates)
     # The first wave the averaging windows are matched from is a property of
     # the configuration (`batch_window_planner`), not of this machine.

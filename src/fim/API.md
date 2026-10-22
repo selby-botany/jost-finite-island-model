@@ -2427,7 +2427,7 @@ interface includes `init`, `run`, `stats`, `study`, `experiment`, `object`,
 
 <a id="fim.cli.load_config"></a>
 
-#### [load\_config](./cli.py#L108)
+#### [load\_config](./cli.py#L109)
 
 ```python
 def load_config(path: Path | str) -> SimulationParams
@@ -2457,7 +2457,7 @@ re-check any of that.
 
 <a id="fim.cli.main"></a>
 
-#### [main](./cli.py#L155)
+#### [main](./cli.py#L156)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -5559,7 +5559,7 @@ Backend protocol, the generational backend, and the factory.
 
 <a id="fim.engine.backends.EngineBackend"></a>
 
-## [EngineBackend Objects](./engine/backends.py#L32)
+## [EngineBackend Objects](./engine/backends.py#L33)
 
 ```python
 class EngineBackend(Protocol)
@@ -5587,7 +5587,7 @@ contract.
 
 <a id="fim.engine.backends.EngineBackend.run"></a>
 
-#### [run](./engine/backends.py#L54)
+#### [run](./engine/backends.py#L55)
 
 ```python
 def run(params: SimulationParams, store: TrajectoryStore | None,
@@ -5598,7 +5598,7 @@ Run every replicate `params` describes; return the result(s).
 
 <a id="fim.engine.backends.GenerationalBackend"></a>
 
-## [GenerationalBackend Objects](./engine/backends.py#L65)
+## [GenerationalBackend Objects](./engine/backends.py#L66)
 
 ```python
 class GenerationalBackend()
@@ -5617,13 +5617,13 @@ class itself changing at all.
 
 <a id="fim.engine.backends.GenerationalBackend.__init__"></a>
 
-#### [\_\_init\_\_](./engine/backends.py#L78)
+#### [\_\_init\_\_](./engine/backends.py#L79)
 
 ```python
-def __init__(
-        advancer: Advancer | None = None,
-        *,
-        store_factory: Callable[[str], TrajectoryStore] | None = None) -> None
+def __init__(advancer: Advancer | None = None,
+             *,
+             store_factory: Callable[[str], TrajectoryStore] | None = None,
+             default_concurrency: int | None = None) -> None
 ```
 
 Configure which `Advancer` drives this backend's own batches.
@@ -5648,10 +5648,17 @@ Configure which `Advancer` drives this backend's own batches.
   or any `Advancer` implementation at all
   (`20260914-claude-sonnet-5-non-lineal-batch-execution-
   design.md`, `selby/restricted`, §5.1-§5.2).
+- `default_concurrency` - Overrides `run`'s own resolved
+  `run_batch(default_concurrency=...)` (see `run`'s own
+  docstring) when given. `None` (the default) lets `run`
+  resolve it itself from the real `params` it receives —
+  the ordinary case; only a caller that already knows a
+  better answer than `run` can compute on its own (none
+  exists yet) would pass this explicitly.
 
 <a id="fim.engine.backends.GenerationalBackend.run"></a>
 
-#### [run](./engine/backends.py#L109)
+#### [run](./engine/backends.py#L119)
 
 ```python
 def run(params: SimulationParams, store: TrajectoryStore | None,
@@ -5660,9 +5667,20 @@ def run(params: SimulationParams, store: TrajectoryStore | None,
 
 Run `params`'s own replicate(s); see `simulate_params()`'s own docstring.
 
+Resolves `run_batch`'s own `default_concurrency` (used only when
+`params.max_concurrent_replicates` is unset) via `fim.engine.
+concurrency.default_replicate_concurrency`, unless this backend's
+own constructor was given one explicitly. `generational-vector`
+(`self._advancer` a `VectorizedAdvancer`) has no fan-out at all —
+`advance()` steps every active lane in one Python loop — so a
+wider window buys it no throughput; every other `Advancer` here
+(`SequentialAdvancer`, `ThreadedAdvancer`) is treated as
+`"generational"`, which does get real, hardware-scaled fan-out
+from `ThreadedAdvancer`'s own thread pool.
+
 <a id="fim.engine.backends.resolve_auto_engine_backend"></a>
 
-#### [resolve\_auto\_engine\_backend](./engine/backends.py#L136)
+#### [resolve\_auto\_engine\_backend](./engine/backends.py#L175)
 
 ```python
 def resolve_auto_engine_backend(
@@ -5686,7 +5704,7 @@ The selected backend is recorded in the run manifest.
 
 <a id="fim.engine.backends.numba_is_available"></a>
 
-#### [numba\_is\_available](./engine/backends.py#L166)
+#### [numba\_is\_available](./engine/backends.py#L205)
 
 ```python
 def numba_is_available() -> bool
@@ -5696,7 +5714,7 @@ Return whether Python can locate `numba` without importing it.
 
 <a id="fim.engine.backends.build_engine_backend"></a>
 
-#### [build\_engine\_backend](./engine/backends.py#L171)
+#### [build\_engine\_backend](./engine/backends.py#L210)
 
 ```python
 def build_engine_backend(
@@ -5767,9 +5785,13 @@ The generation-first batch driver and its adaptive stop.
 #### [run\_batch](./engine/batch.py#L43)
 
 ```python
-def run_batch(params: SimulationParams, store: TrajectoryStore,
-              run_id: str | None, clock: Clock,
-              advancer: Advancer) -> tuple[RunResult, ...]
+def run_batch(params: SimulationParams,
+              store: TrajectoryStore,
+              run_id: str | None,
+              clock: Clock,
+              advancer: Advancer,
+              *,
+              default_concurrency: int | None = None) -> tuple[RunResult, ...]
 ```
 
 Run every replicate `params` describes, generation-first.
@@ -5790,9 +5812,22 @@ become available; no new lane is built after the adaptive monitor
 stops. Limiting active lanes bounds per-lane state and vectorized
 buffers independently of the total replicate count.
 
+**Arguments**:
+
+- `default_concurrency` - The lane window to use when `params.
+  max_concurrent_replicates` is unset, resolved by the caller
+  (`GenerationalBackend.run`) via `fim.engine.concurrency.
+  default_replicate_concurrency` — backend-aware, since a
+  wide window helps `generational` keep its own thread pool
+  fed but buys `generational-vector` nothing (it has no
+  fan-out at all). `None` (only ever reached from a direct,
+  backend-agnostic test call) falls back to `params.
+  n_replicates` — every requested replicate at once, this
+  function's own behavior before this parameter existed.
+
 <a id="fim.engine.batch.waiting_for_window"></a>
 
-#### [waiting\_for\_window](./engine/batch.py#L177)
+#### [waiting\_for\_window](./engine/batch.py#L193)
 
 ```python
 def waiting_for_window(lane: ReplicaLane,
@@ -13865,22 +13900,34 @@ removes output from replicates discarded by an adaptive early stop.
 
 <a id="fim.gui.batch_runner.default_max_workers"></a>
 
-#### [default\_max\_workers](./gui/batch_runner.py#L81)
+#### [default\_max\_workers](./gui/batch_runner.py#L85)
 
 ```python
-def default_max_workers() -> int
+def default_max_workers(n_replicates: int = DEFAULT_N_REPLICATES) -> int
 ```
 
 Return the GUI's own default batch worker count.
 
-Matches `cli._cpu_count()` — the CLI's own default (non-`--sequential`)
-parallel batch worker count — so the GUI's default batch behavior is
-never silently weaker than the CLI's own. Still
-overridable per call via `start_batch_run`'s `max_workers` argument.
+Delegates to `fim.engine.default_replicate_concurrency` — the same
+function `cli._cpu_count()` now delegates to — so the GUI's default
+batch behavior is never silently weaker than, or inconsistent with,
+the CLI's own. Still overridable per call via `start_batch_run`'s
+own `max_workers` argument.
+
+**Arguments**:
+
+- `n_replicates` - The pending batch's own replicate count, when
+  known (`start_batch_run` passes `params.n_replicates`).
+  `Api.get_default_max_workers` calls this with no batch in
+  mind yet — just to show the Settings screen's own default
+  worker count — so it keeps this parameter's own default,
+  the adaptive ceiling every batch starts from
+  (`DEFAULT_N_REPLICATES`), which clamps nothing in practice
+  since it comfortably exceeds any real core count.
 
 <a id="fim.gui.batch_runner.start_batch_run"></a>
 
-#### [start\_batch\_run](./gui/batch_runner.py#L92)
+#### [start\_batch\_run](./gui/batch_runner.py#L107)
 
 ```python
 def start_batch_run(
@@ -19897,20 +19944,31 @@ functions that actually use each one.
   carries.
 - `max_concurrent_replicates` - Caps how many replicate lanes
   `fim.engine.run_batch` (the `"generational"`/
-  `"generational-vector"` path) advances at once — `None` (the
-  default) advances every requested replicate together,
-  exactly like every prior release. `run_batch` builds each
-  lane lazily now, on demand, rather than all `n_replicates`
-  of them up front: only this many are ever alive
-  simultaneously, and a finished lane's slot is handed to the
-  next not-yet-started replicate rather than every replicate
-  starting at once. Meaningful for any `engine_backend` that
-  reaches `run_batch`; matters most for `"generational-
-  vector"`, whose own per-lane cached `VectorBlock` is a dense
-  `(loci, deme_count, width)` array — held by every
-  concurrently active lane at once, so an unbounded
-  batch's steady-state memory scales with `n_replicates`
-  directly (`dev/doc/apps/selby/jost-finite-island-model/
+  `"generational-vector"` path) advances at once — `None`
+  (the default) resolves to `fim.engine.concurrency.
+  default_replicate_concurrency`'s own backend-aware answer,
+  not to every requested replicate at once:
+  `"generational-vector"` has no fan-out mechanism at all
+  (`VectorizedAdvancer.advance` steps every active lane in
+  one Python loop), so a wide window there buys no
+  throughput, only memory and a slower adaptive stop, and the
+  default is the small, fixed `expert.batch_width` instead;
+  `"generational"` gets genuine fan-out from its own
+  `ThreadedAdvancer` thread pool, so its default tracks the
+  process-visible core count (`20261022-claude-sonnet-5-
+  replicate-concurrency-unification-design.md`, `selby/
+  restricted`). `run_batch` builds each lane lazily, on
+  demand, rather than all `n_replicates` of them up front:
+  only this many are ever alive simultaneously, and a
+  finished lane's slot is handed to the next not-yet-started
+  replicate rather than every replicate starting at once.
+  Meaningful for any `engine_backend` that reaches
+  `run_batch`; matters most for `"generational-vector"`,
+  whose own per-lane cached `VectorBlock` is a dense `(loci,
+  deme_count, width)` array — held by every concurrently
+  active lane at once, so an unbounded batch's steady-state
+  memory scales with `n_replicates` directly
+  (`dev/doc/apps/selby/jost-finite-island-model/
   20260904-claude-sonnet-5-fim-engine-review-remediations.md`,
   `FIM-48`). Silently clamped down to `n_replicates` if given
   larger, the same reasoning `replicate_minimum`'s own clamp
@@ -19967,7 +20025,7 @@ functions that actually use each one.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./model/params.py#L664)
+#### [\_\_post\_init\_\_](./model/params.py#L675)
 
 ```python
 def __post_init__() -> None
@@ -19986,7 +20044,7 @@ without re-checking any of this.
 
 <a id="fim.model.params.SimulationParams.convergence_statistics"></a>
 
-#### [convergence\_statistics](./model/params.py#L820)
+#### [convergence\_statistics](./model/params.py#L831)
 
 ```python
 @property
@@ -20003,7 +20061,7 @@ actually uses, instead of handling both shapes itself.
 
 <a id="fim.model.params.SimulationParams.derived_thinning_start"></a>
 
-#### [derived\_thinning\_start](./model/params.py#L854)
+#### [derived\_thinning\_start](./model/params.py#L865)
 
 ```python
 def derived_thinning_start() -> int
@@ -20023,7 +20081,7 @@ the user typed.
 
 <a id="fim.model.params.SimulationParams.batch_precision"></a>
 
-#### [batch\_precision](./model/params.py#L939)
+#### [batch\_precision](./model/params.py#L950)
 
 ```python
 @property
@@ -20039,7 +20097,7 @@ value the batch's stopping rule reads.
 
 <a id="fim.model.params.SimulationParams.population_sizes"></a>
 
-#### [population\_sizes](./model/params.py#L952)
+#### [population\_sizes](./model/params.py#L963)
 
 ```python
 @property
@@ -20057,7 +20115,7 @@ actually iterates over, so it never needs to special-case the
 
 <a id="fim.model.params.SimulationParams.individuals"></a>
 
-#### [individuals](./model/params.py#L967)
+#### [individuals](./model/params.py#L978)
 
 ```python
 @property
@@ -20071,7 +20129,7 @@ configuration key `N` names.
 
 <a id="fim.model.params.SimulationParams.mutation_rates"></a>
 
-#### [mutation\_rates](./model/params.py#L978)
+#### [mutation\_rates](./model/params.py#L989)
 
 ```python
 @property
@@ -20085,7 +20143,7 @@ but for `mu` instead of `N`, and per-locus instead of per-deme.
 
 <a id="fim.model.params.SimulationParams.to_dict"></a>
 
-#### [to\_dict](./model/params.py#L1074)
+#### [to\_dict](./model/params.py#L1085)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -20105,7 +20163,7 @@ without needing the original config file at all.
 
 <a id="fim.model.params.SimulationParams.identity_dict"></a>
 
-#### [identity\_dict](./model/params.py#L1207)
+#### [identity\_dict](./model/params.py#L1218)
 
 ```python
 def identity_dict() -> dict[str, object]
@@ -20135,7 +20193,7 @@ so existing configurations keep their IDs.
 
 <a id="fim.model.params.SimulationParams.from_mapping"></a>
 
-#### [from\_mapping](./model/params.py#L1246)
+#### [from\_mapping](./model/params.py#L1257)
 
 ```python
 @classmethod
@@ -20182,7 +20240,7 @@ before construction, rather than inside `__post_init__`.
 
 <a id="fim.model.params.describe_population"></a>
 
-#### [describe\_population](./model/params.py#L2199)
+#### [describe\_population](./model/params.py#L2210)
 
 ```python
 def describe_population(params: SimulationParams) -> str
@@ -20202,7 +20260,7 @@ Return the population size the way a botanist reads it.
 
 <a id="fim.model.params.EXECUTION_SETTING_NAMES"></a>
 
-#### [EXECUTION\_SETTING\_NAMES](./model/params.py#L2370)
+#### [EXECUTION\_SETTING\_NAMES](./model/params.py#L2381)
 
 The configuration keys `validate_execution_settings` checks on their own.
 
@@ -20213,7 +20271,7 @@ set).
 
 <a id="fim.model.params.validate_execution_settings"></a>
 
-#### [validate\_execution\_settings](./model/params.py#L2399)
+#### [validate\_execution\_settings](./model/params.py#L2410)
 
 ```python
 def validate_execution_settings(settings: Mapping[str, object]) -> None
