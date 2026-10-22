@@ -21,7 +21,9 @@ from typing import Any
 import pytest
 
 from fim.examples import seed
+from fim.examples.artifacts import copy_outputs
 from fim.persistence import groups
+from fim.persistence.manifest import hash_file
 from fim.persistence.run_metadata import read_run_metadata, run_metadata_path
 
 _FIXED_CLOCK = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
@@ -289,6 +291,46 @@ def test_reseeding_keeps_decoded_data_until_an_archive_changes(
     _seed(results, bundle)
     assert not restored.exists()
     assert (run / "notes.txt").read_bytes() == b"keep"
+
+
+def test_seeding_pre_decodes_a_changed_archive(tmp_path: Path, results: Path) -> None:
+    """A real archive is gzip-decoded and digest-verified at seed time.
+
+    `Api.open_batch`/`open_run` both call `fim.examples.artifacts.
+    materialize_outputs` themselves on the directory `seed_examples`
+    writes to, and do nothing a second time once the raw file already
+    exists (that function's own `target.exists()` short-circuit) --
+    this proves `seed_examples` already leaves it there, so a user's
+    own first click no longer pays for the decode live.
+    """
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    content = b'{"generation": 1}\n' * 50
+    (raw / "convergence.jsonl").write_bytes(content)
+    digest = hash_file(raw / "convergence.jsonl")
+    archived = tmp_path / "archived"
+    copy_outputs(raw, archived)
+    gz_part = (archived / "convergence.jsonl.gz.part-0001").read_bytes()
+
+    manifest = {
+        "run_id": "archived",
+        "parameters": {"N": 10, "_read_only": True},
+        "artifacts": {"convergence": digest},
+    }
+    files = {
+        "manifest.json": (json.dumps(manifest, indent=2) + "\n").encode("utf-8"),
+        "report.json": b'{"D": 0.1}\n',
+        "convergence.jsonl.gz.part-0001": gz_part,
+    }
+    bundle = _write_bundle(
+        tmp_path / "bundle", [_entry("archived", "getting-started", files)]
+    )
+
+    _seed(results, bundle)
+
+    restored = results / "examples" / "archived" / "convergence.jsonl"
+    assert restored.is_file()
+    assert restored.read_bytes() == content
 
 
 def test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time(

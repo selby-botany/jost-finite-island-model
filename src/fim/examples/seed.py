@@ -25,6 +25,7 @@ from fim.examples.artifacts import (
     RUN_OUTPUT_NAMES,
     TOP_LEVEL_OUTPUT_NAMES,
     archive_target,
+    materialize_outputs,
 )
 from fim.persistence import groups
 from fim.persistence.run_metadata import (
@@ -243,7 +244,34 @@ def seed_examples(
     # Run directories, one per example with a saved result.
     seeded = [example for example in parsed.examples if example.has_saved_result]
     for example in seeded:
-        written.extend(_seed_run_directory(parsed, example, root, clock))
+        example_changed = _seed_run_directory(parsed, example, root, clock)
+        written.extend(example_changed)
+        # Decode this example's archived outputs now, not on its first
+        # "Open saved result" -- `Api.open_batch`/`open_run` already call
+        # `materialize_outputs` themselves and do nothing a second time
+        # once it has already run (that function's own `target.exists()`
+        # short-circuit), so this only moves the one-time gzip-decode-
+        # and-digest-verify cost from a user's own click, live, onto
+        # this already-backgrounded seeding pass. Skipped when nothing
+        # about this example's own files changed: a file this function
+        # did not just (re)write cannot hold a stale decoded artifact,
+        # and a previous pass either already decoded it or left it to
+        # be decoded, unhurried, the first time it is actually opened --
+        # exactly `materialize_outputs`'s own ordinary contract, run
+        # here instead of there. One example's own damaged archive is
+        # logged and skipped, not fatal to seeding the rest, or to the
+        # Study/Experiment grouping below.
+        if example_changed:
+            try:
+                materialize_outputs(
+                    example_run_directory(example.example_id, results=root)
+                )
+            except (OSError, ValueError) as error:
+                logger.warning(
+                    "could not pre-decode %s's own archived outputs: %s",
+                    example.example_id,
+                    error,
+                )
     removed.extend(_remove_stale_run_directories({e.example_id for e in seeded}, root))
 
     # One read-only Study per class with seeded members, in class order.

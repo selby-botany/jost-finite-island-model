@@ -1655,7 +1655,7 @@ files and the same timestamps.
 
 <a id="test.test_examples_seed.results"></a>
 
-#### [results](./test_examples_seed.py#L137)
+#### [results](./test_examples_seed.py#L139)
 
 ```python
 @pytest.fixture
@@ -1666,7 +1666,7 @@ An empty results directory.
 
 <a id="test.test_examples_seed.test_seeding_writes_runs_studies_and_the_examples_experiment"></a>
 
-#### [test\_seeding\_writes\_runs\_studies\_and\_the\_examples\_experiment](./test_examples_seed.py#L158)
+#### [test\_seeding\_writes\_runs\_studies\_and\_the\_examples\_experiment](./test_examples_seed.py#L160)
 
 ```python
 def test_seeding_writes_runs_studies_and_the_examples_experiment(
@@ -1677,7 +1677,7 @@ Every part of section 4.2, from one standard bundle.
 
 <a id="test.test_examples_seed.test_seeding_twice_changes_nothing"></a>
 
-#### [test\_seeding\_twice\_changes\_nothing](./test_examples_seed.py#L227)
+#### [test\_seeding\_twice\_changes\_nothing](./test_examples_seed.py#L229)
 
 ```python
 def test_seeding_twice_changes_nothing(tmp_path: Path, results: Path) -> None
@@ -1687,7 +1687,7 @@ Idempotent: the same bundle again writes no file, not even a timestamp.
 
 <a id="test.test_examples_seed.test_a_changed_bundle_file_replaces_only_that_file"></a>
 
-#### [test\_a\_changed\_bundle\_file\_replaces\_only\_that\_file](./test_examples_seed.py#L243)
+#### [test\_a\_changed\_bundle\_file\_replaces\_only\_that\_file](./test_examples_seed.py#L245)
 
 ```python
 def test_a_changed_bundle_file_replaces_only_that_file(tmp_path: Path,
@@ -1698,7 +1698,7 @@ A newer bundle rewrites the files whose content differs, nothing else.
 
 <a id="test.test_examples_seed.test_reseeding_keeps_decoded_data_until_an_archive_changes"></a>
 
-#### [test\_reseeding\_keeps\_decoded\_data\_until\_an\_archive\_changes](./test_examples_seed.py#L264)
+#### [test\_reseeding\_keeps\_decoded\_data\_until\_an\_archive\_changes](./test_examples_seed.py#L266)
 
 ```python
 @pytest.mark.parametrize("remove_part", [False, True])
@@ -1708,9 +1708,27 @@ def test_reseeding_keeps_decoded_data_until_an_archive_changes(
 
 Cached raw data survives identical seeding, not changed or removed parts.
 
+<a id="test.test_examples_seed.test_seeding_pre_decodes_a_changed_archive"></a>
+
+#### [test\_seeding\_pre\_decodes\_a\_changed\_archive](./test_examples_seed.py#L296)
+
+```python
+def test_seeding_pre_decodes_a_changed_archive(tmp_path: Path,
+                                               results: Path) -> None
+```
+
+A real archive is gzip-decoded and digest-verified at seed time.
+
+`Api.open_batch`/`open_run` both call `fim.examples.artifacts.
+materialize_outputs` themselves on the directory `seed_examples`
+writes to, and do nothing a second time once the raw file already
+exists (that function's own `target.exists()` short-circuit) --
+this proves `seed_examples` already leaves it there, so a user's
+own first click no longer pays for the decode live.
+
 <a id="test.test_examples_seed.test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time"></a>
 
-#### [test\_changed\_labels\_rewrite\_the\_metadata\_and\_keep\_its\_creation\_time](./test_examples_seed.py#L294)
+#### [test\_changed\_labels\_rewrite\_the\_metadata\_and\_keep\_its\_creation\_time](./test_examples_seed.py#L336)
 
 ```python
 def test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time(
@@ -1721,7 +1739,7 @@ A renamed example gets its new name; `created_at` survives.
 
 <a id="test.test_examples_seed.test_an_owned_file_the_bundle_stops_shipping_is_removed"></a>
 
-#### [test\_an\_owned\_file\_the\_bundle\_stops\_shipping\_is\_removed](./test_examples_seed.py#L313)
+#### [test\_an\_owned\_file\_the\_bundle\_stops\_shipping\_is\_removed](./test_examples_seed.py#L355)
 
 ```python
 def test_an_owned_file_the_bundle_stops_shipping_is_removed(
@@ -1732,7 +1750,7 @@ A batch example that became a single run loses its batch files.
 
 <a id="test.test_examples_seed.test_seeding_never_touches_a_users_own_runs_studies_or_experiments"></a>
 
-#### [test\_seeding\_never\_touches\_a\_users\_own\_runs\_studies\_or\_experiments](./test_examples_seed.py#L331)
+#### [test\_seeding\_never\_touches\_a\_users\_own\_runs\_studies\_or\_experiments](./test_examples_seed.py#L373)
 
 ```python
 def test_seeding_never_touches_a_users_own_runs_studies_or_experiments(
@@ -1743,7 +1761,7 @@ Everything outside the examples' own items is byte-for-byte unchanged.
 
 <a id="test.test_examples_seed.test_an_example_dropped_from_the_bundle_is_removed_with_its_study"></a>
 
-#### [test\_an\_example\_dropped\_from\_the\_bundle\_is\_removed\_with\_its\_study](./test_examples_seed.py#L358)
+#### [test\_an\_example\_dropped\_from\_the\_bundle\_is\_removed\_with\_its\_study](./test_examples_seed.py#L400)
 
 ```python
 def test_an_example_dropped_from_the_bundle_is_removed_with_its_study(
@@ -1754,7 +1772,7 @@ Stale example items go; a directory holding a user's file stays.
 
 <a id="test.test_examples_seed.test_reseeding_restores_a_read_only_flag_an_older_version_dropped"></a>
 
-#### [test\_reseeding\_restores\_a\_read\_only\_flag\_an\_older\_version\_dropped](./test_examples_seed.py#L381)
+#### [test\_reseeding\_restores\_a\_read\_only\_flag\_an\_older\_version\_dropped](./test_examples_seed.py#L423)
 
 ```python
 def test_reseeding_restores_a_read_only_flag_an_older_version_dropped(
@@ -1765,7 +1783,7 @@ An older fim that rewrote a manifest drops `read_only`; seeding repairs it.
 
 <a id="test.test_examples_seed.test_a_bundle_without_a_catalog_seeds_nothing"></a>
 
-#### [test\_a\_bundle\_without\_a\_catalog\_seeds\_nothing](./test_examples_seed.py#L398)
+#### [test\_a\_bundle\_without\_a\_catalog\_seeds\_nothing](./test_examples_seed.py#L440)
 
 ```python
 def test_a_bundle_without_a_catalog_seeds_nothing(tmp_path: Path,
@@ -1776,7 +1794,7 @@ No `catalog.json` (an unbundled build): nothing is created.
 
 <a id="test.test_examples_seed.test_a_bundle_with_no_saved_results_removes_a_stale_examples_experiment"></a>
 
-#### [test\_a\_bundle\_with\_no\_saved\_results\_removes\_a\_stale\_examples\_experiment](./test_examples_seed.py#L411)
+#### [test\_a\_bundle\_with\_no\_saved\_results\_removes\_a\_stale\_examples\_experiment](./test_examples_seed.py#L453)
 
 ```python
 def test_a_bundle_with_no_saved_results_removes_a_stale_examples_experiment(
@@ -1787,7 +1805,7 @@ With nothing to show, the Examples Experiment is not kept around empty.
 
 <a id="test.test_examples_seed.test_a_malformed_catalog_is_reported"></a>
 
-#### [test\_a\_malformed\_catalog\_is\_reported](./test_examples_seed.py#L427)
+#### [test\_a\_malformed\_catalog\_is\_reported](./test_examples_seed.py#L469)
 
 ```python
 def test_a_malformed_catalog_is_reported(tmp_path: Path,
@@ -1798,7 +1816,7 @@ A catalog missing its keys raises `ValueError` naming the file.
 
 <a id="test.test_examples_seed.test_the_committed_bundle_seeds_cleanly"></a>
 
-#### [test\_the\_committed\_bundle\_seeds\_cleanly](./test_examples_seed.py#L437)
+#### [test\_the\_committed\_bundle\_seeds\_cleanly](./test_examples_seed.py#L479)
 
 ```python
 def test_the_committed_bundle_seeds_cleanly(results: Path) -> None
