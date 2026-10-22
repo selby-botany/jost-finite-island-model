@@ -14,6 +14,7 @@ tests do not change whenever the shipped examples do.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -170,15 +171,37 @@ def test_ensure_examples_reports_a_damaged_bundle(
     assert groups.list_experiments(results=results) == []
 
 
-def test_app_start_seeds_the_examples_before_the_window_opens(
-    results: Path, bundle: Path, monkeypatch: pytest.MonkeyPatch
+def test_app_start_backgrounds_example_seeding_without_blocking_the_window(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`main` seeds once the results location is final."""
-    seeded: list[Path] = []
+    """`main` starts seeding in its own thread and never waits for it.
+
+    Regression guard for the opposite of this test's own former contract
+    (`_seed_bundled_examples` run synchronously, before `create_window`,
+    so the window could not appear until every bundled example's every
+    file had been read and byte-compared against its already-seeded
+    copy -- live-measured as the dominant share of "detached" to "a
+    window is actually on screen"). `Api.ensure_examples` (Home's own
+    fallback the moment it finds the Examples Experiment missing) and
+    `open_saved_example`'s own re-seed-if-missing check (both their own
+    docstrings) are the safety net for a document opened before this
+    thread gets to it.
+    """
+    thread_calls: list[dict[str, object]] = []
+
+    class _FakeThread:
+        def __init__(
+            self, *, target: object, name: str | None = None, daemon: bool | None = None
+        ) -> None:
+            thread_calls.append({"target": target, "name": name, "daemon": daemon})
+
+        def start(self) -> None:
+            """Record the call; never actually run `target` (kept deterministic)."""
+
+    monkeypatch.setattr(threading, "Thread", _FakeThread)
+    seeded: list[None] = []
     monkeypatch.setattr(
-        app_module,
-        "_seed_bundled_examples",
-        lambda: seeded.append(paths.results_directory()),
+        app_module, "_seed_bundled_examples", lambda: seeded.append(None)
     )
 
     def _stop(*_args: object, **_kwargs: object) -> None:
@@ -189,7 +212,12 @@ def test_app_start_seeds_the_examples_before_the_window_opens(
     with pytest.raises(SystemExit):
         app_module.main([])
 
-    assert seeded == [results]
+    assert len(thread_calls) == 1
+    assert thread_calls[0]["target"] is app_module._seed_bundled_examples
+    assert thread_calls[0]["daemon"] is True
+    # The fake thread's own `start()` never ran it, proving `main` itself
+    # never calls it inline on the thread that goes on to open the window.
+    assert seeded == []
 
 
 def test_the_seeded_study_holds_only_examples_with_a_saved_result(

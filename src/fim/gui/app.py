@@ -11115,9 +11115,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     _apply_saved_results_location_override()
     logger.info("starting fim %s", _version_display())
-    # After the results location is final, before the window opens: the
-    # Home card then finds the Examples experiment already in place.
-    _seed_bundled_examples()
+    # Backgrounded, not awaited: seeding every bundled example (one
+    # bundle-vs-already-seeded byte comparison per file, dozens of
+    # replicates deep for a batch example) previously ran synchronously
+    # here, blocking the window from appearing at all until it finished
+    # -- live-measured as the dominant share of "detached" to "a window
+    # is actually on screen." Nothing before the window closes depends
+    # on this having finished: Home's own `refreshRecentRuns` calls
+    # `Api.ensure_examples` as its own fallback the moment it finds the
+    # Examples Experiment missing, and `open_saved_example` re-seeds on
+    # demand if a specific example is opened before this thread gets to
+    # it (that function's own docstring). The results location is
+    # already final (just above), so nothing here races a later
+    # override.
+    threading.Thread(
+        target=_seed_bundled_examples, name="fim-seed-examples", daemon=True
+    ).start()
     api = Api()
     window = create_window(api=api)
     # Before `webview.start()`, not after: a signal delivered while the

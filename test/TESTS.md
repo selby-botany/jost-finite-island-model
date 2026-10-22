@@ -20519,7 +20519,7 @@ tests do not change whenever the shipped examples do.
 
 <a id="gui.test_examples_bridge.build_bundle"></a>
 
-#### [build\_bundle](./gui/test_examples_bridge.py#L47)
+#### [build\_bundle](./gui/test_examples_bridge.py#L48)
 
 ```python
 def build_bundle(root: Path) -> Path
@@ -20533,7 +20533,7 @@ trajectory), and `not-run-yet`, with a configuration only.
 
 <a id="gui.test_examples_bridge.results"></a>
 
-#### [results](./gui/test_examples_bridge.py#L102)
+#### [results](./gui/test_examples_bridge.py#L103)
 
 ```python
 @pytest.fixture
@@ -20545,7 +20545,7 @@ Point `paths.results_directory()` at an isolated directory.
 
 <a id="gui.test_examples_bridge.bundle"></a>
 
-#### [bundle](./gui/test_examples_bridge.py#L113)
+#### [bundle](./gui/test_examples_bridge.py#L114)
 
 ```python
 @pytest.fixture
@@ -20556,7 +20556,7 @@ Build the fixture bundle and make it the app's bundled examples.
 
 <a id="gui.test_examples_bridge.test_ensure_examples_seeds_a_missing_examples_experiment"></a>
 
-#### [test\_ensure\_examples\_seeds\_a\_missing\_examples\_experiment](./gui/test_examples_bridge.py#L120)
+#### [test\_ensure\_examples\_seeds\_a\_missing\_examples\_experiment](./gui/test_examples_bridge.py#L121)
 
 ```python
 def test_ensure_examples_seeds_a_missing_examples_experiment(
@@ -20567,7 +20567,7 @@ Missing: seeded, and reported as changed so Home refetches.
 
 <a id="gui.test_examples_bridge.test_ensure_examples_does_nothing_while_the_experiment_exists"></a>
 
-#### [test\_ensure\_examples\_does\_nothing\_while\_the\_experiment\_exists](./gui/test_examples_bridge.py#L141)
+#### [test\_ensure\_examples\_does\_nothing\_while\_the\_experiment\_exists](./gui/test_examples_bridge.py#L142)
 
 ```python
 def test_ensure_examples_does_nothing_while_the_experiment_exists(
@@ -20578,7 +20578,7 @@ Present: no seeding at all, even if the bundle has changed since.
 
 <a id="gui.test_examples_bridge.test_ensure_examples_reports_a_damaged_bundle"></a>
 
-#### [test\_ensure\_examples\_reports\_a\_damaged\_bundle](./gui/test_examples_bridge.py#L157)
+#### [test\_ensure\_examples\_reports\_a\_damaged\_bundle](./gui/test_examples_bridge.py#L158)
 
 ```python
 def test_ensure_examples_reports_a_damaged_bundle(
@@ -20588,20 +20588,31 @@ def test_ensure_examples_reports_a_damaged_bundle(
 
 A malformed catalog is a refusal with a message, never an exception.
 
-<a id="gui.test_examples_bridge.test_app_start_seeds_the_examples_before_the_window_opens"></a>
+<a id="gui.test_examples_bridge.test_app_start_backgrounds_example_seeding_without_blocking_the_window"></a>
 
-#### [test\_app\_start\_seeds\_the\_examples\_before\_the\_window\_opens](./gui/test_examples_bridge.py#L173)
+#### [test\_app\_start\_backgrounds\_example\_seeding\_without\_blocking\_the\_window](./gui/test_examples_bridge.py#L174)
 
 ```python
-def test_app_start_seeds_the_examples_before_the_window_opens(
-        results: Path, bundle: Path, monkeypatch: pytest.MonkeyPatch) -> None
+def test_app_start_backgrounds_example_seeding_without_blocking_the_window(
+        monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-`main` seeds once the results location is final.
+`main` starts seeding in its own thread and never waits for it.
+
+Regression guard for the opposite of this test's own former contract
+(`_seed_bundled_examples` run synchronously, before `create_window`,
+so the window could not appear until every bundled example's every
+file had been read and byte-compared against its already-seeded
+copy -- live-measured as the dominant share of "detached" to "a
+window is actually on screen"). `Api.ensure_examples` (Home's own
+fallback the moment it finds the Examples Experiment missing) and
+`open_saved_example`'s own re-seed-if-missing check (both their own
+docstrings) are the safety net for a document opened before this
+thread gets to it.
 
 <a id="gui.test_examples_bridge.test_the_seeded_study_holds_only_examples_with_a_saved_result"></a>
 
-#### [test\_the\_seeded\_study\_holds\_only\_examples\_with\_a\_saved\_result](./gui/test_examples_bridge.py#L195)
+#### [test\_the\_seeded\_study\_holds\_only\_examples\_with\_a\_saved\_result](./gui/test_examples_bridge.py#L223)
 
 ```python
 def test_the_seeded_study_holds_only_examples_with_a_saved_result(
@@ -20612,7 +20623,7 @@ def test_the_seeded_study_holds_only_examples_with_a_saved_result(
 
 <a id="gui.test_examples_bridge.test_open_run_shows_a_seeded_example_from_its_saved_report"></a>
 
-#### [test\_open\_run\_shows\_a\_seeded\_example\_from\_its\_saved\_report](./gui/test_examples_bridge.py#L207)
+#### [test\_open\_run\_shows\_a\_seeded\_example\_from\_its\_saved\_report](./gui/test_examples_bridge.py#L235)
 
 ```python
 def test_open_run_shows_a_seeded_example_from_its_saved_report(
@@ -20623,7 +20634,7 @@ No trajectory, a saved report: the report-only payload (design §4.3).
 
 <a id="gui.test_examples_bridge.test_open_run_without_a_trajectory_or_a_report_still_fails"></a>
 
-#### [test\_open\_run\_without\_a\_trajectory\_or\_a\_report\_still\_fails](./gui/test_examples_bridge.py#L233)
+#### [test\_open\_run\_without\_a\_trajectory\_or\_a\_report\_still\_fails](./gui/test_examples_bridge.py#L261)
 
 ```python
 def test_open_run_without_a_trajectory_or_a_report_still_fails(
@@ -20634,7 +20645,7 @@ Only a saved report enables the report-only path.
 
 <a id="gui.test_examples_bridge.test_open_batch_shows_a_batch_from_its_saved_summary"></a>
 
-#### [test\_open\_batch\_shows\_a\_batch\_from\_its\_saved\_summary](./gui/test_examples_bridge.py#L247)
+#### [test\_open\_batch\_shows\_a\_batch\_from\_its\_saved\_summary](./gui/test_examples_bridge.py#L275)
 
 ```python
 def test_open_batch_shows_a_batch_from_its_saved_summary(
@@ -20645,7 +20656,7 @@ A batch without replicate trajectories opens from `summary.json`.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example"></a>
 
-#### [test\_load\_run\_configuration\_gives\_an\_editable\_copy\_of\_a\_seeded\_example](./gui/test_examples_bridge.py#L277)
+#### [test\_load\_run\_configuration\_gives\_an\_editable\_copy\_of\_a\_seeded\_example](./gui/test_examples_bridge.py#L305)
 
 ```python
 def test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example(
@@ -20661,7 +20672,7 @@ engine, which the configuration leaves at the library default.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_falls_back_to_the_manifest"></a>
 
-#### [test\_load\_run\_configuration\_falls\_back\_to\_the\_manifest](./gui/test_examples_bridge.py#L315)
+#### [test\_load\_run\_configuration\_falls\_back\_to\_the\_manifest](./gui/test_examples_bridge.py#L343)
 
 ```python
 def test_load_run_configuration_falls_back_to_the_manifest(
@@ -20672,7 +20683,7 @@ Without `config.yaml`, the manifest's parameters and the metadata serve.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_reads_a_regular_batch_manifest"></a>
 
-#### [test\_load\_run\_configuration\_reads\_a\_regular\_batch\_manifest](./gui/test_examples_bridge.py#L331)
+#### [test\_load\_run\_configuration\_reads\_a\_regular\_batch\_manifest](./gui/test_examples_bridge.py#L359)
 
 ```python
 def test_load_run_configuration_reads_a_regular_batch_manifest(
@@ -20683,7 +20694,7 @@ A regular batch without config.yaml also loads editable parameters.
 
 <a id="gui.test_examples_bridge.test_list_examples_says_which_examples_have_a_saved_result"></a>
 
-#### [test\_list\_examples\_says\_which\_examples\_have\_a\_saved\_result](./gui/test_examples_bridge.py#L346)
+#### [test\_list\_examples\_says\_which\_examples\_have\_a\_saved\_result](./gui/test_examples_bridge.py#L374)
 
 ```python
 def test_list_examples_says_which_examples_have_a_saved_result(
@@ -20694,7 +20705,7 @@ The dialog reads the same bundle seeding does.
 
 <a id="gui.test_examples_bridge.test_open_saved_example_seeds_when_needed_and_names_the_run"></a>
 
-#### [test\_open\_saved\_example\_seeds\_when\_needed\_and\_names\_the\_run](./gui/test_examples_bridge.py#L356)
+#### [test\_open\_saved\_example\_seeds\_when\_needed\_and\_names\_the\_run](./gui/test_examples_bridge.py#L384)
 
 ```python
 def test_open_saved_example_seeds_when_needed_and_names_the_run(
@@ -20705,7 +20716,7 @@ def test_open_saved_example_seeds_when_needed_and_names_the_run(
 
 <a id="gui.test_examples_bridge.test_open_saved_example_refuses_without_a_saved_result"></a>
 
-#### [test\_open\_saved\_example\_refuses\_without\_a\_saved\_result](./gui/test_examples_bridge.py#L375)
+#### [test\_open\_saved\_example\_refuses\_without\_a\_saved\_result](./gui/test_examples_bridge.py#L403)
 
 ```python
 @pytest.mark.parametrize(
@@ -20720,7 +20731,7 @@ No saved result, or no such example: a message for the dialog.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_refuses_a_directory_that_is_not_a_run"></a>
 
-#### [test\_load\_run\_configuration\_refuses\_a\_directory\_that\_is\_not\_a\_run](./gui/test_examples_bridge.py#L385)
+#### [test\_load\_run\_configuration\_refuses\_a\_directory\_that\_is\_not\_a\_run](./gui/test_examples_bridge.py#L413)
 
 ```python
 def test_load_run_configuration_refuses_a_directory_that_is_not_a_run(
