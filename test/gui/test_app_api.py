@@ -5601,7 +5601,7 @@ def test_get_about_info_names_the_installed_version() -> None:
 def test_get_about_info_reports_the_dev_checkout_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`commit` mirrors `fim.__dev_commit__`'s module-level value.
+    """`commit` mirrors `fim.dev_commit()`'s own return value.
 
     `None` for a release install or frozen build; a short `git` label
     (`g<sha>`, `-dirty`-suffixed for uncommitted local changes) for a
@@ -5609,7 +5609,7 @@ def test_get_about_info_reports_the_dev_checkout_commit(
     docstring. Monkeypatched here rather than relying on this test
     process's own live value, so the assertion is exact either way.
     """
-    monkeypatch.setattr(app_module, "fim_dev_commit", "abc1234-dirty")
+    monkeypatch.setattr(app_module, "fim_dev_commit", lambda: "abc1234-dirty")
 
     info = Api().get_about_info()
 

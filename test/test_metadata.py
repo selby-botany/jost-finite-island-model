@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -52,7 +55,7 @@ def test_version_loader_does_not_read_working_directory(
         "is_file",
         lambda path: False if path == source_version else original_is_file(path),
     )
-    monkeypatch.setattr(fim, "version", package_version)
+    monkeypatch.setattr(importlib.metadata, "version", package_version)
 
     assert fim._load_version() == "1.0.0"
 
@@ -180,15 +183,42 @@ def test_dev_commit_suffix_is_none_when_git_binary_is_missing(
     assert fim._dev_commit_suffix(tmp_path) is None
 
 
-def test_load_version_sets_dev_commit_only_for_the_source_tree_checkout(
-    tmp_path: Path,
+def test_load_version_never_shells_out_to_git(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A frozen bundle never shells out to `git`, even if `.git` exists.
+    """`_load_version` resolves the version string alone, never `git`.
 
     Regression guard for exactly the scenario `_dev_commit_suffix`'s own
     docstring promises: an installed release's version string must never
-    depend on whatever happens to be on the machine's `PATH`.
+    depend on whatever happens to be on the machine's `PATH` -- and, since
+    this project's own `dev_commit()` split out from `_load_version`,
+    neither does a source-tree checkout's version string, which this
+    test's own process (running from this very checkout, `.git` and
+    all) is one. `import fim` running `_load_version` unconditionally,
+    in every process (a CLI command, a GUI job worker, this very test
+    suite), is exactly why that split matters: only `dev_commit()`'s
+    own first call may ever pay for `git`.
+    """
+    source_version = Path(fim.__file__).resolve().parents[2] / "version.txt"
+
+    def _fail_if_called(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("_load_version must never invoke git")
+
+    monkeypatch.setattr(subprocess, "run", _fail_if_called)
+
+    assert fim._load_version() == source_version.read_text(encoding="utf-8").strip()
+
+
+def test_dev_commit_never_shells_out_to_git_for_a_frozen_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A frozen bundle's commit label is `None`, without ever invoking `git`.
+
+    Mirrors the previous guard this module kept on `_load_version`'s own
+    eager side effect, now exercised against `dev_commit()` instead --
+    `_source_tree_root` is the one place both functions agree on what
+    "a real source checkout" means.
     """
     source_version = Path(fim.__file__).resolve().parents[2] / "version.txt"
     original_is_file = Path.is_file
@@ -205,23 +235,37 @@ def test_load_version_sets_dev_commit_only_for_the_source_tree_checkout(
         raise AssertionError("a frozen bundle must never invoke git")
 
     monkeypatch.setattr(subprocess, "run", _fail_if_called)
-    monkeypatch.setattr(fim, "__dev_commit__", "stale-sentinel")
+    monkeypatch.setattr(fim, "_dev_commit_cache", None)
+    monkeypatch.setattr(fim, "_dev_commit_computed", False)
 
-    assert fim._load_version() == "1.2.3"
-    assert fim.__dev_commit__ == "stale-sentinel"
+    assert fim.dev_commit() is None
 
 
-def test_load_version_sets_dev_commit_for_a_real_source_checkout(
+def test_dev_commit_reads_and_caches_for_a_real_source_checkout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The module's own `_load_version()` wires the two functions together."""
+    """`dev_commit()` wires `_source_tree_root`/`_dev_commit_suffix` together,
+    computing the label only on its own first call and caching it after."""
+    calls: list[list[str]] = []
+    stub = cast(
+        "Callable[..., subprocess.CompletedProcess[str]]",
+        _stub_git_run(rev_parse_stdout="abc1234\n"),
+    )
+
+    def _counting_stub(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return stub(command, **kwargs)
+
     monkeypatch.delattr(sys, "_MEIPASS", raising=False)
-    monkeypatch.setattr(subprocess, "run", _stub_git_run(rev_parse_stdout="abc1234\n"))
-    monkeypatch.setattr(fim, "__dev_commit__", None)
+    monkeypatch.setattr(subprocess, "run", _counting_stub)
+    monkeypatch.setattr(fim, "_dev_commit_cache", None)
+    monkeypatch.setattr(fim, "_dev_commit_computed", False)
 
-    fim._load_version()
-
-    assert fim.__dev_commit__ == "abc1234"
+    assert fim.dev_commit() == "abc1234"
+    assert fim.dev_commit() == "abc1234"
+    assert len(calls) == 2  # one `rev-parse`, one `status`, never repeated
 
 
 def test_mplconfigdir_pinned_only_when_frozen_and_darwin(
@@ -303,6 +347,6 @@ def test_version_loader_reports_unknown_without_any_metadata(
         "is_file",
         lambda path: False if path == source_version else original_is_file(path),
     )
-    monkeypatch.setattr(fim, "version", missing_distribution)
+    monkeypatch.setattr(importlib.metadata, "version", missing_distribution)
 
     assert fim._load_version() == "0+unknown"

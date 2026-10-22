@@ -1966,7 +1966,7 @@ function replaced the eager `__dev_commit__` module global that
 
 <a id="fim.__getattr__"></a>
 
-#### [\_\_getattr\_\_](./__init__.py#L266)
+#### [\_\_getattr\_\_](./__init__.py#L267)
 
 ```python
 def __getattr__(name: str) -> object
@@ -1990,7 +1990,7 @@ Load a facade name from its module on first use.
 
 <a id="fim.__dir__"></a>
 
-#### [\_\_dir\_\_](./__init__.py#L286)
+#### [\_\_dir\_\_](./__init__.py#L287)
 
 ```python
 def __dir__() -> list[str]
@@ -8438,7 +8438,7 @@ owned by the bundled examples.
 
 <a id="fim.examples.seed.BundledClass"></a>
 
-## [BundledClass Objects](./examples/seed.py#L84)
+## [BundledClass Objects](./examples/seed.py#L83)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8456,7 +8456,7 @@ One class in the bundle's tree.
 
 <a id="fim.examples.seed.BundledExample"></a>
 
-## [BundledExample Objects](./examples/seed.py#L101)
+## [BundledExample Objects](./examples/seed.py#L100)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8478,7 +8478,7 @@ One example in the bundle.
 
 <a id="fim.examples.seed.BundledExample.has_saved_result"></a>
 
-#### [has\_saved\_result](./examples/seed.py#L123)
+#### [has\_saved\_result](./examples/seed.py#L122)
 
 ```python
 @property
@@ -8489,7 +8489,7 @@ Return whether the bundle carries this example's saved run.
 
 <a id="fim.examples.seed.ExamplesBundle"></a>
 
-## [ExamplesBundle Objects](./examples/seed.py#L129)
+## [ExamplesBundle Objects](./examples/seed.py#L128)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8506,7 +8506,7 @@ A parsed examples bundle.
 
 <a id="fim.examples.seed.SeedReport"></a>
 
-## [SeedReport Objects](./examples/seed.py#L144)
+## [SeedReport Objects](./examples/seed.py#L143)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8526,7 +8526,7 @@ What one `seed_examples` call found and did.
 
 <a id="fim.examples.seed.SeedReport.changed"></a>
 
-#### [changed](./examples/seed.py#L162)
+#### [changed](./examples/seed.py#L161)
 
 ```python
 @property
@@ -8537,7 +8537,7 @@ Return whether anything on disk changed.
 
 <a id="fim.examples.seed.example_run_directory"></a>
 
-#### [example\_run\_directory](./examples/seed.py#L167)
+#### [example\_run\_directory](./examples/seed.py#L166)
 
 ```python
 def example_run_directory(example_id: str,
@@ -8559,7 +8559,7 @@ Return where a seeded example's run lives.
 
 <a id="fim.examples.seed.example_study_id"></a>
 
-#### [example\_study\_id](./examples/seed.py#L181)
+#### [example\_study\_id](./examples/seed.py#L180)
 
 ```python
 def example_study_id(class_id: str) -> str
@@ -8569,7 +8569,7 @@ Return the fixed id of the read-only Study for one class.
 
 <a id="fim.examples.seed.read_bundle"></a>
 
-#### [read\_bundle](./examples/seed.py#L186)
+#### [read\_bundle](./examples/seed.py#L185)
 
 ```python
 def read_bundle(bundle: Path) -> ExamplesBundle | None
@@ -8595,7 +8595,7 @@ Read an examples bundle's `catalog.json`.
 
 <a id="fim.examples.seed.seed_examples"></a>
 
-#### [seed\_examples](./examples/seed.py#L215)
+#### [seed\_examples](./examples/seed.py#L214)
 
 ```python
 def seed_examples(results: Path | None = None,

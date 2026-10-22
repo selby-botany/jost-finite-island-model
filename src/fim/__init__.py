@@ -7,7 +7,6 @@ import logging
 import os
 import subprocess
 import sys
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -140,14 +139,27 @@ def _dev_commit_suffix(repo_root: Path) -> str | None:
     return label
 
 
+def _source_tree_root() -> Path | None:
+    """Return this checkout's root directory, or `None` off a source tree.
+
+    The one place both `_load_version` and `dev_commit` decide whether
+    they are running from a source-tree `version.txt` -- kept in sync so
+    a commit label is only ever offered for the exact candidate
+    `_load_version` itself read its version string from.
+    """
+    source_version = Path(__file__).resolve().parents[2] / "version.txt"
+    return source_version.parent if source_version.is_file() else None
+
+
 def _load_version() -> str:
     """Return the version from the source tree, bundle, or package metadata.
 
-    As a side effect, populates the module-level `__dev_commit__` when
-    (and only when) the version actually came from a source-tree `git`
-    checkout -- see `_dev_commit_suffix`'s own docstring.
+    Never shells out to `git`: `dev_commit`, below, is the one place
+    that happens, and only on its own first call -- this function alone
+    governs every process's `__version__`, including the many (a CLI
+    command, a GUI job worker's own startup, this package's own test
+    suite) that never read a commit label at all.
     """
-    global __dev_commit__  # noqa: PLW0603
     source_version = Path(__file__).resolve().parents[2] / "version.txt"
     candidates = [source_version]
     bundle_root = getattr(sys, "_MEIPASS", None)
@@ -155,17 +167,40 @@ def _load_version() -> str:
         candidates.append(Path(bundle_root) / "version.txt")
     for candidate in candidates:
         if candidate.is_file():
-            if candidate == source_version:
-                __dev_commit__ = _dev_commit_suffix(candidate.parent)
             return candidate.read_text(encoding="utf-8").strip()
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
     try:
         return version("fim")
     except PackageNotFoundError:
         return "0+unknown"
 
 
-__dev_commit__: str | None = None
 __version__ = _load_version()
+
+_dev_commit_cache: str | None = None
+_dev_commit_computed = False
+
+
+def dev_commit() -> str | None:
+    """Return a short `git` commit label for a source-tree checkout, or `None`.
+
+    Computed, and its one `git rev-parse`/`git status` pair run, only on
+    this function's own first call -- never merely from `import fim`, so
+    a CLI command, a GUI job worker, or this package's own test suite
+    never pays for it unless something (today, only `fim.gui.app`'s own
+    window title and About dialog) actually asks. `None` for an
+    installed release or a PyInstaller bundle, exactly as before this
+    function replaced the eager `__dev_commit__` module global that
+    `_load_version` itself used to set as a side effect.
+    """
+    global _dev_commit_cache, _dev_commit_computed  # noqa: PLW0603
+    if not _dev_commit_computed:
+        root = _source_tree_root()
+        _dev_commit_cache = _dev_commit_suffix(root) if root is not None else None
+        _dev_commit_computed = True
+    return _dev_commit_cache
+
 
 # The public facade. Names load on first use (PEP 562), so `import fim` stays
 # light and the package's own modules can import `fim.__version__` while the
@@ -280,8 +315,8 @@ __all__ = [
     "StoredRun",
     "UnsupportedError",
     "Workspace",
-    "__dev_commit__",
     "__version__",
+    "dev_commit",
     "load_config",
     "open_run",
     "run_identity",

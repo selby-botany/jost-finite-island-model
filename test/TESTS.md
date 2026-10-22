@@ -1655,7 +1655,7 @@ files and the same timestamps.
 
 <a id="test.test_examples_seed.results"></a>
 
-#### [results](./test_examples_seed.py#L139)
+#### [results](./test_examples_seed.py#L137)
 
 ```python
 @pytest.fixture
@@ -1666,7 +1666,7 @@ An empty results directory.
 
 <a id="test.test_examples_seed.test_seeding_writes_runs_studies_and_the_examples_experiment"></a>
 
-#### [test\_seeding\_writes\_runs\_studies\_and\_the\_examples\_experiment](./test_examples_seed.py#L160)
+#### [test\_seeding\_writes\_runs\_studies\_and\_the\_examples\_experiment](./test_examples_seed.py#L158)
 
 ```python
 def test_seeding_writes_runs_studies_and_the_examples_experiment(
@@ -1677,7 +1677,7 @@ Every part of section 4.2, from one standard bundle.
 
 <a id="test.test_examples_seed.test_seeding_twice_changes_nothing"></a>
 
-#### [test\_seeding\_twice\_changes\_nothing](./test_examples_seed.py#L229)
+#### [test\_seeding\_twice\_changes\_nothing](./test_examples_seed.py#L227)
 
 ```python
 def test_seeding_twice_changes_nothing(tmp_path: Path, results: Path) -> None
@@ -1687,7 +1687,7 @@ Idempotent: the same bundle again writes no file, not even a timestamp.
 
 <a id="test.test_examples_seed.test_a_changed_bundle_file_replaces_only_that_file"></a>
 
-#### [test\_a\_changed\_bundle\_file\_replaces\_only\_that\_file](./test_examples_seed.py#L245)
+#### [test\_a\_changed\_bundle\_file\_replaces\_only\_that\_file](./test_examples_seed.py#L243)
 
 ```python
 def test_a_changed_bundle_file_replaces_only_that_file(tmp_path: Path,
@@ -1698,7 +1698,7 @@ A newer bundle rewrites the files whose content differs, nothing else.
 
 <a id="test.test_examples_seed.test_reseeding_keeps_decoded_data_until_an_archive_changes"></a>
 
-#### [test\_reseeding\_keeps\_decoded\_data\_until\_an\_archive\_changes](./test_examples_seed.py#L266)
+#### [test\_reseeding\_keeps\_decoded\_data\_until\_an\_archive\_changes](./test_examples_seed.py#L264)
 
 ```python
 @pytest.mark.parametrize("remove_part", [False, True])
@@ -1708,27 +1708,9 @@ def test_reseeding_keeps_decoded_data_until_an_archive_changes(
 
 Cached raw data survives identical seeding, not changed or removed parts.
 
-<a id="test.test_examples_seed.test_seeding_pre_decodes_a_changed_archive"></a>
-
-#### [test\_seeding\_pre\_decodes\_a\_changed\_archive](./test_examples_seed.py#L296)
-
-```python
-def test_seeding_pre_decodes_a_changed_archive(tmp_path: Path,
-                                               results: Path) -> None
-```
-
-A real archive is gzip-decoded and digest-verified at seed time.
-
-`Api.open_batch`/`open_run` both call `fim.examples.artifacts.
-materialize_outputs` themselves on the directory `seed_examples`
-writes to, and do nothing a second time once the raw file already
-exists (that function's own `target.exists()` short-circuit) --
-this proves `seed_examples` already leaves it there, so a user's
-own first click no longer pays for the decode live.
-
 <a id="test.test_examples_seed.test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time"></a>
 
-#### [test\_changed\_labels\_rewrite\_the\_metadata\_and\_keep\_its\_creation\_time](./test_examples_seed.py#L336)
+#### [test\_changed\_labels\_rewrite\_the\_metadata\_and\_keep\_its\_creation\_time](./test_examples_seed.py#L294)
 
 ```python
 def test_changed_labels_rewrite_the_metadata_and_keep_its_creation_time(
@@ -1739,7 +1721,7 @@ A renamed example gets its new name; `created_at` survives.
 
 <a id="test.test_examples_seed.test_an_owned_file_the_bundle_stops_shipping_is_removed"></a>
 
-#### [test\_an\_owned\_file\_the\_bundle\_stops\_shipping\_is\_removed](./test_examples_seed.py#L355)
+#### [test\_an\_owned\_file\_the\_bundle\_stops\_shipping\_is\_removed](./test_examples_seed.py#L313)
 
 ```python
 def test_an_owned_file_the_bundle_stops_shipping_is_removed(
@@ -1750,7 +1732,7 @@ A batch example that became a single run loses its batch files.
 
 <a id="test.test_examples_seed.test_seeding_never_touches_a_users_own_runs_studies_or_experiments"></a>
 
-#### [test\_seeding\_never\_touches\_a\_users\_own\_runs\_studies\_or\_experiments](./test_examples_seed.py#L373)
+#### [test\_seeding\_never\_touches\_a\_users\_own\_runs\_studies\_or\_experiments](./test_examples_seed.py#L331)
 
 ```python
 def test_seeding_never_touches_a_users_own_runs_studies_or_experiments(
@@ -1761,7 +1743,7 @@ Everything outside the examples' own items is byte-for-byte unchanged.
 
 <a id="test.test_examples_seed.test_an_example_dropped_from_the_bundle_is_removed_with_its_study"></a>
 
-#### [test\_an\_example\_dropped\_from\_the\_bundle\_is\_removed\_with\_its\_study](./test_examples_seed.py#L400)
+#### [test\_an\_example\_dropped\_from\_the\_bundle\_is\_removed\_with\_its\_study](./test_examples_seed.py#L358)
 
 ```python
 def test_an_example_dropped_from_the_bundle_is_removed_with_its_study(
@@ -1772,7 +1754,7 @@ Stale example items go; a directory holding a user's file stays.
 
 <a id="test.test_examples_seed.test_reseeding_restores_a_read_only_flag_an_older_version_dropped"></a>
 
-#### [test\_reseeding\_restores\_a\_read\_only\_flag\_an\_older\_version\_dropped](./test_examples_seed.py#L423)
+#### [test\_reseeding\_restores\_a\_read\_only\_flag\_an\_older\_version\_dropped](./test_examples_seed.py#L381)
 
 ```python
 def test_reseeding_restores_a_read_only_flag_an_older_version_dropped(
@@ -1783,7 +1765,7 @@ An older fim that rewrote a manifest drops `read_only`; seeding repairs it.
 
 <a id="test.test_examples_seed.test_a_bundle_without_a_catalog_seeds_nothing"></a>
 
-#### [test\_a\_bundle\_without\_a\_catalog\_seeds\_nothing](./test_examples_seed.py#L440)
+#### [test\_a\_bundle\_without\_a\_catalog\_seeds\_nothing](./test_examples_seed.py#L398)
 
 ```python
 def test_a_bundle_without_a_catalog_seeds_nothing(tmp_path: Path,
@@ -1794,7 +1776,7 @@ No `catalog.json` (an unbundled build): nothing is created.
 
 <a id="test.test_examples_seed.test_a_bundle_with_no_saved_results_removes_a_stale_examples_experiment"></a>
 
-#### [test\_a\_bundle\_with\_no\_saved\_results\_removes\_a\_stale\_examples\_experiment](./test_examples_seed.py#L453)
+#### [test\_a\_bundle\_with\_no\_saved\_results\_removes\_a\_stale\_examples\_experiment](./test_examples_seed.py#L411)
 
 ```python
 def test_a_bundle_with_no_saved_results_removes_a_stale_examples_experiment(
@@ -1805,7 +1787,7 @@ With nothing to show, the Examples Experiment is not kept around empty.
 
 <a id="test.test_examples_seed.test_a_malformed_catalog_is_reported"></a>
 
-#### [test\_a\_malformed\_catalog\_is\_reported](./test_examples_seed.py#L469)
+#### [test\_a\_malformed\_catalog\_is\_reported](./test_examples_seed.py#L427)
 
 ```python
 def test_a_malformed_catalog_is_reported(tmp_path: Path,
@@ -1816,7 +1798,7 @@ A catalog missing its keys raises `ValueError` naming the file.
 
 <a id="test.test_examples_seed.test_the_committed_bundle_seeds_cleanly"></a>
 
-#### [test\_the\_committed\_bundle\_seeds\_cleanly](./test_examples_seed.py#L479)
+#### [test\_the\_committed\_bundle\_seeds\_cleanly](./test_examples_seed.py#L437)
 
 ```python
 def test_the_committed_bundle_seeds_cleanly(results: Path) -> None
@@ -20537,7 +20519,7 @@ tests do not change whenever the shipped examples do.
 
 <a id="gui.test_examples_bridge.build_bundle"></a>
 
-#### [build\_bundle](./gui/test_examples_bridge.py#L48)
+#### [build\_bundle](./gui/test_examples_bridge.py#L47)
 
 ```python
 def build_bundle(root: Path) -> Path
@@ -20551,7 +20533,7 @@ trajectory), and `not-run-yet`, with a configuration only.
 
 <a id="gui.test_examples_bridge.results"></a>
 
-#### [results](./gui/test_examples_bridge.py#L103)
+#### [results](./gui/test_examples_bridge.py#L102)
 
 ```python
 @pytest.fixture
@@ -20563,7 +20545,7 @@ Point `paths.results_directory()` at an isolated directory.
 
 <a id="gui.test_examples_bridge.bundle"></a>
 
-#### [bundle](./gui/test_examples_bridge.py#L114)
+#### [bundle](./gui/test_examples_bridge.py#L113)
 
 ```python
 @pytest.fixture
@@ -20574,7 +20556,7 @@ Build the fixture bundle and make it the app's bundled examples.
 
 <a id="gui.test_examples_bridge.test_ensure_examples_seeds_a_missing_examples_experiment"></a>
 
-#### [test\_ensure\_examples\_seeds\_a\_missing\_examples\_experiment](./gui/test_examples_bridge.py#L121)
+#### [test\_ensure\_examples\_seeds\_a\_missing\_examples\_experiment](./gui/test_examples_bridge.py#L120)
 
 ```python
 def test_ensure_examples_seeds_a_missing_examples_experiment(
@@ -20585,7 +20567,7 @@ Missing: seeded, and reported as changed so Home refetches.
 
 <a id="gui.test_examples_bridge.test_ensure_examples_does_nothing_while_the_experiment_exists"></a>
 
-#### [test\_ensure\_examples\_does\_nothing\_while\_the\_experiment\_exists](./gui/test_examples_bridge.py#L142)
+#### [test\_ensure\_examples\_does\_nothing\_while\_the\_experiment\_exists](./gui/test_examples_bridge.py#L141)
 
 ```python
 def test_ensure_examples_does_nothing_while_the_experiment_exists(
@@ -20596,7 +20578,7 @@ Present: no seeding at all, even if the bundle has changed since.
 
 <a id="gui.test_examples_bridge.test_ensure_examples_reports_a_damaged_bundle"></a>
 
-#### [test\_ensure\_examples\_reports\_a\_damaged\_bundle](./gui/test_examples_bridge.py#L158)
+#### [test\_ensure\_examples\_reports\_a\_damaged\_bundle](./gui/test_examples_bridge.py#L157)
 
 ```python
 def test_ensure_examples_reports_a_damaged_bundle(
@@ -20606,31 +20588,20 @@ def test_ensure_examples_reports_a_damaged_bundle(
 
 A malformed catalog is a refusal with a message, never an exception.
 
-<a id="gui.test_examples_bridge.test_app_start_backgrounds_example_seeding_without_blocking_the_window"></a>
+<a id="gui.test_examples_bridge.test_app_start_seeds_the_examples_before_the_window_opens"></a>
 
-#### [test\_app\_start\_backgrounds\_example\_seeding\_without\_blocking\_the\_window](./gui/test_examples_bridge.py#L174)
+#### [test\_app\_start\_seeds\_the\_examples\_before\_the\_window\_opens](./gui/test_examples_bridge.py#L173)
 
 ```python
-def test_app_start_backgrounds_example_seeding_without_blocking_the_window(
-        monkeypatch: pytest.MonkeyPatch) -> None
+def test_app_start_seeds_the_examples_before_the_window_opens(
+        results: Path, bundle: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-`main` starts seeding in its own thread and never waits for it.
-
-Regression guard for the opposite of this test's own former contract
-(`_seed_bundled_examples` run synchronously, before `create_window`,
-so the window could not appear until every bundled example's every
-file had been read and byte-compared against its already-seeded
-copy -- live-measured as the dominant share of "detached" to "a
-window is actually on screen"). `Api.ensure_examples` (Home's own
-fallback the moment it finds the Examples Experiment missing) and
-`open_saved_example`'s own re-seed-if-missing check (both their own
-docstrings) are the safety net for a document opened before this
-thread gets to it.
+`main` seeds once the results location is final.
 
 <a id="gui.test_examples_bridge.test_the_seeded_study_holds_only_examples_with_a_saved_result"></a>
 
-#### [test\_the\_seeded\_study\_holds\_only\_examples\_with\_a\_saved\_result](./gui/test_examples_bridge.py#L223)
+#### [test\_the\_seeded\_study\_holds\_only\_examples\_with\_a\_saved\_result](./gui/test_examples_bridge.py#L195)
 
 ```python
 def test_the_seeded_study_holds_only_examples_with_a_saved_result(
@@ -20641,7 +20612,7 @@ def test_the_seeded_study_holds_only_examples_with_a_saved_result(
 
 <a id="gui.test_examples_bridge.test_open_run_shows_a_seeded_example_from_its_saved_report"></a>
 
-#### [test\_open\_run\_shows\_a\_seeded\_example\_from\_its\_saved\_report](./gui/test_examples_bridge.py#L235)
+#### [test\_open\_run\_shows\_a\_seeded\_example\_from\_its\_saved\_report](./gui/test_examples_bridge.py#L207)
 
 ```python
 def test_open_run_shows_a_seeded_example_from_its_saved_report(
@@ -20652,7 +20623,7 @@ No trajectory, a saved report: the report-only payload (design §4.3).
 
 <a id="gui.test_examples_bridge.test_open_run_without_a_trajectory_or_a_report_still_fails"></a>
 
-#### [test\_open\_run\_without\_a\_trajectory\_or\_a\_report\_still\_fails](./gui/test_examples_bridge.py#L261)
+#### [test\_open\_run\_without\_a\_trajectory\_or\_a\_report\_still\_fails](./gui/test_examples_bridge.py#L233)
 
 ```python
 def test_open_run_without_a_trajectory_or_a_report_still_fails(
@@ -20663,7 +20634,7 @@ Only a saved report enables the report-only path.
 
 <a id="gui.test_examples_bridge.test_open_batch_shows_a_batch_from_its_saved_summary"></a>
 
-#### [test\_open\_batch\_shows\_a\_batch\_from\_its\_saved\_summary](./gui/test_examples_bridge.py#L275)
+#### [test\_open\_batch\_shows\_a\_batch\_from\_its\_saved\_summary](./gui/test_examples_bridge.py#L247)
 
 ```python
 def test_open_batch_shows_a_batch_from_its_saved_summary(
@@ -20674,7 +20645,7 @@ A batch without replicate trajectories opens from `summary.json`.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example"></a>
 
-#### [test\_load\_run\_configuration\_gives\_an\_editable\_copy\_of\_a\_seeded\_example](./gui/test_examples_bridge.py#L305)
+#### [test\_load\_run\_configuration\_gives\_an\_editable\_copy\_of\_a\_seeded\_example](./gui/test_examples_bridge.py#L277)
 
 ```python
 def test_load_run_configuration_gives_an_editable_copy_of_a_seeded_example(
@@ -20690,7 +20661,7 @@ engine, which the configuration leaves at the library default.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_falls_back_to_the_manifest"></a>
 
-#### [test\_load\_run\_configuration\_falls\_back\_to\_the\_manifest](./gui/test_examples_bridge.py#L343)
+#### [test\_load\_run\_configuration\_falls\_back\_to\_the\_manifest](./gui/test_examples_bridge.py#L315)
 
 ```python
 def test_load_run_configuration_falls_back_to_the_manifest(
@@ -20701,7 +20672,7 @@ Without `config.yaml`, the manifest's parameters and the metadata serve.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_reads_a_regular_batch_manifest"></a>
 
-#### [test\_load\_run\_configuration\_reads\_a\_regular\_batch\_manifest](./gui/test_examples_bridge.py#L359)
+#### [test\_load\_run\_configuration\_reads\_a\_regular\_batch\_manifest](./gui/test_examples_bridge.py#L331)
 
 ```python
 def test_load_run_configuration_reads_a_regular_batch_manifest(
@@ -20712,7 +20683,7 @@ A regular batch without config.yaml also loads editable parameters.
 
 <a id="gui.test_examples_bridge.test_list_examples_says_which_examples_have_a_saved_result"></a>
 
-#### [test\_list\_examples\_says\_which\_examples\_have\_a\_saved\_result](./gui/test_examples_bridge.py#L374)
+#### [test\_list\_examples\_says\_which\_examples\_have\_a\_saved\_result](./gui/test_examples_bridge.py#L346)
 
 ```python
 def test_list_examples_says_which_examples_have_a_saved_result(
@@ -20723,7 +20694,7 @@ The dialog reads the same bundle seeding does.
 
 <a id="gui.test_examples_bridge.test_open_saved_example_seeds_when_needed_and_names_the_run"></a>
 
-#### [test\_open\_saved\_example\_seeds\_when\_needed\_and\_names\_the\_run](./gui/test_examples_bridge.py#L384)
+#### [test\_open\_saved\_example\_seeds\_when\_needed\_and\_names\_the\_run](./gui/test_examples_bridge.py#L356)
 
 ```python
 def test_open_saved_example_seeds_when_needed_and_names_the_run(
@@ -20734,7 +20705,7 @@ def test_open_saved_example_seeds_when_needed_and_names_the_run(
 
 <a id="gui.test_examples_bridge.test_open_saved_example_refuses_without_a_saved_result"></a>
 
-#### [test\_open\_saved\_example\_refuses\_without\_a\_saved\_result](./gui/test_examples_bridge.py#L403)
+#### [test\_open\_saved\_example\_refuses\_without\_a\_saved\_result](./gui/test_examples_bridge.py#L375)
 
 ```python
 @pytest.mark.parametrize(
@@ -20749,7 +20720,7 @@ No saved result, or no such example: a message for the dialog.
 
 <a id="gui.test_examples_bridge.test_load_run_configuration_refuses_a_directory_that_is_not_a_run"></a>
 
-#### [test\_load\_run\_configuration\_refuses\_a\_directory\_that\_is\_not\_a\_run](./gui/test_examples_bridge.py#L413)
+#### [test\_load\_run\_configuration\_refuses\_a\_directory\_that\_is\_not\_a\_run](./gui/test_examples_bridge.py#L385)
 
 ```python
 def test_load_run_configuration_refuses_a_directory_that_is_not_a_run(
@@ -24125,7 +24096,7 @@ measurement.
 
 <a id="gui.test_open_run_screen.test_clicking_a_column_header_sorts_that_studys_own_runs"></a>
 
-#### [test\_clicking\_a\_column\_header\_sorts\_that\_studys\_own\_runs](./gui/test_open_run_screen.py#L1282)
+#### [test\_clicking\_a\_column\_header\_sorts\_that\_studys\_own\_runs](./gui/test_open_run_screen.py#L1271)
 
 ```python
 def test_clicking_a_column_header_sorts_that_studys_own_runs(
@@ -24143,7 +24114,7 @@ touches.
 
 <a id="gui.test_open_run_screen.test_dragging_a_column_resize_handle_widens_it_for_the_whole_table"></a>
 
-#### [test\_dragging\_a\_column\_resize\_handle\_widens\_it\_for\_the\_whole\_table](./gui/test_open_run_screen.py#L1400)
+#### [test\_dragging\_a\_column\_resize\_handle\_widens\_it\_for\_the\_whole\_table](./gui/test_open_run_screen.py#L1389)
 
 ```python
 def test_dragging_a_column_resize_handle_widens_it_for_the_whole_table(
@@ -24156,7 +24127,7 @@ row share the identical underlying columns (item 4).
 
 <a id="gui.test_open_run_screen.test_selecting_a_study_checkbox_also_checks_its_own_run_rows"></a>
 
-#### [test\_selecting\_a\_study\_checkbox\_also\_checks\_its\_own\_run\_rows](./gui/test_open_run_screen.py#L1456)
+#### [test\_selecting\_a\_study\_checkbox\_also\_checks\_its\_own\_run\_rows](./gui/test_open_run_screen.py#L1445)
 
 ```python
 def test_selecting_a_study_checkbox_also_checks_its_own_run_rows(
@@ -24169,7 +24140,7 @@ still being included in a bulk delete.
 
 <a id="gui.test_open_run_screen.test_result_table_cells_are_user_selectable_for_copy"></a>
 
-#### [test\_result\_table\_cells\_are\_user\_selectable\_for\_copy](./gui/test_open_run_screen.py#L1506)
+#### [test\_result\_table\_cells\_are\_user\_selectable\_for\_copy](./gui/test_open_run_screen.py#L1495)
 
 ```python
 def test_result_table_cells_are_user_selectable_for_copy(
@@ -24189,7 +24160,7 @@ both.
 
 <a id="gui.test_open_run_screen.test_a_reopened_runs_graphs_repaint_at_the_real_pane_size"></a>
 
-#### [test\_a\_reopened\_runs\_graphs\_repaint\_at\_the\_real\_pane\_size](./gui/test_open_run_screen.py#L1554)
+#### [test\_a\_reopened\_runs\_graphs\_repaint\_at\_the\_real\_pane\_size](./gui/test_open_run_screen.py#L1543)
 
 ```python
 def test_a_reopened_runs_graphs_repaint_at_the_real_pane_size(
@@ -24214,7 +24185,7 @@ pane's own CSS size, and content really was drawn across that width
 
 <a id="gui.test_open_run_screen.test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row"></a>
 
-#### [test\_multiple\_graph\_panes\_do\_not\_push\_the\_stats\_table\_off\_the\_row](./gui/test_open_run_screen.py#L1622)
+#### [test\_multiple\_graph\_panes\_do\_not\_push\_the\_stats\_table\_off\_the\_row](./gui/test_open_run_screen.py#L1611)
 
 ```python
 def test_multiple_graph_panes_do_not_push_the_stats_table_off_the_row(
