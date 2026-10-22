@@ -8917,6 +8917,37 @@ get genuine, hardware-scaled fan-out, so their default must track the
 process-visible core count. Either way, the result never exceeds
 `n_replicates`.
 
+<a id="engine.test_concurrency.test_an_unset_generational_vector_batch_no_longer_schedules_every_replicate"></a>
+
+#### [test\_an\_unset\_generational\_vector\_batch\_no\_longer\_schedules\_every\_replicate](./engine/test_concurrency.py#L145)
+
+```python
+def test_an_unset_generational_vector_batch_no_longer_schedules_every_replicate(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The regression this whole investigation traces back to.
+
+A fresh adaptive batch of 20 replicates under `generational-vector`,
+with `max_concurrent_replicates` left unset — exactly the bundled
+`golden-part-vi` example's own configuration — must no longer
+resolve to scheduling all 20 replicates concurrently (the confirmed
+cause of the GUI's "frozen progress screen" liveliness bug): it
+resolves to the small, fixed `batch_width` instead.
+
+<a id="engine.test_concurrency.test_an_explicit_max_concurrent_replicates_still_wins_over_the_resolved_default"></a>
+
+#### [test\_an\_explicit\_max\_concurrent\_replicates\_still\_wins\_over\_the\_resolved\_default](./engine/test_concurrency.py#L202)
+
+```python
+def test_an_explicit_max_concurrent_replicates_still_wins_over_the_resolved_default(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`run_batch`'s own precedence (unaffected by this fix): an explicit
+`max_concurrent_replicates` always wins over whatever
+`default_concurrency` the backend resolved.
+
 <a id="engine.test_engine"></a>
 
 # [engine.test\_engine](./engine/test_engine.py#L1)
