@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,7 @@ import pytest
 from conftest import poll_or_fail, wait_or_fail
 
 from fim.gui import app as app_module
+from fim.gui import jobs, object_bridge
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.jobs import ChildJob
@@ -63,7 +64,7 @@ class _HeldRuns:
     needed by this scalar-run test, so the drain thread releases the claim.
     """
 
-    def __init__(self, factory: Any) -> None:
+    def __init__(self, factory: Callable[..., ChildJob]) -> None:
         self.started: list[str] = []
         self._factory = factory
         self._children: list[tuple[ChildJob, Path]] = []
@@ -118,13 +119,13 @@ def _fake_worker_command(
 @pytest.fixture
 def held_runs(monkeypatch: pytest.MonkeyPatch) -> Iterator[_HeldRuns]:
     """Replace child execution with held processes, then release them all."""
-    start_child_job = app_module.jobs.start_child_job
+    start_child_job = jobs.start_child_job
     held = _HeldRuns(start_child_job)
 
-    def start_held_child(object_id: str, **options: Any) -> Any:
+    def start_held_child(object_id: str, **options: Any) -> ChildJob:
         return held.start_child(object_id, **options)
 
-    monkeypatch.setattr(app_module.jobs, "start_child_job", start_held_child)
+    monkeypatch.setattr(jobs, "start_child_job", start_held_child)
     try:
         yield held
     finally:
@@ -154,7 +155,7 @@ def test_two_runs_reserve_and_control_distinct_jobs(
 ) -> None:
     """Held runs keep separate records; cancel targets only its selected job."""
     del window
-    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 2)
+    monkeypatch.setattr(jobs, "usable_core_count", lambda: 2)
     first = api.start_run(_form())
     assert first["ok"] is True, first.get("message")
     first_object_id = held_runs.started[0]
@@ -165,8 +166,12 @@ def test_two_runs_reserve_and_control_distinct_jobs(
     assert second["ok"] is True, second.get("message")
     assert second["jobId"] != first["jobId"]
     assert second["objectId"] != first_object_id
-    assert api._jobs.active_job(first["jobId"]).active_object_id == first_object_id
-    assert api._jobs.active_job(second["jobId"]).active_object_id == second["objectId"]
+    first_job = api._jobs.active_job(first["jobId"])
+    second_job = api._jobs.active_job(second["jobId"])
+    assert first_job is not None
+    assert second_job is not None
+    assert first_job.active_object_id == first_object_id
+    assert second_job.active_object_id == second["objectId"]
     assert len(api._jobs.active_jobs()) == 2
 
     cancelled: list[str] = []
@@ -176,10 +181,12 @@ def test_two_runs_reserve_and_control_distinct_jobs(
         cancelled.append(object_id)
         return "cancelling"
 
-    monkeypatch.setattr(app_module.object_bridge, "cancel", record_cancel)
+    monkeypatch.setattr(object_bridge, "cancel", record_cancel)
     api.cancel_run(first["jobId"])
     assert cancelled == [first_object_id]
-    assert api._jobs.active_job(second["jobId"]).active_object_id == second["objectId"]
+    remaining_job = api._jobs.active_job(second["jobId"])
+    assert remaining_job is not None
+    assert remaining_job.active_object_id == second["objectId"]
 
     held_runs.release_all()
     _wait_until_no_run(api)
@@ -193,7 +200,7 @@ def test_child_progress_tracks_full_and_summary_view_levels(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The supervisor renders each child tick at the job's current view level."""
-    start_child_job = app_module.jobs.start_child_job
+    start_child_job = jobs.start_child_job
 
     def start_progress_child(object_id: str, **options: Any) -> ChildJob:
         return start_child_job(
@@ -207,7 +214,7 @@ def test_child_progress_tracks_full_and_summary_view_levels(
             **options,
         )
 
-    monkeypatch.setattr(app_module.jobs, "start_child_job", start_progress_child)
+    monkeypatch.setattr(jobs, "start_child_job", start_progress_child)
     started = api.start_run(_form())
     assert started["ok"] is True
     summary_release = results / f".summary-release-{started['objectId']}"
@@ -261,7 +268,7 @@ def test_child_crash_is_recorded_as_failed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An exited child with an active attempt is recorded as failed."""
-    start_child_job = app_module.jobs.start_child_job
+    start_child_job = jobs.start_child_job
 
     def start_crashing_child(object_id: str, **options: Any) -> ChildJob:
         return start_child_job(
@@ -270,7 +277,7 @@ def test_child_crash_is_recorded_as_failed(
             **options,
         )
 
-    monkeypatch.setattr(app_module.jobs, "start_child_job", start_crashing_child)
+    monkeypatch.setattr(jobs, "start_child_job", start_crashing_child)
     started = api.start_run(_form())
     assert started["ok"] is True
     _wait_until_no_run(api)
@@ -302,7 +309,7 @@ def test_a_refused_start_leaves_the_running_saved_run_alone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A full budget refuses a run without releasing existing reservations."""
-    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 1)
+    monkeypatch.setattr(jobs, "usable_core_count", lambda: 1)
     active, refusal = api._admit_run(object_id="saved-run")
     assert refusal is None
     assert active is not None
@@ -336,7 +343,7 @@ def test_an_admitted_sweep_consumes_capacity_for_run_starts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The run check and both start paths report exhausted sweep capacity."""
-    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 1)
+    monkeypatch.setattr(jobs, "usable_core_count", lambda: 1)
     sweep, refusal = api._admit_sweep(1)
     assert refusal is None
     assert sweep is not None
@@ -356,7 +363,7 @@ def test_run_and_sweep_reservations_share_the_worker_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two job kinds may coexist, but each consumes the same capacity."""
-    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 2)
+    monkeypatch.setattr(jobs, "usable_core_count", lambda: 2)
     run, refusal = api._admit_run()
     assert refusal is None
     assert run is not None

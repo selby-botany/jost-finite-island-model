@@ -1814,7 +1814,7 @@ Tests for lowered priority on GUI worker processes.
 
 <a id="test.test_execution_priority.test_linux_priority_is_applied_to_each_existing_thread"></a>
 
-#### [test\_linux\_priority\_is\_applied\_to\_each\_existing\_thread](./test_execution_priority.py#L14)
+#### [test\_linux\_priority\_is\_applied\_to\_each\_existing\_thread](./test_execution_priority.py#L16)
 
 ```python
 def test_linux_priority_is_applied_to_each_existing_thread(
@@ -1825,7 +1825,7 @@ Linux niceness is per thread, so enumerate the process task IDs.
 
 <a id="test.test_execution_priority.test_macos_priority_targets_the_current_process"></a>
 
-#### [test\_macos\_priority\_targets\_the\_current\_process](./test_execution_priority.py#L41)
+#### [test\_macos\_priority\_targets\_the\_current\_process](./test_execution_priority.py#L43)
 
 ```python
 def test_macos_priority_targets_the_current_process(
@@ -1836,7 +1836,7 @@ Platforms with process-scoped niceness lower the current process.
 
 <a id="test.test_execution_priority.test_linux_lowest_priority_uses_nice_nineteen"></a>
 
-#### [test\_linux\_lowest\_priority\_uses\_nice\_nineteen](./test_execution_priority.py#L60)
+#### [test\_linux\_lowest\_priority\_uses\_nice\_nineteen](./test_execution_priority.py#L62)
 
 ```python
 def test_linux_lowest_priority_uses_nice_nineteen(
@@ -1847,7 +1847,7 @@ Lowest priority uses the maximum supported positive nice value.
 
 <a id="test.test_execution_priority.test_macos_lowest_priority_uses_background_process_class"></a>
 
-#### [test\_macos\_lowest\_priority\_uses\_background\_process\_class](./test_execution_priority.py#L84)
+#### [test\_macos\_lowest\_priority\_uses\_background\_process\_class](./test_execution_priority.py#L86)
 
 ```python
 def test_macos_lowest_priority_uses_background_process_class(
@@ -1858,7 +1858,7 @@ macOS Lowest selects the Darwin background process priority.
 
 <a id="test.test_execution_priority.test_windows_priority_uses_below_normal_class"></a>
 
-#### [test\_windows\_priority\_uses\_below\_normal\_class](./test_execution_priority.py#L104)
+#### [test\_windows\_priority\_uses\_below\_normal\_class](./test_execution_priority.py#L106)
 
 ```python
 def test_windows_priority_uses_below_normal_class(
@@ -1869,7 +1869,7 @@ Windows child jobs use the below-normal process priority class.
 
 <a id="test.test_execution_priority.test_windows_lowest_priority_uses_idle_class"></a>
 
-#### [test\_windows\_lowest\_priority\_uses\_idle\_class](./test_execution_priority.py#L135)
+#### [test\_windows\_lowest\_priority\_uses\_idle\_class](./test_execution_priority.py#L137)
 
 ```python
 def test_windows_lowest_priority_uses_idle_class(
@@ -4866,7 +4866,7 @@ generations), so the run ids, manifests and attachments are the real ones.
 
 <a id="test.test_sweep_run.results"></a>
 
-#### [results](./test_sweep_run.py#L86)
+#### [results](./test_sweep_run.py#L87)
 
 ```python
 @pytest.fixture
@@ -4877,7 +4877,7 @@ Point the results directory at a temporary one for the test.
 
 <a id="test.test_sweep_run.test_local_point_runner_releases_its_reservation"></a>
 
-#### [test\_local\_point\_runner\_releases\_its\_reservation](./test_sweep_run.py#L728)
+#### [test\_local\_point\_runner\_releases\_its\_reservation](./test_sweep_run.py#L729)
 
 ```python
 @pytest.mark.parametrize("fails", [False, True], ids=["published", "failed"])
@@ -4889,7 +4889,7 @@ A point releases its marker after publishing or when its run fails.
 
 <a id="test.test_sweep_run.test_each_point_run_is_named_after_its_study_and_coordinates"></a>
 
-#### [test\_each\_point\_run\_is\_named\_after\_its\_study\_and\_coordinates](./test_sweep_run.py#L783)
+#### [test\_each\_point\_run\_is\_named\_after\_its\_study\_and\_coordinates](./test_sweep_run.py#L784)
 
 ```python
 def test_each_point_run_is_named_after_its_study_and_coordinates(
@@ -4900,7 +4900,7 @@ A sweep's runs say which sweep and which point they are.
 
 <a id="test.test_sweep_run.test_a_reused_run_keeps_the_name_it_already_has"></a>
 
-#### [test\_a\_reused\_run\_keeps\_the\_name\_it\_already\_has](./test_sweep_run.py#L803)
+#### [test\_a\_reused\_run\_keeps\_the\_name\_it\_already\_has](./test_sweep_run.py#L804)
 
 ```python
 def test_a_reused_run_keeps_the_name_it_already_has(results: Path) -> None
@@ -4910,7 +4910,7 @@ A second sweep reusing a point does not rename the first sweep's run.
 
 <a id="test.test_sweep_run.test_a_reused_run_without_a_name_is_named_by_the_sweep"></a>
 
-#### [test\_a\_reused\_run\_without\_a\_name\_is\_named\_by\_the\_sweep](./test_sweep_run.py#L819)
+#### [test\_a\_reused\_run\_without\_a\_name\_is\_named\_by\_the\_sweep](./test_sweep_run.py#L820)
 
 ```python
 def test_a_reused_run_without_a_name_is_named_by_the_sweep(
@@ -4921,7 +4921,7 @@ A reused run nobody named (an ordinary single run) gets the sweep's name.
 
 <a id="test.test_sweep_run.test_a_read_only_point_run_keeps_its_own_labels_and_the_sweep_succeeds"></a>
 
-#### [test\_a\_read\_only\_point\_run\_keeps\_its\_own\_labels\_and\_the\_sweep\_succeeds](./test_sweep_run.py#L840)
+#### [test\_a\_read\_only\_point\_run\_keeps\_its\_own\_labels\_and\_the\_sweep\_succeeds](./test_sweep_run.py#L841)
 
 ```python
 def test_a_read_only_point_run_keeps_its_own_labels_and_the_sweep_succeeds(
@@ -4932,7 +4932,7 @@ Naming a read-only run is refused; the sweep logs that and carries on.
 
 <a id="test.test_sweep_run.test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run"></a>
 
-#### [test\_a\_matching\_recompute\_of\_a\_read\_only\_run\_keeps\_the\_old\_run](./test_sweep_run.py#L854)
+#### [test\_a\_matching\_recompute\_of\_a\_read\_only\_run\_keeps\_the\_old\_run](./test_sweep_run.py#L855)
 
 ```python
 def test_a_matching_recompute_of_a_read_only_run_keeps_the_old_run(
@@ -4943,7 +4943,7 @@ A read-only run is never superseded: both runs stay, the sweep succeeds.
 
 <a id="test.test_sweep_run.test_pool_priority_initializer_is_gui_only_and_survives_replacement"></a>
 
-#### [test\_pool\_priority\_initializer\_is\_gui\_only\_and\_survives\_replacement](./test_sweep_run.py#L1226)
+#### [test\_pool\_priority\_initializer\_is\_gui\_only\_and\_survives\_replacement](./test_sweep_run.py#L1227)
 
 ```python
 def test_pool_priority_initializer_is_gui_only_and_survives_replacement(
@@ -4954,7 +4954,7 @@ Only GUI sweep pools lower priority, including replacement pools.
 
 <a id="test.test_sweep_run.test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs"></a>
 
-#### [test\_a\_sweep\_stored\_under\_old\_ids\_is\_repaired\_and\_then\_runs](./test_sweep_run.py#L1600)
+#### [test\_a\_sweep\_stored\_under\_old\_ids\_is\_repaired\_and\_then\_runs](./test_sweep_run.py#L1599)
 
 ```python
 def test_a_sweep_stored_under_old_ids_is_repaired_and_then_runs(
@@ -18077,7 +18077,7 @@ def test_start_batch_run_summary_matches_replicate_summary(
 
 <a id="gui.test_batch_runner.test_start_batch_run_prunes_orphan_replicate_directories"></a>
 
-#### [test\_start\_batch\_run\_prunes\_orphan\_replicate\_directories](./gui/test_batch_runner.py#L307)
+#### [test\_start\_batch\_run\_prunes\_orphan\_replicate\_directories](./gui/test_batch_runner.py#L311)
 
 ```python
 def test_start_batch_run_prunes_orphan_replicate_directories(
@@ -18103,7 +18103,7 @@ present on disk, and absent from `summary.json` and `manifest.json`
 
 <a id="gui.test_batch_runner.test_start_batch_run_leaves_no_temporary_sibling_after_a_successful_publish"></a>
 
-#### [test\_start\_batch\_run\_leaves\_no\_temporary\_sibling\_after\_a\_successful\_publish](./gui/test_batch_runner.py#L357)
+#### [test\_start\_batch\_run\_leaves\_no\_temporary\_sibling\_after\_a\_successful\_publish](./gui/test_batch_runner.py#L361)
 
 ```python
 def test_start_batch_run_leaves_no_temporary_sibling_after_a_successful_publish(
@@ -18114,7 +18114,7 @@ The hidden `.output.<random>` working directory never survives success.
 
 <a id="gui.test_batch_runner.test_cancel_during_batch_leaves_no_output_directory"></a>
 
-#### [test\_cancel\_during\_batch\_leaves\_no\_output\_directory](./gui/test_batch_runner.py#L373)
+#### [test\_cancel\_during\_batch\_leaves\_no\_output\_directory](./gui/test_batch_runner.py#L377)
 
 ```python
 def test_cancel_during_batch_leaves_no_output_directory(
@@ -18140,7 +18140,7 @@ between them.
 
 <a id="gui.test_batch_runner.test_default_max_workers_matches_cpu_count"></a>
 
-#### [test\_default\_max\_workers\_matches\_cpu\_count](./gui/test_batch_runner.py#L414)
+#### [test\_default\_max\_workers\_matches\_cpu\_count](./gui/test_batch_runner.py#L418)
 
 ```python
 def test_default_max_workers_matches_cpu_count() -> None
@@ -18153,7 +18153,7 @@ never silently weaker than the CLI's own default.
 
 <a id="gui.test_batch_runner.test_start_batch_run_passes_a_real_worker_count_to_fim"></a>
 
-#### [test\_start\_batch\_run\_passes\_a\_real\_worker\_count\_to\_fim](./gui/test_batch_runner.py#L464)
+#### [test\_start\_batch\_run\_passes\_a\_real\_worker\_count\_to\_fim](./gui/test_batch_runner.py#L468)
 
 ```python
 def test_start_batch_run_passes_a_real_worker_count_to_fim(
@@ -18170,7 +18170,7 @@ behavior `start_batch_run` must never silently fall back to.
 
 <a id="gui.test_batch_runner.test_start_batch_run_respects_an_explicit_max_workers_override"></a>
 
-#### [test\_start\_batch\_run\_respects\_an\_explicit\_max\_workers\_override](./gui/test_batch_runner.py#L488)
+#### [test\_start\_batch\_run\_respects\_an\_explicit\_max\_workers\_override](./gui/test_batch_runner.py#L492)
 
 ```python
 def test_start_batch_run_respects_an_explicit_max_workers_override(
@@ -18182,7 +18182,7 @@ An explicit `max_workers` argument is used verbatim, not the default.
 
 <a id="gui.test_batch_runner.test_batch_replicates_actually_run_concurrently"></a>
 
-#### [test\_batch\_replicates\_actually\_run\_concurrently](./gui/test_batch_runner.py#L510)
+#### [test\_batch\_replicates\_actually\_run\_concurrently](./gui/test_batch_runner.py#L514)
 
 ```python
 def test_batch_replicates_actually_run_concurrently(
@@ -18525,7 +18525,7 @@ be running, and then ask it to stop; nothing waits on a delay.
 
 <a id="gui.test_close_guard_work.results"></a>
 
-#### [results](./gui/test_close_guard_work.py#L71)
+#### [results](./gui/test_close_guard_work.py#L72)
 
 ```python
 @pytest.fixture
@@ -18536,7 +18536,7 @@ Isolate the results directory for the test.
 
 <a id="gui.test_close_guard_work.window"></a>
 
-#### [window](./gui/test_close_guard_work.py#L83)
+#### [window](./gui/test_close_guard_work.py#L84)
 
 ```python
 @pytest.fixture
@@ -18547,7 +18547,7 @@ Provide a fake active window.
 
 <a id="gui.test_close_guard_work.api"></a>
 
-#### [api](./gui/test_close_guard_work.py#L91)
+#### [api](./gui/test_close_guard_work.py#L92)
 
 ```python
 @pytest.fixture
@@ -18558,7 +18558,7 @@ An `Api` whose defaults make a run that cannot finish.
 
 <a id="gui.test_close_guard_work.test_application_shutdown_does_not_join_the_saved_run_child"></a>
 
-#### [test\_application\_shutdown\_does\_not\_join\_the\_saved\_run\_child](./gui/test_close_guard_work.py#L187)
+#### [test\_application\_shutdown\_does\_not\_join\_the\_saved\_run\_child](./gui/test_close_guard_work.py#L188)
 
 ```python
 def test_application_shutdown_does_not_join_the_saved_run_child(
@@ -22304,7 +22304,7 @@ Three groups of tests:
 
 <a id="gui.test_job_events.test_next_sequence_starts_at_zero_and_counts_up"></a>
 
-#### [test\_next\_sequence\_starts\_at\_zero\_and\_counts\_up](./gui/test_job_events.py#L64)
+#### [test\_next\_sequence\_starts\_at\_zero\_and\_counts\_up](./gui/test_job_events.py#L66)
 
 ```python
 def test_next_sequence_starts_at_zero_and_counts_up() -> None
@@ -22314,7 +22314,7 @@ One job's own sequence: 0, 1, 2, never resetting on its own.
 
 <a id="gui.test_job_events.test_two_jobs_have_independent_sequences"></a>
 
-#### [test\_two\_jobs\_have\_independent\_sequences](./gui/test_job_events.py#L71)
+#### [test\_two\_jobs\_have\_independent\_sequences](./gui/test_job_events.py#L73)
 
 ```python
 def test_two_jobs_have_independent_sequences() -> None
@@ -22324,7 +22324,7 @@ A second job's own counter starts at 0 regardless of the first's.
 
 <a id="gui.test_job_events.test_worker_capacity_respects_reserve_and_one_slot_minimum"></a>
 
-#### [test\_worker\_capacity\_respects\_reserve\_and\_one\_slot\_minimum](./gui/test_job_events.py#L86)
+#### [test\_worker\_capacity\_respects\_reserve\_and\_one\_slot\_minimum](./gui/test_job_events.py#L88)
 
 ```python
 @pytest.mark.parametrize(
@@ -22339,7 +22339,7 @@ Injected CPU counts make reserve arithmetic deterministic.
 
 <a id="gui.test_job_events.test_worker_capacity_rejects_invalid_inputs"></a>
 
-#### [test\_worker\_capacity\_rejects\_invalid\_inputs](./gui/test_job_events.py#L93)
+#### [test\_worker\_capacity\_rejects\_invalid\_inputs](./gui/test_job_events.py#L95)
 
 ```python
 def test_worker_capacity_rejects_invalid_inputs() -> None
@@ -22349,7 +22349,7 @@ Invalid budgets fail explicitly instead of producing hidden capacity.
 
 <a id="gui.test_job_events.test_percentage_reserve_rounds_up_to_whole_cores"></a>
 
-#### [test\_percentage\_reserve\_rounds\_up\_to\_whole\_cores](./gui/test_job_events.py#L105)
+#### [test\_percentage\_reserve\_rounds\_up\_to\_whole\_cores](./gui/test_job_events.py#L107)
 
 ```python
 @pytest.mark.parametrize(
@@ -22365,7 +22365,7 @@ A fractional core reserve always rounds upward.
 
 <a id="gui.test_job_events.test_memory_reserve_modes_and_rounding"></a>
 
-#### [test\_memory\_reserve\_modes\_and\_rounding](./gui/test_job_events.py#L124)
+#### [test\_memory\_reserve\_modes\_and\_rounding](./gui/test_job_events.py#L126)
 
 ```python
 @pytest.mark.parametrize(
@@ -22386,7 +22386,7 @@ Automatic, GiB, and percentage reserves resolve to whole bytes.
 
 <a id="gui.test_job_events.test_memory_estimate_uses_child_and_vector_cost_per_worker_slot"></a>
 
-#### [test\_memory\_estimate\_uses\_child\_and\_vector\_cost\_per\_worker\_slot](./gui/test_job_events.py#L134)
+#### [test\_memory\_estimate\_uses\_child\_and\_vector\_cost\_per\_worker\_slot](./gui/test_job_events.py#L136)
 
 ```python
 def test_memory_estimate_uses_child_and_vector_cost_per_worker_slot() -> None
@@ -22396,7 +22396,7 @@ Batch slots account for child overhead and each known vector block.
 
 <a id="gui.test_job_events.test_child_memory_estimate_uses_largest_rss_or_fallback"></a>
 
-#### [test\_child\_memory\_estimate\_uses\_largest\_rss\_or\_fallback](./gui/test_job_events.py#L139)
+#### [test\_child\_memory\_estimate\_uses\_largest\_rss\_or\_fallback](./gui/test_job_events.py#L141)
 
 ```python
 def test_child_memory_estimate_uses_largest_rss_or_fallback(
@@ -22407,7 +22407,7 @@ Measured workers use the largest RSS; unmeasurable workers use fallback.
 
 <a id="gui.test_job_events.test_invalid_memory_reserves_are_rejected"></a>
 
-#### [test\_invalid\_memory\_reserves\_are\_rejected](./gui/test_job_events.py#L170)
+#### [test\_invalid\_memory\_reserves\_are\_rejected](./gui/test_job_events.py#L172)
 
 ```python
 def test_invalid_memory_reserves_are_rejected() -> None
@@ -22417,7 +22417,7 @@ Invalid memory settings cannot silently become a zero reserve.
 
 <a id="gui.test_job_events.test_pause_job_pauses_a_saved_run"></a>
 
-#### [test\_pause\_job\_pauses\_a\_saved\_run](./gui/test_job_events.py#L180)
+#### [test\_pause\_job\_pauses\_a\_saved\_run](./gui/test_job_events.py#L182)
 
 ```python
 def test_pause_job_pauses_a_saved_run(monkeypatch: pytest.MonkeyPatch) -> None
@@ -22427,7 +22427,7 @@ A memory warning's Pause action reaches the durable Run lifecycle.
 
 <a id="gui.test_job_events.test_pause_job_stops_a_sweep_at_a_resumable_point"></a>
 
-#### [test\_pause\_job\_stops\_a\_sweep\_at\_a\_resumable\_point](./gui/test_job_events.py#L195)
+#### [test\_pause\_job\_stops\_a\_sweep\_at\_a\_resumable\_point](./gui/test_job_events.py#L197)
 
 ```python
 def test_pause_job_stops_a_sweep_at_a_resumable_point() -> None
@@ -22437,7 +22437,7 @@ A sweep Pause request sets its cooperative checkpoint event.
 
 <a id="gui.test_job_events.test_admission_retains_effective_priority_in_job_snapshots"></a>
 
-#### [test\_admission\_retains\_effective\_priority\_in\_job\_snapshots](./gui/test_job_events.py#L206)
+#### [test\_admission\_retains\_effective\_priority\_in\_job\_snapshots](./gui/test_job_events.py#L208)
 
 ```python
 def test_admission_retains_effective_priority_in_job_snapshots() -> None
@@ -22447,7 +22447,7 @@ Changing preferences cannot change the priority of an admitted job.
 
 <a id="gui.test_job_events.test_admission_never_reserves_more_than_available_capacity"></a>
 
-#### [test\_admission\_never\_reserves\_more\_than\_available\_capacity](./gui/test_job_events.py#L225)
+#### [test\_admission\_never\_reserves\_more\_than\_available\_capacity](./gui/test_job_events.py#L227)
 
 ```python
 def test_admission_never_reserves_more_than_available_capacity() -> None
@@ -22457,7 +22457,7 @@ A refused reservation leaves the existing job and remaining budget intact.
 
 <a id="gui.test_job_events.test_concurrent_admission_cannot_overbook_worker_capacity"></a>
 
-#### [test\_concurrent\_admission\_cannot\_overbook\_worker\_capacity](./gui/test_job_events.py#L244)
+#### [test\_concurrent\_admission\_cannot\_overbook\_worker\_capacity](./gui/test_job_events.py#L246)
 
 ```python
 def test_concurrent_admission_cannot_overbook_worker_capacity() -> None
@@ -22467,7 +22467,7 @@ Simultaneous requests compete atomically for the final worker slot.
 
 <a id="gui.test_job_events.test_latest_sequence_is_none_before_any_push"></a>
 
-#### [test\_latest\_sequence\_is\_none\_before\_any\_push](./gui/test_job_events.py#L273)
+#### [test\_latest\_sequence\_is\_none\_before\_any\_push](./gui/test_job_events.py#L275)
 
 ```python
 def test_latest_sequence_is_none_before_any_push() -> None
@@ -22477,7 +22477,7 @@ A claimed job that has not pushed anything yet has no latest sequence.
 
 <a id="gui.test_job_events.test_forget_drops_the_bookkeeping"></a>
 
-#### [test\_forget\_drops\_the\_bookkeeping](./gui/test_job_events.py#L284)
+#### [test\_forget\_drops\_the\_bookkeeping](./gui/test_job_events.py#L286)
 
 ```python
 def test_forget_drops_the_bookkeeping() -> None
@@ -22487,7 +22487,7 @@ Forgetting a job's own id lets a later, unrelated use of it start fresh.
 
 <a id="gui.test_job_events.test_claim_run_mints_a_job_id_and_release_clears_it"></a>
 
-#### [test\_claim\_run\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L295)
+#### [test\_claim\_run\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L297)
 
 ```python
 def test_claim_run_mints_a_job_id_and_release_clears_it(
@@ -22498,7 +22498,7 @@ def test_claim_run_mints_a_job_id_and_release_clears_it(
 
 <a id="gui.test_job_events.test_claim_sweep_mints_a_job_id_and_release_clears_it"></a>
 
-#### [test\_claim\_sweep\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L309)
+#### [test\_claim\_sweep\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L311)
 
 ```python
 def test_claim_sweep_mints_a_job_id_and_release_clears_it(
@@ -22509,7 +22509,7 @@ def test_claim_sweep_mints_a_job_id_and_release_clears_it(
 
 <a id="gui.test_job_events.test_a_finished_job_snapshot_survives_claim_release"></a>
 
-#### [test\_a\_finished\_job\_snapshot\_survives\_claim\_release](./gui/test_job_events.py#L322)
+#### [test\_a\_finished\_job\_snapshot\_survives\_claim\_release](./gui/test_job_events.py#L324)
 
 ```python
 def test_a_finished_job_snapshot_survives_claim_release(
@@ -22520,7 +22520,7 @@ Finished jobs remain available for page resynchronization.
 
 <a id="gui.test_job_events.test_closing_a_finished_job_document_forgets_its_snapshot"></a>
 
-#### [test\_closing\_a\_finished\_job\_document\_forgets\_its\_snapshot](./gui/test_job_events.py#L347)
+#### [test\_closing\_a\_finished\_job\_document\_forgets\_its\_snapshot](./gui/test_job_events.py#L349)
 
 ```python
 def test_closing_a_finished_job_document_forgets_its_snapshot(
@@ -22531,7 +22531,7 @@ Closing a document drops the finished job's retained event state.
 
 <a id="gui.test_job_events.test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id"></a>
 
-#### [test\_a\_run\_claim\_and\_a\_sweep\_claim\_each\_mint\_their\_own\_job\_id](./gui/test_job_events.py#L362)
+#### [test\_a\_run\_claim\_and\_a\_sweep\_claim\_each\_mint\_their\_own\_job\_id](./gui/test_job_events.py#L364)
 
 ```python
 def test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id(
@@ -22542,7 +22542,7 @@ A run's own job id and a later sweep's own are never the same value.
 
 <a id="gui.test_job_events.test_get_job_snapshot_before_any_push"></a>
 
-#### [test\_get\_job\_snapshot\_before\_any\_push](./gui/test_job_events.py#L376)
+#### [test\_get\_job\_snapshot\_before\_any\_push](./gui/test_job_events.py#L378)
 
 ```python
 def test_get_job_snapshot_before_any_push(tmp_path: Path) -> None
@@ -22552,7 +22552,7 @@ A snapshot taken before the job has pushed anything reports sequence -1.
 
 <a id="gui.test_job_events.test_get_job_snapshot_reports_the_latest_assigned_sequence"></a>
 
-#### [test\_get\_job\_snapshot\_reports\_the\_latest\_assigned\_sequence](./gui/test_job_events.py#L393)
+#### [test\_get\_job\_snapshot\_reports\_the\_latest\_assigned\_sequence](./gui/test_job_events.py#L395)
 
 ```python
 def test_get_job_snapshot_reports_the_latest_assigned_sequence(
@@ -22563,7 +22563,7 @@ A snapshot reflects however many pushes `next_sequence` has already given out.
 
 <a id="gui.test_job_events.test_set_job_view_returns_latest_event_snapshot"></a>
 
-#### [test\_set\_job\_view\_returns\_latest\_event\_snapshot](./gui/test_job_events.py#L414)
+#### [test\_set\_job\_view\_returns\_latest\_event\_snapshot](./gui/test_job_events.py#L416)
 
 ```python
 def test_set_job_view_returns_latest_event_snapshot(tmp_path: Path) -> None
@@ -22573,7 +22573,7 @@ Changing the active job's view level returns its current event snapshot.
 
 <a id="gui.test_job_events.test_set_job_view_refuses_invalid_level"></a>
 
-#### [test\_set\_job\_view\_refuses\_invalid\_level](./gui/test_job_events.py#L438)
+#### [test\_set\_job\_view\_refuses\_invalid\_level](./gui/test_job_events.py#L440)
 
 ```python
 def test_set_job_view_refuses_invalid_level(tmp_path: Path) -> None
@@ -22583,7 +22583,7 @@ A bad view level is rejected without changing the active job.
 
 <a id="gui.test_job_events.test_get_job_snapshot_refuses_an_unknown_job_id"></a>
 
-#### [test\_get\_job\_snapshot\_refuses\_an\_unknown\_job\_id](./gui/test_job_events.py#L452)
+#### [test\_get\_job\_snapshot\_refuses\_an\_unknown\_job\_id](./gui/test_job_events.py#L454)
 
 ```python
 def test_get_job_snapshot_refuses_an_unknown_job_id(tmp_path: Path) -> None
@@ -22593,7 +22593,7 @@ A `jobId` nobody has claimed is refused, not reported as empty.
 
 <a id="gui.test_job_events.test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released"></a>
 
-#### [test\_get\_job\_snapshot\_refuses\_a\_job\_whose\_claim\_has\_been\_released](./gui/test_job_events.py#L461)
+#### [test\_get\_job\_snapshot\_refuses\_a\_job\_whose\_claim\_has\_been\_released](./gui/test_job_events.py#L463)
 
 ```python
 def test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released(
@@ -22604,7 +22604,7 @@ A released claim's view and snapshot are not active job state.
 
 <a id="gui.test_job_events.test_the_addressed_push_rides_alongside_the_legacy_push_in_order"></a>
 
-#### [test\_the\_addressed\_push\_rides\_alongside\_the\_legacy\_push\_in\_order](./gui/test_job_events.py#L476)
+#### [test\_the\_addressed\_push\_rides\_alongside\_the\_legacy\_push\_in\_order](./gui/test_job_events.py#L478)
 
 ```python
 def test_the_addressed_push_rides_alongside_the_legacy_push_in_order() -> None
@@ -22619,7 +22619,7 @@ delivery order (`fim.gui.publisher`'s own module docstring).
 
 <a id="gui.test_job_events.test_one_sequence_per_job_and_jobs_never_cross"></a>
 
-#### [test\_one\_sequence\_per\_job\_and\_jobs\_never\_cross](./gui/test_job_events.py#L531)
+#### [test\_one\_sequence\_per\_job\_and\_jobs\_never\_cross](./gui/test_job_events.py#L533)
 
 ```python
 @pytest.mark.gui
@@ -22630,7 +22630,7 @@ Two jobs' own sequences are tracked independently, never conflated.
 
 <a id="gui.test_job_events.test_duplicate_and_stale_events_are_ignored"></a>
 
-#### [test\_duplicate\_and\_stale\_events\_are\_ignored](./gui/test_job_events.py#L569)
+#### [test\_duplicate\_and\_stale\_events\_are\_ignored](./gui/test_job_events.py#L571)
 
 ```python
 @pytest.mark.gui
@@ -22641,7 +22641,7 @@ A repeated or older sequence never re-applies, never regresses tracking.
 
 <a id="gui.test_job_events.test_a_jobs_first_ever_event_is_never_treated_as_a_gap"></a>
 
-#### [test\_a\_jobs\_first\_ever\_event\_is\_never\_treated\_as\_a\_gap](./gui/test_job_events.py#L614)
+#### [test\_a\_jobs\_first\_ever\_event\_is\_never\_treated\_as\_a\_gap](./gui/test_job_events.py#L616)
 
 ```python
 @pytest.mark.gui
@@ -22658,7 +22658,7 @@ leaving any other, already-tracked job untouched.
 
 <a id="gui.test_job_events.test_a_progress_gap_never_requests_a_snapshot"></a>
 
-#### [test\_a\_progress\_gap\_never\_requests\_a\_snapshot](./gui/test_job_events.py#L656)
+#### [test\_a\_progress\_gap\_never\_requests\_a\_snapshot](./gui/test_job_events.py#L658)
 
 ```python
 @pytest.mark.gui
@@ -22669,7 +22669,7 @@ A skipped progress sequence is routine (coalescing), not a loss.
 
 <a id="gui.test_job_events.test_a_gap_before_a_status_or_terminal_event_requests_a_snapshot"></a>
 
-#### [test\_a\_gap\_before\_a\_status\_or\_terminal\_event\_requests\_a\_snapshot](./gui/test_job_events.py#L694)
+#### [test\_a\_gap\_before\_a\_status\_or\_terminal\_event\_requests\_a\_snapshot](./gui/test_job_events.py#L696)
 
 ```python
 @pytest.mark.gui
@@ -22683,7 +22683,7 @@ stays at whatever it was before the gap was seen.
 
 <a id="gui.test_job_events.test_a_snapshot_resyncs_the_tracked_sequence"></a>
 
-#### [test\_a\_snapshot\_resyncs\_the\_tracked\_sequence](./gui/test_job_events.py#L739)
+#### [test\_a\_snapshot\_resyncs\_the\_tracked\_sequence](./gui/test_job_events.py#L741)
 
 ```python
 @pytest.mark.gui
@@ -22698,7 +22698,7 @@ docstring describes.
 
 <a id="gui.test_job_events.test_a_late_snapshot_does_not_overwrite_a_newer_event"></a>
 
-#### [test\_a\_late\_snapshot\_does\_not\_overwrite\_a\_newer\_event](./gui/test_job_events.py#L805)
+#### [test\_a\_late\_snapshot\_does\_not\_overwrite\_a\_newer\_event](./gui/test_job_events.py#L807)
 
 ```python
 @pytest.mark.gui
@@ -22709,7 +22709,7 @@ A delayed snapshot cannot move event tracking backward.
 
 <a id="gui.test_job_events.test_an_annotation_for_a_closed_document_is_dropped"></a>
 
-#### [test\_an\_annotation\_for\_a\_closed\_document\_is\_dropped](./gui/test_job_events.py#L864)
+#### [test\_an\_annotation\_for\_a\_closed\_document\_is\_dropped](./gui/test_job_events.py#L866)
 
 ```python
 @pytest.mark.gui
@@ -22720,7 +22720,7 @@ A late annotation cannot reach a document that has closed.
 
 <a id="gui.test_job_events.test_an_annotation_after_coalesced_progress_is_applied"></a>
 
-#### [test\_an\_annotation\_after\_coalesced\_progress\_is\_applied](./gui/test_job_events.py#L915)
+#### [test\_an\_annotation\_after\_coalesced\_progress\_is\_applied](./gui/test_job_events.py#L917)
 
 ```python
 @pytest.mark.gui
@@ -22731,7 +22731,7 @@ Progress coalescing does not suppress the following annotation.
 
 <a id="gui.test_job_events.test_memory_warning_names_jobs_and_pause_button_refreshes_the_banner"></a>
 
-#### [test\_memory\_warning\_names\_jobs\_and\_pause\_button\_refreshes\_the\_banner](./gui/test_job_events.py#L982)
+#### [test\_memory\_warning\_names\_jobs\_and\_pause\_button\_refreshes\_the\_banner](./gui/test_job_events.py#L984)
 
 ```python
 @pytest.mark.gui
@@ -23443,7 +23443,7 @@ thread pushes nothing to the page until it is released.
 
 <a id="gui.test_one_run_at_a_time._HeldRuns"></a>
 
-## [\_HeldRuns Objects](./gui/test_one_run_at_a_time.py#L59)
+## [\_HeldRuns Objects](./gui/test_one_run_at_a_time.py#L60)
 
 ```python
 class _HeldRuns()
@@ -23456,7 +23456,7 @@ needed by this scalar-run test, so the drain thread releases the claim.
 
 <a id="gui.test_one_run_at_a_time._HeldRuns.start_child"></a>
 
-#### [start\_child](./gui/test_one_run_at_a_time.py#L71)
+#### [start\_child](./gui/test_one_run_at_a_time.py#L72)
 
 ```python
 def start_child(object_id: str, **options: Any) -> ChildJob
@@ -23466,7 +23466,7 @@ Start a child that waits for the test's explicit release.
 
 <a id="gui.test_one_run_at_a_time._HeldRuns.release_all"></a>
 
-#### [release\_all](./gui/test_one_run_at_a_time.py#L88)
+#### [release\_all](./gui/test_one_run_at_a_time.py#L89)
 
 ```python
 def release_all() -> None
@@ -23476,7 +23476,7 @@ Let every held child report its cancellation.
 
 <a id="gui.test_one_run_at_a_time.held_runs"></a>
 
-#### [held\_runs](./gui/test_one_run_at_a_time.py#L119)
+#### [held\_runs](./gui/test_one_run_at_a_time.py#L120)
 
 ```python
 @pytest.fixture
@@ -23487,7 +23487,7 @@ Replace child execution with held processes, then release them all.
 
 <a id="gui.test_one_run_at_a_time.test_two_runs_reserve_and_control_distinct_jobs"></a>
 
-#### [test\_two\_runs\_reserve\_and\_control\_distinct\_jobs](./gui/test_one_run_at_a_time.py#L149)
+#### [test\_two\_runs\_reserve\_and\_control\_distinct\_jobs](./gui/test_one_run_at_a_time.py#L150)
 
 ```python
 def test_two_runs_reserve_and_control_distinct_jobs(
@@ -23499,7 +23499,7 @@ Held runs keep separate records; cancel targets only its selected job.
 
 <a id="gui.test_one_run_at_a_time.test_child_progress_tracks_full_and_summary_view_levels"></a>
 
-#### [test\_child\_progress\_tracks\_full\_and\_summary\_view\_levels](./gui/test_one_run_at_a_time.py#L189)
+#### [test\_child\_progress\_tracks\_full\_and\_summary\_view\_levels](./gui/test_one_run_at_a_time.py#L196)
 
 ```python
 def test_child_progress_tracks_full_and_summary_view_levels(
@@ -23511,7 +23511,7 @@ The supervisor renders each child tick at the job's current view level.
 
 <a id="gui.test_one_run_at_a_time.test_child_crash_is_recorded_as_failed"></a>
 
-#### [test\_child\_crash\_is\_recorded\_as\_failed](./gui/test_one_run_at_a_time.py#L257)
+#### [test\_child\_crash\_is\_recorded\_as\_failed](./gui/test_one_run_at_a_time.py#L264)
 
 ```python
 def test_child_crash_is_recorded_as_failed(
@@ -23523,7 +23523,7 @@ An exited child with an active attempt is recorded as failed.
 
 <a id="gui.test_one_run_at_a_time.test_a_start_without_an_active_window_releases_its_reservation"></a>
 
-#### [test\_a\_start\_without\_an\_active\_window\_releases\_its\_reservation](./gui/test_one_run_at_a_time.py#L285)
+#### [test\_a\_start\_without\_an\_active\_window\_releases\_its\_reservation](./gui/test_one_run_at_a_time.py#L292)
 
 ```python
 def test_a_start_without_an_active_window_releases_its_reservation(
@@ -23534,7 +23534,7 @@ A refused start leaves no output-directory marker behind.
 
 <a id="gui.test_one_run_at_a_time.test_a_refused_start_leaves_the_running_saved_run_alone"></a>
 
-#### [test\_a\_refused\_start\_leaves\_the\_running\_saved\_run\_alone](./gui/test_one_run_at_a_time.py#L300)
+#### [test\_a\_refused\_start\_leaves\_the\_running\_saved\_run\_alone](./gui/test_one_run_at_a_time.py#L307)
 
 ```python
 def test_a_refused_start_leaves_the_running_saved_run_alone(
@@ -23545,7 +23545,7 @@ A full budget refuses a run without releasing existing reservations.
 
 <a id="gui.test_one_run_at_a_time.test_a_saved_run_already_active_cannot_be_started_twice"></a>
 
-#### [test\_a\_saved\_run\_already\_active\_cannot\_be\_started\_twice](./gui/test_one_run_at_a_time.py#L317)
+#### [test\_a\_saved\_run\_already\_active\_cannot\_be\_started\_twice](./gui/test_one_run_at_a_time.py#L324)
 
 ```python
 def test_a_saved_run_already_active_cannot_be_started_twice(api: Api) -> None
@@ -23555,7 +23555,7 @@ Admission rejects the same saved object while retaining its job.
 
 <a id="gui.test_one_run_at_a_time.test_an_admitted_sweep_consumes_capacity_for_run_starts"></a>
 
-#### [test\_an\_admitted\_sweep\_consumes\_capacity\_for\_run\_starts](./gui/test_one_run_at_a_time.py#L334)
+#### [test\_an\_admitted\_sweep\_consumes\_capacity\_for\_run\_starts](./gui/test_one_run_at_a_time.py#L341)
 
 ```python
 def test_an_admitted_sweep_consumes_capacity_for_run_starts(
@@ -23566,7 +23566,7 @@ The run check and both start paths report exhausted sweep capacity.
 
 <a id="gui.test_one_run_at_a_time.test_run_and_sweep_reservations_share_the_worker_budget"></a>
 
-#### [test\_run\_and\_sweep\_reservations\_share\_the\_worker\_budget](./gui/test_one_run_at_a_time.py#L354)
+#### [test\_run\_and\_sweep\_reservations\_share\_the\_worker\_budget](./gui/test_one_run_at_a_time.py#L361)
 
 ```python
 def test_run_and_sweep_reservations_share_the_worker_budget(
@@ -23577,7 +23577,7 @@ Two job kinds may coexist, but each consumes the same capacity.
 
 <a id="gui.test_one_run_at_a_time.test_a_start_that_starts_nothing_releases_the_claim"></a>
 
-#### [test\_a\_start\_that\_starts\_nothing\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L383)
+#### [test\_a\_start\_that\_starts\_nothing\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L390)
 
 ```python
 @pytest.mark.parametrize(
@@ -23605,7 +23605,7 @@ Reusing a computed run, or failing to start one, leaves no run in flight.
 
 <a id="gui.test_one_run_at_a_time.test_an_invalid_form_releases_the_claim"></a>
 
-#### [test\_an\_invalid\_form\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L403)
+#### [test\_an\_invalid\_form\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L410)
 
 ```python
 def test_an_invalid_form_releases_the_claim(api: Api) -> None
@@ -23615,7 +23615,7 @@ A form that does not validate starts nothing and leaves the slot free.
 
 <a id="gui.test_one_run_at_a_time.test_an_error_while_starting_releases_the_claim"></a>
 
-#### [test\_an\_error\_while\_starting\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L411)
+#### [test\_an\_error\_while\_starting\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L418)
 
 ```python
 def test_an_error_while_starting_releases_the_claim(
@@ -23626,7 +23626,7 @@ An unexpected exception cannot leave the slot claimed for good.
 
 <a id="gui.test_one_run_at_a_time.test_a_saved_run_start_that_fails_releases_the_claim"></a>
 
-#### [test\_a\_saved\_run\_start\_that\_fails\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L433)
+#### [test\_a\_saved\_run\_start\_that\_fails\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L440)
 
 ```python
 def test_a_saved_run_start_that_fails_releases_the_claim(
@@ -23637,7 +23637,7 @@ With no window to report to, a saved run starts nothing and frees the slot.
 
 <a id="gui.test_one_run_at_a_time.test_the_check_and_the_claim_happen_under_one_lock"></a>
 
-#### [test\_the\_check\_and\_the\_claim\_happen\_under\_one\_lock](./gui/test_one_run_at_a_time.py#L446)
+#### [test\_the\_check\_and\_the\_claim\_happen\_under\_one\_lock](./gui/test_one_run_at_a_time.py#L453)
 
 ```python
 def test_the_check_and_the_claim_happen_under_one_lock(api: Api) -> None
@@ -23647,7 +23647,7 @@ A claimed record is visible to the capacity calculation.
 
 <a id="gui.test_one_run_at_a_time.test_run_clicked_during_a_run_says_so_and_keeps_the_running_view"></a>
 
-#### [test\_run\_clicked\_during\_a\_run\_says\_so\_and\_keeps\_the\_running\_view](./gui/test_one_run_at_a_time.py#L460)
+#### [test\_run\_clicked\_during\_a\_run\_says\_so\_and\_keeps\_the\_running\_view](./gui/test_one_run_at_a_time.py#L467)
 
 ```python
 @pytest.mark.gui
@@ -28932,7 +28932,7 @@ load-dependent duration, bounds the wait, failing with a named message.
 
 <a id="gui.test_sweep_api._InlineProcessPointRunner"></a>
 
-## [\_InlineProcessPointRunner Objects](./gui/test_sweep_api.py#L40)
+## [\_InlineProcessPointRunner Objects](./gui/test_sweep_api.py#L42)
 
 ```python
 class _InlineProcessPointRunner(LocalPointRunner)
@@ -28942,7 +28942,7 @@ Use the local point runner while preserving the process-runner API.
 
 <a id="gui.test_sweep_api._InlineProcessPointRunner.close"></a>
 
-#### [close](./gui/test_sweep_api.py#L57)
+#### [close](./gui/test_sweep_api.py#L59)
 
 ```python
 def close() -> None
@@ -28952,7 +28952,7 @@ Match the process runner lifecycle without starting a pool.
 
 <a id="gui.test_sweep_api.results"></a>
 
-#### [results](./gui/test_sweep_api.py#L85)
+#### [results](./gui/test_sweep_api.py#L87)
 
 ```python
 @pytest.fixture
@@ -28963,7 +28963,7 @@ Isolate the results directory for the test.
 
 <a id="gui.test_sweep_api.window"></a>
 
-#### [window](./gui/test_sweep_api.py#L97)
+#### [window](./gui/test_sweep_api.py#L99)
 
 ```python
 @pytest.fixture
@@ -28974,7 +28974,7 @@ Provide a fake active window.
 
 <a id="gui.test_sweep_api.api"></a>
 
-#### [api](./gui/test_sweep_api.py#L105)
+#### [api](./gui/test_sweep_api.py#L107)
 
 ```python
 @pytest.fixture
@@ -28985,7 +28985,7 @@ An `Api` whose defaults make every point a tiny single run.
 
 <a id="gui.test_sweep_api.test_finished_sweep_helper_does_not_spawn_point_processes"></a>
 
-#### [test\_finished\_sweep\_helper\_does\_not\_spawn\_point\_processes](./gui/test_sweep_api.py#L642)
+#### [test\_finished\_sweep\_helper\_does\_not\_spawn\_point\_processes](./gui/test_sweep_api.py#L644)
 
 ```python
 def test_finished_sweep_helper_does_not_spawn_point_processes(
@@ -28996,7 +28996,7 @@ Metadata fixtures must not depend on concurrent child-process startup.
 
 <a id="gui.test_sweep_api.test_gui_one_point_sweep_uses_process_runner_and_half_core_budget"></a>
 
-#### [test\_gui\_one\_point\_sweep\_uses\_process\_runner\_and\_half\_core\_budget](./gui/test_sweep_api.py#L653)
+#### [test\_gui\_one\_point\_sweep\_uses\_process\_runner\_and\_half\_core\_budget](./gui/test_sweep_api.py#L655)
 
 ```python
 def test_gui_one_point_sweep_uses_process_runner_and_half_core_budget(
@@ -29008,7 +29008,7 @@ Explicit sweep execution receives all currently available capacity.
 
 <a id="gui.test_sweep_api.test_automatic_sweep_preview_uses_reserved_and_remaining_capacity"></a>
 
-#### [test\_automatic\_sweep\_preview\_uses\_reserved\_and\_remaining\_capacity](./gui/test_sweep_api.py#L680)
+#### [test\_automatic\_sweep\_preview\_uses\_reserved\_and\_remaining\_capacity](./gui/test_sweep_api.py#L682)
 
 ```python
 def test_automatic_sweep_preview_uses_reserved_and_remaining_capacity(
@@ -29019,7 +29019,7 @@ Automatic sizing applies the reserve, then respects active reservations.
 
 <a id="gui.test_sweep_api.test_explicit_sweep_demand_above_remaining_budget_is_refused"></a>
 
-#### [test\_explicit\_sweep\_demand\_above\_remaining\_budget\_is\_refused](./gui/test_sweep_api.py#L707)
+#### [test\_explicit\_sweep\_demand\_above\_remaining\_budget\_is\_refused](./gui/test_sweep_api.py#L709)
 
 ```python
 def test_explicit_sweep_demand_above_remaining_budget_is_refused(
@@ -29031,7 +29031,7 @@ A request is never silently clamped to fit the remaining budget.
 
 <a id="gui.test_sweep_api.test_gui_sweep_budget_prefers_process_cpu_count"></a>
 
-#### [test\_gui\_sweep\_budget\_prefers\_process\_cpu\_count](./gui/test_sweep_api.py#L732)
+#### [test\_gui\_sweep\_budget\_prefers\_process\_cpu\_count](./gui/test_sweep_api.py#L734)
 
 ```python
 def test_gui_sweep_budget_prefers_process_cpu_count(
@@ -29042,7 +29042,7 @@ Use the process-visible CPU count when the Python runtime exposes it.
 
 <a id="gui.test_sweep_api.test_a_plan_marks_the_points_a_finished_sweep_already_computed"></a>
 
-#### [test\_a\_plan\_marks\_the\_points\_a\_finished\_sweep\_already\_computed](./gui/test_sweep_api.py#L1074)
+#### [test\_a\_plan\_marks\_the\_points\_a\_finished\_sweep\_already\_computed](./gui/test_sweep_api.py#L1076)
 
 ```python
 def test_a_plan_marks_the_points_a_finished_sweep_already_computed(

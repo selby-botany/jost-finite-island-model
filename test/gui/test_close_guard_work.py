@@ -29,6 +29,7 @@ from conftest import COMPLETION_BACKSTOP_SECONDS, poll_or_fail
 from fim import paths
 from fim.examples import classes
 from fim.gui import app as app_module
+from fim.gui import jobs
 from fim.gui.app import Api
 from fim.gui.config_form import DEFAULT_RUN_SETTING_FIELD_NAMES, starter_form_values
 from fim.persistence.run_lifecycle import RunState
@@ -188,7 +189,7 @@ def test_application_shutdown_does_not_join_the_saved_run_child(api: Api) -> Non
     """Application shutdown closes the lifeline and returns without a join."""
     saved = api.save_run_object(_form())
     assert saved["state"] == "planned"
-    child = app_module.jobs.start_child_job(
+    child = jobs.start_child_job(
         saved["objectId"],
         results=None,
         pairwise_max_demes=1,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import multiprocessing
 import re
 import shutil
 import subprocess
@@ -1233,7 +1234,7 @@ def test_pool_priority_initializer_is_gui_only_and_survives_replacement(
         def shutdown(self) -> None:
             return None
 
-    class FakeExecutor:
+    class FakeExecutor(Executor):
         def __init__(self) -> None:
             self.shut_down = False
 
@@ -1250,9 +1251,7 @@ def test_pool_priority_initializer_is_gui_only_and_survives_replacement(
         instances.append(executor)
         return executor
 
-    monkeypatch.setattr(
-        sweep_run_module.multiprocessing, "get_context", lambda _method: context
-    )
+    monkeypatch.setattr(multiprocessing, "get_context", lambda _method: context)
     monkeypatch.setattr(sweep_run_module, "ProcessPoolExecutor", create_executor)
     results = Path("/tmp/test-sweep-results")
     priorities: tuple[tuple[Priority, bool], ...] = (

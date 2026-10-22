@@ -3614,7 +3614,7 @@ def test_background_work_settings_persist_and_apply_to_new_jobs_only(
 ) -> None:
     """Admitted jobs retain priority while saved settings affect later jobs."""
     path = tmp_path / "preferences.json"
-    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 5)
+    monkeypatch.setattr(jobs_module, "usable_core_count", lambda: 5)
     api = Api(preferences_path=path)
 
     assert api.get_background_work_settings() == {
@@ -3663,7 +3663,7 @@ def test_background_work_settings_persist_and_apply_to_new_jobs_only(
         ("lower", "invalid", 0),
         ("lower", "cores", 0, "percent", 101),
     ):
-        result = api.set_background_work_settings(*bad)  # type: ignore[arg-type]
+        result = api.set_background_work_settings(*bad)
         assert result["ok"] is False
 
 

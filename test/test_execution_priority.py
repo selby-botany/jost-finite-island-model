@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,19 +18,19 @@ def test_linux_priority_is_applied_to_each_existing_thread(
 ) -> None:
     """Linux niceness is per thread, so enumerate the process task IDs."""
     calls: list[tuple[int, int, int]] = []
-    monkeypatch.setattr(execution_priority.sys, "platform", "linux")
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(
-        execution_priority.Path,
+        Path,
         "iterdir",
         lambda _path: iter([Path("/proc/self/task/11"), Path("/proc/self/task/12")]),
     )
     monkeypatch.setattr(
-        execution_priority.os,
+        os,
         "setpriority",
         lambda which, who, priority: calls.append((which, who, priority)),
         raising=False,
     )
-    monkeypatch.setattr(execution_priority.os, "PRIO_PROCESS", 0, raising=False)
+    monkeypatch.setattr(os, "PRIO_PROCESS", 0, raising=False)
 
     execution_priority.apply_lower_priority()
 
@@ -43,14 +45,14 @@ def test_macos_priority_targets_the_current_process(
 ) -> None:
     """Platforms with process-scoped niceness lower the current process."""
     calls: list[tuple[int, int, int]] = []
-    monkeypatch.setattr(execution_priority.sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(
-        execution_priority.os,
+        os,
         "setpriority",
         lambda which, who, priority: calls.append((which, who, priority)),
         raising=False,
     )
-    monkeypatch.setattr(execution_priority.os, "PRIO_PROCESS", 0, raising=False)
+    monkeypatch.setattr(os, "PRIO_PROCESS", 0, raising=False)
 
     execution_priority.apply_lower_priority()
 
@@ -62,19 +64,19 @@ def test_linux_lowest_priority_uses_nice_nineteen(
 ) -> None:
     """Lowest priority uses the maximum supported positive nice value."""
     calls: list[tuple[int, int, int]] = []
-    monkeypatch.setattr(execution_priority.sys, "platform", "linux")
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(
-        execution_priority.Path,
+        Path,
         "iterdir",
         lambda _path: iter([Path("/proc/self/task/11")]),
     )
     monkeypatch.setattr(
-        execution_priority.os,
+        os,
         "setpriority",
         lambda which, who, priority: calls.append((which, who, priority)),
         raising=False,
     )
-    monkeypatch.setattr(execution_priority.os, "PRIO_PROCESS", 0, raising=False)
+    monkeypatch.setattr(os, "PRIO_PROCESS", 0, raising=False)
 
     execution_priority.apply_priority("lowest")
 
@@ -86,15 +88,15 @@ def test_macos_lowest_priority_uses_background_process_class(
 ) -> None:
     """macOS Lowest selects the Darwin background process priority."""
     calls: list[tuple[int, int, int]] = []
-    monkeypatch.setattr(execution_priority.sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(
-        execution_priority.os,
+        os,
         "setpriority",
         lambda which, who, priority: calls.append((which, who, priority)),
         raising=False,
     )
-    monkeypatch.setattr(execution_priority.os, "PRIO_DARWIN_PROCESS", 4, raising=False)
-    monkeypatch.setattr(execution_priority.os, "PRIO_DARWIN_BG", 0x1000, raising=False)
+    monkeypatch.setattr(os, "PRIO_DARWIN_PROCESS", 4, raising=False)
+    monkeypatch.setattr(os, "PRIO_DARWIN_BG", 0x1000, raising=False)
 
     execution_priority.apply_priority("lowest")
 
@@ -114,9 +116,9 @@ def test_windows_priority_uses_below_normal_class(
         calls.append((process, priority))
         return 1
 
-    monkeypatch.setattr(execution_priority.sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(
-        execution_priority.ctypes,
+        ctypes,
         "windll",
         SimpleNamespace(
             kernel32=SimpleNamespace(
@@ -137,16 +139,19 @@ def test_windows_lowest_priority_uses_idle_class(
 ) -> None:
     """Windows Lowest selects the idle process priority class."""
     calls: list[tuple[int, int]] = []
-    monkeypatch.setattr(execution_priority.sys, "platform", "win32")
+
+    def set_priority_class(process: int, priority: int) -> int:
+        calls.append((process, priority))
+        return 1
+
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(
-        execution_priority.ctypes,
+        ctypes,
         "windll",
         SimpleNamespace(
             kernel32=SimpleNamespace(
                 GetCurrentProcess=lambda: 7,
-                SetPriorityClass=lambda process, priority: (
-                    calls.append((process, priority)) or 1
-                ),
+                SetPriorityClass=set_priority_class,
             )
         ),
         raising=False,

@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 from conftest import assert_none_open, join_or_fail, poll_or_fail
 
-from fim.engine import Clock, SimulationOutput, replicate_summary
+from fim.engine import Clock, RunResult, SimulationOutput, replicate_summary
 from fim.engine import simulate_params as engine_fim
 from fim.gui import batch_runner
 from fim.model.params import SimulationParams
@@ -296,7 +296,11 @@ def test_start_batch_run_summary_matches_replicate_summary(
 
     done = _drain(message_queue)[-1]
     assert done[0] == "done"
-    expected = replicate_summary(done[1])
+    results = []
+    for result in done[1]:
+        assert isinstance(result, RunResult)
+        results.append(result)
+    expected = replicate_summary(results)
     summary = json.loads((output_directory / "summary.json").read_text())
     assert set(summary) == set(expected)
     for name, interval in expected.items():

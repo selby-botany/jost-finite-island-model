@@ -30,12 +30,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+import psutil
 import pytest
 import webview
 from conftest import COMPLETION_BACKSTOP_SECONDS
 
 from fim.gui import app as app_module
 from fim.gui import jobs as jobs_module
+from fim.gui import object_bridge
 from fim.gui.app import Api, create_window
 from fim.gui.publisher import Publisher
 
@@ -154,7 +156,7 @@ def test_child_memory_estimate_uses_largest_rss_or_fallback(
 
     rss_by_pid = {1: 512, 2: 1024}
     monkeypatch.setattr(
-        jobs_module.psutil,
+        psutil,
         "Process",
         lambda pid: SimpleNamespace(
             memory_info=lambda: SimpleNamespace(rss=rss_by_pid[pid])
@@ -186,7 +188,7 @@ def test_pause_job_pauses_a_saved_run(
     assert record is not None
     record.active_object_id = "run-object"
     paused: list[str] = []
-    monkeypatch.setattr(app_module.object_bridge, "pause", paused.append)
+    monkeypatch.setattr(object_bridge, "pause", paused.append)
 
     assert api.pause_job(record.job_id) == {"ok": True}
     assert paused == ["run-object"]

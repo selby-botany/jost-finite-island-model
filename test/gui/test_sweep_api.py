@@ -14,6 +14,7 @@ load-dependent duration, bounds the wait, failing with a named message.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from collections.abc import Iterator
 from concurrent.futures.process import BrokenProcessPool
@@ -28,6 +29,7 @@ from fim import paths
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.execution_priority import Priority
 from fim.gui import app as app_module
+from fim.gui import jobs
 from fim.gui.app import Api
 from fim.gui.config_form import DEFAULT_RUN_SETTING_FIELD_NAMES, starter_form_values
 from fim.persistence import groups
@@ -254,7 +256,7 @@ def test_a_sweep_is_refused_when_another_job_uses_the_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     del window
-    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 1)
+    monkeypatch.setattr(jobs, "usable_core_count", lambda: 1)
     run, refusal = api._admit_run()
     assert refusal is None
     assert run is not None
@@ -655,7 +657,7 @@ def test_gui_one_point_sweep_uses_process_runner_and_half_core_budget(
 ) -> None:
     """Explicit sweep execution receives all currently available capacity."""
     _PROCESS_COUNTS.clear()
-    monkeypatch.setattr(app_module.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
     original_run_sweep = run_sweep
     captured: dict[str, Any] = {}
 
@@ -681,7 +683,7 @@ def test_automatic_sweep_preview_uses_reserved_and_remaining_capacity(
     api: Api, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Automatic sizing applies the reserve, then respects active reservations."""
-    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 10)
+    monkeypatch.setattr(jobs, "usable_core_count", lambda: 10)
     api._preferences = api._preferences.with_reserved_cores(2)
     request = _request({"key": "N", "values": [16, 20, 24, 28, 32, 36, 40, 44, 48, 52]})
     payload = api.plan_sweep(
@@ -710,7 +712,7 @@ def test_explicit_sweep_demand_above_remaining_budget_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A request is never silently clamped to fit the remaining budget."""
-    monkeypatch.setattr(app_module.jobs, "usable_core_count", lambda: 8)
+    monkeypatch.setattr(jobs, "usable_core_count", lambda: 8)
     run, refusal = api._admit_run(cores=6)
     assert refusal is None
     assert run is not None
@@ -733,8 +735,8 @@ def test_gui_sweep_budget_prefers_process_cpu_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Use the process-visible CPU count when the Python runtime exposes it."""
-    monkeypatch.setattr(app_module.os, "cpu_count", lambda: 12)
-    monkeypatch.setattr(app_module.os, "process_cpu_count", lambda: 6, raising=False)
+    monkeypatch.setattr(os, "cpu_count", lambda: 12)
+    monkeypatch.setattr(os, "process_cpu_count", lambda: 6, raising=False)
 
     assert app_module._gui_sweep_core_budget() == 3
 

@@ -36,11 +36,11 @@ import yaml
 from conftest import poll_or_fail
 
 from fim.gui import app as app_module
-from fim.gui import object_bridge
 from fim.gui import presets as presets_module
 from fim.gui.app import Api, await_bridge_threads
 from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.model.params import SimulationParams
+from fim.persistence.run_ownership import reconcile_run_object
 
 from .test_sweep_api import results  # noqa: F401
 
@@ -226,7 +226,7 @@ def test_run_settings_can_be_edited_restored_and_replaced_with_defaults(
 
     def capture(self: Api, object_id: str, **_options: Any) -> dict[str, Any]:
         """Record the submitted configuration without starting a simulation."""
-        run_object = object_bridge.reconcile_run_object(object_id)
+        run_object = reconcile_run_object(object_id)
         model, _labels = presets_module.split_configuration(
             yaml.safe_load(run_object.config_text)
         )
@@ -410,7 +410,7 @@ def test_loading_a_lineal_example_runs_it_without_changing_settings(
 
     def capture(self: Api, object_id: str, **_options: Any) -> dict[str, Any]:
         """Record the run's parameters and decline to start it."""
-        run_object = object_bridge.reconcile_run_object(object_id)
+        run_object = reconcile_run_object(object_id)
         model, _labels = presets_module.split_configuration(
             yaml.safe_load(run_object.config_text)
         )
