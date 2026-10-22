@@ -161,6 +161,7 @@ def test_editing_saved_run_stays_with_its_document(
                 lambda text: str(text).startswith("Saved."),
                 what="saved-run confirmation",
             )
+            window.evaluate_js("window.fim.workspace.createDocument();")
             window.evaluate_js("window.fim.showOpenRunScreen();")
             poll_page(window, _SAVED_ROWS, bool, what="Saved runs row")
             window.evaluate_js(
@@ -169,10 +170,12 @@ def test_editing_saved_run_stays_with_its_document(
             )
             editing = poll_page(
                 window,
-                "window.fim.getEditingObjectId()",
-                bool,
-                what="editing saved-run ID",
+                "({tabId: window.fim.workspace.selectedId(), "
+                "objectId: window.fim.getEditingObjectId()})",
+                lambda value: value["tabId"] == first and bool(value["objectId"]),
+                what="saved-run document activation",
             )
+            editing = editing["objectId"]
             second = window.evaluate_js("window.fim.workspace.createDocument()")
             second_editing = window.evaluate_js("window.fim.getEditingObjectId()")
             window.evaluate_js(f"window.fim.workspace.select({first!r});")
