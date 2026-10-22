@@ -73,6 +73,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_window_statistics`](#convergence.test_window_statistics)
 - [`test/engine/`](#group-engine)
   - [`test_batch_session`](#engine.test_batch_session)
+  - [`test_concurrency`](#engine.test_concurrency)
   - [`test_engine`](#engine.test_engine)
   - [`test_execution_checkpoint`](#engine.test_execution_checkpoint)
   - [`test_execution_session`](#engine.test_execution_session)
@@ -8902,6 +8903,19 @@ def test_a_log_cut_down_after_its_checkpoint_resumes_by_content(
 ```
 
 The window between a lane stopping and the next checkpoint is safe.
+
+<a id="engine.test_concurrency"></a>
+
+# [engine.test\_concurrency](./engine/test_concurrency.py#L1)
+
+Tests for `fim.engine.concurrency.default_replicate_concurrency`.
+
+`generational-vector` has no fan-out mechanism (`VectorizedAdvancer.advance`
+steps every active lane in one Python loop), so its default must stay the
+fixed `batch_width` regardless of hardware; `lineal` and `generational` both
+get genuine, hardware-scaled fan-out, so their default must track the
+process-visible core count. Either way, the result never exceeds
+`n_replicates`.
 
 <a id="engine.test_engine"></a>
 

@@ -217,6 +217,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.engine.batch](#fim.engine.batch)
   * [run\_batch](#fim.engine.batch.run_batch)
   * [waiting\_for\_window](#fim.engine.batch.waiting_for_window)
+* [fim.engine.concurrency](#fim.engine.concurrency)
+  * [default\_replicate\_concurrency](#fim.engine.concurrency.default_replicate_concurrency)
 * [fim.engine.identity](#fim.engine.identity)
   * [deterministic\_run\_id](#fim.engine.identity.deterministic_run_id)
   * [replicate\_seed](#fim.engine.identity.replicate_seed)
@@ -5815,6 +5817,71 @@ had run when the wave ended, and so on the backend. It pauses there.
 
   `True` when the lane is waiting for its window and has reached the
   earliest generation it may stop at.
+
+<a id="fim.engine.concurrency"></a>
+
+# [fim.engine.concurrency](./engine/concurrency.py#L1)
+
+The one place that resolves "how many replicates run at once" when unset.
+
+Three independent mechanisms answer this question today, with different
+resource semantics (`20261022-claude-sonnet-5-replicate-concurrency-
+unification-design.md`, `selby/restricted`):
+
+- `lineal`'s `max_workers` (`fim.engine.lineal`): OS processes, real
+  parallelism scaling to the core count.
+- `generational`'s own `ThreadedAdvancer` thread pool
+  (`fim.engine.lanes`): OS threads, real (GIL-shaped) parallelism also
+  scaling to the core count.
+- `generational` and `generational-vector`'s shared lane window
+  (`SimulationParams.max_concurrent_replicates`, consumed by
+  `fim.engine.batch.run_batch`): in-process `ReplicaLane`s. Under
+  `generational-vector` specifically, `VectorizedAdvancer.advance()`
+  steps every active lane in one Python loop with no fan-out at all, so
+  a wider window there buys no throughput, only memory and a slower
+  adaptive stop.
+
+`default_replicate_concurrency` is the single function every one of
+those three call sites falls back on when the caller (a user, a saved
+config, a CLI invocation) left its own concurrency setting unset,
+instead of each computing its own answer independently.
+
+<a id="fim.engine.concurrency.default_replicate_concurrency"></a>
+
+#### [default\_replicate\_concurrency](./engine/concurrency.py#L34)
+
+```python
+def default_replicate_concurrency(engine_backend: ConcurrencyAwareBackend,
+                                  n_replicates: int, batch_width: int) -> int
+```
+
+Return how many replicates run at once when the caller left it unset.
+
+**Arguments**:
+
+- `engine_backend` - The resolved backend (never the literal
+  `"auto"` — resolve it first).
+- `n_replicates` - The batch's own replicate ceiling; the result
+  never exceeds this, so a 4-replicate batch runs at most 4
+  at once regardless of hardware or backend.
+- `batch_width` - `SimulationParams.expert.batch_width` — the fixed
+  width the adaptive-batch window-matching statistics already
+  assume for this same "unset" case
+  (`fim.engine.monitors.batch_window_planner`). Reusing it
+  here, rather than inventing a second constant, is the
+- `point` - the statistical assumption and the execution
+  schedule agree by construction.
+
+
+**Returns**:
+
+  The process-visible core count for `"lineal"` and
+  `"generational"`, both of which get genuine, hardware-scaled
+  fan-out from more concurrency (OS processes and OS threads
+  respectively) — starving either below the core count leaves
+  real parallelism idle for no benefit. `batch_width` for
+  `"generational-vector"`, which has no fan-out mechanism at all.
+  Either way, clamped to `n_replicates`.
 
 <a id="fim.engine.identity"></a>
 
