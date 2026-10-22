@@ -1795,6 +1795,14 @@ and the last submitted configuration between launches:
   up to whole logical cores; the worker budget is derived from the cores
   left, with at least one worker. Changes affect jobs started afterward,
   and each job's effective priority appears in its document tab.
+- The memory reserve for desktop jobs. **Automatic** keeps the larger of
+  2 GiB and 10% of physical memory available; you can instead reserve a
+  whole number of GiB or a percentage. Before a job starts, the app
+  estimates its added memory and asks before starting if that estimate
+  would cross the reserve. While work is active, a warning appears if
+  available memory falls below the reserve. Each listed job has a
+  **Pause** button: runs pause at a saved checkpoint, and sweeps stop at
+  a resumable point so you can continue them from their Study.
 - The configuration last submitted with **Run simulation**.
 
 **Restore the last submitted configuration** opens that configuration at

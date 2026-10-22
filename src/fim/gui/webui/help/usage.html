@@ -1661,6 +1661,14 @@ of all five each generation; see
 up to whole logical cores; the worker budget is derived from the cores
 left, with at least one worker. Changes affect jobs started afterward,
 and each job's effective priority appears in its document tab.</li>
+<li>The memory reserve for desktop jobs. <strong>Automatic</strong> keeps the larger of
+2 GiB and 10% of physical memory available; you can instead reserve a
+whole number of GiB or a percentage. Before a job starts, the app
+estimates its added memory and asks before starting if that estimate
+would cross the reserve. While work is active, a warning appears if
+available memory falls below the reserve. Each listed job has a
+<strong>Pause</strong> button: runs pause at a saved checkpoint, and sweeps stop at
+a resumable point so you can continue them from their Study.</li>
 <li>The configuration last submitted with <strong>Run simulation</strong>.</li>
 </ul>
 <p><strong>Restore the last submitted configuration</strong> opens that configuration at
