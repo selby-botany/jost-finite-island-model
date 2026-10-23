@@ -6,7 +6,7 @@ ownership protocol in `fim.persistence.run_ownership` are applied in one
 place only.
 
 `execute_run_object` is the worker. It opens an attempt (start for a
-`planned` object, resume for a `paused`, `interrupted`, or `failed` one),
+`planned` object, resume for a stopped object with a checkpoint),
 runs a `fim.execution.ScalarSession` (one replicate) or a
 `fim.batch_session.BatchSession` (several) in bounded steps, and between
 steps sits at a safe point where it:
@@ -343,7 +343,7 @@ def execute_run_object(
 
     Args:
         object_id: A `planned` object to start, or a `paused`,
-            `interrupted`, or `failed` object to resume.
+            `interrupted`, `failed`, or `cancelled` object to resume.
         results: Results directory (default: `results_directory()`).
         write_artifacts: Writes the completed run's artifacts (default:
             `fim.persistence.artifacts.write_run_artifacts`; a test seam).
@@ -636,7 +636,7 @@ def _replicate_store_factory(
 
 
 def _resume_problems(run_object: RunObject) -> list[str]:
-    """Return why a paused, interrupted, or failed run may not resume."""
+    """Return why a stopped run may not continue from its checkpoint."""
     record = run_object.record
     problems: list[str] = []
     try:
@@ -645,7 +645,7 @@ def _resume_problems(run_object: RunObject) -> list[str]:
         problems.append(f"this release cannot run the configuration: {error}")
     reference = record.latest_checkpoint
     if reference is None:
-        if record.phase is not None:
+        if record.phase is not None or record.state is RunState.CANCELLED:
             problems.append(
                 "it stopped before its first checkpoint, so it cannot resume; "
                 "clone it to run the same configuration from generation 0"

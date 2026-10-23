@@ -53,7 +53,7 @@ from fim.persistence.run_ownership import (
     record_worker_failure,
     request_pause,
 )
-from fim.run_service import cancel_run_object
+from fim.run_service import cancel_run_object, diagnose_run_object
 
 GUI_FORM_FILE_NAME: Final = "gui-form.json"
 
@@ -348,6 +348,12 @@ def prepare_start(
         allowed = capabilities(record, resume_verified=True)
         reason = allowed.reasons.get("can_start", f"it is {record.state.value}")
         raise LifecycleError(f"this saved run cannot start: {reason}")
+    if record.state in RESUMABLE_STATES:
+        problems = diagnose_run_object(run_object)
+        if record.latest_checkpoint is None and not problems:
+            problems = ("it stopped before its first checkpoint",)
+        if problems:
+            raise LifecycleError("this saved run cannot resume: " + "; ".join(problems))
     model, _labels = split_configuration(yaml.safe_load(run_object.config_text))
     params = SimulationParams.from_mapping(model)
     if params.n_replicates > 1:
@@ -436,7 +442,11 @@ def row(
     allowed = capabilities(
         record,
         pause_supported=True,
-        resume_verified=record.latest_checkpoint is not None,
+        resume_verified=(
+            record.state in RESUMABLE_STATES
+            and record.latest_checkpoint is not None
+            and not diagnose_run_object(run_object)
+        ),
     )
     error = record.last_error
     return {
@@ -456,6 +466,7 @@ def row(
             "edit": allowed.can_edit,
             "start": allowed.can_start,
             "resume": allowed.can_resume,
+            "resurrect": allowed.can_resurrect,
             "clone": True,
             "pause": allowed.can_pause,
             "cancel": allowed.can_cancel or allowed.can_abandon,

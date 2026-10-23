@@ -14,7 +14,8 @@ from fim.gui.config_form import starter_form_values
 from fim.model.params import SimulationParams
 from fim.persistence.run_lifecycle import CheckpointReference, LifecycleError, RunState
 from fim.persistence.run_objects import read_run_object, write_run_record
-from fim.persistence.run_ownership import start_run_object
+from fim.persistence.run_ownership import request_cancel, start_run_object
+from fim.run_service import CheckpointCadence, Session, execute_run_object
 
 _CLASSES_FIXTURE = (
     Path(__file__).resolve().parents[1] / "persistence" / "fixtures" / "classes.yaml"
@@ -385,3 +386,59 @@ def test_identical_source_reports_stopped_checkpoint_progress(
     info = object_bridge.row(copy)["identicalToSource"]
     assert info["hasCheckpoint"] is True
     assert info["state"] == state.value
+
+
+@pytest.mark.parametrize("checkpoint", ["valid", "corrupt", "missing", "absent"])
+def test_cancelled_row_offers_resurrect_only_for_a_verified_checkpoint(
+    tmp_path: Path, checkpoint: str
+) -> None:
+    """Rows and admission reject unavailable checkpoints without a new attempt."""
+    saved, _problem = object_bridge.save(_valid(seed="123"), results=tmp_path)
+    if checkpoint == "absent":
+        object_bridge.cancel(saved.object_id, results=tmp_path)
+        cancelled = read_run_object(saved.object_id, results=tmp_path)
+    else:
+
+        def cancel(session: Session) -> None:
+            """Request cancellation between checkpoints, at generation five."""
+            if session.generation == 5:
+                current = read_run_object(saved.object_id, results=tmp_path)
+                request_cancel(
+                    saved.object_id,
+                    expected_revision=current.record.revision,
+                    results=tmp_path,
+                )
+
+        cancelled = execute_run_object(
+            saved.object_id,
+            results=tmp_path,
+            cadence=CheckpointCadence(2, 1e9, 1),
+            monotonic=lambda: 0.0,
+            observer=cancel,
+        )
+        if checkpoint in {"corrupt", "missing"}:
+            files = list((cancelled.directory / "checkpoints").rglob("*.json"))
+            assert files
+            for path in files:
+                if checkpoint == "missing":
+                    path.unlink()
+                else:
+                    path.write_text("corrupt checkpoint")
+    entry = object_bridge.row(cancelled)
+    assert entry["state"] == "cancelled"
+    assert entry["actions"]["resurrect"] is (checkpoint == "valid")
+    assert not entry["actions"]["resume"]
+    assert entry["actions"]["clone"] and entry["actions"]["delete"]
+    if checkpoint == "valid":
+        prepared, _params = object_bridge.prepare_start(
+            saved.object_id, results=tmp_path
+        )
+        assert prepared.record == cancelled.record
+    else:
+        assert "can_resurrect" in entry["reasons"]
+        with pytest.raises(LifecycleError, match="checkpoint"):
+            object_bridge.prepare_start(saved.object_id, results=tmp_path)
+        assert (
+            read_run_object(saved.object_id, results=tmp_path).record
+            == cancelled.record
+        )

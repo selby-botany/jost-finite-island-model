@@ -24,7 +24,7 @@ from fim.examples import classes
 from fim.persistence.artifacts import write_run_artifacts
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_objects import read_run_object
-from fim.persistence.run_ownership import request_pause
+from fim.persistence.run_ownership import request_cancel, request_pause
 
 _CLASSES_FIXTURE = (
     Path(__file__).resolve().parents[1] / "persistence" / "fixtures" / "classes.yaml"
@@ -176,14 +176,17 @@ def test_pausing_a_planned_object_is_refused(
     assert "fim: error:" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("cancel", [False, True])
 def test_resume_refuses_a_planned_object_and_start_refuses_a_paused_one(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    cancel: bool,
 ) -> None:
+    """Resume continues paused or cancelled runs, but start refuses both."""
     object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
     assert _main(tmp_path, "object", "resume", object_id) == 2
-    assert "only a paused, interrupted, or failed" in capsys.readouterr().err
+    assert "only a paused, interrupted, failed, or cancelled" in capsys.readouterr().err
 
     # Pause the run from the observer at generation 15, as another
     # terminal's `fim object pause` would.
@@ -193,7 +196,7 @@ def test_resume_refuses_a_planned_object_and_start_refuses_a_paused_one(
         def observer(session: run_service.Session) -> None:
             if session.generation == 15:
                 current = read_run_object(object_id, results=_results(tmp_path))
-                request_pause(
+                (request_cancel if cancel else request_pause)(
                     object_id,
                     expected_revision=current.record.revision,
                     results=_results(tmp_path),
@@ -208,7 +211,8 @@ def test_resume_refuses_a_planned_object_and_start_refuses_a_paused_one(
 
     monkeypatch.setattr("fim.cli_objects.execute_run_object", pause_at_15)
     assert _main(tmp_path, "object", "start", object_id) == 0
-    assert f"{object_id} is paused at generation 15" in capsys.readouterr().out
+    state = "cancelled" if cancel else "paused"
+    assert f"{object_id} is {state} at generation 15" in capsys.readouterr().out
 
     assert _main(tmp_path, "object", "start", object_id) == 2
     assert f"use `fim object resume {object_id}`" in capsys.readouterr().err
@@ -225,6 +229,10 @@ def test_cancel_abandons_a_planned_object_and_delete_removes_it(
 
     assert _main(tmp_path, "object", "cancel", object_id) == 0
     assert f"Cancelled {object_id}" in capsys.readouterr().out
+    assert _main(tmp_path, "object", "resume", object_id) == 2
+    assert "before its first checkpoint" in capsys.readouterr().err
+    assert read_run_object(object_id, results=_results(tmp_path)).record.is_terminal
+
     assert _main(tmp_path, "object", "delete", object_id) == 0
     assert f"Deleted {object_id}" in capsys.readouterr().out
     assert _main(tmp_path, "object", "list") == 0

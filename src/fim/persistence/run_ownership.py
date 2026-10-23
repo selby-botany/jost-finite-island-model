@@ -700,7 +700,7 @@ def resume_run_object(
     """Open a new attempt that continues from the latest checkpoint.
 
     Args:
-        object_id: A `paused`, `interrupted`, or `failed` object.
+        object_id: A `paused`, `interrupted`, `failed`, or `cancelled` object.
         expected_revision: Lifecycle revision the caller read.
         results: Results directory (default: `results_directory()`).
         clock: Injectable current-time source.
