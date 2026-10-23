@@ -275,7 +275,7 @@ function buildSavedRunRow(run) {
             "Running in another window or command; watch it there";
     }
     const generation = document.createElement("td");
-    generation.textContent = String(run.generation);
+    generation.textContent = run.generation == null ? "—" : String(run.generation);
     const updated = document.createElement("td");
     updated.textContent = formatSavedRunTime(run.updatedAt);
     updated.title = run.updatedAt;
@@ -364,7 +364,11 @@ function watchSavedRun(run) {
         );
         return;
     }
+    const documentState = window.fim.workspace.get(tabId);
+    documentState.label = savedRunDisplayName(run);
+    documentState.savedRunConfigSummary = run.configSummary;
     window.fim.workspace.select(tabId);
+    window.fim.workspace.notifyChange();
     window.fim.showScreen("screen-run");
 }
 
@@ -503,7 +507,7 @@ async function editSavedRun(objectId) {
                 opened.resourceKey || `saved-run:${objectId}`,
                 {
                     kind: "saved-run",
-                    label: opened.name || objectId,
+                    label: savedRunDisplayName(opened),
                     formValues: opened.values,
                     readOnly: false,
                 }
@@ -516,7 +520,7 @@ async function editSavedRun(objectId) {
         } else {
             tabId = window.fim.workspace.createDocument({
                 kind: "draft",
-                label: `${opened.name || objectId} copy`,
+                label: `${savedRunDisplayName(opened)} copy`,
             });
         }
     }
@@ -559,6 +563,7 @@ async function startSavedRun(run) {
             {
                 kind: "saved-run",
                 label: savedRunDisplayName(run),
+                savedRunConfigSummary: run.configSummary,
                 readOnly: false,
             }
         );
@@ -628,12 +633,13 @@ window.fim.resumeRunObjectFromTab = async function resumeRunObjectFromTab(tabId)
     }
     const run = {
         objectId,
-        name: documentState.runTitle?.state?.runName || documentState.label || "",
+        name: documentState.runTitle?.state?.runName || documentState.label,
+        configSummary: documentState.savedRunConfigSummary,
     };
     await window.fim.startRunExclusively(
         () => beginSavedRun(run, tabId),
         (message) => {
-            documentState.startRefusal = `${run.name || objectId}: ${message}`;
+            documentState.startRefusal = `${savedRunDisplayName(run)}: ${message}`;
             window.fim.workspace.notifyChange();
             if (window.fim.workspace.selectedId() === tabId) {
                 window.fim.showRunBanner(documentState.startRefusal);
@@ -669,6 +675,8 @@ async function beginSavedRun(run, tabId = window.fim.workspace.selectedId()) {
         documentState.jobState = "starting";
         documentState.runObjectId = run.objectId;
         documentState.runObjectState = "running";
+        documentState.label = savedRunDisplayName(run);
+        documentState.savedRunConfigSummary = run.configSummary;
         window.fim.workspace.notifyChange();
     }
     if (selected) {
@@ -761,7 +769,8 @@ async function saveFormForLater() {
             const documentState = window.fim.workspace.get(tabId);
             if (documentState) {
                 documentState.kind = "saved-run";
-                documentState.label = name || saved.objectId;
+                documentState.label = savedRunDisplayName({ ...saved, name });
+                documentState.savedRunConfigSummary = saved.configSummary;
             }
         }
         window.fim.markFormClean(tabId);

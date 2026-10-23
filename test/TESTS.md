@@ -27791,7 +27791,7 @@ An `Api` whose defaults make every run tiny, lineal, and resumable.
 
 <a id="gui.test_saved_runs_api.test_an_unnamed_row_summarizes_its_settings"></a>
 
-#### [test\_an\_unnamed\_row\_summarizes\_its\_settings](./gui/test_saved_runs_api.py#L164)
+#### [test\_an\_unnamed\_row\_summarizes\_its\_settings](./gui/test_saved_runs_api.py#L165)
 
 ```python
 def test_an_unnamed_row_summarizes_its_settings(api: Api) -> None
@@ -27817,7 +27817,7 @@ so the outcome does not depend on how fast the machine is.
 
 <a id="gui.test_saved_runs_screen.saved_run_settings"></a>
 
-#### [saved\_run\_settings](./gui/test_saved_runs_screen.py#L62)
+#### [saved\_run\_settings](./gui/test_saved_runs_screen.py#L63)
 
 ```python
 @pytest.fixture
@@ -27828,7 +27828,7 @@ Settings for one short, resumable (lineal), scalar run.
 
 <a id="gui.test_saved_runs_screen._StubbedSavedRunsApi"></a>
 
-## [\_StubbedSavedRunsApi Objects](./gui/test_saved_runs_screen.py#L234)
+## [\_StubbedSavedRunsApi Objects](./gui/test_saved_runs_screen.py#L237)
 
 ```python
 class _StubbedSavedRunsApi(Api)
@@ -27838,7 +27838,7 @@ Serves one saved run whose state the test changes from Python.
 
 <a id="gui.test_saved_runs_screen._StubbedSavedRunsApi.list_run_objects"></a>
 
-#### [list\_run\_objects](./gui/test_saved_runs_screen.py#L246)
+#### [list\_run\_objects](./gui/test_saved_runs_screen.py#L249)
 
 ```python
 def list_run_objects() -> dict[str, Any]
@@ -27848,7 +27848,7 @@ Return the current stub row, executed here when `owned_here`.
 
 <a id="gui.test_saved_runs_screen._StubbedSavedRunsApi.kill_run_object"></a>
 
-#### [kill\_run\_object](./gui/test_saved_runs_screen.py#L257)
+#### [kill\_run\_object](./gui/test_saved_runs_screen.py#L260)
 
 ```python
 def kill_run_object(object_id: str) -> dict[str, Any]
@@ -27858,7 +27858,7 @@ Record the kill and report the run failed.
 
 <a id="gui.test_saved_runs_screen._StubbedSavedRunsApi.delete_run_object"></a>
 
-#### [delete\_run\_object](./gui/test_saved_runs_screen.py#L263)
+#### [delete\_run\_object](./gui/test_saved_runs_screen.py#L266)
 
 ```python
 def delete_run_object(object_id: str) -> dict[str, Any]
@@ -27868,7 +27868,7 @@ Record the deletion.
 
 <a id="gui.test_saved_runs_screen._StubbedSavedRunsApi.delete_selected"></a>
 
-#### [delete\_selected](./gui/test_saved_runs_screen.py#L268)
+#### [delete\_selected](./gui/test_saved_runs_screen.py#L271)
 
 ```python
 def delete_selected(items: list[dict[str, str]]) -> dict[str, Any]
@@ -27878,7 +27878,7 @@ Record the saved runs in a Home selection, and delete nothing else.
 
 <a id="gui.test_saved_runs_screen.test_home_rereads_an_unsettled_saved_run_until_it_settles"></a>
 
-#### [test\_home\_rereads\_an\_unsettled\_saved\_run\_until\_it\_settles](./gui/test_saved_runs_screen.py#L288)
+#### [test\_home\_rereads\_an\_unsettled\_saved\_run\_until\_it\_settles](./gui/test_saved_runs_screen.py#L291)
 
 ```python
 def test_home_rereads_an_unsettled_saved_run_until_it_settles(
@@ -27889,7 +27889,7 @@ A Cancelling row becomes Cancelled with no action from the user.
 
 <a id="gui.test_saved_runs_screen.test_an_unnamed_saved_run_is_shown_by_its_settings"></a>
 
-#### [test\_an\_unnamed\_saved\_run\_is\_shown\_by\_its\_settings](./gui/test_saved_runs_screen.py#L330)
+#### [test\_an\_unnamed\_saved\_run\_is\_shown\_by\_its\_settings](./gui/test_saved_runs_screen.py#L333)
 
 ```python
 def test_an_unnamed_saved_run_is_shown_by_its_settings(
@@ -27900,7 +27900,7 @@ The object id is kept for the tooltip, not shown as the name.
 
 <a id="gui.test_saved_runs_screen.test_watch_returns_to_the_document_running_the_saved_run"></a>
 
-#### [test\_watch\_returns\_to\_the\_document\_running\_the\_saved\_run](./gui/test_saved_runs_screen.py#L357)
+#### [test\_watch\_returns\_to\_the\_document\_running\_the\_saved\_run](./gui/test_saved_runs_screen.py#L360)
 
 ```python
 def test_watch_returns_to_the_document_running_the_saved_run(
@@ -27911,7 +27911,7 @@ Home links a run this window executes back to its own document.
 
 <a id="gui.test_saved_runs_screen.test_a_run_executing_elsewhere_offers_no_watch"></a>
 
-#### [test\_a\_run\_executing\_elsewhere\_offers\_no\_watch](./gui/test_saved_runs_screen.py#L407)
+#### [test\_a\_run\_executing\_elsewhere\_offers\_no\_watch](./gui/test_saved_runs_screen.py#L414)
 
 ```python
 def test_a_run_executing_elsewhere_offers_no_watch(
@@ -27922,7 +27922,7 @@ Without its document here, the row says where to watch it instead.
 
 <a id="gui.test_saved_runs_screen.test_select_all_and_delete_selected_include_saved_runs"></a>
 
-#### [test\_select\_all\_and\_delete\_selected\_include\_saved\_runs](./gui/test_saved_runs_screen.py#L444)
+#### [test\_select\_all\_and\_delete\_selected\_include\_saved\_runs](./gui/test_saved_runs_screen.py#L451)
 
 ```python
 def test_select_all_and_delete_selected_include_saved_runs(
@@ -27933,13 +27933,52 @@ A deletable saved run joins Home's selection; Delete removes it.
 
 <a id="gui.test_saved_runs_screen.test_kill_then_delete_from_home"></a>
 
-#### [test\_kill\_then\_delete\_from\_home](./gui/test_saved_runs_screen.py#L507)
+#### [test\_kill\_then\_delete\_from\_home](./gui/test_saved_runs_screen.py#L514)
 
 ```python
 def test_kill_then_delete_from_home(saved_run_settings: Path) -> None
 ```
 
 Kill asks first, kills, then offers to delete what is left.
+
+<a id="gui.test_saved_runs_screen.test_saved_run_generation_has_a_placeholder_only_when_absent"></a>
+
+#### [test\_saved\_run\_generation\_has\_a\_placeholder\_only\_when\_absent](./gui/test_saved_runs_screen.py#L558)
+
+```python
+@pytest.mark.parametrize("generation, expected", [(None, "—"), (0, "0"),
+                                                  (7, "7")])
+def test_saved_run_generation_has_a_placeholder_only_when_absent(
+        saved_run_settings: Path, generation: int | None,
+        expected: str) -> None
+```
+
+Planned rows have no committed generation; zero is still a generation.
+
+<a id="gui.test_saved_runs_screen.test_opening_a_saved_run_labels_its_new_tab"></a>
+
+#### [test\_opening\_a\_saved\_run\_labels\_its\_new\_tab](./gui/test_saved_runs_screen.py#L589)
+
+```python
+@pytest.mark.parametrize("named", [False, True])
+def test_opening_a_saved_run_labels_its_new_tab(saved_run_settings: Path,
+                                                named: bool) -> None
+```
+
+Open supplies the same name/settings fallback as the Home row.
+
+<a id="gui.test_saved_runs_screen.test_run_button_tracks_its_own_document_job"></a>
+
+#### [test\_run\_button\_tracks\_its\_own\_document\_job](./gui/test_saved_runs_screen.py#L650)
+
+```python
+@pytest.mark.parametrize(
+    "ending", ["completed", "paused", "cancelled", "failed", "killed"])
+def test_run_button_tracks_its_own_document_job(saved_run_settings: Path,
+                                                ending: str) -> None
+```
+
+Job notifications and validation cannot enable a running tab's button.
 
 <a id="gui.test_scatter_styles"></a>
 

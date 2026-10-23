@@ -123,6 +123,7 @@ def test_a_saved_draft_reopens_with_the_values_as_typed(api: Api) -> None:
     assert opened["state"] == "draft"
     assert opened["editable"] is True
     assert opened["name"] == "Trial"
+    assert opened["configSummary"] is None
     assert {key: opened["values"][key] for key in form} == form
 
 
@@ -170,6 +171,8 @@ def test_an_unnamed_row_summarizes_its_settings(api: Api) -> None:
     assert row["objectId"] == saved["objectId"]
     assert row["name"] is None or row["name"] == ""
     summary = row["configSummary"]
+    assert saved["configSummary"] == summary
+    assert api.open_run_object(saved["objectId"])["configSummary"] == summary
     assert list(summary) == [
         "N",
         "d",

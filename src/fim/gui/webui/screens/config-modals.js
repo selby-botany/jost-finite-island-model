@@ -221,12 +221,12 @@ function markTabError(tab, field) {
  */
 function showValidationResult(result) {
     clearTabErrorDots();
+    // Validating successfully must not enable a document with an active worker.
+    window.fim.refreshRunButton();
     if (result.ok) {
-        runButton.disabled = false;
         runReason.textContent = result.note || "";
         return;
     }
-    runButton.disabled = true;
     const location = result.field ? ` (${result.field})` : "";
     runReason.textContent = `${result.message}${location}`;
     markTabError(result.tab, result.field);
