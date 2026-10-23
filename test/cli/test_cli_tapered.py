@@ -310,3 +310,25 @@ def test_the_app_opens_a_statistics_run_as_a_report_without_a_trajectory(
 
     assert single["ok"] is True and single["reportOnly"] is True
     assert many["ok"] is True and many["reportOnly"] is True
+
+
+def test_a_reopened_statistics_batch_pools_its_saved_histories(
+    tmp_path: Path,
+) -> None:
+    """A statistics-only batch still shows its pooled convergence curve.
+
+    No trajectory is left to rebuild the histories from, so the curve is
+    pooled from each replicate's decimated `history.json`, on one grid.
+    """
+    from fim.gui.app import Api  # noqa: PLC0415
+
+    batch = _run(tmp_path, "statistics-batch", n_replicates=3, **_STATISTICS)
+    api = Api(preferences_path=tmp_path / "preferences.json")
+
+    opened = api.open_batch(str(batch))
+
+    pooled = opened["pooledConvergenceHistories"]
+    assert opened["reportOnly"] is True and "D" in pooled
+    generations = [point["generation"] for point in pooled["D"]]
+    assert generations == sorted(set(generations)) and generations[0] == 0
+    assert all(point["sampleCount"] >= 2 for point in pooled["D"])

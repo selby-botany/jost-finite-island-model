@@ -16,6 +16,7 @@ from fim.persistence.binary_store import (
     EQUILIBRIUM_LOG_FILENAME,
     TRAJECTORY_LOG_FILENAME,
 )
+from fim.persistence.history import DECIMATED_FILENAME
 from fim.persistence.manifest import hash_file
 
 RUN_OUTPUT_NAMES: Final = (
@@ -24,6 +25,9 @@ RUN_OUTPUT_NAMES: Final = (
     TRAJECTORY_LOG_FILENAME,
     EQUILIBRIUM_LOG_FILENAME,
     "convergence.jsonl",
+    # A statistics-only run's decimated history, kept in place of the two
+    # above when `trajectory_retention: statistics` drops its trajectory.
+    DECIMATED_FILENAME,
     "pairwise.json",
     "scatter.png",
 )

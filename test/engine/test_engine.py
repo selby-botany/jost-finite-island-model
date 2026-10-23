@@ -35,6 +35,7 @@ from fim.engine import (
     lanes,
     pair_statistic_values,
     pooled_convergence_histories,
+    pooled_convergence_histories_from_pairs,
     replicate_summary,
     report_for_state,
     reports_summary,
@@ -751,6 +752,51 @@ def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
     assert set(pooled) == {"D", "H_S", "H_T", "H_ST"}
     for name in ("D", "H_S", "H_T", "H_ST"):
         assert all(point["sample_count"] == 2 for point in pooled[name])
+
+
+def test_pooled_histories_from_pairs_interpolates_sparse_histories_onto_a_grid() -> (
+    None
+):
+    """Sparse, differently sampled histories pool on one shared grid.
+
+    A statistics-only replicate keeps a decimated history whose sampled
+    generations depend on where it stopped. Pooling at grid generations
+    after linear interpolation compares the replicates at the same
+    generation; a replicate that stopped early carries its final value.
+    """
+    first = ([0, 4, 8], {"D": [0.0, 0.4, 0.8]})
+    second = ([0, 2, 4], {"D": [1.0, 1.2, 1.4]})
+
+    pooled = pooled_convergence_histories_from_pairs(
+        [first, second], grid=[0, 2, 4, 6, 8]
+    )
+
+    assert [point["generation"] for point in pooled["D"]] == [0, 2, 4, 6, 8]
+    means = [point["mean"] for point in pooled["D"]]
+    assert means == pytest.approx([0.5, 0.7, 0.9, 1.0, 1.1])
+    assert all(point["sample_count"] == 2 for point in pooled["D"])
+
+
+def test_pooled_histories_from_pairs_grid_drops_a_non_finite_statistic() -> None:
+    """A sparse statistic holding a non-finite value is dropped, not guessed at."""
+    first = ([0, 4], {"D": [0.0, 0.4], "G_ST": [math.nan, 0.1]})
+    second = ([0, 4], {"D": [0.2, 0.6], "G_ST": [0.0, 0.1]})
+
+    pooled = pooled_convergence_histories_from_pairs([first, second], grid=[0, 4])
+
+    assert "G_ST" not in pooled
+    assert [point["mean"] for point in pooled["D"]] == pytest.approx([0.1, 0.5])
+
+
+def test_pooled_histories_from_pairs_grid_on_every_generation_matches_dense() -> None:
+    """A grid naming every generation reproduces the dense result exactly."""
+    first = ([0, 1, 2, 3], {"D": [0.0, 0.1, 0.3, 0.6]})
+    second = ([0, 1, 2], {"D": [0.2, 0.2, 0.5]})
+
+    dense = pooled_convergence_histories_from_pairs([first, second])
+    gridded = pooled_convergence_histories_from_pairs([first, second], grid=range(4))
+
+    assert gridded == dense
 
 
 def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:

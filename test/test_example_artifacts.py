@@ -11,6 +11,7 @@ import yaml
 from fim import cli
 from fim import paths as paths_module
 from fim.examples.artifacts import (
+    PART_BYTES,
     RUN_OUTPUT_NAMES,
     copy_outputs,
     materialize_outputs,
@@ -19,6 +20,7 @@ from fim.examples.artifacts import (
 from fim.gui.app import Api
 from fim.persistence import groups
 from fim.persistence.artifacts import run_artifact_targets
+from fim.persistence.history import DECIMATED_FILENAME
 from fim.persistence.manifest import hash_file
 
 
@@ -176,10 +178,14 @@ def test_truncated_gzip_does_not_publish_a_partial_archive(tmp_path: Path) -> No
 
 
 def test_artifact_inventory_matches_the_run_producer(tmp_path: Path) -> None:
-    """Adding a CLI artifact requires adding it to the example inventory too."""
-    assert {path.name for path in run_artifact_targets(tmp_path).values()} == (
-        set(RUN_OUTPUT_NAMES)
-    )
+    """Adding a CLI artifact requires adding it to the example inventory too.
+
+    `history.json` is the statistics-only retention form of the history,
+    written in place of `convergence.jsonl`, so it is not a default target.
+    """
+    assert {path.name for path in run_artifact_targets(tmp_path).values()} | {
+        DECIMATED_FILENAME
+    } == set(RUN_OUTPUT_NAMES)
 
 
 def test_opening_a_study_restores_its_archived_members(tmp_path: Path) -> None:
@@ -195,3 +201,28 @@ def test_opening_a_study_restores_its_archived_members(tmp_path: Path) -> None:
     assert (target / "convergence.jsonl").read_bytes() == (
         original / "convergence.jsonl"
     ).read_bytes()
+
+
+def test_committed_examples_keep_every_file_within_one_archive_part() -> None:
+    """No committed example file, nor its app bundle copy, may exceed one part.
+
+    GitHub rejects a push whose pack exceeds 2 GiB, and a raw trajectory
+    from a long run can pass 1 GiB on its own. A long example keeps its
+    statistics only (`trajectory_retention: statistics`) or tapers its
+    trajectory instead. A raw file decoded beside its own archive parts
+    (`materialize_outputs`) is derived, not committed, so it is skipped.
+    """
+    root = Path(__file__).resolve().parents[1]
+    trees = (
+        root / "doc" / "examples",
+        root / "src" / "fim" / "gui" / "webui" / "examples",
+    )
+    oversized = sorted(
+        (str(path.relative_to(root)), path.stat().st_size)
+        for tree in trees
+        for path in tree.rglob("*")
+        if path.is_file()
+        and path.stat().st_size > PART_BYTES
+        and not path.with_name(f"{path.name}.gz.part-0001").is_file()
+    )
+    assert oversized == []

@@ -52,6 +52,7 @@ from fim.config.limits import (
     MINIMUM_EQUILIBRIUM_DEMES,
     MINIMUM_EQUILIBRIUM_N,
 )
+from fim.config.numerics import MINIMUM_REPLICATE_COUNT
 from fim.convergence.defaults import (
     describe_derived_convergence,
     island_migration_matrix,
@@ -125,6 +126,7 @@ from fim.model.state import ModelState
 from fim.model.topology import MINIMUM_DEMES
 from fim.persistence import groups
 from fim.persistence.binary_store import TRAJECTORY_LOG_FILENAME
+from fim.persistence.history import decimated_generations
 from fim.persistence.manifest import (
     BatchManifest,
     RunManifest,
@@ -11304,8 +11306,10 @@ def _report_only_batch_payload(
     The batch counterpart of `_report_only_run_payload`: the replicate
     table comes from each replicate's saved `report.json` (a replicate
     without one is left out), and the statistics panel from the batch's
-    saved `summary.json`. Nothing needs a trajectory: no pooled curve,
-    no scatter.
+    saved `summary.json`. Nothing needs a trajectory: the pooled curve
+    is pooled from each replicate's saved convergence history
+    (`_saved_pooled_histories`), whichever form retention left it in,
+    and there is no scatter.
 
     Args:
         directory: The batch's own directory.
@@ -11330,6 +11334,7 @@ def _report_only_batch_payload(
         replicate_ids.append(replicate_run_id)
         reports.append(cast("FinalReport", report))
         trajectory_paths.append(replicate_directory / TRAJECTORY_LOG_FILENAME)
+    raw_pooled = _saved_pooled_histories([path.parent for path in trajectory_paths])
     payload = _pooled_batch_payload(
         params,
         manifest.run_id,
@@ -11339,7 +11344,9 @@ def _report_only_batch_payload(
         final_states=[],
         trajectory_paths=trajectory_paths,
         digits=digits,
-        pooled_convergence_histories_payload={},
+        pooled_convergence_histories_payload=_pooled_histories_payload(
+            raw_pooled, digits
+        ),
         convergence_note=_derived_convergence_note(params),
     )
     # The saved summary is what the run reported; it wins over one
@@ -11365,6 +11372,52 @@ def _report_only_batch_payload(
         "reportOnly": True,
         "readOnly": groups.is_run_read_only(directory),
     }
+
+
+def _saved_pooled_histories(
+    replicate_directories: Sequence[Path],
+) -> dict[str, tuple[dict[str, float], ...]]:
+    """Pool a batch's replicates' saved convergence histories.
+
+    A report-only batch has no trajectories to rebuild histories from,
+    but each replicate still saved one (`convergence.jsonl`, its compact
+    `.fhist` form, or the decimated `history.json` that
+    `trajectory_retention: statistics` keeps). Decimated histories
+    sample each replicate at generations of its own, so they are pooled
+    on one shared decimation grid, spanning the slowest replicate.
+
+    Args:
+        replicate_directories: Each replicate's own output directory.
+
+    Returns:
+        `pooled_convergence_histories_from_pairs`' own return, or an
+        empty mapping when fewer than two replicates have a readable,
+        digest-verified history.
+    """
+    histories: list[tuple[Sequence[int], Mapping[str, Sequence[float]]]] = []
+    for replicate_directory in replicate_directories:
+        try:
+            manifest = read_manifest(replicate_directory / "manifest.json")
+            history = read_persisted_convergence_history(
+                replicate_directory / TRAJECTORY_LOG_FILENAME, manifest
+            )
+        except (OSError, ValueError):
+            continue
+        if history is not None and history[0]:
+            histories.append(history)
+    if len(histories) < MINIMUM_REPLICATE_COUNT:
+        return {}
+    contiguous = all(
+        list(generations) == list(range(generations[0], generations[-1] + 1))
+        for generations, _ in histories
+    )
+    grid = (
+        None if contiguous else decimated_generations(max(g[-1] for g, _ in histories))
+    )
+    try:
+        return pooled_convergence_histories_from_pairs(histories, grid=grid)
+    except ValueError:
+        return {}
 
 
 def _branding_directory() -> Path:

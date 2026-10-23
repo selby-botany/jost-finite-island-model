@@ -334,6 +334,7 @@ def pooled_convergence_histories_from_pairs(
     histories: Sequence[tuple[Sequence[int], Mapping[str, Sequence[float]]]],
     *,
     confidence: float = 0.95,
+    grid: Sequence[int] | None = None,
 ) -> dict[str, tuple[dict[str, float], ...]]:
     """`pooled_convergence_histories`'s own core, over bare history pairs.
 
@@ -344,12 +345,27 @@ def pooled_convergence_histories_from_pairs(
     (`fim.reanalyze.replicate_convergence_history`), which produces
     exactly this pair and nothing else a `RunResult` would carry.
 
+    `grid` exists for sparse histories, such as the decimated
+    `history.json` a statistics-only replicate keeps: each replicate
+    samples its own generations (they depend on where it stopped), so
+    pooling generation by generation would mix one replicate's real
+    value with another's carried-forward final value. With a grid, each
+    replicate's history is first interpolated linearly onto the grid
+    generations up to its own final generation, and pooling is done at
+    the grid generations only.
+
     Args:
         histories: One `(generations, {name: values})` pair per
             replicate, each pair shaped exactly like `RunResult.
             convergence_generations`/`convergence_histories`.
         confidence: Two-tailed confidence level; see
             `fim.statistics.interval.confidence_interval`.
+        grid: Generations to pool at, after interpolating every
+            replicate onto them; `None` pools at every generation from
+            0 through the slowest replicate's final generation. A
+            statistic with a non-finite value in a replicate's sparse
+            history is dropped from that replicate, as an interior gap
+            is.
 
     Returns:
         The identical shape `pooled_convergence_histories` returns.
@@ -359,6 +375,11 @@ def pooled_convergence_histories_from_pairs(
     """
     if len(histories) < MINIMUM_REPLICATE_COUNT:
         raise ValueError("pooled_convergence_histories requires at least two results")
+    if grid is not None:
+        histories = [
+            _interpolated_history(generations, replicate_histories, grid)
+            for generations, replicate_histories in histories
+        ]
     statistic_names = sorted(
         {name for _, replicate_histories in histories for name in replicate_histories}
     )
@@ -387,8 +408,13 @@ def pooled_convergence_histories_from_pairs(
     max_generation = max(
         generation for generations, _ in histories for generation in generations
     )
+    pooled_generations = (
+        range(max_generation + 1)
+        if grid is None
+        else sorted({g for g in grid if 0 <= g <= max_generation})
+    )
     pooled: dict[str, list[dict[str, float]]] = {name: [] for name in statistic_names}
-    for generation in range(max_generation + 1):
+    for generation in pooled_generations:
         for name in statistic_names:
             pooled_values = [
                 lookup[name].get(generation, per_replicate_last_value[index][name])
@@ -408,6 +434,45 @@ def pooled_convergence_histories_from_pairs(
                 }
             )
     return {name: tuple(points) for name, points in pooled.items() if points}
+
+
+def _interpolated_history(
+    generations: Sequence[int],
+    histories: Mapping[str, Sequence[float]],
+    grid: Sequence[int],
+) -> tuple[tuple[int, ...], dict[str, list[float]]]:
+    """Return one replicate's history interpolated onto `grid`.
+
+    Args:
+        generations: The replicate's recorded generations, ascending.
+        histories: One value sequence per statistic, aligned with
+            `generations`.
+        grid: The generations to evaluate at.
+
+    Returns:
+        `(points, {name: values})`: the grid generations within the
+        replicate's own recorded span, plus its final generation (the
+        value carried forward once it stops), and each statistic's
+        linearly interpolated value there. A statistic that is not
+        aligned with `generations` or holds a non-finite value is left
+        out, the "drop rather than guess" rule
+        `pooled_convergence_histories` applies to interior gaps.
+    """
+    if not generations:
+        return (), {}
+    first, last = generations[0], generations[-1]
+    points = tuple(sorted({g for g in grid if first <= g <= last} | {last}))
+    known = np.asarray(generations, dtype=float)
+    wanted = np.asarray(points, dtype=float)
+    resampled: dict[str, list[float]] = {}
+    for name, values in histories.items():
+        if len(values) != len(generations):
+            continue
+        column = np.asarray(values, dtype=float)
+        if not np.all(np.isfinite(column)):
+            continue
+        resampled[name] = np.interp(wanted, known, column).tolist()
+    return points, resampled
 
 
 def _grand_ratio_of_means(

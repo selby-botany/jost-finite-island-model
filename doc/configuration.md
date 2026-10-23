@@ -845,8 +845,10 @@ sweep where only the numbers matter. The finished run holds `report.json` (or a
 batch's `summary.json`), `scatter.png`, `pairwise.json`, and `history.json`: the
 statistic history at full precision for at most 2,048 generations (generation 0,
 then closely spaced early generations and evenly spaced later ones). The app
-opens such a run as a report with no curves, and re-analysis and the scrubber
-say that the run kept statistics only. Every reported number is the same as in
+opens such a run as a report with no per-generation trajectory; a batch still
+shows its pooled convergence curve, drawn from the replicates' `history.json`
+files on one shared generation grid. Re-analysis and the scrubber say that the
+run kept statistics only. Every reported number is the same as in
 a `full` run of the same seed. While a batch runs, a replicate that has stopped
 keeps only its final frame; the full log of each replicate still running is
 needed until it stops.
