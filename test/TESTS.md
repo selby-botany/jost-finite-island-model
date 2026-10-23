@@ -35,6 +35,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_reproducibility`](#test.test_reproducibility)
   - [`test_results`](#test.test_results)
+  - [`test_run_adoption`](#test.test_run_adoption)
   - [`test_run_service`](#test.test_run_service)
   - [`test_run_service_batch`](#test.test_run_service_batch)
   - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
@@ -3879,6 +3880,138 @@ def test_provenance_records_the_backend_that_ran() -> None
 
 `auto` is resolved to a real backend in the provenance.
 
+<a id="test.test_run_adoption"></a>
+
+# [test.test\_run\_adoption](./test_run_adoption.py#L1)
+
+Tests for continuing a planned Run object from another's checkpoint.
+
+<a id="test.test_run_adoption._Writer"></a>
+
+## [\_Writer Objects](./test_run_adoption.py#L92)
+
+```python
+class _Writer()
+```
+
+An artifact writer that remembers what it was asked to write.
+
+<a id="test.test_run_adoption._Writer.__init__"></a>
+
+#### [\_\_init\_\_](./test_run_adoption.py#L95)
+
+```python
+def __init__() -> None
+```
+
+Start with nothing written.
+
+<a id="test.test_run_adoption._Writer.__call__"></a>
+
+#### [\_\_call\_\_](./test_run_adoption.py#L99)
+
+```python
+def __call__(result: RunResult, directory: Path) -> None
+```
+
+Remember `result` and write the standard artifacts.
+
+<a id="test.test_run_adoption.test_a_continued_copy_finishes_as_the_uninterrupted_run"></a>
+
+#### [test\_a\_continued\_copy\_finishes\_as\_the\_uninterrupted\_run](./test_run_adoption.py#L215)
+
+```python
+@pytest.mark.parametrize("config", [_SCALAR, _BATCH], ids=["scalar", "batch"])
+def test_a_continued_copy_finishes_as_the_uninterrupted_run(
+        tmp_path: Path, config: dict[str, Any]) -> None
+```
+
+Continuing from a cancelled run's checkpoint changes no result.
+
+<a id="test.test_run_adoption.test_adoption_copies_without_clonefile"></a>
+
+#### [test\_adoption\_copies\_without\_clonefile](./test_run_adoption.py#L242)
+
+```python
+def test_adoption_copies_without_clonefile(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Filesystems without copy-on-write clones get an ordinary copy.
+
+<a id="test.test_run_adoption.test_sources_are_matching_stopped_runs_furthest_first"></a>
+
+#### [test\_sources\_are\_matching\_stopped\_runs\_furthest\_first](./test_run_adoption.py#L263)
+
+```python
+def test_sources_are_matching_stopped_runs_furthest_first(
+        tmp_path: Path) -> None
+```
+
+Only same-configuration runs with progress are offered.
+
+<a id="test.test_run_adoption.test_a_different_configuration_is_refused"></a>
+
+#### [test\_a\_different\_configuration\_is\_refused](./test_run_adoption.py#L280)
+
+```python
+def test_a_different_configuration_is_refused(tmp_path: Path) -> None
+```
+
+A checkpoint continues only the configuration that wrote it.
+
+<a id="test.test_run_adoption.test_an_executing_source_is_refused"></a>
+
+#### [test\_an\_executing\_source\_is\_refused](./test_run_adoption.py#L293)
+
+```python
+def test_an_executing_source_is_refused(tmp_path: Path) -> None
+```
+
+A source that is running could rewrite its files mid-copy.
+
+<a id="test.test_run_adoption.test_a_source_without_progress_is_refused"></a>
+
+#### [test\_a\_source\_without\_progress\_is\_refused](./test_run_adoption.py#L305)
+
+```python
+def test_a_source_without_progress_is_refused(tmp_path: Path) -> None
+```
+
+A planned source has nothing to continue from.
+
+<a id="test.test_run_adoption.test_a_corrupt_checkpoint_is_refused_and_leaves_the_target_planned"></a>
+
+#### [test\_a\_corrupt\_checkpoint\_is\_refused\_and\_leaves\_the\_target\_planned](./test_run_adoption.py#L314)
+
+```python
+def test_a_corrupt_checkpoint_is_refused_and_leaves_the_target_planned(
+        tmp_path: Path) -> None
+```
+
+A copy that does not verify is discarded before anything is published.
+
+<a id="test.test_run_adoption.test_only_a_planned_target_adopts"></a>
+
+#### [test\_only\_a\_planned\_target\_adopts](./test_run_adoption.py#L338)
+
+```python
+def test_only_a_planned_target_adopts(tmp_path: Path) -> None
+```
+
+An object that already has progress keeps it.
+
+<a id="test.test_run_adoption.test_leftovers_of_an_interrupted_adoption_are_replaced"></a>
+
+#### [test\_leftovers\_of\_an\_interrupted\_adoption\_are\_replaced](./test_run_adoption.py#L350)
+
+```python
+def test_leftovers_of_an_interrupted_adoption_are_replaced(
+        tmp_path: Path) -> None
+```
+
+Files from an adoption that never recorded itself do not survive.
+
 <a id="test.test_run_service"></a>
 
 # [test.test\_run\_service](./test_run_service.py#L1)
@@ -7000,6 +7133,18 @@ def test_start_and_resume_accept_checkpoint_cadence_flags(
 ```
 
 CLI cadence flags override the run's default checkpoint cadence.
+
+<a id="cli.test_cli_objects.test_start_continue_copies_a_stopped_object_checkpoint"></a>
+
+#### [test\_start\_continue\_copies\_a\_stopped\_object\_checkpoint](./cli/test_cli_objects.py#L466)
+
+```python
+def test_start_continue_copies_a_stopped_object_checkpoint(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A planned copy continues from a cancelled run instead of generation 0.
 
 <a id="cli.test_cli_sweep"></a>
 
@@ -27814,7 +27959,7 @@ a hang.
 
 <a id="gui.test_saved_runs_api.results"></a>
 
-#### [results](./gui/test_saved_runs_api.py#L55)
+#### [results](./gui/test_saved_runs_api.py#L57)
 
 ```python
 @pytest.fixture
@@ -27825,7 +27970,7 @@ Isolate the results directory for the test.
 
 <a id="gui.test_saved_runs_api.window"></a>
 
-#### [window](./gui/test_saved_runs_api.py#L67)
+#### [window](./gui/test_saved_runs_api.py#L69)
 
 ```python
 @pytest.fixture
@@ -27836,7 +27981,7 @@ Provide a fake active window.
 
 <a id="gui.test_saved_runs_api.api"></a>
 
-#### [api](./gui/test_saved_runs_api.py#L75)
+#### [api](./gui/test_saved_runs_api.py#L77)
 
 ```python
 @pytest.fixture
@@ -27847,7 +27992,7 @@ An `Api` whose defaults make every run tiny, lineal, and resumable.
 
 <a id="gui.test_saved_runs_api.test_an_unnamed_row_summarizes_its_settings"></a>
 
-#### [test\_an\_unnamed\_row\_summarizes\_its\_settings](./gui/test_saved_runs_api.py#L165)
+#### [test\_an\_unnamed\_row\_summarizes\_its\_settings](./gui/test_saved_runs_api.py#L167)
 
 ```python
 def test_an_unnamed_row_summarizes_its_settings(api: Api) -> None
@@ -27855,9 +28000,20 @@ def test_an_unnamed_row_summarizes_its_settings(api: Api) -> None
 
 Home names an unnamed run by its settings, not its object id.
 
+<a id="gui.test_saved_runs_api.test_a_copy_continues_from_its_cancelled_source"></a>
+
+#### [test\_a\_copy\_continues\_from\_its\_cancelled\_source](./gui/test_saved_runs_api.py#L325)
+
+```python
+def test_a_copy_continues_from_its_cancelled_source(api: Api,
+                                                    results: Path) -> None
+```
+
+Start offers the stopped run's checkpoint, and adopting it pauses there.
+
 <a id="gui.test_saved_runs_api.test_start_source_reports_a_missing_copy"></a>
 
-#### [test\_start\_source\_reports\_a\_missing\_copy](./gui/test_saved_runs_api.py#L321)
+#### [test\_start\_source\_reports\_a\_missing\_copy](./gui/test_saved_runs_api.py#L366)
 
 ```python
 def test_start_source_reports_a_missing_copy(api: Api) -> None
@@ -27926,7 +28082,7 @@ Return the source described by the current stub row.
 
 <a id="gui.test_saved_runs_screen._StubbedSavedRunsApi.kill_run_object"></a>
 
-#### [kill\_run\_object](./gui/test_saved_runs_screen.py#L284)
+#### [kill\_run\_object](./gui/test_saved_runs_screen.py#L288)
 
 ```python
 def kill_run_object(object_id: str) -> dict[str, Any]
@@ -27936,7 +28092,7 @@ Record the kill and report the run failed.
 
 <a id="gui.test_saved_runs_screen._StubbedSavedRunsApi.delete_run_object"></a>
 
-#### [delete\_run\_object](./gui/test_saved_runs_screen.py#L290)
+#### [delete\_run\_object](./gui/test_saved_runs_screen.py#L294)
 
 ```python
 def delete_run_object(object_id: str) -> dict[str, Any]
@@ -27946,7 +28102,7 @@ Record the deletion.
 
 <a id="gui.test_saved_runs_screen._StubbedSavedRunsApi.delete_selected"></a>
 
-#### [delete\_selected](./gui/test_saved_runs_screen.py#L295)
+#### [delete\_selected](./gui/test_saved_runs_screen.py#L299)
 
 ```python
 def delete_selected(items: list[dict[str, str]]) -> dict[str, Any]
@@ -27956,7 +28112,7 @@ Record the saved runs in a Home selection, and delete nothing else.
 
 <a id="gui.test_saved_runs_screen.test_home_rereads_an_unsettled_saved_run_until_it_settles"></a>
 
-#### [test\_home\_rereads\_an\_unsettled\_saved\_run\_until\_it\_settles](./gui/test_saved_runs_screen.py#L315)
+#### [test\_home\_rereads\_an\_unsettled\_saved\_run\_until\_it\_settles](./gui/test_saved_runs_screen.py#L319)
 
 ```python
 def test_home_rereads_an_unsettled_saved_run_until_it_settles(
@@ -27967,7 +28123,7 @@ A Cancelling row becomes Cancelled with no action from the user.
 
 <a id="gui.test_saved_runs_screen.test_an_unnamed_saved_run_is_shown_by_its_settings"></a>
 
-#### [test\_an\_unnamed\_saved\_run\_is\_shown\_by\_its\_settings](./gui/test_saved_runs_screen.py#L357)
+#### [test\_an\_unnamed\_saved\_run\_is\_shown\_by\_its\_settings](./gui/test_saved_runs_screen.py#L361)
 
 ```python
 def test_an_unnamed_saved_run_is_shown_by_its_settings(
@@ -27978,7 +28134,7 @@ The object id is kept for the tooltip, not shown as the name.
 
 <a id="gui.test_saved_runs_screen.test_watch_returns_to_the_document_running_the_saved_run"></a>
 
-#### [test\_watch\_returns\_to\_the\_document\_running\_the\_saved\_run](./gui/test_saved_runs_screen.py#L384)
+#### [test\_watch\_returns\_to\_the\_document\_running\_the\_saved\_run](./gui/test_saved_runs_screen.py#L388)
 
 ```python
 def test_watch_returns_to_the_document_running_the_saved_run(
@@ -27989,7 +28145,7 @@ Home links a run this window executes back to its own document.
 
 <a id="gui.test_saved_runs_screen.test_a_run_executing_elsewhere_offers_no_watch"></a>
 
-#### [test\_a\_run\_executing\_elsewhere\_offers\_no\_watch](./gui/test_saved_runs_screen.py#L438)
+#### [test\_a\_run\_executing\_elsewhere\_offers\_no\_watch](./gui/test_saved_runs_screen.py#L442)
 
 ```python
 def test_a_run_executing_elsewhere_offers_no_watch(
@@ -28000,7 +28156,7 @@ Without its document here, the row says where to watch it instead.
 
 <a id="gui.test_saved_runs_screen.test_select_all_and_delete_selected_include_saved_runs"></a>
 
-#### [test\_select\_all\_and\_delete\_selected\_include\_saved\_runs](./gui/test_saved_runs_screen.py#L475)
+#### [test\_select\_all\_and\_delete\_selected\_include\_saved\_runs](./gui/test_saved_runs_screen.py#L479)
 
 ```python
 def test_select_all_and_delete_selected_include_saved_runs(
@@ -28011,7 +28167,7 @@ A deletable saved run joins Home's selection; Delete removes it.
 
 <a id="gui.test_saved_runs_screen.test_kill_then_delete_from_home"></a>
 
-#### [test\_kill\_then\_delete\_from\_home](./gui/test_saved_runs_screen.py#L538)
+#### [test\_kill\_then\_delete\_from\_home](./gui/test_saved_runs_screen.py#L542)
 
 ```python
 def test_kill_then_delete_from_home(saved_run_settings: Path) -> None
@@ -28021,7 +28177,7 @@ Kill asks first, kills, then offers to delete what is left.
 
 <a id="gui.test_saved_runs_screen.test_saved_run_generation_has_a_placeholder_only_when_absent"></a>
 
-#### [test\_saved\_run\_generation\_has\_a\_placeholder\_only\_when\_absent](./gui/test_saved_runs_screen.py#L582)
+#### [test\_saved\_run\_generation\_has\_a\_placeholder\_only\_when\_absent](./gui/test_saved_runs_screen.py#L586)
 
 ```python
 @pytest.mark.parametrize("generation, expected", [(None, "—"), (0, "0"),
@@ -28035,7 +28191,7 @@ Planned rows have no committed generation; zero is still a generation.
 
 <a id="gui.test_saved_runs_screen.test_opening_a_saved_run_labels_its_new_tab"></a>
 
-#### [test\_opening\_a\_saved\_run\_labels\_its\_new\_tab](./gui/test_saved_runs_screen.py#L613)
+#### [test\_opening\_a\_saved\_run\_labels\_its\_new\_tab](./gui/test_saved_runs_screen.py#L617)
 
 ```python
 @pytest.mark.parametrize("named", [False, True])
@@ -28047,7 +28203,7 @@ Open supplies the same name/settings fallback as the Home row.
 
 <a id="gui.test_saved_runs_screen.test_run_button_tracks_its_own_document_job"></a>
 
-#### [test\_run\_button\_tracks\_its\_own\_document\_job](./gui/test_saved_runs_screen.py#L674)
+#### [test\_run\_button\_tracks\_its\_own\_document\_job](./gui/test_saved_runs_screen.py#L678)
 
 ```python
 @pytest.mark.parametrize(
@@ -28060,7 +28216,7 @@ Job notifications and validation cannot enable a running tab's button.
 
 <a id="gui.test_saved_runs_screen.test_clone_opens_for_editing_and_confirms_an_identical_start"></a>
 
-#### [test\_clone\_opens\_for\_editing\_and\_confirms\_an\_identical\_start](./gui/test_saved_runs_screen.py#L754)
+#### [test\_clone\_opens\_for\_editing\_and\_confirms\_an\_identical\_start](./gui/test_saved_runs_screen.py#L758)
 
 ```python
 @pytest.mark.parametrize("target", ["saved", "configure"])
@@ -28073,7 +28229,7 @@ Cloning opens its copy; both Start paths warn unless settings change.
 
 <a id="gui.test_saved_runs_screen.test_identical_clone_warning_explains_original_checkpoint_progress"></a>
 
-#### [test\_identical\_clone\_warning\_explains\_original\_checkpoint\_progress](./gui/test_saved_runs_screen.py#L868)
+#### [test\_identical\_clone\_warning\_explains\_original\_checkpoint\_progress](./gui/test_saved_runs_screen.py#L872)
 
 ```python
 @pytest.mark.parametrize("source_state", ["cancelled", "failed", "paused"])
@@ -28083,9 +28239,30 @@ def test_identical_clone_warning_explains_original_checkpoint_progress(
 
 A declined duplicate launch points to the original's existing progress.
 
+<a id="gui.test_saved_runs_screen.test_start_offers_to_continue_from_a_stopped_run_with_the_same_settings"></a>
+
+#### [test\_start\_offers\_to\_continue\_from\_a\_stopped\_run\_with\_the\_same\_settings](./gui/test_saved_runs_screen.py#L925)
+
+```python
+@pytest.mark.parametrize(
+    ("answers", "adopted", "started"),
+    [
+        ([True], True, True),
+        ([False, True], False, True),
+        ([False, False], False, False),
+    ],
+    ids=["continue", "restart", "neither"],
+)
+def test_start_offers_to_continue_from_a_stopped_run_with_the_same_settings(
+        saved_run_settings: Path, answers: list[bool], adopted: bool,
+        started: bool) -> None
+```
+
+Start copies the checkpoint, or asks before recomputing from generation 0.
+
 <a id="gui.test_saved_runs_screen.test_cancelled_saved_run_resurrect_action_uses_the_start_backend"></a>
 
-#### [test\_cancelled\_saved\_run\_resurrect\_action\_uses\_the\_start\_backend](./gui/test_saved_runs_screen.py#L913)
+#### [test\_cancelled\_saved\_run\_resurrect\_action\_uses\_the\_start\_backend](./gui/test_saved_runs_screen.py#L1008)
 
 ```python
 @pytest.mark.parametrize("checkpoint", [False, True])
@@ -37935,9 +38112,15 @@ Every `(state, event)` pair is checked against the transition table, so a
 change to the table is a deliberate, visible test change. Timestamps are
 fixed; nothing here reads the clock.
 
+<a id="persistence.test_run_lifecycle.ADOPTED"></a>
+
+#### [ADOPTED](./persistence/test_run_lifecycle.py#L89)
+
+A checkpoint another object committed, as a planned object adopts it.
+
 <a id="persistence.test_run_lifecycle.test_transition_table_matches_the_design"></a>
 
-#### [test\_transition\_table\_matches\_the\_design](./persistence/test_run_lifecycle.py#L124)
+#### [test\_transition\_table\_matches\_the\_design](./persistence/test_run_lifecycle.py#L130)
 
 ```python
 def test_transition_table_matches_the_design() -> None
@@ -37947,7 +38130,7 @@ The table holds exactly the designed transitions, draft included.
 
 <a id="persistence.test_run_lifecycle.test_every_state_event_pair"></a>
 
-#### [test\_every\_state\_event\_pair](./persistence/test_run_lifecycle.py#L132)
+#### [test\_every\_state\_event\_pair](./persistence/test_run_lifecycle.py#L138)
 
 ```python
 @pytest.mark.parametrize(("state", "event"),
@@ -37959,7 +38142,7 @@ Legal pairs reach their target; every other pair is rejected.
 
 <a id="persistence.test_run_lifecycle.test_terminal_states_have_no_exits"></a>
 
-#### [test\_terminal\_states\_have\_no\_exits](./persistence/test_run_lifecycle.py#L154)
+#### [test\_terminal\_states\_have\_no\_exits](./persistence/test_run_lifecycle.py#L160)
 
 ```python
 def test_terminal_states_have_no_exits() -> None
@@ -37969,7 +38152,7 @@ No event leaves an unconditionally terminal state.
 
 <a id="persistence.test_run_lifecycle.test_invalid_first_save_creates_a_draft_with_its_issues"></a>
 
-#### [test\_invalid\_first\_save\_creates\_a\_draft\_with\_its\_issues](./persistence/test_run_lifecycle.py#L160)
+#### [test\_invalid\_first\_save\_creates\_a\_draft\_with\_its\_issues](./persistence/test_run_lifecycle.py#L166)
 
 ```python
 def test_invalid_first_save_creates_a_draft_with_its_issues() -> None
@@ -37979,7 +38162,7 @@ An invalid configuration persists as a draft, not as an error.
 
 <a id="persistence.test_run_lifecycle.test_draft_and_planned_reclassify_on_each_save"></a>
 
-#### [test\_draft\_and\_planned\_reclassify\_on\_each\_save](./persistence/test_run_lifecycle.py#L170)
+#### [test\_draft\_and\_planned\_reclassify\_on\_each\_save](./persistence/test_run_lifecycle.py#L176)
 
 ```python
 def test_draft_and_planned_reclassify_on_each_save() -> None
@@ -37989,7 +38172,7 @@ Saves move back and forth by validity; the object ID never changes.
 
 <a id="persistence.test_run_lifecycle.test_save_event_must_match_its_configuration"></a>
 
-#### [test\_save\_event\_must\_match\_its\_configuration](./persistence/test_run_lifecycle.py#L184)
+#### [test\_save\_event\_must\_match\_its\_configuration](./persistence/test_run_lifecycle.py#L190)
 
 ```python
 def test_save_event_must_match_its_configuration() -> None
@@ -37999,7 +38182,7 @@ A valid configuration cannot be saved as invalid, or vice versa.
 
 <a id="persistence.test_run_lifecycle.test_draft_cannot_start"></a>
 
-#### [test\_draft\_cannot\_start](./persistence/test_run_lifecycle.py#L193)
+#### [test\_draft\_cannot\_start](./persistence/test_run_lifecycle.py#L199)
 
 ```python
 def test_draft_cannot_start() -> None
@@ -38009,7 +38192,7 @@ Start on a draft is an illegal transition naming the draft state.
 
 <a id="persistence.test_run_lifecycle.test_configuration_is_fixed_once_execution_starts"></a>
 
-#### [test\_configuration\_is\_fixed\_once\_execution\_starts](./persistence/test_run_lifecycle.py#L199)
+#### [test\_configuration\_is\_fixed\_once\_execution\_starts](./persistence/test_run_lifecycle.py#L205)
 
 ```python
 def test_configuration_is_fixed_once_execution_starts() -> None
@@ -38019,7 +38202,7 @@ A started run accepts no save of either kind.
 
 <a id="persistence.test_run_lifecycle.test_stale_revision_is_rejected"></a>
 
-#### [test\_stale\_revision\_is\_rejected](./persistence/test_run_lifecycle.py#L209)
+#### [test\_stale\_revision\_is\_rejected](./persistence/test_run_lifecycle.py#L215)
 
 ```python
 def test_stale_revision_is_rejected() -> None
@@ -38029,7 +38212,7 @@ A request based on an older revision fails before any change.
 
 <a id="persistence.test_run_lifecycle.test_start_requires_a_well_formed_attempt"></a>
 
-#### [test\_start\_requires\_a\_well\_formed\_attempt](./persistence/test_run_lifecycle.py#L219)
+#### [test\_start\_requires\_a\_well\_formed\_attempt](./persistence/test_run_lifecycle.py#L225)
 
 ```python
 def test_start_requires_a_well_formed_attempt() -> None
@@ -38039,7 +38222,7 @@ Start without a valid new attempt ID is rejected.
 
 <a id="persistence.test_run_lifecycle.test_stale_attempt_cannot_report"></a>
 
-#### [test\_stale\_attempt\_cannot\_report](./persistence/test_run_lifecycle.py#L228)
+#### [test\_stale\_attempt\_cannot\_report](./persistence/test_run_lifecycle.py#L234)
 
 ```python
 def test_stale_attempt_cannot_report() -> None
@@ -38049,7 +38232,7 @@ A worker event from a superseded attempt is fenced out.
 
 <a id="persistence.test_run_lifecycle.test_completion_wins_over_a_pending_cancel"></a>
 
-#### [test\_completion\_wins\_over\_a\_pending\_cancel](./persistence/test_run_lifecycle.py#L239)
+#### [test\_completion\_wins\_over\_a\_pending\_cancel](./persistence/test_run_lifecycle.py#L245)
 
 ```python
 def test_completion_wins_over_a_pending_cancel() -> None
@@ -38059,7 +38242,7 @@ Completion committed during cancelling yields completed.
 
 <a id="persistence.test_run_lifecycle.test_resume_opens_a_new_attempt_and_clears_the_error"></a>
 
-#### [test\_resume\_opens\_a\_new\_attempt\_and\_clears\_the\_error](./persistence/test_run_lifecycle.py#L248)
+#### [test\_resume\_opens\_a\_new\_attempt\_and\_clears\_the\_error](./persistence/test_run_lifecycle.py#L254)
 
 ```python
 def test_resume_opens_a_new_attempt_and_clears_the_error() -> None
@@ -38069,7 +38252,7 @@ Resume from failed records the new attempt and keeps first start.
 
 <a id="persistence.test_run_lifecycle.test_recover_completion_requires_the_finalizing_phase"></a>
 
-#### [test\_recover\_completion\_requires\_the\_finalizing\_phase](./persistence/test_run_lifecycle.py#L268)
+#### [test\_recover\_completion\_requires\_the\_finalizing\_phase](./persistence/test_run_lifecycle.py#L274)
 
 ```python
 @pytest.mark.parametrize(
@@ -38090,7 +38273,7 @@ A run still simulating cannot have published a completion receipt.
 
 <a id="persistence.test_run_lifecycle.test_recover_completion_closes_the_attempt_and_clears_the_error"></a>
 
-#### [test\_recover\_completion\_closes\_the\_attempt\_and\_clears\_the\_error](./persistence/test_run_lifecycle.py#L277)
+#### [test\_recover\_completion\_closes\_the\_attempt\_and\_clears\_the\_error](./persistence/test_run_lifecycle.py#L283)
 
 ```python
 def test_recover_completion_closes_the_attempt_and_clears_the_error() -> None
@@ -38100,7 +38283,7 @@ Recovered completion is a plain completion: no owner, no error.
 
 <a id="persistence.test_run_lifecycle.test_record_round_trips_through_json"></a>
 
-#### [test\_record\_round\_trips\_through\_json](./persistence/test_run_lifecycle.py#L293)
+#### [test\_record\_round\_trips\_through\_json](./persistence/test_run_lifecycle.py#L299)
 
 ```python
 def test_record_round_trips_through_json() -> None
@@ -38110,7 +38293,7 @@ A record with every field set survives JSON exactly.
 
 <a id="persistence.test_run_lifecycle.test_draft_round_trips_with_its_issues"></a>
 
-#### [test\_draft\_round\_trips\_with\_its\_issues](./persistence/test_run_lifecycle.py#L306)
+#### [test\_draft\_round\_trips\_with\_its\_issues](./persistence/test_run_lifecycle.py#L312)
 
 ```python
 def test_draft_round_trips_with_its_issues() -> None
@@ -38120,7 +38303,7 @@ A draft's validation issues are preserved exactly.
 
 <a id="persistence.test_run_lifecycle.test_malformed_record_is_rejected"></a>
 
-#### [test\_malformed\_record\_is\_rejected](./persistence/test_run_lifecycle.py#L324)
+#### [test\_malformed\_record\_is\_rejected](./persistence/test_run_lifecycle.py#L330)
 
 ```python
 @pytest.mark.parametrize(
@@ -38143,7 +38326,7 @@ Every malformed or inconsistent document raises a record error.
 
 <a id="persistence.test_run_lifecycle.test_inconsistent_records_cannot_be_built"></a>
 
-#### [test\_inconsistent\_records\_cannot\_be\_built](./persistence/test_run_lifecycle.py#L332)
+#### [test\_inconsistent\_records\_cannot\_be\_built](./persistence/test_run_lifecycle.py#L338)
 
 ```python
 def test_inconsistent_records_cannot_be_built() -> None
@@ -38153,7 +38336,7 @@ Cross-field invariants hold for every constructed record.
 
 <a id="persistence.test_run_lifecycle.test_configuration_is_exactly_one_form"></a>
 
-#### [test\_configuration\_is\_exactly\_one\_form](./persistence/test_run_lifecycle.py#L343)
+#### [test\_configuration\_is\_exactly\_one\_form](./persistence/test_run_lifecycle.py#L349)
 
 ```python
 def test_configuration_is_exactly_one_form() -> None
@@ -38163,7 +38346,7 @@ A configuration outcome is valid or invalid, never both or neither.
 
 <a id="persistence.test_run_lifecycle.test_capabilities_for_draft_explain_why_start_is_blocked"></a>
 
-#### [test\_capabilities\_for\_draft\_explain\_why\_start\_is\_blocked](./persistence/test_run_lifecycle.py#L353)
+#### [test\_capabilities\_for\_draft\_explain\_why\_start\_is\_blocked](./persistence/test_run_lifecycle.py#L359)
 
 ```python
 def test_capabilities_for_draft_explain_why_start_is_blocked() -> None
@@ -38173,7 +38356,7 @@ A draft is editable and deletable, never startable or abandonable.
 
 <a id="persistence.test_run_lifecycle.test_capabilities_by_state"></a>
 
-#### [test\_capabilities\_by\_state](./persistence/test_run_lifecycle.py#L362)
+#### [test\_capabilities\_by\_state](./persistence/test_run_lifecycle.py#L368)
 
 ```python
 def test_capabilities_by_state() -> None
@@ -38183,7 +38366,7 @@ Each state allows exactly its designed actions.
 
 <a id="persistence.test_run_lifecycle.test_read_only_objects_allow_nothing"></a>
 
-#### [test\_read\_only\_objects\_allow\_nothing](./persistence/test_run_lifecycle.py#L379)
+#### [test\_read\_only\_objects\_allow\_nothing](./persistence/test_run_lifecycle.py#L385)
 
 ```python
 def test_read_only_objects_allow_nothing() -> None
@@ -38193,7 +38376,7 @@ A protected example refuses every action, with a reason for each.
 
 <a id="persistence.test_run_lifecycle.test_timestamps_are_utc_and_require_a_zone"></a>
 
-#### [test\_timestamps\_are\_utc\_and\_require\_a\_zone](./persistence/test_run_lifecycle.py#L387)
+#### [test\_timestamps\_are\_utc\_and\_require\_a\_zone](./persistence/test_run_lifecycle.py#L393)
 
 ```python
 def test_timestamps_are_utc_and_require_a_zone() -> None
@@ -38203,7 +38386,7 @@ Timestamps normalize to UTC `Z` form; naive times are refused.
 
 <a id="persistence.test_run_lifecycle.test_object_ids_are_safe_directory_names"></a>
 
-#### [test\_object\_ids\_are\_safe\_directory\_names](./persistence/test_run_lifecycle.py#L395)
+#### [test\_object\_ids\_are\_safe\_directory\_names](./persistence/test_run_lifecycle.py#L401)
 
 ```python
 def test_object_ids_are_safe_directory_names() -> None
@@ -38213,7 +38396,7 @@ Only the fixed `obj-<32 hex>` form is an object ID.
 
 <a id="persistence.test_run_lifecycle.test_schema_version_is_one"></a>
 
-#### [test\_schema\_version\_is\_one](./persistence/test_run_lifecycle.py#L402)
+#### [test\_schema\_version\_is\_one](./persistence/test_run_lifecycle.py#L408)
 
 ```python
 def test_schema_version_is_one() -> None
@@ -38223,7 +38406,7 @@ The first lifecycle schema is version 1.
 
 <a id="persistence.test_run_lifecycle.test_command_key_is_recorded_and_found"></a>
 
-#### [test\_command\_key\_is\_recorded\_and\_found](./persistence/test_run_lifecycle.py#L407)
+#### [test\_command\_key\_is\_recorded\_and\_found](./persistence/test_run_lifecycle.py#L413)
 
 ```python
 def test_command_key_is_recorded_and_found() -> None
@@ -38233,7 +38416,7 @@ A keyed transition can be found again by its key.
 
 <a id="persistence.test_run_lifecycle.test_command_key_cannot_apply_twice"></a>
 
-#### [test\_command\_key\_cannot\_apply\_twice](./persistence/test_run_lifecycle.py#L419)
+#### [test\_command\_key\_cannot\_apply\_twice](./persistence/test_run_lifecycle.py#L425)
 
 ```python
 def test_command_key_cannot_apply_twice() -> None
@@ -38243,7 +38426,7 @@ A key that already produced a transition is refused.
 
 <a id="persistence.test_run_lifecycle.test_malformed_command_key_is_refused"></a>
 
-#### [test\_malformed\_command\_key\_is\_refused](./persistence/test_run_lifecycle.py#L432)
+#### [test\_malformed\_command\_key\_is\_refused](./persistence/test_run_lifecycle.py#L438)
 
 ```python
 @pytest.mark.parametrize("key", ["", "has space", "x" * 129, "slash/no"])
@@ -38254,7 +38437,7 @@ Keys are short printable tokens.
 
 <a id="persistence.test_run_lifecycle.test_progress_advances_revision_without_a_transition"></a>
 
-#### [test\_progress\_advances\_revision\_without\_a\_transition](./persistence/test_run_lifecycle.py#L440)
+#### [test\_progress\_advances\_revision\_without\_a\_transition](./persistence/test_run_lifecycle.py#L446)
 
 ```python
 def test_progress_advances_revision_without_a_transition() -> None
@@ -38264,7 +38447,7 @@ Progress bumps the revision and keeps the state and history.
 
 <a id="persistence.test_run_lifecycle.test_progress_from_a_stale_or_absent_attempt_is_fenced"></a>
 
-#### [test\_progress\_from\_a\_stale\_or\_absent\_attempt\_is\_fenced](./persistence/test_run_lifecycle.py#L454)
+#### [test\_progress\_from\_a\_stale\_or\_absent\_attempt\_is\_fenced](./persistence/test_run_lifecycle.py#L460)
 
 ```python
 def test_progress_from_a_stale_or_absent_attempt_is_fenced() -> None
@@ -38274,7 +38457,7 @@ Only the owning attempt of an active run may commit progress.
 
 <a id="persistence.test_run_lifecycle.test_progress_never_moves_backward"></a>
 
-#### [test\_progress\_never\_moves\_backward](./persistence/test_run_lifecycle.py#L462)
+#### [test\_progress\_never\_moves\_backward](./persistence/test_run_lifecycle.py#L468)
 
 ```python
 def test_progress_never_moves_backward() -> None
@@ -38284,7 +38467,7 @@ Committed generation is monotonic and agrees with the checkpoint.
 
 <a id="persistence.test_run_lifecycle.test_cancelled_capabilities_require_a_verified_checkpoint"></a>
 
-#### [test\_cancelled\_capabilities\_require\_a\_verified\_checkpoint](./persistence/test_run_lifecycle.py#L484)
+#### [test\_cancelled\_capabilities\_require\_a\_verified\_checkpoint](./persistence/test_run_lifecycle.py#L490)
 
 ```python
 @pytest.mark.parametrize("checkpoint", [False, True])
@@ -38294,6 +38477,28 @@ def test_cancelled_capabilities_require_a_verified_checkpoint(
 ```
 
 Cancellation is final without a checkpoint, and never restarts at zero.
+
+<a id="persistence.test_run_lifecycle.test_adopting_a_checkpoint_pauses_a_planned_run_at_its_generation"></a>
+
+#### [test\_adopting\_a\_checkpoint\_pauses\_a\_planned\_run\_at\_its\_generation](./persistence/test_run_lifecycle.py#L512)
+
+```python
+def test_adopting_a_checkpoint_pauses_a_planned_run_at_its_generation(
+) -> None
+```
+
+Adoption records the copied checkpoint so the next resume restores it.
+
+<a id="persistence.test_run_lifecycle.test_adoption_requires_its_checkpoint_and_no_other_event_takes_one"></a>
+
+#### [test\_adoption\_requires\_its\_checkpoint\_and\_no\_other\_event\_takes\_one](./persistence/test_run_lifecycle.py#L525)
+
+```python
+def test_adoption_requires_its_checkpoint_and_no_other_event_takes_one(
+) -> None
+```
+
+The checkpoint argument belongs to adoption alone.
 
 <a id="persistence.test_run_metadata"></a>
 

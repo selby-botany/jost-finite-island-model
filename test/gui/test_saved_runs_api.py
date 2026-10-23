@@ -23,6 +23,8 @@ from fim.gui.app import Api
 from fim.gui.config_form import DEFAULT_RUN_SETTING_FIELD_NAMES, starter_form_values
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_objects import read_run_object
+from fim.persistence.run_ownership import request_cancel
+from fim.run_service import CheckpointCadence, Session, execute_run_object
 
 _CLASSES_FIXTURE = (
     Path(__file__).resolve().parents[1] / "persistence" / "fixtures" / "classes.yaml"
@@ -307,15 +309,58 @@ def test_clone_saved_run_via_api(api: Api) -> None:
     assert api.get_run_object_start_source(cloned["objectId"], _form()) == {
         "ok": True,
         "identicalToSource": source,
+        "continueFrom": None,
     }
     assert api.get_run_object_start_source(cloned["objectId"], _form(seed="99")) == {
         "ok": True,
         "identicalToSource": None,
+        "continueFrom": None,
     }
     # Checking an unsaved edit must not overwrite the saved copy.
     assert api.open_run_object(cloned["objectId"])["identicalToSource"] == source
     api.save_run_object(_form(seed="99"), cloned["objectId"])
     assert api.open_run_object(cloned["objectId"])["identicalToSource"] is None
+
+
+def test_a_copy_continues_from_its_cancelled_source(api: Api, results: Path) -> None:
+    """Start offers the stopped run's checkpoint, and adopting it pauses there."""
+    saved = api.save_run_object(_form(), None, "Source run")
+    source_id = saved["objectId"]
+
+    def cancel_at_5(session: Session) -> None:
+        """Request cancellation between checkpoints, at generation five."""
+        if session.generation == 5:
+            current = read_run_object(source_id, results=results)
+            request_cancel(
+                source_id, expected_revision=current.record.revision, results=results
+            )
+
+    execute_run_object(
+        source_id,
+        results=results,
+        cadence=CheckpointCadence(4, 1e9, 1),
+        monotonic=lambda: 0.0,
+        observer=cancel_at_5,
+    )
+    copy_id = api.clone_run_object(source_id)["objectId"]
+
+    offered = api.get_run_object_start_source(copy_id)
+    unsaved = api.get_run_object_start_source(copy_id, _form())
+    adopted = api.adopt_run_object_checkpoint(copy_id, source_id)
+    again = api.adopt_run_object_checkpoint(copy_id, source_id)
+
+    assert offered["continueFrom"] == {
+        "objectId": source_id,
+        "name": "Source run",
+        "state": "cancelled",
+        "committedGeneration": 4,
+    }
+    assert unsaved["continueFrom"] is None
+    assert adopted == {"ok": True, "committedGeneration": 4}
+    assert read_run_object(copy_id, results=results).record.state is RunState.PAUSED
+    assert api.get_run_object_start_source(copy_id)["continueFrom"] is None
+    assert again["ok"] is False
+    assert "paused" in again["message"]
 
 
 def test_start_source_reports_a_missing_copy(api: Api) -> None:

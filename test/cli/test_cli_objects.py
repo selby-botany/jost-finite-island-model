@@ -461,3 +461,64 @@ def test_start_and_resume_accept_checkpoint_cadence_flags(
     assert cadence is not None
     assert cadence.generations == 50
     assert cadence.seconds == 12.5
+
+
+def test_start_continue_copies_a_stopped_object_checkpoint(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A planned copy continues from a cancelled run instead of generation 0."""
+    source_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    original = run_service.execute_run_object
+
+    def cancel_at_15(object_id: str, **kwargs: Any) -> Any:
+        def observer(session: run_service.Session) -> None:
+            if session.generation == 15:
+                current = read_run_object(object_id, results=_results(tmp_path))
+                request_cancel(
+                    object_id,
+                    expected_revision=current.record.revision,
+                    results=_results(tmp_path),
+                )
+
+        return original(
+            object_id,
+            cadence=run_service.CheckpointCadence(10, 1e9, 5),
+            observer=observer,
+            **kwargs,
+        )
+
+    monkeypatch.setattr("fim.cli_objects.execute_run_object", cancel_at_15)
+    assert _main(tmp_path, "object", "start", source_id) == 0
+    monkeypatch.setattr("fim.cli_objects.execute_run_object", original)
+    hinted_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    continued_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    capsys.readouterr()
+
+    assert _main(tmp_path, "object", "start", hinted_id) == 0
+    hinted = capsys.readouterr().out
+    assert _main(tmp_path, "object", "start", continued_id, "--continue") == 0
+    continued = capsys.readouterr().out
+
+    assert f"{source_id} stopped at generation 10" in hinted
+    assert f"`fim object start {hinted_id} --continue`" in hinted
+    assert f"Continuing from generation 10 of {source_id}" in continued
+    assert f"Starting {continued_id}" in continued
+    assert f"{continued_id} is completed at generation 30" in continued
+    record = read_run_object(continued_id, results=_results(tmp_path)).record
+    events = [entry.event.value for entry in record.transition_history]
+    assert "adopt-checkpoint" in events
+
+
+def test_start_continue_without_a_source_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+
+    status = _main(tmp_path, "object", "start", object_id, "--continue")
+
+    assert status == 2
+    assert "has a checkpoint to continue from" in capsys.readouterr().err
+    record = read_run_object(object_id, results=_results(tmp_path)).record
+    assert record.state is RunState.PLANNED

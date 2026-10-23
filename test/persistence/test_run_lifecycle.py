@@ -55,6 +55,7 @@ _EXPECTED: dict[tuple[RunState, RunEvent], RunState] = {
     (RunState.PLANNED, RunEvent.SAVE_VALID): RunState.PLANNED,
     (RunState.PLANNED, RunEvent.SAVE_INVALID): RunState.DRAFT,
     (RunState.PLANNED, RunEvent.START): RunState.RUNNING,
+    (RunState.PLANNED, RunEvent.ADOPT_CHECKPOINT): RunState.PAUSED,
     (RunState.PLANNED, RunEvent.ABANDON): RunState.CANCELLED,
     (RunState.RUNNING, RunEvent.REQUEST_PAUSE): RunState.PAUSING,
     (RunState.RUNNING, RunEvent.COMPLETE): RunState.COMPLETED,
@@ -83,6 +84,10 @@ _EXPECTED: dict[tuple[RunState, RunEvent], RunState] = {
     (RunState.INTERRUPTED, RunEvent.RECOVER_COMPLETION): RunState.COMPLETED,
     (RunState.FAILED, RunEvent.RECOVER_COMPLETION): RunState.COMPLETED,
 }
+
+
+ADOPTED = CheckpointReference("ckpt-000000000070-0123456789ab", "a" * 64, 70)
+"""A checkpoint another object committed, as a planned object adopts it."""
 
 
 def _record_in(state: RunState) -> RunLifecycleRecord:
@@ -118,6 +123,7 @@ def _apply(record: RunLifecycleRecord, event: RunEvent) -> RunLifecycleRecord:
             if event is RunEvent.FAIL
             else None
         ),
+        checkpoint=ADOPTED if event is RunEvent.ADOPT_CHECKPOINT else None,
     )
 
 
@@ -501,3 +507,31 @@ def test_cancelled_capabilities_require_a_verified_checkpoint(
         assert "before its first checkpoint" in result.reasons["can_resurrect"]
     elif not verified:
         assert "verified" in result.reasons["can_resurrect"]
+
+
+def test_adopting_a_checkpoint_pauses_a_planned_run_at_its_generation() -> None:
+    """Adoption records the copied checkpoint so the next resume restores it."""
+    planned = new_record(OBJECT_ID, VALID, at=AT)
+    adopted = _apply(planned, RunEvent.ADOPT_CHECKPOINT)
+    assert adopted.state is RunState.PAUSED
+    assert adopted.latest_checkpoint == ADOPTED
+    assert adopted.committed_generation == 70
+    assert adopted.phase is RunPhase.SIMULATING
+    assert adopted.first_started_at is None
+    assert adopted.active_attempt_id is None
+    assert adopted.transition_history[-1].event is RunEvent.ADOPT_CHECKPOINT
+
+
+def test_adoption_requires_its_checkpoint_and_no_other_event_takes_one() -> None:
+    """The checkpoint argument belongs to adoption alone."""
+    planned = new_record(OBJECT_ID, VALID, at=AT)
+    with pytest.raises(ValueError, match="requires the adopted checkpoint"):
+        apply_event(planned, RunEvent.ADOPT_CHECKPOINT, at=AT)
+    with pytest.raises(ValueError, match="only adopt-checkpoint"):
+        apply_event(
+            planned,
+            RunEvent.START,
+            at=AT,
+            attempt_id=ATTEMPT_A,
+            checkpoint=ADOPTED,
+        )

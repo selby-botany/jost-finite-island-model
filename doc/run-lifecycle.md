@@ -16,6 +16,7 @@ Return to the [command reference](usage.md) or the
 - [States](#states)
 - [Commands](#commands)
 - [Checkpoints and exact continuation](#checkpoints-and-exact-continuation)
+- [Continuing from another run's checkpoint](#continuing-from-another-runs-checkpoint)
 - [Stopping a run: pause, Ctrl-C, SIGTERM, and cancel](#stopping-a-run-pause-ctrl-c-sigterm-and-cancel)
 - [Recovery after a crash or power failure](#recovery-after-a-crash-or-power-failure)
 - [Saved runs in the desktop app](#saved-runs-in-the-desktop-app)
@@ -73,7 +74,7 @@ lifecycle rules and keep the record consistent.
 | State | Meaning | What you can do next |
 |-------|---------|----------------------|
 | `draft` | Saved, but the configuration is incomplete or invalid | Edit it; delete it |
-| `planned` | Saved, valid, and not started | Start; edit; delete |
+| `planned` | Saved, valid, and not started | Start, or continue from a stopped run with the same settings; edit; delete |
 | `running` | A command or the desktop app is executing it | Pause; cancel; kill |
 | `pausing` | A pause was requested; it stops at the next safe point | Wait; cancel; kill |
 | `paused` | Stopped at a checkpoint | Resume; cancel; delete |
@@ -117,7 +118,7 @@ Only `completed` is unconditionally terminal.
 | `fim object edit OBJECT_ID CONFIG` | Replace the configuration of a `draft` or `planned` object |
 | `fim object list` | List every object with its state, generation, and name |
 | `fim object status OBJECT_ID [--json]` | Show one object's lifecycle; `--json` prints the full record |
-| `fim object start OBJECT_ID [--quiet]` | Execute a `planned` object in the foreground |
+| `fim object start OBJECT_ID [--continue [SOURCE_ID]] [--quiet]` | Execute a `planned` object in the foreground; `--continue` first copies a stopped object's checkpoint |
 | `fim object resume OBJECT_ID [--quiet]` | Continue a stopped object, including `cancelled`, from its checkpoint |
 | `fim object pause OBJECT_ID` | Ask a running object to checkpoint and pause |
 | `fim object cancel OBJECT_ID` | Stop an object, keeping its checkpoint and partial data |
@@ -132,7 +133,7 @@ lifecycle refuses the request; 130 after Ctrl-C; and another nonzero status
 when an error fails the run.
 
 `clone` copies only the configuration. The new object is `planned` (or
-`draft`), starts from generation 0, and records the object it was cloned from
+`draft`), starts from generation 0 unless started with `--continue`, and records the object it was cloned from
 (`source_object_id` in `run.json`). Use it to run a finished configuration
 again or to retry a run that stopped before its first checkpoint.
 
@@ -145,6 +146,9 @@ effective configuration differs from the source, or the source is deleted.
 It also checks unsaved settings when Run is clicked in the copy's edit tab.
 For a stopped source with a checkpoint, continuing the original (when Resume
 is available) keeps its progress instead of recomputing it in a copy.
+When any stopped run with the same settings has a checkpoint, **Start** first
+offers to continue from it; see
+[Continuing from another run's checkpoint](#continuing-from-another-runs-checkpoint).
 
 `status` lists problems it finds, under `Problems:`, such as a damaged
 artifact or a run that cannot resume and why:
@@ -202,6 +206,40 @@ checkpoint is kept, so disk use does not grow with run length.
 - A checkpoint from a different checkpoint format version is refused, not
   converted. Run the configuration again from generation 0 with
   `fim object clone OBJECT_ID`.
+
+## Continuing from another run's checkpoint
+
+A run is a pure function of its configuration: the same settings and seed
+always produce the same trajectory. A `planned` object can therefore continue
+from the checkpoint of any stopped object with the same configuration
+digest, instead of recomputing those generations.
+
+```console
+$ fim object start obj-7c… --continue
+Copying the checkpoint of obj-36b1…
+Continuing from generation 4000 of obj-36b1…
+Starting obj-7c…
+obj-7c… is completed at generation 30000
+```
+
+- `--continue` alone picks the matching object furthest along;
+  `--continue SOURCE_ID` names one. Put it after the object ID.
+- Without `--continue`, `start` names a matching object when one exists,
+  and then starts from generation 0 as asked.
+- A source qualifies when it has the same configuration digest and run kind,
+  has a checkpoint, and is `paused`, `interrupted`, `failed`, or `cancelled`.
+  A running or completed object is never a source.
+- The checkpoint and its trajectory logs are copied (as copy-on-write clones
+  where the file system supports them), verified against their recorded
+  digests, and only then installed. A copy that does not verify is
+  discarded and the object stays `planned`.
+- The object records the `adopt-checkpoint` event and becomes `paused` at
+  the source's checkpoint generation; execution then resumes exactly as
+  [Resume](#checkpoints-and-exact-continuation) does. The source is not
+  changed.
+- In the desktop app, **Start** on a planned saved run asks
+  "Continue from generation N?". **Cancel** asks whether to start from
+  generation 0 instead.
 
 ## Stopping a run: pause, Ctrl-C, SIGTERM, and cancel
 

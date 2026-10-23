@@ -279,7 +279,11 @@ class _StubbedSavedRunsApi(Api):
     ) -> dict[str, Any]:
         """Return the source described by the current stub row."""
         del object_id, values
-        return {"ok": True, "identicalToSource": self.row.get("identicalToSource")}
+        return {
+            "ok": True,
+            "identicalToSource": self.row.get("identicalToSource"),
+            "continueFrom": self.row.get("continueFrom"),
+        }
 
     def kill_run_object(self, object_id: str) -> dict[str, Any]:
         """Record the kill and report the run failed."""
@@ -907,6 +911,97 @@ def test_identical_clone_warning_explains_original_checkpoint_progress(
     assert 'identical to "Original run"' in message
     assert "Continuing the original keeps its progress" in message
     assert "when available" in message
+
+
+@pytest.mark.parametrize(
+    ("answers", "adopted", "started"),
+    [
+        ([True], True, True),
+        ([False, True], False, True),
+        ([False, False], False, False),
+    ],
+    ids=["continue", "restart", "neither"],
+)
+def test_start_offers_to_continue_from_a_stopped_run_with_the_same_settings(
+    saved_run_settings: Path, answers: list[bool], adopted: bool, started: bool
+) -> None:
+    """Start copies the checkpoint, or asks before recomputing from generation 0."""
+
+    class ContinueApi(_StubbedSavedRunsApi):
+        """Record adoption and admission without copying or launching anything."""
+
+        def __init__(self) -> None:
+            """Initialize a planned row with a stopped run to continue from."""
+            super().__init__()
+            self.adopted: list[tuple[str, str]] = []
+            self.started: list[str] = []
+            self.row = _stub_row("planned", kill=False, delete=True)
+            self.row["actions"]["start"] = True
+            self.row["continueFrom"] = {
+                "objectId": "obj-" + "c" * 32,
+                "name": "Long original",
+                "state": "cancelled",
+                "committedGeneration": 4000,
+            }
+
+        def adopt_run_object_checkpoint(
+            self, object_id: str, source_id: str
+        ) -> dict[str, Any]:
+            """Record the adoption request."""
+            self.adopted.append((object_id, source_id))
+            return {"ok": True, "committedGeneration": 4000}
+
+        def start_run_object(
+            self, object_id: str, memory_confirmed: bool = False
+        ) -> dict[str, Any]:
+            """Record the start request without launching a worker."""
+            del memory_confirmed
+            self.started.append(object_id)
+            return {"ok": False, "message": "Start reached backend"}
+
+    api = ContinueApi()
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[list[str]] = queue.Queue(maxsize=1)
+
+    def drive() -> None:
+        """Answer each confirmation in turn, then wait for the outcome."""
+        try:
+            wait_for_run_view_ready(window)
+            _show_home_and_wait(window)
+            poll_page(window, _SAVED_ROWS, bool, what="planned saved run")
+            window.evaluate_js(
+                f"window.__answers = {json.dumps(answers)};"
+                "window.__asked = [];"
+                "window.confirm = function(text) {"
+                "window.__asked.push(text); return window.__answers.shift();};"
+                "document.querySelector("
+                "'#saved-runs-body button[data-action=\"start\"]').click();"
+            )
+            asked = poll_page(
+                window,
+                "window.__asked",
+                lambda texts: len(texts) == len(answers),
+                what="continuation questions",
+            )
+            if started:
+                poll_page(
+                    window,
+                    _RUN_BANNER,
+                    lambda text: "Start reached backend" in str(text),
+                    what="start backend admission",
+                )
+            outcome.put(asked)
+        finally:
+            window.destroy()
+
+    webview.start(drive)
+    asked = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+    assert '"Long original" has the same settings' in asked[0]
+    assert "Continue from generation 4000?" in asked[0]
+    assert asked[1:] == ["Start from generation 0?"][: len(asked) - 1]
+    object_id = api.row["objectId"]
+    assert api.adopted == ([(object_id, "obj-" + "c" * 32)] if adopted else [])
+    assert api.started == ([object_id] if started else [])
 
 
 @pytest.mark.parametrize("checkpoint", [False, True])

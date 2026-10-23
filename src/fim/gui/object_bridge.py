@@ -53,6 +53,7 @@ from fim.persistence.run_ownership import (
     record_worker_failure,
     request_pause,
 )
+from fim.run_adoption import find_continuation_sources
 from fim.run_service import cancel_run_object, diagnose_run_object
 
 GUI_FORM_FILE_NAME: Final = "gui-form.json"
@@ -361,6 +362,30 @@ def prepare_start(
     else:
         check_session_support(params)
     return run_object, params
+
+
+def continuation_source(run_object: RunObject) -> dict[str, Any] | None:
+    """Describe the stopped run a planned one could continue from.
+
+    Args:
+        run_object: The planned saved run, read from its own results directory.
+
+    Returns:
+        The furthest matching source's `objectId`, `name`, `state`, and
+        `committedGeneration`, or None when there is none.
+    """
+    sources = find_continuation_sources(
+        run_object.object_id, results=run_object.directory.parent.parent
+    )
+    if not sources:
+        return None
+    best = sources[0]
+    return {
+        "objectId": best.object_id,
+        "name": best.name,
+        "state": best.state.value,
+        "committedGeneration": best.committed_generation,
+    }
 
 
 def _config_summary(

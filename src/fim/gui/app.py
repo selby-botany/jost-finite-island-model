@@ -144,6 +144,7 @@ from fim.reanalyze import (
     replicate_convergence_history,
 )
 from fim.reproducibility import compare_runs
+from fim.run_adoption import adopt_checkpoint
 from fim.statistics import (
     effective_allele_count,
     equilibrium_d,
@@ -3087,7 +3088,9 @@ class Api:
             values: Unsaved form values, or None to check the saved settings.
 
         Returns:
-            Source display information in `identicalToSource`, or an error.
+            Source display information in `identicalToSource`, the stopped
+            run the saved settings could continue from in `continueFrom`
+            (None while checking unsaved form values), or an error.
         """
         try:
             run_object = read_run_object(object_id)
@@ -3098,9 +3101,49 @@ class Api:
                 if values is None
                 else self._merge_default_run_settings(values),
             )
+            continue_from = (
+                object_bridge.continuation_source(run_object)
+                if values is None
+                else None
+            )
         except (LifecycleError, OSError) as error:
             return {"ok": False, "message": str(error)}
-        return {"ok": True, "identicalToSource": source}
+        return {
+            "ok": True,
+            "identicalToSource": source,
+            "continueFrom": continue_from,
+        }
+
+    @_log_bridge_call
+    def adopt_run_object_checkpoint(
+        self, object_id: str, source_id: str
+    ) -> dict[str, Any]:
+        """Copy a stopped run's checkpoint into a planned run with its settings.
+
+        The planned run becomes paused at the source's checkpoint, so
+        `start_run_object` then resumes it instead of starting at generation 0.
+
+        Args:
+            object_id: The planned saved run.
+            source_id: The stopped run whose checkpoint is copied.
+
+        Returns:
+            `{"ok": True, "committedGeneration": ...}`, or an error.
+        """
+        try:
+            current = read_run_object(object_id)
+            adopted = adopt_checkpoint(
+                object_id,
+                source_id,
+                expected_revision=current.record.revision,
+                results=current.directory.parent.parent,
+            )
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        return {
+            "ok": True,
+            "committedGeneration": adopted.record.committed_generation,
+        }
 
     @_log_bridge_call
     def start_run_object(

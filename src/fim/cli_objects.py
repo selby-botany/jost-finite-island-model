@@ -10,6 +10,8 @@ their latest checkpoint. SIGTERM requests a pause; a second SIGTERM ends
 execution immediately. A later command reconciles a lost owner as interrupted,
 or as completed when its completion receipt verifies. An object without a
 checkpoint can be cloned to start a new run from generation zero.
+`start --continue` first copies the checkpoint of a stopped object with the
+same configuration, so the new object resumes where that one stopped.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ from fim.persistence.run_ownership import (
     request_pause,
 )
 from fim.persistence.staging import reclaim_orphan_staging
+from fim.run_adoption import adopt_checkpoint, find_continuation_sources
 from fim.run_service import (
     CheckpointCadence,
     DraftRunError,
@@ -99,6 +102,19 @@ def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
             default=None,
             help="seconds between periodic checkpoints",
         )
+        if name == "start":
+            execute_parser.add_argument(
+                "--continue",
+                dest="continue_from",
+                nargs="?",
+                const="",
+                default=None,
+                metavar="SOURCE_ID",
+                help=(
+                    "first copy the checkpoint of a stopped object with the "
+                    "same configuration (default: the one furthest along)"
+                ),
+            )
     for name, text in (
         ("pause", "ask a running object to checkpoint and pause"),
         ("cancel", "stop an object for good, keeping its partial data"),
@@ -143,6 +159,7 @@ def command_object(
             arguments.object_id,
             quiet=arguments.quiet,
             resume=False,
+            continue_from=arguments.continue_from,
             checkpoint_generations=arguments.checkpoint_generations,
             checkpoint_seconds=arguments.checkpoint_seconds,
         ),
@@ -196,6 +213,29 @@ def _clone(object_id: str) -> int:
     return 0
 
 
+def _continue(target: RunObject, source_id: str, *, quiet: bool) -> RunObject:
+    """Adopt `source_id`'s checkpoint, or the furthest one when it is empty."""
+    if not source_id:
+        sources = find_continuation_sources(target.object_id)
+        if not sources:
+            raise LifecycleError(
+                f"no stopped object with {target.object_id}'s configuration "
+                "has a checkpoint to continue from"
+            )
+        source_id = sources[0].object_id
+    if not quiet:
+        print(f"Copying the checkpoint of {source_id}")
+    adopted = adopt_checkpoint(
+        target.object_id, source_id, expected_revision=target.record.revision
+    )
+    if not quiet:
+        print(
+            f"Continuing from generation {adopted.record.committed_generation} "
+            f"of {source_id}"
+        )
+    return adopted
+
+
 def _create(config: Path) -> int:
     """Save a configuration file as a new object, whatever its validity."""
     created = create_run_object(config.read_text(encoding="utf-8"))
@@ -228,34 +268,27 @@ def _execute(
     *,
     quiet: bool,
     resume: bool,
+    continue_from: str | None = None,
     checkpoint_generations: int | None = None,
     checkpoint_seconds: float | None = None,
 ) -> int:
-    """Start or resume an object and run it in the foreground until it stops."""
-    # `start` and `resume` name the user's intent; refuse the other one
-    # rather than silently doing it.
+    """Start or resume an object and run it in the foreground until it stops.
+
+    `continue_from` (start only) first adopts another stopped object's
+    checkpoint: an empty string picks the source furthest along.
+    """
     reconciled = reconcile_run_object(object_id)
-    state = reconciled.record.state
     if completion_was_recovered(reconciled.record):
         if not quiet:
             print(f"{object_id} had already finished; it is completed")
             print(f"Artifacts: {reconciled.directory}")
         return 0
-    if resume and state not in RESUMABLE_STATES:
-        raise LifecycleError(
-            f"{object_id} is {state.value}; only a paused, interrupted, "
-            "failed, or cancelled object with a checkpoint can resume"
-        )
-    if state in RESUMABLE_STATES and reconciled.record.latest_checkpoint is None:
-        raise LifecycleError(
-            f"{object_id} is {state.value} and stopped before its first "
-            f"checkpoint, so it cannot resume; `fim object clone {object_id}` "
-            "saves its configuration as a new run that starts from generation 0"
-        )
-    if not resume and state in RESUMABLE_STATES:
-        raise LifecycleError(
-            f"{object_id} is {state.value}; use `fim object resume {object_id}`"
-        )
+    _refuse_other_intent(reconciled, resume=resume)
+    verb = "Resuming" if resume else "Starting"
+    if continue_from is not None:
+        reconciled = _continue(reconciled, continue_from, quiet=quiet)
+    elif not resume and not quiet:
+        _hint_continuation(object_id)
     cadence: CheckpointCadence | None = None
     if checkpoint_generations is not None or checkpoint_seconds is not None:
         params = load_params(reconciled)
@@ -265,7 +298,7 @@ def _execute(
             seconds=checkpoint_seconds,
         )
     if not quiet:
-        print(f"{'Resuming' if resume else 'Starting'} {object_id}")
+        print(f"{verb} {object_id}")
     execution_kwargs: dict[str, Any] = {}
     if cadence is not None:
         execution_kwargs["cadence"] = cadence
@@ -293,6 +326,19 @@ def _execute(
         elif record.state is RunState.PAUSED:
             print(f"Continue with `fim object resume {object_id}`")
     return 0
+
+
+def _hint_continuation(object_id: str) -> None:
+    """Name a stopped object this one could continue from, if there is one."""
+    sources = find_continuation_sources(object_id)
+    if not sources:
+        return
+    best = sources[0]
+    print(
+        f"{best.object_id} stopped at generation {best.committed_generation} "
+        f"with this configuration; `fim object start {object_id} --continue` "
+        "continues from there instead of generation 0"
+    )
 
 
 def _kill(object_id: str) -> int:
@@ -398,6 +444,31 @@ def _reclaim(*, dry_run: bool) -> int:
             verb = "Removed"
         print(f"{verb} {orphan.kind.value} staging {orphan.path}: {orphan.reason}")
     return 0
+
+
+def _refuse_other_intent(reconciled: RunObject, *, resume: bool) -> None:
+    """Raise unless the object's state matches `start` or `resume`.
+
+    The two commands name the user's intent; doing the other one silently
+    would surprise them.
+    """
+    object_id = reconciled.object_id
+    state = reconciled.record.state
+    if resume and state not in RESUMABLE_STATES:
+        raise LifecycleError(
+            f"{object_id} is {state.value}; only a paused, interrupted, "
+            "failed, or cancelled object with a checkpoint can resume"
+        )
+    if state in RESUMABLE_STATES and reconciled.record.latest_checkpoint is None:
+        raise LifecycleError(
+            f"{object_id} is {state.value} and stopped before its first "
+            f"checkpoint, so it cannot resume; `fim object clone {object_id}` "
+            "saves its configuration as a new run that starts from generation 0"
+        )
+    if not resume and state in RESUMABLE_STATES:
+        raise LifecycleError(
+            f"{object_id} is {state.value}; use `fim object resume {object_id}`"
+        )
 
 
 def _status(object_id: str, *, as_json: bool) -> int:

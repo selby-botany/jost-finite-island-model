@@ -38,6 +38,7 @@ CHECKPOINTS_DIRECTORY_NAME: Final = "checkpoints"
 CHECKPOINT_FILE_NAME: Final = "checkpoint.json"
 ARRAYS_FILE_NAME: Final = "arrays.npz"
 _STAGING_PREFIX: Final = ".staging-"
+_VERIFY_CHUNK_BYTES: Final = 16 * 1024 * 1024
 # A fixed timestamp keeps archive bytes a pure function of their contents.
 _ZIP_DATE_TIME: Final = (1980, 1, 1, 0, 0, 0)
 
@@ -283,6 +284,45 @@ def publish_checkpoint(
         digest=_sha256(document_bytes),
         committed_generation=committed_generation,
     )
+
+
+def verify_checkpoint_files(
+    object_directory: Path, reference: CheckpointReference
+) -> None:
+    """Check a checkpoint's files against its reference without loading it.
+
+    `load_checkpoint` reads the whole archive into memory, which for a
+    large batch is gigabytes; this streams the archive through its digest
+    instead, so a copied checkpoint can be checked before it is adopted.
+
+    Args:
+        object_directory: The Run object's directory.
+        reference: The reference the files must match.
+
+    Raises:
+        CheckpointError: Files are missing or do not match the reference.
+        UnsupportedCheckpointError: The schema version is not executable.
+    """
+    directory = checkpoints_directory(object_directory) / reference.checkpoint_id
+    digest = hashlib.sha256()
+    try:
+        document_bytes = (directory / CHECKPOINT_FILE_NAME).read_bytes()
+        if _sha256(document_bytes) != reference.digest:
+            raise CheckpointError(
+                f"checkpoint {reference.checkpoint_id!r} does not match its digest"
+            )
+        document = _parse_document(document_bytes, reference)
+        with (directory / ARRAYS_FILE_NAME).open("rb") as archive:
+            while chunk := archive.read(_VERIFY_CHUNK_BYTES):
+                digest.update(chunk)
+    except OSError as error:
+        raise CheckpointError(
+            f"checkpoint {reference.checkpoint_id!r} is unreadable: {error}"
+        ) from error
+    if digest.hexdigest() != document["arrays_sha256"]:
+        raise CheckpointError(
+            f"checkpoint {reference.checkpoint_id!r} arrays do not match"
+        )
 
 
 def _document_bytes(

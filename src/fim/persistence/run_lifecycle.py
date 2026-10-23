@@ -59,6 +59,7 @@ class RunEvent(StrEnum):
     COMMIT_CANCEL = "commit-cancel"
     ABANDON = "abandon"
     RECOVER_COMPLETION = "recover-completion"
+    ADOPT_CHECKPOINT = "adopt-checkpoint"
 
 
 class RunKind(StrEnum):
@@ -103,6 +104,9 @@ TRANSITIONS: Final[Mapping[tuple[RunState, RunEvent], RunState]] = {
     (_S.PLANNED, _E.SAVE_VALID): _S.PLANNED,
     (_S.PLANNED, _E.SAVE_INVALID): _S.DRAFT,
     (_S.PLANNED, _E.START): _S.RUNNING,
+    # A planned object takes a copy of another object's checkpoint for the
+    # same configuration, and is then resumed like any paused run.
+    (_S.PLANNED, _E.ADOPT_CHECKPOINT): _S.PAUSED,
     (_S.RUNNING, _E.REQUEST_PAUSE): _S.PAUSING,
     (_S.PAUSING, _E.COMMIT_PAUSE): _S.PAUSED,
     (_S.RUNNING, _E.COMPLETE): _S.COMPLETED,
@@ -676,6 +680,7 @@ def apply_event(
     phase: RunPhase | None = None,
     error: ErrorInfo | None = None,
     command_key: str | None = None,
+    checkpoint: CheckpointReference | None = None,
 ) -> RunLifecycleRecord:
     """Return the record that results from applying one event.
 
@@ -693,6 +698,8 @@ def apply_event(
         command_key: Idempotency key of the request, recorded in the
             transition so a retried request can find its original outcome
             (see `find_command`).
+        checkpoint: For `adopt-checkpoint`, the copied checkpoint, already
+            in this object's directory.
 
     Returns:
         A new record with the next state, revision + 1, and the transition
@@ -726,6 +733,7 @@ def apply_event(
         **_configuration_changes(record, event, configuration),
         **_ownership_changes(record, event, target, attempt_id, timestamp),
         **_outcome_changes(event, target, error, timestamp),
+        **_adoption_changes(event, checkpoint),
     }
     if phase is not None:
         changes["phase"] = phase
@@ -871,6 +879,30 @@ def capabilities(
         can_delete=can_delete,
         reasons=reasons,
     )
+
+
+def _adoption_changes(
+    event: RunEvent, checkpoint: CheckpointReference | None
+) -> dict[str, Any]:
+    """Return the progress fields an adopted checkpoint gives a planned run.
+
+    Raises:
+        ValueError: Adoption lacks its checkpoint, or another event passes one.
+    """
+    if event is not RunEvent.ADOPT_CHECKPOINT:
+        if checkpoint is not None:
+            raise ValueError("only adopt-checkpoint records a checkpoint")
+        return {}
+    if checkpoint is None:
+        raise ValueError("adopt-checkpoint requires the adopted checkpoint")
+    return {
+        "committed_generation": checkpoint.committed_generation,
+        "latest_checkpoint": checkpoint,
+        # Not the source's phase: this object has published nothing, so a
+        # finalizing phase would demand a completion receipt it cannot have.
+        # Restoring a stopped batch finalizes it again on its own.
+        "phase": RunPhase.SIMULATING,
+    }
 
 
 def _configuration_changes(

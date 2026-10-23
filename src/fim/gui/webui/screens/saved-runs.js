@@ -572,6 +572,44 @@ function confirmIdenticalSource(source) {
 }
 
 /**
+ * Offer to continue a planned run from a stopped run with its settings.
+ *
+ * Declining asks whether to start from generation 0 instead; when the
+ * stopped run is also this copy's source, that question is the
+ * identical-source warning, which the caller then shows.
+ * @param {object} run The row's saved run, still planned.
+ * @param {object} checked `get_run_object_start_source`'s result.
+ * @returns {Promise<boolean|null>} True once the checkpoint is copied,
+ *     false to start from generation 0, or null to start nothing.
+ */
+async function continueFromStoppedRun(run, checked) {
+    const candidate = checked.continueFrom;
+    if (!candidate) {
+        return false;
+    }
+    const generation = candidate.committedGeneration;
+    const accepted = window.confirm(
+        `"${savedRunDisplayName(candidate)}" has the same settings and ` +
+        `stopped at generation ${generation}.\n\n` +
+        `Continue from generation ${generation}? ` +
+        "Cancel to choose whether to start from generation 0 instead."
+    );
+    if (!accepted) {
+        const sameSource = checked.identicalToSource?.objectId === candidate.objectId;
+        return sameSource || window.confirm("Start from generation 0?") ? false : null;
+    }
+    const adopted = await window.pywebview.api.adopt_run_object_checkpoint(
+        run.objectId,
+        candidate.objectId
+    );
+    if (!adopted.ok) {
+        showSavedRunsBanner(adopted.message);
+        return null;
+    }
+    return true;
+}
+
+/**
  * Check current form settings, not the last saved digest, before Run.
  * @param {string} tabId The edited document.
  * @param {object} values The current configuration form.
@@ -607,7 +645,11 @@ async function startSavedRun(run) {
         showSavedRunsBanner(checked.message);
         return;
     }
-    if (!confirmIdenticalSource(checked.identicalToSource)) {
+    const continued = await continueFromStoppedRun(run, checked);
+    if (continued === null) {
+        return;
+    }
+    if (!continued && !confirmIdenticalSource(checked.identicalToSource)) {
         return;
     }
     let startTabId = window.fim.workspace.selectedId();
