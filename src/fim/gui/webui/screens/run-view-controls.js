@@ -309,6 +309,11 @@ async function startConfiguredRun(tabId = window.fim.workspace.selectedId()) {
         await window.fim.runConfiguredSweep(studyId || null, tabId);
         return;
     }
+    // Configure starts a fresh object, so check unsaved settings as well as
+    // the Saved runs action that starts the saved object itself.
+    if (!await window.fim.confirmConfiguredCloneStart(tabId, collectFormValues(tabId))) {
+        return;
+    }
     // Design §3.1: "clicking 'Run simulation' anywhere in Configure
     // jumps to the Run destination" -- `fim.menu.runSimulation` (the
     // Configure footer's own button, and the native Run menu) already
