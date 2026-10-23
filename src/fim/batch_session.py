@@ -27,7 +27,7 @@ unrecoverable.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Final
 
@@ -66,7 +66,7 @@ from fim.execution import (
     restore_lane,
 )
 from fim.model.params import SimulationParams
-from fim.persistence.binary_store import BinaryLogStore
+from fim.persistence.binary_store import BinaryLogStore, sync_store_drives
 from fim.persistence.run_checkpoint import (
     FaultHook,
     LoadedCheckpoint,
@@ -361,6 +361,16 @@ class BatchSession:
             ValueError: If the session is finalized or closed.
         """
         self._require_open()
+        # Each lane's own checkpoint below then finds nothing left to sync.
+        self._make_logs_durable(
+            lane.run_id
+            for lane in self._lanes
+            if lane.result is None
+            and (
+                self._accepted_count is None
+                or lane.replica_index < self._accepted_count
+            )
+        )
         arrays: dict[str, npt.NDArray[Any]] = {}
         entries: list[dict[str, Any]] = []
         discarded = list(self._discarded_run_ids)
@@ -460,11 +470,29 @@ class BatchSession:
             ValueError: If the session is finalized or closed.
         """
         self._require_open()
-        for lane in self._lanes:
-            store = self._store.store_for(lane.run_id)
-            if lane.active and isinstance(store, BinaryLogStore):
-                store.checkpoint()
+        self._make_logs_durable(lane.run_id for lane in self._lanes if lane.active)
         return self._ticks
+
+    def _make_logs_durable(self, run_ids: Iterable[str]) -> None:
+        """Commit and sync the named lanes' logs together.
+
+        Every lane's write and plain sync starts before any is waited on,
+        each on its lane's own writer thread; then one drive flush makes
+        them all durable. A full sync flushes the whole drive's cache, not
+        one file's; one per lane, in turn, committed a 200-lane cancel's
+        logs about 2.2 seconds apart, for over seven minutes in all.
+        """
+        stores = [
+            store
+            for run_id in run_ids
+            if isinstance(store := self._store.store_for(run_id), BinaryLogStore)
+            and store.has_writer
+        ]
+        for store in stores:
+            store.begin_checkpoint(drive=False)
+        for store in stores:
+            store.finish_checkpoint()
+        sync_store_drives(stores)
 
     def finalize(self) -> tuple[RunResult, ...]:
         """Return the kept replicates' results once the batch has stopped.

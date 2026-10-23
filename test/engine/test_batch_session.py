@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 from conftest import FAST_EXPERT_SETTINGS
 
+from fim import batch_session
 from fim.batch_session import (
     BatchSession,
     check_batch_session_support,
@@ -33,6 +34,7 @@ from fim.execution import (
     UnsupportedSessionError,
 )
 from fim.model.params import SimulationParams
+from fim.persistence import binary_store
 from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.run_checkpoint import (
     LoadedCheckpoint,
@@ -494,3 +496,56 @@ def test_a_log_cut_down_after_its_checkpoint_resumes_by_content(
 
     _assert_same_results(resumed, reference)
     _assert_same_logs(tmp_path / "whole", tmp_path / "a" / "logs")
+
+
+def test_capture_and_commit_start_every_lane_before_waiting_on_any(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A checkpoint's and a cancel's flushes overlap; each ends at the tick.
+
+    The order of calls is the claim, recorded rather than timed: every
+    lane's write and plain sync is queued before the first is waited on,
+    and one drive flush for all of them follows.
+    """
+    calls: list[str] = []
+    begin = BinaryLogStore.begin_checkpoint
+    finish = BinaryLogStore.finish_checkpoint
+    drives = binary_store.sync_store_drives
+
+    def recording_begin(store: BinaryLogStore, *, drive: bool = True) -> None:
+        calls.append(f"begin drive={drive}")
+        begin(store, drive=drive)
+
+    def recording_finish(store: BinaryLogStore) -> Any:
+        calls.append("finish")
+        return finish(store)
+
+    def recording_drives(stores: list[BinaryLogStore]) -> None:
+        calls.append(f"drives {len(stores)}")
+        drives(stores)
+
+    monkeypatch.setattr(BinaryLogStore, "begin_checkpoint", recording_begin)
+    monkeypatch.setattr(BinaryLogStore, "finish_checkpoint", recording_finish)
+    monkeypatch.setattr(batch_session, "sync_store_drives", recording_drives)
+    params = _params()
+    with BatchSession.create(params, _factory(tmp_path), clock=_clock) as session:
+        session.advance(10)
+        session.capture()
+        captured = list(calls)
+        calls.clear()
+        ticks = session.commit_logs()
+        positions = [
+            store.checkpoint()
+            for lane in session._lanes
+            if lane.active
+            and isinstance(
+                store := session._store.store_for(lane.run_id), BinaryLogStore
+            )
+        ]
+
+    lanes = len(positions)
+    assert lanes == params.n_replicates
+    together = ["begin drive=False"] * lanes + ["finish"] * lanes + [f"drives {lanes}"]
+    assert captured == together
+    assert calls == together
+    assert {position.generation for position in positions} == {ticks}

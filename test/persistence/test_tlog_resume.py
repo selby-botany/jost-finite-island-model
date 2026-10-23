@@ -29,9 +29,11 @@ from fim.persistence.frame import FrameLayout, TrajectoryFrame, frame_to_rows
 from fim.persistence.tlog import (
     LogPosition,
     LogWriter,
+    SyncMode,
     TlogError,
     iter_frames,
     recover,
+    sync_drives,
 )
 from fim.persistence.tlog_export import derive_jsonl
 
@@ -395,3 +397,75 @@ def test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_log(
     assert hashlib.sha256((tmp_path / "killed.tlog").read_bytes()).hexdigest() == (
         hashlib.sha256((tmp_path / "whole.tlog").read_bytes()).hexdigest()
     )
+
+
+def test_a_flush_begun_then_waited_commits_what_checkpoint_does(
+    tmp_path: Path,
+) -> None:
+    """Splitting the barrier in two, across writers, loses nothing.
+
+    Two writers begin before either waits; each then holds exactly what a
+    third writer's single `checkpoint` call commits for the same frames.
+    """
+    frames = walk(37, change=0.1, seed=53)
+    writers = [
+        LogWriter(tmp_path / f"{name}.tlog", RUN_ID, LAYOUT, **OPTIONS)
+        for name in ("a", "b", "reference")
+    ]
+    for writer in writers:
+        for frame in frames:
+            writer.submit(frame)
+    split = writers[:2]
+    for writer in split:
+        writer.begin_flush(sync=True)
+    for writer in split:
+        writer.wait_flushed()
+    expected = writers[2].checkpoint()
+    positions = [writer.position() for writer in split]
+    for writer in writers:
+        writer.close()
+
+    assert positions == [expected, expected]
+    assert expected.generation == frames[-1].generation
+
+
+def test_deferred_drive_flushes_become_one_full_sync(tmp_path: Path) -> None:
+    """Each log gets a plain `fsync`, then one full sync covers them all.
+
+    The writers are then recorded as durable, so closing them syncs nothing
+    again. The sync calls are recorded, not made, so this holds on every
+    platform; the clock is frozen, so no periodic sync interleaves.
+    """
+    calls: list[tuple[str, SyncMode]] = []
+    frames = walk(20, change=0.1, seed=54)
+    writers: dict[int, str] = {}
+
+    def recording_sync(fd: int, mode: SyncMode) -> None:
+        calls.append((writers[fd], mode))
+
+    logs = []
+    for name in ("a", "b", "c"):
+        writer = LogWriter(
+            tmp_path / f"{name}.tlog",
+            RUN_ID,
+            LAYOUT,
+            sync="full",
+            sync_function=recording_sync,
+            clock=lambda: 0.0,
+            **OPTIONS,
+        )
+        writers[writer.fileno()] = name
+        for frame in frames:
+            writer.submit(frame)
+        logs.append(writer)
+    for writer in logs:
+        writer.begin_flush(sync=True, drive=False)
+    for writer in logs:
+        writer.wait_flushed()
+    sync_drives(logs)
+    durable = [writer.synced_generation for writer in logs]
+    for writer in logs:
+        writer.close()
+
+    assert calls == [("a", "fsync"), ("b", "fsync"), ("c", "fsync"), ("a", "full")]
+    assert durable == [frames[-1].generation] * 3

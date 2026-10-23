@@ -22,7 +22,7 @@ import contextlib
 import logging
 import threading
 import time
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Final
@@ -303,6 +303,45 @@ class BinaryLogStore:
                 raise ValueError("nothing has been written, so there is no position")
             return self._writer.checkpoint()
 
+    @property
+    def has_writer(self) -> bool:
+        """Whether a log is open for writing, so a checkpoint has a position."""
+        with self._lock:
+            return self._writer is not None
+
+    def begin_checkpoint(self, *, drive: bool = True) -> None:
+        """Start a `checkpoint` without waiting for it; see `finish_checkpoint`.
+
+        Many stores can begin before any finishes, so a batch's lanes write
+        and sync at the same time rather than one after another.
+
+        Args:
+            drive: `False` leaves the drive flush to `sync_store_drives`,
+                which does one for every store at once.
+
+        Raises:
+            ValueError: If nothing has been written yet.
+        """
+        with self._lock:
+            if self._writer is None:
+                raise ValueError("nothing has been written, so there is no position")
+            self._writer.begin_flush(sync=True, drive=drive)
+
+    def finish_checkpoint(self) -> tlog.LogPosition:
+        """Wait for a begun checkpoint and return its position.
+
+        Returns:
+            The committed position, as `checkpoint` returns it.
+
+        Raises:
+            ValueError: If nothing has been written yet.
+        """
+        with self._lock:
+            if self._writer is None:
+                raise ValueError("nothing has been written, so there is no position")
+            self._writer.wait_flushed()
+            return self._writer.position()
+
     def resume(
         self,
         run_id: str,
@@ -523,3 +562,19 @@ class BinaryLogStore:
     def exists(self) -> bool:
         """Whether the log file exists on disk."""
         return self.path.is_file()
+
+
+def sync_store_drives(stores: Sequence[BinaryLogStore]) -> None:
+    """Make checkpoints begun with `drive=False` durable, one flush per drive.
+
+    Call once every store's `finish_checkpoint` returned.
+
+    Args:
+        stores: The stores whose drive flush was deferred.
+    """
+    writers = []
+    for store in stores:
+        with store._lock:
+            if store._writer is not None:
+                writers.append(store._writer)
+    tlog.sync_drives(writers)

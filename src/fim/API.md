@@ -410,6 +410,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [open\_run\_object](#fim.gui.app.Api.open_run_object)
     * [start\_run\_object](#fim.gui.app.Api.start_run_object)
     * [cancel\_run\_object](#fim.gui.app.Api.cancel_run_object)
+    * [kill\_run\_object](#fim.gui.app.Api.kill_run_object)
     * [clone\_run\_object](#fim.gui.app.Api.clone_run_object)
     * [delete\_run\_object](#fim.gui.app.Api.delete_run_object)
     * [stop\_active\_work](#fim.gui.app.Api.stop_active_work)
@@ -637,9 +638,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [configuration\_text](#fim.gui.object_bridge.configuration_text)
   * [clone](#fim.gui.object_bridge.clone)
   * [delete](#fim.gui.object_bridge.delete)
+  * [delete\_many](#fim.gui.object_bridge.delete_many)
   * [form\_values](#fim.gui.object_bridge.form_values)
   * [find\_completed\_run](#fim.gui.object_bridge.find_completed_run)
   * [study\_id\_for](#fim.gui.object_bridge.study_id_for)
+  * [kill](#fim.gui.object_bridge.kill)
   * [list\_rows](#fim.gui.object_bridge.list_rows)
   * [pause](#fim.gui.object_bridge.pause)
   * [fail\_worker](#fim.gui.object_bridge.fail_worker)
@@ -953,6 +956,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [read](#fim.persistence.binary_store.BinaryLogStore.read)
     * [frames](#fim.persistence.binary_store.BinaryLogStore.frames)
     * [checkpoint](#fim.persistence.binary_store.BinaryLogStore.checkpoint)
+    * [has\_writer](#fim.persistence.binary_store.BinaryLogStore.has_writer)
+    * [begin\_checkpoint](#fim.persistence.binary_store.BinaryLogStore.begin_checkpoint)
+    * [finish\_checkpoint](#fim.persistence.binary_store.BinaryLogStore.finish_checkpoint)
     * [resume](#fim.persistence.binary_store.BinaryLogStore.resume)
     * [resume\_after\_taper](#fim.persistence.binary_store.BinaryLogStore.resume_after_taper)
     * [frame\_at](#fim.persistence.binary_store.BinaryLogStore.frame_at)
@@ -963,6 +969,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [close](#fim.persistence.binary_store.BinaryLogStore.close)
     * [equilibrium\_store](#fim.persistence.binary_store.BinaryLogStore.equilibrium_store)
     * [exists](#fim.persistence.binary_store.BinaryLogStore.exists)
+  * [sync\_store\_drives](#fim.persistence.binary_store.sync_store_drives)
 * [fim.persistence.frame](#fim.persistence.frame)
   * [UNKNOWN\_DEME\_SIZE](#fim.persistence.frame.UNKNOWN_DEME_SIZE)
   * [FrameLayout](#fim.persistence.frame.FrameLayout)
@@ -1216,6 +1223,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ResumeUnavailableError](#fim.persistence.run_ownership.ResumeUnavailableError)
   * [CommandResult](#fim.persistence.run_ownership.CommandResult)
   * [StartResult](#fim.persistence.run_ownership.StartResult)
+  * [AttemptOwner](#fim.persistence.run_ownership.AttemptOwner)
+    * [of\_this\_process](#fim.persistence.run_ownership.AttemptOwner.of_this_process)
+    * [from\_mapping](#fim.persistence.run_ownership.AttemptOwner.from_mapping)
+    * [to\_mapping](#fim.persistence.run_ownership.AttemptOwner.to_mapping)
   * [ExecutionLease](#fim.persistence.run_ownership.ExecutionLease)
     * [\_\_init\_\_](#fim.persistence.run_ownership.ExecutionLease.__init__)
     * [\_\_enter\_\_](#fim.persistence.run_ownership.ExecutionLease.__enter__)
@@ -1228,10 +1239,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [release](#fim.persistence.run_ownership.ExecutionLease.release)
   * [abandon\_run\_object](#fim.persistence.run_ownership.abandon_run_object)
   * [attempt\_lock\_path](#fim.persistence.run_ownership.attempt_lock_path)
+  * [attempt\_owner\_path](#fim.persistence.run_ownership.attempt_owner_path)
+  * [kill\_run\_object](#fim.persistence.run_ownership.kill_run_object)
   * [new\_attempt\_id](#fim.persistence.run_ownership.new_attempt_id)
   * [reconcile\_run\_object](#fim.persistence.run_ownership.reconcile_run_object)
   * [record\_worker\_failure](#fim.persistence.run_ownership.record_worker_failure)
   * [reconcile\_run\_objects](#fim.persistence.run_ownership.reconcile_run_objects)
+  * [read\_attempt\_owner](#fim.persistence.run_ownership.read_attempt_owner)
   * [request\_cancel](#fim.persistence.run_ownership.request_cancel)
   * [request\_pause](#fim.persistence.run_ownership.request_pause)
   * [resume\_run\_object](#fim.persistence.run_ownership.resume_run_object)
@@ -1344,11 +1358,19 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [SyncMode](#fim.persistence.tlog.SyncMode)
   * [sync\_file](#fim.persistence.tlog.sync_file)
   * [WriterStats](#fim.persistence.tlog.WriterStats)
+  * [sync\_drives](#fim.persistence.tlog.sync_drives)
   * [LogWriter](#fim.persistence.tlog.LogWriter)
     * [\_\_init\_\_](#fim.persistence.tlog.LogWriter.__init__)
     * [synced\_generation](#fim.persistence.tlog.LogWriter.synced_generation)
     * [submit](#fim.persistence.tlog.LogWriter.submit)
     * [flush](#fim.persistence.tlog.LogWriter.flush)
+    * [begin\_flush](#fim.persistence.tlog.LogWriter.begin_flush)
+    * [closed](#fim.persistence.tlog.LogWriter.closed)
+    * [fileno](#fim.persistence.tlog.LogWriter.fileno)
+    * [mark\_synced](#fim.persistence.tlog.LogWriter.mark_synced)
+    * [raise\_error](#fim.persistence.tlog.LogWriter.raise_error)
+    * [sync\_drive](#fim.persistence.tlog.LogWriter.sync_drive)
+    * [wait\_flushed](#fim.persistence.tlog.LogWriter.wait_flushed)
     * [close](#fim.persistence.tlog.LogWriter.close)
     * [snapshot](#fim.persistence.tlog.LogWriter.snapshot)
     * [checkpoint](#fim.persistence.tlog.LogWriter.checkpoint)
@@ -2313,7 +2335,7 @@ Export the batch's exact state at the current safe point.
 
 <a id="fim.batch_session.BatchSession.checkpoint"></a>
 
-#### [checkpoint](./batch_session.py#L422)
+#### [checkpoint](./batch_session.py#L432)
 
 ```python
 def checkpoint(lease: ExecutionLease,
@@ -2335,7 +2357,7 @@ Capture the batch and publish it as the object's latest checkpoint.
 
 <a id="fim.batch_session.BatchSession.close"></a>
 
-#### [close](./batch_session.py#L444)
+#### [close](./batch_session.py#L454)
 
 ```python
 def close() -> None
@@ -2345,7 +2367,7 @@ Release every lane's open files; idempotent.
 
 <a id="fim.batch_session.BatchSession.commit_logs"></a>
 
-#### [commit\_logs](./batch_session.py#L450)
+#### [commit\_logs](./batch_session.py#L460)
 
 ```python
 def commit_logs() -> int
@@ -2367,7 +2389,7 @@ tick count is what the lifecycle records as committed.
 
 <a id="fim.batch_session.BatchSession.finalize"></a>
 
-#### [finalize](./batch_session.py#L469)
+#### [finalize](./batch_session.py#L497)
 
 ```python
 def finalize() -> tuple[RunResult, ...]
@@ -2390,7 +2412,7 @@ discarded from the store first, as `fim.engine.run_batch` does.
 
 <a id="fim.batch_session.check_batch_session_support"></a>
 
-#### [check\_batch\_session\_support](./batch_session.py#L768)
+#### [check\_batch\_session\_support](./batch_session.py#L796)
 
 ```python
 def check_batch_session_support(params: SimulationParams) -> SessionBackend
@@ -2488,7 +2510,9 @@ CLI handlers for creating and managing persisted Run objects.
 Run objects store configurations and lifecycle state. Commands delegate
 lifecycle rules and execution to `fim.persistence` and `fim.run_service`.
 `start` and `resume` run in the foreground; `pause` checkpoints and stops,
-while `cancel` stops and retains partial data. Interrupted runs resume from
+while `cancel` stops and retains partial data. `kill` ends a running
+object's worker at once, discarding work after its last checkpoint, and
+records it as failed so it can be resumed or deleted. Interrupted runs resume from
 their latest checkpoint. SIGTERM requests a pause; a second SIGTERM ends
 execution immediately. A later command reconciles a lost owner as interrupted,
 or as completed when its completion receipt verifies. An object without a
@@ -2496,7 +2520,7 @@ checkpoint can be cloned to start a new run from generation zero.
 
 <a id="fim.cli_objects.add_object_subcommands"></a>
 
-#### [add\_object\_subcommands](./cli_objects.py#L55)
+#### [add\_object\_subcommands](./cli_objects.py#L58)
 
 ```python
 def add_object_subcommands(
@@ -2507,7 +2531,7 @@ Wire `fim object` and its subcommands, `create` through `reclaim`.
 
 <a id="fim.cli_objects.command_object"></a>
 
-#### [command\_object](./cli_objects.py#L118)
+#### [command\_object](./cli_objects.py#L122)
 
 ```python
 def command_object(arguments: argparse.Namespace,
@@ -9816,7 +9840,7 @@ would shift that difference by up to half a display digit.
 
 <a id="fim.gui.app.Api"></a>
 
-## [Api Objects](./gui/app.py#L1949)
+## [Api Objects](./gui/app.py#L1960)
 
 ```python
 class Api()
@@ -9838,7 +9862,7 @@ reimplemented here.
 
 <a id="fim.gui.app.Api.__init__"></a>
 
-#### [\_\_init\_\_](./gui/app.py#L1965)
+#### [\_\_init\_\_](./gui/app.py#L1976)
 
 ```python
 def __init__(*,
@@ -9908,7 +9932,7 @@ Start with no run in flight.
 
 <a id="fim.gui.app.Api.start_run"></a>
 
-#### [start\_run](./gui/app.py#L2140)
+#### [start\_run](./gui/app.py#L2151)
 
 ```python
 @_log_bridge_call
@@ -9997,7 +10021,7 @@ driver thread, before this method was written; see
 
 <a id="fim.gui.app.Api.can_start_run"></a>
 
-#### [can\_start\_run](./gui/app.py#L2610)
+#### [can\_start\_run](./gui/app.py#L2621)
 
 ```python
 @_log_bridge_call
@@ -10017,7 +10041,7 @@ then refused would wipe the view of the run still in flight.
 
 <a id="fim.gui.app.Api.get_job_snapshot"></a>
 
-#### [get\_job\_snapshot](./gui/app.py#L2627)
+#### [get\_job\_snapshot](./gui/app.py#L2638)
 
 ```python
 @_log_bridge_call
@@ -10038,7 +10062,7 @@ Return a retained job's view level and latest addressed event.
 
 <a id="fim.gui.app.Api.close_job_document"></a>
 
-#### [close\_job\_document](./gui/app.py#L2647)
+#### [close\_job\_document](./gui/app.py#L2658)
 
 ```python
 @_log_bridge_call
@@ -10049,7 +10073,7 @@ Release a finished job's snapshot after its document closes.
 
 <a id="fim.gui.app.Api.set_job_view"></a>
 
-#### [set\_job\_view](./gui/app.py#L2657)
+#### [set\_job\_view](./gui/app.py#L2668)
 
 ```python
 @_log_bridge_call
@@ -10060,7 +10084,7 @@ Set an active job's rendering level and return its latest snapshot.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
-#### [cancel\_run](./gui/app.py#L2899)
+#### [cancel\_run](./gui/app.py#L2910)
 
 ```python
 @_log_bridge_call
@@ -10076,7 +10100,7 @@ that arrives a moment after the run already finished on its own.
 
 <a id="fim.gui.app.Api.pause_run"></a>
 
-#### [pause\_run](./gui/app.py#L2917)
+#### [pause\_run](./gui/app.py#L2928)
 
 ```python
 @_log_bridge_call
@@ -10095,7 +10119,7 @@ resume from the checkpoint. The worker acknowledges with a pushed
 
 <a id="fim.gui.app.Api.pause_job"></a>
 
-#### [pause\_job](./gui/app.py#L2938)
+#### [pause\_job](./gui/app.py#L2949)
 
 ```python
 @_log_bridge_call
@@ -10106,7 +10130,7 @@ Pause one run or stop a sweep at its next resumable point.
 
 <a id="fim.gui.app.Api.save_run_object"></a>
 
-#### [save\_run\_object](./gui/app.py#L2960)
+#### [save\_run\_object](./gui/app.py#L2971)
 
 ```python
 @_log_bridge_call
@@ -10137,7 +10161,7 @@ reopened and fixed later; a valid one is saved as Planned.
 
 <a id="fim.gui.app.Api.list_run_objects"></a>
 
-#### [list\_run\_objects](./gui/app.py#L3002)
+#### [list\_run\_objects](./gui/app.py#L3013)
 
 ```python
 @_log_bridge_call
@@ -10153,7 +10177,7 @@ Return the Saved runs panel's rows (`object_bridge.list_rows`).
 
 <a id="fim.gui.app.Api.open_run_object"></a>
 
-#### [open\_run\_object](./gui/app.py#L3030)
+#### [open\_run\_object](./gui/app.py#L3041)
 
 ```python
 @_log_bridge_call
@@ -10176,7 +10200,7 @@ Return a saved run's form values, to edit it in Configure.
 
 <a id="fim.gui.app.Api.start_run_object"></a>
 
-#### [start\_run\_object](./gui/app.py#L3063)
+#### [start\_run\_object](./gui/app.py#L3074)
 
 ```python
 @_log_bridge_call
@@ -10203,7 +10227,7 @@ its own object directory.
 
 <a id="fim.gui.app.Api.cancel_run_object"></a>
 
-#### [cancel\_run\_object](./gui/app.py#L3362)
+#### [cancel\_run\_object](./gui/app.py#L3373)
 
 ```python
 @_log_bridge_call
@@ -10221,9 +10245,32 @@ Cancel a saved run that is not executing in this window, keeping its data.
 
 - ``{"ok"` - True, "state": ...}`, or `{"ok": False, "message": ...}`.
 
+<a id="fim.gui.app.Api.kill_run_object"></a>
+
+#### [kill\_run\_object](./gui/app.py#L3389)
+
+```python
+@_log_bridge_call
+def kill_run_object(object_id: str) -> dict[str, Any]
+```
+
+Kill a saved run's worker at once, discarding uncommitted work.
+
+The run becomes `failed`, which Delete accepts. A worker this
+window started reports the exit to its own tab as usual.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "state": ...}`, or `{"ok": False, "message": ...}`.
+
 <a id="fim.gui.app.Api.clone_run_object"></a>
 
-#### [clone\_run\_object](./gui/app.py#L3378)
+#### [clone\_run\_object](./gui/app.py#L3408)
 
 ```python
 @_log_bridge_call
@@ -10243,7 +10290,7 @@ Clone a saved run into a new object with the same configuration.
 
 <a id="fim.gui.app.Api.delete_run_object"></a>
 
-#### [delete\_run\_object](./gui/app.py#L3398)
+#### [delete\_run\_object](./gui/app.py#L3428)
 
 ```python
 @_log_bridge_call
@@ -10263,7 +10310,7 @@ Delete a saved run that is not executing, and all of its data.
 
 <a id="fim.gui.app.Api.stop_active_work"></a>
 
-#### [stop\_active\_work](./gui/app.py#L3413)
+#### [stop\_active\_work](./gui/app.py#L3443)
 
 ```python
 def stop_active_work(timeout: float,
@@ -10297,7 +10344,7 @@ sweep's own thread had already queued, never still growing.
 
 <a id="fim.gui.app.Api.on_window_closing"></a>
 
-#### [on\_window\_closing](./gui/app.py#L3492)
+#### [on\_window\_closing](./gui/app.py#L3522)
 
 ```python
 def on_window_closing(window: _EvaluatesJs) -> bool
@@ -10322,7 +10369,7 @@ arrives through `finish_close`.
 
 <a id="fim.gui.app.Api.request_close"></a>
 
-#### [request\_close](./gui/app.py#L3515)
+#### [request\_close](./gui/app.py#L3545)
 
 ```python
 def request_close() -> None
@@ -10332,7 +10379,7 @@ Close the window the way its close button does (the Quit menu item).
 
 <a id="fim.gui.app.Api.close_needs_confirmation"></a>
 
-#### [close\_needs\_confirmation](./gui/app.py#L3525)
+#### [close\_needs\_confirmation](./gui/app.py#L3555)
 
 ```python
 def close_needs_confirmation() -> bool
@@ -10342,7 +10389,7 @@ Return whether closing now would lose edits or interrupt work.
 
 <a id="fim.gui.app.Api.close_requirements"></a>
 
-#### [close\_requirements](./gui/app.py#L3643)
+#### [close\_requirements](./gui/app.py#L3673)
 
 ```python
 @_log_bridge_call
@@ -10360,7 +10407,7 @@ Return what closing the window now would affect, for its dialog.
 
 <a id="fim.gui.app.Api.finish_close"></a>
 
-#### [finish\_close](./gui/app.py#L3655)
+#### [finish\_close](./gui/app.py#L3685)
 
 ```python
 @_log_bridge_call
@@ -10379,7 +10426,7 @@ the window from a helper thread so this call can return first.
 
 <a id="fim.gui.app.Api.report_unsaved_edits"></a>
 
-#### [report\_unsaved\_edits](./gui/app.py#L3675)
+#### [report\_unsaved\_edits](./gui/app.py#L3705)
 
 ```python
 @_log_bridge_call
@@ -10407,7 +10454,7 @@ from Home can name every dirty document, including hidden ones.
 
 <a id="fim.gui.app.Api.open_output_folder"></a>
 
-#### [open\_output\_folder](./gui/app.py#L3738)
+#### [open\_output\_folder](./gui/app.py#L3768)
 
 ```python
 @_log_bridge_call
@@ -10426,7 +10473,7 @@ Reveal a completed run's output directory in the OS file browser.
 
 <a id="fim.gui.app.Api.get_run_setting_differences"></a>
 
-#### [get\_run\_setting\_differences](./gui/app.py#L3883)
+#### [get\_run\_setting\_differences](./gui/app.py#L3913)
 
 ```python
 @_log_bridge_call
@@ -10453,7 +10500,7 @@ configuration's run settings are in use (Settings saved, or
 
 <a id="fim.gui.app.Api.get_starter_form"></a>
 
-#### [get\_starter\_form](./gui/app.py#L3903)
+#### [get\_starter\_form](./gui/app.py#L3933)
 
 ```python
 @_log_bridge_call
@@ -10475,7 +10522,7 @@ calls instead.
 
 <a id="fim.gui.app.Api.get_starter_form_with_overrides"></a>
 
-#### [get\_starter\_form\_with\_overrides](./gui/app.py#L3920)
+#### [get\_starter\_form\_with\_overrides](./gui/app.py#L3950)
 
 ```python
 @_log_bridge_call
@@ -10517,7 +10564,7 @@ caller, never hidden behind values the botanist did not ask for.
 
 <a id="fim.gui.app.Api.get_initial_form"></a>
 
-#### [get\_initial\_form](./gui/app.py#L3964)
+#### [get\_initial\_form](./gui/app.py#L3994)
 
 ```python
 @_log_bridge_call
@@ -10543,7 +10590,7 @@ competing precedence rule against this restore path.
 
 <a id="fim.gui.app.Api.get_startup_behavior"></a>
 
-#### [get\_startup\_behavior](./gui/app.py#L3994)
+#### [get\_startup\_behavior](./gui/app.py#L4024)
 
 ```python
 @_log_bridge_call
@@ -10554,7 +10601,7 @@ Return how a fresh launch chooses its initial form values.
 
 <a id="fim.gui.app.Api.set_startup_behavior"></a>
 
-#### [set\_startup\_behavior](./gui/app.py#L3999)
+#### [set\_startup\_behavior](./gui/app.py#L4029)
 
 ```python
 @_log_bridge_call
@@ -10576,7 +10623,7 @@ Set how a fresh launch chooses its initial form values.
 
 <a id="fim.gui.app.Api.get_run_card_layout"></a>
 
-#### [get\_run\_card\_layout](./gui/app.py#L4022)
+#### [get\_run\_card\_layout](./gui/app.py#L4052)
 
 ```python
 @_log_bridge_call
@@ -10599,7 +10646,7 @@ Return how the Run card shows its graphs.
 
 <a id="fim.gui.app.Api.set_run_graphs"></a>
 
-#### [set\_run\_graphs](./gui/app.py#L4049)
+#### [set\_run\_graphs](./gui/app.py#L4079)
 
 ```python
 @_log_bridge_call
@@ -10621,7 +10668,7 @@ Remember which graphs the Run card shows together.
 
 <a id="fim.gui.app.Api.set_run_graph_columns"></a>
 
-#### [set\_run\_graph\_columns](./gui/app.py#L4068)
+#### [set\_run\_graph\_columns](./gui/app.py#L4098)
 
 ```python
 @_log_bridge_call
@@ -10642,7 +10689,7 @@ Set how many columns the Run card lays its graphs out in.
 
 <a id="fim.gui.app.Api.set_scatter_style"></a>
 
-#### [set\_scatter\_style](./gui/app.py#L4094)
+#### [set\_scatter\_style](./gui/app.py#L4124)
 
 ```python
 @_log_bridge_call
@@ -10663,7 +10710,7 @@ Choose how the scatter plot draws its points.
 
 <a id="fim.gui.app.Api.set_trajectory_display"></a>
 
-#### [set\_trajectory\_display](./gui/app.py#L4111)
+#### [set\_trajectory\_display](./gui/app.py#L4141)
 
 ```python
 @_log_bridge_call
@@ -10691,7 +10738,7 @@ either way.
 
 <a id="fim.gui.app.Api.set_trajectory_band_width"></a>
 
-#### [set\_trajectory\_band\_width](./gui/app.py#L4137)
+#### [set\_trajectory\_band\_width](./gui/app.py#L4167)
 
 ```python
 @_log_bridge_call
@@ -10716,7 +10763,7 @@ window) and the standard-error band of the averaged displays.
 
 <a id="fim.gui.app.Api.set_show_identity_recovery_trajectory"></a>
 
-#### [set\_show\_identity\_recovery\_trajectory](./gui/app.py#L4160)
+#### [set\_show\_identity\_recovery\_trajectory](./gui/app.py#L4190)
 
 ```python
 @_log_bridge_call
@@ -10744,7 +10791,7 @@ tracks or saves.
 
 <a id="fim.gui.app.Api.get_default_ploidy"></a>
 
-#### [get\_default\_ploidy](./gui/app.py#L4186)
+#### [get\_default\_ploidy](./gui/app.py#L4216)
 
 ```python
 @_log_bridge_call
@@ -10755,7 +10802,7 @@ Return the default ploidy: `"2"` unless changed; `""` asks each time.
 
 <a id="fim.gui.app.Api.set_default_ploidy"></a>
 
-#### [set\_default\_ploidy](./gui/app.py#L4191)
+#### [set\_default\_ploidy](./gui/app.py#L4221)
 
 ```python
 @_log_bridge_call
@@ -10777,7 +10824,7 @@ Set the ploidy a fresh configuration's form starts on.
 
 <a id="fim.gui.app.Api.validate_form"></a>
 
-#### [validate\_form](./gui/app.py#L4212)
+#### [validate\_form](./gui/app.py#L4242)
 
 ```python
 @_log_bridge_call
@@ -10810,7 +10857,7 @@ Validate the form exactly as "Run simulation" would.
 
 <a id="fim.gui.app.Api.get_initial_state_panels"></a>
 
-#### [get\_initial\_state\_panels](./gui/app.py#L4249)
+#### [get\_initial\_state\_panels](./gui/app.py#L4279)
 
 ```python
 @_log_bridge_call
@@ -10842,7 +10889,7 @@ state would show at generation 0.
 
 <a id="fim.gui.app.Api.get_initial_state_deme_pair_panel"></a>
 
-#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L4301)
+#### [get\_initial\_state\_deme\_pair\_panel](./gui/app.py#L4331)
 
 ```python
 @_log_bridge_call
@@ -10870,7 +10917,7 @@ pair as separate panels (`d > 6`).
 
 <a id="fim.gui.app.Api.get_equilibrium_predictions"></a>
 
-#### [get\_equilibrium\_predictions](./gui/app.py#L4338)
+#### [get\_equilibrium\_predictions](./gui/app.py#L4368)
 
 ```python
 @_log_bridge_call
@@ -10915,7 +10962,7 @@ of how large `N`/`d` are.
 
 <a id="fim.gui.app.Api.get_equilibrium_grid"></a>
 
-#### [get\_equilibrium\_grid](./gui/app.py#L4388)
+#### [get\_equilibrium\_grid](./gui/app.py#L4418)
 
 ```python
 @_log_bridge_call
@@ -10963,7 +11010,7 @@ integer value, not an interpolated blur (`_grid_axis_values`).
 
 <a id="fim.gui.app.Api.get_equilibrium_curve"></a>
 
-#### [get\_equilibrium\_curve](./gui/app.py#L4475)
+#### [get\_equilibrium\_curve](./gui/app.py#L4505)
 
 ```python
 @_log_bridge_call
@@ -10992,7 +11039,7 @@ samples an interval densely and spaces its points by the response.
 
 <a id="fim.gui.app.Api.get_equilibrium_sweep"></a>
 
-#### [get\_equilibrium\_sweep](./gui/app.py#L4520)
+#### [get\_equilibrium\_sweep](./gui/app.py#L4550)
 
 ```python
 @_log_bridge_call
@@ -11052,7 +11099,7 @@ the marker moves, with no extra bridge round trip per tick.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 
-#### [load\_yaml](./gui/app.py#L4644)
+#### [load\_yaml](./gui/app.py#L4674)
 
 ```python
 @_log_bridge_call
@@ -11078,7 +11125,7 @@ changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.list_examples"></a>
 
-#### [list\_examples](./gui/app.py#L4677)
+#### [list\_examples](./gui/app.py#L4707)
 
 ```python
 @_log_bridge_call
@@ -11112,7 +11159,7 @@ example's form values once the user loads it.
 
 <a id="fim.gui.app.Api.load_example"></a>
 
-#### [load\_example](./gui/app.py#L4726)
+#### [load\_example](./gui/app.py#L4756)
 
 ```python
 @_log_bridge_call
@@ -11145,7 +11192,7 @@ saved Settings are not changed (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.open_saved_example"></a>
 
-#### [open\_saved\_example](./gui/app.py#L4764)
+#### [open\_saved\_example](./gui/app.py#L4794)
 
 ```python
 @_log_bridge_call
@@ -11174,7 +11221,7 @@ again first. The page then opens it like any run, which takes
 
 <a id="fim.gui.app.Api.load_run_configuration"></a>
 
-#### [load\_run\_configuration](./gui/app.py#L4808)
+#### [load\_run\_configuration](./gui/app.py#L4838)
 
 ```python
 @_log_bridge_call
@@ -11213,7 +11260,7 @@ cleared, and the name and description come from the run's
 
 <a id="fim.gui.app.Api.list_presets"></a>
 
-#### [list\_presets](./gui/app.py#L4872)
+#### [list\_presets](./gui/app.py#L4902)
 
 ```python
 @_log_bridge_call
@@ -11262,7 +11309,7 @@ only once the user actually picks it.
 
 <a id="fim.gui.app.Api.get_preset_form_values"></a>
 
-#### [get\_preset\_form\_values](./gui/app.py#L4937)
+#### [get\_preset\_form\_values](./gui/app.py#L4967)
 
 ```python
 @_log_bridge_call
@@ -11298,7 +11345,7 @@ Return one preset's own form values, ready for `applyFormValues`.
 
 <a id="fim.gui.app.Api.load_preset"></a>
 
-#### [load\_preset](./gui/app.py#L4979)
+#### [load\_preset](./gui/app.py#L5009)
 
 ```python
 @_log_bridge_call
@@ -11328,7 +11375,7 @@ user's Settings (`_loaded_run_settings`).
 
 <a id="fim.gui.app.Api.get_preset_yaml"></a>
 
-#### [get\_preset\_yaml](./gui/app.py#L5004)
+#### [get\_preset\_yaml](./gui/app.py#L5034)
 
 ```python
 @_log_bridge_call
@@ -11374,7 +11421,7 @@ saved preset).
 
 <a id="fim.gui.app.Api.save_current_as_preset"></a>
 
-#### [save\_current\_as\_preset](./gui/app.py#L5068)
+#### [save\_current\_as\_preset](./gui/app.py#L5098)
 
 ```python
 @_log_bridge_call
@@ -11406,7 +11453,7 @@ Save `values` as a user preset named `name`, persisted immediately.
 
 <a id="fim.gui.app.Api.delete_user_preset"></a>
 
-#### [delete\_user\_preset](./gui/app.py#L5103)
+#### [delete\_user\_preset](./gui/app.py#L5133)
 
 ```python
 @_log_bridge_call
@@ -11421,7 +11468,7 @@ affordance only ever offers a name it just listed.
 
 <a id="fim.gui.app.Api.save_yaml"></a>
 
-#### [save\_yaml](./gui/app.py#L5115)
+#### [save\_yaml](./gui/app.py#L5145)
 
 ```python
 @_log_bridge_call
@@ -11445,7 +11492,7 @@ Validate the form, then save it as a `fim run`-compatible YAML file.
 
 <a id="fim.gui.app.Api.export_graph_image"></a>
 
-#### [export\_graph\_image](./gui/app.py#L5152)
+#### [export\_graph\_image](./gui/app.py#L5182)
 
 ```python
 @_log_bridge_call
@@ -11482,7 +11529,7 @@ gap `save_yaml`'s own config export, just above, does not cover.
 
 <a id="fim.gui.app.Api.get_default_max_workers"></a>
 
-#### [get\_default\_max\_workers](./gui/app.py#L5205)
+#### [get\_default\_max\_workers](./gui/app.py#L5235)
 
 ```python
 @_log_bridge_call
@@ -11498,7 +11545,7 @@ workers` directly rather than inventing a second default.
 
 <a id="fim.gui.app.Api.get_engine_backend_availability"></a>
 
-#### [get\_engine\_backend\_availability](./gui/app.py#L5216)
+#### [get\_engine\_backend\_availability](./gui/app.py#L5246)
 
 ```python
 @_log_bridge_call
@@ -11540,7 +11587,7 @@ bind a copy at import time and quietly defeat exactly that hook.
 
 <a id="fim.gui.app.Api.get_significant_digits"></a>
 
-#### [get\_significant\_digits](./gui/app.py#L5252)
+#### [get\_significant\_digits](./gui/app.py#L5282)
 
 ```python
 @_log_bridge_call
@@ -11559,7 +11606,7 @@ back).
 
 <a id="fim.gui.app.Api.set_significant_digits"></a>
 
-#### [set\_significant\_digits](./gui/app.py#L5266)
+#### [set\_significant\_digits](./gui/app.py#L5296)
 
 ```python
 @_log_bridge_call
@@ -11591,7 +11638,7 @@ ever about a *run's own* output, never this GUI-local setting.
 
 <a id="fim.gui.app.Api.get_dark_mode_override"></a>
 
-#### [get\_dark\_mode\_override](./gui/app.py#L5303)
+#### [get\_dark\_mode\_override](./gui/app.py#L5333)
 
 ```python
 @_log_bridge_call
@@ -11609,7 +11656,7 @@ dark_mode_override` is already the one place this value lives.
 
 <a id="fim.gui.app.Api.set_dark_mode_override"></a>
 
-#### [set\_dark\_mode\_override](./gui/app.py#L5316)
+#### [set\_dark\_mode\_override](./gui/app.py#L5346)
 
 ```python
 @_log_bridge_call
@@ -11634,7 +11681,7 @@ Change the saved dark-mode override (Configure's own field).
 
 <a id="fim.gui.app.Api.get_default_run_settings"></a>
 
-#### [get\_default\_run\_settings](./gui/app.py#L5342)
+#### [get\_default\_run\_settings](./gui/app.py#L5372)
 
 ```python
 @_log_bridge_call
@@ -11668,7 +11715,7 @@ value for that one field and reported at launch
 
 <a id="fim.gui.app.Api.get_expert_settings_info"></a>
 
-#### [get\_expert\_settings\_info](./gui/app.py#L5410)
+#### [get\_expert\_settings\_info](./gui/app.py#L5440)
 
 ```python
 @_log_bridge_call
@@ -11688,7 +11735,7 @@ Return how Settings lists the Expert Settings.
 
 <a id="fim.gui.app.Api.set_default_run_settings"></a>
 
-#### [set\_default\_run\_settings](./gui/app.py#L5424)
+#### [set\_default\_run\_settings](./gui/app.py#L5454)
 
 ```python
 @_log_bridge_call
@@ -11733,7 +11780,7 @@ form no longer submits at all.
 
 <a id="fim.gui.app.Api.get_results_location"></a>
 
-#### [get\_results\_location](./gui/app.py#L5473)
+#### [get\_results\_location](./gui/app.py#L5503)
 
 ```python
 @_log_bridge_call
@@ -11763,7 +11810,7 @@ identical field (§5, Option D4).
 
 <a id="fim.gui.app.Api.set_results_location"></a>
 
-#### [set\_results\_location](./gui/app.py#L5506)
+#### [set\_results\_location](./gui/app.py#L5536)
 
 ```python
 @_log_bridge_call
@@ -11796,7 +11843,7 @@ location_override` is what applies a saved value, once, the
 
 <a id="fim.gui.app.Api.browse_for_results_location"></a>
 
-#### [browse\_for\_results\_location](./gui/app.py#L5542)
+#### [browse\_for\_results\_location](./gui/app.py#L5572)
 
 ```python
 @_log_bridge_call
@@ -11816,7 +11863,7 @@ Browse for a results/logs directory via the OS's own native folder picker.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 
-#### [get\_welcome\_dismissed](./gui/app.py#L5562)
+#### [get\_welcome\_dismissed](./gui/app.py#L5592)
 
 ```python
 @_log_bridge_call
@@ -11832,7 +11879,7 @@ at all.
 
 <a id="fim.gui.app.Api.dismiss_welcome"></a>
 
-#### [dismiss\_welcome](./gui/app.py#L5573)
+#### [dismiss\_welcome](./gui/app.py#L5603)
 
 ```python
 @_log_bridge_call
@@ -11847,7 +11894,7 @@ actions the user picks, never un-called.
 
 <a id="fim.gui.app.Api.get_statistics_catalog"></a>
 
-#### [get\_statistics\_catalog](./gui/app.py#L5584)
+#### [get\_statistics\_catalog](./gui/app.py#L5614)
 
 ```python
 @_log_bridge_call
@@ -11869,7 +11916,7 @@ statistic is defined.
 
 <a id="fim.gui.app.Api.set_shown_statistics"></a>
 
-#### [set\_shown\_statistics](./gui/app.py#L5605)
+#### [set\_shown\_statistics](./gui/app.py#L5635)
 
 ```python
 @_log_bridge_call
@@ -11897,7 +11944,7 @@ text`). A saved run's results never change.
 
 <a id="fim.gui.app.Api.get_pairwise_max_demes"></a>
 
-#### [get\_pairwise\_max\_demes](./gui/app.py#L5636)
+#### [get\_pairwise\_max\_demes](./gui/app.py#L5666)
 
 ```python
 @_log_bridge_call
@@ -11908,7 +11955,7 @@ Return the largest deme count whose runs save `pairwise.json` in full.
 
 <a id="fim.gui.app.Api.get_background_work_settings"></a>
 
-#### [get\_background\_work\_settings](./gui/app.py#L5641)
+#### [get\_background\_work\_settings](./gui/app.py#L5671)
 
 ```python
 @_log_bridge_call
@@ -11919,7 +11966,7 @@ Return saved background-work settings and the derived CPU budget.
 
 <a id="fim.gui.app.Api.set_background_work_settings"></a>
 
-#### [set\_background\_work\_settings](./gui/app.py#L5671)
+#### [set\_background\_work\_settings](./gui/app.py#L5701)
 
 ```python
 @_log_bridge_call
@@ -11935,7 +11982,7 @@ Save priority and CPU/memory reserves for jobs started afterward.
 
 <a id="fim.gui.app.Api.get_memory_status"></a>
 
-#### [get\_memory\_status](./gui/app.py#L5694)
+#### [get\_memory\_status](./gui/app.py#L5724)
 
 ```python
 @_log_bridge_call
@@ -11946,7 +11993,7 @@ Return current memory availability and pause controls when needed.
 
 <a id="fim.gui.app.Api.set_pairwise_max_demes"></a>
 
-#### [set\_pairwise\_max\_demes](./gui/app.py#L5727)
+#### [set\_pairwise\_max\_demes](./gui/app.py#L5757)
 
 ```python
 @_log_bridge_call
@@ -11970,7 +12017,7 @@ Set the largest deme count whose runs save every pair's statistics.
 
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
-#### [get\_startup\_warnings](./gui/app.py#L5751)
+#### [get\_startup\_warnings](./gui/app.py#L5781)
 
 ```python
 @_log_bridge_call
@@ -11990,7 +12037,7 @@ own docstring on why this exists instead of one).
 
 <a id="fim.gui.app.Api.get_live_deme_pair"></a>
 
-#### [get\_live\_deme\_pair](./gui/app.py#L5767)
+#### [get\_live\_deme\_pair](./gui/app.py#L5797)
 
 ```python
 @_log_bridge_call
@@ -12008,7 +12055,7 @@ unlike `_significant_digits`'s own thread-start snapshot.
 
 <a id="fim.gui.app.Api.set_live_deme_pair"></a>
 
-#### [set\_live\_deme\_pair](./gui/app.py#L5783)
+#### [set\_live\_deme\_pair](./gui/app.py#L5813)
 
 ```python
 @_log_bridge_call
@@ -12059,7 +12106,7 @@ than crash the whole push).
 
 <a id="fim.gui.app.Api.list_recent_runs"></a>
 
-#### [list\_recent\_runs](./gui/app.py#L5845)
+#### [list\_recent\_runs](./gui/app.py#L5875)
 
 ```python
 @_log_bridge_call
@@ -12081,7 +12128,7 @@ no single trajectory of its own to open.
 
 <a id="fim.gui.app.Api.list_home_runs"></a>
 
-#### [list\_home\_runs](./gui/app.py#L5880)
+#### [list\_home\_runs](./gui/app.py#L5910)
 
 ```python
 @_log_bridge_call
@@ -12115,7 +12162,7 @@ asked for this heavier per-row read, so neither pays for it.
 
 <a id="fim.gui.app.Api.list_studies"></a>
 
-#### [list\_studies](./gui/app.py#L5911)
+#### [list\_studies](./gui/app.py#L5941)
 
 ```python
 @_log_bridge_call
@@ -12147,7 +12194,7 @@ List every Study, oldest first (matching `groups.list_studies`'s own order).
 
 <a id="fim.gui.app.Api.list_experiments"></a>
 
-#### [list\_experiments](./gui/app.py#L5966)
+#### [list\_experiments](./gui/app.py#L5996)
 
 ```python
 @_log_bridge_call
@@ -12172,7 +12219,7 @@ List every Experiment, oldest first.
 
 <a id="fim.gui.app.Api.get_study_run_summary"></a>
 
-#### [get\_study\_run\_summary](./gui/app.py#L6005)
+#### [get\_study\_run\_summary](./gui/app.py#L6035)
 
 ```python
 @_log_bridge_call
@@ -12200,7 +12247,7 @@ its own runs' config summaries and statistics.
 
 <a id="fim.gui.app.Api.create_study"></a>
 
-#### [create\_study](./gui/app.py#L6037)
+#### [create\_study](./gui/app.py#L6067)
 
 ```python
 @_log_bridge_call
@@ -12222,7 +12269,7 @@ Blank `description`/`documentation` are stored as unset.
 
 <a id="fim.gui.app.Api.create_experiment"></a>
 
-#### [create\_experiment](./gui/app.py#L6070)
+#### [create\_experiment](./gui/app.py#L6100)
 
 ```python
 @_log_bridge_call
@@ -12235,7 +12282,7 @@ Create a new, empty Experiment. See `create_study`.
 
 <a id="fim.gui.app.Api.get_details"></a>
 
-#### [get\_details](./gui/app.py#L6085)
+#### [get\_details](./gui/app.py#L6115)
 
 ```python
 @_log_bridge_call
@@ -12262,7 +12309,7 @@ read fresh from disk each time.
 
 <a id="fim.gui.app.Api.update_study_details"></a>
 
-#### [update\_study\_details](./gui/app.py#L6124)
+#### [update\_study\_details](./gui/app.py#L6154)
 
 ```python
 @_log_bridge_call
@@ -12283,7 +12330,7 @@ The details dialog's Save (`webui/screens/details.js`). Blank
 
 <a id="fim.gui.app.Api.update_experiment_details"></a>
 
-#### [update\_experiment\_details](./gui/app.py#L6149)
+#### [update\_experiment\_details](./gui/app.py#L6179)
 
 ```python
 @_log_bridge_call
@@ -12297,7 +12344,7 @@ See `update_study_details`.
 
 <a id="fim.gui.app.Api.update_run_details"></a>
 
-#### [update\_run\_details](./gui/app.py#L6168)
+#### [update\_run\_details](./gui/app.py#L6198)
 
 ```python
 @_log_bridge_call
@@ -12318,7 +12365,7 @@ Blank text clears a field; a run may have neither. The run's own
 
 <a id="fim.gui.app.Api.get_run_context"></a>
 
-#### [get\_run\_context](./gui/app.py#L6196)
+#### [get\_run\_context](./gui/app.py#L6226)
 
 ```python
 @_log_bridge_call
@@ -12352,7 +12399,7 @@ description (`webui/screens/details.js`).
 
 <a id="fim.gui.app.Api.ensure_default_study"></a>
 
-#### [ensure\_default\_study](./gui/app.py#L6256)
+#### [ensure\_default\_study](./gui/app.py#L6286)
 
 ```python
 @_log_bridge_call
@@ -12375,7 +12422,7 @@ never gains this call at all.
 
 <a id="fim.gui.app.Api.ensure_examples"></a>
 
-#### [ensure\_examples](./gui/app.py#L6275)
+#### [ensure\_examples](./gui/app.py#L6305)
 
 ```python
 @_log_bridge_call
@@ -12399,7 +12446,7 @@ brought it up to date.
 
 <a id="fim.gui.app.Api.add_run_to_study"></a>
 
-#### [add\_run\_to\_study](./gui/app.py#L6299)
+#### [add\_run\_to\_study](./gui/app.py#L6329)
 
 ```python
 @_log_bridge_call
@@ -12415,7 +12462,7 @@ Add one existing Run directory to a Study; idempotent.
 
 <a id="fim.gui.app.Api.add_study_to_experiment"></a>
 
-#### [add\_study\_to\_experiment](./gui/app.py#L6313)
+#### [add\_study\_to\_experiment](./gui/app.py#L6343)
 
 ```python
 @_log_bridge_call
@@ -12432,7 +12479,7 @@ Add one existing Study to an Experiment; idempotent.
 
 <a id="fim.gui.app.Api.set_experiment_closed"></a>
 
-#### [set\_experiment\_closed](./gui/app.py#L6329)
+#### [set\_experiment\_closed](./gui/app.py#L6359)
 
 ```python
 @_log_bridge_call
@@ -12452,7 +12499,7 @@ Closing is refused while a Run of one of its Studies is running
 
 <a id="fim.gui.app.Api.set_study_closed"></a>
 
-#### [set\_study\_closed](./gui/app.py#L6352)
+#### [set\_study\_closed](./gui/app.py#L6382)
 
 ```python
 @_log_bridge_call
@@ -12474,7 +12521,7 @@ a Run.
 
 <a id="fim.gui.app.Api.delete_study"></a>
 
-#### [delete\_study](./gui/app.py#L6373)
+#### [delete\_study](./gui/app.py#L6403)
 
 ```python
 @_log_bridge_call
@@ -12501,7 +12548,7 @@ A read-only example Run the Study holds is kept too
 
 <a id="fim.gui.app.Api.delete_study_runs"></a>
 
-#### [delete\_study\_runs](./gui/app.py#L6410)
+#### [delete\_study\_runs](./gui/app.py#L6440)
 
 ```python
 @_log_bridge_call
@@ -12526,7 +12573,7 @@ A read-only example Run stays in the Study and counts as kept.
 
 <a id="fim.gui.app.Api.delete_experiment"></a>
 
-#### [delete\_experiment](./gui/app.py#L6439)
+#### [delete\_experiment](./gui/app.py#L6469)
 
 ```python
 @_log_bridge_call
@@ -12546,7 +12593,7 @@ A read-only Study the Experiment holds is kept
 
 <a id="fim.gui.app.Api.copy_study"></a>
 
-#### [copy\_study](./gui/app.py#L6470)
+#### [copy\_study](./gui/app.py#L6500)
 
 ```python
 @_log_bridge_call
@@ -12563,7 +12610,7 @@ Copy a Study's own run list into a new, independent Study.
 
 <a id="fim.gui.app.Api.get_sweepable_keys"></a>
 
-#### [get\_sweepable\_keys](./gui/app.py#L6485)
+#### [get\_sweepable\_keys](./gui/app.py#L6515)
 
 ```python
 @_log_bridge_call
@@ -12574,7 +12621,7 @@ Return every parameter a sweep may vary, with its axis metadata.
 
 <a id="fim.gui.app.Api.plan_sweep"></a>
 
-#### [plan\_sweep](./gui/app.py#L6490)
+#### [plan\_sweep](./gui/app.py#L6520)
 
 ```python
 @_log_bridge_call
@@ -12599,7 +12646,7 @@ Enumerate and validate a sweep without running anything.
 
 <a id="fim.gui.app.Api.start_sweep"></a>
 
-#### [start\_sweep](./gui/app.py#L6590)
+#### [start\_sweep](./gui/app.py#L6620)
 
 ```python
 @_log_bridge_call
@@ -12630,7 +12677,7 @@ at or over the size threshold, until `confirmed` is true.
 
 <a id="fim.gui.app.Api.resume_sweep"></a>
 
-#### [resume\_sweep](./gui/app.py#L6692)
+#### [resume\_sweep](./gui/app.py#L6722)
 
 ```python
 @_log_bridge_call
@@ -12663,7 +12710,7 @@ Run the points of an existing sweep Study that are still missing.
 
 <a id="fim.gui.app.Api.cancel_sweep"></a>
 
-#### [cancel\_sweep](./gui/app.py#L6809)
+#### [cancel\_sweep](./gui/app.py#L6839)
 
 ```python
 @_log_bridge_call
@@ -12674,7 +12721,7 @@ Stop one sweep: its current point is cancelled, and the rest skipped.
 
 <a id="fim.gui.app.Api.get_sweep_status"></a>
 
-#### [get\_sweep\_status](./gui/app.py#L6826)
+#### [get\_sweep\_status](./gui/app.py#L6856)
 
 ```python
 @_log_bridge_call
@@ -12685,7 +12732,7 @@ Return a sweep Study's planned points with their derived states.
 
 <a id="fim.gui.app.Api.get_sweep_results"></a>
 
-#### [get\_sweep\_results](./gui/app.py#L6843)
+#### [get\_sweep\_results](./gui/app.py#L6873)
 
 ```python
 @_log_bridge_call
@@ -12696,7 +12743,7 @@ Return a sweep Study's finished points and their statistics.
 
 <a id="fim.gui.app.Api.estimate_sweep_cost"></a>
 
-#### [estimate\_sweep\_cost](./gui/app.py#L6851)
+#### [estimate\_sweep\_cost](./gui/app.py#L6881)
 
 ```python
 @_log_bridge_call
@@ -12726,7 +12773,7 @@ run already exists cost nothing and are left out.
 
 <a id="fim.gui.app.Api.get_sweep_eta"></a>
 
-#### [get\_sweep\_eta](./gui/app.py#L6918)
+#### [get\_sweep\_eta](./gui/app.py#L6948)
 
 ```python
 @_log_bridge_call
@@ -12746,7 +12793,7 @@ goes, and read from files, so it works while the sweep runs.
 
 <a id="fim.gui.app.Api.get_sweep_series"></a>
 
-#### [get\_sweep\_series](./gui/app.py#L6943)
+#### [get\_sweep\_series](./gui/app.py#L6973)
 
 ```python
 @_log_bridge_call
@@ -12773,7 +12820,7 @@ Return a statistic as response curves across a sweep's axes.
 
 <a id="fim.gui.app.Api.get_sweep_trajectories"></a>
 
-#### [get\_sweep\_trajectories](./gui/app.py#L6970)
+#### [get\_sweep\_trajectories](./gui/app.py#L7000)
 
 ```python
 @_log_bridge_call
@@ -12800,7 +12847,7 @@ Return how each point approached equilibrium, for the overlay chart.
 
 <a id="fim.gui.app.Api.compare_sweeps"></a>
 
-#### [compare\_sweeps](./gui/app.py#L6996)
+#### [compare\_sweeps](./gui/app.py#L7026)
 
 ```python
 @_log_bridge_call
@@ -12830,7 +12877,7 @@ Nothing is stored; the comparison is worked out on each call.
 
 <a id="fim.gui.app.Api.get_sweep_theory"></a>
 
-#### [get\_sweep\_theory](./gui/app.py#L7025)
+#### [get\_sweep\_theory](./gui/app.py#L7055)
 
 ```python
 @_log_bridge_call
@@ -12857,7 +12904,7 @@ every statistic, never an error.
 
 <a id="fim.gui.app.Api.export_sweep_table"></a>
 
-#### [export\_sweep\_table](./gui/app.py#L7051)
+#### [export\_sweep\_table](./gui/app.py#L7081)
 
 ```python
 @_log_bridge_call
@@ -12890,7 +12937,7 @@ overwritten once the researcher has chosen it.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
-#### [copy\_experiment](./gui/app.py#L7224)
+#### [copy\_experiment](./gui/app.py#L7254)
 
 ```python
 @_log_bridge_call
@@ -12907,7 +12954,7 @@ Copy an Experiment's own study list into a new, independent Experiment.
 
 <a id="fim.gui.app.Api.delete_runs"></a>
 
-#### [delete\_runs](./gui/app.py#L7239)
+#### [delete\_runs](./gui/app.py#L7269)
 
 ```python
 @_log_bridge_call
@@ -12938,7 +12985,7 @@ nothing at all is deleted and the refusal is reported.
 
 <a id="fim.gui.app.Api.delete_selected"></a>
 
-#### [delete\_selected](./gui/app.py#L7268)
+#### [delete\_selected](./gui/app.py#L7298)
 
 ```python
 @_log_bridge_call
@@ -12968,6 +13015,8 @@ policy) rather than double-counted or treated as a failure.
 - `"experimentId"` - ...}` per selected row. A read-only Run
   linked into an editable Study uses `{"kind": "run-link",
 - `"studyId"` - ..., "directory": ...}` to remove only that link.
+  A saved run (Home's Saved runs table) is `{"kind":
+  "object", "objectId": ...}`.
 
   A `run-link` selection removes only the named editable Study's
   membership, keeping the example's files and other memberships.
@@ -12981,18 +13030,22 @@ policy) rather than double-counted or treated as a failure.
 - `refusal` - it is skipped, and deleting that Study keeps it
   (`groups.delete_study`).
 
+  Saved runs are deleted first, all or none: one still executing
+  refuses the whole selection before anything else is touched.
+
 
 **Returns**:
 
 - ``{"ok"` - True, "deletedRunCount": N, "deletedStudyCount": M,
-- `"deletedExperimentCount"` - K}` — each count is how many of
-  that kind actually still existed and were removed.
-- ``{"ok"` - False, "message": ...}` when the selection holds a
-  read-only item; the message names them.
+- `"deletedExperimentCount"` - K, "deletedObjectCount": J}` — each
+  count is how many of that kind actually still existed and
+  were removed. `{"ok": False, "message": ...}` when the
+  selection holds a read-only item or an executing saved run;
+  the message names them.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 
-#### [get\_batch\_replicate\_summary](./gui/app.py#L7356)
+#### [get\_batch\_replicate\_summary](./gui/app.py#L7399)
 
 ```python
 @_log_bridge_call
@@ -13034,7 +13087,7 @@ already uses — no second naming scheme.
 
 <a id="fim.gui.app.Api.get_batch_pair_statistics"></a>
 
-#### [get\_batch\_pair\_statistics](./gui/app.py#L7419)
+#### [get\_batch\_pair\_statistics](./gui/app.py#L7462)
 
 ```python
 @_log_bridge_call
@@ -13068,7 +13121,7 @@ existed, or above its deme-count limit).
 
 <a id="fim.gui.app.Api.open_run"></a>
 
-#### [open\_run](./gui/app.py#L7469)
+#### [open\_run](./gui/app.py#L7512)
 
 ```python
 @_log_bridge_call
@@ -13141,7 +13194,7 @@ reuse, not a second rendering path.
 
 <a id="fim.gui.app.Api.open_batch"></a>
 
-#### [open\_batch](./gui/app.py#L7654)
+#### [open\_batch](./gui/app.py#L7697)
 
 ```python
 @_log_bridge_call
@@ -13201,7 +13254,7 @@ Home screen's own reopen spinner (`open-run.js`'s own
 
 <a id="fim.gui.app.Api.open_study"></a>
 
-#### [open\_study](./gui/app.py#L7782)
+#### [open\_study](./gui/app.py#L7825)
 
 ```python
 @_log_bridge_call
@@ -13268,7 +13321,7 @@ refuse," not a bug).
 
 <a id="fim.gui.app.Api.compare_runs"></a>
 
-#### [compare\_runs](./gui/app.py#L7925)
+#### [compare\_runs](./gui/app.py#L7968)
 
 ```python
 @_log_bridge_call
@@ -13321,7 +13374,7 @@ animation screen's own frame sampler already computes.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 
-#### [get\_animation\_frames](./gui/app.py#L8011)
+#### [get\_animation\_frames](./gui/app.py#L8054)
 
 ```python
 @_log_bridge_call
@@ -13361,7 +13414,7 @@ any kind during playback.
 
 <a id="fim.gui.app.Api.get_animation_deme_pair_frames"></a>
 
-#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L8078)
+#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L8121)
 
 ```python
 @_log_bridge_call
@@ -13405,7 +13458,7 @@ shape the default view's own frames already arrived in.
 
 <a id="fim.gui.app.Api.get_deme_pair_panel"></a>
 
-#### [get\_deme\_pair\_panel](./gui/app.py#L8143)
+#### [get\_deme\_pair\_panel](./gui/app.py#L8186)
 
 ```python
 @_log_bridge_call
@@ -13447,7 +13500,7 @@ small `d`).
 
 <a id="fim.gui.app.Api.get_batch_deme_pair_panel"></a>
 
-#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L8189)
+#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L8232)
 
 ```python
 @_log_bridge_call
@@ -13486,7 +13539,7 @@ itself.
 
 <a id="fim.gui.app.Api.get_batch_animation_frames"></a>
 
-#### [get\_batch\_animation\_frames](./gui/app.py#L8232)
+#### [get\_batch\_animation\_frames](./gui/app.py#L8275)
 
 ```python
 @_log_bridge_call
@@ -13533,7 +13586,7 @@ recent_runs`/`open_run` already use.
 
 <a id="fim.gui.app.Api.ping"></a>
 
-#### [ping](./gui/app.py#L8304)
+#### [ping](./gui/app.py#L8347)
 
 ```python
 @_log_bridge_call
@@ -13548,7 +13601,7 @@ context, before any real screen is built on top of it.
 
 <a id="fim.gui.app.Api.ping_from_worker"></a>
 
-#### [ping\_from\_worker](./gui/app.py#L8314)
+#### [ping\_from\_worker](./gui/app.py#L8357)
 
 ```python
 @_log_bridge_call
@@ -13568,7 +13621,7 @@ inside a real batch run.
 
 <a id="fim.gui.app.Api.open_external_link"></a>
 
-#### [open\_external\_link](./gui/app.py#L8333)
+#### [open\_external\_link](./gui/app.py#L8376)
 
 ```python
 @_log_bridge_call
@@ -13587,7 +13640,7 @@ module already follows for another OS-dispatched action.
 
 <a id="fim.gui.app.Api.check_for_updates"></a>
 
-#### [check\_for\_updates](./gui/app.py#L8347)
+#### [check\_for\_updates](./gui/app.py#L8390)
 
 ```python
 @_log_bridge_call
@@ -13617,7 +13670,7 @@ own equivalent action called the same module the same way.
 
 <a id="fim.gui.app.Api.get_about_info"></a>
 
-#### [get\_about\_info](./gui/app.py#L8383)
+#### [get\_about\_info](./gui/app.py#L8426)
 
 ```python
 @_log_bridge_call
@@ -13664,7 +13717,7 @@ three-part parsing).
 
 <a id="fim.gui.app.RunDetails"></a>
 
-## [RunDetails Objects](./gui/app.py#L8631)
+## [RunDetails Objects](./gui/app.py#L8674)
 
 ```python
 class RunDetails(NamedTuple)
@@ -13674,7 +13727,7 @@ The optional name and description Configure gives a run before it starts.
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 
-#### [in\_flight\_bridge\_threads](./gui/app.py#L10216)
+#### [in\_flight\_bridge\_threads](./gui/app.py#L10259)
 
 ```python
 def in_flight_bridge_threads(
@@ -13702,7 +13755,7 @@ flakiness.
 
 <a id="fim.gui.app.await_bridge_threads"></a>
 
-#### [await\_bridge\_threads](./gui/app.py#L10251)
+#### [await\_bridge\_threads](./gui/app.py#L10294)
 
 ```python
 def await_bridge_threads(
@@ -13755,7 +13808,7 @@ seconds later.
 
 <a id="fim.gui.app.initial_window_size"></a>
 
-#### [initial\_window\_size](./gui/app.py#L10485)
+#### [initial\_window\_size](./gui/app.py#L10528)
 
 ```python
 def initial_window_size(screen_width: int,
@@ -13782,7 +13835,7 @@ edges), between `_MIN_WINDOW_SIZE` and `_MAX_WINDOW_SIZE`.
 
 <a id="fim.gui.app.create_window"></a>
 
-#### [create\_window](./gui/app.py#L10526)
+#### [create\_window](./gui/app.py#L10569)
 
 ```python
 def create_window(*,
@@ -13833,7 +13886,7 @@ pywebview's own API instead of Tk's.
 
 <a id="fim.gui.app.shutdown_timeout"></a>
 
-#### [shutdown\_timeout](./gui/app.py#L10748)
+#### [shutdown\_timeout](./gui/app.py#L10791)
 
 ```python
 def shutdown_timeout() -> float
@@ -13858,7 +13911,7 @@ outcome than the hang it guards against.
 
 <a id="fim.gui.app.main"></a>
 
-#### [main](./gui/app.py#L11058)
+#### [main](./gui/app.py#L11101)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -15696,7 +15749,7 @@ The bridge delegates lifecycle operations to `fim.run_service` and
 
 <a id="fim.gui.object_bridge.cancel"></a>
 
-#### [cancel](./gui/object_bridge.py#L64)
+#### [cancel](./gui/object_bridge.py#L67)
 
 ```python
 def cancel(object_id: str, *, results: Path | None = None) -> str
@@ -15716,7 +15769,7 @@ Cancel a saved run, or ask its running worker to stop.
 
 <a id="fim.gui.object_bridge.configuration_text"></a>
 
-#### [configuration\_text](./gui/object_bridge.py#L81)
+#### [configuration\_text](./gui/object_bridge.py#L84)
 
 ```python
 def configuration_text(values: Mapping[str, str],
@@ -15741,7 +15794,7 @@ Turn form values into configuration text, whether or not they are valid.
 
 <a id="fim.gui.object_bridge.clone"></a>
 
-#### [clone](./gui/object_bridge.py#L114)
+#### [clone](./gui/object_bridge.py#L117)
 
 ```python
 def clone(object_id: str, *, results: Path | None = None) -> RunObject
@@ -15761,7 +15814,7 @@ Create a new saved run from another one's configuration.
 
 <a id="fim.gui.object_bridge.delete"></a>
 
-#### [delete](./gui/object_bridge.py#L139)
+#### [delete](./gui/object_bridge.py#L142)
 
 ```python
 def delete(object_id: str, *, results: Path | None = None) -> None
@@ -15774,9 +15827,40 @@ Delete a saved run that is not executing.
 - `object_id` - The saved run.
 - `results` - Results directory (default: `results_directory()`).
 
+<a id="fim.gui.object_bridge.delete_many"></a>
+
+#### [delete\_many](./gui/object_bridge.py#L155)
+
+```python
+def delete_many(object_ids: Sequence[str],
+                *,
+                results: Path | None = None) -> int
+```
+
+Delete several saved runs, all or none of those that still exist.
+
+Every one is checked first, so one that is still executing leaves the
+others in place too. One already gone is not an error.
+
+**Arguments**:
+
+- `object_ids` - The saved runs.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+  How many were deleted.
+
+
+**Raises**:
+
+- `LifecycleError` - One of them cannot be deleted now; the message
+  names every such run.
+
 <a id="fim.gui.object_bridge.form_values"></a>
 
-#### [form\_values](./gui/object_bridge.py#L152)
+#### [form\_values](./gui/object_bridge.py#L202)
 
 ```python
 def form_values(
@@ -15796,7 +15880,7 @@ Return a saved run's configuration as form values.
 
 <a id="fim.gui.object_bridge.find_completed_run"></a>
 
-#### [find\_completed\_run](./gui/object_bridge.py#L179)
+#### [find\_completed\_run](./gui/object_bridge.py#L229)
 
 ```python
 def find_completed_run(run_id: str,
@@ -15820,7 +15904,7 @@ Find a completed Run object for this scientific run and version.
 
 <a id="fim.gui.object_bridge.study_id_for"></a>
 
-#### [study\_id\_for](./gui/object_bridge.py#L206)
+#### [study\_id\_for](./gui/object_bridge.py#L256)
 
 ```python
 def study_id_for(object_id: str, *, results: Path | None = None) -> str | None
@@ -15828,12 +15912,36 @@ def study_id_for(object_id: str, *, results: Path | None = None) -> str | None
 
 Return the Study selected when this Run object was started, if any.
 
-<a id="fim.gui.object_bridge.list_rows"></a>
+<a id="fim.gui.object_bridge.kill"></a>
 
-#### [list\_rows](./gui/object_bridge.py#L214)
+#### [kill](./gui/object_bridge.py#L264)
 
 ```python
-def list_rows(results: Path | None = None) -> dict[str, Any]
+def kill(object_id: str, *, results: Path | None = None) -> str
+```
+
+Kill a saved run's worker at once, recording the run as failed.
+
+**Arguments**:
+
+- `object_id` - The saved run.
+- `results` - Results directory (default: `results_directory()`).
+
+
+**Returns**:
+
+  The state the run is in afterward, normally `failed`.
+
+<a id="fim.gui.object_bridge.list_rows"></a>
+
+#### [list\_rows](./gui/object_bridge.py#L280)
+
+```python
+def list_rows(
+    results: Path | None = None,
+    *,
+    summarize: Callable[[SimulationParams], dict[str, str]] | None = None
+) -> dict[str, Any]
 ```
 
 Return one row per saved run, after recording any lost worker.
@@ -15841,6 +15949,8 @@ Return one row per saved run, after recording any lost worker.
 **Arguments**:
 
 - `results` - Results directory (default: `results_directory()`).
+- `summarize` - Summarizes a valid configuration for each row's
+  `configSummary`; `None` leaves that `None`.
 
 
 **Returns**:
@@ -15850,7 +15960,7 @@ Return one row per saved run, after recording any lost worker.
 
 <a id="fim.gui.object_bridge.pause"></a>
 
-#### [pause](./gui/object_bridge.py#L235)
+#### [pause](./gui/object_bridge.py#L309)
 
 ```python
 def pause(object_id: str, *, results: Path | None = None) -> None
@@ -15865,7 +15975,7 @@ Ask a running saved run to checkpoint and pause.
 
 <a id="fim.gui.object_bridge.fail_worker"></a>
 
-#### [fail\_worker](./gui/object_bridge.py#L246)
+#### [fail\_worker](./gui/object_bridge.py#L320)
 
 ```python
 def fail_worker(object_id: str,
@@ -15878,7 +15988,7 @@ Record an unexpected worker exit as a failed Run object attempt.
 
 <a id="fim.gui.object_bridge.prepare_start"></a>
 
-#### [prepare\_start](./gui/object_bridge.py#L253)
+#### [prepare\_start](./gui/object_bridge.py#L327)
 
 ```python
 def prepare_start(
@@ -15908,10 +16018,14 @@ Check that a saved run can start or resume now, before any side effect.
 
 <a id="fim.gui.object_bridge.row"></a>
 
-#### [row](./gui/object_bridge.py#L285)
+#### [row](./gui/object_bridge.py#L373)
 
 ```python
-def row(run_object: RunObject) -> dict[str, Any]
+def row(
+    run_object: RunObject,
+    *,
+    summarize: Callable[[SimulationParams], dict[str, str]] | None = None
+) -> dict[str, Any]
 ```
 
 Return the Saved runs panel's row for one saved run.
@@ -15919,6 +16033,9 @@ Return the Saved runs panel's row for one saved run.
 **Arguments**:
 
 - `run_object` - The saved run.
+- `summarize` - Summarizes a valid configuration as `configSummary`, so
+  a run saved without a name is still told apart by its
+  settings; `None` leaves that `None`.
 
 
 **Returns**:
@@ -15927,7 +16044,7 @@ Return the Saved runs panel's row for one saved run.
 
 <a id="fim.gui.object_bridge.save"></a>
 
-#### [save](./gui/object_bridge.py#L325)
+#### [save](./gui/object_bridge.py#L423)
 
 ```python
 def save(
@@ -23134,9 +23251,62 @@ cuts the file back to it.
 
 - `ValueError` - If nothing has been written yet.
 
+<a id="fim.persistence.binary_store.BinaryLogStore.has_writer"></a>
+
+#### [has\_writer](./persistence/binary_store.py#L307)
+
+```python
+@property
+def has_writer() -> bool
+```
+
+Whether a log is open for writing, so a checkpoint has a position.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.begin_checkpoint"></a>
+
+#### [begin\_checkpoint](./persistence/binary_store.py#L312)
+
+```python
+def begin_checkpoint(*, drive: bool = True) -> None
+```
+
+Start a `checkpoint` without waiting for it; see `finish_checkpoint`.
+
+Many stores can begin before any finishes, so a batch's lanes write
+and sync at the same time rather than one after another.
+
+**Arguments**:
+
+- `drive` - `False` leaves the drive flush to `sync_store_drives`,
+  which does one for every store at once.
+
+
+**Raises**:
+
+- `ValueError` - If nothing has been written yet.
+
+<a id="fim.persistence.binary_store.BinaryLogStore.finish_checkpoint"></a>
+
+#### [finish\_checkpoint](./persistence/binary_store.py#L330)
+
+```python
+def finish_checkpoint() -> tlog.LogPosition
+```
+
+Wait for a begun checkpoint and return its position.
+
+**Returns**:
+
+  The committed position, as `checkpoint` returns it.
+
+
+**Raises**:
+
+- `ValueError` - If nothing has been written yet.
+
 <a id="fim.persistence.binary_store.BinaryLogStore.resume"></a>
 
-#### [resume](./persistence/binary_store.py#L306)
+#### [resume](./persistence/binary_store.py#L345)
 
 ```python
 def resume(run_id: str,
@@ -23175,7 +23345,7 @@ generation and is stored as a keyframe.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.resume_after_taper"></a>
 
-#### [resume\_after\_taper](./persistence/binary_store.py#L354)
+#### [resume\_after\_taper](./persistence/binary_store.py#L393)
 
 ```python
 def resume_after_taper(run_id: str, layout: FrameLayout,
@@ -23210,7 +23380,7 @@ checkpoint's), and then resumed at its last block.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.frame_at"></a>
 
-#### [frame\_at](./persistence/binary_store.py#L394)
+#### [frame\_at](./persistence/binary_store.py#L433)
 
 ```python
 def frame_at(generation: int) -> TrajectoryFrame
@@ -23227,7 +23397,7 @@ Everything written so far is committed first (a flush barrier).
 
 <a id="fim.persistence.binary_store.BinaryLogStore.discard"></a>
 
-#### [discard](./persistence/binary_store.py#L407)
+#### [discard](./persistence/binary_store.py#L446)
 
 ```python
 def discard(run_id: str) -> None
@@ -23239,7 +23409,7 @@ Closes the writer first (an open file blocks removal on Windows).
 
 <a id="fim.persistence.binary_store.BinaryLogStore.flush"></a>
 
-#### [flush](./persistence/binary_store.py#L431)
+#### [flush](./persistence/binary_store.py#L470)
 
 ```python
 def flush(*, sync: bool = False) -> None
@@ -23253,7 +23423,7 @@ Commit everything written so far (a barrier); optionally make it durable.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.snapshot"></a>
 
-#### [snapshot](./persistence/binary_store.py#L442)
+#### [snapshot](./persistence/binary_store.py#L481)
 
 ```python
 def snapshot() -> tuple[int, int, int]
@@ -23265,7 +23435,7 @@ Return `(committed generation, committed bytes, chain checksum)`.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.is_open"></a>
 
-#### [is\_open](./persistence/binary_store.py#L451)
+#### [is\_open](./persistence/binary_store.py#L490)
 
 ```python
 def is_open() -> bool
@@ -23275,7 +23445,7 @@ Whether this log's writer is currently open (for tests and diagnostics).
 
 <a id="fim.persistence.binary_store.BinaryLogStore.close"></a>
 
-#### [close](./persistence/binary_store.py#L455)
+#### [close](./persistence/binary_store.py#L494)
 
 ```python
 def close() -> None
@@ -23287,7 +23457,7 @@ Idempotent. A closed store is finished: writing again raises.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.equilibrium_store"></a>
 
-#### [equilibrium\_store](./persistence/binary_store.py#L466)
+#### [equilibrium\_store](./persistence/binary_store.py#L505)
 
 ```python
 def equilibrium_store(run_id: str) -> BinaryLogStore
@@ -23301,13 +23471,29 @@ artifacts. One instance per store.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.exists"></a>
 
-#### [exists](./persistence/binary_store.py#L523)
+#### [exists](./persistence/binary_store.py#L562)
 
 ```python
 def exists() -> bool
 ```
 
 Whether the log file exists on disk.
+
+<a id="fim.persistence.binary_store.sync_store_drives"></a>
+
+#### [sync\_store\_drives](./persistence/binary_store.py#L567)
+
+```python
+def sync_store_drives(stores: Sequence[BinaryLogStore]) -> None
+```
+
+Make checkpoints begun with `drive=False` durable, one flush per drive.
+
+Call once every store's `finish_checkpoint` returned.
+
+**Arguments**:
+
+- `stores` - The stores whose drive flush was deferred.
 
 <a id="fim.persistence.frame"></a>
 
@@ -27477,7 +27663,7 @@ editors cannot silently overwrite each other.
 
 <a id="fim.persistence.run_objects.RunObjectNotFoundError"></a>
 
-## [RunObjectNotFoundError Objects](./persistence/run_objects.py#L76)
+## [RunObjectNotFoundError Objects](./persistence/run_objects.py#L78)
 
 ```python
 class RunObjectNotFoundError(LifecycleError)
@@ -27487,7 +27673,7 @@ No Run object exists with the requested ID.
 
 <a id="fim.persistence.run_objects.RunObject"></a>
 
-## [RunObject Objects](./persistence/run_objects.py#L81)
+## [RunObject Objects](./persistence/run_objects.py#L83)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27505,7 +27691,7 @@ One Run object as read from disk.
 
 <a id="fim.persistence.run_objects.RunObject.object_id"></a>
 
-#### [object\_id](./persistence/run_objects.py#L97)
+#### [object\_id](./persistence/run_objects.py#L99)
 
 ```python
 @property
@@ -27516,7 +27702,7 @@ Return the object's stable identity.
 
 <a id="fim.persistence.run_objects.RunObject.capabilities"></a>
 
-#### [capabilities](./persistence/run_objects.py#L101)
+#### [capabilities](./persistence/run_objects.py#L103)
 
 ```python
 def capabilities(**kwargs: bool) -> Capabilities
@@ -27530,7 +27716,7 @@ Return the lifecycle's allowed actions for this object.
 
 <a id="fim.persistence.run_objects.ObjectDiagnostic"></a>
 
-## [ObjectDiagnostic Objects](./persistence/run_objects.py#L111)
+## [ObjectDiagnostic Objects](./persistence/run_objects.py#L113)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27546,7 +27732,7 @@ A directory under `objects/` that is not a readable Run object.
 
 <a id="fim.persistence.run_objects.ObjectListing"></a>
 
-## [ObjectListing Objects](./persistence/run_objects.py#L124)
+## [ObjectListing Objects](./persistence/run_objects.py#L126)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27557,7 +27743,7 @@ Result of scanning `objects/`: readable objects and diagnostics.
 
 <a id="fim.persistence.run_objects.clone_run_object"></a>
 
-#### [clone\_run\_object](./persistence/run_objects.py#L131)
+#### [clone\_run\_object](./persistence/run_objects.py#L133)
 
 ```python
 def clone_run_object(source_object_id: str,
@@ -27588,7 +27774,7 @@ ownership.
 
 <a id="fim.persistence.run_objects.configuration_digest"></a>
 
-#### [configuration\_digest](./persistence/run_objects.py#L164)
+#### [configuration\_digest](./persistence/run_objects.py#L166)
 
 ```python
 def configuration_digest(params: SimulationParams) -> str
@@ -27598,7 +27784,7 @@ Return the SHA-256 of the canonical effective configuration.
 
 <a id="fim.persistence.run_objects.create_run_object"></a>
 
-#### [create\_run\_object](./persistence/run_objects.py#L172)
+#### [create\_run\_object](./persistence/run_objects.py#L174)
 
 ```python
 def create_run_object(config_text: str,
@@ -27629,7 +27815,7 @@ rename, so a crash never leaves a half-created object.
 
 <a id="fim.persistence.run_objects.delete_run_object"></a>
 
-#### [delete\_run\_object](./persistence/run_objects.py#L214)
+#### [delete\_run\_object](./persistence/run_objects.py#L216)
 
 ```python
 def delete_run_object(object_id: str,
@@ -27657,7 +27843,7 @@ discovery in one step even if removing its files is interrupted.
 
 <a id="fim.persistence.run_objects.list_run_objects"></a>
 
-#### [list\_run\_objects](./persistence/run_objects.py#L246)
+#### [list\_run\_objects](./persistence/run_objects.py#L254)
 
 ```python
 def list_run_objects(results: Path | None = None) -> ObjectListing
@@ -27680,7 +27866,7 @@ yields a diagnostic, never a fabricated object.
 
 <a id="fim.persistence.run_objects.new_object_id"></a>
 
-#### [new\_object\_id](./persistence/run_objects.py#L279)
+#### [new\_object\_id](./persistence/run_objects.py#L287)
 
 ```python
 def new_object_id() -> str
@@ -27690,7 +27876,7 @@ Return a new random object ID.
 
 <a id="fim.persistence.run_objects.object_directory"></a>
 
-#### [object\_directory](./persistence/run_objects.py#L284)
+#### [object\_directory](./persistence/run_objects.py#L292)
 
 ```python
 def object_directory(object_id: str, results: Path | None = None) -> Path
@@ -27705,7 +27891,7 @@ Return the directory of the object `object_id`.
 
 <a id="fim.persistence.run_objects.object_locked"></a>
 
-#### [object\_locked](./persistence/run_objects.py#L297)
+#### [object\_locked](./persistence/run_objects.py#L305)
 
 ```python
 @contextmanager
@@ -27729,7 +27915,7 @@ held only for the bookkeeping step, never for execution.
 
 <a id="fim.persistence.run_objects.objects_directory"></a>
 
-#### [objects\_directory](./persistence/run_objects.py#L314)
+#### [objects\_directory](./persistence/run_objects.py#L322)
 
 ```python
 def objects_directory(results: Path | None = None) -> Path
@@ -27739,7 +27925,7 @@ Return the `objects/` namespace inside the results directory.
 
 <a id="fim.persistence.run_objects.read_run_object"></a>
 
-#### [read\_run\_object](./persistence/run_objects.py#L320)
+#### [read\_run\_object](./persistence/run_objects.py#L328)
 
 ```python
 def read_run_object(object_id: str,
@@ -27756,7 +27942,7 @@ Read one Run object.
 
 <a id="fim.persistence.run_objects.read_run_object_unlocked"></a>
 
-#### [read\_run\_object\_unlocked](./persistence/run_objects.py#L331)
+#### [read\_run\_object\_unlocked](./persistence/run_objects.py#L339)
 
 ```python
 def read_run_object_unlocked(object_id: str,
@@ -27784,7 +27970,7 @@ Read one object without taking its lock.
 
 <a id="fim.persistence.run_objects.save_run_object"></a>
 
-#### [save\_run\_object](./persistence/run_objects.py#L376)
+#### [save\_run\_object](./persistence/run_objects.py#L384)
 
 ```python
 def save_run_object(object_id: str,
@@ -27819,7 +28005,7 @@ Save an edited configuration; reclassify the object by its validity.
 
 <a id="fim.persistence.run_objects.validate_configuration_text"></a>
 
-#### [validate\_configuration\_text](./persistence/run_objects.py#L421)
+#### [validate\_configuration\_text](./persistence/run_objects.py#L429)
 
 ```python
 def validate_configuration_text(
@@ -27843,7 +28029,7 @@ it. Every failure becomes a `ValidationIssue`.
 
 <a id="fim.persistence.run_objects.write_run_record"></a>
 
-#### [write\_run\_record](./persistence/run_objects.py#L464)
+#### [write\_run\_record](./persistence/run_objects.py#L472)
 
 ```python
 def write_run_record(directory: Path, record: RunLifecycleRecord) -> None
@@ -27879,7 +28065,7 @@ lock while probing or taking it cannot deadlock.
 
 <a id="fim.persistence.run_ownership.ConfigurationDriftError"></a>
 
-## [ConfigurationDriftError Objects](./persistence/run_ownership.py#L86)
+## [ConfigurationDriftError Objects](./persistence/run_ownership.py#L99)
 
 ```python
 class ConfigurationDriftError(LifecycleError)
@@ -27889,7 +28075,7 @@ The stored configuration no longer matches the recorded digest.
 
 <a id="fim.persistence.run_ownership.OwnershipConflictError"></a>
 
-## [OwnershipConflictError Objects](./persistence/run_ownership.py#L90)
+## [OwnershipConflictError Objects](./persistence/run_ownership.py#L103)
 
 ```python
 class OwnershipConflictError(LifecycleError)
@@ -27899,7 +28085,7 @@ Another live attempt already owns the object's execution.
 
 <a id="fim.persistence.run_ownership.ResumeUnavailableError"></a>
 
-## [ResumeUnavailableError Objects](./persistence/run_ownership.py#L94)
+## [ResumeUnavailableError Objects](./persistence/run_ownership.py#L107)
 
 ```python
 class ResumeUnavailableError(LifecycleError)
@@ -27909,7 +28095,7 @@ The object has no committed checkpoint to resume from.
 
 <a id="fim.persistence.run_ownership.CommandResult"></a>
 
-## [CommandResult Objects](./persistence/run_ownership.py#L99)
+## [CommandResult Objects](./persistence/run_ownership.py#L112)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27926,7 +28112,7 @@ The outcome of a controller command.
 
 <a id="fim.persistence.run_ownership.StartResult"></a>
 
-## [StartResult Objects](./persistence/run_ownership.py#L113)
+## [StartResult Objects](./persistence/run_ownership.py#L126)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27943,9 +28129,64 @@ The outcome of a start or resume command.
 - `replayed` - Whether an earlier request with the same idempotency key
   already started this attempt.
 
+<a id="fim.persistence.run_ownership.AttemptOwner"></a>
+
+## [AttemptOwner Objects](./persistence/run_ownership.py#L143)
+
+```python
+@dataclass(frozen=True, slots=True)
+class AttemptOwner()
+```
+
+The process that holds an attempt lock, so Kill can find it.
+
+The lock proves an owner is alive but not who it is; the owner writes
+this record beside the lock when it takes the attempt.
+
+**Arguments**:
+
+- `attempt_id` - The attempt the process owns.
+- `pid` - Its process ID.
+- `process_group` - Its process group when it leads one (a GUI worker
+  runs in its own session), else `None`.
+- `started_at` - Its start time in seconds since the epoch, to tell it
+  from a later process given the same PID; `None` if unknown.
+
+<a id="fim.persistence.run_ownership.AttemptOwner.of_this_process"></a>
+
+#### [of\_this\_process](./persistence/run_ownership.py#L164)
+
+```python
+@classmethod
+def of_this_process(cls, attempt_id: str) -> AttemptOwner
+```
+
+Describe the calling process as the owner of `attempt_id`.
+
+<a id="fim.persistence.run_ownership.AttemptOwner.from_mapping"></a>
+
+#### [from\_mapping](./persistence/run_ownership.py#L176)
+
+```python
+@classmethod
+def from_mapping(cls, mapping: Any) -> AttemptOwner | None
+```
+
+Return the owner a JSON mapping describes, or `None` if malformed.
+
+<a id="fim.persistence.run_ownership.AttemptOwner.to_mapping"></a>
+
+#### [to\_mapping](./persistence/run_ownership.py#L193)
+
+```python
+def to_mapping() -> dict[str, Any]
+```
+
+Return the JSON-ready record.
+
 <a id="fim.persistence.run_ownership.ExecutionLease"></a>
 
-## [ExecutionLease Objects](./persistence/run_ownership.py#L129)
+## [ExecutionLease Objects](./persistence/run_ownership.py#L203)
 
 ```python
 class ExecutionLease()
@@ -27964,7 +28205,7 @@ an exception while still owning execution records the run as `failed`.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/run_ownership.py#L141)
+#### [\_\_init\_\_](./persistence/run_ownership.py#L215)
 
 ```python
 def __init__(object_id: str, attempt_id: str, *, lock: contextlib.ExitStack,
@@ -27975,7 +28216,7 @@ Wrap an already-acquired attempt lock; use `start_run_object`.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.__enter__"></a>
 
-#### [\_\_enter\_\_](./persistence/run_ownership.py#L157)
+#### [\_\_enter\_\_](./persistence/run_ownership.py#L231)
 
 ```python
 def __enter__() -> Self
@@ -27985,7 +28226,7 @@ Return the lease for use in a `with` block.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.__exit__"></a>
 
-#### [\_\_exit\_\_](./persistence/run_ownership.py#L161)
+#### [\_\_exit\_\_](./persistence/run_ownership.py#L235)
 
 ```python
 def __exit__(exc_type: type[BaseException] | None, exc: BaseException | None,
@@ -27996,7 +28237,7 @@ Record an escaping exception as a failure, then release.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.is_held"></a>
 
-#### [is\_held](./persistence/run_ownership.py#L181)
+#### [is\_held](./persistence/run_ownership.py#L255)
 
 ```python
 @property
@@ -28007,7 +28248,7 @@ Return whether this lease still holds its attempt lock.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.commit_progress"></a>
 
-#### [commit\_progress](./persistence/run_ownership.py#L185)
+#### [commit\_progress](./persistence/run_ownership.py#L259)
 
 ```python
 def commit_progress(
@@ -28037,7 +28278,7 @@ Durably record progress or a published checkpoint.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.current"></a>
 
-#### [current](./persistence/run_ownership.py#L219)
+#### [current](./persistence/run_ownership.py#L293)
 
 ```python
 def current() -> RunObject
@@ -28052,7 +28293,7 @@ Return the stored object, for example to observe a requested pause.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.finish"></a>
 
-#### [finish](./persistence/run_ownership.py#L229)
+#### [finish](./persistence/run_ownership.py#L303)
 
 ```python
 def finish(event: RunEvent,
@@ -28083,7 +28324,7 @@ Commit a finishing event and release the attempt.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.request_pause"></a>
 
-#### [request\_pause](./persistence/run_ownership.py#L275)
+#### [request\_pause](./persistence/run_ownership.py#L349)
 
 ```python
 def request_pause() -> RunObject
@@ -28106,7 +28347,7 @@ already pausing or cancelling is left as it is.
 
 <a id="fim.persistence.run_ownership.ExecutionLease.release"></a>
 
-#### [release](./persistence/run_ownership.py#L303)
+#### [release](./persistence/run_ownership.py#L377)
 
 ```python
 def release() -> None
@@ -28119,7 +28360,7 @@ A run still recorded as active afterward has lost its owner, and
 
 <a id="fim.persistence.run_ownership.abandon_run_object"></a>
 
-#### [abandon\_run\_object](./persistence/run_ownership.py#L321)
+#### [abandon\_run\_object](./persistence/run_ownership.py#L395)
 
 ```python
 def abandon_run_object(object_id: str,
@@ -28147,7 +28388,7 @@ Abandon a planned or stopped run, making it `cancelled`.
 
 <a id="fim.persistence.run_ownership.attempt_lock_path"></a>
 
-#### [attempt\_lock\_path](./persistence/run_ownership.py#L351)
+#### [attempt\_lock\_path](./persistence/run_ownership.py#L425)
 
 ```python
 def attempt_lock_path(object_id: str, results: Path | None = None) -> Path
@@ -28158,9 +28399,58 @@ Return the attempt lock an executing owner holds for the object.
 It lives outside the object directory so deletion and rename work on
 every platform.
 
+<a id="fim.persistence.run_ownership.attempt_owner_path"></a>
+
+#### [attempt\_owner\_path](./persistence/run_ownership.py#L435)
+
+```python
+def attempt_owner_path(object_id: str, results: Path | None = None) -> Path
+```
+
+Return the record naming the process that holds the attempt lock.
+
+<a id="fim.persistence.run_ownership.kill_run_object"></a>
+
+#### [kill\_run\_object](./persistence/run_ownership.py#L441)
+
+```python
+def kill_run_object(object_id: str,
+                    *,
+                    results: Path | None = None,
+                    clock: Clock | None = None,
+                    timeout: float = 30.0) -> RunObject
+```
+
+Stop an executing run's worker at once and record the run as `failed`.
+
+Unlike cancel, nothing is flushed or committed first: the worker is
+killed where it stands, so the run keeps only what its last checkpoint
+committed. A `failed` run can be deleted, or resumed from that
+checkpoint where the checkpoint is still intact.
+
+**Arguments**:
+
+- `object_id` - A `running`, `pausing`, or `cancelling` object.
+- `results` - Results directory (default: `results_directory()`).
+- `clock` - Injectable current-time source.
+- `timeout` - Seconds to wait for the killed worker to release its lock.
+
+
+**Returns**:
+
+  The object afterward, normally `failed`. A worker that finished on
+  its own first leaves the state it recorded.
+
+
+**Raises**:
+
+- `LifecycleError` - The run is not executing.
+- `OwnershipConflictError` - The live owner cannot be identified, or
+  still holds its lock after `timeout` seconds.
+
 <a id="fim.persistence.run_ownership.new_attempt_id"></a>
 
-#### [new\_attempt\_id](./persistence/run_ownership.py#L361)
+#### [new\_attempt\_id](./persistence/run_ownership.py#L499)
 
 ```python
 def new_attempt_id() -> str
@@ -28170,7 +28460,7 @@ Return a fresh random attempt ID.
 
 <a id="fim.persistence.run_ownership.reconcile_run_object"></a>
 
-#### [reconcile\_run\_object](./persistence/run_ownership.py#L366)
+#### [reconcile\_run\_object](./persistence/run_ownership.py#L504)
 
 ```python
 def reconcile_run_object(object_id: str,
@@ -28203,21 +28493,25 @@ verifies. Every other run is returned unchanged.
 
 <a id="fim.persistence.run_ownership.record_worker_failure"></a>
 
-#### [record\_worker\_failure](./persistence/run_ownership.py#L413)
+#### [record\_worker\_failure](./persistence/run_ownership.py#L551)
 
 ```python
 def record_worker_failure(object_id: str,
                           message: str,
                           *,
                           results: Path | None = None,
-                          clock: Clock | None = None) -> RunObject
+                          clock: Clock | None = None,
+                          category: str = "worker") -> RunObject
 ```
 
 Record a child-process exit as a failed attempt when it owns no lock.
 
+A run no longer executing is returned unchanged, so a worker's own
+exit report and a Kill can both record the same exit.
+
 <a id="fim.persistence.run_ownership.reconcile_run_objects"></a>
 
-#### [reconcile\_run\_objects](./persistence/run_ownership.py#L450)
+#### [reconcile\_run\_objects](./persistence/run_ownership.py#L593)
 
 ```python
 def reconcile_run_objects(results: Path | None = None,
@@ -28238,9 +28532,20 @@ Reconcile every readable object; return those that changed state.
   The objects newly recorded as `interrupted` or recovered as
   `completed`.
 
+<a id="fim.persistence.run_ownership.read_attempt_owner"></a>
+
+#### [read\_attempt\_owner](./persistence/run_ownership.py#L618)
+
+```python
+def read_attempt_owner(object_id: str,
+                       results: Path | None = None) -> AttemptOwner | None
+```
+
+Return the recorded owner of the object's attempt, if readable.
+
 <a id="fim.persistence.run_ownership.request_cancel"></a>
 
-#### [request\_cancel](./persistence/run_ownership.py#L475)
+#### [request\_cancel](./persistence/run_ownership.py#L629)
 
 ```python
 def request_cancel(object_id: str,
@@ -28269,7 +28574,7 @@ Ask the owning worker to cancel at its next safe point.
 
 <a id="fim.persistence.run_ownership.request_pause"></a>
 
-#### [request\_pause](./persistence/run_ownership.py#L506)
+#### [request\_pause](./persistence/run_ownership.py#L660)
 
 ```python
 def request_pause(object_id: str,
@@ -28298,7 +28603,7 @@ Ask the owning worker to checkpoint and pause at its next safe point.
 
 <a id="fim.persistence.run_ownership.resume_run_object"></a>
 
-#### [resume\_run\_object](./persistence/run_ownership.py#L537)
+#### [resume\_run\_object](./persistence/run_ownership.py#L691)
 
 ```python
 def resume_run_object(object_id: str,
@@ -28335,7 +28640,7 @@ Open a new attempt that continues from the latest checkpoint.
 
 <a id="fim.persistence.run_ownership.start_run_object"></a>
 
-#### [start\_run\_object](./persistence/run_ownership.py#L575)
+#### [start\_run\_object](./persistence/run_ownership.py#L729)
 
 ```python
 def start_run_object(object_id: str,
@@ -30239,9 +30544,34 @@ Counters a writer keeps, for tests and for tuning.
 - `timed_seals` - Blocks sealed because `block_seconds` had passed, the only
   kind of seal that depends on how fast the machine ran.
 
+<a id="fim.persistence.tlog.sync_drives"></a>
+
+#### [sync\_drives](./persistence/tlog.py#L600)
+
+```python
+def sync_drives(writers: Sequence[LogWriter]) -> None
+```
+
+Finish syncs begun with `begin_flush(sync=True, drive=False)`.
+
+`F_FULLFSYNC` flushes the whole drive's cache, not one file's, and can
+take seconds when much was written recently. Many writers that each
+did a plain `fsync` are therefore made durable together by one full
+flush per device, then recorded as synced, so closing them syncs
+nothing again. Call it once every writer's `wait_flushed` returned.
+
+**Arguments**:
+
+- `writers` - The writers whose drive flush was deferred.
+
+
+**Raises**:
+
+- `OSError` - If a flush fails.
+
 <a id="fim.persistence.tlog.LogWriter"></a>
 
-## [LogWriter Objects](./persistence/tlog.py#L592)
+## [LogWriter Objects](./persistence/tlog.py#L630)
 
 ```python
 class LogWriter()
@@ -30323,7 +30653,7 @@ when the writer closes.
 
 <a id="fim.persistence.tlog.LogWriter.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/tlog.py#L665)
+#### [\_\_init\_\_](./persistence/tlog.py#L703)
 
 ```python
 def __init__(path: Path | str,
@@ -30350,7 +30680,7 @@ Create the file (or reopen it to continue) and start the thread if asked.
 
 <a id="fim.persistence.tlog.LogWriter.synced_generation"></a>
 
-#### [synced\_generation](./persistence/tlog.py#L929)
+#### [synced\_generation](./persistence/tlog.py#L967)
 
 ```python
 @property
@@ -30361,7 +30691,7 @@ The last generation known to have been made durable (`-1` for none).
 
 <a id="fim.persistence.tlog.LogWriter.submit"></a>
 
-#### [submit](./persistence/tlog.py#L933)
+#### [submit](./persistence/tlog.py#L971)
 
 ```python
 def submit(frame: TrajectoryFrame) -> None
@@ -30383,7 +30713,7 @@ Encode one generation into the open block, sealing it when due.
 
 <a id="fim.persistence.tlog.LogWriter.flush"></a>
 
-#### [flush](./persistence/tlog.py#L1029)
+#### [flush](./persistence/tlog.py#L1067)
 
 ```python
 def flush(*, sync: bool = False) -> None
@@ -30404,9 +30734,103 @@ committed (and durable when `sync` is true and the sync mode is not
 
 - `BaseException` - Whatever the writer thread raised.
 
+<a id="fim.persistence.tlog.LogWriter.begin_flush"></a>
+
+#### [begin\_flush](./persistence/tlog.py#L1083)
+
+```python
+def begin_flush(*, sync: bool = False, drive: bool = True) -> None
+```
+
+Seal the open block and queue it, without waiting for the write.
+
+The first half of `flush`: many writers can begin before any is
+waited on, so their writes and syncs overlap on their own threads.
+Without a writer thread the work is done here, at once.
+
+**Arguments**:
+
+- `sync` - Also queue a request to make the data durable.
+- `drive` - `False` defers a full sync's drive flush to
+  `sync_drives`, which does one for many writers; the file
+  then gets a plain `fsync` here.
+
+
+**Raises**:
+
+- `BaseException` - Whatever the writer thread raised.
+
+<a id="fim.persistence.tlog.LogWriter.closed"></a>
+
+#### [closed](./persistence/tlog.py#L1110)
+
+```python
+@property
+def closed() -> bool
+```
+
+Whether `close` has been called.
+
+<a id="fim.persistence.tlog.LogWriter.fileno"></a>
+
+#### [fileno](./persistence/tlog.py#L1114)
+
+```python
+def fileno() -> int
+```
+
+Return the log's file descriptor.
+
+<a id="fim.persistence.tlog.LogWriter.mark_synced"></a>
+
+#### [mark\_synced](./persistence/tlog.py#L1118)
+
+```python
+def mark_synced() -> None
+```
+
+Record everything committed as durable (after `sync_drives`).
+
+<a id="fim.persistence.tlog.LogWriter.raise_error"></a>
+
+#### [raise\_error](./persistence/tlog.py#L1124)
+
+```python
+def raise_error() -> None
+```
+
+Raise the exception the writer thread stored, if any.
+
+<a id="fim.persistence.tlog.LogWriter.sync_drive"></a>
+
+#### [sync\_drive](./persistence/tlog.py#L1128)
+
+```python
+def sync_drive() -> None
+```
+
+Flush the drive under this log at once, with the writer's own mode.
+
+Only while the writer thread is idle: after `wait_flushed`, with
+nothing submitted since.
+
+<a id="fim.persistence.tlog.LogWriter.wait_flushed"></a>
+
+#### [wait\_flushed](./persistence/tlog.py#L1137)
+
+```python
+def wait_flushed() -> None
+```
+
+Wait until everything queued so far is written (`flush`'s second half).
+
+**Raises**:
+
+- `BaseException` - Whatever the writer thread raised.
+
 <a id="fim.persistence.tlog.LogWriter.close"></a>
 
-#### [close](./persistence/tlog.py#L1053)
+#### [close](./persistence/tlog.py#L1147)
 
 ```python
 def close() -> None
@@ -30423,7 +30847,7 @@ earlier write failed; the failure is then raised from here.
 
 <a id="fim.persistence.tlog.LogWriter.snapshot"></a>
 
-#### [snapshot](./persistence/tlog.py#L1119)
+#### [snapshot](./persistence/tlog.py#L1213)
 
 ```python
 def snapshot() -> tuple[int, int, int]
@@ -30436,7 +30860,7 @@ so the three always describe the same block.
 
 <a id="fim.persistence.tlog.LogWriter.checkpoint"></a>
 
-#### [checkpoint](./persistence/tlog.py#L1140)
+#### [checkpoint](./persistence/tlog.py#L1234)
 
 ```python
 def checkpoint() -> LogPosition
@@ -30460,7 +30884,7 @@ that. Resuming from it later cuts the file back to this point.
 
 <a id="fim.persistence.tlog.LogWriter.position"></a>
 
-#### [position](./persistence/tlog.py#L1157)
+#### [position](./persistence/tlog.py#L1251)
 
 ```python
 def position() -> LogPosition
@@ -30473,7 +30897,7 @@ barrier that makes it everything submitted.
 
 <a id="fim.persistence.tlog.iter_frames"></a>
 
-#### [iter\_frames](./persistence/tlog.py#L1340)
+#### [iter\_frames](./persistence/tlog.py#L1441)
 
 ```python
 def iter_frames(path: Path | str,

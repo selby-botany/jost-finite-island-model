@@ -41,7 +41,7 @@ import struct
 import threading
 import time
 import zlib
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO, Final, Literal, Protocol
@@ -587,6 +587,44 @@ class _Sealed:
 _INITIAL_WIDTH: Final = 16
 _STOP: Final = object()
 _SYNC: Final = object()
+_SYNC_DEFERRING_DRIVE: Final = object()
+
+
+def _resolved_sync_mode(mode: SyncMode) -> SyncMode:
+    """Return the mode `sync_file` actually uses for `mode`."""
+    if mode != "auto":
+        return mode
+    return "full" if getattr(fcntl, "F_FULLFSYNC", None) is not None else "fsync"
+
+
+def sync_drives(writers: Sequence[LogWriter]) -> None:
+    """Finish syncs begun with `begin_flush(sync=True, drive=False)`.
+
+    `F_FULLFSYNC` flushes the whole drive's cache, not one file's, and can
+    take seconds when much was written recently. Many writers that each
+    did a plain `fsync` are therefore made durable together by one full
+    flush per device, then recorded as synced, so closing them syncs
+    nothing again. Call it once every writer's `wait_flushed` returned.
+
+    Args:
+        writers: The writers whose drive flush was deferred.
+
+    Raises:
+        OSError: If a flush fails.
+    """
+    deferred = [
+        writer
+        for writer in writers
+        if _resolved_sync_mode(writer.sync) == "full" and not writer.closed
+    ]
+    one_per_device: dict[int, LogWriter] = {}
+    for writer in deferred:
+        writer.raise_error()
+        one_per_device.setdefault(os.fstat(writer.fileno()).st_dev, writer)
+    for writer in one_per_device.values():
+        writer.sync_drive()
+    for writer in deferred:
+        writer.mark_synced()
 
 
 class LogWriter:
@@ -1039,16 +1077,72 @@ class LogWriter:
         Raises:
             BaseException: Whatever the writer thread raised.
         """
+        self.begin_flush(sync=sync)
+        self.wait_flushed()
+
+    def begin_flush(self, *, sync: bool = False, drive: bool = True) -> None:
+        """Seal the open block and queue it, without waiting for the write.
+
+        The first half of `flush`: many writers can begin before any is
+        waited on, so their writes and syncs overlap on their own threads.
+        Without a writer thread the work is done here, at once.
+
+        Args:
+            sync: Also queue a request to make the data durable.
+            drive: `False` defers a full sync's drive flush to
+                `sync_drives`, which does one for many writers; the file
+                then gets a plain `fsync` here.
+
+        Raises:
+            BaseException: Whatever the writer thread raised.
+        """
         self._raise_error()
         if self._buffer is not None and self._records:
             self._seal()
+        request = _SYNC if drive else _SYNC_DEFERRING_DRIVE
         if self._work is not None:
             if sync:
-                self._work.put(_SYNC)
+                self._work.put(request)
+        elif sync:
+            self._sync_now(defer_drive=not drive)
+
+    @property
+    def closed(self) -> bool:
+        """Whether `close` has been called."""
+        return self._closed
+
+    def fileno(self) -> int:
+        """Return the log's file descriptor."""
+        return self._fd
+
+    def mark_synced(self) -> None:
+        """Record everything committed as durable (after `sync_drives`)."""
+        with self._state_lock:
+            self._synced_generation = self.committed_generation
+        self._last_sync = self._clock()
+
+    def raise_error(self) -> None:
+        """Raise the exception the writer thread stored, if any."""
+        self._raise_error()
+
+    def sync_drive(self) -> None:
+        """Flush the drive under this log at once, with the writer's own mode.
+
+        Only while the writer thread is idle: after `wait_flushed`, with
+        nothing submitted since.
+        """
+        self._sync_function(self._fd, self.sync)
+        self.stats.syncs += 1
+
+    def wait_flushed(self) -> None:
+        """Wait until everything queued so far is written (`flush`'s second half).
+
+        Raises:
+            BaseException: Whatever the writer thread raised.
+        """
+        if self._work is not None:
             self._work.join()
             self._raise_error()
-        elif sync:
-            self._sync_now()
 
     def close(self) -> None:
         """Write the open block, sync, stop the thread and close the file.
@@ -1287,13 +1381,18 @@ class LogWriter:
         if self._fault is not None:
             self._fault("after_write", size)
 
-    def _sync_now(self) -> None:
+    def _sync_now(self, *, defer_drive: bool = False) -> None:
         """Make everything committed so far durable; honor the fault hook.
 
         Does nothing when the sync mode is `"none"` or when everything
         committed is already durable (a periodic sync may have just run).
+        With `defer_drive`, a full sync becomes a plain `fsync` and the data
+        is not yet recorded as durable: `sync_drives` finishes it.
         """
         if self.sync == "none" or self._synced_generation == self.committed_generation:
+            return
+        if defer_drive and _resolved_sync_mode(self.sync) == "full":
+            self._sync_function(self._fd, "fsync")
             return
         if self._fault is not None:
             self._fault("before_sync", 0)
@@ -1324,6 +1423,8 @@ class LogWriter:
                     continue
                 if item is _SYNC:
                     self._sync_now()
+                elif item is _SYNC_DEFERRING_DRIVE:
+                    self._sync_now(defer_drive=True)
                 elif isinstance(item, _Sealed):
                     self._commit(item)
             except BaseException as error:  # re-raised on the producer
