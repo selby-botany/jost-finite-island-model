@@ -23786,7 +23786,7 @@ thread pushes nothing to the page until it is released.
 
 <a id="gui.test_one_run_at_a_time._HeldRuns"></a>
 
-## [\_HeldRuns Objects](./gui/test_one_run_at_a_time.py#L60)
+## [\_HeldRuns Objects](./gui/test_one_run_at_a_time.py#L61)
 
 ```python
 class _HeldRuns()
@@ -23799,7 +23799,7 @@ needed by this scalar-run test, so the drain thread releases the claim.
 
 <a id="gui.test_one_run_at_a_time._HeldRuns.start_child"></a>
 
-#### [start\_child](./gui/test_one_run_at_a_time.py#L72)
+#### [start\_child](./gui/test_one_run_at_a_time.py#L73)
 
 ```python
 def start_child(object_id: str, **options: Any) -> ChildJob
@@ -23809,7 +23809,7 @@ Start a child that waits for the test's explicit release.
 
 <a id="gui.test_one_run_at_a_time._HeldRuns.release_all"></a>
 
-#### [release\_all](./gui/test_one_run_at_a_time.py#L89)
+#### [release\_all](./gui/test_one_run_at_a_time.py#L90)
 
 ```python
 def release_all() -> None
@@ -23819,7 +23819,7 @@ Let every held child report its cancellation.
 
 <a id="gui.test_one_run_at_a_time.held_runs"></a>
 
-#### [held\_runs](./gui/test_one_run_at_a_time.py#L120)
+#### [held\_runs](./gui/test_one_run_at_a_time.py#L121)
 
 ```python
 @pytest.fixture
@@ -23830,7 +23830,7 @@ Replace child execution with held processes, then release them all.
 
 <a id="gui.test_one_run_at_a_time.test_two_runs_reserve_and_control_distinct_jobs"></a>
 
-#### [test\_two\_runs\_reserve\_and\_control\_distinct\_jobs](./gui/test_one_run_at_a_time.py#L150)
+#### [test\_two\_runs\_reserve\_and\_control\_distinct\_jobs](./gui/test_one_run_at_a_time.py#L151)
 
 ```python
 def test_two_runs_reserve_and_control_distinct_jobs(
@@ -23842,7 +23842,7 @@ Held runs keep separate records; cancel targets only its selected job.
 
 <a id="gui.test_one_run_at_a_time.test_child_progress_tracks_full_and_summary_view_levels"></a>
 
-#### [test\_child\_progress\_tracks\_full\_and\_summary\_view\_levels](./gui/test_one_run_at_a_time.py#L196)
+#### [test\_child\_progress\_tracks\_full\_and\_summary\_view\_levels](./gui/test_one_run_at_a_time.py#L197)
 
 ```python
 def test_child_progress_tracks_full_and_summary_view_levels(
@@ -23854,7 +23854,7 @@ The supervisor renders each child tick at the job's current view level.
 
 <a id="gui.test_one_run_at_a_time.test_child_crash_is_recorded_as_failed"></a>
 
-#### [test\_child\_crash\_is\_recorded\_as\_failed](./gui/test_one_run_at_a_time.py#L264)
+#### [test\_child\_crash\_is\_recorded\_as\_failed](./gui/test_one_run_at_a_time.py#L265)
 
 ```python
 def test_child_crash_is_recorded_as_failed(
@@ -23866,7 +23866,7 @@ An exited child with an active attempt is recorded as failed.
 
 <a id="gui.test_one_run_at_a_time.test_a_start_without_an_active_window_releases_its_reservation"></a>
 
-#### [test\_a\_start\_without\_an\_active\_window\_releases\_its\_reservation](./gui/test_one_run_at_a_time.py#L292)
+#### [test\_a\_start\_without\_an\_active\_window\_releases\_its\_reservation](./gui/test_one_run_at_a_time.py#L293)
 
 ```python
 def test_a_start_without_an_active_window_releases_its_reservation(
@@ -23877,7 +23877,7 @@ A refused start leaves no output-directory marker behind.
 
 <a id="gui.test_one_run_at_a_time.test_a_refused_start_leaves_the_running_saved_run_alone"></a>
 
-#### [test\_a\_refused\_start\_leaves\_the\_running\_saved\_run\_alone](./gui/test_one_run_at_a_time.py#L307)
+#### [test\_a\_refused\_start\_leaves\_the\_running\_saved\_run\_alone](./gui/test_one_run_at_a_time.py#L308)
 
 ```python
 def test_a_refused_start_leaves_the_running_saved_run_alone(
@@ -23888,7 +23888,7 @@ A full budget refuses a run without releasing existing reservations.
 
 <a id="gui.test_one_run_at_a_time.test_a_saved_run_already_active_cannot_be_started_twice"></a>
 
-#### [test\_a\_saved\_run\_already\_active\_cannot\_be\_started\_twice](./gui/test_one_run_at_a_time.py#L324)
+#### [test\_a\_saved\_run\_already\_active\_cannot\_be\_started\_twice](./gui/test_one_run_at_a_time.py#L325)
 
 ```python
 def test_a_saved_run_already_active_cannot_be_started_twice(api: Api) -> None
@@ -23898,7 +23898,7 @@ Admission rejects the same saved object while retaining its job.
 
 <a id="gui.test_one_run_at_a_time.test_an_admitted_sweep_consumes_capacity_for_run_starts"></a>
 
-#### [test\_an\_admitted\_sweep\_consumes\_capacity\_for\_run\_starts](./gui/test_one_run_at_a_time.py#L341)
+#### [test\_an\_admitted\_sweep\_consumes\_capacity\_for\_run\_starts](./gui/test_one_run_at_a_time.py#L342)
 
 ```python
 def test_an_admitted_sweep_consumes_capacity_for_run_starts(
@@ -23909,7 +23909,7 @@ The run check and both start paths report exhausted sweep capacity.
 
 <a id="gui.test_one_run_at_a_time.test_run_and_sweep_reservations_share_the_worker_budget"></a>
 
-#### [test\_run\_and\_sweep\_reservations\_share\_the\_worker\_budget](./gui/test_one_run_at_a_time.py#L361)
+#### [test\_run\_and\_sweep\_reservations\_share\_the\_worker\_budget](./gui/test_one_run_at_a_time.py#L362)
 
 ```python
 def test_run_and_sweep_reservations_share_the_worker_budget(
@@ -23920,7 +23920,7 @@ Two job kinds may coexist, but each consumes the same capacity.
 
 <a id="gui.test_one_run_at_a_time.test_a_start_that_starts_nothing_releases_the_claim"></a>
 
-#### [test\_a\_start\_that\_starts\_nothing\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L390)
+#### [test\_a\_start\_that\_starts\_nothing\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L391)
 
 ```python
 @pytest.mark.parametrize(
@@ -23948,7 +23948,7 @@ Reusing a computed run, or failing to start one, leaves no run in flight.
 
 <a id="gui.test_one_run_at_a_time.test_an_invalid_form_releases_the_claim"></a>
 
-#### [test\_an\_invalid\_form\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L410)
+#### [test\_an\_invalid\_form\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L411)
 
 ```python
 def test_an_invalid_form_releases_the_claim(api: Api) -> None
@@ -23958,7 +23958,7 @@ A form that does not validate starts nothing and leaves the slot free.
 
 <a id="gui.test_one_run_at_a_time.test_an_error_while_starting_releases_the_claim"></a>
 
-#### [test\_an\_error\_while\_starting\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L418)
+#### [test\_an\_error\_while\_starting\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L419)
 
 ```python
 def test_an_error_while_starting_releases_the_claim(
@@ -23969,7 +23969,7 @@ An unexpected exception cannot leave the slot claimed for good.
 
 <a id="gui.test_one_run_at_a_time.test_a_saved_run_start_that_fails_releases_the_claim"></a>
 
-#### [test\_a\_saved\_run\_start\_that\_fails\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L440)
+#### [test\_a\_saved\_run\_start\_that\_fails\_releases\_the\_claim](./gui/test_one_run_at_a_time.py#L441)
 
 ```python
 def test_a_saved_run_start_that_fails_releases_the_claim(
@@ -23980,7 +23980,7 @@ With no window to report to, a saved run starts nothing and frees the slot.
 
 <a id="gui.test_one_run_at_a_time.test_the_check_and_the_claim_happen_under_one_lock"></a>
 
-#### [test\_the\_check\_and\_the\_claim\_happen\_under\_one\_lock](./gui/test_one_run_at_a_time.py#L453)
+#### [test\_the\_check\_and\_the\_claim\_happen\_under\_one\_lock](./gui/test_one_run_at_a_time.py#L454)
 
 ```python
 def test_the_check_and_the_claim_happen_under_one_lock(api: Api) -> None
@@ -23990,7 +23990,7 @@ A claimed record is visible to the capacity calculation.
 
 <a id="gui.test_one_run_at_a_time.test_run_clicked_during_a_run_says_so_and_keeps_the_running_view"></a>
 
-#### [test\_run\_clicked\_during\_a\_run\_says\_so\_and\_keeps\_the\_running\_view](./gui/test_one_run_at_a_time.py#L467)
+#### [test\_run\_clicked\_during\_a\_run\_says\_so\_and\_keeps\_the\_running\_view](./gui/test_one_run_at_a_time.py#L468)
 
 ```python
 @pytest.mark.gui
@@ -23999,10 +23999,12 @@ def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
         results: Path) -> None
 ```
 
-Run and the Run menu, clicked during a run, are refused on the page.
+Run is disabled during a run, and the Run menu is refused on the page.
 
-The refusal comes before anything on screen changes: the run view
-stays in `running`, Cancel stays enabled, and no second run starts.
+The disabled button swallows a click without a banner; the menu, which
+has no disabled state, gets the refusal. Neither changes the screen:
+the run view stays in `running`, Cancel stays enabled, and no second
+run starts.
 Once the first run ends, Run starts a new one. Page reads are safe
 while a run is held: a held run pushes nothing until it is released,
 so the page is never polled while a drain thread is pushing to it.

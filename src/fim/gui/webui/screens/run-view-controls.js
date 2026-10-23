@@ -897,6 +897,10 @@ window.fim.selectStudyForNewRun = function selectStudyForNewRun(studyId) {
 
 function wireRunViewControls() {
     runButton.addEventListener("click", onRunClicked);
+    // The Run menu has no disabled state, so it calls the handler itself
+    // rather than clicking a button that is disabled while a run is
+    // active; the handler then explains why nothing starts.
+    window.fim.runSimulation = onRunClicked;
     cancelButton.addEventListener("click", onCancelClicked);
     openFolderButton.addEventListener("click", onOpenFolderClicked);
     const sweepBox = document.getElementById("configure-sweep-checkbox");

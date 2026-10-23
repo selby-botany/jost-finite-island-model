@@ -53,7 +53,8 @@ _RUN_CARD_STATE = """({
     view: window.fim.getRunViewState(),
     screenRunHidden: document.getElementById('screen-run').hidden,
     banner: document.getElementById('run-banner').textContent,
-    cancelDisabled: document.getElementById('cancel-run-button').disabled
+    cancelDisabled: document.getElementById('cancel-run-button').disabled,
+    runDisabled: document.getElementById('run-button').disabled
 })"""
 
 
@@ -469,10 +470,12 @@ def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     held_runs: _HeldRuns,
     results: Path,  # noqa: F811
 ) -> None:
-    """Run and the Run menu, clicked during a run, are refused on the page.
+    """Run is disabled during a run, and the Run menu is refused on the page.
 
-    The refusal comes before anything on screen changes: the run view
-    stays in `running`, Cancel stays enabled, and no second run starts.
+    The disabled button swallows a click without a banner; the menu, which
+    has no disabled state, gets the refusal. Neither changes the screen:
+    the run view stays in `running`, Cancel stays enabled, and no second
+    run starts.
     Once the first run ends, Run starts a new one. Page reads are safe
     while a run is held: a held run pushes nothing until it is released,
     so the page is never polled while a drain thread is pushing to it.
@@ -528,7 +531,9 @@ def test_run_clicked_during_a_run_says_so_and_keeps_the_running_view(
     for state in (seen["afterClick"], seen["afterMenu"]):
         assert state["view"] == "running"
         assert state["screenRunHidden"] is False
-        assert state["banner"] == f"Untitled: {_IN_PROGRESS}"
+        assert state["runDisabled"] is True
         assert state["cancelDisabled"] is False
+    assert seen["afterClick"]["banner"] == ""
+    assert seen["afterMenu"]["banner"] == f"Untitled: {_IN_PROGRESS}"
     assert seen["startsWhileRunning"] == 1
     assert len(held_runs.started) == 2

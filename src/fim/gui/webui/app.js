@@ -400,7 +400,7 @@ const fim = {
         },
         runSimulation() {
             window.fim.showScreen("screen-run");
-            document.getElementById("run-button").click();
+            window.fim.runSimulation();
         },
         openRun() {
             window.fim.showOpenRunScreen();
