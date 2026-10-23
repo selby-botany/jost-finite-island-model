@@ -4679,8 +4679,11 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         }
         documentState.kind = "result";
         documentState.readOnly = true;
-        documentState.label =
-            payload.directoryName || documentState.label || "Result";
+        // A saved run already has a human-readable name/settings label;
+        // its object directory must not replace that when results arrive.
+        documentState.label = documentState.savedRunConfigSummary
+            ? documentState.label
+            : payload.directoryName || documentState.label || "Result";
         window.fim.workspace.notifyChange();
     }
     activeCompletedViewState = state;

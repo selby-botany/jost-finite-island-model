@@ -66,14 +66,24 @@ function restoreRunControls() {
     syncRunStudyNewRowVisibility();
 }
 
+/** Reflect the selected document's validation and worker admission state. */
 window.fim.refreshRunButton = function refreshRunButton() {
     const state = window.fim.workspace.get(
         window.fim.workspace.selectedId()
     );
     runButton.textContent =
         state?.runObjectState === "paused" ? "Resume run" : "Run simulation";
+    const active = state?.jobState === "starting" || Boolean(
+        state?.attachedJobId &&
+        state.jobState !== "finished" &&
+        state.jobState !== "terminal"
+    );
+    runButton.disabled = active || state?.validationResult?.ok === false;
 };
 
+// Job events and attachment changes notify the workspace, including events
+// for background documents; always render only the selected document.
+window.fim.workspace.onChange(window.fim.refreshRunButton);
 window.fim.workspace.onSelectionChange(restoreRunControls);
 restoreRunControls();
 
@@ -237,11 +247,12 @@ function showStartRefusal(tabId, message) {
     if (!state) {
         return;
     }
-    const label =
-        runControlsState(tabId)?.runName?.trim() ||
-        state.runTitle?.state?.runName ||
-        state.label ||
-        "Configuration";
+    const label = savedRunDisplayName({
+        name: runControlsState(tabId)?.runName?.trim() ||
+            state.runTitle?.state?.runName || state.label,
+        configSummary: state.savedRunConfigSummary,
+        objectId: state.label || "Configuration",
+    });
     state.startRefusal = `${label}: ${message}`;
     window.fim.workspace.notifyChange();
     if (window.fim.workspace.selectedId() === tabId) {

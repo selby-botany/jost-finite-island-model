@@ -28,6 +28,7 @@ from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.gui.runner import RunMessage
 
 from .conftest import poll_page, wait_for_run_view_ready
+from .test_saved_runs_api import _form
 
 pytestmark = pytest.mark.gui
 
@@ -117,7 +118,8 @@ def test_a_draft_is_fixed_saved_and_run_from_home(
             settled = poll_page(
                 window,
                 "({state: window.fim.getRunViewState(), "
-                "pauseHidden: document.getElementById('pause-run-button').hidden})",
+                "pauseHidden: document.getElementById('pause-run-button').hidden, "
+                "label: window.fim.workspace.selected().label})",
                 lambda value: value["state"] == "completed",
                 what="completed view",
             )
@@ -142,6 +144,7 @@ def test_a_draft_is_fixed_saved_and_run_from_home(
     assert "edit" in row["actions"]
     assert messages[-1][0] == "done"
     assert settled["pauseHidden"] is True
+    assert settled["label"].startswith("20 haploid, d=2, m=0.1, mu=0.01")
 
 
 def test_editing_saved_run_stays_with_its_document(
@@ -359,7 +362,7 @@ def test_watch_returns_to_the_document_running_the_saved_run(
 ) -> None:
     """Home links a run this window executes back to its own document."""
     api = _StubbedSavedRunsApi()
-    api.row = _stub_row("running", kill=True, delete=False)
+    api.row = _stub_row("running", kill=True, delete=False, name="")
     api.owned_here = True
     window = create_window(api=api, hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -388,7 +391,7 @@ def test_watch_returns_to_the_document_running_the_saved_run(
                 window,
                 "(function(){const state = window.fim.workspace.selected();"
                 "return {tab: state.tabId,"
-                " screen: state.history[state.historyIndex]};})()",
+                " screen: state.history[state.historyIndex], label: state.label};})()",
                 lambda value: value["tab"] != home_tab,
                 what="running document",
             )
@@ -401,7 +404,11 @@ def test_watch_returns_to_the_document_running_the_saved_run(
 
     assert result is not None
     assert result["rows"][0]["actions"] == ["watch", "clone", "kill"]
-    assert result["shown"] == {"tab": result["running"], "screen": "screen-run"}
+    assert result["shown"] == {
+        "tab": result["running"],
+        "screen": "screen-run",
+        "label": "225 diploid, d=10, m=0.01, mu=1e-05, 200 replicates",
+    }
 
 
 def test_a_run_executing_elsewhere_offers_no_watch(
@@ -545,3 +552,174 @@ def test_kill_then_delete_from_home(saved_run_settings: Path) -> None:
     assert result["prompts"][1].startswith('"Long run" was killed. Delete it')
     assert api.killed == api.deleted == ["obj-" + "a" * 32]
     assert result["settled"][0]["actions"] == ["clone", "delete"]
+
+
+@pytest.mark.parametrize("generation, expected", [(None, "—"), (0, "0"), (7, "7")])
+def test_saved_run_generation_has_a_placeholder_only_when_absent(
+    saved_run_settings: Path, generation: int | None, expected: str
+) -> None:
+    """Planned rows have no committed generation; zero is still a generation."""
+    api = _StubbedSavedRunsApi()
+    api.row = _stub_row("planned", kill=False, delete=True)
+    api.row["generation"] = generation
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[str] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            outcome.put(
+                poll_page(
+                    window,
+                    "document.querySelector('#saved-runs-body tr td:nth-child(3)')"
+                    "?.textContent",
+                    bool,
+                    what="saved generation",
+                )
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    assert outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS) == expected
+
+
+@pytest.mark.parametrize("named", [False, True])
+def test_opening_a_saved_run_labels_its_new_tab(
+    saved_run_settings: Path, named: bool
+) -> None:
+    """Open supplies the same name/settings fallback as the Home row."""
+    api = Api()
+    saved = api.save_run_object(_form(), run_name="Named trial" if named else "")
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(f"editSavedRun({saved['objectId']!r});")
+            state = poll_page(
+                window,
+                "({label: window.fim.workspace.selected().label, "
+                "editing: window.fim.getEditingObjectId()})",
+                lambda value: value["editing"] == saved["objectId"],
+                what="opened saved-run tab",
+            )
+            window.evaluate_js(
+                "showStartRefusal(window.fim.workspace.selectedId(), 'Busy');"
+            )
+            state["refusal"] = window.evaluate_js(_RUN_BANNER)
+            window.evaluate_js(
+                "const documentState = window.fim.workspace.selected();"
+                f"documentState.runObjectId = {saved['objectId']!r};"
+                "documentState.jobState = 'running';"
+                "window.fim.workspace.attachJob(documentState.tabId, 'refusal-job');"
+                "window.fim.resumeRunObjectFromTab(documentState.tabId);"
+            )
+            state["resumeRefusal"] = poll_page(
+                window,
+                _RUN_BANNER,
+                lambda value: "a run is in progress" in str(value),
+                what="resume admission backstop",
+            )
+            outcome.put(state)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+    summary = saved["configSummary"]
+    expected = (
+        "Named trial"
+        if named
+        else (f"{summary['N']}, d={summary['d']}, m={summary['m']}, mu={summary['mu']}")
+    )
+    if not named and summary["replicates"] != "1":
+        expected += f", {summary['replicates']} replicates"
+    assert result["label"] == expected
+    assert result["refusal"] == f"{expected}: Busy"
+    assert result["resumeRefusal"] == (
+        f"{expected}: a run is in progress; wait for it to finish or cancel it first"
+    )
+
+
+@pytest.mark.parametrize(
+    "ending", ["completed", "paused", "cancelled", "failed", "killed"]
+)
+def test_run_button_tracks_its_own_document_job(
+    saved_run_settings: Path, ending: str
+) -> None:
+    """Job notifications and validation cannot enable a running tab's button."""
+    window = create_window(api=Api(), hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            result = window.evaluate_js("""
+                (function() {
+                    const workspace = window.fim.workspace;
+                    const state = workspace.selected();
+                    state.validationResult = {ok: true};
+                    workspace.attachJob(state.tabId, 'button-test-job');
+                    state.jobState = 'starting';
+                    workspace.notifyChange();
+                    const button = document.getElementById('run-button');
+                    const starting = button.disabled;
+                    window.fim.onJobEvent({jobId: 'button-test-job',
+                        sequence: 1, type: 'status', payload: {}});
+                    showValidationResult(state.validationResult);
+                    const running = button.disabled;
+                    const other = workspace.createDocument();
+                    const otherEnabled = !button.disabled;
+                    workspace.select(state.tabId);
+                    return {starting, running, otherEnabled,
+                        restoredRunning: button.disabled};
+                })()
+            """)
+            window.evaluate_js(
+                "window.fim.workspace.selected().runObjectState = "
+                f"{ending!r};"
+                "window.fim.onJobEvent({jobId: 'button-test-job', sequence: 2, "
+                f"type: 'terminal', payload: {{state: {ending!r}}}}});"
+            )
+            result["endedEnabled"] = window.evaluate_js(
+                "!document.getElementById('run-button').disabled"
+            )
+            result["text"] = window.evaluate_js(
+                "document.getElementById('run-button').textContent"
+            )
+            window.evaluate_js(
+                "window.fim.onJobEvent({jobId: 'button-test-job', sequence: 3, "
+                "type: 'finished', payload: {}});"
+            )
+            result["finishedEnabled"] = window.evaluate_js(
+                "!document.getElementById('run-button').disabled"
+            )
+            window.evaluate_js("""
+                window.fim.workspace.selected().validationResult = {ok: false};
+                window.fim.workspace.notifyChange();
+            """)
+            result["invalidDisabled"] = window.evaluate_js(
+                "document.getElementById('run-button').disabled"
+            )
+            outcome.put(result)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+    assert all(
+        result[key]
+        for key in (
+            "starting",
+            "running",
+            "otherEnabled",
+            "restoredRunning",
+            "endedEnabled",
+            "finishedEnabled",
+            "invalidDisabled",
+        )
+    )
+    assert result["text"] == ("Resume run" if ending == "paused" else "Run simulation")

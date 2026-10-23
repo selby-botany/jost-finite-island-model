@@ -2987,8 +2987,8 @@ class Api:
             run_description: Optional run description.
 
         Returns:
-            `{"ok": True, "objectId", "state", "problem"}` (`problem` says
-            why a Draft is invalid, else `None`), or `{"ok": False,
+            `{"ok": True, "objectId", "state", "problem", "configSummary"}`
+            (`problem` says why a Draft is invalid, else `None`), or `{"ok": False,
             "message": ...}`.
         """
         values = self._merge_default_run_settings(values)
@@ -3007,6 +3007,9 @@ class Api:
             "resourceKey": _run_resource_key(saved.directory),
             "state": saved.record.state.value,
             "problem": problem,
+            "configSummary": object_bridge.row(
+                saved, summarize=_saved_run_config_summary
+            )["configSummary"],
         }
 
     @_log_bridge_call
@@ -3046,7 +3049,7 @@ class Api:
 
         Returns:
             `{"ok": True, "values", "name", "description", "state",
-            "objectId", "editable", "runSettings",
+            "objectId", "editable", "configSummary", "runSettings",
             "runSettingDifferences"}` (the last two as `load_yaml`), or
             `{"ok": False, "message": ...}`.
         """
@@ -3057,10 +3060,11 @@ class Api:
         values, problem = object_bridge.form_values(run_object)
         if values is None:
             return {"ok": False, "message": f"cannot open this saved run: {problem}"}
-        row = object_bridge.row(run_object)
+        row = object_bridge.row(run_object, summarize=_saved_run_config_summary)
         return {
             "ok": True,
             "values": values,
+            "configSummary": row["configSummary"],
             "name": run_object.labels.name,
             "description": run_object.labels.description,
             "state": row["state"],
