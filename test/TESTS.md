@@ -13349,7 +13349,7 @@ makes one; a test of the estimate itself reads `asked`.
 
 <a id="gui.conftest.examples_seeding"></a>
 
-#### [examples\_seeding](./gui/conftest.py#L1065)
+#### [examples\_seeding](./gui/conftest.py#L1092)
 
 ```python
 @pytest.fixture
@@ -13365,7 +13365,7 @@ test usually also installs a fixture bundle by patching
 
 <a id="gui.conftest.fast_scalar_run_settings"></a>
 
-#### [fast\_scalar\_run\_settings](./gui/conftest.py#L1079)
+#### [fast\_scalar\_run\_settings](./gui/conftest.py#L1106)
 
 ```python
 @pytest.fixture
@@ -13402,7 +13402,7 @@ before `Api()`/`create_window()` ever reads it.
 
 <a id="gui.conftest.short_scalar_run_settings"></a>
 
-#### [short\_scalar\_run\_settings](./gui/conftest.py#L1125)
+#### [short\_scalar\_run\_settings](./gui/conftest.py#L1152)
 
 ```python
 @pytest.fixture
@@ -13417,7 +13417,7 @@ a few thousand generations): the cap is a few hundred generations.
 
 <a id="gui.conftest.unreachable_convergence_run_settings"></a>
 
-#### [unreachable\_convergence\_run\_settings](./gui/conftest.py#L1149)
+#### [unreachable\_convergence\_run\_settings](./gui/conftest.py#L1176)
 
 ```python
 @pytest.fixture
@@ -13458,7 +13458,7 @@ fixture that builds one) in a test's own parameter list.
 
 <a id="gui.conftest.fast_batch_run_settings"></a>
 
-#### [fast\_batch\_run\_settings](./gui/conftest.py#L1195)
+#### [fast\_batch\_run\_settings](./gui/conftest.py#L1222)
 
 ```python
 @pytest.fixture
@@ -13475,7 +13475,7 @@ batch (`n_replicates > 1` is the GUI's own scalar-vs-batch toggle,
 
 <a id="gui.conftest.unreachable_batch_run_settings"></a>
 
-#### [unreachable\_batch\_run\_settings](./gui/conftest.py#L1222)
+#### [unreachable\_batch\_run\_settings](./gui/conftest.py#L1249)
 
 ```python
 @pytest.fixture
@@ -13502,7 +13502,7 @@ reporting.)
 
 <a id="gui.conftest.staggered_batch_run_settings"></a>
 
-#### [staggered\_batch\_run\_settings](./gui/conftest.py#L1258)
+#### [staggered\_batch\_run\_settings](./gui/conftest.py#L1285)
 
 ```python
 @pytest.fixture

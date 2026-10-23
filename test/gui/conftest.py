@@ -744,6 +744,33 @@ def _no_real_engine_probe(monkeypatch: pytest.MonkeyPatch) -> type[FastEnginePro
 
 
 @pytest.fixture(autouse=True)
+def _bridge_threads_settled_between_tests() -> Iterator[None]:
+    """Keep one test's late bridge reply out of the next test's window.
+
+    pywebview names the first window of every `webview.start` `master`,
+    and its reply thread finds the window to answer by that name. A reply
+    still in flight when a test's window closes -- `jobs.js`'s periodic
+    `get_memory_status` can start one after the close's own settle -- is
+    otherwise delivered into the next test's new `master` window, which
+    has no callback for it, and fails that unrelated test.
+
+    Runs before any window fixture, and again after the test, so every
+    reply finishes while no window owns the name.
+
+    Args:
+        None
+
+    Returns:
+        A generator fixture; yields once.
+    """
+    assert await_bridge_threads(timeout=_BRIDGE_SETTLE_TIMEOUT_SECONDS), (
+        "a previous GUI test left a pywebview bridge call running"
+    )
+    yield
+    await_bridge_threads(timeout=_BRIDGE_SETTLE_TIMEOUT_SECONDS)
+
+
+@pytest.fixture(autouse=True)
 def _stable_memory_reading(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep GUI tests independent of the host's available-memory pressure."""
     from fim.gui import jobs  # noqa: PLC0415
