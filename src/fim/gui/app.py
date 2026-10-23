@@ -3046,7 +3046,7 @@ class Api:
 
         Returns:
             `{"ok": True, "values", "name", "description", "state",
-            "objectId", "editable", "runSettings",
+            "objectId", "editable", "identicalToSource", "runSettings",
             "runSettingDifferences"}` (the last two as `load_yaml`), or
             `{"ok": False, "message": ...}`.
         """
@@ -3057,7 +3057,7 @@ class Api:
         values, problem = object_bridge.form_values(run_object)
         if values is None:
             return {"ok": False, "message": f"cannot open this saved run: {problem}"}
-        row = object_bridge.row(run_object)
+        row = object_bridge.row(run_object, summarize=_saved_run_config_summary)
         return {
             "ok": True,
             "values": values,
@@ -3067,8 +3067,35 @@ class Api:
             "objectId": object_id,
             "resourceKey": _run_resource_key(run_object.directory),
             "editable": row["actions"]["edit"],
+            "identicalToSource": row["identicalToSource"],
             **self._loaded_run_settings(values),
         }
+
+    @_log_bridge_call
+    def get_run_object_start_source(
+        self, object_id: str, values: dict[str, str] | None = None
+    ) -> dict[str, Any]:
+        """Check a saved copy against its source immediately before starting.
+
+        Args:
+            object_id: The saved copy being started or edited.
+            values: Unsaved form values, or None to check the saved settings.
+
+        Returns:
+            Source display information in `identicalToSource`, or an error.
+        """
+        try:
+            run_object = read_run_object(object_id)
+            source = object_bridge.identical_source(
+                run_object,
+                summarize=_saved_run_config_summary,
+                values=None
+                if values is None
+                else self._merge_default_run_settings(values),
+            )
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "identicalToSource": source}
 
     @_log_bridge_call
     def start_run_object(

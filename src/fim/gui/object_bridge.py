@@ -42,6 +42,7 @@ from fim.persistence.run_objects import (
     create_run_object,
     delete_run_object,
     list_run_objects,
+    read_run_object,
     save_run_object,
     validate_configuration_text,
 )
@@ -370,6 +371,51 @@ def _config_summary(
     return summarize(params)
 
 
+def identical_source(
+    run_object: RunObject,
+    *,
+    summarize: Callable[[SimulationParams], dict[str, str]] | None = None,
+    values: Mapping[str, str] | None = None,
+) -> dict[str, Any] | None:
+    """Describe a planned copy's source when their effective settings match.
+
+    Args:
+        run_object: The saved copy, read from its own results directory.
+        summarize: Optional display summary for an unnamed source.
+        values: Current form values to check instead of the saved settings.
+
+    Returns:
+        Source display and checkpoint information, or None for a changed copy,
+        a missing source, or a run that has already started.
+    """
+    record = run_object.record
+    if record.state is not RunState.PLANNED or not record.source_object_id:
+        return None
+    digest = record.configuration_digest
+    if values is not None:
+        text, problem = configuration_text(values)
+        if problem is not None:
+            return None
+        configuration, _labels = validate_configuration_text(text)
+        digest = configuration.digest
+    try:
+        source = read_run_object(
+            record.source_object_id, results=run_object.directory.parent.parent
+        )
+    except (LifecycleError, OSError):
+        # Deleting the source must not prevent editing or starting its copy.
+        return None
+    if digest is None or digest != source.record.configuration_digest:
+        return None
+    return {
+        "objectId": source.object_id,
+        "name": source.labels.name,
+        "configSummary": _config_summary(source, summarize),
+        "state": source.record.state.value,
+        "hasCheckpoint": source.record.latest_checkpoint is not None,
+    }
+
+
 def row(
     run_object: RunObject,
     *,
@@ -398,6 +444,7 @@ def row(
         "name": run_object.labels.name,
         "description": run_object.labels.description,
         "configSummary": _config_summary(run_object, summarize),
+        "identicalToSource": identical_source(run_object, summarize=summarize),
         "scientificRunId": record.scientific_run_id,
         "state": record.state.value,
         "generation": record.committed_generation,

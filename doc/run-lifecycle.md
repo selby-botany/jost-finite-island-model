@@ -129,6 +129,16 @@ when an error fails the run.
 (`source_object_id` in `run.json`). Use it to run a finished configuration
 again or to retry a run that stopped before its first checkpoint.
 
+In the GUI, **Clone** opens the copy for editing and refreshes Saved runs.
+Starting an unchanged planned copy asks for confirmation: the same settings
+and seed recompute exactly the same results from generation 0; no progress
+is reused. Cancel the confirmation to edit settings first, or confirm
+**Start anyway** to repeat the simulation. The warning disappears when the
+effective configuration differs from the source, or the source is deleted.
+It also checks unsaved settings when Run is clicked in the copy's edit tab.
+For a stopped source with a checkpoint, continuing the original (when Resume
+is available) keeps its progress instead of recomputing it in a copy.
+
 `status` lists problems it finds, under `Problems:`, such as a damaged
 artifact or a run that cannot resume and why:
 

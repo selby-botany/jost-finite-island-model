@@ -443,7 +443,9 @@ async function onSavedRunAction(action, run) {
     if (action === "clone") {
         result = await window.pywebview.api.clone_run_object(run.objectId);
         if (result.ok) {
-            showSavedRunsBanner(`Cloned "${label}" as a new saved run.`);
+            await refreshSavedRuns();
+            await editSavedRun(result.objectId);
+            return;
         }
     } else if (action === "cancel") {
         result = await window.pywebview.api.cancel_run_object(run.objectId);
@@ -544,6 +546,49 @@ async function editSavedRun(objectId) {
 }
 
 /**
+ * Confirm recomputing a copy whose current settings still match its source.
+ * @param {object|null} source Current source display and checkpoint information.
+ * @returns {boolean} Whether starting may proceed.
+ */
+function confirmIdenticalSource(source) {
+    if (!source) {
+        return true;
+    }
+    let message = `This run is identical to "${savedRunDisplayName(source)}", ` +
+        "so it will recompute exactly the same results from generation 0.";
+    if (
+        source.hasCheckpoint &&
+        ["cancelled", "failed", "paused", "interrupted"].includes(source.state)
+    ) {
+        message += " Continuing the original keeps its progress; " +
+            "use Resume on the original when available instead of starting a copy.";
+    }
+    return window.confirm(`${message}\n\nStart anyway?`);
+}
+
+/**
+ * Check current form settings, not the last saved digest, before Run.
+ * @param {string} tabId The edited document.
+ * @param {object} values The current configuration form.
+ * @returns {Promise<boolean>} Whether starting may proceed.
+ */
+window.fim.confirmConfiguredCloneStart = async function confirmConfiguredCloneStart(
+    tabId,
+    values
+) {
+    const objectId = savedRunStateFor(tabId)?.editingObjectId;
+    if (!objectId) {
+        return true;
+    }
+    const checked = await window.pywebview.api.get_run_object_start_source(objectId, values);
+    if (!checked.ok) {
+        window.fim.showRunBanner(checked.message);
+        return false;
+    }
+    return confirmIdenticalSource(checked.identicalToSource);
+};
+
+/**
  * Start a planned saved run, or resume a paused or stopped one, in the
  * same running view "Run simulation" uses. While another run or a sweep
  * is in flight, only says so here on Home, and leaves the running view
@@ -551,6 +596,15 @@ async function editSavedRun(objectId) {
  * @param {object} run The row's saved run.
  */
 async function startSavedRun(run) {
+    // Home may still show an older row while its refresh is in flight.
+    const checked = await window.pywebview.api.get_run_object_start_source(run.objectId);
+    if (!checked.ok) {
+        showSavedRunsBanner(checked.message);
+        return;
+    }
+    if (!confirmIdenticalSource(checked.identicalToSource)) {
+        return;
+    }
     let startTabId = window.fim.workspace.selectedId();
     let ownerTabId = null;
     if (window.fim.workspace.documentTabsEnabled()) {

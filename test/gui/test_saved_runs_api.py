@@ -282,7 +282,7 @@ def test_start_and_complete_a_saved_batch_run(
 
 
 def test_clone_saved_run_via_api(api: Api) -> None:
-    saved = api.save_run_object({**_form(), "name": "Source Run"})
+    saved = api.save_run_object(_form(), None, "Source run")
 
     cloned = api.clone_run_object(saved["objectId"])
 
@@ -293,3 +293,30 @@ def test_clone_saved_run_via_api(api: Api) -> None:
     listing = api.list_run_objects()
     ids = {row["objectId"] for row in listing["runs"]}
     assert {saved["objectId"], cloned["objectId"]} <= ids
+
+    source = api.open_run_object(cloned["objectId"])["identicalToSource"]
+    assert source["objectId"] == saved["objectId"]
+    assert source["name"] == "Source run"
+    assert source["configSummary"]
+    rows = {row["objectId"]: row for row in listing["runs"]}
+    assert rows[cloned["objectId"]]["identicalToSource"] == source
+    assert rows[saved["objectId"]]["identicalToSource"] is None
+    assert api.get_run_object_start_source(cloned["objectId"], _form()) == {
+        "ok": True,
+        "identicalToSource": source,
+    }
+    assert api.get_run_object_start_source(cloned["objectId"], _form(seed="99")) == {
+        "ok": True,
+        "identicalToSource": None,
+    }
+    # Checking an unsaved edit must not overwrite the saved copy.
+    assert api.open_run_object(cloned["objectId"])["identicalToSource"] == source
+    api.save_run_object(_form(seed="99"), cloned["objectId"])
+    assert api.open_run_object(cloned["objectId"])["identicalToSource"] is None
+
+
+def test_start_source_reports_a_missing_copy(api: Api) -> None:
+    """A stale edit tab receives a useful error instead of starting silently."""
+    result = api.get_run_object_start_source("obj-" + "0" * 32)
+    assert result["ok"] is False
+    assert result["message"]

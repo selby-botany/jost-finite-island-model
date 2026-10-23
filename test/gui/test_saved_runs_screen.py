@@ -13,6 +13,7 @@ so the outcome does not depend on how fast the machine is.
 
 from __future__ import annotations
 
+import json
 import queue
 import threading
 from pathlib import Path
@@ -253,6 +254,13 @@ class _StubbedSavedRunsApi(Api):
             "activeObjectId": None,
             "activeObjectIds": owned,
         }
+
+    def get_run_object_start_source(
+        self, object_id: str, values: dict[str, str] | None = None
+    ) -> dict[str, Any]:
+        """Return the source described by the current stub row."""
+        del object_id, values
+        return {"ok": True, "identicalToSource": self.row.get("identicalToSource")}
 
     def kill_run_object(self, object_id: str) -> dict[str, Any]:
         """Record the kill and report the run failed."""
@@ -545,3 +553,163 @@ def test_kill_then_delete_from_home(saved_run_settings: Path) -> None:
     assert result["prompts"][1].startswith('"Long run" was killed. Delete it')
     assert api.killed == api.deleted == ["obj-" + "a" * 32]
     assert result["settled"][0]["actions"] == ["clone", "delete"]
+
+
+@pytest.mark.parametrize("target", ["saved", "configure"])
+@pytest.mark.parametrize("decision", ["cancel", "start", "edited"])
+def test_clone_opens_for_editing_and_confirms_an_identical_start(
+    saved_run_settings: Path, target: str, decision: str
+) -> None:
+    """Cloning opens its copy; both Start paths warn unless settings change."""
+    api = Api()
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        """Exercise real bridge saves/cloning and intercept only worker launch."""
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(_SET_FIELDS % {"N": "20"})
+            poll_page(
+                window,
+                _RUN_BANNER,
+                lambda text: str(text).startswith("Saved."),
+                what="saved source",
+            )
+            source = api.list_run_objects()["runs"][0]
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            poll_page(window, _SAVED_ROWS, bool, what="source row")
+            window.evaluate_js(
+                "document.querySelector("
+                "'#saved-runs-body button[data-action=\"clone\"]').click();"
+            )
+            copy_id = poll_page(
+                window,
+                "window.fim.getEditingObjectId()",
+                lambda value: bool(value) and value != source["objectId"],
+                what="cloned copy opened for editing",
+            )
+            rows = window.evaluate_js(_SAVED_ROWS)
+            values = window.evaluate_js("document.getElementById('field-N').value")
+            opened = api.open_run_object(copy_id)
+            if decision == "edited":
+                window.evaluate_js(
+                    "const field = document.getElementById('field-seed');"
+                    "field.value = '99';"
+                    "field.dispatchEvent(new Event('input', {bubbles: true}));"
+                )
+                if target == "saved":
+                    saved = api.save_run_object(
+                        {**opened["values"], "seed": "99"}, copy_id
+                    )
+                    assert saved["ok"]
+            window.evaluate_js(
+                "window.__cloneDialogs = []; window.__cloneStarts = 0;"
+                "window.confirm = function(text) {"
+                "window.__cloneDialogs.push(text);"
+                f"return {json.dumps(decision != 'cancel')};"
+                "};"
+                "window.fim.jobs.startWithMemoryConfirmation = async function() {"
+                "window.__cloneStarts += 1;"
+                "return {ok: false, message: 'Test intercepted worker launch'};"
+                "};"
+            )
+            if target == "saved":
+                window.evaluate_js("window.fim.showOpenRunScreen();")
+                poll_page(
+                    window,
+                    _SAVED_ROWS,
+                    lambda listed: any(row["id"] == copy_id for row in listed),
+                    what="copy row",
+                )
+                window.evaluate_js(
+                    "document.querySelector("
+                    f'\'#saved-runs-body tr[data-object-id="{copy_id}"] '
+                    'button[data-action="start"]\').click();'
+                )
+            else:
+                window.evaluate_js("document.getElementById('run-button').click();")
+            settled = poll_page(
+                window,
+                "({dialogs: window.__cloneDialogs, starts: window.__cloneStarts})",
+                lambda value: (
+                    bool(value["dialogs"])
+                    if decision == "cancel"
+                    else value["starts"] == 1
+                ),
+                what="clone start decision",
+            )
+            outcome.put(
+                {
+                    "rows": rows,
+                    "copy": copy_id,
+                    "source": source,
+                    "values": values,
+                    **settled,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+    assert {row["id"] for row in result["rows"]} == {
+        result["copy"],
+        result["source"]["objectId"],
+    }
+    assert result["values"] == "20"
+    assert result["starts"] == (0 if decision == "cancel" else 1)
+    if decision == "edited":
+        assert result["dialogs"] == []
+    else:
+        [message] = result["dialogs"]
+        assert "recompute exactly the same results from generation 0" in message
+        assert "Start anyway?" in message
+        # An unnamed source is identified by its settings, not an opaque ID.
+        assert result["source"]["configSummary"]["N"] in message
+        assert result["source"]["objectId"] not in message
+
+
+@pytest.mark.parametrize("source_state", ["cancelled", "failed", "paused"])
+def test_identical_clone_warning_explains_original_checkpoint_progress(
+    saved_run_settings: Path, source_state: str
+) -> None:
+    """A declined duplicate launch points to the original's existing progress."""
+    api = _StubbedSavedRunsApi()
+    api.row = _stub_row("planned", kill=False, delete=True)
+    api.row["actions"]["start"] = True
+    api.row["identicalToSource"] = {
+        "objectId": "obj-" + "b" * 32,
+        "name": "Original run",
+        "state": source_state,
+        "hasCheckpoint": True,
+    }
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[str] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        """Capture the native confirmation without launching a worker."""
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            poll_page(window, _SAVED_ROWS, bool, what="planned copy row")
+            window.evaluate_js(
+                "window.__cloneWarning = null;"
+                "window.confirm = function(text) {"
+                "window.__cloneWarning = text; return false;};"
+                "document.querySelector("
+                "'#saved-runs-body button[data-action=\"start\"]').click();"
+            )
+            outcome.put(
+                poll_page(
+                    window, "window.__cloneWarning", bool, what="checkpoint warning"
+                )
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    message = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+    assert 'identical to "Original run"' in message
+    assert "Continuing the original keeps its progress" in message
+    assert "when available" in message

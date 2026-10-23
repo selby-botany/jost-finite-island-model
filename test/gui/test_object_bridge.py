@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,8 @@ from fim.examples import classes
 from fim.gui import object_bridge
 from fim.gui.config_form import starter_form_values
 from fim.model.params import SimulationParams
-from fim.persistence.run_lifecycle import LifecycleError, RunState
-from fim.persistence.run_objects import read_run_object
+from fim.persistence.run_lifecycle import CheckpointReference, LifecycleError, RunState
+from fim.persistence.run_objects import read_run_object, write_run_record
 from fim.persistence.run_ownership import start_run_object
 
 _CLASSES_FIXTURE = (
@@ -311,3 +312,76 @@ def test_clone_draft_object_creates_draft_and_preserves_typed_values(
     assert reason is None
     assert loaded_values is not None
     assert loaded_values["N"] == "many"
+
+
+@pytest.mark.parametrize("changed", ["copy", "source", "deleted", "draft", "started"])
+def test_identical_source_tracks_current_digest_and_state(
+    tmp_path: Path, changed: str
+) -> None:
+    """Only planned copies with a readable, currently identical source warn."""
+    source, _problem = object_bridge.save(_valid(), name="Original", results=tmp_path)
+    copy = object_bridge.clone(source.object_id, results=tmp_path)
+
+    def summarize(params: SimulationParams) -> dict[str, str]:
+        """Give the source the same display information as an ordinary row."""
+        return {"N": str(params.gene_copies)}
+
+    assert object_bridge.row(source)["identicalToSource"] is None
+    source_info = object_bridge.row(copy, summarize=summarize)["identicalToSource"]
+    assert source_info == {
+        "objectId": source.object_id,
+        "name": "Original",
+        "configSummary": {"N": "16"},
+        "state": "planned",
+        "hasCheckpoint": False,
+    }
+    assert object_bridge.identical_source(copy, values=_valid()) is not None
+    assert object_bridge.identical_source(copy, values=_valid(seed="99")) is None
+    assert object_bridge.identical_source(copy, values=_valid(N="invalid")) is None
+    lease = None
+    try:
+        if changed in ("copy", "draft"):
+            copy, _problem = object_bridge.save(
+                _valid(N="invalid" if changed == "draft" else "20"),
+                object_id=copy.object_id,
+                results=tmp_path,
+            )
+        elif changed == "source":
+            object_bridge.save(
+                _valid(seed="99"), object_id=source.object_id, results=tmp_path
+            )
+        elif changed == "deleted":
+            object_bridge.delete_many([source.object_id], results=tmp_path)
+        else:
+            started = start_run_object(
+                copy.object_id, expected_revision=copy.record.revision, results=tmp_path
+            )
+            lease = started.lease
+            copy = read_run_object(copy.object_id, results=tmp_path)
+        assert object_bridge.row(copy)["identicalToSource"] is None
+    finally:
+        if lease is not None:
+            lease.release()
+
+
+@pytest.mark.parametrize(
+    "state", [RunState.CANCELLED, RunState.FAILED, RunState.PAUSED]
+)
+def test_identical_source_reports_stopped_checkpoint_progress(
+    tmp_path: Path, state: RunState
+) -> None:
+    """The warning can distinguish an original whose progress can be retained."""
+    source, _problem = object_bridge.save(_valid(), results=tmp_path)
+    write_run_record(
+        source.directory,
+        replace(
+            source.record,
+            state=state,
+            committed_generation=7,
+            latest_checkpoint=CheckpointReference("checkpoint-7", "a" * 64, 7),
+        ),
+    )
+    copy = object_bridge.clone(source.object_id, results=tmp_path)
+    info = object_bridge.row(copy)["identicalToSource"]
+    assert info["hasCheckpoint"] is True
+    assert info["state"] == state.value
