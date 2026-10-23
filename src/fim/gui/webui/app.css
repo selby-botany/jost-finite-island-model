@@ -2363,7 +2363,8 @@ fieldset.combinator-choice label {
  * `#open-run-table` into "selecting" mode (`screens/open-run.js`).
  * Selection state itself (`selectedRunDirectories`/etc.) is untouched
  * either way; this is a pure display toggle, never a data reset. */
-#open-run-table:not(.open-run-selecting) .open-run-select-checkbox {
+#open-run-table:not(.open-run-selecting) .open-run-select-checkbox,
+#saved-runs-table:not(.open-run-selecting) .open-run-select-checkbox {
     display: none;
 }
 

@@ -1327,6 +1327,17 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
     }
 
 
+def _saved_run_config_summary(params: SimulationParams) -> dict[str, str]:
+    """Summarize a saved run's configuration, with its replicate count.
+
+    `_run_config_summary`'s fields, with `replicates` before `seed`: a saved
+    run without a name is told apart on Home by these settings.
+    """
+    summary = _run_config_summary(params)
+    seed = summary.pop("seed")
+    return {**summary, "replicates": str(params.n_replicates), "seed": seed}
+
+
 def _read_json_object(path: Path) -> dict[str, Any] | None:
     """Read one small JSON file already known to hold a plain object, or `None`.
 
@@ -3007,7 +3018,7 @@ class Api:
             "activeObjectId": ...}`, or `{"ok": False, "message": ...}`.
         """
         try:
-            rows = object_bridge.list_rows()
+            rows = object_bridge.list_rows(summarize=_saved_run_config_summary)
         except (LifecycleError, OSError) as error:
             return {"ok": False, "message": str(error)}
         for run in rows["runs"]:
@@ -3370,6 +3381,25 @@ class Api:
         """
         try:
             state = object_bridge.cancel(object_id)
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "state": state}
+
+    @_log_bridge_call
+    def kill_run_object(self, object_id: str) -> dict[str, Any]:
+        """Kill a saved run's worker at once, discarding uncommitted work.
+
+        The run becomes `failed`, which Delete accepts. A worker this
+        window started reports the exit to its own tab as usual.
+
+        Args:
+            object_id: The saved run.
+
+        Returns:
+            `{"ok": True, "state": ...}`, or `{"ok": False, "message": ...}`.
+        """
+        try:
+            state = object_bridge.kill(object_id)
         except (LifecycleError, OSError) as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "state": state}
@@ -7288,6 +7318,8 @@ class Api:
                 "experimentId": ...}` per selected row. A read-only Run
                 linked into an editable Study uses `{"kind": "run-link",
                 "studyId": ..., "directory": ...}` to remove only that link.
+                A saved run (Home's Saved runs table) is `{"kind":
+                "object", "objectId": ...}`.
 
         A `run-link` selection removes only the named editable Study's
         membership, keeping the example's files and other memberships.
@@ -7301,16 +7333,26 @@ class Api:
         refusal: it is skipped, and deleting that Study keeps it
         (`groups.delete_study`).
 
+        Saved runs are deleted first, all or none: one still executing
+        refuses the whole selection before anything else is touched.
+
         Returns:
             `{"ok": True, "deletedRunCount": N, "deletedStudyCount": M,
-            "deletedExperimentCount": K}` — each count is how many of
-            that kind actually still existed and were removed.
-            `{"ok": False, "message": ...}` when the selection holds a
-            read-only item; the message names them.
+            "deletedExperimentCount": K, "deletedObjectCount": J}` — each
+            count is how many of that kind actually still existed and
+            were removed. `{"ok": False, "message": ...}` when the
+            selection holds a read-only item or an executing saved run;
+            the message names them.
         """
         refusal = _read_only_selection_message(items)
         if refusal is not None:
             return {"ok": False, "message": refusal}
+        try:
+            deleted_object_count = object_bridge.delete_many(
+                [item["objectId"] for item in items if item.get("kind") == "object"]
+            )
+        except (LifecycleError, OSError) as error:
+            return {"ok": False, "message": str(error)}
         implied = _runs_in_selected_groups(items)
         # Validate every unlink before any deletion. A forged or stale
         # selection must not alter an example Study or delete example data.
@@ -7350,6 +7392,7 @@ class Api:
             "deletedRunCount": deleted_run_count,
             "deletedStudyCount": deleted_study_count,
             "deletedExperimentCount": deleted_experiment_count,
+            "deletedObjectCount": deleted_object_count,
         }
 
     @_log_bridge_call

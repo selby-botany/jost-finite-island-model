@@ -10,8 +10,10 @@ import pytest
 from fim.examples import classes
 from fim.gui import object_bridge
 from fim.gui.config_form import starter_form_values
+from fim.model.params import SimulationParams
 from fim.persistence.run_lifecycle import LifecycleError, RunState
 from fim.persistence.run_objects import read_run_object
+from fim.persistence.run_ownership import start_run_object
 
 _CLASSES_FIXTURE = (
     Path(__file__).resolve().parents[1] / "persistence" / "fixtures" / "classes.yaml"
@@ -132,6 +134,98 @@ def test_rows_report_state_and_allowed_actions(tmp_path: Path) -> None:
     assert rows[planned.object_id]["actions"]["start"] is True
     assert rows[planned.object_id]["actions"]["clone"] is True
     assert rows[planned.object_id]["actions"]["open"] is False
+
+
+def test_rows_summarize_a_valid_configuration_but_not_a_draft(
+    tmp_path: Path,
+) -> None:
+    draft, _problem = object_bridge.save(_valid(N="many"), results=tmp_path)
+    planned, _problem = object_bridge.save(_valid(), results=tmp_path)
+    seen: list[int] = []
+
+    def summarize(params: SimulationParams) -> dict[str, str]:
+        seen.append(params.d)
+        return {"d": str(params.d)}
+
+    rows = {
+        entry["objectId"]: entry
+        for entry in object_bridge.list_rows(tmp_path, summarize=summarize)["runs"]
+    }
+
+    assert rows[planned.object_id]["configSummary"] == {"d": "2"}
+    assert rows[planned.object_id]["scientificRunId"]
+    assert rows[draft.object_id]["configSummary"] is None
+    assert rows[draft.object_id]["scientificRunId"] is None
+    assert seen == [2]
+    assert object_bridge.row(planned)["configSummary"] is None
+
+
+def test_delete_many_removes_every_saved_run_that_exists(tmp_path: Path) -> None:
+    draft, _problem = object_bridge.save(_valid(N="many"), results=tmp_path)
+    planned, _problem = object_bridge.save(_valid(), results=tmp_path)
+
+    deleted = object_bridge.delete_many(
+        [draft.object_id, planned.object_id, "obj-" + "0" * 32, draft.object_id],
+        results=tmp_path,
+    )
+
+    assert deleted == 2
+    assert object_bridge.list_rows(tmp_path)["runs"] == []
+
+
+def test_delete_many_deletes_nothing_while_one_executes(tmp_path: Path) -> None:
+    """An executing run refuses the whole selection, naming that run."""
+    idle, _problem = object_bridge.save(_valid(), results=tmp_path)
+    busy, _problem = object_bridge.save(_valid(), name="Busy", results=tmp_path)
+    started = start_run_object(
+        busy.object_id, expected_revision=busy.record.revision, results=tmp_path
+    )
+    assert started.lease is not None
+    try:
+        with pytest.raises(LifecycleError, match="Busy"):
+            object_bridge.delete_many(
+                [idle.object_id, busy.object_id], results=tmp_path
+            )
+        remaining = {
+            entry["objectId"] for entry in object_bridge.list_rows(tmp_path)["runs"]
+        }
+    finally:
+        started.lease.release()
+
+    assert remaining == {idle.object_id, busy.object_id}
+
+
+def test_only_an_executing_run_offers_kill(tmp_path: Path) -> None:
+    """Kill is offered while a live owner executes the run, never before."""
+    planned, _problem = object_bridge.save(_valid(), results=tmp_path)
+    assert object_bridge.row(planned)["actions"]["kill"] is False
+
+    started = start_run_object(
+        planned.object_id, expected_revision=planned.record.revision, results=tmp_path
+    )
+    assert started.lease is not None
+    try:
+        [running] = object_bridge.list_rows(tmp_path)["runs"]
+        assert running["state"] == "running"
+        assert running["actions"]["kill"] is True
+        assert running["actions"]["delete"] is False
+    finally:
+        started.lease.release()
+
+
+def test_kill_records_a_run_whose_owner_is_gone_without_killing(
+    tmp_path: Path,
+) -> None:
+    """A run that lost its owner is reconciled, then reported as is."""
+    planned, _problem = object_bridge.save(_valid(), results=tmp_path)
+    started = start_run_object(
+        planned.object_id, expected_revision=planned.record.revision, results=tmp_path
+    )
+    assert started.lease is not None
+    started.lease.release()
+
+    assert object_bridge.kill(planned.object_id, results=tmp_path) == "interrupted"
+    assert object_bridge.kill(planned.object_id, results=tmp_path) == "interrupted"
 
 
 def test_cancel_abandons_a_planned_run_and_delete_removes_it(

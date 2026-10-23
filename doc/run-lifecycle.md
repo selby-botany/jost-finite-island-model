@@ -28,7 +28,7 @@ Return to the [command reference](usage.md) or the
 
 **In the desktop app:** choose **Run simulation** to create and start a Run
 object automatically. While unfinished, the run appears under **Saved runs** on Home, where
-**Resume**, **Edit**, **Cancel**, and **Delete** appear when allowed. After
+**Resume**, **Edit**, **Cancel**, **Kill**, and **Delete** appear when allowed. After
 completion, it appears with the completed results.
 The Run screen's **Pause** button stops it at a checkpoint; after pausing,
 **Run simulation** becomes **Resume run** in that same document.
@@ -74,12 +74,12 @@ lifecycle rules and keep the record consistent.
 |-------|---------|----------------------|
 | `draft` | Saved, but the configuration is incomplete or invalid | Edit it; delete it |
 | `planned` | Saved, valid, and not started | Start; edit; delete |
-| `running` | A command or the desktop app is executing it | Pause; cancel |
-| `pausing` | A pause was requested; it stops at the next safe point | Wait; cancel |
+| `running` | A command or the desktop app is executing it | Pause; cancel; kill |
+| `pausing` | A pause was requested; it stops at the next safe point | Wait; cancel; kill |
 | `paused` | Stopped at a checkpoint | Resume; cancel; delete |
 | `interrupted` | Its owner stopped without saying so (Ctrl-C, crash, power failure) | Resume; cancel; delete |
 | `failed` | An error stopped it | Resume; cancel; delete |
-| `cancelling` | A cancel was requested | Wait |
+| `cancelling` | A cancel was requested | Wait; kill |
 | `cancelled` | Stopped for good; the trajectory written so far is kept | Clone; delete |
 | `completed` | Finished; every artifact is published | Clone; delete |
 
@@ -114,6 +114,7 @@ failed while starting) has nothing to resume from; see
 | `fim object resume OBJECT_ID [--quiet]` | Continue a `paused`, `interrupted`, or `failed` object |
 | `fim object pause OBJECT_ID` | Ask a running object to checkpoint and pause |
 | `fim object cancel OBJECT_ID` | Stop an object for good, keeping its partial data |
+| `fim object kill OBJECT_ID` | End a running object's worker now; record it as `failed` |
 | `fim object delete OBJECT_ID` | Delete an object that is not executing |
 | `fim object clone OBJECT_ID` | Save the object's configuration as a new object |
 | `fim object reclaim [--dry-run]` | Remove staging folders that killed commands left behind |
@@ -190,9 +191,18 @@ checkpoint is kept, so disk use does not grow with run length.
 | Ctrl-C (SIGINT) | `interrupted`; exits with status 130 | Up to the latest checkpoint |
 | An engine error | `failed`, with the error recorded | Up to the latest checkpoint |
 | `fim object cancel` | `cancelled` | The trajectory written so far |
+| `fim object kill` or the desktop app's **Kill** | `failed`, recorded as killed | Up to the latest checkpoint |
 
 A run that reaches its stopping rule completes, even if a pause or a cancel
 was requested at the same moment.
+
+**Kill** is for a run you want gone now. Cancel and pause wait for the run to
+reach a safe point and write its logs, which can take minutes for a large
+run. Kill ends the worker process at once instead, so nothing after the
+latest checkpoint is kept. The run becomes `failed`, which you can resume
+from that checkpoint or delete. In the desktop app, Kill then offers to
+delete the run and all of its data. Kill refuses a run whose worker did not
+record its process, rather than guess which process to end.
 
 Plain `fim run` is different: it is not a saved run. On SIGTERM it stops,
 removes its unfinished output, and exits with status 143. Rerun it to start
@@ -225,7 +235,18 @@ for real data. `fim object reclaim --dry-run` lists them, and
   already has a completed result for the current software version, the app
   reuses that result instead of computing it again.
 - **Saved runs** on Home lists unfinished saved runs. Each row offers only
-  the actions its state allows: Start, Resume, Edit, Cancel, Delete.
+  the actions its state allows: Watch, Start, Resume, Edit, Cancel, Kill,
+  Delete. A row that is starting, running, pausing, or cancelling refreshes
+  itself every few seconds until it settles.
+- A run saved without a name is listed by its settings, such as
+  "225 diploid, d=10, m=0.01, mu=1e-05, 200 replicates". Hold the pointer
+  over the name to see every setting, the object ID, and the run ID.
+- **Watch**, or a click on the run's name, returns to the running view of a
+  saved run this window is executing. A run executing in another window or
+  from the command line has no Watch; watch it there.
+- **Select**, **Select all**, and **Delete selected** on Home include every
+  saved run that can be deleted now. A saved run that is still executing
+  has no checkbox: pause, cancel, or kill it first.
   Completed results appear in the run list instead.
 - **Pause** appears on the Run screen while a saved run executes. After it
   pauses, **Run simulation** in that document resumes the same Run object.

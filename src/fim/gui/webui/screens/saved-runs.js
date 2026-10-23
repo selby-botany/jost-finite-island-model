@@ -11,6 +11,12 @@
  *   Draft and Planned as its form is broken or fixed.
  * - Home's "Saved runs" table keeps unfinished saved runs. Completed runs
  *   are listed with results rather than duplicated here.
+ * - Home's Select, Select all, and Delete selected include saved runs
+ *   that may be deleted now, alongside runs, studies, and experiments.
+ * - "Watch" (or the run's name) returns to the running view of a saved
+ *   run this window executes, after its document has gone back to Home.
+ * - "Kill" stops an executing saved run at once, without the flush that
+ *   Cancel waits for, and records it as Failed; Delete then removes it.
  * - "Pause" (Run toolbar, shown only while a saved run executes) asks the
  *   run to write a checkpoint and stop; Resume continues it exactly.
  *
@@ -52,12 +58,14 @@ window.fim.workspace.onSelectionChange(renderPauseRunButton);
 
 // Actions in the order their buttons appear in a row.
 const SAVED_RUN_ACTIONS = [
+    ["watch", "Watch"],
     ["start", "Start"],
     ["resume", "Resume"],
     ["clone", "Clone"],
     ["edit", "Edit"],
     ["open", "Open"],
     ["cancel", "Cancel"],
+    ["kill", "Kill"],
     ["delete", "Delete"],
 ];
 
@@ -111,6 +119,118 @@ function clearEditingObject(objectId) {
 }
 
 /**
+ * Describe a saved run's settings in a few words, such as
+ * "225 diploid, d=10, m=0.01, mu=1e-05, 200 replicates".
+ * @param {Record<string, string> | null | undefined} summary The row's
+ *     `configSummary`.
+ * @returns {string} The description, or "" for a Draft.
+ */
+function savedRunSettingsText(summary) {
+    if (!summary) {
+        return "";
+    }
+    const parts = [summary.N, `d=${summary.d}`, `m=${summary.m}`, `mu=${summary.mu}`];
+    if (summary.replicates && summary.replicates !== "1") {
+        parts.push(`${summary.replicates} replicates`);
+    }
+    return parts.join(", ");
+}
+
+/**
+ * List every summarized setting, as Home's completed runs show them.
+ * @param {Record<string, string>} summary The row's `configSummary`.
+ * @returns {string} "N=… d=… … seed=…".
+ */
+function formatSavedRunSummary(summary) {
+    return Object.entries(summary)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(" ");
+}
+
+/**
+ * Name a saved run for people: its name, else its settings, and its
+ * object id only for a Draft that has neither.
+ * @param {object} run A row from `Api.list_run_objects`.
+ * @returns {string} The name to show.
+ */
+function savedRunDisplayName(run) {
+    return run.name || savedRunSettingsText(run.configSummary) || run.objectId;
+}
+
+/**
+ * Show a timestamp in this computer's local time, to the second.
+ * @param {string} timestamp An ISO 8601 UTC timestamp.
+ * @returns {string} The local time, or `timestamp` unchanged if unreadable.
+ */
+function formatSavedRunTime(timestamp) {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+        return timestamp;
+    }
+    return date.toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "medium",
+    });
+}
+
+// Saved runs chosen with Home's Select, by object id. Only a run that may
+// be deleted now gets a checkbox; a reread drops any that no longer may.
+const selectedSavedRunIds = new Set();
+let deletableSavedRunIds = [];
+
+/**
+ * Build a row's checkbox for Home's Select, Select all, and Delete selected.
+ * @param {object} run A row from `Api.list_run_objects`.
+ * @returns {HTMLInputElement} The checkbox.
+ */
+function buildSavedRunCheckbox(run) {
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "open-run-select-checkbox saved-run-select-checkbox";
+    checkbox.dataset.objectId = run.objectId;
+    checkbox.checked = selectedSavedRunIds.has(run.objectId);
+    checkbox.setAttribute(
+        "aria-label",
+        `Select ${savedRunDisplayName(run)} for deletion`
+    );
+    checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+            selectedSavedRunIds.add(run.objectId);
+        } else {
+            selectedSavedRunIds.delete(run.objectId);
+        }
+        window.fim.updateSelectionToolbar?.();
+    });
+    return checkbox;
+}
+
+/** Make every saved-run checkbox show the current selection. */
+function renderSavedRunSelection() {
+    for (const checkbox of savedRunsBody.querySelectorAll(".saved-run-select-checkbox")) {
+        checkbox.checked = selectedSavedRunIds.has(checkbox.dataset.objectId);
+    }
+}
+
+// Home's selection toolbar (`open-run.js`) reads and changes this one.
+window.fim.savedRunSelection = {
+    size: () => selectedSavedRunIds.size,
+    ids: () => [...selectedSavedRunIds],
+    selectAll() {
+        for (const objectId of deletableSavedRunIds) {
+            selectedSavedRunIds.add(objectId);
+        }
+        renderSavedRunSelection();
+    },
+    clear() {
+        selectedSavedRunIds.clear();
+        renderSavedRunSelection();
+    },
+    setSelecting(selecting) {
+        savedRunsTable.classList.toggle("open-run-selecting", selecting);
+    },
+};
+
+/**
  * Build one table row.
  * @param {object} run A row from `Api.list_run_objects`.
  * @returns {HTMLTableRowElement} The row.
@@ -119,20 +239,46 @@ function buildSavedRunRow(run) {
     const row = document.createElement("tr");
     row.dataset.objectId = run.objectId;
     const name = document.createElement("td");
-    name.textContent = run.name || run.objectId;
-    if (run.description) {
-        name.title = run.description;
+    if (run.actions.delete) {
+        name.append(buildSavedRunCheckbox(run));
     }
+    if (run.actions.watch) {
+        const link = document.createElement("a");
+        link.href = "#";
+        link.className = "saved-run-watch-link";
+        link.textContent = savedRunDisplayName(run);
+        link.addEventListener("click", (event) => {
+            event.preventDefault();
+            onSavedRunAction("watch", run);
+        });
+        name.append(link);
+    } else {
+        name.append(savedRunDisplayName(run));
+    }
+    // The identifiers and full settings are for telling runs apart or
+    // finding their files, not for reading at a glance.
+    name.title = [
+        run.description,
+        run.configSummary ? formatSavedRunSummary(run.configSummary) : "",
+        `Saved run: ${run.objectId}`,
+        run.scientificRunId ? `Run ID: ${run.scientificRunId}` : "",
+    ]
+        .filter((line) => line)
+        .join("\n");
     const state = document.createElement("td");
     state.textContent = SAVED_RUN_STATE_TEXT[run.state] || run.state;
     const problems = run.error ? [run.error] : run.issues;
     if (problems.length > 0) {
         state.title = problems.join("\n");
+    } else if (run.executingElsewhere) {
+        state.title =
+            "Running in another window or command; watch it there";
     }
     const generation = document.createElement("td");
     generation.textContent = String(run.generation);
     const updated = document.createElement("td");
-    updated.textContent = run.updatedAt;
+    updated.textContent = formatSavedRunTime(run.updatedAt);
+    updated.title = run.updatedAt;
     const actions = document.createElement("td");
     actions.className = "saved-runs-actions";
     for (const [action, label] of SAVED_RUN_ACTIONS) {
@@ -150,20 +296,116 @@ function buildSavedRunRow(run) {
     return row;
 }
 
+// States a worker is still changing. While any row shows one, Home
+// rereads the table so "Cancelling" becomes "Cancelled" without a visit
+// elsewhere and back.
+const SAVED_RUN_UNSETTLED_STATES = new Set([
+    "starting",
+    "running",
+    "pausing",
+    "cancelling",
+]);
+
+// Milliseconds between rereads. A property, not a constant, so a test
+// can shorten it.
+window.fim.savedRunsPollMilliseconds = 3000;
+
+let savedRunsPollTimer = null;
+
+function homeIsShowing() {
+    const home = document.getElementById("screen-open-run");
+    return home !== null && !home.hidden;
+}
+
+/**
+ * Reread the table later while a row is unsettled and Home is showing.
+ * @param {object[]} runs The rows just shown.
+ */
+function scheduleSavedRunsPoll(runs) {
+    clearTimeout(savedRunsPollTimer);
+    savedRunsPollTimer = null;
+    const unsettled = runs.some((run) => SAVED_RUN_UNSETTLED_STATES.has(run.state));
+    if (!unsettled || !homeIsShowing()) {
+        return;
+    }
+    savedRunsPollTimer = setTimeout(() => {
+        savedRunsPollTimer = null;
+        if (homeIsShowing()) {
+            refreshSavedRuns();
+        }
+    }, window.fim.savedRunsPollMilliseconds);
+}
+
 /** Reload the Saved runs table from disk. */
+/**
+ * Find the document that started a saved run, while it is still open.
+ * @param {string} objectId The saved run.
+ * @returns {string | null} Its tab id, or `null`.
+ */
+function savedRunTabFor(objectId) {
+    const workspace = window.fim.workspace;
+    return (
+        workspace.ids().find((tabId) => workspace.get(tabId)?.runObjectId === objectId) ??
+        null
+    );
+}
+
+/**
+ * Return to the running view of a saved run this window is executing:
+ * select its document and show its Run screen, which leaving for Home
+ * kept running.
+ * @param {object} run The row's saved run.
+ */
+function watchSavedRun(run) {
+    const tabId = savedRunTabFor(run.objectId);
+    if (tabId === null) {
+        showSavedRunsBanner(
+            `${savedRunDisplayName(run)} is no longer open in this window.`
+        );
+        return;
+    }
+    window.fim.workspace.select(tabId);
+    window.fim.showScreen("screen-run");
+}
+
 async function refreshSavedRuns() {
     const listing = await window.pywebview.api.list_run_objects();
     if (!listing.ok) {
         showSavedRunsBanner(listing.message);
         return;
     }
-    const unfinished = listing.runs.filter((run) => run.state !== "completed");
+    const ownedHere = new Set(listing.activeObjectIds || []);
+    const unfinished = listing.runs
+        .filter((run) => run.state !== "completed")
+        .map((run) => {
+            const executing = SAVED_RUN_UNSETTLED_STATES.has(run.state);
+            const watchable =
+                executing &&
+                ownedHere.has(run.objectId) &&
+                savedRunTabFor(run.objectId) !== null;
+            return {
+                ...run,
+                actions: { ...run.actions, watch: watchable },
+                executingElsewhere: executing && !ownedHere.has(run.objectId),
+            };
+        });
+    deletableSavedRunIds = unfinished
+        .filter((run) => run.actions.delete)
+        .map((run) => run.objectId);
+    const deletable = new Set(deletableSavedRunIds);
+    for (const objectId of [...selectedSavedRunIds]) {
+        if (!deletable.has(objectId)) {
+            selectedSavedRunIds.delete(objectId);
+        }
+    }
     savedRunsBody.replaceChildren(...unfinished.map(buildSavedRunRow));
+    window.fim.updateSelectionToolbar?.();
     savedRunsTable.hidden = unfinished.length === 0;
     savedRunsEmpty.hidden = unfinished.length > 0;
     if (listing.unreadable.length > 0) {
         showSavedRunsBanner(`Some saved runs cannot be read: ${listing.unreadable.join("; ")}`);
     }
+    scheduleSavedRunsPoll(unfinished);
 }
 
 window.fim.refreshSavedRuns = refreshSavedRuns;
@@ -175,6 +417,10 @@ window.fim.refreshSavedRuns = refreshSavedRuns;
  */
 async function onSavedRunAction(action, run) {
     showSavedRunsBanner("");
+    if (action === "watch") {
+        watchSavedRun(run);
+        return;
+    }
     if (action === "edit") {
         await editSavedRun(run.objectId);
         return;
@@ -192,7 +438,7 @@ async function onSavedRunAction(action, run) {
         );
         return;
     }
-    const label = run.name || run.objectId;
+    const label = savedRunDisplayName(run);
     let result;
     if (action === "clone") {
         result = await window.pywebview.api.clone_run_object(run.objectId);
@@ -201,6 +447,23 @@ async function onSavedRunAction(action, run) {
         }
     } else if (action === "cancel") {
         result = await window.pywebview.api.cancel_run_object(run.objectId);
+    } else if (action === "kill") {
+        if (!window.confirm(
+            `Kill "${label}" now? It stops at once, without saving anything ` +
+            "since its last checkpoint."
+        )) {
+            return;
+        }
+        result = await window.pywebview.api.kill_run_object(run.objectId);
+        if (
+            result.ok &&
+            window.confirm(`"${label}" was killed. Delete it and all of its data too?`)
+        ) {
+            result = await window.pywebview.api.delete_run_object(run.objectId);
+            if (result.ok) {
+                clearEditingObject(run.objectId);
+            }
+        }
     } else if (action === "delete") {
         if (!window.confirm(`Delete the saved run "${label}" and all of its data?`)) {
             return;
@@ -295,7 +558,7 @@ async function startSavedRun(run) {
             run.resourceKey || `saved-run:${run.objectId}`,
             {
                 kind: "saved-run",
-                label: run.name || run.objectId,
+                label: savedRunDisplayName(run),
                 readOnly: false,
             }
         );
@@ -310,7 +573,7 @@ async function startSavedRun(run) {
                 const state = window.fim.workspace.get(ownerTabId);
                 if (state) {
                     state.startRefusal =
-                        `${run.name || run.objectId}: ${message}`;
+                        `${savedRunDisplayName(run)}: ${message}`;
                     window.fim.workspace.notifyChange();
                     if (window.fim.workspace.selectedId() === ownerTabId) {
                         window.fim.showScreen("screen-run");
@@ -427,7 +690,7 @@ async function beginSavedRun(run, tabId = window.fim.workspace.selectedId()) {
             documentState.jobKind = null;
             documentState.jobState = null;
             documentState.startRefusal =
-                `${run.name || run.objectId}: ${started.message}`;
+                `${savedRunDisplayName(run)}: ${started.message}`;
             window.fim.workspace.notifyChange();
         }
         if (window.fim.workspace.selectedId() === tabId) {

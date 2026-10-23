@@ -161,6 +161,49 @@ def test_a_planned_run_starts_completes_and_is_listed(
     assert row["actions"]["open"] is True
 
 
+def test_an_unnamed_row_summarizes_its_settings(api: Api) -> None:
+    """Home names an unnamed run by its settings, not its object id."""
+    saved = api.save_run_object(_form())
+
+    [row] = api.list_run_objects()["runs"]
+
+    assert row["objectId"] == saved["objectId"]
+    assert row["name"] is None or row["name"] == ""
+    summary = row["configSummary"]
+    assert list(summary) == [
+        "N",
+        "d",
+        "m",
+        "mu",
+        "mutation_model",
+        "replicates",
+        "seed",
+    ]
+    assert summary["replicates"].isdigit()
+    assert row["scientificRunId"]
+
+
+def test_delete_selected_deletes_selected_saved_runs(api: Api) -> None:
+    first = api.save_run_object(_form())
+    second = api.save_run_object(_form())
+
+    result = api.delete_selected(
+        [
+            {"kind": "object", "objectId": first["objectId"]},
+            {"kind": "object", "objectId": second["objectId"]},
+        ]
+    )
+
+    assert result == {
+        "ok": True,
+        "deletedRunCount": 0,
+        "deletedStudyCount": 0,
+        "deletedExperimentCount": 0,
+        "deletedObjectCount": 2,
+    }
+    assert api.list_run_objects()["runs"] == []
+
+
 def test_cancel_and_delete_a_planned_run(api: Api) -> None:
     saved = api.save_run_object(_form())
 
@@ -170,6 +213,19 @@ def test_cancel_and_delete_a_planned_run(api: Api) -> None:
     }
     assert api.delete_run_object(saved["objectId"]) == {"ok": True}
     assert api.list_run_objects()["runs"] == []
+
+
+def test_kill_leaves_a_run_that_is_not_executing_as_it_is(api: Api) -> None:
+    saved = api.save_run_object(_form())
+
+    assert api.kill_run_object(saved["objectId"]) == {"ok": True, "state": "planned"}
+
+
+def test_kill_reports_an_unknown_run(api: Api) -> None:
+    killed = api.kill_run_object("obj-" + "0" * 32)
+
+    assert killed["ok"] is False
+    assert killed["message"]
 
 
 def test_pause_without_a_saved_run_in_flight_is_refused(api: Api) -> None:

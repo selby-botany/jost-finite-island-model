@@ -200,3 +200,348 @@ def test_editing_saved_run_stays_with_its_document(
     assert settled["second"] != settled["first"]
     assert settled["secondEditing"] is None
     assert settled["firstEditing"] == settled["editing"]
+
+
+def _stub_row(
+    state: str, *, kill: bool, delete: bool, name: str = "Long run"
+) -> dict[str, Any]:
+    """One `list_run_objects` row for a saved run in `state`."""
+    return {
+        "objectId": "obj-" + "a" * 32,
+        "name": name,
+        "description": None,
+        "configSummary": {
+            "N": "225 diploid",
+            "d": "10",
+            "m": "0.01",
+            "mu": "1e-05",
+            "mutation_model": "kam",
+            "replicates": "200",
+            "seed": "7",
+        },
+        "scientificRunId": "run-1",
+        "state": state,
+        "generation": 7,
+        "updatedAt": "2026-10-23T12:00:00Z",
+        "issues": [],
+        "error": None,
+        "directory": "/nonexistent",
+        "actions": {"clone": True, "kill": kill, "delete": delete},
+        "reasons": {},
+    }
+
+
+class _StubbedSavedRunsApi(Api):
+    """Serves one saved run whose state the test changes from Python."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.row = _stub_row("cancelling", kill=True, delete=False)
+        self.killed: list[str] = []
+        self.deleted: list[str] = []
+        self.selected_items: list[dict[str, str]] = []
+
+    owned_here: bool = False
+
+    def list_run_objects(self) -> dict[str, Any]:
+        """Return the current stub row, executed here when `owned_here`."""
+        owned = [self.row["objectId"]] if self.owned_here else []
+        return {
+            "ok": True,
+            "runs": [self.row],
+            "unreadable": [],
+            "activeObjectId": None,
+            "activeObjectIds": owned,
+        }
+
+    def kill_run_object(self, object_id: str) -> dict[str, Any]:
+        """Record the kill and report the run failed."""
+        self.killed.append(object_id)
+        self.row = _stub_row("failed", kill=False, delete=True)
+        return {"ok": True, "state": "failed"}
+
+    def delete_run_object(self, object_id: str) -> dict[str, Any]:
+        """Record the deletion."""
+        self.deleted.append(object_id)
+        return {"ok": True}
+
+    def delete_selected(self, items: list[dict[str, str]]) -> dict[str, Any]:
+        """Record the saved runs in a Home selection, and delete nothing else."""
+        objects = [item["objectId"] for item in items if item["kind"] == "object"]
+        self.deleted.extend(objects)
+        self.selected_items = items
+        return {
+            "ok": True,
+            "deletedRunCount": 0,
+            "deletedStudyCount": 0,
+            "deletedExperimentCount": 0,
+            "deletedObjectCount": len(objects),
+        }
+
+
+_SAVED_ROW_STATE = (
+    "(document.querySelector('#saved-runs-body tr td:nth-child(2)') || {})"
+    ".textContent || null"
+)
+
+
+def test_home_rereads_an_unsettled_saved_run_until_it_settles(
+    saved_run_settings: Path,
+) -> None:
+    """A Cancelling row becomes Cancelled with no action from the user."""
+    api = _StubbedSavedRunsApi()
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(
+                "window.fim.savedRunsPollMilliseconds = 20;"
+                "window.fim.showOpenRunScreen();"
+            )
+            first = poll_page(
+                window, _SAVED_ROW_STATE, bool, what="Cancelling saved run"
+            )
+            api.row = _stub_row("cancelled", kill=False, delete=True)
+            settled = poll_page(
+                window,
+                _SAVED_ROW_STATE,
+                lambda text: text == "Cancelled",
+                what="Cancelled saved run",
+            )
+            outcome.put({"first": first, "settled": settled})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert result == {"first": "Cancelling", "settled": "Cancelled"}
+
+
+_SAVED_ROW_NAME = (
+    "(function(){const cell = document.querySelector("
+    "'#saved-runs-body tr td:first-child');"
+    "return cell ? {text: cell.textContent, title: cell.title} : null;})()"
+)
+
+
+def test_an_unnamed_saved_run_is_shown_by_its_settings(
+    saved_run_settings: Path,
+) -> None:
+    """The object id is kept for the tooltip, not shown as the name."""
+    api = _StubbedSavedRunsApi()
+    api.row = _stub_row("cancelled", kill=False, delete=True, name="")
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            outcome.put(poll_page(window, _SAVED_ROW_NAME, bool, what="saved run name"))
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["text"] == ("225 diploid, d=10, m=0.01, mu=1e-05, 200 replicates")
+    assert "obj-" + "a" * 32 in result["title"]
+    assert "seed=7" in result["title"]
+    assert "Run ID: run-1" in result["title"]
+
+
+def test_watch_returns_to_the_document_running_the_saved_run(
+    saved_run_settings: Path,
+) -> None:
+    """Home links a run this window executes back to its own document."""
+    api = _StubbedSavedRunsApi()
+    api.row = _stub_row("running", kill=True, delete=False)
+    api.owned_here = True
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+    object_id = "obj-" + "a" * 32
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            running_tab = window.evaluate_js(
+                "(function(){const workspace = window.fim.workspace;"
+                "const tabId = workspace.createDocument("
+                f"{{label: 'Long run', runObjectId: '{object_id}'}},"
+                "{select: false});"
+                "window.fim.showOpenRunScreen();"
+                "return tabId;})()"
+            )
+            rows = poll_page(
+                window,
+                _SAVED_ROWS,
+                lambda value: bool(value) and "watch" in value[0]["actions"],
+                what="watchable saved run",
+            )
+            home_tab = window.evaluate_js("window.fim.workspace.selectedId()")
+            window.evaluate_js("document.querySelector('#saved-runs-body a').click();")
+            shown = poll_page(
+                window,
+                "(function(){const state = window.fim.workspace.selected();"
+                "return {tab: state.tabId,"
+                " screen: state.history[state.historyIndex]};})()",
+                lambda value: value["tab"] != home_tab,
+                what="running document",
+            )
+            outcome.put({"running": running_tab, "rows": rows, "shown": shown})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["rows"][0]["actions"] == ["watch", "clone", "kill"]
+    assert result["shown"] == {"tab": result["running"], "screen": "screen-run"}
+
+
+def test_a_run_executing_elsewhere_offers_no_watch(
+    saved_run_settings: Path,
+) -> None:
+    """Without its document here, the row says where to watch it instead."""
+    api = _StubbedSavedRunsApi()
+    api.row = _stub_row("running", kill=True, delete=False)
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            rows = poll_page(window, _SAVED_ROWS, bool, what="running saved run")
+            title = window.evaluate_js(
+                "document.querySelector('#saved-runs-body tr td:nth-child(2)').title"
+            )
+            outcome.put({"rows": rows, "title": title})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["rows"][0]["actions"] == ["clone", "kill"]
+    assert "another window or command" in result["title"]
+
+
+_SAVED_CHECKBOXES = (
+    "Array.from(document.querySelectorAll("
+    "'#saved-runs-body .saved-run-select-checkbox')).map("
+    "function(box){return {checked: box.checked,"
+    " shown: getComputedStyle(box).display !== 'none'};})"
+)
+
+
+def test_select_all_and_delete_selected_include_saved_runs(
+    saved_run_settings: Path,
+) -> None:
+    """A deletable saved run joins Home's selection; Delete removes it."""
+    api = _StubbedSavedRunsApi()
+    api.row = _stub_row("cancelled", kill=False, delete=True)
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            hidden = poll_page(
+                window, _SAVED_CHECKBOXES, bool, what="saved-run checkbox"
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-select-all-button').click();"
+            )
+            selected = poll_page(
+                window,
+                _SAVED_CHECKBOXES,
+                lambda boxes: boxes[0]["checked"] and boxes[0]["shown"],
+                what="selected saved run",
+            )
+            label = window.evaluate_js(
+                "document.getElementById('open-run-delete-selected-button').textContent"
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-delete-selected-button')"
+                ".click();"
+                "document.querySelector('.open-run-inline-confirm button')"
+                ".click();"
+            )
+            after = poll_page(
+                window,
+                "document.getElementById('open-run-delete-selected-button')"
+                ".textContent",
+                lambda text: text == "Delete selected",
+                what="selection cleared by the deletion",
+            )
+            outcome.put(
+                {
+                    "hidden": hidden,
+                    "selected": selected,
+                    "label": label,
+                    "after": after,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["hidden"] == [{"checked": False, "shown": False}]
+    assert result["selected"] == [{"checked": True, "shown": True}]
+    assert result["label"].startswith("Delete selected (")
+    assert {"kind": "object", "objectId": "obj-" + "a" * 32} in api.selected_items
+    assert api.deleted == ["obj-" + "a" * 32]
+
+
+def test_kill_then_delete_from_home(saved_run_settings: Path) -> None:
+    """Kill asks first, kills, then offers to delete what is left."""
+    api = _StubbedSavedRunsApi()
+    api.row = _stub_row("running", kill=True, delete=False)
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            rows = poll_page(window, _SAVED_ROWS, bool, what="running saved run")
+            window.evaluate_js(
+                "window.__fimConfirms = [];"
+                "window.confirm = function(text) {"
+                "window.__fimConfirms.push(text); return true;};"
+                "document.querySelector("
+                "'#saved-runs-body button[data-action=\"kill\"]').click();"
+            )
+            prompts = poll_page(
+                window,
+                "window.__fimConfirms",
+                lambda texts: len(texts) == 2,
+                what="kill and delete confirmations",
+            )
+            settled = poll_page(
+                window, _SAVED_ROWS, lambda value: value != rows, what="reread"
+            )
+            outcome.put({"rows": rows, "prompts": prompts, "settled": settled})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["rows"][0]["actions"] == ["clone", "kill"]
+    assert result["prompts"][0].startswith('Kill "Long run" now?')
+    assert result["prompts"][1].startswith('"Long run" was killed. Delete it')
+    assert api.killed == api.deleted == ["obj-" + "a" * 32]
+    assert result["settled"][0]["actions"] == ["clone", "delete"]

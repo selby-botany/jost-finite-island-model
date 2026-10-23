@@ -1602,6 +1602,7 @@ async function refreshRecentRuns() {
     selectedRunLinks.clear();
     selectedStudyIds.clear();
     selectedExperimentIds.clear();
+    window.fim.savedRunSelection?.clear();
     setSelectMode(false);
     recentRunsFilterInput.value = "";
     [allRecentRuns, allStudies, allExperiments] = await Promise.all([
@@ -1688,7 +1689,8 @@ recentRunsFilterInput.addEventListener("input", () => {
 function totalSelectedCount() {
     return (
         selectedRunDirectories.size + selectedRunLinks.size +
-        selectedStudyIds.size + selectedExperimentIds.size
+        selectedStudyIds.size + selectedExperimentIds.size +
+        (window.fim.savedRunSelection?.size() ?? 0)
     );
 }
 
@@ -1716,6 +1718,8 @@ function updateSelectionToolbar() {
         count === 0 ? "Delete selected" : `Delete selected (${count})`;
     selectionCountLabel.textContent = count === 0 ? "" : `${count} selected`;
 }
+
+window.fim.updateSelectionToolbar = updateSelectionToolbar;
 
 /**
  * The selected Studies that hold a sweep, in the order Home lists them.
@@ -1757,6 +1761,10 @@ function buildDeleteSelectedMessage() {
     if (selectedRunLinks.size > 0) {
         parts.push(`${selectedRunLinks.size} example link(s) from editable studies`);
     }
+    const savedRuns = window.fim.savedRunSelection?.size() ?? 0;
+    if (savedRuns > 0) {
+        parts.push(`${savedRuns} saved run(s) (and all of their data)`);
+    }
     const keptExamples = selectedRunLinks.size > 0
         ? " Linked examples and their saved results will be kept." : "";
     const builtIn =
@@ -1780,6 +1788,7 @@ function buildDeleteSelectedMessage() {
 // leaves whatever was already selected exactly as it was.
 function setSelectMode(selecting) {
     openRunTable.classList.toggle("open-run-selecting", selecting);
+    window.fim.savedRunSelection?.setSelecting(selecting);
     toggleSelectButton.setAttribute("aria-pressed", String(selecting));
 }
 
@@ -1820,6 +1829,7 @@ selectAllButton.addEventListener("click", () => {
     )) {
         selectedExperimentIds.add(experiment.experimentId);
     }
+    window.fim.savedRunSelection?.selectAll();
     setSelectMode(true);
     updateSelectionToolbar();
     renderRecentRuns();
@@ -1830,6 +1840,7 @@ clearSelectionButton.addEventListener("click", () => {
     selectedRunLinks.clear();
     selectedStudyIds.clear();
     selectedExperimentIds.clear();
+    window.fim.savedRunSelection?.clear();
     renderRecentRuns();
 });
 
@@ -1849,13 +1860,19 @@ deleteSelectedButton.addEventListener("click", () => {
                 directory,
             })),
             ...selectedRunLinks.values(),
+            ...(window.fim.savedRunSelection?.ids() ?? []).map((objectId) => ({
+                kind: "object",
+                objectId,
+            })),
         ];
         const result = await window.pywebview.api.delete_selected(items);
         if (!result.ok) {
             showOpenRunBanner(result.message);
             return;
         }
+        window.fim.savedRunSelection?.clear();
         await refreshRecentRuns();
+        await window.fim.refreshSavedRuns?.();
     });
 });
 

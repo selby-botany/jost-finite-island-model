@@ -247,6 +247,7 @@ def test_delete_selected_skips_a_read_only_run_its_selected_study_implies(
         "deletedRunCount": 0,
         "deletedStudyCount": 1,
         "deletedExperimentCount": 0,
+        "deletedObjectCount": 0,
     }
     assert not own.exists()
     assert example.is_dir()

@@ -4419,6 +4419,7 @@ def test_delete_selected_deletes_a_mixed_selection(
         "deletedRunCount": 1,
         "deletedStudyCount": 1,
         "deletedExperimentCount": 1,
+        "deletedObjectCount": 0,
     }
     assert not bare_run.exists()
     assert not study_run.exists()
@@ -4465,6 +4466,7 @@ def test_delete_selected_tolerates_an_already_deleted_parent(
         "deletedRunCount": 0,
         "deletedStudyCount": 0,
         "deletedExperimentCount": 1,
+        "deletedObjectCount": 0,
     }
     assert api.list_studies() == []
     assert api.list_experiments() == []
@@ -4483,6 +4485,7 @@ def test_delete_selected_with_nothing_selected_deletes_nothing(
         "deletedRunCount": 0,
         "deletedStudyCount": 0,
         "deletedExperimentCount": 0,
+        "deletedObjectCount": 0,
     }
 
 
