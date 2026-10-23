@@ -3,7 +3,9 @@
 Run objects store configurations and lifecycle state. Commands delegate
 lifecycle rules and execution to `fim.persistence` and `fim.run_service`.
 `start` and `resume` run in the foreground; `pause` checkpoints and stops,
-while `cancel` stops and retains partial data. Interrupted runs resume from
+while `cancel` stops and retains partial data. `kill` ends a running
+object's worker at once, discarding work after its last checkpoint, and
+records it as failed so it can be resumed or deleted. Interrupted runs resume from
 their latest checkpoint. SIGTERM requests a pause; a second SIGTERM ends
 execution immediately. A later command reconciles a lost owner as interrupted,
 or as completed when its completion receipt verifies. An object without a
@@ -34,6 +36,7 @@ from fim.persistence.run_objects import (
     save_run_object,
 )
 from fim.persistence.run_ownership import (
+    kill_run_object,
     reconcile_run_object,
     reconcile_run_objects,
     request_pause,
@@ -99,6 +102,7 @@ def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
     for name, text in (
         ("pause", "ask a running object to checkpoint and pause"),
         ("cancel", "stop an object for good, keeping its partial data"),
+        ("kill", "end a running object's worker now and record it as failed"),
         ("delete", "delete an object that is not executing"),
     ):
         control_parser = commands.add_parser(name, help=text)
@@ -152,6 +156,7 @@ def command_object(
         "pause": lambda: _pause(arguments.object_id),
         "cancel": lambda: _cancel(arguments.object_id),
         "delete": lambda: _delete(arguments.object_id),
+        "kill": lambda: _kill(arguments.object_id),
         "reclaim": lambda: _reclaim(dry_run=arguments.dry_run),
     }
     handler = handlers.get(arguments.object_command)
@@ -287,6 +292,13 @@ def _execute(
             print(f"Artifacts: {finished.directory}")
         elif record.state is RunState.PAUSED:
             print(f"Continue with `fim object resume {object_id}`")
+    return 0
+
+
+def _kill(object_id: str) -> int:
+    """End a running object's worker now and record the object as failed."""
+    killed = kill_run_object(object_id)
+    print(f"Killed {object_id}; it is now {killed.record.state.value}")
     return 0
 
 

@@ -8,12 +8,16 @@ process to prove that a dead owner is detected without any timeout.
 from __future__ import annotations
 
 import itertools
+import json
+import os
+import signal
 import subprocess
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+import psutil
 import pytest
 import yaml
 
@@ -25,6 +29,7 @@ from fim.persistence.run_lifecycle import (
     CheckpointReference,
     CommandKeyReuseError,
     IllegalTransitionError,
+    LifecycleError,
     RevisionConflictError,
     RunEvent,
     RunPhase,
@@ -38,12 +43,17 @@ from fim.persistence.run_objects import (
     read_run_object,
 )
 from fim.persistence.run_ownership import (
+    KILLED_MESSAGE,
+    AttemptOwner,
     ConfigurationDriftError,
     ExecutionLease,
     OwnershipConflictError,
     ResumeUnavailableError,
     abandon_run_object,
     attempt_lock_path,
+    attempt_owner_path,
+    kill_run_object,
+    read_attempt_owner,
     reconcile_run_object,
     reconcile_run_objects,
     record_worker_failure,
@@ -570,3 +580,124 @@ def test_a_dead_owner_process_is_detected_without_a_timeout(tmp_path: Path) -> N
     lost = reconcile_run_object(planned.object_id, results=tmp_path)
     assert lost.record.state is RunState.INTERRUPTED
     assert lost.record.active_attempt_id is None
+
+
+def test_start_records_this_process_as_the_attempt_owner(tmp_path: Path) -> None:
+    """The owner record names the attempt, this PID, and its start time."""
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    owner = read_attempt_owner(planned.object_id, tmp_path)
+    assert owner is not None
+    assert owner.attempt_id == lease.attempt_id
+    assert owner.pid == os.getpid()
+    assert owner.started_at == psutil.Process().create_time()
+    lease.release()
+
+
+def test_kill_stops_a_live_owner_process_and_records_failed(tmp_path: Path) -> None:
+    """A real owner in its own session is killed, then recorded as failed."""
+    planned = _planned(tmp_path)
+    owner = subprocess.Popen(
+        [sys.executable, "-c", _OWNER_PROGRAM, planned.object_id, str(tmp_path)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        assert owner.stdout is not None
+        assert owner.stdout.readline().strip() == "owning", owner.stderr
+        recorded = read_attempt_owner(planned.object_id, tmp_path)
+        assert recorded is not None
+        assert (recorded.pid, recorded.process_group) == (owner.pid, owner.pid)
+        killed = kill_run_object(
+            planned.object_id, results=tmp_path, timeout=BACKSTOP_SECONDS
+        )
+        assert owner.wait(timeout=BACKSTOP_SECONDS) == -signal.SIGKILL
+    finally:
+        owner.kill()
+        owner.wait(timeout=BACKSTOP_SECONDS)
+    assert killed.record.state is RunState.FAILED
+    error = killed.record.last_error
+    assert error is not None
+    assert (error.category, error.message) == ("killed", KILLED_MESSAGE)
+    owner_record = attempt_owner_path(planned.object_id, tmp_path)
+    assert not owner_record.exists()
+    attempt_lock = attempt_lock_path(planned.object_id, tmp_path)
+    assert attempt_lock.exists()
+    delete_run_object(
+        planned.object_id, expected_revision=killed.record.revision, results=tmp_path
+    )
+    assert not attempt_lock.exists()
+
+
+def test_kill_refuses_a_run_that_is_not_executing(tmp_path: Path) -> None:
+    """Only a running, pausing, or cancelling run can be killed."""
+    planned = _planned(tmp_path)
+    with pytest.raises(LifecycleError, match="not executing"):
+        kill_run_object(planned.object_id, results=tmp_path)
+
+
+def test_kill_records_failed_when_the_owner_is_already_gone(tmp_path: Path) -> None:
+    """A run whose owner released its lock is failed without signaling."""
+    planned = _planned(tmp_path)
+    _start(tmp_path, planned).release()
+    killed = kill_run_object(planned.object_id, results=tmp_path, clock=_clock)
+    assert killed.record.state is RunState.FAILED
+
+
+def test_kill_refuses_a_live_owner_it_cannot_identify(tmp_path: Path) -> None:
+    """Without a matching owner record, nothing is signaled or recorded."""
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    attempt_owner_path(planned.object_id, tmp_path).unlink()
+    with pytest.raises(OwnershipConflictError, match="did not record its process"):
+        kill_run_object(planned.object_id, results=tmp_path)
+    stored = read_run_object(planned.object_id, results=tmp_path).record
+    assert stored.state is RunState.RUNNING
+    lease.release()
+
+
+def test_kill_spares_a_later_process_given_the_same_pid(tmp_path: Path) -> None:
+    """A start time that does not match means a reused PID: no signal sent.
+
+    The owner here is this test process with an earlier start time, so a
+    signal would end the test run; the lock stays held, so the wait times
+    out and nothing is recorded.
+    """
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    real = AttemptOwner.of_this_process(lease.attempt_id)
+    assert real.started_at is not None
+    reused = AttemptOwner(lease.attempt_id, real.pid, None, real.started_at - 3600)
+    attempt_owner_path(planned.object_id, tmp_path).write_text(
+        json.dumps(reused.to_mapping()), encoding="utf-8"
+    )
+    with pytest.raises(OwnershipConflictError, match="still holds"):
+        kill_run_object(planned.object_id, results=tmp_path, timeout=0)
+    stored = read_run_object(planned.object_id, results=tmp_path).record
+    assert stored.state is RunState.RUNNING
+    lease.release()
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        None,
+        [],
+        {"attemptId": 1, "pid": 1, "processGroup": None, "startedAt": None},
+        {"attemptId": "a", "pid": "1", "processGroup": None, "startedAt": None},
+        {"attemptId": "a", "pid": 1, "processGroup": "1", "startedAt": None},
+        {"attemptId": "a", "pid": 1, "processGroup": None, "startedAt": "x"},
+    ],
+)
+def test_a_malformed_owner_record_reads_as_none(mapping: object) -> None:
+    """Anything but the written shape is treated as no owner record."""
+    assert AttemptOwner.from_mapping(mapping) is None
+
+
+def test_an_owner_record_round_trips() -> None:
+    """The JSON mapping reads back as the same owner."""
+    owner = AttemptOwner("att-1", 42, 42, 1.5)
+    assert AttemptOwner.from_mapping(owner.to_mapping()) == owner

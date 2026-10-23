@@ -68,6 +68,8 @@ logger = logging.getLogger(__name__)
 OBJECTS_DIRECTORY_NAME: Final = "objects"
 CONFIG_FILE_NAME: Final = "config.yaml"
 _LOCKS_DIRECTORY_NAME: Final = ".locks"
+# Owned by `fim.persistence.run_ownership`, which imports this module.
+_ATTEMPTS_DIRECTORY_NAME: Final = ".attempts"
 
 Clock = Callable[[], datetime]
 IdFactory = Callable[[], str]
@@ -239,6 +241,12 @@ def delete_run_object(
             )
         doomed = current.directory.with_name(f".deleted-{object_id}-{uuid.uuid4().hex}")
         current.directory.rename(doomed)
+        # No attempt can open once the object is gone, so its attempt lock
+        # and owner record are only litter now. The object lock stays: it
+        # is held here, and another process may be waiting on it.
+        attempts = current.directory.parent / _ATTEMPTS_DIRECTORY_NAME
+        for suffix in (".lock", ".owner.json"):
+            (attempts / f"{object_id}{suffix}").unlink(missing_ok=True)
     shutil.rmtree(doomed)
     logger.debug("deleted run object %s", object_id)
 

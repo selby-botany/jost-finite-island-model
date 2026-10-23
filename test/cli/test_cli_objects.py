@@ -7,6 +7,7 @@ test depends on timing.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import re
@@ -21,6 +22,7 @@ import yaml
 from fim import cli, paths, run_service
 from fim.examples import classes
 from fim.persistence.artifacts import write_run_artifacts
+from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_objects import read_run_object
 from fim.persistence.run_ownership import request_pause
 
@@ -227,6 +229,37 @@ def test_cancel_abandons_a_planned_object_and_delete_removes_it(
     assert f"Deleted {object_id}" in capsys.readouterr().out
     assert _main(tmp_path, "object", "list") == 0
     assert "No run objects." in capsys.readouterr().out
+
+
+def test_killing_an_object_that_is_not_executing_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+
+    assert _main(tmp_path, "object", "kill", object_id) == 2
+    assert "fim: error:" in capsys.readouterr().err
+
+
+def test_kill_reports_the_state_it_recorded(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real kill is covered with a live process in the ownership tests."""
+    object_id, _ = _create(tmp_path, capsys, _config(tmp_path))
+    killed: list[str] = []
+
+    def record_kill(object_id: str) -> Any:
+        killed.append(object_id)
+        current = read_run_object(object_id, results=_results(tmp_path))
+        failed = dataclasses.replace(current.record, state=RunState.FAILED)
+        return dataclasses.replace(current, record=failed)
+
+    monkeypatch.setattr("fim.cli_objects.kill_run_object", record_kill)
+
+    assert _main(tmp_path, "object", "kill", object_id) == 0
+    assert killed == [object_id]
+    assert f"Killed {object_id}; it is now failed" in capsys.readouterr().out
 
 
 def test_an_interrupted_start_points_to_resume(

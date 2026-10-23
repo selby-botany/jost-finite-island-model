@@ -24,15 +24,22 @@ lock while probing or taking it cannot deadlock.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
+import os
+import signal
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Final, Self
+from typing import Any, Final, Self
 
+import psutil
+
+from fim.paths import write_text_atomically
 from fim.persistence.object_lock import (
     LockUnavailableError,
     exclusive_lock,
@@ -67,6 +74,12 @@ from fim.persistence.run_receipt import receipt_problem
 logger = logging.getLogger(__name__)
 
 _ATTEMPT_LOCKS_DIRECTORY_NAME: Final = ".attempts"
+_OWNER_SUFFIX: Final = ".owner.json"
+_KILL_POLL_SECONDS: Final = 0.05
+# A recorded and an observed start time of the same process agree to far
+# better than this; a reused PID started later differs by much more.
+_START_TIME_TOLERANCE_SECONDS: Final = 1.0
+KILLED_MESSAGE: Final = "stopped by Kill; work after the last checkpoint was discarded"
 _WORKER_FINISH_EVENTS: Final = frozenset(
     {
         RunEvent.COMMIT_PAUSE,
@@ -124,6 +137,67 @@ class StartResult:
     run_object: RunObject
     lease: ExecutionLease | None
     replayed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class AttemptOwner:
+    """The process that holds an attempt lock, so Kill can find it.
+
+    The lock proves an owner is alive but not who it is; the owner writes
+    this record beside the lock when it takes the attempt.
+
+    Args:
+        attempt_id: The attempt the process owns.
+        pid: Its process ID.
+        process_group: Its process group when it leads one (a GUI worker
+            runs in its own session), else `None`.
+        started_at: Its start time in seconds since the epoch, to tell it
+            from a later process given the same PID; `None` if unknown.
+    """
+
+    attempt_id: str
+    pid: int
+    process_group: int | None
+    started_at: float | None
+
+    @classmethod
+    def of_this_process(cls, attempt_id: str) -> AttemptOwner:
+        """Describe the calling process as the owner of `attempt_id`."""
+        pid = os.getpid()
+        getpgid = getattr(os, "getpgid", None)
+        group = pid if getpgid is not None and getpgid(0) == pid else None
+        try:
+            started_at: float | None = psutil.Process(pid).create_time()
+        except psutil.Error:
+            started_at = None
+        return cls(attempt_id, pid, group, started_at)
+
+    @classmethod
+    def from_mapping(cls, mapping: Any) -> AttemptOwner | None:
+        """Return the owner a JSON mapping describes, or `None` if malformed."""
+        if not isinstance(mapping, dict):
+            return None
+        attempt_id = mapping.get("attemptId")
+        pid = mapping.get("pid")
+        group = mapping.get("processGroup")
+        started_at = mapping.get("startedAt")
+        if (
+            not isinstance(attempt_id, str)
+            or not isinstance(pid, int)
+            or not (group is None or isinstance(group, int))
+            or not (started_at is None or isinstance(started_at, int | float))
+        ):
+            return None
+        return cls(attempt_id, pid, group, started_at)
+
+    def to_mapping(self) -> dict[str, Any]:
+        """Return the JSON-ready record."""
+        return {
+            "attemptId": self.attempt_id,
+            "pid": self.pid,
+            "processGroup": self.process_group,
+            "startedAt": self.started_at,
+        }
 
 
 class ExecutionLease:
@@ -358,6 +432,70 @@ def attempt_lock_path(object_id: str, results: Path | None = None) -> Path:
     return directory.parent / _ATTEMPT_LOCKS_DIRECTORY_NAME / f"{object_id}.lock"
 
 
+def attempt_owner_path(object_id: str, results: Path | None = None) -> Path:
+    """Return the record naming the process that holds the attempt lock."""
+    lock = attempt_lock_path(object_id, results)
+    return lock.with_name(lock.stem + _OWNER_SUFFIX)
+
+
+def kill_run_object(
+    object_id: str,
+    *,
+    results: Path | None = None,
+    clock: Clock | None = None,
+    timeout: float = 30.0,
+) -> RunObject:
+    """Stop an executing run's worker at once and record the run as `failed`.
+
+    Unlike cancel, nothing is flushed or committed first: the worker is
+    killed where it stands, so the run keeps only what its last checkpoint
+    committed. A `failed` run can be deleted, or resumed from that
+    checkpoint where the checkpoint is still intact.
+
+    Args:
+        object_id: A `running`, `pausing`, or `cancelling` object.
+        results: Results directory (default: `results_directory()`).
+        clock: Injectable current-time source.
+        timeout: Seconds to wait for the killed worker to release its lock.
+
+    Returns:
+        The object afterward, normally `failed`. A worker that finished on
+        its own first leaves the state it recorded.
+
+    Raises:
+        LifecycleError: The run is not executing.
+        OwnershipConflictError: The live owner cannot be identified, or
+            still holds its lock after `timeout` seconds.
+    """
+    lock_path = attempt_lock_path(object_id, results)
+    with object_locked(object_id, results):
+        current = read_run_object_unlocked(object_id, results)
+        state = current.record.state
+        if state not in ACTIVE_STATES:
+            raise LifecycleError(
+                f"run object {object_id!r} is {state.value}, not executing"
+            )
+        owner = None
+        if is_lock_held(lock_path):
+            owner = read_attempt_owner(object_id, results)
+            if owner is None or owner.attempt_id != current.record.active_attempt_id:
+                raise OwnershipConflictError(
+                    f"the worker running {object_id!r} did not record its "
+                    "process, so it cannot be killed here; stop it with "
+                    "Cancel or end the process with the operating system"
+                )
+    if owner is not None:
+        _kill_owner(owner)
+        _wait_for_release(lock_path, timeout)
+        # A killed worker never reaches the cleanup that removes its record.
+        attempt_owner_path(object_id, results).unlink(missing_ok=True)
+    killed = record_worker_failure(
+        object_id, KILLED_MESSAGE, results=results, clock=clock, category="killed"
+    )
+    logger.info("killed run object %s; now %s", object_id, killed.record.state.value)
+    return killed
+
+
 def new_attempt_id() -> str:
     """Return a fresh random attempt ID."""
     return f"att-{uuid.uuid4().hex}"
@@ -416,8 +554,13 @@ def record_worker_failure(
     *,
     results: Path | None = None,
     clock: Clock | None = None,
+    category: str = "worker",
 ) -> RunObject:
-    """Record a child-process exit as a failed attempt when it owns no lock."""
+    """Record a child-process exit as a failed attempt when it owns no lock.
+
+    A run no longer executing is returned unchanged, so a worker's own
+    exit report and a Kill can both record the same exit.
+    """
     with object_locked(object_id, results):
         current = read_run_object_unlocked(object_id, results)
         if current.record.state not in ACTIVE_STATES:
@@ -437,13 +580,13 @@ def record_worker_failure(
             at=_now(clock),
             expected_revision=current.record.revision,
             error=ErrorInfo(
-                category="worker",
+                category=category,
                 message=message,
                 attempt_id=attempt_id,
             ),
         )
         write_run_record(current.directory, record)
-    logger.error("GUI worker for Run object %s failed: %s", object_id, message)
+    logger.error("worker for Run object %s failed: %s", object_id, message)
     return _with_record(current, record)
 
 
@@ -470,6 +613,17 @@ def reconcile_run_objects(
         if reconciled.record.revision != listed.record.revision:
             changed.append(reconciled)
     return changed
+
+
+def read_attempt_owner(
+    object_id: str, results: Path | None = None
+) -> AttemptOwner | None:
+    """Return the recorded owner of the object's attempt, if readable."""
+    try:
+        text = attempt_owner_path(object_id, results).read_text(encoding="utf-8")
+        return AttemptOwner.from_mapping(json.loads(text))
+    except (OSError, ValueError):
+        return None
 
 
 def request_cancel(
@@ -664,6 +818,36 @@ def _is_replay(run_object: RunObject, event: RunEvent, command_key: str | None) 
     return True
 
 
+def _kill_owner(owner: AttemptOwner) -> None:
+    """Kill the owner's process group, or the process alone if it leads none.
+
+    A process whose start time differs from the record's is a later one
+    given the same PID, and is left alone.
+    """
+    try:
+        process = psutil.Process(owner.pid)
+        if (
+            owner.started_at is not None
+            and abs(process.create_time() - owner.started_at)
+            > _START_TIME_TOLERANCE_SECONDS
+        ):
+            logger.warning(
+                "process %d is not the recorded owner of %s; not killed",
+                owner.pid,
+                owner.attempt_id,
+            )
+            return
+        killpg = getattr(os, "killpg", None)
+        if owner.process_group is not None and killpg is not None:
+            logger.debug("killing process group %d", owner.process_group)
+            killpg(owner.process_group, signal.SIGKILL)
+        else:
+            logger.debug("killing process %d", owner.pid)
+            process.kill()
+    except (psutil.NoSuchProcess, ProcessLookupError):
+        logger.debug("owner process %d already exited", owner.pid)
+
+
 def _now(clock: Clock | None) -> datetime:
     """Return the current time from `clock`, or the real UTC time."""
     return clock() if clock is not None else datetime.now(UTC)
@@ -717,6 +901,11 @@ def _open_attempt(
                 raise OwnershipConflictError(
                     f"another attempt is executing run object {object_id!r}"
                 ) from error
+            write_text_atomically(
+                attempt_owner_path(object_id, results),
+                json.dumps(AttemptOwner.of_this_process(attempt_id).to_mapping()),
+                prefix=".owner.",
+            )
             write_run_record(current.directory, record)
     except BaseException:
         lock.close()
@@ -749,6 +938,22 @@ def _require_owner(run_object: RunObject, attempt_id: str) -> None:
         raise AttemptMismatchError(
             f"attempt {attempt_id!r} does not own run {run_object.object_id!r}"
         )
+
+
+def _wait_for_release(lock_path: Path, timeout: float) -> None:
+    """Wait for a killed owner's lock to be released by the operating system.
+
+    Raises:
+        OwnershipConflictError: The lock is still held after `timeout`.
+    """
+    deadline = time.monotonic() + timeout
+    while is_lock_held(lock_path):
+        if time.monotonic() >= deadline:
+            raise OwnershipConflictError(
+                f"the killed worker still holds {lock_path.name} after "
+                f"{timeout:g} seconds"
+            )
+        time.sleep(_KILL_POLL_SECONDS)
 
 
 def _with_record(run_object: RunObject, record: RunLifecycleRecord) -> RunObject:
