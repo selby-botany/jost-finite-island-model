@@ -18257,7 +18257,7 @@ behavior `start_batch_run` must never silently fall back to.
 
 <a id="gui.test_batch_runner.test_start_batch_run_respects_an_explicit_max_workers_override"></a>
 
-#### [test\_start\_batch\_run\_respects\_an\_explicit\_max\_workers\_override](./gui/test_batch_runner.py#L492)
+#### [test\_start\_batch\_run\_respects\_an\_explicit\_max\_workers\_override](./gui/test_batch_runner.py#L498)
 
 ```python
 def test_start_batch_run_respects_an_explicit_max_workers_override(
@@ -18269,7 +18269,7 @@ An explicit `max_workers` argument is used verbatim, not the default.
 
 <a id="gui.test_batch_runner.test_batch_replicates_actually_run_concurrently"></a>
 
-#### [test\_batch\_replicates\_actually\_run\_concurrently](./gui/test_batch_runner.py#L514)
+#### [test\_batch\_replicates\_actually\_run\_concurrently](./gui/test_batch_runner.py#L520)
 
 ```python
 def test_batch_replicates_actually_run_concurrently(

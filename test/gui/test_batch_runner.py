@@ -486,7 +486,13 @@ def test_start_batch_run_passes_a_real_worker_count_to_fim(
     )
     join_or_fail(thread, "batch thread")
 
-    assert captured["max_workers"] == batch_runner.default_max_workers()
+    # Same n_replicates as start_batch_run itself resolves against (3, from
+    # the batch_params fixture): the no-argument default_max_workers() falls
+    # back to DEFAULT_N_REPLICATES (200), which only coincidentally matches
+    # on a machine with 3 or fewer visible cores.
+    assert captured["max_workers"] == batch_runner.default_max_workers(
+        batch_params.n_replicates
+    )
 
 
 def test_start_batch_run_respects_an_explicit_max_workers_override(
