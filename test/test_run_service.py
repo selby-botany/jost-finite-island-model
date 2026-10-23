@@ -238,15 +238,16 @@ def test_a_planned_run_executes_to_completion(
     assert not is_lock_held(attempt_lock_path(OBJECT_ID, tmp_path))
 
 
+@pytest.mark.parametrize("cancel", [False, True])
 def test_pause_then_resume_finishes_as_the_uninterrupted_run(
-    tmp_path: Path, checkpointed: list[int]
+    tmp_path: Path, checkpointed: list[int], cancel: bool
 ) -> None:
-    """Pause is acknowledged after a checkpoint; resume continues exactly."""
+    """Paused and cancelled runs continue exactly from their checkpoint."""
     _create(tmp_path)
     writer = _Writer()
     pause = _at(
         15,
-        lambda: request_pause(
+        lambda: (request_cancel if cancel else request_pause)(
             OBJECT_ID, expected_revision=_revision(tmp_path), results=tmp_path
         ),
     )
@@ -254,19 +255,26 @@ def test_pause_then_resume_finishes_as_the_uninterrupted_run(
     paused = _execute(tmp_path, writer, observer=pause)
 
     record = paused.record
-    assert record.state is RunState.PAUSED
+    assert record.state is (RunState.CANCELLED if cancel else RunState.PAUSED)
     assert record.active_attempt_id is None
     assert record.committed_generation == 15
     assert record.latest_checkpoint is not None
-    assert record.latest_checkpoint.committed_generation == 15
+    assert record.latest_checkpoint.committed_generation == (10 if cancel else 15)
     assert not is_lock_held(attempt_lock_path(OBJECT_ID, tmp_path))
     assert not writer.results
 
     resumed = _execute(tmp_path, writer)
 
     assert resumed.record.state is RunState.COMPLETED
-    assert checkpointed == [0, 10, 15, 25, 30]
+    assert checkpointed == ([0, 10, 20, 30] if cancel else [0, 10, 15, 25, 30])
     _assert_matches_whole(tmp_path, writer.results[0])
+    if cancel:
+        whole_results = tmp_path / "uninterrupted"
+        _create(whole_results)
+        whole = _execute(whole_results, _Writer())
+        assert (resumed.directory / "report.json").read_bytes() == (
+            whole.directory / "report.json"
+        ).read_bytes()
 
 
 def test_a_pause_requested_as_the_run_stops_completes_it(

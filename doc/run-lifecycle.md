@@ -28,7 +28,7 @@ Return to the [command reference](usage.md) or the
 
 **In the desktop app:** choose **Run simulation** to create and start a Run
 object automatically. While unfinished, the run appears under **Saved runs** on Home, where
-**Resume**, **Edit**, **Cancel**, **Kill**, and **Delete** appear when allowed. After
+**Resume**, **Resurrect**, **Edit**, **Cancel**, **Kill**, and **Delete** appear when allowed. After
 completion, it appears with the completed results.
 The Run screen's **Pause** button stops it at a checkpoint; after pausing,
 **Run simulation** becomes **Resume run** in that same document.
@@ -80,7 +80,7 @@ lifecycle rules and keep the record consistent.
 | `interrupted` | Its owner stopped without saying so (Ctrl-C, crash, power failure) | Resume; cancel; delete |
 | `failed` | An error stopped it | Resume; cancel; delete |
 | `cancelling` | A cancel was requested | Wait; kill |
-| `cancelled` | Stopped for good; the trajectory written so far is kept | Clone; delete |
+| `cancelled` | Stopped by cancellation; partial data and the latest checkpoint are kept | Resurrect with a checkpoint; clone; delete |
 | `completed` | Finished; every artifact is published | Clone; delete |
 
 **Draft and Planned.** A configuration that does not validate is saved as a
@@ -97,10 +97,17 @@ It cannot start until these are fixed:
 becomes `planned` when the new configuration is valid and goes back to
 `draft` when it is not. Editing is available until the run starts.
 
-`interrupted`, `failed`, and `paused` objects resume from their latest
+`interrupted`, `failed`, `paused`, and `cancelled` objects resume from their latest
 checkpoint. A run that stopped *before its first checkpoint* (for example, it
 failed while starting) has nothing to resume from; see
 [clone](#commands).
+
+A cancelled run with a verified compatible checkpoint can be **resurrected**:
+`fim object resume OBJECT_ID` opens a new attempt on the same object and
+scientific run ID, not a clone. The lifecycle transition is
+`cancelled` → `running`, using the existing `resume` event. A cancelled run
+without a checkpoint stays final; clone it to start from generation 0.
+Only `completed` is unconditionally terminal.
 
 ## Commands
 
@@ -111,9 +118,9 @@ failed while starting) has nothing to resume from; see
 | `fim object list` | List every object with its state, generation, and name |
 | `fim object status OBJECT_ID [--json]` | Show one object's lifecycle; `--json` prints the full record |
 | `fim object start OBJECT_ID [--quiet]` | Execute a `planned` object in the foreground |
-| `fim object resume OBJECT_ID [--quiet]` | Continue a `paused`, `interrupted`, or `failed` object |
+| `fim object resume OBJECT_ID [--quiet]` | Continue a stopped object, including `cancelled`, from its checkpoint |
 | `fim object pause OBJECT_ID` | Ask a running object to checkpoint and pause |
-| `fim object cancel OBJECT_ID` | Stop an object for good, keeping its partial data |
+| `fim object cancel OBJECT_ID` | Stop an object, keeping its checkpoint and partial data |
 | `fim object kill OBJECT_ID` | End a running object's worker now; record it as `failed` |
 | `fim object delete OBJECT_ID` | Delete an object that is not executing |
 | `fim object clone OBJECT_ID` | Save the object's configuration as a new object |
@@ -155,10 +162,15 @@ committed position in the trajectory log. A run writes one:
 - every 1,000 generations or every 60 seconds, whichever comes first;
 - whenever it pauses.
 
-**Resuming is exact.** A run that is paused and resumed, any number of times,
-produces the same trajectory, the same report, and the same convergence
+**Resuming is exact.** A run that is paused or cancelled and resumed, any
+number of times, produces the same trajectory, the same report, and the same convergence
 decision as a run that was never stopped. A trajectory log cut off by a crash
-is trimmed back to the checkpoint and continued from there.
+is trimmed back to the checkpoint and continued from there. Cancellation may
+leave logs beyond the checkpoint too; resurrection discards those frames and
+recomputes them exactly. Replicate artifacts are rewritten at completion,
+and unneeded replicate folders are removed. Log block encoding and its
+manifest digests can differ after reopening; the decoded trajectory and
+scientific results are identical.
 
 A checkpoint's SHA-256 digest is verified before use. Incompatible
 checkpoint format versions are rejected.
@@ -235,9 +247,13 @@ for real data. `fim object reclaim --dry-run` lists them, and
   already has a completed result for the current software version, the app
   reuses that result instead of computing it again.
 - **Saved runs** on Home lists unfinished saved runs. Each row offers only
-  the actions its state allows: Watch, Start, Resume, Edit, Cancel, Kill,
-  Delete. A row that is starting, running, pausing, or cancelling refreshes
+  the actions its state allows: Watch, Start, Resume, Resurrect, Clone, Edit,
+  Cancel, Kill, Delete. A row that is starting, running, pausing, or cancelling refreshes
   itself every few seconds until it settles.
+- **Resurrect** appears for a cancelled run only when its latest checkpoint
+  is verified and compatible. It uses the same execution path as **Resume**,
+  preserving the saved configuration and continuing exactly from that checkpoint.
+  **Clone** and **Delete** remain available.
 - A run saved without a name is listed by its settings, such as
   "225 diploid, d=10, m=0.01, mu=1e-05, 200 replicates". Hold the pointer
   over the name to see every setting, the object ID, and the run ID.

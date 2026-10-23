@@ -290,10 +290,12 @@ def test_a_batch_object_executes_to_completion_as_fim_run_lays_it_out(
     assert manifest.artifacts["summary"] == hash_file(directory / "summary.json")
 
 
+@pytest.mark.parametrize("cancel", [False, True])
 def test_pause_then_resume_publishes_what_an_uninterrupted_batch_does(
     tmp_path: Path,
+    cancel: bool,
 ) -> None:
-    """A batch paused mid-run resumes to the same files and logs."""
+    """Paused and cancelled batches resume to identical files and logs."""
     whole_results = tmp_path / "whole"
     _create(whole_results)
     whole = _execute(whole_results, _Writer())
@@ -302,7 +304,7 @@ def test_pause_then_resume_publishes_what_an_uninterrupted_batch_does(
     writer = _Writer()
     pause = _at(
         15,
-        lambda: request_pause(
+        lambda: (request_cancel if cancel else request_pause)(
             OBJECT_ID,
             expected_revision=_revision(paused_results),
             results=paused_results,
@@ -311,16 +313,34 @@ def test_pause_then_resume_publishes_what_an_uninterrupted_batch_does(
 
     paused = _execute(paused_results, writer, observer=pause)
 
-    assert paused.record.state is RunState.PAUSED
+    assert paused.record.state is (RunState.CANCELLED if cancel else RunState.PAUSED)
     assert paused.record.committed_generation == 15
     assert not writer.results
     assert not (paused.directory / "manifest.json").exists()
+
+    if cancel:
+        checkpoint = paused.record.latest_checkpoint
+        assert checkpoint is not None and checkpoint.committed_generation == 10
+        orphan = paused.directory / "replicate-999"
+        orphan.mkdir()
+        (orphan / "report.json").write_text("uncommitted orphan")
+        (paused.directory / "replicate-001" / "report.json").write_text("partial")
 
     resumed = _execute(paused_results, writer)
 
     assert resumed.record.state is RunState.COMPLETED
     assert _published(resumed.directory) == _published(whole.directory)
     _assert_same_logs(resumed.directory, whole.directory)
+    if cancel:
+        files = [whole.directory / "summary.json"]
+        files.extend(
+            path
+            for path in whole.directory.glob("replicate-*/*")
+            if path.is_file() and path.name not in {"trajectory.tlog", "manifest.json"}
+        )
+        for path in files:
+            relative = path.relative_to(whole.directory)
+            assert (resumed.directory / relative).read_bytes() == path.read_bytes()
 
 
 def test_cancel_keeps_every_replicate_partial_trajectory(tmp_path: Path) -> None:

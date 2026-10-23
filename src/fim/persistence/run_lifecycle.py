@@ -85,11 +85,11 @@ ACTIVE_STATES: Final = frozenset(
 )
 """States in which one attempt owns execution."""
 
-TERMINAL_STATES: Final = frozenset({RunState.COMPLETED, RunState.CANCELLED})
+TERMINAL_STATES: Final = frozenset({RunState.COMPLETED})
 """States no event may leave."""
 
 RESUMABLE_STATES: Final = frozenset(
-    {RunState.PAUSED, RunState.INTERRUPTED, RunState.FAILED}
+    {RunState.PAUSED, RunState.INTERRUPTED, RunState.FAILED, RunState.CANCELLED}
 )
 """States from which a verified checkpoint may continue execution."""
 
@@ -112,6 +112,7 @@ TRANSITIONS: Final[Mapping[tuple[RunState, RunEvent], RunState]] = {
     (_S.PAUSED, _E.RESUME): _S.RUNNING,
     (_S.INTERRUPTED, _E.RESUME): _S.RUNNING,
     (_S.FAILED, _E.RESUME): _S.RUNNING,
+    (_S.CANCELLED, _E.RESUME): _S.RUNNING,
     (_S.RUNNING, _E.OWNER_LOST): _S.INTERRUPTED,
     (_S.PAUSING, _E.OWNER_LOST): _S.INTERRUPTED,
     (_S.CANCELLING, _E.OWNER_LOST): _S.INTERRUPTED,
@@ -481,8 +482,10 @@ class RunLifecycleRecord:
 
     @property
     def is_terminal(self) -> bool:
-        """Return whether no event may leave the current state."""
-        return self.state in TERMINAL_STATES
+        """Return whether execution cannot continue from the current record."""
+        return self.state in TERMINAL_STATES or (
+            self.state is RunState.CANCELLED and self.latest_checkpoint is None
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON form stored as `run.json`."""
@@ -641,6 +644,7 @@ class Capabilities:
     can_start: bool
     can_pause: bool
     can_resume: bool
+    can_resurrect: bool
     can_cancel: bool
     can_abandon: bool
     can_delete: bool
@@ -655,6 +659,7 @@ class Capabilities:
             "can_edit": self.can_edit,
             "can_pause": self.can_pause,
             "can_resume": self.can_resume,
+            "can_resurrect": self.can_resurrect,
             "can_start": self.can_start,
             "reasons": dict(sorted(self.reasons.items())),
         }
@@ -779,12 +784,15 @@ def capabilities(
             "can_start",
             "can_pause",
             "can_resume",
+            "can_resurrect",
             "can_cancel",
             "can_abandon",
             "can_delete",
         ):
             reasons[name] = protected
-        return Capabilities(False, False, False, False, False, False, False, reasons)
+        return Capabilities(
+            False, False, False, False, False, False, False, False, reasons
+        )
 
     can_edit = allow(
         "can_edit",
@@ -809,11 +817,28 @@ def capabilities(
     )
     can_resume = allow(
         "can_resume",
-        state in RESUMABLE_STATES and resume_verified,
+        state in RESUMABLE_STATES
+        and state is not RunState.CANCELLED
+        and resume_verified,
         (
-            "no verified compatible checkpoint is available"
+            "use resurrect to continue a cancelled run"
+            if state is RunState.CANCELLED
+            else "no verified compatible checkpoint is available"
             if state in RESUMABLE_STATES
             else f"a {state.value} run cannot resume"
+        ),
+    )
+    can_resurrect = allow(
+        "can_resurrect",
+        state is RunState.CANCELLED
+        and record.latest_checkpoint is not None
+        and resume_verified,
+        (
+            "it was cancelled before its first checkpoint"
+            if state is RunState.CANCELLED and record.latest_checkpoint is None
+            else "no verified compatible checkpoint is available"
+            if state is RunState.CANCELLED
+            else f"a {state.value} run is not cancelled"
         ),
     )
     can_cancel = allow(
@@ -840,6 +865,7 @@ def capabilities(
         can_start=can_start,
         can_pause=can_pause,
         can_resume=can_resume,
+        can_resurrect=can_resurrect,
         can_cancel=can_cancel,
         can_abandon=can_abandon,
         can_delete=can_delete,

@@ -61,6 +61,7 @@ const SAVED_RUN_ACTIONS = [
     ["watch", "Watch"],
     ["start", "Start"],
     ["resume", "Resume"],
+    ["resurrect", "Resurrect"],
     ["clone", "Clone"],
     ["edit", "Edit"],
     ["open", "Open"],
@@ -425,7 +426,7 @@ async function onSavedRunAction(action, run) {
         await editSavedRun(run.objectId);
         return;
     }
-    if (action === "start" || action === "resume") {
+    if (["start", "resume", "resurrect"].includes(action)) {
         await startSavedRun(run);
         return;
     }

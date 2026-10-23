@@ -16018,7 +16018,7 @@ Check that a saved run can start or resume now, before any side effect.
 
 <a id="fim.gui.object_bridge.row"></a>
 
-#### [row](./gui/object_bridge.py#L373)
+#### [row](./gui/object_bridge.py#L379)
 
 ```python
 def row(
@@ -16044,7 +16044,7 @@ Return the Saved runs panel's row for one saved run.
 
 <a id="fim.gui.object_bridge.save"></a>
 
-#### [save](./gui/object_bridge.py#L423)
+#### [save](./gui/object_bridge.py#L434)
 
 ```python
 def save(
@@ -26670,7 +26670,7 @@ Every legal `(state, event)` pair and the state it leads to.
 
 <a id="fim.persistence.run_lifecycle.LifecycleError"></a>
 
-## [LifecycleError Objects](./persistence/run_lifecycle.py#L152)
+## [LifecycleError Objects](./persistence/run_lifecycle.py#L153)
 
 ```python
 class LifecycleError(FimError)
@@ -26680,7 +26680,7 @@ Base class for every lifecycle rule or record violation.
 
 <a id="fim.persistence.run_lifecycle.IllegalTransitionError"></a>
 
-## [IllegalTransitionError Objects](./persistence/run_lifecycle.py#L156)
+## [IllegalTransitionError Objects](./persistence/run_lifecycle.py#L157)
 
 ```python
 class IllegalTransitionError(LifecycleError)
@@ -26696,7 +26696,7 @@ An event is not legal in the object's current state.
 
 <a id="fim.persistence.run_lifecycle.IllegalTransitionError.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/run_lifecycle.py#L165)
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L166)
 
 ```python
 def __init__(state: RunState, event: RunEvent, revision: int) -> None
@@ -26706,7 +26706,7 @@ Record the rejected request and describe it.
 
 <a id="fim.persistence.run_lifecycle.RevisionConflictError"></a>
 
-## [RevisionConflictError Objects](./persistence/run_lifecycle.py#L176)
+## [RevisionConflictError Objects](./persistence/run_lifecycle.py#L177)
 
 ```python
 class RevisionConflictError(LifecycleError)
@@ -26721,7 +26721,7 @@ A request named a lifecycle revision other than the current one.
 
 <a id="fim.persistence.run_lifecycle.RevisionConflictError.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/run_lifecycle.py#L184)
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L185)
 
 ```python
 def __init__(expected: int, actual: int) -> None
@@ -26731,7 +26731,7 @@ Record both revisions and describe the conflict.
 
 <a id="fim.persistence.run_lifecycle.AttemptMismatchError"></a>
 
-## [AttemptMismatchError Objects](./persistence/run_lifecycle.py#L194)
+## [AttemptMismatchError Objects](./persistence/run_lifecycle.py#L195)
 
 ```python
 class AttemptMismatchError(LifecycleError)
@@ -26741,7 +26741,7 @@ An event came from an attempt that no longer owns execution.
 
 <a id="fim.persistence.run_lifecycle.LifecycleRecordError"></a>
 
-## [LifecycleRecordError Objects](./persistence/run_lifecycle.py#L198)
+## [LifecycleRecordError Objects](./persistence/run_lifecycle.py#L199)
 
 ```python
 class LifecycleRecordError(LifecycleError)
@@ -26751,7 +26751,7 @@ A stored lifecycle record is malformed or has an unknown schema.
 
 <a id="fim.persistence.run_lifecycle.CommandKeyReuseError"></a>
 
-## [CommandKeyReuseError Objects](./persistence/run_lifecycle.py#L202)
+## [CommandKeyReuseError Objects](./persistence/run_lifecycle.py#L203)
 
 ```python
 class CommandKeyReuseError(LifecycleError)
@@ -26766,7 +26766,7 @@ An idempotency key was reused for a different command.
 
 <a id="fim.persistence.run_lifecycle.CommandKeyReuseError.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/run_lifecycle.py#L210)
+#### [\_\_init\_\_](./persistence/run_lifecycle.py#L211)
 
 ```python
 def __init__(command_key: str, original: TransitionRecord) -> None
@@ -26776,7 +26776,7 @@ Record the key and its original transition, and describe them.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue"></a>
 
-## [ValidationIssue Objects](./persistence/run_lifecycle.py#L221)
+## [ValidationIssue Objects](./persistence/run_lifecycle.py#L222)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26793,7 +26793,7 @@ One reason a saved configuration cannot run.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L233)
+#### [to\_dict](./persistence/run_lifecycle.py#L234)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -26803,7 +26803,7 @@ Return the JSON form of this issue.
 
 <a id="fim.persistence.run_lifecycle.ValidationIssue.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L238)
+#### [from\_dict](./persistence/run_lifecycle.py#L239)
 
 ```python
 @classmethod
@@ -26814,7 +26814,7 @@ Parse one stored issue, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo"></a>
 
-## [ErrorInfo Objects](./persistence/run_lifecycle.py#L250)
+## [ErrorInfo Objects](./persistence/run_lifecycle.py#L251)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26833,7 +26833,7 @@ The most recent execution error recorded for a Run object.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L266)
+#### [to\_dict](./persistence/run_lifecycle.py#L267)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -26843,7 +26843,7 @@ Return the JSON form of this error.
 
 <a id="fim.persistence.run_lifecycle.ErrorInfo.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L276)
+#### [from\_dict](./persistence/run_lifecycle.py#L277)
 
 ```python
 @classmethod
@@ -26854,7 +26854,7 @@ Parse one stored error, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference"></a>
 
-## [CheckpointReference Objects](./persistence/run_lifecycle.py#L291)
+## [CheckpointReference Objects](./persistence/run_lifecycle.py#L292)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26871,7 +26871,7 @@ Pointer from a lifecycle record to its latest committed checkpoint.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L304)
+#### [to\_dict](./persistence/run_lifecycle.py#L305)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -26881,7 +26881,7 @@ Return the JSON form of this reference.
 
 <a id="fim.persistence.run_lifecycle.CheckpointReference.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L313)
+#### [from\_dict](./persistence/run_lifecycle.py#L314)
 
 ```python
 @classmethod
@@ -26892,7 +26892,7 @@ Parse one stored reference, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord"></a>
 
-## [TransitionRecord Objects](./persistence/run_lifecycle.py#L326)
+## [TransitionRecord Objects](./persistence/run_lifecycle.py#L327)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26914,7 +26914,7 @@ One lifecycle transition retained in the object's history.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L348)
+#### [to\_dict](./persistence/run_lifecycle.py#L349)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -26924,7 +26924,7 @@ Return the JSON form of this transition.
 
 <a id="fim.persistence.run_lifecycle.TransitionRecord.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L361)
+#### [from\_dict](./persistence/run_lifecycle.py#L362)
 
 ```python
 @classmethod
@@ -26935,7 +26935,7 @@ Parse one stored transition, rejecting a malformed value.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord"></a>
 
-## [RunLifecycleRecord Objects](./persistence/run_lifecycle.py#L380)
+## [RunLifecycleRecord Objects](./persistence/run_lifecycle.py#L381)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26976,7 +26976,7 @@ record that exists is always internally consistent.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L434)
+#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L435)
 
 ```python
 def __post_init__() -> None
@@ -26986,7 +26986,7 @@ Reject a record whose fields contradict each other.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.is_draft"></a>
 
-#### [is\_draft](./persistence/run_lifecycle.py#L478)
+#### [is\_draft](./persistence/run_lifecycle.py#L479)
 
 ```python
 @property
@@ -26997,18 +26997,18 @@ Return whether the saved configuration cannot run yet.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.is_terminal"></a>
 
-#### [is\_terminal](./persistence/run_lifecycle.py#L483)
+#### [is\_terminal](./persistence/run_lifecycle.py#L484)
 
 ```python
 @property
 def is_terminal() -> bool
 ```
 
-Return whether no event may leave the current state.
+Return whether execution cannot continue from the current record.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L487)
+#### [to\_dict](./persistence/run_lifecycle.py#L490)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27018,7 +27018,7 @@ Return the JSON form stored as `run.json`.
 
 <a id="fim.persistence.run_lifecycle.RunLifecycleRecord.from_dict"></a>
 
-#### [from\_dict](./persistence/run_lifecycle.py#L521)
+#### [from\_dict](./persistence/run_lifecycle.py#L524)
 
 ```python
 @classmethod
@@ -27034,7 +27034,7 @@ Parse a stored `run.json` document.
 
 <a id="fim.persistence.run_lifecycle.Configuration"></a>
 
-## [Configuration Objects](./persistence/run_lifecycle.py#L590)
+## [Configuration Objects](./persistence/run_lifecycle.py#L593)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27054,7 +27054,7 @@ and scientific run ID; an invalid one has at least one issue.
 
 <a id="fim.persistence.run_lifecycle.Configuration.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L606)
+#### [\_\_post\_init\_\_](./persistence/run_lifecycle.py#L609)
 
 ```python
 def __post_init__() -> None
@@ -27064,7 +27064,7 @@ Reject a configuration that is both or neither valid and invalid.
 
 <a id="fim.persistence.run_lifecycle.Configuration.is_valid"></a>
 
-#### [is\_valid](./persistence/run_lifecycle.py#L617)
+#### [is\_valid](./persistence/run_lifecycle.py#L620)
 
 ```python
 @property
@@ -27075,7 +27075,7 @@ Return whether the configuration may run.
 
 <a id="fim.persistence.run_lifecycle.Configuration.valid"></a>
 
-#### [valid](./persistence/run_lifecycle.py#L622)
+#### [valid](./persistence/run_lifecycle.py#L625)
 
 ```python
 @classmethod
@@ -27086,7 +27086,7 @@ Return a valid configuration outcome.
 
 <a id="fim.persistence.run_lifecycle.Configuration.invalid"></a>
 
-#### [invalid](./persistence/run_lifecycle.py#L627)
+#### [invalid](./persistence/run_lifecycle.py#L630)
 
 ```python
 @classmethod
@@ -27097,7 +27097,7 @@ Return an invalid configuration outcome.
 
 <a id="fim.persistence.run_lifecycle.Capabilities"></a>
 
-## [Capabilities Objects](./persistence/run_lifecycle.py#L633)
+## [Capabilities Objects](./persistence/run_lifecycle.py#L636)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -27111,7 +27111,7 @@ has an entry in `reasons` explaining why.
 
 <a id="fim.persistence.run_lifecycle.Capabilities.to_dict"></a>
 
-#### [to\_dict](./persistence/run_lifecycle.py#L649)
+#### [to\_dict](./persistence/run_lifecycle.py#L653)
 
 ```python
 def to_dict() -> dict[str, Any]
@@ -27121,7 +27121,7 @@ Return the JSON form sent to frontends.
 
 <a id="fim.persistence.run_lifecycle.apply_event"></a>
 
-#### [apply\_event](./persistence/run_lifecycle.py#L663)
+#### [apply\_event](./persistence/run_lifecycle.py#L668)
 
 ```python
 def apply_event(record: RunLifecycleRecord,
@@ -27173,7 +27173,7 @@ Return the record that results from applying one event.
 
 <a id="fim.persistence.run_lifecycle.capabilities"></a>
 
-#### [capabilities](./persistence/run_lifecycle.py#L748)
+#### [capabilities](./persistence/run_lifecycle.py#L753)
 
 ```python
 def capabilities(record: RunLifecycleRecord,
@@ -27199,7 +27199,7 @@ Return the actions allowed for one Run object, with reasons.
 
 <a id="fim.persistence.run_lifecycle.find_command"></a>
 
-#### [find\_command](./persistence/run_lifecycle.py#L939)
+#### [find\_command](./persistence/run_lifecycle.py#L965)
 
 ```python
 def find_command(record: RunLifecycleRecord,
@@ -27220,7 +27220,7 @@ Return the transition an idempotency key produced, if any.
 
 <a id="fim.persistence.run_lifecycle.format_timestamp"></a>
 
-#### [format\_timestamp](./persistence/run_lifecycle.py#L957)
+#### [format\_timestamp](./persistence/run_lifecycle.py#L983)
 
 ```python
 def format_timestamp(value: datetime) -> str
@@ -27234,7 +27234,7 @@ Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`.
 
 <a id="fim.persistence.run_lifecycle.is_attempt_id"></a>
 
-#### [is\_attempt\_id](./persistence/run_lifecycle.py#L968)
+#### [is\_attempt\_id](./persistence/run_lifecycle.py#L994)
 
 ```python
 def is_attempt_id(value: str) -> bool
@@ -27244,7 +27244,7 @@ Return whether `value` is a well-formed attempt ID.
 
 <a id="fim.persistence.run_lifecycle.is_object_id"></a>
 
-#### [is\_object\_id](./persistence/run_lifecycle.py#L973)
+#### [is\_object\_id](./persistence/run_lifecycle.py#L999)
 
 ```python
 def is_object_id(value: str) -> bool
@@ -27256,7 +27256,7 @@ The fixed form also guarantees an object ID is a safe directory name.
 
 <a id="fim.persistence.run_lifecycle.new_record"></a>
 
-#### [new\_record](./persistence/run_lifecycle.py#L981)
+#### [new\_record](./persistence/run_lifecycle.py#L1007)
 
 ```python
 def new_record(object_id: str,
@@ -27279,7 +27279,7 @@ Return the record for a newly saved object: `planned` or `draft`.
 
 <a id="fim.persistence.run_lifecycle.record_progress"></a>
 
-#### [record\_progress](./persistence/run_lifecycle.py#L1014)
+#### [record\_progress](./persistence/run_lifecycle.py#L1040)
 
 ```python
 def record_progress(
@@ -28619,7 +28619,7 @@ Open a new attempt that continues from the latest checkpoint.
 
 **Arguments**:
 
-- `object_id` - A `paused`, `interrupted`, or `failed` object.
+- `object_id` - A `paused`, `interrupted`, `failed`, or `cancelled` object.
 - `expected_revision` - Lifecycle revision the caller read.
 - `results` - Results directory (default: `results_directory()`).
 - `clock` - Injectable current-time source.
@@ -32845,7 +32845,7 @@ ownership protocol in `fim.persistence.run_ownership` are applied in one
 place only.
 
 `execute_run_object` is the worker. It opens an attempt (start for a
-`planned` object, resume for a `paused`, `interrupted`, or `failed` one),
+`planned` object, resume for a stopped object with a checkpoint),
 runs a `fim.execution.ScalarSession` (one replicate) or a
 `fim.batch_session.BatchSession` (several) in bounded steps, and between
 steps sits at a safe point where it:
@@ -33153,7 +33153,7 @@ Start or resume a Run object and execute it until it stops.
 **Arguments**:
 
 - `object_id` - A `planned` object to start, or a `paused`,
-  `interrupted`, or `failed` object to resume.
+  `interrupted`, `failed`, or `cancelled` object to resume.
 - `results` - Results directory (default: `results_directory()`).
 - `write_artifacts` - Writes the completed run's artifacts (default:
   `fim.persistence.artifacts.write_run_artifacts`; a test seam).

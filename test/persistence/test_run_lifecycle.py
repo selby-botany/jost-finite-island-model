@@ -71,6 +71,7 @@ _EXPECTED: dict[tuple[RunState, RunEvent], RunState] = {
     (RunState.INTERRUPTED, RunEvent.RESUME): RunState.RUNNING,
     (RunState.INTERRUPTED, RunEvent.ABANDON): RunState.CANCELLED,
     (RunState.FAILED, RunEvent.RESUME): RunState.RUNNING,
+    (RunState.CANCELLED, RunEvent.RESUME): RunState.RUNNING,
     (RunState.FAILED, RunEvent.ABANDON): RunState.CANCELLED,
     (RunState.CANCELLING, RunEvent.COMMIT_CANCEL): RunState.CANCELLED,
     (RunState.CANCELLING, RunEvent.COMPLETE): RunState.COMPLETED,
@@ -151,7 +152,7 @@ def test_every_state_event_pair(state: RunState, event: RunEvent) -> None:
 
 
 def test_terminal_states_have_no_exits() -> None:
-    """No event leaves `completed` or `cancelled`."""
+    """No event leaves an unconditionally terminal state."""
     for state, event in TRANSITIONS:
         assert state not in TERMINAL_STATES, (state, event)
 
@@ -380,7 +381,7 @@ def test_read_only_objects_allow_nothing() -> None:
     result = capabilities(_record_in(RunState.COMPLETED), read_only=True)
     document = result.to_dict()
     assert not any(value for key, value in document.items() if key != "reasons")
-    assert len(document["reasons"]) == 7
+    assert len(document["reasons"]) == 8
 
 
 def test_timestamps_are_utc_and_require_a_zone() -> None:
@@ -476,3 +477,27 @@ def test_progress_never_moves_backward() -> None:
             committed_generation=9,
             checkpoint=CheckpointReference("ckpt-10", "e" * 64, 10),
         )
+
+
+@pytest.mark.parametrize("checkpoint", [False, True])
+@pytest.mark.parametrize("verified", [False, True])
+def test_cancelled_capabilities_require_a_verified_checkpoint(
+    checkpoint: bool, verified: bool
+) -> None:
+    """Cancellation is final without a checkpoint, and never restarts at zero."""
+    record = _record_in(RunState.CANCELLED)
+    if checkpoint:
+        record = replace(
+            record,
+            latest_checkpoint=CheckpointReference("ckpt-000000", "0" * 64, 0),
+        )
+    result = capabilities(record, resume_verified=verified)
+    assert result.can_resurrect is (checkpoint and verified)
+    assert not result.can_resume
+    assert result.can_delete
+    assert record.is_terminal is (not checkpoint)
+    assert result.to_dict()["can_resurrect"] is (checkpoint and verified)
+    if not checkpoint:
+        assert "before its first checkpoint" in result.reasons["can_resurrect"]
+    elif not verified:
+        assert "verified" in result.reasons["can_resurrect"]

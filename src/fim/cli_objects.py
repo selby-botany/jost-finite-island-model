@@ -78,7 +78,7 @@ def add_object_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
     )
     for name, text in (
         ("start", "execute a planned object in the foreground"),
-        ("resume", "continue a paused, interrupted, or failed object"),
+        ("resume", "continue a stopped object from its checkpoint"),
     ):
         execute_parser = commands.add_parser(name, help=text)
         execute_parser.add_argument("object_id", metavar="OBJECT_ID")
@@ -243,8 +243,8 @@ def _execute(
         return 0
     if resume and state not in RESUMABLE_STATES:
         raise LifecycleError(
-            f"{object_id} is {state.value}; only a paused, interrupted, or "
-            "failed object can resume"
+            f"{object_id} is {state.value}; only a paused, interrupted, "
+            "failed, or cancelled object with a checkpoint can resume"
         )
     if state in RESUMABLE_STATES and reconciled.record.latest_checkpoint is None:
         raise LifecycleError(

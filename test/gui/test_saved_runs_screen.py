@@ -58,6 +58,22 @@ _SAVED_ROWS = (
 )
 
 
+def _show_home_and_wait(window: webview.Window) -> None:
+    """Wait for both Home listings before acting on rows they can replace."""
+    # Showing Home starts asynchronous refreshes; an early saved-run row
+    # alone does not prove that the later refresh cannot replace it.
+    window.evaluate_js(
+        "window.__fimSavedRunsHomeReady = false;"
+        "window.fim.showOpenRunScreen().then(() => {"
+        "window.__fimSavedRunsHomeReady = true;});"
+    )
+    poll_page(
+        window,
+        "window.__fimSavedRunsHomeReady",
+        what="Home listings settled",
+    )
+
+
 @pytest.fixture
 def saved_run_settings(_isolate_gui_preferences: Path) -> Path:
     """Settings for one short, resumable (lineal), scalar run."""
@@ -107,7 +123,7 @@ def test_a_draft_is_fixed_saved_and_run_from_home(
                 lambda text: str(text).startswith("Saved."),
                 what="Planned save banner",
             )
-            window.evaluate_js("window.fim.showOpenRunScreen();")
+            _show_home_and_wait(window)
             rows = poll_page(window, _SAVED_ROWS, bool, what="Saved runs row")
             window.evaluate_js(
                 "document.querySelector("
@@ -162,7 +178,7 @@ def test_editing_saved_run_stays_with_its_document(
                 what="saved-run confirmation",
             )
             window.evaluate_js("window.fim.workspace.createDocument();")
-            window.evaluate_js("window.fim.showOpenRunScreen();")
+            _show_home_and_wait(window)
             poll_page(window, _SAVED_ROWS, bool, what="Saved runs row")
             window.evaluate_js(
                 "document.querySelector("
@@ -339,7 +355,7 @@ def test_an_unnamed_saved_run_is_shown_by_its_settings(
     def _drive() -> None:
         try:
             wait_for_run_view_ready(window)
-            window.evaluate_js("window.fim.showOpenRunScreen();")
+            _show_home_and_wait(window)
             outcome.put(poll_page(window, _SAVED_ROW_NAME, bool, what="saved run name"))
         finally:
             window.destroy()
@@ -416,7 +432,7 @@ def test_a_run_executing_elsewhere_offers_no_watch(
     def _drive() -> None:
         try:
             wait_for_run_view_ready(window)
-            window.evaluate_js("window.fim.showOpenRunScreen();")
+            _show_home_and_wait(window)
             rows = poll_page(window, _SAVED_ROWS, bool, what="running saved run")
             title = window.evaluate_js(
                 "document.querySelector('#saved-runs-body tr td:nth-child(2)').title"
@@ -453,7 +469,7 @@ def test_select_all_and_delete_selected_include_saved_runs(
     def _drive() -> None:
         try:
             wait_for_run_view_ready(window)
-            window.evaluate_js("window.fim.showOpenRunScreen();")
+            _show_home_and_wait(window)
             hidden = poll_page(
                 window, _SAVED_CHECKBOXES, bool, what="saved-run checkbox"
             )
@@ -514,7 +530,7 @@ def test_kill_then_delete_from_home(saved_run_settings: Path) -> None:
     def _drive() -> None:
         try:
             wait_for_run_view_ready(window)
-            window.evaluate_js("window.fim.showOpenRunScreen();")
+            _show_home_and_wait(window)
             rows = poll_page(window, _SAVED_ROWS, bool, what="running saved run")
             window.evaluate_js(
                 "window.__fimConfirms = [];"
@@ -545,3 +561,66 @@ def test_kill_then_delete_from_home(saved_run_settings: Path) -> None:
     assert result["prompts"][1].startswith('"Long run" was killed. Delete it')
     assert api.killed == api.deleted == ["obj-" + "a" * 32]
     assert result["settled"][0]["actions"] == ["clone", "delete"]
+
+
+@pytest.mark.parametrize("checkpoint", [False, True])
+def test_cancelled_saved_run_resurrect_action_uses_the_start_backend(
+    saved_run_settings: Path, checkpoint: bool
+) -> None:
+    """A checkpoint enables Resurrect, preserving Clone and Delete."""
+
+    class ResurrectApi(_StubbedSavedRunsApi):
+        """Record admission through the same backend Resume uses."""
+
+        def __init__(self) -> None:
+            """Initialize a cancelled saved-run row and admission tracking."""
+            super().__init__()
+            self.started: list[str] = []
+            self.row = _stub_row("cancelled", kill=False, delete=True)
+            self.row["actions"]["resurrect"] = checkpoint
+
+        def start_run_object(
+            self, object_id: str, memory_confirmed: bool = False
+        ) -> dict[str, Any]:
+            """Record the Resurrect request without launching a worker."""
+            assert memory_confirmed is False
+            self.started.append(object_id)
+            return {"ok": False, "message": "Resurrection reached backend"}
+
+    api = ResurrectApi()
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def drive() -> None:
+        """Inspect action labels and activate resurrection when available."""
+        try:
+            wait_for_run_view_ready(window)
+            _show_home_and_wait(window)
+            rows = poll_page(window, _SAVED_ROWS, bool, what="cancelled saved run")
+            label = None
+            if checkpoint:
+                label = window.evaluate_js(
+                    "document.querySelector('#saved-runs-body "
+                    'button[data-action="resurrect"]\').textContent'
+                )
+                window.evaluate_js(
+                    "document.querySelector('#saved-runs-body "
+                    'button[data-action="resurrect"]\').click();'
+                )
+                poll_page(
+                    window,
+                    _RUN_BANNER,
+                    lambda text: "Resurrection reached backend" in str(text),
+                    what="resurrect backend admission",
+                )
+            outcome.put({"rows": rows, "label": label})
+        finally:
+            window.destroy()
+
+    webview.start(drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+    assert result["rows"][0]["actions"] == (
+        ["resurrect", "clone", "delete"] if checkpoint else ["clone", "delete"]
+    )
+    assert result["label"] == ("Resurrect" if checkpoint else None)
+    assert api.started == ([api.row["objectId"]] if checkpoint else [])

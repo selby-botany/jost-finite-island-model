@@ -701,3 +701,39 @@ def test_an_owner_record_round_trips() -> None:
     """The JSON mapping reads back as the same owner."""
     owner = AttemptOwner("att-1", 42, 42, 1.5)
     assert AttemptOwner.from_mapping(owner.to_mapping()) == owner
+
+
+@pytest.mark.parametrize("checkpoint", [False, True])
+def test_cancelled_run_reopens_only_with_a_checkpoint(
+    tmp_path: Path, checkpoint: bool
+) -> None:
+    """Resurrection opens a fenced attempt without altering checkpoint identity."""
+    planned = _planned(tmp_path)
+    lease = _start(tmp_path, planned)
+    if checkpoint:
+        lease.commit_progress(checkpoint=CHECKPOINT)
+    current = lease.current()
+    request_cancel(
+        planned.object_id, expected_revision=current.record.revision, results=tmp_path
+    )
+    cancelled = lease.finish(RunEvent.COMMIT_CANCEL)
+    if not checkpoint:
+        with pytest.raises(ResumeUnavailableError):
+            resume_run_object(
+                planned.object_id,
+                expected_revision=cancelled.record.revision,
+                results=tmp_path,
+            )
+        assert read_run_object(planned.object_id, results=tmp_path) == cancelled
+        return
+    opened = resume_run_object(
+        planned.object_id,
+        expected_revision=cancelled.record.revision,
+        results=tmp_path,
+    )
+    assert opened.lease is not None
+    with opened.lease as resurrected:
+        assert resurrected.current().record.state is RunState.RUNNING
+        assert resurrected.current().record.latest_checkpoint == CHECKPOINT
+        with pytest.raises(AttemptMismatchError):
+            lease.commit_progress(committed_generation=11)
