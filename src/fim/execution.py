@@ -62,6 +62,7 @@ from fim.model.allele import AlleleRegistry
 from fim.model.initial import EquilibrationOutcome
 from fim.model.operators import expand_population_sizes
 from fim.model.params import SimulationParams
+from fim.model.state import ModelState
 from fim.model.vector_block import VectorBlock, VectorMigration
 from fim.persistence import tlog
 from fim.persistence.binary_store import BinaryLogStore
@@ -276,11 +277,11 @@ class ScalarSession:
         except BaseException:
             close_store(store)
             raise
-        if _lane_generation(lane) != checkpoint.reference.committed_generation:
+        if lane_generation(lane) != checkpoint.reference.committed_generation:
             close_store(store)
             raise SessionRestoreError(
                 f"checkpoint {checkpoint.reference.checkpoint_id} holds generation "
-                f"{_lane_generation(lane)}, not the committed generation "
+                f"{lane_generation(lane)}, not the committed generation "
                 f"{checkpoint.reference.committed_generation}"
             )
         run_clock = clock if clock is not None else utc_now
@@ -289,7 +290,7 @@ class ScalarSession:
     @property
     def generation(self) -> int:
         """The last generation computed, persisted and recorded."""
-        return _lane_generation(self._lane)
+        return lane_generation(self._lane)
 
     @property
     def lane(self) -> ReplicaLane:
@@ -525,7 +526,7 @@ def export_lane(
     arrays: dict[str, npt.NDArray[Any]] = dict(monitor_arrays)
     payload: dict[str, Any] = {
         "equilibration": None,
-        "generation": _lane_generation(lane),
+        "generation": lane_generation(lane),
         "monitor": monitor,
         "population": None,
         "registries": None,
@@ -872,7 +873,7 @@ def _restore_block(
         raise SnapshotError(f"vector block: {error}") from error
 
 
-def _lane_generation(lane: ReplicaLane) -> int:
+def lane_generation(lane: ReplicaLane) -> int:
     """Return the lane's current generation, wherever it is held.
 
     Under the vector backend `lane.state` stays at generation zero until
@@ -880,6 +881,17 @@ def _lane_generation(lane: ReplicaLane) -> int:
     """
     block = lane.vectorized_state
     return block.generation if block is not None else lane.state.generation
+
+
+def lane_state(lane: ReplicaLane) -> ModelState:
+    """Return the lane's current population, wherever it is held.
+
+    Under the vector backend `lane.state` stays at generation zero until
+    the run stops, so the current population is materialized from the
+    block; this costs a full table conversion, so callers throttle it.
+    """
+    block = lane.vectorized_state
+    return block.to_model_state() if block is not None else lane.state
 
 
 def _select(

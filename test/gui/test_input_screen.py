@@ -735,7 +735,7 @@ def test_batch_progress_display_tracks_mean_generation_not_replicate_high_water(
 
     assert settled["barValue"] == 6
     assert settled["barMax"] == 100
-    assert settled["labelText"] == "mean completed generation 6"
+    assert settled["labelText"] == "mean completed generation 6 of up to 100"
     assert "replicates reporting" not in settled["labelText"]
 
 

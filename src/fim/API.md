@@ -368,6 +368,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [resolve\_session\_backend](#fim.execution.resolve_session_backend)
   * [check\_payload\_identity](#fim.execution.check_payload_identity)
   * [restore\_lane](#fim.execution.restore_lane)
+  * [lane\_generation](#fim.execution.lane_generation)
+  * [lane\_state](#fim.execution.lane_state)
 * [fim.execution\_priority](#fim.execution_priority)
   * [apply\_priority](#fim.execution_priority.apply_priority)
   * [apply\_lower\_priority](#fim.execution_priority.apply_lower_priority)
@@ -8816,7 +8818,7 @@ publishes a capture under an execution lease.
 
 <a id="fim.execution.SESSION_CHECKPOINT_KIND"></a>
 
-#### [SESSION\_CHECKPOINT\_KIND](./execution.py#L100)
+#### [SESSION\_CHECKPOINT\_KIND](./execution.py#L101)
 
 The `kind` a session's checkpoint payload carries.
 
@@ -8825,7 +8827,7 @@ covers every backend a session runs, the vector backend included.
 
 <a id="fim.execution.SESSION_CHECKPOINT_VERSION"></a>
 
-#### [SESSION\_CHECKPOINT\_VERSION](./execution.py#L107)
+#### [SESSION\_CHECKPOINT\_VERSION](./execution.py#L108)
 
 Version of the session payload layout this build writes.
 
@@ -8835,25 +8837,25 @@ Version 1 payloads never have a block.
 
 <a id="fim.execution.READABLE_SESSION_CHECKPOINT_VERSIONS"></a>
 
-#### [READABLE\_SESSION\_CHECKPOINT\_VERSIONS](./execution.py#L115)
+#### [READABLE\_SESSION\_CHECKPOINT\_VERSIONS](./execution.py#L116)
 
 Payload versions this build restores.
 
 <a id="fim.execution.EQUILIBRATION_HISTORY"></a>
 
-#### [EQUILIBRATION\_HISTORY](./execution.py#L118)
+#### [EQUILIBRATION\_HISTORY](./execution.py#L119)
 
 Array holding the ancestral phase's `H_S` history, when there was one.
 
 <a id="fim.execution.VECTOR_PREFIX"></a>
 
-#### [VECTOR\_PREFIX](./execution.py#L121)
+#### [VECTOR\_PREFIX](./execution.py#L122)
 
 Prefix of the vector block's arrays inside a checkpoint.
 
 <a id="fim.execution.UnsupportedSessionError"></a>
 
-## [UnsupportedSessionError Objects](./execution.py#L125)
+## [UnsupportedSessionError Objects](./execution.py#L126)
 
 ```python
 class UnsupportedSessionError(UnsupportedError)
@@ -8863,7 +8865,7 @@ Raised when a configuration cannot run as a resumable scalar session.
 
 <a id="fim.execution.SessionRestoreError"></a>
 
-## [SessionRestoreError Objects](./execution.py#L129)
+## [SessionRestoreError Objects](./execution.py#L130)
 
 ```python
 class SessionRestoreError(StoreError, ValueError)
@@ -8873,7 +8875,7 @@ Raised when a checkpoint cannot continue the given configuration.
 
 <a id="fim.execution.SessionCapture"></a>
 
-## [SessionCapture Objects](./execution.py#L134)
+## [SessionCapture Objects](./execution.py#L135)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -8893,7 +8895,7 @@ Everything a checkpoint of a scalar session holds.
 
 <a id="fim.execution.ScalarSession"></a>
 
-## [ScalarSession Objects](./execution.py#L152)
+## [ScalarSession Objects](./execution.py#L153)
 
 ```python
 class ScalarSession()
@@ -8907,7 +8909,7 @@ that closes it on exit.
 
 <a id="fim.execution.ScalarSession.__init__"></a>
 
-#### [\_\_init\_\_](./execution.py#L160)
+#### [\_\_init\_\_](./execution.py#L161)
 
 ```python
 def __init__(lane: ReplicaLane, store: TrajectoryStore, clock: Clock,
@@ -8926,7 +8928,7 @@ Wrap an already-built lane; use `create` instead of calling this.
 
 <a id="fim.execution.ScalarSession.__enter__"></a>
 
-#### [\_\_enter\_\_](./execution.py#L190)
+#### [\_\_enter\_\_](./execution.py#L191)
 
 ```python
 def __enter__() -> ScalarSession
@@ -8936,7 +8938,7 @@ Return this session for a `with` block.
 
 <a id="fim.execution.ScalarSession.__exit__"></a>
 
-#### [\_\_exit\_\_](./execution.py#L194)
+#### [\_\_exit\_\_](./execution.py#L195)
 
 ```python
 def __exit__(*_: object) -> None
@@ -8946,7 +8948,7 @@ Close the session's store, whether or not it finished.
 
 <a id="fim.execution.ScalarSession.create"></a>
 
-#### [create](./execution.py#L199)
+#### [create](./execution.py#L200)
 
 ```python
 @classmethod
@@ -8982,7 +8984,7 @@ Build generation zero of a single replicate and persist it.
 
 <a id="fim.execution.ScalarSession.restore"></a>
 
-#### [restore](./execution.py#L235)
+#### [restore](./execution.py#L236)
 
 ```python
 @classmethod
@@ -9024,7 +9026,7 @@ they are: ``auto`` is never resolved again on resume.
 
 <a id="fim.execution.ScalarSession.generation"></a>
 
-#### [generation](./execution.py#L290)
+#### [generation](./execution.py#L291)
 
 ```python
 @property
@@ -9035,7 +9037,7 @@ The last generation computed, persisted and recorded.
 
 <a id="fim.execution.ScalarSession.lane"></a>
 
-#### [lane](./execution.py#L295)
+#### [lane](./execution.py#L296)
 
 ```python
 @property
@@ -9046,7 +9048,7 @@ The working state; read-only use only (snapshots, diagnostics).
 
 <a id="fim.execution.ScalarSession.run_id"></a>
 
-#### [run\_id](./execution.py#L300)
+#### [run\_id](./execution.py#L301)
 
 ```python
 @property
@@ -9057,7 +9059,7 @@ The scientific run identifier.
 
 <a id="fim.execution.ScalarSession.stopped"></a>
 
-#### [stopped](./execution.py#L305)
+#### [stopped](./execution.py#L306)
 
 ```python
 @property
@@ -9068,7 +9070,7 @@ Whether the convergence monitor has stopped the run.
 
 <a id="fim.execution.ScalarSession.store"></a>
 
-#### [store](./execution.py#L310)
+#### [store](./execution.py#L311)
 
 ```python
 @property
@@ -9079,7 +9081,7 @@ The trajectory store generations are persisted to.
 
 <a id="fim.execution.ScalarSession.advance"></a>
 
-#### [advance](./execution.py#L314)
+#### [advance](./execution.py#L315)
 
 ```python
 def advance(generations: int | None = None) -> bool
@@ -9109,7 +9111,7 @@ session is again at a safe point.
 
 <a id="fim.execution.ScalarSession.capture"></a>
 
-#### [capture](./execution.py#L342)
+#### [capture](./execution.py#L343)
 
 ```python
 def capture() -> SessionCapture
@@ -9133,7 +9135,7 @@ first, so the positions recorded name data already on disk.
 
 <a id="fim.execution.ScalarSession.checkpoint"></a>
 
-#### [checkpoint](./execution.py#L373)
+#### [checkpoint](./execution.py#L374)
 
 ```python
 def checkpoint(lease: ExecutionLease,
@@ -9161,7 +9163,7 @@ Capture the session and publish it as the object's latest checkpoint.
 
 <a id="fim.execution.ScalarSession.close"></a>
 
-#### [close](./execution.py#L399)
+#### [close](./execution.py#L400)
 
 ```python
 def close() -> None
@@ -9171,7 +9173,7 @@ Release the store's open files; idempotent.
 
 <a id="fim.execution.ScalarSession.finalize"></a>
 
-#### [finalize](./execution.py#L405)
+#### [finalize](./execution.py#L406)
 
 ```python
 def finalize() -> RunResult
@@ -9192,7 +9194,7 @@ Build the run's result once it has stopped, and close the store.
 
 <a id="fim.execution.check_session_support"></a>
 
-#### [check\_session\_support](./execution.py#L443)
+#### [check\_session\_support](./execution.py#L444)
 
 ```python
 def check_session_support(params: SimulationParams) -> SessionBackend
@@ -9222,7 +9224,7 @@ configuration is reported without recording a failed attempt.
 
 <a id="fim.execution.check_backend_buildable"></a>
 
-#### [check\_backend\_buildable](./execution.py#L471)
+#### [check\_backend\_buildable](./execution.py#L472)
 
 ```python
 def check_backend_buildable(params: SimulationParams,
@@ -9243,7 +9245,7 @@ Refuse a backend the blocking call itself would refuse for `params`.
 
 <a id="fim.execution.export_lane"></a>
 
-#### [export\_lane](./execution.py#L498)
+#### [export\_lane](./execution.py#L499)
 
 ```python
 def export_lane(
@@ -9276,7 +9278,7 @@ log) first, so the positions recorded name data already on disk.
 
 <a id="fim.execution.resolve_session_backend"></a>
 
-#### [resolve\_session\_backend](./execution.py#L572)
+#### [resolve\_session\_backend](./execution.py#L573)
 
 ```python
 def resolve_session_backend(params: SimulationParams) -> SessionBackend
@@ -9304,7 +9306,7 @@ blocking call would.
 
 <a id="fim.execution.check_payload_identity"></a>
 
-#### [check\_payload\_identity](./execution.py#L604)
+#### [check\_payload\_identity](./execution.py#L605)
 
 ```python
 def check_payload_identity(
@@ -9338,7 +9340,7 @@ Check a payload is a session's of `kind`, taken under `params`.
 
 <a id="fim.execution.restore_lane"></a>
 
-#### [restore\_lane](./execution.py#L742)
+#### [restore\_lane](./execution.py#L743)
 
 ```python
 def restore_lane(params: SimulationParams,
@@ -9382,6 +9384,33 @@ the recorded positions.
 
 - `SnapshotError` - If any part of the state is malformed or inconsistent.
 - `ValueError` - If a log does not match its recorded position.
+
+<a id="fim.execution.lane_generation"></a>
+
+#### [lane\_generation](./execution.py#L876)
+
+```python
+def lane_generation(lane: ReplicaLane) -> int
+```
+
+Return the lane's current generation, wherever it is held.
+
+Under the vector backend `lane.state` stays at generation zero until
+the run stops; the block holds the current generation.
+
+<a id="fim.execution.lane_state"></a>
+
+#### [lane\_state](./execution.py#L886)
+
+```python
+def lane_state(lane: ReplicaLane) -> ModelState
+```
+
+Return the lane's current population, wherever it is held.
+
+Under the vector backend `lane.state` stays at generation zero until
+the run stops, so the current population is materialized from the
+block; this costs a full table conversion, so callers throttle it.
 
 <a id="fim.execution_priority"></a>
 
@@ -16203,7 +16232,7 @@ pause and cancellation requests at safe points.
 
 <a id="fim.gui.object_runner.start_object_run"></a>
 
-#### [start\_object\_run](./gui/object_runner.py#L76)
+#### [start\_object\_run](./gui/object_runner.py#L82)
 
 ```python
 def start_object_run(

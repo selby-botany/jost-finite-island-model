@@ -23891,7 +23891,7 @@ Each test joins the worker thread; none waits on a clock.
 
 <a id="gui.test_object_runner.test_cancel_before_worker_start_posts_a_cancelled_outcome"></a>
 
-#### [test\_cancel\_before\_worker\_start\_posts\_a\_cancelled\_outcome](./gui/test_object_runner.py#L152)
+#### [test\_cancel\_before\_worker\_start\_posts\_a\_cancelled\_outcome](./gui/test_object_runner.py#L157)
 
 ```python
 def test_cancel_before_worker_start_posts_a_cancelled_outcome(
@@ -23900,9 +23900,26 @@ def test_cancel_before_worker_start_posts_a_cancelled_outcome(
 
 Cancellation may win the race with a newly spawned worker.
 
+<a id="gui.test_object_runner.test_a_vector_batch_sidecar_reports_readable_progress"></a>
+
+#### [test\_a\_vector\_batch\_sidecar\_reports\_readable\_progress](./gui/test_object_runner.py#L224)
+
+```python
+def test_a_vector_batch_sidecar_reports_readable_progress(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Each `.progress` sidecar follows the log, not the stale `lane.state`.
+
+The vector backend leaves `lane.state` at generation zero until the
+run stops, which once pinned every sidecar, and so the whole live
+view, at generation zero. The observer flushes every log after each
+tick and blocks are never sealed on a timer, so each tick's committed
+generation is exactly the previous tick's, whatever the clock does.
+
 <a id="gui.test_object_runner.test_a_run_killed_after_publishing_reports_it_already_finished"></a>
 
-#### [test\_a\_run\_killed\_after\_publishing\_reports\_it\_already\_finished](./gui/test_object_runner.py#L219)
+#### [test\_a\_run\_killed\_after\_publishing\_reports\_it\_already\_finished](./gui/test_object_runner.py#L268)
 
 ```python
 def test_a_run_killed_after_publishing_reports_it_already_finished(

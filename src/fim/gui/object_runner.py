@@ -20,7 +20,13 @@ import yaml
 from fim.batch_session import BatchSession, check_batch_session_support
 from fim.config.defaults import DEFAULT_PAIRWISE_MAX_DEMES
 from fim.engine import RunResult
-from fim.execution import ScalarSession, check_session_support
+from fim.engine.lanes import ReplicaLane
+from fim.execution import (
+    ScalarSession,
+    check_session_support,
+    lane_generation,
+    lane_state,
+)
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.presets import split_configuration
 from fim.gui.runner import (
@@ -173,6 +179,55 @@ def _post_terminal_outcome(
         message_queue.put(("error", f"the saved run is {record.state.value}"))
 
 
+def _readable_generation(session: BatchSession, lane: ReplicaLane) -> int:
+    """Return the newest generation another process can read from the lane's log.
+
+    A `.progress` sidecar promises its generation's rows are already on
+    disk (`fim.gui.store.read_live_state`). The log writes a block only
+    every `LIVE_BLOCK_SECONDS`, so the lane's own generation is usually
+    ahead of the file; the log's committed generation never is. Under
+    the vector backend `lane.state` is not even current, so reading it
+    would report generation zero for the whole run.
+
+    Args:
+        session: The running batch.
+        lane: One of its replicates.
+
+    Returns:
+        The committed generation while the log is open; the lane's own
+        generation once the log is closed and all of it is on disk.
+    """
+    store = session.store.store_for(lane.run_id)
+    if isinstance(store, BinaryLogStore) and store.has_writer:
+        return max(store.snapshot()[0], 0)
+    return lane_generation(lane)
+
+
+def _report_batch_progress(
+    session: BatchSession, run_dir: Path, reported: dict[int, int]
+) -> None:
+    """Update each replicate's `.progress` sidecar when its log has moved on.
+
+    Args:
+        session: The running batch.
+        run_dir: The batch's own directory, holding `replicate-NNN/`.
+        reported: Each replicate's last sidecar value, by replica index;
+            updated in place.
+    """
+    for lane in session.lanes:
+        previous = reported.get(lane.replica_index, -1)
+        # Progress never moves back, and an unchanged sidecar is not
+        # rewritten: a large batch would otherwise rewrite every file on
+        # every tick.
+        generation = max(_readable_generation(session, lane), previous)
+        if generation == previous:
+            continue
+        rep_dir = run_dir / f"replicate-{lane.replica_index + 1:03d}"
+        if rep_dir.is_dir():
+            write_progress_sidecar(rep_dir / ".progress", generation)
+            reported[lane.replica_index] = generation
+
+
 def _object_worker(
     object_id: str,
     message_queue: queue.Queue[Any],
@@ -208,12 +263,13 @@ def _object_worker(
     except Exception:
         effective_cadence = cadence or GUI_CADENCE
 
+    # Each replicate's last sidecar value, so a sidecar is rewritten only
+    # when its log commits a new block rather than on every tick.
+    reported: dict[int, int] = {}
+
     def observe(session: Session) -> None:
         if isinstance(session, BatchSession) and run_dir is not None:
-            for lane in session.lanes:
-                rep_dir = run_dir / f"replicate-{lane.replica_index + 1:03d}"
-                if rep_dir.is_dir():
-                    write_progress_sidecar(rep_dir / ".progress", lane.state.generation)
+            _report_batch_progress(session, run_dir, reported)
         elif isinstance(session, ScalarSession):
             lane = session.lane
             if throttle.should_report(session.generation, lane.params.max_generations):
@@ -221,7 +277,7 @@ def _object_worker(
                     write_progress_sidecar(run_dir / ".progress", session.generation)
                 message_queue.put(
                     progress_message(
-                        lane.state,
+                        lane_state(lane),
                         session.generation,
                         lane.params,
                         session.run_id,

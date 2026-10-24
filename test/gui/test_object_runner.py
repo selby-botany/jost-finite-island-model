@@ -15,11 +15,16 @@ from typing import Any
 import pytest
 import yaml
 
+from fim.batch_session import BatchSession
 from fim.engine import RunResult
 from fim.examples import classes
-from fim.execution import ScalarSession, UnsupportedSessionError
+from fim.execution import ScalarSession, UnsupportedSessionError, lane_generation
+from fim.gui import object_runner
 from fim.gui.object_runner import start_object_run
+from fim.gui.store import read_live_state, read_progress_sidecar
+from fim.model.params import SimulationParams
 from fim.persistence.artifacts import write_run_artifacts
+from fim.persistence.binary_store import BinaryLogStore
 from fim.persistence.run_lifecycle import RunState
 from fim.persistence.run_objects import create_run_object, read_run_object
 from fim.persistence.run_ownership import request_cancel, request_pause
@@ -214,6 +219,50 @@ def test_a_planned_batch_run_posts_started_then_done(tmp_path: Path) -> None:
     assert (finished.directory / "manifest.json").is_file()
     assert (finished.directory / "replicate-001" / "manifest.json").is_file()
     assert (finished.directory / "replicate-002" / "manifest.json").is_file()
+
+
+def test_a_vector_batch_sidecar_reports_readable_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each `.progress` sidecar follows the log, not the stale `lane.state`.
+
+    The vector backend leaves `lane.state` at generation zero until the
+    run stops, which once pinned every sidecar, and so the whole live
+    view, at generation zero. The observer flushes every log after each
+    tick and blocks are never sealed on a timer, so each tick's committed
+    generation is exactly the previous tick's, whatever the clock does.
+    """
+    pytest.importorskip("numba")
+    monkeypatch.setattr(object_runner, "LIVE_BLOCK_SECONDS", None)
+    object_id = _create(
+        tmp_path,
+        n_replicates=2,
+        max_generations=12,
+        engine_backend="generational-vector",
+    )
+    run = read_run_object(object_id, results=tmp_path)
+    sidecar = run.directory / "replicate-001" / ".progress"
+    seen: list[tuple[int, int]] = []
+
+    def observe(session: BatchSession) -> None:
+        lane = session.lanes[0]
+        reported = read_progress_sidecar(sidecar)
+        assert reported is not None
+        seen.append((reported["generation"], lane_generation(lane)))
+        for each in session.lanes:
+            store = session.store.store_for(each.run_id)
+            assert isinstance(store, BinaryLogStore)
+            store.flush()
+
+    posted = _execute(object_id, tmp_path, observer=observe)
+
+    assert posted[-1][0] == "done"
+    assert [reported for reported, _ in seen] == [0, 5, 12]
+    params = SimulationParams.from_mapping(_CONFIG)
+    trajectory = sidecar.parent / "trajectory.tlog"
+    run_id = f"{run.record.scientific_run_id}-r001"
+    for reported, _ in seen:
+        assert read_live_state(trajectory, run_id, reported, params.loci) is not None
 
 
 def test_a_run_killed_after_publishing_reports_it_already_finished(

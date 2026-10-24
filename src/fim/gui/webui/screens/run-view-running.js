@@ -809,7 +809,8 @@ function renderBatchProgress(state, payload, jobId = null) {
     const meanGeneration = payload.meanReportedGeneration ?? 0;
     progressBar.max = payload.maxGenerations;
     progressBar.value = meanGeneration;
-    progressLabel.textContent = `mean completed generation ${meanGeneration}`;
+    progressLabel.textContent =
+        `mean completed generation ${meanGeneration} of up to ${payload.maxGenerations}`;
     if (!state.liveDemeSelectorWired) {
         wireLiveDemePairSelector(payload.demeCount, state, jobId);
         state.liveDemeSelectorWired = true;
