@@ -53,3 +53,9 @@ run-*/
 
 # Local-only reference material (literature review, not for the public repo)
 /papers/
+
+# Shipped worked examples ship `convergence.jsonl.gz.part-NNNN`; opening one
+# in place (`materialize_outputs`) decodes it to a plain `convergence.jsonl`
+# beside it, so any read-only tool that opens a repo-tree example leaves this
+# file behind
+src/fim/gui/webui/examples/**/convergence.jsonl
