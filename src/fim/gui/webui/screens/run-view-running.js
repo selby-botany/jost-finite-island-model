@@ -316,6 +316,9 @@ function enterRunningState(
     runDemePairSelector.hidden = true;
     cancelButton.disabled = false;
     openFolderButton.hidden = true;
+    // A run in flight has no settings left to change (`screens/run-view-
+    // controls.js`'s own doc comment on the button).
+    editConfigurationButton.hidden = true;
     resultsBackButton.hidden = true;
     resultsHistoryBackButton.hidden = true;
     resultsHistoryForwardButton.hidden = true;

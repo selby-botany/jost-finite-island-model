@@ -16,6 +16,9 @@ const runReason = document.getElementById("run-reason");
 const runButton = document.getElementById("run-button");
 const cancelButton = document.getElementById("cancel-run-button");
 const openFolderButton = document.getElementById("open-folder-button");
+const editConfigurationButton = document.getElementById(
+    "edit-configuration-button"
+);
 const runStudySelect = document.getElementById("run-study-select");
 const runStudyNewRow = document.getElementById("run-study-new-row");
 const runStudyNewNameInput = document.getElementById("run-study-new-name");
@@ -903,6 +906,9 @@ function wireRunViewControls() {
     window.fim.runSimulation = onRunClicked;
     cancelButton.addEventListener("click", onCancelClicked);
     openFolderButton.addEventListener("click", onOpenFolderClicked);
+    editConfigurationButton.addEventListener("click", () => {
+        window.fim.showConfigureScreen();
+    });
     const sweepBox = document.getElementById("configure-sweep-checkbox");
     if (sweepBox !== null) {
         sweepBox.addEventListener("change", syncRunDetailsRowVisibility);

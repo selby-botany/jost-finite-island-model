@@ -302,6 +302,23 @@
              saved-runs.js`): an invalid form is saved as a Draft. -->
         <button type="button" id="save-run-object-button">Save for later</button>
         <button type="button" id="cancel-run-button" disabled>Cancel</button>
+        <!-- `initial`/`completed`-only (hidden while `running`): opens
+             Configure with this run's own settings already loaded, so a
+             run that has not started yet -- or one just shown because it
+             turned out to already be computed (`screens/run-view-
+             controls.js`'s own "already computed" banner) -- can be
+             changed before (re)starting, instead of leaving Configure
+             reachable only through the always-visible parameter strip or
+             rail. Wired in `screens/run-view-controls.js` (state-
+             independent, like `cancelButton`/`openFolderButton` above);
+             shown/hidden by each state's own `enterInitialState`/
+             `enterCompletedState`/`enterRunningState`. -->
+        <button type="button" id="edit-configuration-button" hidden>
+          <svg class="button-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-configure"></use>
+          </svg>
+          Edit configuration
+        </button>
         <!-- Shown only while a saved run executes: it stops at a
              checkpoint and can be resumed from Home's Saved runs. -->
         <button type="button" id="pause-run-button" hidden>Pause</button>

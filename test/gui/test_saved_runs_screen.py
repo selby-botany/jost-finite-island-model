@@ -672,6 +672,67 @@ def test_opening_a_saved_run_labels_its_new_tab(
     )
 
 
+def test_edit_configuration_button_opens_configure(saved_run_settings: Path) -> None:
+    """The Run card's "Edit configuration" button is the way back to
+    Configure for a saved run opened via `editSavedRun` (the Home row's
+    "Edit" action): that action lands on `screen-run`, whose own
+    N/d/m/mu are plain text, not editable fields -- only Configure's own
+    two-panel form is. Reported as a navigational dead end: Home's
+    "Edit" led to a card with no way to actually change a value.
+    """
+    api = Api()
+    saved = api.save_run_object(_form(), run_name="Edit link trial")
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(f"editSavedRun({saved['objectId']!r});")
+            poll_page(
+                window,
+                "window.fim.getEditingObjectId()",
+                lambda value: value == saved["objectId"],
+                what="opened saved-run tab",
+            )
+            before = window.evaluate_js(
+                "({runHidden: document.getElementById('screen-run').hidden, "
+                "configureHidden: "
+                "document.getElementById('screen-configure').hidden, "
+                "buttonHidden: "
+                "document.getElementById('edit-configuration-button').hidden})"
+            )
+            window.evaluate_js(
+                "document.getElementById('edit-configuration-button').click();"
+            )
+            poll_page(
+                window,
+                "document.getElementById('screen-configure').hidden",
+                lambda hidden: hidden is False,
+                what="Configure screen shown",
+            )
+            after = window.evaluate_js(
+                "({runHidden: document.getElementById('screen-run').hidden, "
+                "configureHidden: "
+                "document.getElementById('screen-configure').hidden, "
+                "fieldN: document.getElementById('field-N').value})"
+            )
+            outcome.put({"before": before, "after": after})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+    assert result["before"] == {
+        "runHidden": False,
+        "configureHidden": True,
+        "buttonHidden": False,
+    }
+    assert result["after"]["runHidden"] is True
+    assert result["after"]["configureHidden"] is False
+    assert result["after"]["fieldN"] == _form()["N"]
+
+
 @pytest.mark.parametrize(
     "ending", ["completed", "paused", "cancelled", "failed", "killed"]
 )

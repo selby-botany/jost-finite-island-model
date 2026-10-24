@@ -443,6 +443,9 @@ function enterInitialState(renderPreview = true) {
     runProgress.hidden = true;
     cancelButton.disabled = true;
     openFolderButton.hidden = true;
+    // Not started yet: offer a way back to Configure to change it
+    // (`screens/run-view-controls.js`'s own doc comment on the button).
+    editConfigurationButton.hidden = false;
     // "<Experiment> — initial conditions (p₀)" (`screens/run-title.js`).
     window.fim.setRunCardTitle({ phase: "initial" });
     // `resultsBackButton`/`resultsStats`/`batchResultsTableEl` are all

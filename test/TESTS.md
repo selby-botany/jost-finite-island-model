@@ -27180,7 +27180,7 @@ A configuration already computed is reused, not computed again.
 
 <a id="gui.test_run_reuse._RecordingWindow"></a>
 
-## [\_RecordingWindow Objects](./gui/test_run_reuse.py#L139)
+## [\_RecordingWindow Objects](./gui/test_run_reuse.py#L144)
 
 ```python
 class _RecordingWindow(_RunWindow)
@@ -27190,7 +27190,7 @@ A run window that also keeps every script it was sent.
 
 <a id="gui.test_run_reuse._RecordingWindow.reproducibility_script"></a>
 
-#### [reproducibility\_script](./gui/test_run_reuse.py#L150)
+#### [reproducibility\_script](./gui/test_run_reuse.py#L155)
 
 ```python
 def reproducibility_script() -> str | None
@@ -28219,9 +28219,25 @@ def test_opening_a_saved_run_labels_its_new_tab(saved_run_settings: Path,
 
 Open supplies the same name/settings fallback as the Home row.
 
+<a id="gui.test_saved_runs_screen.test_edit_configuration_button_opens_configure"></a>
+
+#### [test\_edit\_configuration\_button\_opens\_configure](./gui/test_saved_runs_screen.py#L675)
+
+```python
+def test_edit_configuration_button_opens_configure(
+        saved_run_settings: Path) -> None
+```
+
+The Run card's "Edit configuration" button is the way back to
+Configure for a saved run opened via `editSavedRun` (the Home row's
+"Edit" action): that action lands on `screen-run`, whose own
+N/d/m/mu are plain text, not editable fields -- only Configure's own
+two-panel form is. Reported as a navigational dead end: Home's
+"Edit" led to a card with no way to actually change a value.
+
 <a id="gui.test_saved_runs_screen.test_run_button_tracks_its_own_document_job"></a>
 
-#### [test\_run\_button\_tracks\_its\_own\_document\_job](./gui/test_saved_runs_screen.py#L678)
+#### [test\_run\_button\_tracks\_its\_own\_document\_job](./gui/test_saved_runs_screen.py#L739)
 
 ```python
 @pytest.mark.parametrize(
@@ -28234,7 +28250,7 @@ Job notifications and validation cannot enable a running tab's button.
 
 <a id="gui.test_saved_runs_screen.test_clone_opens_for_editing_and_confirms_an_identical_start"></a>
 
-#### [test\_clone\_opens\_for\_editing\_and\_confirms\_an\_identical\_start](./gui/test_saved_runs_screen.py#L758)
+#### [test\_clone\_opens\_for\_editing\_and\_confirms\_an\_identical\_start](./gui/test_saved_runs_screen.py#L819)
 
 ```python
 @pytest.mark.parametrize("target", ["saved", "configure"])
@@ -28247,7 +28263,7 @@ Cloning opens its copy; both Start paths warn unless settings change.
 
 <a id="gui.test_saved_runs_screen.test_identical_clone_warning_explains_original_checkpoint_progress"></a>
 
-#### [test\_identical\_clone\_warning\_explains\_original\_checkpoint\_progress](./gui/test_saved_runs_screen.py#L872)
+#### [test\_identical\_clone\_warning\_explains\_original\_checkpoint\_progress](./gui/test_saved_runs_screen.py#L933)
 
 ```python
 @pytest.mark.parametrize("source_state", ["cancelled", "failed", "paused"])
@@ -28259,7 +28275,7 @@ A declined duplicate launch points to the original's existing progress.
 
 <a id="gui.test_saved_runs_screen.test_start_offers_to_continue_from_a_stopped_run_with_the_same_settings"></a>
 
-#### [test\_start\_offers\_to\_continue\_from\_a\_stopped\_run\_with\_the\_same\_settings](./gui/test_saved_runs_screen.py#L925)
+#### [test\_start\_offers\_to\_continue\_from\_a\_stopped\_run\_with\_the\_same\_settings](./gui/test_saved_runs_screen.py#L986)
 
 ```python
 @pytest.mark.parametrize(
@@ -28280,7 +28296,7 @@ Start copies the checkpoint, or asks before recomputing from generation 0.
 
 <a id="gui.test_saved_runs_screen.test_cancelled_saved_run_resurrect_action_uses_the_start_backend"></a>
 
-#### [test\_cancelled\_saved\_run\_resurrect\_action\_uses\_the\_start\_backend](./gui/test_saved_runs_screen.py#L1008)
+#### [test\_cancelled\_saved\_run\_resurrect\_action\_uses\_the\_start\_backend](./gui/test_saved_runs_screen.py#L1069)
 
 ```python
 @pytest.mark.parametrize("checkpoint", [False, True])

@@ -4774,6 +4774,12 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     resultsBackButton.hidden = false;
     resultsHistoryBackButton.hidden = false;
     resultsHistoryForwardButton.hidden = false;
+    // Covers the "already computed" case (`screens/run-view-controls.js`'s
+    // own `onRunClicked`, the `started.reused` branch) that lands here
+    // with nothing actually (re)started: offers a way back to Configure
+    // to change the settings, rather than only the always-visible
+    // parameter strip or rail.
+    editConfigurationButton.hidden = false;
     if (typeof window.fim.syncHistoryControls === "function") {
         window.fim.syncHistoryControls();
     }

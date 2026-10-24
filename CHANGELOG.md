@@ -2653,6 +2653,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Confirmed with real local builds of the frozen executable against the
   new image (CLI smoke checks, the default batch, a GUI stay-alive check
   under `xvfb`, and the dependency-purged fail-loudly check).
+- **The Run card no longer strands a botanist who wants to change a
+  setting.** Home's "Edit" action on a saved run opened the Run card,
+  whose own N/d/m/mu are plain text, not editable fields — only
+  Configure's own form is, reachable only through the always-visible
+  parameter strip or rail, neither of which look clickable. Starting an
+  already-computed configuration had the same gap: its "already
+  computed, so nothing was run" banner showed the existing result with
+  no way back to the settings that produced it. An "Edit configuration"
+  button on the Run card now opens Configure directly, shown whenever a
+  run has not started or is showing results reused this way, hidden
+  only while a run is actually in progress.
 
 ---
 

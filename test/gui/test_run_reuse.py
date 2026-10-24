@@ -105,7 +105,9 @@ def test_clicking_run_on_a_computed_configuration_shows_it_and_says_so(
         view: window.fim.getRunViewState(),
         pending: window.__fimScrubberPending,
         banner: document.getElementById('run-banner').textContent,
-        bannerHidden: document.getElementById('run-banner').hidden
+        bannerHidden: document.getElementById('run-banner').hidden,
+        editConfigurationHidden:
+            document.getElementById('edit-configuration-button').hidden
     })"""
 
     def steps(poll_until: Poll) -> Any:
@@ -131,6 +133,9 @@ def test_clicking_run_on_a_computed_configuration_shows_it_and_says_so(
 
     assert second["view"] == "completed"
     assert second["bannerHidden"] is False
+    # Reported as a dead end: "already computed" left no way back to
+    # Configure to change the settings that produced it.
+    assert second["editConfigurationHidden"] is False
     runs = list(results.glob("objects/*/manifest.json"))
     assert len(runs) == 1
     assert before == len(groups.list_studies())
