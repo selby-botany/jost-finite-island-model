@@ -73,7 +73,9 @@ def test_messages_render_symbols_including_collapsed_details(
             renderRunMessages([{severity: "warning", text: G_ST_CAUTION_TEXT}]);
         })();""",
         read="""({
-            primary: document.querySelector("#run-messages > li").innerHTML,
+            // [0] is the pooled-scatter sentence (10 replicates); the stop
+            // sentence carrying the G_ST math is [1].
+            primary: document.querySelectorAll("#run-messages > li")[1].innerHTML,
             details: document.querySelector(".run-message-detail-list").innerHTML,
             warning: document.querySelector(".run-message-warning").innerHTML,
             raw: document.getElementById("run-messages").textContent,

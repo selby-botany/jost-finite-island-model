@@ -66,28 +66,37 @@ def test_the_batch_sentences_say_how_the_batch_stopped(
     """Each way a batch can end has its own sentence."""
     settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_MESSAGES)
 
+    # More than one replicate leads with the pooled-scatter sentence; the
+    # stop sentence follows it.
     assert settled["met"][0]["text"] == (
+        '10 replicates are overlaid in "Allele frequencies by deme pair". '
+        "In each replicate, each deme's frequencies sum to 1."
+    )
+    assert settled["met"][1]["text"] == (
         "The batch ran 10 replicates and stopped because the 95% confidence "
         "interval for D and G_ST is within ±0.5."
     )
-    assert settled["unmet"][0] == (
+    assert settled["unmet"][1] == (
         "The batch ran all 10 replicates it allows and stopped at that limit: "
         "the 95% confidence interval for D and G_ST is still wider than "
         "±0.01."
     )
-    assert settled["capped"][0].startswith("The batch ran all 200 replicates it allows")
-    assert settled["capMet"][0] == (
+    assert settled["capped"][1].startswith("The batch ran all 200 replicates it allows")
+    assert settled["capMet"][1] == (
         "The batch ran all 200 replicates it allows, and the 95% confidence "
         "interval for D and G_ST is within ±0.5."
     )
-    assert settled["planned"][0] == (
+    assert settled["planned"][1] == (
         "The batch ran the 10 replicates you planned. Each ran long enough "
         "for the interval across them to reach ±0.5."
     )
-    assert settled["noStop"][0] == (
+    assert settled["noStop"][1] == (
         "The batch ran exactly 10 replicates, because stop_batch_early is off."
     )
+    # Exactly one replicate: no pooling, so no pooled-scatter sentence and
+    # the stop sentence stays at the head.
     assert "The batch ran 1 replicate and" in settled["one"][0]
+    assert not settled["one"][0].startswith("1 replicate")
 
 
 def test_the_batch_sentences_give_each_watched_interval(
@@ -99,12 +108,13 @@ def test_the_batch_sentences_give_each_watched_interval(
     messages = settled["met"]
     primary = [message["text"] for message in messages if not message.get("detail")]
     details = [message["text"] for message in messages if message.get("detail")]
-    assert primary[1].startswith("The batch mean of D is 0.25")
-    assert "95% confidence interval from" in primary[1]
-    assert "D is a statistic the batch watches; that is within" in primary[1]
-    assert "G_ST is a statistic the batch watches" in primary[2]
-    assert primary[3].startswith("The interval is across replicates")
-    assert "open a replicate" in primary[3]
+    assert primary[0].startswith("10 replicates are overlaid")
+    assert primary[2].startswith("The batch mean of D is 0.25")
+    assert "95% confidence interval from" in primary[2]
+    assert "D is a statistic the batch watches; that is within" in primary[2]
+    assert "G_ST is a statistic the batch watches" in primary[3]
+    assert primary[4].startswith("The interval is across replicates")
+    assert "open a replicate" in primary[4]
     # Every shown statistic is explained in the collapsed group, watched first.
     assert details[0].startswith("D is allelic differentiation")
     assert details[1].startswith("G_ST is nearness to fixation")
@@ -144,9 +154,12 @@ def test_a_real_batch_explains_how_it_stopped(fast_batch_run_settings: Path) -> 
     webview.start(_drive)
     settled = outcome.get(timeout=120)
 
-    assert settled["items"][0].startswith("The batch ran ")
+    # Two replicates means pooled: the pooled-scatter sentence leads, with
+    # the stop sentence right after it.
+    assert settled["items"][0].startswith("2 replicates are overlaid")
+    assert settled["items"][1].startswith("The batch ran ")
     assert (
-        " 2 replicate" in settled["items"][0]
-        or "all 2 replicates" in settled["items"][0]
+        " 2 replicate" in settled["items"][1]
+        or "all 2 replicates" in settled["items"][1]
     )
     assert settled["details"] == 1

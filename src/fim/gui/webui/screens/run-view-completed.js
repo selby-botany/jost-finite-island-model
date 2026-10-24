@@ -608,7 +608,17 @@ function batchMessagesFor(batch, summary) {
     const others = Object.keys(summary).filter(
         (name) => shown(name) && !watched.includes(name)
     );
-    const messages = [{ severity: "info", text: batchStopSentence(batch, summary) }];
+    const messages = [];
+    if (batch.replicates > 1) {
+        messages.push({
+            severity: "info",
+            text:
+                `${batch.replicates} replicates are overlaid in "Allele ` +
+                `frequencies by deme pair". In each replicate, each deme's ` +
+                "frequencies sum to 1.",
+        });
+    }
+    messages.push({ severity: "info", text: batchStopSentence(batch, summary) });
     for (const name of watched) {
         const text = batchIntervalSentence(name, summary[name], batch);
         if (text) {

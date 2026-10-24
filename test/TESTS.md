@@ -17803,7 +17803,7 @@ Each way a batch can end has its own sentence.
 
 <a id="gui.test_batch_messages_screen.test_the_batch_sentences_give_each_watched_interval"></a>
 
-#### [test\_the\_batch\_sentences\_give\_each\_watched\_interval](./gui/test_batch_messages_screen.py#L93)
+#### [test\_the\_batch\_sentences\_give\_each\_watched\_interval](./gui/test_batch_messages_screen.py#L102)
 
 ```python
 def test_the_batch_sentences_give_each_watched_interval(
@@ -17814,7 +17814,7 @@ Watched statistics first, then the meaning of an interval, then details.
 
 <a id="gui.test_batch_messages_screen.test_a_real_batch_explains_how_it_stopped"></a>
 
-#### [test\_a\_real\_batch\_explains\_how\_it\_stopped](./gui/test_batch_messages_screen.py#L114)
+#### [test\_a\_real\_batch\_explains\_how\_it\_stopped](./gui/test_batch_messages_screen.py#L124)
 
 ```python
 def test_a_real_batch_explains_how_it_stopped(
@@ -28371,7 +28371,7 @@ Batch sentences, cautions and details render math at their DOM boundary.
 
 <a id="gui.test_scientific_notation_screen.test_statistic_tooltips_use_math_and_restore_titles"></a>
 
-#### [test\_statistic\_tooltips\_use\_math\_and\_restore\_titles](./gui/test_scientific_notation_screen.py#L89)
+#### [test\_statistic\_tooltips\_use\_math\_and\_restore\_titles](./gui/test_scientific_notation_screen.py#L91)
 
 ```python
 def test_statistic_tooltips_use_math_and_restore_titles(
@@ -28382,7 +28382,7 @@ Mouse and keyboard tooltips render scripts; Escape removes the bubble.
 
 <a id="gui.test_scientific_notation_screen.test_field_help_and_native_statistic_choices"></a>
 
-#### [test\_field\_help\_and\_native\_statistic\_choices](./gui/test_scientific_notation_screen.py#L135)
+#### [test\_field\_help\_and\_native\_statistic\_choices](./gui/test_scientific_notation_screen.py#L137)
 
 ```python
 def test_field_help_and_native_statistic_choices(
@@ -28393,7 +28393,7 @@ Field help and selected symbols use math without changing option values.
 
 <a id="gui.test_scientific_notation_screen.test_canvas_labels_have_smaller_positioned_scripts"></a>
 
-#### [test\_canvas\_labels\_have\_smaller\_positioned\_scripts](./gui/test_scientific_notation_screen.py#L165)
+#### [test\_canvas\_labels\_have\_smaller\_positioned\_scripts](./gui/test_scientific_notation_screen.py#L167)
 
 ```python
 def test_canvas_labels_have_smaller_positioned_scripts(
@@ -28404,7 +28404,7 @@ Canvas labels retain mathematical subscripts, superscripts and alignment.
 
 <a id="gui.test_scientific_notation_screen.test_statistics_chooser_and_sweep_headers"></a>
 
-#### [test\_statistics\_chooser\_and\_sweep\_headers](./gui/test_scientific_notation_screen.py#L197)
+#### [test\_statistics\_chooser\_and\_sweep\_headers](./gui/test_scientific_notation_screen.py#L199)
 
 ```python
 def test_statistics_chooser_and_sweep_headers(
