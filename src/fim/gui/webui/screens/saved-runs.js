@@ -246,7 +246,6 @@ function buildSavedRunRow(run) {
     if (run.actions.watch) {
         const link = document.createElement("a");
         link.href = "#";
-        link.className = "saved-run-watch-link";
         link.textContent = savedRunDisplayName(run);
         link.addEventListener("click", (event) => {
             event.preventDefault();
