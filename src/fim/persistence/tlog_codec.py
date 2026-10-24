@@ -50,7 +50,7 @@ try:  # Numba is an optional dependency of fim.
 
     HAVE_NUMBA = True
 except ImportError:  # pragma: no cover - exercised only without numba
-    numba = None  # type: ignore[assignment]
+    numba = None  # type: ignore[assignment, unused-ignore]
     HAVE_NUMBA = False
 
 PAD4 = 4
@@ -73,7 +73,7 @@ def kernel(function: Callable[..., Any]) -> Callable[..., Any]:
         The compiled function, or `function` itself without Numba.
     """
     if HAVE_NUMBA:
-        return numba.njit(cache=True, nogil=True)(function)
+        return numba.njit(cache=True, nogil=True)(function)  # type: ignore[no-any-return, unused-ignore]
     return function
 
 
