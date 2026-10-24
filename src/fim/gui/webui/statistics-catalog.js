@@ -106,19 +106,15 @@ function isProportionStatistic(key) {
 }
 
 /**
- * A short plain-text name for charts and readouts: the familiar "G ST"
- * spacing for the long-standing statistics, the catalog's own text label
- * for the rest (`G'_ST (Hedrick)`, `Nei D (pair, arithmetic)`, ...).
+ * The catalog's presentation name, ready for scientificText or
+ * fillScientificText at the rendering boundary.
  *
  * @param {string} key
  * @returns {string}
  */
 function statisticDisplayName(key) {
     const spec = statisticSpec(key);
-    if (spec && !spec.convergence_eligible) {
-        return spec.label_text;
-    }
-    return key.replace("_", " ");
+    return spec ? spec.label_text : key;
 }
 
 /**

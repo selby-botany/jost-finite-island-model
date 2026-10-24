@@ -129,14 +129,8 @@ function formatStatisticLabel(name) {
 }
 
 /**
- * The plain-text form of `formatStatisticLabel`'s own HTML -- a native
- * `title` tooltip cannot render markup, so `<sub>ST</sub>` has to come
- * back as the `_ST` a reader already recognizes rather than being
- * flattened to a run-together `ST`.
- *
- * Restoring the underscore matters: stripping tags alone turned `H_S`
- * into `HS` and `δ<sub>G</sub>` into `δG`, neither of which names
- * anything.
+ * A lossless text token for composing messages. scientificText restores
+ * the catalog's mathematical markup at the presentation boundary.
  *
  * @param {string} name
  * @returns {string}
@@ -146,6 +140,153 @@ function plainStatisticLabel(name) {
         .replace(/<sub>([^<]*)<\/sub>/g, "_$1")
         .replace(/<sup>([^<]*)<\/sup>/g, "$1")
         .replace(/<[^>]*>/g, "");
+}
+
+/**
+ * Split presentation prose into text and catalog-owned mathematical labels.
+ * Only complete identifiers match; arbitrary text is never interpreted as HTML.
+ *
+ * @param {string} text
+ * @returns {DocumentFragment}
+ */
+function scientificText(text) {
+    const labels = new Map();
+    for (const spec of STATISTIC_CATALOG) {
+        labels.set(spec.key, spec.label_html);
+        labels.set(spec.label_text, spec.label_html);
+        labels.set(plainStatisticLabel(spec.key), spec.label_html);
+    }
+    for (const name of ["S_S", "S_T", "A_S", "A_T"]) {
+        labels.set(name, formatStatisticLabel(name));
+    }
+    for (const suffix of ["S", "T"]) {
+        labels.set(`HD_${suffix}`, `<sup>H</sup>D<sub>${suffix}</sub>`);
+        labels.set(`Ne_${suffix}`, `<sup>H</sup>D<sub>${suffix}</sub>`);
+    }
+    labels.set("δG", formatStatisticLabel("Delta"));
+    labels.set("G'_ST", "G′<sub>ST</sub>");
+    labels.set("G′_ST", "G′<sub>ST</sub>");
+    const alternatives = [...labels.keys()]
+        .sort((a, b) => b.length - a.length)
+        .map((key) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const pattern = new RegExp(
+        `(?<![\\w])(?:${alternatives.join("|")})(?![\\w])`, "g"
+    );
+    const fragment = document.createDocumentFragment();
+    let end = 0;
+    for (const match of String(text).matchAll(pattern)) {
+        if (match.index > end) {
+            fragment.append(document.createTextNode(String(text).slice(end, match.index)));
+        }
+        const symbol = document.createElement("span");
+        symbol.innerHTML = labels.get(match[0]);
+        fragment.append(symbol);
+        end = match.index + match[0].length;
+    }
+    if (end < String(text).length) {
+        fragment.append(document.createTextNode(String(text).slice(end)));
+    }
+    return fragment;
+}
+
+const statisticSelectLabels = new WeakMap();
+
+/**
+ * Label a native statistic option and display its selected mathematical symbol.
+ * Native menus cannot reliably render subscript/superscript markup.
+ *
+ * @param {HTMLSelectElement} select
+ */
+function labelStatisticSelect(select) {
+    for (const option of select.options) {
+        option.textContent = scientificAccessibleText(statisticDisplayName(option.value));
+    }
+    let selectedLabel = statisticSelectLabels.get(select);
+    if (!selectedLabel) {
+        selectedLabel = document.createElement("span");
+        selectedLabel.className = "statistic-selected-symbol";
+        selectedLabel.setAttribute("aria-hidden", "true");
+        select.after(selectedLabel);
+        statisticSelectLabels.set(select, selectedLabel);
+        select.addEventListener("change", () => labelStatisticSelect(select));
+    }
+    selectedLabel.replaceChildren(scientificText(statisticDisplayName(select.value)));
+}
+
+/**
+ * Update a title without reviving a native bubble while its rich one is open.
+ *
+ * @param {HTMLElement} element
+ * @param {string} text
+ */
+function setScientificTitle(element, text) {
+    if (element.dataset.scientificTitle !== undefined) {
+        element.dataset.scientificTitle = text;
+        showFieldTooltip(element, text);
+    } else {
+        element.title = text;
+    }
+}
+
+/**
+ * Speak mathematical scripts where markup is unavailable (accessible names
+ * and native select options), without exposing machine identifiers.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function scientificAccessibleText(text) {
+    const container = document.createElement("span");
+    container.append(scientificText(text));
+    for (const script of container.querySelectorAll("sub, sup")) {
+        script.replaceWith(
+            ` ${script.tagName === "SUB" ? "subscript" : "superscript"} ${script.textContent} `
+        );
+    }
+    return container.textContent.replace(/\s+/g, " ").replace(/\s+([.,;:)])/g, "$1").trim();
+}
+
+/**
+ * Draw catalog notation on a canvas, preserving alignment and script position.
+ *
+ * @param {CanvasRenderingContext2D} context
+ * @param {string} text
+ * @param {number} x
+ * @param {number} y
+ */
+function fillScientificText(context, text, x, y) {
+    const container = document.createElement("span");
+    container.append(scientificText(text));
+    const runs = [];
+    const visit = (node, script = "") => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            runs.push({ text: node.textContent, script });
+        } else {
+            for (const child of node.childNodes) {
+                visit(child, ["SUB", "SUP"].includes(node.nodeName) ? node.nodeName : script);
+            }
+        }
+    };
+    visit(container);
+    context.save();
+    const font = context.font;
+    const size = Number(/([\d.]+)px/.exec(font)[1]);
+    const scriptFont = font.replace(/[\d.]+px/, `${size * 0.75}px`);
+    for (const run of runs) {
+        context.font = run.script ? scriptFont : font;
+        run.width = context.measureText(run.text).width;
+    }
+    const width = runs.reduce((sum, run) => sum + run.width, 0);
+    const align = context.textAlign;
+    let left = x - (align === "center" ? width / 2 : ["right", "end"].includes(align) ? width : 0);
+    context.textAlign = "left";
+    for (const run of runs) {
+        context.font = run.script ? scriptFont : font;
+        const offset = run.script === "SUB" ? size * 0.25 : run.script === "SUP" ? -size * 0.4 : 0;
+        context.fillText(run.text, left, y + offset);
+        left += run.width;
+    }
+    context.restore();
 }
 
 /**
@@ -179,7 +320,7 @@ function buildStatisticName(name) {
         label.type = "button";
         label.className = "statistic-help-link";
         label.title = `Definition, interpretation, and implementation of ${plainStatisticLabel(name)}`;
-        label.setAttribute("aria-label", label.title);
+        label.setAttribute("aria-label", scientificAccessibleText(label.title));
         label.addEventListener("click", (event) => {
             event.stopPropagation();
             window.fim.showHelp("statistics", anchor);
@@ -389,8 +530,8 @@ function buildPointMeter(name, formattedValue, description, estimateText) {
  */
 function applyStatRow(row, cells) {
     const title = cells.tooltip || "";
-    if (row.title !== title) {
-        row.title = title;
+    if ((row.dataset.scientificTitle ?? row.title) !== title) {
+        setScientificTitle(row, title);
     }
     const incoming = Array.from(cells.children);
     const current = Array.from(row.children);

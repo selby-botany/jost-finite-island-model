@@ -38,7 +38,7 @@ window.__fimExploreSweepReady = false;
 for (const name of ["D", "G_ST", "E_ST", "H_S", "H_T"]) {
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name.replace("_", " ");
+    option.textContent = scientificAccessibleText(statisticDisplayName(name));
     exploreSweepStatistic.appendChild(option);
 }
 

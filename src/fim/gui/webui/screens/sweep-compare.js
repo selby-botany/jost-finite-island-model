@@ -118,10 +118,11 @@ function populateSweepCompareControls(data) {
     for (const name of offered) {
         const option = document.createElement("option");
         option.value = name;
-        option.textContent = statisticDisplayName(name);
+        option.textContent = scientificAccessibleText(statisticDisplayName(name));
         sweepCompareStatistic.appendChild(option);
     }
     sweepCompareStatistic.value = data.statistic;
+    labelStatisticSelect(sweepCompareStatistic);
     sweepCompareX.replaceChildren();
     for (const key of data.on) {
         const option = document.createElement("option");
@@ -445,10 +446,10 @@ sweepCompareCanvas.addEventListener("mousemove", (event) => {
             ? ` [${sweepFormatValue(mark.ciLow)}, ${sweepFormatValue(mark.ciHigh)}]`
             : "";
     const flag = mark.health === "healthy" ? "" : `; ${mark.health}`;
-    sweepCompareReadout.textContent =
+    sweepCompareReadout.replaceChildren(scientificText(
         `${mark.label}: ${sweepCompareLastSpec.xKey} ${sweepFormatValue(mark.x)}, ` +
         `${statisticDisplayName(sweepCompareLastSpec.statistic)} ` +
-        `${sweepFormatValue(mark.mean)}${interval}${flag}`;
+        `${sweepFormatValue(mark.mean)}${interval}${flag}`));
 });
 
 sweepCompareX.addEventListener("change", () => {

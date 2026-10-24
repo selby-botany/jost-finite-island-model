@@ -779,7 +779,7 @@ function sweepHeaderRow(labels) {
     const row = document.createElement("tr");
     for (const label of labels) {
         const cell = document.createElement("th");
-        cell.textContent = label;
+        cell.append(scientificText(label));
         row.appendChild(cell);
     }
     return row;

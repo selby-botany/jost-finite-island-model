@@ -224,6 +224,8 @@ function ensureTooltipElement() {
     if (tooltipElement === null) {
         tooltipElement = document.createElement("div");
         tooltipElement.className = "field-tooltip";
+        tooltipElement.id = "field-tooltip";
+        tooltipElement.setAttribute("role", "tooltip");
         tooltipElement.hidden = true;
         document.body.appendChild(tooltipElement);
     }
@@ -242,10 +244,15 @@ function ensureTooltipElement() {
  */
 function showFieldTooltip(anchor, text) {
     const tooltip = ensureTooltipElement();
-    tooltip.textContent = text;
+    tooltip.replaceChildren(scientificText(text));
     tooltip.hidden = false;
+    // A dialog's top layer is above document.body, regardless of z-index.
+    (anchor.closest("dialog[open]") || document.body).appendChild(tooltip);
     const rect = anchor.getBoundingClientRect();
-    tooltip.style.left = `${Math.max(FIELD_TOOLTIP_EDGE_MARGIN_PX, rect.left)}px`;
+    tooltip.style.left = `${Math.max(
+        FIELD_TOOLTIP_EDGE_MARGIN_PX,
+        Math.min(rect.left, window.innerWidth - tooltip.offsetWidth - FIELD_TOOLTIP_EDGE_MARGIN_PX)
+    )}px`;
     tooltip.style.top = `${Math.max(
         FIELD_TOOLTIP_EDGE_MARGIN_PX,
         rect.top - tooltip.offsetHeight - FIELD_TOOLTIP_GAP_PX
@@ -355,3 +362,74 @@ function wireAllFieldTooltips() {
 }
 
 wireAllFieldTooltips();
+
+// Native title bubbles cannot render mathematical scripts. Delegate so
+// dynamically rebuilt rows and headers use the same rich tooltip as fields.
+let scientificTooltipAnchor = null;
+let scientificTooltipDescription = null;
+
+/** Restore the native title after hiding its mathematical replacement. */
+function hideScientificTooltip() {
+    if (scientificTooltipAnchor !== null) {
+        scientificTooltipAnchor.title = scientificTooltipAnchor.dataset.scientificTitle;
+        delete scientificTooltipAnchor.dataset.scientificTitle;
+        if (scientificTooltipDescription === null) {
+            scientificTooltipAnchor.removeAttribute("aria-describedby");
+        } else {
+            scientificTooltipAnchor.setAttribute("aria-describedby", scientificTooltipDescription);
+        }
+        scientificTooltipDescription = null;
+        scientificTooltipAnchor = null;
+        hideFieldTooltip();
+    }
+}
+
+/** Show a title containing scientific notation on hover or keyboard focus. */
+function showScientificTooltip(event) {
+    const anchor = event.target.closest?.("[title], [data-scientific-title]");
+    if (!anchor || anchor === scientificTooltipAnchor) {
+        return;
+    }
+    hideScientificTooltip();
+    const text = anchor.title;
+    const formatted = scientificText(text);
+    if (!formatted.querySelector("sub, sup") && formatted.textContent === text) {
+        return;
+    }
+    scientificTooltipAnchor = anchor;
+    scientificTooltipDescription = anchor.getAttribute("aria-describedby");
+    anchor.dataset.scientificTitle = text;
+    // An absent title inherits the parent row's native tooltip; an empty
+    // title suppresses that fallback as well as this element's own bubble.
+    anchor.title = "";
+    anchor.setAttribute("aria-describedby",
+        [scientificTooltipDescription, "field-tooltip"].filter(Boolean).join(" "));
+    showFieldTooltip(anchor, text);
+}
+
+document.addEventListener("mouseover", showScientificTooltip);
+document.addEventListener("focusin", showScientificTooltip);
+for (const eventName of ["mouseout", "focusout"]) {
+    document.addEventListener(eventName, (event) => {
+        if (scientificTooltipAnchor && !scientificTooltipAnchor.contains(event.relatedTarget)) {
+            hideScientificTooltip();
+        }
+    });
+}
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+        hideScientificTooltip();
+        hideFieldTooltip();
+    }
+});
+document.addEventListener("scroll", hideScientificTooltip, true);
+
+onStatisticCatalogReady(() => {
+    for (const id of [
+        "compare-trajectory-statistic",
+        "explore-surface-statistic",
+        "explore-sweep-statistic",
+    ]) {
+        labelStatisticSelect(document.getElementById(id));
+    }
+});

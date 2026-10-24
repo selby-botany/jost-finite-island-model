@@ -330,7 +330,7 @@ Three demes start with partially shared alleles at different frequencies.
 Migration shares alleles, mutation creates private alleles, and drift changes
 their abundance and survival. Compare Caballero-García-Dorado allelic distance
 $A_{\mathrm{CGD}}$ (presence/absence), Gregorius $\delta_G$ (frequency distance), and
-Sherwin mutual information `MI` (information about population membership)
+Sherwin mutual information $I$ (`MI`; information about population membership)
 with `D` and $G_{ST}$. The split is imposed, not simulated from an
 ancestral population.
 
@@ -384,7 +384,8 @@ final-generation values. It uses one replicate and took about 17 seconds
 on the development machine. Choose **Run settings...** on Configure to
 change the replicate count, cap, or precision for your run only.
 
-Unlike $\delta_G$ and $D$, $A_{\mathrm{CGD}}$ is not bounded by 1; `MI` uses natural-log units.
+Unlike $\delta_G$ and $D$, $A_{\mathrm{CGD}}$ is not bounded by 1;
+$I$ (`MI`) uses natural-log units.
 The implementation averages allelic distance over distinct deme pairs,
 whereas Caballero and García-Dorado's all-pairs equation 6 includes
 self-pairs. See the [example's explanation and literature references](
@@ -1491,8 +1492,8 @@ About.
 | Help | Read this guide, the [configuration reference](configuration.md), and the [statistics reference](statistics.md) offline with cross-links. Other documents open on GitHub in the default browser. Available from the rail or Help menu; Back/Forward uses screen history | The same three Markdown guides are available in the repository |
 
 **Trajectory references and averages.** Scalar trajectories include
-analytic equilibrium lines for `D`, `G_ST`, and `E_ST`, and dash-dot
-expected trajectories for `D`, `G_ST`, `H_S`, `H_T`, and `H_ST` where
+analytic equilibrium lines for $D$, $G_{ST}$, and $E_{ST}$, and dash-dot
+expected trajectories for $D$, $G_{ST}$, $H_S$, $H_T$, and $H_{ST}$ where
 available. Expected trajectories start from the seeded founding state and
 support unequal deme sizes and explicit migration matrices up to 24 demes.
 They are omitted for per-locus mutation rates, equilibrium-split founding,
@@ -1533,7 +1534,7 @@ generation) and trajectory mean squared error, for example
 $\Delta D_p=+0.012$, $\mathrm{MSE}=4.1\times10^{-5}$.
 Both update during execution and scrubbing.
 The prediction uses the expected trajectory when supported, otherwise
-the equilibrium line (including `E_ST`). The tooltip identifies which
+the equilibrium line (including $E_{ST}$). The tooltip identifies which
 reference applies. See the [statistics reference](statistics.md) for
 definitions and API/source links.
 
@@ -2002,7 +2003,7 @@ The final report contains:
   differentiation $K_{ST}$;
 - literature-derived supplemental statistics:
   Caballero-García-Dorado allelic distance $A_{\mathrm{CGD}}$, Gregorius
-  $\delta_G$, and Sherwin mutual information `MI`;
+  $\delta_G$ (`Delta`), and Sherwin mutual information $I$ (`MI`);
 - the within- and between-deme gene identities $G_s$ (`Gs`) and
   $G_d$ (`Gd`);
 - Nei's (1973) $D_m$ (`D_m`) and $R_{ST}$ (`R_ST`), Nei's
@@ -2127,7 +2128,7 @@ above.
 `summary.json` maps each reported statistic name (every global statistic in
 [`report.json`](#reportjson): `D`, $G_{ST}$, $E_{ST}$,
 $K_{ST}$, $H_S$, $H_T$, $H_{ST}$, $A_{\mathrm{CGD}}$,
-Gregorius $\delta_G$, `MI`, $G_s$, $G_d$, the pooled-heterozygosity
+Gregorius $\delta_G$, Sherwin's $I$ (`MI`), $G_s$, $G_d$, the pooled-heterozygosity
 measures and the all-demes Nei forms) to its across-replicate confidence
 interval:
 

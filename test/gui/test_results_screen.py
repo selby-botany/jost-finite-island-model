@@ -317,6 +317,7 @@ def test_completed_run_consolidates_its_messages_into_one_area(
                         className: item.className,
                         hasDot: item.querySelector(".run-message-dot") !== null,
                         text: item.textContent,
+                        html: item.innerHTML,
                     })),
                 };
             };
@@ -346,7 +347,9 @@ def test_completed_run_consolidates_its_messages_into_one_area(
     assert info_two["text"].startswith("Convergence: window ")
     assert warning["className"] == "run-message run-message-warning"
     assert "within-deme diversity" in warning["text"]
-    assert "limits the maximum possible G_ST" in warning["text"]
+    assert "limits the maximum possible" in warning["text"]
+    assert "G<sub>ST</sub>" in warning["html"]
+    assert "G_ST" not in warning["text"]
     assert "Jost's D equals one when demes share no alleles" in warning["text"]
 
 

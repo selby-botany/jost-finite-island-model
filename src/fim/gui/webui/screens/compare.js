@@ -216,9 +216,9 @@ function renderComparePanels(runs) {
         const stats = document.createElement("p");
         stats.className = "hint";
         // The researcher's "Statistics shown" choice applies here too.
-        stats.textContent = _COMPARE_STATISTIC_NAMES.filter(isStatisticShown).map(
+        stats.append(scientificText(_COMPARE_STATISTIC_NAMES.filter(isStatisticShown).map(
             (name) => `${name}=${run.statistics[name]}`
-        ).join(" ");
+        ).join(" ")));
         cell.appendChild(stats);
         comparePanels.appendChild(cell);
     }

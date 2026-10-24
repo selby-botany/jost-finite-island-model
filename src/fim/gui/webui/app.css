@@ -3146,6 +3146,11 @@ fieldset.combinator-choice label {
  * relative), matching `getBoundingClientRect`'s own coordinate space --
  * `position: absolute` here would instead be relative to the nearest
  * positioned ancestor, silently wrong the moment one exists. */
+.statistic-selected-symbol {
+    margin-inline-start: 0.5em;
+    white-space: nowrap;
+}
+
 .field-tooltip {
     position: fixed;
     z-index: 1000;

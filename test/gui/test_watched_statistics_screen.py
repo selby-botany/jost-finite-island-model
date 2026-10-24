@@ -68,7 +68,9 @@ def _assert_default_watch(marks: dict[str, dict[str, Any]]) -> None:
         assert marks[name]["watched"] is True, name
         assert marks[name]["underlined"] is True, name
         assert marks[name]["title"].endswith("known to the requested precision."), name
-        assert marks[name]["label"].startswith(f"{name}. The run watches {name}"), name
+        label = "G subscript ST" if name == "G_ST" else name
+        prefix = f"{label}. The run watches {label}"
+        assert marks[name]["label"].startswith(prefix), name
     others = [name for name in marks if name not in ("D", "G_ST")]
     assert others
     for name in others:

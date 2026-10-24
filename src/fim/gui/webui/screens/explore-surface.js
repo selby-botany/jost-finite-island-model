@@ -48,7 +48,7 @@ window.__fimExploreSurfaceReady = false;
 for (const name of EXPLORE_SURFACE_STATISTICS) {
     const option = document.createElement("option");
     option.value = name;
-    option.textContent = name.replace("_", " ");
+    option.textContent = scientificAccessibleText(statisticDisplayName(name));
     exploreSurfaceStatistic.appendChild(option);
 }
 exploreSurfaceStatistic.value = "D";
@@ -165,7 +165,7 @@ function drawExploreSurface() {
         max: proportion ? 1 : flat.length === 0 ? 1 : Math.max(...flat),
         xTitle: exploreAxisLabel(grid.xAxis),
         yTitle: exploreAxisLabel(grid.yAxis),
-        valueTitle: statistic.replace("_", " "),
+        valueTitle: statisticDisplayName(statistic),
         selected: exploreSurfaceProbe,
         markers: exploreSurfaceMarkers,
     });
@@ -190,7 +190,9 @@ function describeExploreProbe(statistic) {
         `${exploreAxisLabel(grid.yAxis)} = ${formatExploreTick(grid.yValues[probe.row])}`;
     const shown = formatExploreSweepValue(value, grid.digits ?? EXPLORE_DEFAULT_SIGNIFICANT_DIGITS);
     const note = atCurrent ? "the configuration you entered" : "exploring";
-    exploreSurfaceReadout.textContent = `${where}: ${statistic.replace("_", " ")} ${shown} (${note})`;
+    exploreSurfaceReadout.replaceChildren(
+        scientificText(`${where}: ${statisticDisplayName(statistic)} ${shown} (${note})`)
+    );
 }
 
 /**

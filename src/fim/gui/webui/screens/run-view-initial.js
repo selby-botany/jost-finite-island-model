@@ -313,7 +313,7 @@ function renderSupplementalPanels(visuals) {
     const hasSpectrum = Boolean(visuals && visuals.frequencySpectrum);
     if (hasComposition) {
         alleleCompositionTitle.textContent = visuals.alleleComposition.title;
-        alleleCompositionNote.textContent = visuals.alleleComposition.note;
+        alleleCompositionNote.replaceChildren(scientificText(visuals.alleleComposition.note));
         alleleCompositionLegend.replaceChildren();
         for (const allele of visuals.alleleComposition.alleles) {
             const item = document.createElement("span");
@@ -332,7 +332,7 @@ function renderSupplementalPanels(visuals) {
     }
     if (hasSpectrum) {
         frequencySpectrumTitle.textContent = visuals.frequencySpectrum.title;
-        frequencySpectrumNote.textContent = visuals.frequencySpectrum.note;
+        frequencySpectrumNote.replaceChildren(scientificText(visuals.frequencySpectrum.note));
         const spectrum = visuals.frequencySpectrum;
         window.fim.registerGraphDraw("frequencySpectrum", () =>
             drawFrequencySpectrum(frequencySpectrumCanvas, spectrum)
@@ -347,7 +347,7 @@ function renderSupplementalPanels(visuals) {
     // registered -- but the stage does not offer it a selector slot.
     if (visuals && visuals.isolationByDistance) {
         ibdTitle.textContent = visuals.isolationByDistance.title;
-        ibdNote.textContent = visuals.isolationByDistance.note;
+        ibdNote.replaceChildren(scientificText(visuals.isolationByDistance.note));
         const isolationByDistance = visuals.isolationByDistance;
         window.fim.registerGraphDraw("ibd", () => drawIbdCurve(ibdCanvas, isolationByDistance));
     }

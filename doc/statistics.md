@@ -20,6 +20,14 @@ identifiers, and reported keys use backticks. Displayed equations have
 unique tags beginning with $\text{S}$. Section headings retain the
 reported keys so desktop help links continue to identify each entry.
 
+The desktop science views use the mathematical symbols, including in
+tooltips, result messages, and chart readouts. For example, the saved key
+`H_ST` is displayed as $H_{ST}$, `Delta` as $\delta_G$, and `MI` as $I$.
+Native selection menus cannot reliably typeset scripts; their text spells
+out "subscript" or "superscript", with the selected mathematical symbol
+shown alongside. Configuration fields, command-line arguments, and saved
+JSON/CSV keys retain their literal identifiers.
+
 For one locus, $p_{i,a}$ is the frequency of allele $a$ in deme $i$,
 $d$ is the number of demes, and $w_i$ is a normalized deme weight.
 The weights satisfy $w_i\geq0$ and $\sum_{i=1}^{d}w_i=1$.

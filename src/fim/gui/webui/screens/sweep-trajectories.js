@@ -274,7 +274,7 @@ function drawSweepTrajectories(canvas, spec) {
     context.save();
     context.translate(SWEEP_Y_TITLE_INSET, top + height / 2);
     context.rotate(-QUARTER_TURN);
-    context.fillText(
+    fillScientificText(context,
         `${statisticDisplayName(spec.statistic)}${yAxis.log ? " (log scale)" : ""}`,
         0,
         0
@@ -526,12 +526,12 @@ function sweepTrajectorySampleAt(x, y) {
 function showSweepTrajectorySample(pixel) {
     const curve = sweepTrajectoryLastSpec.curves[pixel.curve];
     const point = curve.points[pixel.point];
-    sweepResultsReadout.textContent = sweepTrajectoryReadout(
+    sweepResultsReadout.replaceChildren(scientificText(sweepTrajectoryReadout(
         curve,
         point,
         pixel.position,
         sweepTrajectoryLastSpec.statistic
-    );
+    )));
 }
 
 /**

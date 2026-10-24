@@ -617,9 +617,9 @@ and so on). Allele-spectrum statistics: <code>E_ST</code>, <code>K_ST</code>, <c
 <li><strong>Default:</strong> <code>[D, G_ST]</code></li>
 </ul>
 <p>By default a run watches both and stops when both have settled
-(convergence_combinator <code>all</code>): <code>D</code> is the statistic most studies report, and
-<code>G_ST</code> is the one that is slowest and noisiest at low diversity, so a run that
-has settled on <code>D</code> alone can still be imprecise on <code>G_ST</code>. Name one statistic
+(convergence_combinator <code>all</code>): <var>D</var> is the statistic most studies report, and
+<var>G</var><sub>ST</sub> is the one that is slowest and noisiest at low diversity, so a run that
+has settled on <var>D</var> alone can still be imprecise on <var>G</var><sub>ST</sub>. Name one statistic
 (<code>convergence_statistic: D</code>) to judge the run on it alone.</p>
 <p>Every watched statistic is computed every generation, whatever the display
 settings say. The allele-spectrum statistics are expensive (a pass over every
@@ -627,9 +627,10 @@ allele per locus per generation) and are not covered by the relaxation time,
 which is derived for the identity statistics: they depend on allele counts and
 rare alleles, which can relax more slowly. The Expert Setting
 <code>spectrum_burn_in_multiplier</code> lengthens the burn-in when one is watched; it is 1
-until the difference is measured. Only <code>D</code> and <code>G_ST</code> have both expected-value
+until the difference is measured. Only <var>D</var> and <var>G</var><sub>ST</sub> have both expected-value
 forms (convergence_estimate); every other statistic is the mean of values.</p>
-<p>A statistic with an open end (<code>A_CGD</code>, <code>Delta</code>, <code>MI</code>, <code>D_m</code>, <code>R_ST</code> and the Nei
+<p>A statistic with an open end (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, <var>I</var>, <var>D</var><sub>m</sub>,
+<var>R</var><sub>ST</sub> and the Nei
 family) cannot share one absolute precision with the proportions, so its target
 is relative: <code>precision * max(1, |window mean|)</code>, a relative precision with an
 absolute floor. statistic_precision overrides it.</p>
@@ -705,8 +706,8 @@ and how its numbers were chosen, is in <a href="#" data-fim-external="https://gi
 <pre><code class="language-yaml">convergence_burn_in: 5000
 </code></pre>
 <h3 id="convergence_estimate">convergence_estimate</h3>
-<p>Which expected value a run estimates for <code>D</code> and <code>G_ST</code>, the two statistics
-that are functions of the heterozygosities <code>H_S</code> and <code>H_T</code>:</p>
+<p>Which expected value a run estimates for <var>D</var> and <var>G</var><sub>ST</sub>, the two statistics
+that are functions of the heterozygosities <var>H</var><sub>S</sub> and <var>H</var><sub>T</sub>:</p>
 <table>
 <thead>
 <tr>
@@ -723,7 +724,7 @@ that are functions of the heterozygosities <code>H_S</code> and <code>H_T</code>
 </tr>
 <tr>
 <td><code>value_of_means</code></td>
-<td>The statistic computed from the window's averaged <code>H_S</code> and <code>H_T</code></td>
+<td>The statistic computed from the window's averaged <var>H</var><sub>S</sub> and <var>H</var><sub>T</sub></td>
 <td>Checking the simulator against the closed form</td>
 </tr>
 <tr>
@@ -735,7 +736,7 @@ that are functions of the heterozygosities <code>H_S</code> and <code>H_T</code>
 </table>
 <p>The two differ by a small, systematic amount (the average of a ratio is not
 the ratio of the averages); one locus at the reference scale shows 0.011 for
-<code>D</code> and 0.0001 for <code>G_ST</code>. The choice drives the stopping decision, the headline
+<var>D</var> and 0.0001 for <var>G</var><sub>ST</sub>. The choice drives the stopping decision, the headline
 number and the standard error. The report carries both forms for <code>D</code> and
 <code>G_ST</code> under <code>window_statistics</code>, with <code>selected_form</code> and
 <code>undefined_generations</code>. <code>auto</code> is judged at each check, so the form reported

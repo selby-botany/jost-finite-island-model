@@ -554,9 +554,9 @@ equilibrium_max_generations: 5000
 - **Default:** `[D, G_ST]`
 
 By default a run watches both and stops when both have settled
-(convergence_combinator `all`): `D` is the statistic most studies report, and
-`G_ST` is the one that is slowest and noisiest at low diversity, so a run that
-has settled on `D` alone can still be imprecise on `G_ST`. Name one statistic
+(convergence_combinator `all`): $D$ is the statistic most studies report, and
+$G_{ST}$ is the one that is slowest and noisiest at low diversity, so a run that
+has settled on $D$ alone can still be imprecise on $G_{ST}$. Name one statistic
 (`convergence_statistic: D`) to judge the run on it alone.
 
 Every watched statistic is computed every generation, whatever the display
@@ -565,10 +565,11 @@ allele per locus per generation) and are not covered by the relaxation time,
 which is derived for the identity statistics: they depend on allele counts and
 rare alleles, which can relax more slowly. The Expert Setting
 `spectrum_burn_in_multiplier` lengthens the burn-in when one is watched; it is 1
-until the difference is measured. Only `D` and `G_ST` have both expected-value
+until the difference is measured. Only $D$ and $G_{ST}$ have both expected-value
 forms (convergence_estimate); every other statistic is the mean of values.
 
-A statistic with an open end (`A_CGD`, `Delta`, `MI`, `D_m`, `R_ST` and the Nei
+A statistic with an open end ($A_{\mathrm{CGD}}$, $\delta_G$, $I$, $D_m$,
+$R_{ST}$ and the Nei
 family) cannot share one absolute precision with the proportions, so its target
 is relative: `precision * max(1, |window mean|)`, a relative precision with an
 absolute floor. statistic_precision overrides it.
@@ -664,18 +665,18 @@ convergence_burn_in: 5000
 
 ### convergence_estimate
 
-Which expected value a run estimates for `D` and `G_ST`, the two statistics
-that are functions of the heterozygosities `H_S` and `H_T`:
+Which expected value a run estimates for $D$ and $G_{ST}$, the two statistics
+that are functions of the heterozygosities $H_S$ and $H_T$:
 
 | Value | Estimate | Use it for |
 |---|---|---|
 | `mean_of_values` (default) | The average of statistic values over the evidence window | Comparing with published replicate means |
-| `value_of_means` | The statistic computed from the window's averaged `H_S` and `H_T` | Checking the simulator against the closed form |
+| `value_of_means` | The statistic computed from the window's averaged $H_S$ and $H_T$ | Checking the simulator against the closed form |
 | `auto` | `value_of_means` when the statistic is undefined in any window generation, or its denominator is tiny in too many of them; otherwise `mean_of_values` | Runs near fixation |
 
 The two differ by a small, systematic amount (the average of a ratio is not
 the ratio of the averages); one locus at the reference scale shows 0.011 for
-`D` and 0.0001 for `G_ST`. The choice drives the stopping decision, the headline
+$D$ and 0.0001 for $G_{ST}$. The choice drives the stopping decision, the headline
 number and the standard error. The report carries both forms for `D` and
 `G_ST` under `window_statistics`, with `selected_form` and
 `undefined_generations`. `auto` is judged at each check, so the form reported

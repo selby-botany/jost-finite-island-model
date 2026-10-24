@@ -115,6 +115,7 @@ function restoreSweepResultsControls(controls) {
     if (controls.theory !== undefined) {
         sweepResultsTheory.checked = controls.theory;
     }
+    labelStatisticSelect(sweepResultsStatistic);
 }
 
 async function showSweepResultsDocument(state) {
@@ -350,12 +351,13 @@ function populateSweepResultsControls(data) {
     for (const name of offered) {
         const option = document.createElement("option");
         option.value = name;
-        option.textContent = statisticDisplayName(name);
+        option.textContent = scientificAccessibleText(statisticDisplayName(name));
         sweepResultsStatistic.appendChild(option);
     }
     if (previous && available.has(previous)) {
         sweepResultsStatistic.value = previous;
     }
+    labelStatisticSelect(sweepResultsStatistic);
     const keys = data.axes.map((axis) => axis.key);
     sweepResultsX.replaceChildren();
     sweepResultsY.replaceChildren();
@@ -824,7 +826,7 @@ function drawSweepLine(canvas, spec) {
     context.save();
     context.translate(SWEEP_Y_TITLE_INSET, top + height / 2);
     context.rotate(-QUARTER_TURN);
-    context.fillText(
+    fillScientificText(context,
         `${spec.yLabel ?? statisticDisplayName(spec.statistic)}${yLog ? " (log scale)" : ""}`,
         0,
         0
@@ -1300,15 +1302,15 @@ sweepResultsCanvas.addEventListener("mousemove", (event) => {
         showSweepTrajectorySample(target.trajectory);
     } else if (target.mark) {
         const point = sweepResultsData.points.find((entry) => entry.index === target.mark.index);
-        sweepResultsReadout.textContent = sweepPointReadout(
+        sweepResultsReadout.replaceChildren(scientificText(sweepPointReadout(
             { ...point, result: sweepResultsByIndex().get(point.index) },
             statistic
-        );
+        )));
     } else if (target.point) {
-        sweepResultsReadout.textContent = sweepPointReadout(target.point, statistic);
+        sweepResultsReadout.replaceChildren(scientificText(sweepPointReadout(target.point, statistic)));
         const shown = sweepResultsHit.shownValues[target.cell.row][target.cell.column];
         if (sweepResultsHit.mode !== "simulation" && shown !== null) {
-            sweepResultsReadout.textContent += `; ${sweepResultsHit.mode} ${sweepFormatValue(shown)}`;
+            sweepResultsReadout.append(`; ${sweepResultsHit.mode} ${sweepFormatValue(shown)}`);
         }
     } else {
         const xValue = sweepResultsHit.xValues[target.cell.column];
@@ -1364,10 +1366,10 @@ function moveSweepFocus(event) {
     }
     const mark = curves[sweepFocus.curve].marks[sweepFocus.position];
     const point = sweepResultsData.points.find((entry) => entry.index === mark.index);
-    sweepResultsReadout.textContent = sweepPointReadout(
+    sweepResultsReadout.replaceChildren(scientificText(sweepPointReadout(
         { ...point, result: sweepResultsByIndex().get(point.index) },
         sweepResultsStatistic.value
-    );
+    )));
     redrawSweepLine(sweepResultsLastSpec);
 }
 

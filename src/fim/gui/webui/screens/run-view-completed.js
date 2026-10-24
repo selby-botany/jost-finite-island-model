@@ -199,9 +199,12 @@ function markWatchedStatisticRow(row, name) {
         const explanation =
             `The run watches ${label} and stops when its average is known to ` +
             "the requested precision.";
-        cell.title = explanation;
-        cell.setAttribute("aria-label", `${label}. ${explanation}`);
+        setScientificTitle(cell, explanation);
+        cell.setAttribute("aria-label", scientificAccessibleText(`${label}. ${explanation}`));
     } else {
+        if (cell.dataset.scientificTitle !== undefined) {
+            hideScientificTooltip();
+        }
         cell.removeAttribute("title");
         cell.removeAttribute("aria-label");
     }
@@ -764,7 +767,7 @@ function renderRunMessages(extraMessages = []) {
         item.className = RUN_MESSAGE_CLASSES[message.severity];
         const dot = document.createElement("span");
         dot.className = "run-message-dot";
-        item.append(dot, message.text);
+        item.append(dot, scientificText(message.text));
         runMessagesList.appendChild(item);
     }
     if (details.length > 0) {
@@ -790,7 +793,7 @@ function detailMessagesItem(details) {
     list.className = "run-message-detail-list";
     for (const { text } of details) {
         const entry = document.createElement("li");
-        entry.textContent = text;
+        entry.append(scientificText(text));
         list.appendChild(entry);
     }
     group.append(summary, list);

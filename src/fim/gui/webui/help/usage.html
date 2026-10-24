@@ -282,7 +282,7 @@ distance classes.</p>
 Migration shares alleles, mutation creates private alleles, and drift changes
 their abundance and survival. Compare Caballero-García-Dorado allelic distance
 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math> (presence/absence), Gregorius <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> (frequency distance), and
-Sherwin mutual information <code>MI</code> (information about population membership)
+Sherwin mutual information <var>I</var> (<code>MI</code>; information about population membership)
 with <code>D</code> and <var>G</var><sub>ST</sub>. The split is imposed, not simulated from an
 ancestral population.</p>
 <p>All five measures are watched, so the stopping verdict applies to all of
@@ -329,7 +329,8 @@ n_replicates: 1   # single run: a one-generation computation from an explicit fo
 final-generation values. It uses one replicate and took about 17 seconds
 on the development machine. Choose <strong>Run settings...</strong> on Configure to
 change the replicate count, cap, or precision for your run only.</p>
-<p>Unlike <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> and <var>D</var>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math> is not bounded by 1; <code>MI</code> uses natural-log units.
+<p>Unlike <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> and <var>D</var>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math> is not bounded by 1;
+<var>I</var> (<code>MI</code>) uses natural-log units.
 The implementation averages allelic distance over distinct deme pairs,
 whereas Caballero and García-Dorado's all-pairs equation 6 includes
 self-pairs. See the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/examples/literature-distance-statistics-from-an-explicit-founder-split/README.md">example's explanation and literature references</a>
@@ -1352,8 +1353,8 @@ About.</p>
 </tbody>
 </table>
 <p><strong>Trajectory references and averages.</strong> Scalar trajectories include
-analytic equilibrium lines for <code>D</code>, <code>G_ST</code>, and <code>E_ST</code>, and dash-dot
-expected trajectories for <code>D</code>, <code>G_ST</code>, <code>H_S</code>, <code>H_T</code>, and <code>H_ST</code> where
+analytic equilibrium lines for <var>D</var>, <var>G</var><sub>ST</sub>, and <var>E</var><sub>ST</sub>, and dash-dot
+expected trajectories for <var>D</var>, <var>G</var><sub>ST</sub>, <var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, and <var>H</var><sub>ST</sub> where
 available. Expected trajectories start from the seeded founding state and
 support unequal deme sizes and explicit migration matrices up to 24 demes.
 They are omitted for per-locus mutation rates, equilibrium-split founding,
@@ -1388,7 +1389,7 @@ generation) and trajectory mean squared error, for example
 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>Δ</mi><msub><mi>D</mi><mi>p</mi></msub><mo>=</mo><mo>+</mo><mn>0.012</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">M</mi><mi mathvariant="normal">S</mi><mi mathvariant="normal">E</mi></mrow><mo>=</mo><mn>4.1</mn><mi>×</mi><msup><mn>10</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow></math>.
 Both update during execution and scrubbing.
 The prediction uses the expected trajectory when supported, otherwise
-the equilibrium line (including <code>E_ST</code>). The tooltip identifies which
+the equilibrium line (including <var>E</var><sub>ST</sub>). The tooltip identifies which
 reference applies. See the <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> for
 definitions and API/source links.</p>
 <p>A GUI-authored run with the same parameters and seed produces byte-identical
@@ -1910,7 +1911,7 @@ are excluded rather than replacing defined values);</li>
 differentiation <var>K</var><sub>ST</sub>;</li>
 <li>literature-derived supplemental statistics:
 Caballero-García-Dorado allelic distance <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, Gregorius
-<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, and Sherwin mutual information <code>MI</code>;</li>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math> (<code>Delta</code>), and Sherwin mutual information <var>I</var> (<code>MI</code>);</li>
 <li>the within- and between-deme gene identities <var>G</var><sub>s</sub> (<code>Gs</code>) and
 <var>G</var><sub>d</sub> (<code>Gd</code>);</li>
 <li>Nei's (1973) <var>D</var><sub>m</sub> (<code>D_m</code>) and <var>R</var><sub>ST</sub> (<code>R_ST</code>), Nei's
@@ -2030,7 +2031,7 @@ above.</p>
 <p><code>summary.json</code> maps each reported statistic name (every global statistic in
 <a href="#reportjson"><code>report.json</code></a>: <code>D</code>, <var>G</var><sub>ST</sub>, <var>E</var><sub>ST</sub>,
 <var>K</var><sub>ST</sub>, <var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>H</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>,
-Gregorius <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, <code>MI</code>, <var>G</var><sub>s</sub>, <var>G</var><sub>d</sub>, the pooled-heterozygosity
+Gregorius <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, Sherwin's <var>I</var> (<code>MI</code>), <var>G</var><sub>s</sub>, <var>G</var><sub>d</sub>, the pooled-heterozygosity
 measures and the all-demes Nei forms) to its across-replicate confidence
 interval:</p>
 <pre><code class="language-json">{

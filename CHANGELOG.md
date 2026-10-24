@@ -1844,6 +1844,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Desktop statistic tooltips, result messages, comparison summaries, and
+  sweep/Explore readouts and chart labels use scientific subscripts and
+  superscripts from the statistic catalog. Native statistic menus spell out
+  script positions and show the selected mathematical symbol alongside.
+  Configuration keys, command-line names, and saved output fields are unchanged.
+
 - **Run simulation no longer starts a second run during a run.** The desktop
   app accepted a second run while one was in flight, from Run, the Run menu,
   or Configure's own Run button. The second run took over the first run's

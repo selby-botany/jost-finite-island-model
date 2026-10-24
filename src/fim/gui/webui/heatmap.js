@@ -288,7 +288,7 @@ function drawHeatmapColorBar(context, canvas, spec, ramp, frame) {
     );
     context.fillText(heatmapFormat(spec.min), labelLeft, frame.top + frame.plotHeight);
     if (spec.valueTitle) {
-        context.fillText(
+        fillScientificText(context,
             spec.valueTitle,
             barLeft,
             frame.top - HEATMAP_COLORBAR_TITLE_RISE

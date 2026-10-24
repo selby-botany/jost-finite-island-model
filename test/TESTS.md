@@ -152,6 +152,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_saved_runs_api`](#gui.test_saved_runs_api)
   - [`test_saved_runs_screen`](#gui.test_saved_runs_screen)
   - [`test_scatter_styles`](#gui.test_scatter_styles)
+  - [`test_scientific_notation_screen`](#gui.test_scientific_notation_screen)
   - [`test_scrubber_frame_cap`](#gui.test_scrubber_frame_cap)
   - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
@@ -26430,7 +26431,7 @@ different, one.
 
 <a id="gui.test_results_screen.test_differently_scaled_statistics_start_off_the_trajectory_panel"></a>
 
-#### [test\_differently\_scaled\_statistics\_start\_off\_the\_trajectory\_panel](./gui/test_results_screen.py#L353)
+#### [test\_differently\_scaled\_statistics\_start\_off\_the\_trajectory\_panel](./gui/test_results_screen.py#L356)
 
 ```python
 def test_differently_scaled_statistics_start_off_the_trajectory_panel(
@@ -26451,7 +26452,7 @@ the legend toggle still reaches it.
 
 <a id="gui.test_results_screen.test_a_very_long_run_still_renders_its_trajectory_and_deme_pair_panels"></a>
 
-#### [test\_a\_very\_long\_run\_still\_renders\_its\_trajectory\_and\_deme\_pair\_panels](./gui/test_results_screen.py#L415)
+#### [test\_a\_very\_long\_run\_still\_renders\_its\_trajectory\_and\_deme\_pair\_panels](./gui/test_results_screen.py#L418)
 
 ```python
 def test_a_very_long_run_still_renders_its_trajectory_and_deme_pair_panels(
@@ -26486,7 +26487,7 @@ established by `test_open_run_screen.py`'s own reopened-run tests.
 
 <a id="gui.test_results_screen.test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints"></a>
 
-#### [test\_drawing\_a\_scatter\_sizes\_the\_canvas\_buffer\_before\_it\_paints](./gui/test_results_screen.py#L487)
+#### [test\_drawing\_a\_scatter\_sizes\_the\_canvas\_buffer\_before\_it\_paints](./gui/test_results_screen.py#L490)
 
 ```python
 def test_drawing_a_scatter_sizes_the_canvas_buffer_before_it_paints(
@@ -26520,7 +26521,7 @@ the sync happened in `drawScatter` itself, not a frame later.
 
 <a id="gui.test_results_screen.test_a_single_replicate_run_gets_a_per_generation_results_table"></a>
 
-#### [test\_a\_single\_replicate\_run\_gets\_a\_per\_generation\_results\_table](./gui/test_results_screen.py#L551)
+#### [test\_a\_single\_replicate\_run\_gets\_a\_per\_generation\_results\_table](./gui/test_results_screen.py#L554)
 
 ```python
 def test_a_single_replicate_run_gets_a_per_generation_results_table(
@@ -26547,7 +26548,7 @@ same reason ``results`-outcome` reports above the plot).
 
 <a id="gui.test_results_screen.test_table_headers_toggle_and_highlight_their_statistic"></a>
 
-#### [test\_table\_headers\_toggle\_and\_highlight\_their\_statistic](./gui/test_results_screen.py#L638)
+#### [test\_table\_headers\_toggle\_and\_highlight\_their\_statistic](./gui/test_results_screen.py#L641)
 
 ```python
 def test_table_headers_toggle_and_highlight_their_statistic(
@@ -26563,7 +26564,7 @@ the header, the column and the stats-panel row; leaving clears it.
 
 <a id="gui.test_results_screen.test_capped_run_warns_in_both_message_and_final_generation_row"></a>
 
-#### [test\_capped\_run\_warns\_in\_both\_message\_and\_final\_generation\_row](./gui/test_results_screen.py#L702)
+#### [test\_capped\_run\_warns\_in\_both\_message\_and\_final\_generation\_row](./gui/test_results_screen.py#L705)
 
 ```python
 def test_capped_run_warns_in_both_message_and_final_generation_row(
@@ -26575,7 +26576,7 @@ A real capped run keeps its raw reason and never looks converged.
 
 <a id="gui.test_results_screen.test_not_converged_row_gets_a_warning_background_and_a_text_mark"></a>
 
-#### [test\_not\_converged\_row\_gets\_a\_warning\_background\_and\_a\_text\_mark](./gui/test_results_screen.py#L748)
+#### [test\_not\_converged\_row\_gets\_a\_warning\_background\_and\_a\_text\_mark](./gui/test_results_screen.py#L751)
 
 ```python
 def test_not_converged_row_gets_a_warning_background_and_a_text_mark(
@@ -26590,7 +26591,7 @@ global scope) so the result never depends on how a real run ends.
 
 <a id="gui.test_results_screen.test_completed_run_shows_title_above_canvas_and_back_returns_to_initial"></a>
 
-#### [test\_completed\_run\_shows\_title\_above\_canvas\_and\_back\_returns\_to\_initial](./gui/test_results_screen.py#L782)
+#### [test\_completed\_run\_shows\_title\_above\_canvas\_and\_back\_returns\_to\_initial](./gui/test_results_screen.py#L785)
 
 ```python
 def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
@@ -26602,7 +26603,7 @@ The run title sits above the plot and the Back action returns to p_0.
 
 <a id="gui.test_results_screen.test_completed_scatter_shows_the_marker_color_key_beneath_the_plot"></a>
 
-#### [test\_completed\_scatter\_shows\_the\_marker\_color\_key\_beneath\_the\_plot](./gui/test_results_screen.py#L832)
+#### [test\_completed\_scatter\_shows\_the\_marker\_color\_key\_beneath\_the\_plot](./gui/test_results_screen.py#L835)
 
 ```python
 def test_completed_scatter_shows_the_marker_color_key_beneath_the_plot(
@@ -26619,7 +26620,7 @@ the equivalent as a row of HTML beneath the plot.
 
 <a id="gui.test_results_screen.test_the_default_scatter_style_explains_its_count_colors"></a>
 
-#### [test\_the\_default\_scatter\_style\_explains\_its\_count\_colors](./gui/test_results_screen.py#L867)
+#### [test\_the\_default\_scatter\_style\_explains\_its\_count\_colors](./gui/test_results_screen.py#L870)
 
 ```python
 def test_the_default_scatter_style_explains_its_count_colors(
@@ -26636,7 +26637,7 @@ line of the original circles.
 
 <a id="gui.test_results_screen.test_deme_pair_selector_switches_to_a_chosen_pair_and_back"></a>
 
-#### [test\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back](./gui/test_results_screen.py#L900)
+#### [test\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back](./gui/test_results_screen.py#L903)
 
 ```python
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
@@ -26666,7 +26667,7 @@ live window.
 
 <a id="gui.test_results_screen.test_running_simulation_again_with_changed_config_starts_a_new_run_object"></a>
 
-#### [test\_running\_simulation\_again\_with\_changed\_config\_starts\_a\_new\_run\_object](./gui/test_results_screen.py#L1001)
+#### [test\_running\_simulation\_again\_with\_changed\_config\_starts\_a\_new\_run\_object](./gui/test_results_screen.py#L1004)
 
 ```python
 def test_running_simulation_again_with_changed_config_starts_a_new_run_object(
@@ -26694,7 +26695,7 @@ live window (finish a run, only then click "Run simulation" again)
 
 <a id="gui.test_results_screen.test_open_folder_button_reaches_the_injected_opener_and_settles"></a>
 
-#### [test\_open\_folder\_button\_reaches\_the\_injected\_opener\_and\_settles](./gui/test_results_screen.py#L1096)
+#### [test\_open\_folder\_button\_reaches\_the\_injected\_opener\_and\_settles](./gui/test_results_screen.py#L1099)
 
 ```python
 def test_open_folder_button_reaches_the_injected_opener_and_settles(
@@ -26724,7 +26725,7 @@ recorded path is the icing.
 
 <a id="gui.test_results_screen.test_run_view_fits_the_default_window_without_excess_scrolling"></a>
 
-#### [test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling](./gui/test_results_screen.py#L1162)
+#### [test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling](./gui/test_results_screen.py#L1165)
 
 ```python
 def test_run_view_fits_the_default_window_without_excess_scrolling(
@@ -26757,7 +26758,7 @@ scrolling."
 
 <a id="gui.test_results_screen.test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix"></a>
 
-#### [test\_run\_view\_initial\_state\_canvas\_is\_unaffected\_by\_the\_trajectory\_fix](./gui/test_results_screen.py#L1254)
+#### [test\_run\_view\_initial\_state\_canvas\_is\_unaffected\_by\_the\_trajectory\_fix](./gui/test_results_screen.py#L1257)
 
 ```python
 def test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix(
@@ -26778,7 +26779,7 @@ overflowed the window in the first place.
 
 <a id="gui.test_results_screen.test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks"></a>
 
-#### [test\_completed\_scrubber\_updates\_supplemental\_panels\_on\_scrub\_ticks](./gui/test_results_screen.py#L1311)
+#### [test\_completed\_scrubber\_updates\_supplemental\_panels\_on\_scrub\_ticks](./gui/test_results_screen.py#L1314)
 
 ```python
 def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
@@ -26790,7 +26791,7 @@ Stepping the completed scrubber updates allele composition & spectrum.
 
 <a id="gui.test_results_screen.test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them"></a>
 
-#### [test\_graph\_stage\_shows\_the\_chosen\_graphs\_together\_and\_the\_menu\_changes\_them](./gui/test_results_screen.py#L1360)
+#### [test\_graph\_stage\_shows\_the\_chosen\_graphs\_together\_and\_the\_menu\_changes\_them](./gui/test_results_screen.py#L1363)
 
 ```python
 def test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them(
@@ -26814,7 +26815,7 @@ split let a graph un-hide itself behind the stage's back.
 
 <a id="gui.test_results_screen.test_graph_zoom_frame_takes_the_pane_and_gives_it_back"></a>
 
-#### [test\_graph\_zoom\_frame\_takes\_the\_pane\_and\_gives\_it\_back](./gui/test_results_screen.py#L1452)
+#### [test\_graph\_zoom\_frame\_takes\_the\_pane\_and\_gives\_it\_back](./gui/test_results_screen.py#L1455)
 
 ```python
 def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
@@ -26838,7 +26839,7 @@ too, not only the pane's.
 
 <a id="gui.test_results_screen.test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom"></a>
 
-#### [test\_graph\_zoom\_sizes\_are\_a\_function\_of\_the\_frame\_not\_of\_the\_last\_zoom](./gui/test_results_screen.py#L1564)
+#### [test\_graph\_zoom\_sizes\_are\_a\_function\_of\_the\_frame\_not\_of\_the\_last\_zoom](./gui/test_results_screen.py#L1567)
 
 ```python
 def test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom(
@@ -26859,7 +26860,7 @@ instead of spreading its rows across a stretched box.
 
 <a id="gui.test_results_screen.test_dragging_the_zoomed_scatter_pane_narrows_the_view"></a>
 
-#### [test\_dragging\_the\_zoomed\_scatter\_pane\_narrows\_the\_view](./gui/test_results_screen.py#L1638)
+#### [test\_dragging\_the\_zoomed\_scatter\_pane\_narrows\_the\_view](./gui/test_results_screen.py#L1641)
 
 ```python
 def test_dragging_the_zoomed_scatter_pane_narrows_the_view(
@@ -26881,7 +26882,7 @@ pane, `run-graph-stage.js`'s own `openGraphZoom`).
 
 <a id="gui.test_results_screen.test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane"></a>
 
-#### [test\_reset\_view\_is\_hidden\_for\_a\_non\_scatter\_zoomed\_pane](./gui/test_results_screen.py#L1699)
+#### [test\_reset\_view\_is\_hidden\_for\_a\_non\_scatter\_zoomed\_pane](./gui/test_results_screen.py#L1702)
 
 ```python
 def test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane(
@@ -26893,7 +26894,7 @@ Drag-to-zoom is scatter-only; the trajectory pane offers no reset button.
 
 <a id="gui.test_results_screen.test_deme_pair_selectors_stay_glued_to_the_scatter_axes"></a>
 
-#### [test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes](./gui/test_results_screen.py#L1728)
+#### [test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes](./gui/test_results_screen.py#L1731)
 
 ```python
 def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
@@ -26918,7 +26919,7 @@ rather than on the markup: the selectors must straddle the canvas.
 
 <a id="gui.test_results_screen.test_the_graph_you_are_watching_survives_the_run_finishing"></a>
 
-#### [test\_the\_graph\_you\_are\_watching\_survives\_the\_run\_finishing](./gui/test_results_screen.py#L1811)
+#### [test\_the\_graph\_you\_are\_watching\_survives\_the\_run\_finishing](./gui/test_results_screen.py#L1814)
 
 ```python
 def test_the_graph_you_are_watching_survives_the_run_finishing(
@@ -26949,7 +26950,7 @@ point is that the menu and the stage still agree afterwards.
 
 <a id="gui.test_results_screen.test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics"></a>
 
-#### [test\_the\_default\_pair\_sits\_side\_by\_side\_above\_the\_fold\_with\_statistics](./gui/test_results_screen.py#L1895)
+#### [test\_the\_default\_pair\_sits\_side\_by\_side\_above\_the\_fold\_with\_statistics](./gui/test_results_screen.py#L1898)
 
 ```python
 def test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics(
@@ -26968,7 +26969,7 @@ One column stacks them instead, and the table still stays put.
 
 <a id="gui.test_results_screen.test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows"></a>
 
-#### [test\_double\_click\_zooms\_the\_graph\_under\_the\_pointer\_and\_the\_caption\_follows](./gui/test_results_screen.py#L1953)
+#### [test\_double\_click\_zooms\_the\_graph\_under\_the\_pointer\_and\_the\_caption\_follows](./gui/test_results_screen.py#L1956)
 
 ```python
 def test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows(
@@ -26985,7 +26986,7 @@ generation the trajectory's dashed line marks.
 
 <a id="gui.test_results_screen.test_nice_axis_ticks_round_to_human_steps_at_every_scale"></a>
 
-#### [test\_nice\_axis\_ticks\_round\_to\_human\_steps\_at\_every\_scale](./gui/test_results_screen.py#L2000)
+#### [test\_nice\_axis\_ticks\_round\_to\_human\_steps\_at\_every\_scale](./gui/test_results_screen.py#L2003)
 
 ```python
 def test_nice_axis_ticks_round_to_human_steps_at_every_scale(
@@ -27003,7 +27004,7 @@ reimplementation that could drift from it.
 
 <a id="gui.test_results_screen.test_every_run_card_graph_draws_tick_marks_on_its_axes"></a>
 
-#### [test\_every\_run\_card\_graph\_draws\_tick\_marks\_on\_its\_axes](./gui/test_results_screen.py#L2045)
+#### [test\_every\_run\_card\_graph\_draws\_tick\_marks\_on\_its\_axes](./gui/test_results_screen.py#L2048)
 
 ```python
 def test_every_run_card_graph_draws_tick_marks_on_its_axes(
@@ -27028,7 +27029,7 @@ pixels there is the behavior a reader sees, not a markup detail.
 
 <a id="gui.test_results_screen.test_scrubbing_a_completed_scalar_run_moves_every_stats_row"></a>
 
-#### [test\_scrubbing\_a\_completed\_scalar\_run\_moves\_every\_stats\_row](./gui/test_results_screen.py#L2137)
+#### [test\_scrubbing\_a\_completed\_scalar\_run\_moves\_every\_stats\_row](./gui/test_results_screen.py#L2140)
 
 ```python
 def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
@@ -27050,7 +27051,7 @@ connection cannot quietly drop again on either one.
 
 <a id="gui.test_results_screen.test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square"></a>
 
-#### [test\_the\_scatter\_and\_trajectory\_panes\_share\_a\_height\_and\_the\_scatter\_stays\_square](./gui/test_results_screen.py#L2194)
+#### [test\_the\_scatter\_and\_trajectory\_panes\_share\_a\_height\_and\_the\_scatter\_stays\_square](./gui/test_results_screen.py#L2197)
 
 ```python
 def test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square(
@@ -28339,6 +28340,78 @@ Measured as ink: with the original circles the 48-allele pile covers
 a large disc at the corner; the badge styles draw a small dot and a
 label there instead, so a patch of the canvas just above and right of
 the origin holds far less ink.
+
+<a id="gui.test_scientific_notation_screen"></a>
+
+# [gui.test\_scientific\_notation\_screen](./gui/test_scientific_notation_screen.py#L1)
+
+Scientific presentation stays separate from saved statistic identifiers.
+
+<a id="gui.test_scientific_notation_screen.test_catalog_symbols_and_untrusted_text"></a>
+
+#### [test\_catalog\_symbols\_and\_untrusted\_text](./gui/test_scientific_notation_screen.py#L16)
+
+```python
+def test_catalog_symbols_and_untrusted_text(window: webview.Window,
+                                            drive: Callable[..., Any]) -> None
+```
+
+Every catalog alias renders its symbol, without interpreting input HTML.
+
+<a id="gui.test_scientific_notation_screen.test_messages_render_symbols_including_collapsed_details"></a>
+
+#### [test\_messages\_render\_symbols\_including\_collapsed\_details](./gui/test_scientific_notation_screen.py#L58)
+
+```python
+def test_messages_render_symbols_including_collapsed_details(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Batch sentences, cautions and details render math at their DOM boundary.
+
+<a id="gui.test_scientific_notation_screen.test_statistic_tooltips_use_math_and_restore_titles"></a>
+
+#### [test\_statistic\_tooltips\_use\_math\_and\_restore\_titles](./gui/test_scientific_notation_screen.py#L89)
+
+```python
+def test_statistic_tooltips_use_math_and_restore_titles(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Mouse and keyboard tooltips render scripts; Escape removes the bubble.
+
+<a id="gui.test_scientific_notation_screen.test_field_help_and_native_statistic_choices"></a>
+
+#### [test\_field\_help\_and\_native\_statistic\_choices](./gui/test_scientific_notation_screen.py#L135)
+
+```python
+def test_field_help_and_native_statistic_choices(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Field help and selected symbols use math without changing option values.
+
+<a id="gui.test_scientific_notation_screen.test_canvas_labels_have_smaller_positioned_scripts"></a>
+
+#### [test\_canvas\_labels\_have\_smaller\_positioned\_scripts](./gui/test_scientific_notation_screen.py#L165)
+
+```python
+def test_canvas_labels_have_smaller_positioned_scripts(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Canvas labels retain mathematical subscripts, superscripts and alignment.
+
+<a id="gui.test_scientific_notation_screen.test_statistics_chooser_and_sweep_headers"></a>
+
+#### [test\_statistics\_chooser\_and\_sweep\_headers](./gui/test_scientific_notation_screen.py#L197)
+
+```python
+def test_statistics_chooser_and_sweep_headers(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Secondary descriptions and table headings use the same catalog notation.
 
 <a id="gui.test_scrubber_frame_cap"></a>
 
@@ -30068,7 +30141,7 @@ and for no other.
 
 <a id="gui.test_watched_statistics_screen.test_the_watched_statistics_are_underlined_during_a_run"></a>
 
-#### [test\_the\_watched\_statistics\_are\_underlined\_during\_a\_run](./gui/test_watched_statistics_screen.py#L81)
+#### [test\_the\_watched\_statistics\_are\_underlined\_during\_a\_run](./gui/test_watched_statistics_screen.py#L83)
 
 ```python
 def test_the_watched_statistics_are_underlined_during_a_run(
@@ -30079,7 +30152,7 @@ A live run marks the statistics its convergence rule watches.
 
 <a id="gui.test_watched_statistics_screen.test_the_watched_statistics_are_underlined_after_a_run"></a>
 
-#### [test\_the\_watched\_statistics\_are\_underlined\_after\_a\_run](./gui/test_watched_statistics_screen.py#L98)
+#### [test\_the\_watched\_statistics\_are\_underlined\_after\_a\_run](./gui/test_watched_statistics_screen.py#L100)
 
 ```python
 def test_the_watched_statistics_are_underlined_after_a_run(
@@ -30090,7 +30163,7 @@ A finished run keeps the marks.
 
 <a id="gui.test_watched_statistics_screen.test_a_batch_marks_its_own_watched_statistics_not_the_previous_runs"></a>
 
-#### [test\_a\_batch\_marks\_its\_own\_watched\_statistics\_not\_the\_previous\_runs](./gui/test_watched_statistics_screen.py#L124)
+#### [test\_a\_batch\_marks\_its\_own\_watched\_statistics\_not\_the\_previous\_runs](./gui/test_watched_statistics_screen.py#L126)
 
 ```python
 def test_a_batch_marks_its_own_watched_statistics_not_the_previous_runs(

@@ -216,7 +216,7 @@ function renderExpertSettings(info) {
         row.title = item.help;
         const label = document.createElement("label");
         label.htmlFor = `settings-expert_${item.name}`;
-        label.textContent = item.label;
+        label.append(scientificText(item.label));
         const input = document.createElement("input");
         input.type = "text";
         input.id = `settings-expert_${item.name}`;
@@ -226,7 +226,7 @@ function renderExpertSettings(info) {
         const note = document.createElement("span");
         note.id = `settings-expert-note_${item.name}`;
         note.className = "hint expert-default-hint";
-        note.textContent = `default ${item.default}; ${item.range}. ${item.help}`;
+        note.append(scientificText(`default ${item.default}; ${item.range}. ${item.help}`));
         const reset = document.createElement("button");
         reset.type = "button";
         reset.className = "expert-reset";
@@ -513,10 +513,10 @@ function renderStatisticsChooser() {
             name.innerHTML = spec.label_html;
             const description = document.createElement("span");
             description.className = "settings-statistics-description";
-            description.textContent =
+            description.append(scientificText(
                 spec.scope === "pair"
                     ? `Uses the deme pair chosen for the scatter plot. ${spec.description}`
-                    : spec.description;
+                    : spec.description));
             item.append(box, " ", name, description);
             // The catalog's "opt_in" statistics cost time every
             // generation once shown (`Api._merge_default_run_settings`).
