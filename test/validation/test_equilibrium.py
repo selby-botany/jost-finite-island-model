@@ -43,14 +43,14 @@ def test_dear_nolan_scenarios_match_published_approximations(
 
 
 def test_part_iv_dynamic_example_matches_the_guide() -> None:
-    """The Part IV "dynamic example" bottleneck scenario, both endpoints.
+    r"""The Part IV "dynamic example" bottleneck scenario, both endpoints.
 
     `doc/jost-differentiation-measures.md` Part IV: a 100-deme population
     (`d = 100`) recovers from a bottleneck to `N = 10,000` diploid
     individuals each (20,000 gene copies) with `mu = 0.001` and zero
     migration. The guide's own equilibrium numbers: `D -> 1.00 "exactly"`
     (quoting Part VI's own worked sanity check, "with no migration
-    (m = 0), D = 1") and `G_ST -> 1/41.4 ~= 0.0242`.
+    (m = 0), D = 1") and $G_{ST} \to 1/41.4 \approx 0.0242$.
     """
     assert equilibrium_d(0.0, 0.001, 100) == 1.0
     assert equilibrium_g_st(20_000, 0.0, 0.001, 100) == pytest.approx(
@@ -274,7 +274,7 @@ def test_equilibrium_shannon_entropy_subpopulation_never_exceeds_total(
 def test_equilibrium_shannon_differentiation_is_bounded(
     population_size: int, m: float, mu: float, d: int
 ) -> None:
-    """Shannon differentiation stays in `[0, 1]`, the same range `D`/`G_ST` share.
+    """Shannon differentiation stays in `[0, 1]`, the same range $D$ / $G_{ST}$ share.
 
     Chao et al. (2015) state this directly: zero when every
     subpopulation is identical to the whole, one when subpopulations
@@ -310,7 +310,7 @@ def test_equilibrium_shannon_differentiation_is_increasing_in_mutation() -> None
     Part VI's own "Why this kills the standard inference" pattern
     (`equilibrium_d`'s own docstring), extended to the Shannon-entropy
     family: Fig. 1/Fig. 2 of Chao et al. (2015) show Shannon
-    differentiation and Jost's `D` "always exhibit consistent
+    differentiation and Jost's $D$ "always exhibit consistent
     patterns" -- both increasing in `mu`, both decreasing in `m` (the
     next test, below) -- stated in the paper as a qualitative figure,
     checked here as an executable property instead.

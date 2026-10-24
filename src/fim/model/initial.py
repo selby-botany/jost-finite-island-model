@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def _mean_h_s(state: ModelState) -> float:
-    """Return a one-deme state's `H_S`, averaged across its loci.
+    """Return a one-deme state's $H_S$, averaged across its loci.
 
     Args:
         state: A state with one deme (the ancestral population).
@@ -200,7 +200,7 @@ class EquilibrationOutcome:
     `equilibrium_generation_count`/`equilibrium_final_heterozygosity`
     fields (`20260907-claude-sonnet-5-equilibrium-split-design.md` §5).
     The ancestral phase's full trajectory — every generation's own
-    allele frequencies, not only this `H_S` summary — is not held here:
+    allele frequencies, not only this $H_S$ summary — is not held here:
     `generate_with_outcome` streams it, one generation at a time, to its
     `on_generation` observer, which `fim.engine` writes as the run's
     `equilibrium_trajectory.tlog` artifact.
@@ -208,10 +208,10 @@ class EquilibrationOutcome:
     Args:
         generation_count: The generation at which the ancestral phase
             stopped: its burn-in (`EquilibriumSplitInitialCondition`).
-        final_heterozygosity: The ancestral population's own `H_S` at
+        final_heterozygosity: The ancestral population's own $H_S$ at
             that generation — the actual value split into `d` demes,
             not a value the caller chose.
-        history: `H_S` at every generation of the ancestral phase,
+        history: $H_S$ at every generation of the ancestral phase,
             oldest first, generation zero (the pre-drift Dirichlet draw)
             included.
     """
@@ -239,8 +239,8 @@ class EquilibriumSplitInitialCondition:
        `mutate` (no `migrate` — there is nothing to migrate between with
        one deme) for a burn-in derived from the model itself
        (`fim.convergence.defaults.panmictic_equilibration`): the first
-       generation by which the expected identity, so the expected `H_S`
-       (identical to `H_T` at one deme), of every locus is within
+       generation by which the expected identity, so the expected $H_S$
+       (identical to $H_T$ at one deme), of every locus is within
        `convergence_tolerance` of its mutation-drift equilibrium
        whatever the starting draw, about `ln(1 / tolerance)` relaxation
        times `1 / (2 mu + 1/N)`; never fewer than `convergence_window`
@@ -251,14 +251,14 @@ class EquilibriumSplitInitialCondition:
        from a non-equilibrium ancestral population would defeat the one
        thing this mode exists to guarantee).
 
-       Watching the population's own `H_S` settle, as this phase first
-       did, cannot work: at equilibrium a single population's `H_S`
+       Watching the population's own $H_S$ settle, as this phase first
+       did, cannot work: at equilibrium a single population's $H_S$
        keeps wandering around its expectation by drift, so a trailing
        window never settles to a useful tolerance (with the noise gate
        of `fim.convergence.monitor` it never passed within 100,000
        generations for the bundled example; before that gate it
        "settled" on a chance lull, 20 generations in). Nor can the
-       realized `H_S` be checked against the expectation, for the same
+       realized $H_S$ be checked against the expectation, for the same
        reason. The burn-in is the model's own answer instead: how long
        the population takes to forget where it started.
     2. **Split.** By the time equilibration stops, the ancestral
@@ -318,7 +318,7 @@ class EquilibriumSplitInitialCondition:
                 independent of the real run's own `convergence_window`.
             convergence_tolerance: The largest expected departure of the
                 ancestral population's heterozygosity from its
-                equilibrium, in `H_S`'s units; sets the derived burn-in
+                equilibrium, in $H_S$'s units; sets the derived burn-in
                 (`equilibrium_convergence_tolerance`). Greater than zero.
             max_generations: Hard cap on the ancestral phase's own
                 generation count. A burn-in longer than this is fatal
@@ -623,7 +623,7 @@ def founding_condition_for_heterozygosity(
     """Build a `p_0` table where every deme is an identical ancestral copy.
 
     Ryman & Leimar (2008)'s own gene-identity recursion starts every
-    trajectory from `Gs(0) = Gd(0) = 1 - H_S(0)` — every deme founded as
+    trajectory from $G_s(0) = G_d(0) = 1 - H_S(0)$ — every deme founded as
     an identical copy of one ancestral population at a specified
     heterozygosity, before any migration/mutation/drift has had a chance
     to make the demes diverge from each other. `fim`'s own two existing
@@ -663,7 +663,7 @@ def founding_condition_for_heterozygosity(
 
     Args:
         heterozygosity: The ancestral population's own expected
-            heterozygosity, `H_S(0)`. Must be in `[0, 1)` — `1` itself
+            heterozygosity, $H_S(0)$. Must be in `[0, 1)` — `1` itself
             is the unreachable supremum every finite allele count only
             ever approaches (`heterozygosity.heterozygosity`'s own
             docstring).

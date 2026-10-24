@@ -113,7 +113,7 @@ def test_fixed_point_is_where_the_trajectory_ends(
 def test_equilibrium_d_agrees_with_the_published_approximation(
     size: int, m: float, mu: float, d: int
 ) -> None:
-    """The exact fixed-point `D` is within 15% of `equilibrium_d`."""
+    """The exact fixed-point $D$ is within 15% of `equilibrium_d`."""
     recursion = identity_recursion(size, m, mu, d)
 
     settled = identities_to_statistics(*recursion.fixed_point, d)["D"]
@@ -122,7 +122,7 @@ def test_equilibrium_d_agrees_with_the_published_approximation(
 
 
 def test_identical_founding_demes_start_with_no_differentiation() -> None:
-    """`within == between == 1` is `D = G_ST = 0` at generation zero."""
+    """`within == between == 1` is $D = G_{ST} = 0$ at generation zero."""
     statistics = identity_recursion(100, 0.05, 0.001, 4).statistics_after(0, 1.0, 1.0)
 
     assert statistics["D"] == pytest.approx(0.0, abs=1e-12)
@@ -149,7 +149,7 @@ def test_statistics_match_the_frequency_table_definitions() -> None:
 
 
 def test_heterozygosities_round_trip_through_identities() -> None:
-    """`identities_from_heterozygosities` inverts `H_S`/`H_T`."""
+    """`identities_from_heterozygosities` inverts $H_S$ / $H_T$."""
     within, between = 0.62, 0.31
     statistics = identities_to_statistics(within, between, 5)
 

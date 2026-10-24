@@ -181,7 +181,7 @@ def _dense(
 def test_locus_statistics_match_statistics_report_bit_for_bit(
     demes: int, alleles: int
 ) -> None:
-    """`H_S`, `H_T`, `H_ST`, `G_ST` and `D` equal `statistics_report`'s bits.
+    """$H_S$, $H_T$, $H_{ST}$, $G_{ST}$ and $D$ equal `statistics_report`'s bits.
 
     Seeded states with 1 to 200 alleles, shared and private across demes.
     """
@@ -209,7 +209,7 @@ def test_locus_statistics_match_statistics_report_bit_for_bit(
 def test_locus_statistics_report_g_st_undefined_when_every_deme_is_fixed_alike() -> (
     None
 ):
-    """A monomorphic locus has no `G_ST`: the kernel returns `nan`, not an error."""
+    """A monomorphic locus has no $G_{ST}$: the kernel returns `nan`, not an error."""
     table = [{4: 1.0}, {4: 1.0}, {4: 1.0}]
     freq, ncol, _ids = _dense(table)
     out = np.zeros((1, kernels.STATISTIC_COLUMNS), dtype=np.float64)

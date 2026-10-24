@@ -4,8 +4,8 @@ A statistic with a prediction gets a sentence in the run's messages that
 compares its average over the evidence window with the prediction averaged
 over the same generations, and gives the mean squared difference over the
 whole run. The prediction is the closed-form expected trajectory when the
-model has one (`D`, `G_ST`, `H_S`, `H_T`, `H_ST`), otherwise the predicted
-equilibrium (`D`, `G_ST`, `E_ST`): a run with stochastic migrants has no
+model has one ($D$, $G_{ST}$, $H_S$, $H_T$, $H_{ST}$), otherwise the predicted
+equilibrium ($D$, $G_{ST}$, $E_{ST}$): a run with stochastic migrants has no
 closed-form trajectory but is still compared.
 """
 

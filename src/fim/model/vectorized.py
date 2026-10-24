@@ -640,7 +640,7 @@ def migrate_vectorized_symmetric(
     rate: float,
     sizes: np.ndarray,
 ) -> VectorizedLocusState:
-    """Blend every deme with the migrant pool in `O(d*K)` time, no `(d,d)` matrix.
+    r"""Blend every deme with the migrant pool in $O(dK)$ time, no $(d,d)$ matrix.
 
     The array-native counterpart to `fim.model.operators._migrate_
     symmetric`'s own `O(d*A)` shortcut, for the identical common case:
@@ -653,16 +653,22 @@ def migrate_vectorized_symmetric(
     `d=5x10^4`, genuinely unrepresentable beyond that, not merely slow).
     This function never builds `W` at all — it restates `_migrate_
     symmetric`'s own two-pass formula (global size-weighted mass once,
-    then a per-destination pool) directly in dense-array form:
+    then a per-destination pool) directly in dense-array form. Let $N_i$
+    be `sizes[i]`, $p_{ia}$ be `frequencies[i, a]`, and $m$ be `rate`.
+    With $N_{\mathrm{total}} = \sum_i N_i$, the formulas are
 
-    ```
-    global_mass[a] = sum_i sizes[i] * frequencies[i, a]  # sizes @ frequencies
-    other_weight[i] = total_size - sizes[i]
-    pool[i, a] = (global_mass[a] - sizes[i] * frequencies[i, a]) / other_weight[i]
-    blended[i, a] = (1 - rate) * frequencies[i, a] + rate * pool[i, a]
+    ```math
+    \begin{array}{rl}
+    G_a &= \sum_i N_i p_{ia}, \\
+    W_i &= N_{\mathrm{total}} - N_i, \\
+    P_{ia} &= \frac{G_a - N_i p_{ia}}{W_i}, \\
+    p^\prime_{ia} &= (1 - m)p_{ia} + mP_{ia}.
+    \end{array}
     ```
 
-    `O(d*K)` in both compute and memory — the identical order the
+    Here $G_a$, $W_i$, $P_{ia}$ and $p^\prime_{ia}$ correspond to
+    `global_mass[a]`, `other_weight[i]`, `pool[i, a]` and `blended[i, a]`.
+    This is $O(dK)$ in both compute and memory — the identical order the
     dict-based backend's own shortcut already achieves, now available
     for the array-native path too. No separate normalization step:
     every row of `blended` sums to exactly 1 whenever every row of

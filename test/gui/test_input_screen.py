@@ -473,8 +473,8 @@ def test_the_combinator_follows_how_many_statistics_are_watched(
 ) -> None:
     """The combinator shows for two or more watched statistics, and hides for one.
 
-    The starter form watches `D` and `G_ST`, so the field is visible from the
-    start; unchecking `G_ST` leaves one statistic and hides it
+    The starter form watches $D$ and $G_{ST}$, so the field is visible from the
+    start; unchecking $G_{ST}$ leaves one statistic and hides it
     (`syncConditionalVisibility`, `config-modals.js`), checking it again
     brings it back. Driven as a direct DOM click on the checkbox itself.
     """
@@ -617,7 +617,9 @@ def test_choosing_the_torus_topology_reveals_rows_and_columns(
 def test_configure_has_no_expensive_statistics_checkbox(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The "track E_ST/K_ST/... for display" checkbox is gone; nothing submits it.
+    """The "track $E_{ST}$ / $K_{ST}$ / ... for display" checkbox is gone.
+
+    Nothing submits it.
 
     Settings' "Statistics shown" decides `track_expensive_statistics` now
     (`Api._merge_default_run_settings`), so Configure neither shows a

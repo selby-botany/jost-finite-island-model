@@ -188,9 +188,9 @@ def _recursion_from_payload(payload: dict[str, Any]) -> IdentityRecursion:
 def _defined(value: float | None) -> float:
     """Narrow one of `TrajectoryHistory.histories`' own optional entries.
 
-    Every statistic read this way here is one of `D`/`G_ST`/`H_S`/`H_T` at a
+    Every statistic read this way here is one of $D$ / $G_{ST}$ / $H_S$ / $H_T$ at a
     healthy, multi-locus configuration -- always defined in practice (only
-    `G_ST`, at a monomorphic locus, can ever be `None`).
+    $G_{ST}$, at a monomorphic locus, can ever be `None`).
     """
     assert value is not None, "expected a defined statistic value"
     return value
@@ -247,7 +247,7 @@ ENGINE_CHECK_EXCLUDED = frozenset({"dear-nolan-high"})
 def test_engine_agrees_with_the_payload_for_every_example(
     name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Mean simulated `D` and `G_ST` sit on the offered curve, per example.
+    """Mean simulated $D$ and $G_{ST}$ sit on the offered curve, per example.
 
     Each example runs `REPLICATES` seeds as one scalar run, held for three
     relaxation times with no early stop (the curve does not depend on where

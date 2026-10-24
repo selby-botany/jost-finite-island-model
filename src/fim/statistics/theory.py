@@ -46,14 +46,14 @@ def equilibrium_numeric_predictions(
 
     Every one of these is a closed-form function of `(N, m, mu, d)`
     alone, so every one of them is defined along every one of the four
-    sweep axes. Several do not depend on every parameter -- `D` has no
+    sweep axes. Several do not depend on every parameter -- $D$ has no
     `N` term at all (`equilibrium_d`'s own docstring: only the
-    migration-to-mutation ratio sets where it settles), `H_S` depends on
+    migration-to-mutation ratio sets where it settles), $H_S$ depends on
     `N` and `mu` only, and the whole Whitlock identity-recovery family
     depends on `N` and `m` only. Swept against a parameter they do not
     contain, those produce a flat line. That flat line is the point, not
-    a degenerate case to suppress: `D` level across two orders of
-    magnitude of `N` while `G_ST` falls away beneath it is this
+    a degenerate case to suppress: $D$ level across two orders of
+    magnitude of `N` while $G_{ST}$ falls away beneath it is this
     project's central claim, drawn rather than asserted.
 
     Args:

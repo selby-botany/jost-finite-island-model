@@ -972,11 +972,11 @@ class VectorBlock:
         return maps
 
     def locus_statistics(self) -> tuple[np.ndarray, np.ndarray]:
-        """Compute `H_S`, `H_T`, `H_ST`, `G_ST` and `D` for every locus.
+        """Compute $H_S$, $H_T$, $H_{ST}$, $G_{ST}$ and $D$ for every locus.
 
         Returns:
             `(table, status)`: `table` is `(loci, 5)` float64 in that
-            column order (`G_ST` is `nan` where undefined); `status` is
+            column order ($G_{ST}$ is `nan` where undefined); `status` is
             `(loci,)` int64, non-zero where `statistics_report` would have
             raised (the caller then uses it, to raise the real error).
         """

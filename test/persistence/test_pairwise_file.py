@@ -106,7 +106,7 @@ def test_unknown_schema_version_is_rejected(tmp_path: Path) -> None:
 
 
 def test_pairwise_f_st_matrix_matches_the_pair_function(tmp_path: Path) -> None:
-    """The saved pairwise F_ST equals `pairwise_f_st` at one locus, pooled at two."""
+    """Saved pairwise $F_{ST}$ equals `pairwise_f_st` at one locus, pooled at two."""
     loci = (LocusSpec(1, 100),)
     frequencies = (
         ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
@@ -123,7 +123,7 @@ def test_pairwise_f_st_matrix_matches_the_pair_function(tmp_path: Path) -> None:
 
 
 def test_pairwise_f_st_is_null_where_undefined(tmp_path: Path) -> None:
-    """Two demes fixed for the same allele: F_ST undefined, saved as null."""
+    """Two demes fixed for the same allele: $F_{ST}$ undefined, saved as null."""
     loci = (LocusSpec(1, 100),)
     state = ModelState(
         loci=loci,

@@ -51,7 +51,7 @@ independent runs at that one swept value:
   `jit="off"` and `jit="numba"` respectively.
 - **$V$** — `"generational-vector"` (always effectively JIT-compiled;
   it has no `jit="off"` mode).
-- **`fastest`** — which of $L_b$/$G_{\mathrm{off}}$/$G_{\mathrm{jit}}$/$V$ had the lowest
+- **`fastest`** — which of $L_b$ / $G_{\mathrm{off}}$ / $G_{\mathrm{jit}}$ / $V$ had the lowest
   raw wall-clock time at the row's swept value.
 
 **Fixed across B.1 and B.3** (both produced by `dev/bin/benchmark-engines`):
@@ -287,7 +287,7 @@ concurrently with that queue for about 40 of its 47 minutes:
 #### Summary
 
 $V$ had the lowest median runtime at every measured `d` through 500 in
-both runs. The $V$-to-$G_{\mathrm{jit}}$ runtime ratios differ between the runs
+both runs. The $V$ to $G_{\mathrm{jit}}$ runtime ratios differ between the runs
 (1.86–2.03 versus 1.24–1.68) despite functionally identical simulation
 code. The second run overlapped with four other benchmark jobs on the same
 22-thread host, so host contention is a potential confound. The results
@@ -366,7 +366,7 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 ![Time and L₁ normalized time by Deme Size (d) for Locus Length 7](img/fim-benchmark-b5-l7-deme-by-locus-length-sweep-graph.png)
 
-Fastest backend, and the $V$/$G_{\mathrm{jit}}\;(\mathrm{s})$ wall-clock
+Fastest backend, and the $V$ / $G_{\mathrm{jit}}\;(\mathrm{s})$ wall-clock
 ratio (below 1.0 means $V$ is still ahead), across all three completed
 lengths:
 
@@ -386,7 +386,7 @@ lengths:
 
 #### Summary
 
-The measured $V$/$G$-jit boundary depends on both deme count and locus length.
+The measured $V$ / $G$-jit boundary depends on both deme count and locus length.
 At length 7, $V$ had the lower median runtime at `d >= 120`; at length 5, it
 had the lower median at every sampled `d`. The automatic backend thresholds
 documented for this benchmark use independent scalar conditions. Such
@@ -505,7 +505,7 @@ the selected backend is fastest on every machine or at every grid point.
 The larger-capacity results above do not support extending that simple
 boundary uniformly across deme counts.
 
-`--measure-rss` produced a $V$/G-off/G-jit/$L$ peak-RSS ratio of exactly `1.00`
+`--measure-rss` produced a $V$ / G-off / G-jit / $L$ peak-RSS ratio of exactly `1.00`
 at every measured point in this grid. This is a limitation of the measurement
 at this workload scale: `InMemoryTrajectoryStore` retains every generation's
 full state for the whole run. At up to 75 generations and `d=500`/capacity
@@ -663,7 +663,7 @@ one-replicate `lineal` run, `108.3 MiB`; each `/L1` column is a ratio to it.
 
 - **Latency.** $V$ is fastest at every batch size, from one replicate
   ($V/L_{1}$ `0.05`, about 20 times faster) to `128` (`6.53`).
-  All four engines grow linearly with the batch, so the $V$-versus-$G$ boundary
+  All four engines grow linearly with the batch, so the $V$ versus $G$ boundary
   does not move with batch size at this configuration.
 - $L_b$ here is the benchmark's sequential batch, not `fim run`'s multi-process
   batch, so it is not what a user's `lineal` batch costs.

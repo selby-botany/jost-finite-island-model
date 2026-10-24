@@ -74,7 +74,10 @@ def test_dear_nolan_low_relaxation_time_is_about_twenty_thousand() -> None:
 
 
 def test_the_burn_in_multiple_follows_the_precision_with_a_floor() -> None:
-    """`k = max(5, ln(2 / precision))`: 5.30 at 0.01, 7.6 at 0.001, 5 at 0.1."""
+    r"""The multiple is $k = \max(5, \ln(2 / \mathrm{precision}))$.
+
+    This gives 5.30 at 0.01, 7.6 at 0.001, and 5 at 0.1.
+    """
     floor = BURN_IN_MINIMUM_RELAXATION_TIMES
     assert burn_in_multiple(0.01, floor) == pytest.approx(math.log(200.0))
     assert burn_in_multiple(0.001, floor) == pytest.approx(math.log(2000.0))
@@ -85,7 +88,7 @@ def test_the_burn_in_multiple_follows_the_precision_with_a_floor() -> None:
 
 
 def test_the_burn_in_is_ceil_k_tau_and_never_zero() -> None:
-    """`ceil(k tau)`, at least 1 so generation 0 is never averaged."""
+    r"""Use $\lceil k\tau \rceil$, at least 1 so generation 0 is never averaged."""
     expert = ExpertSettings()
     assert derive_burn_in(100.0, 0.01, expert) == math.ceil(math.log(200.0) * 100.0)
     assert derive_burn_in(0.01, 0.01, expert) == 1
@@ -94,7 +97,7 @@ def test_the_burn_in_is_ceil_k_tau_and_never_zero() -> None:
 
 
 def test_derived_defaults_follow_the_burn_in_and_the_cap_rule() -> None:
-    """Burn-in is `ceil(k tau)`; the cap adds `15 tau` to the burn-in."""
+    r"""Burn-in is $\lceil k\tau \rceil$; the cap adds $15\tau$ to the burn-in."""
     derived = derive_convergence_defaults(
         deme_sizes=[100] * 5, migration=1e-4, mutation_rates=[1e-6], precision=0.01
     )
@@ -272,12 +275,17 @@ def test_large_scalar_island_uses_the_closed_form() -> None:
 
 
 def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None:
-    """600 gene copies at `mu` 0.001: tau about 273, burn-in about 4.6 tau.
+    r"""600 gene copies at $\mu = 0.001$: $\tau \approx 273$, burn-in $4.6\tau$.
 
     The bundled equilibrium-split example (3 demes of 200, haploid). Its
-    `tau` is exactly the one-deme recursion's (both are the textbook
-    `1 / (1 - (1 - 1/N)(1 - mu)^2)`), and its expected heterozygosity is
-    close to `theta / (1 + theta)`, `theta = 2 N mu = 1.2`.
+    $\tau$ is exactly the one-deme recursion's:
+
+    ```math
+    \tau = \frac{1}{1 - (1 - 1/N)(1 - \mu)^2}.
+    ```
+
+    Its expected heterozygosity is close to $\theta / (1 + \theta)$,
+    with $\theta = 2N\mu = 1.2$.
     """
     result = panmictic_equilibration(
         total_size=600, mutation_rates=[0.001], tolerance=0.01
@@ -298,10 +306,15 @@ def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None:
 
 
 def test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start() -> None:
-    """After the burn-in, the expected identity is within tolerance of F*.
+    r"""After the burn-in, the expected identity is within tolerance of $F^*$.
 
-    Iterates the textbook expected recursion (drift, then each copy
-    mutates: `F' = 1/N + (1 - 1/N)(1 - mu)^2 F`) from both extremes
+    Iterates the textbook expected recursion, drift then mutation,
+
+    ```math
+    F^\prime = \frac{1}{N} + \left(1 - \frac{1}{N}\right)(1 - \mu)^2 F,
+    ```
+
+    from both extremes
     (every copy identical, and none) and checks the departure at the
     burn-in.
     """

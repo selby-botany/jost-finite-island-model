@@ -433,7 +433,7 @@ def test_convergence_history_rows_drop_a_statistic_shorter_than_generations() ->
     written for every row or none -- there is no honest partial
     placeholder for "undefined this one generation" in a row-per-
     generation shape. Proven directly here by handing it a synthetic
-    `G_ST`-style short history (only the two attributes this function
+    $G_{ST}$-style short history (only the two attributes this function
     actually reads matter, so a plain stand-in is exact, not an
     approximation of a real `RunResult`), rather than trusting a real
     run to happen to reproduce a monomorphic locus.
@@ -454,7 +454,7 @@ def test_convergence_history_rows_drop_a_statistic_shorter_than_generations() ->
 def test_differentiation_q_for_state_agrees_with_e_st_under_size_weighting(
     tmp_path: Path,
 ) -> None:
-    """`q = 1` under size weighting matches `E_ST`, not the unweighted value.
+    """`q = 1` under size weighting matches $E_{ST}$, not the unweighted value.
 
     Regression coverage carried over from `cli.py`'s own S2 test:
     `differentiation_q_for_state` must pass size weights at `q = 1`
@@ -502,7 +502,7 @@ def test_a_rebuilt_convergence_history_matches_the_live_one(tmp_path: Path) -> N
     this compares every value against the live monitor's own.
 
     Deliberately run with three replicates: at these parameters one of
-    them leaves an interior gap in `G_ST` (every tracked locus briefly
+    them leaves an interior gap in $G_{ST}$ (every tracked locus briefly
     monomorphic), which the reconstruction must reproduce as the same
     short list rather than papering over with a placeholder -- that
     shape is what `pooled_convergence_histories` keys its own

@@ -3,7 +3,7 @@
 `test/statistics/test_identity_recursion.py` proves the closed form equals
 the identity recursion it solves. This proves the recursion is the engine's:
 the mean of seeded engine runs must sit on the closed-form curve at every
-checkpoint, starting each run's curve from that run's own first `H_S`/`H_T`
+checkpoint, starting each run's curve from that run's own first $H_S$ / $H_T$
 exactly as the Run card does.
 
 The band is measured, not assumed: at each checkpoint the paired difference
@@ -43,10 +43,10 @@ STANDARD_ERRORS = 5.0
 def _defined(value: float | None) -> float:
     """Narrow one of `TrajectoryHistory.histories`' own optional entries.
 
-    Every statistic read this way in this file is one of `D`/`G_ST`/`H_S`/
-    `H_T` at a healthy, multi-locus, non-degenerate configuration -- always
+    Every statistic read this way in this file is one of $D$ / $G_{ST}$ / $H_S$/
+    $H_T$ at a healthy, multi-locus, non-degenerate configuration -- always
     defined in practice, per `fim.gui.trajectory_history.TrajectoryHistory`'s
-    own docstring (only `G_ST`, and only at a monomorphic locus, can ever be
+    own docstring (only $G_{ST}$, and only at a monomorphic locus, can ever be
     `None`). A real `None` here would be a genuine, surprising finding about
     the scenario, not something to silently skip past.
     """
@@ -96,7 +96,7 @@ def engine_histories(
 def test_engine_mean_sits_on_the_closed_form_curve(
     name: str, engine_histories: list[tuple[list[int], dict[str, list[float | None]]]]
 ) -> None:
-    """Mean simulated `D`/`G_ST` matches the closed form at five checkpoints."""
+    """Mean simulated $D$ / $G_{ST}$ matches the closed form at five checkpoints."""
     recursion = identity_recursion(SIZE, MIGRATION, MUTATION, DEMES)
     differences: list[list[float]] = []
     for generations, histories in engine_histories:

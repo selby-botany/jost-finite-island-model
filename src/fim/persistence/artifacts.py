@@ -83,7 +83,7 @@ def convergence_history_rows(result: RunResult) -> list[dict[str, object]]:
     """Return one row per generation, for `convergence.jsonl`.
 
     Each row is ``{"generation": N, "D": ..., "H_S": ..., ...}``. A statistic
-    whose history is shorter than the generation list (only `G_ST` can be, at
+    whose history is shorter than the generation list (only $G_{ST}$ can be, at
     a currently monomorphic locus) is left out of every row, because which
     generations it is missing is not recoverable from the monitor's record.
 

@@ -293,10 +293,10 @@ def test_convergence_statistic_accepts_several_names_and_round_trips() -> None:
 
 
 def test_convergence_statistic_accepts_h_st() -> None:
-    """`H_ST` is a real, watchable convergence statistic, not report-only.
+    """$H_{ST}$ is a real, watchable convergence statistic, not report-only.
 
     Regression test for `FIM-51`: `fim.engine.FinalReport`/
-    `replicate_summary` already report `H_ST` alongside every other
+    `replicate_summary` already report $H_{ST}$ alongside every other
     differentiation measure, but `_CONVERGENCE_STATISTICS` did not
     include it, so a run could not actually watch it for convergence —
     the one statistic reportable but not watchable, with no principled
@@ -311,7 +311,7 @@ def test_convergence_statistic_accepts_h_st() -> None:
 
 
 def test_convergence_statistic_accepts_the_expensive_bonus_measurements() -> None:
-    """`A_CGD`/`Delta`/`MI` are watchable, exactly like `E_ST`/`K_ST`.
+    """`A_CGD`/`Delta`/`MI` are watchable, exactly like $E_{ST}$ / $K_{ST}$.
 
     They joined `_CONVERGENCE_STATISTICS` on a real, reported request,
     reversing this same session's own earlier choice to exclude them as
@@ -1889,7 +1889,7 @@ def test_invalid_retention_settings_are_refused(
 
 
 def test_a_configuration_watches_d_and_g_st_by_default() -> None:
-    """The default watched set is `D` and `G_ST`, stopping when both have settled."""
+    """The default watched set is $D$ and $G_{ST}$, stopping when both have settled."""
     params = SimulationParams.from_mapping(_valid_config())
 
     assert params.convergence_statistics == ("D", "G_ST")

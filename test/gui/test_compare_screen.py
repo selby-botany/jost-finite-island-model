@@ -301,7 +301,7 @@ def test_switching_the_trajectory_statistic_redraws_the_overlay(
     names_the_differing_field` proves that shape directly); this proves
     the page's own `change` handler on `compareTrajectoryStatistic`
     actually redraws `#compare-trajectory-canvas` from that same
-    already-fetched data, for a statistic other than the default `D`.
+    already-fetched data, for a statistic other than the default $D$.
     """
     results_root = tmp_path / "results"
     _write_run(results_root, "run-a", seed=1)

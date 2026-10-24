@@ -178,7 +178,7 @@ def _read_d(window: webview.Window) -> dict[str, Any]:
 def test_a_statistic_can_be_hidden_and_shown_during_a_live_run(
     unreachable_convergence_run_settings: Path,
 ) -> None:
-    """Hide `D` mid-run: its curve goes, stays gone across ticks, and returns."""
+    """Hide $D$ mid-run: its curve goes, stays gone across ticks, and returns."""
 
     def body(
         window: webview.Window,

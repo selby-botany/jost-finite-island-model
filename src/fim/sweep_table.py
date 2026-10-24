@@ -401,7 +401,7 @@ def _replicate_outcomes(
 
 DEFAULT_EXPORT_STATISTICS: Final = ("D", "G_ST")
 """The statistics an export writes unless told otherwise (botanist question
-Q1: `D` and `G_ST` first, every statistic selectable)."""
+Q1: $D$ and $G_{ST}$ first, every statistic selectable)."""
 
 ALL_STATISTICS: Final = "all"
 """Pass as `statistics` to write every statistic a sweep has."""

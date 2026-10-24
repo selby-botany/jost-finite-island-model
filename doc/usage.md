@@ -2007,9 +2007,9 @@ The final report contains:
 - the within- and between-deme gene identities $G_s$ (`Gs`) and
   $G_d$ (`Gd`);
 - Nei's (1973) $D_m$ (`D_m`) and $R_{ST}$ (`R_ST`), Nei's
-  logarithmic $G'_{ST}$ (`G_ST_NEI_LOG`), Hedrick's standardized
-  $G'_{ST}$ (`G_ST_HEDRICK`), and coancestry $F_{ST}$ (`F_ST`),
-  each computed from the pooled $H_S$/$H_T$ and `null` where
+  logarithmic $G^\prime_{ST}$ (`G_ST_NEI_LOG`), Hedrick's standardized
+  $G^\prime_{ST}$ (`G_ST_HEDRICK`), and coancestry $F_{ST}$ (`F_ST`),
+  each computed from the pooled $H_S$ / $H_T$ and `null` where
   undefined;
 - Nei's genetic distance across all demes in four forms, and the matching
   identities: `NEI_D_ALL_GEO`, `NEI_D_ALL_GEO_LOCUS_MEAN`, `NEI_D_ALL_ARITH`,
@@ -2024,8 +2024,8 @@ without rewriting the file.
 Multiple loci are independent repeats. $H_S$, $H_T$, $H_{ST}$, $E_{ST}$,
 and $K_{ST}$ are arithmetic means across loci. `D` and $G_{ST}$
 instead follow [locus_aggregation](configuration.md#locus_aggregation):
-by default (`ratio_of_means`), $H_S$/$H_T$ are pooled across loci
-first and one `D`/$G_{ST}$ is computed from those pooled values, not
+by default (`ratio_of_means`), $H_S$ / $H_T$ are pooled across loci
+first and one $D$ / $G_{ST}$ is computed from those pooled values, not
 averaged per-locus ratios; the opt-in `mean_of_ratios` restores the
 per-locus-ratio-then-average behavior. `D` and $K_{ST}$ always use equal
 deme weighting. `deme_weighting` affects $E_{ST}$, $\delta_G$,
@@ -2170,7 +2170,7 @@ replicate whose locus is monomorphic across every deme reports $G_{ST}$ as
 `null` in `report.json`, and that replicate is excluded from
 $G_{ST}$'s interval. The
 other statistics that can be `null` because they are undefined ($R_{ST}$,
-both $G'_{ST}$, $F_{ST}$) are treated the same way. A Nei distance
+both $G^\prime_{ST}$, $F_{ST}$) are treated the same way. A Nei distance
 is different: `null` there means *infinite*, and a mean that includes an
 infinite value has no finite value, so a Nei distance infinite in any
 replicate is omitted from `summary.json`; its identity is still summarized.

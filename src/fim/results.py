@@ -65,7 +65,7 @@ class Report(Mapping[str, float | None]):
 
     Behaves as a read-only mapping from statistic ID (as listed in the
     statistics catalog, for example ``"D"`` or ``"G_ST"``) to its value;
-    ``None`` means the statistic is undefined for this replicate (``G_ST``
+    ``None`` means the statistic is undefined for this replicate ($G_{ST}$
     when a locus is monomorphic everywhere). `to_dict` returns exactly the
     contents of the run's `report.json`.
 
@@ -111,12 +111,12 @@ class Report(Mapping[str, float | None]):
 
     @property
     def D(self) -> float | None:  # noqa: N802
-        """Jost's differentiation `D`."""
+        """Jost's differentiation $D$."""
         return self["D"]
 
     @property
     def G_ST(self) -> float | None:  # noqa: N802
-        """Nei's `G_ST`; `None` where it is undefined."""
+        """Nei's $G_{ST}$; `None` where it is undefined."""
         return self["G_ST"]
 
     @property

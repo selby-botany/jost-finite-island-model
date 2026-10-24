@@ -127,7 +127,7 @@ H_T=H_S+H_{ST}-H_S H_{ST} \tag{S.7}
 ```
 
 With equal weights, $D=dH_{ST}/(d-1)$. This is not Hedrick's
-standardized $G'_{ST}$.
+standardized $G^\prime_{ST}$.
 
 [Python API: h_st](../src/fim/API.md#fim.statistics.differentiation.h_st)
 
@@ -270,7 +270,7 @@ allele-size variance.
 
 ## `G_ST_NEI_LOG`
 
-Nei's logarithmic $G'_{ST}$:
+Nei's logarithmic $G^\prime_{ST}$:
 
 ```math
 G'_{ST,\mathrm{Nei}}=\frac{\ln(J_S/J_T)}{-\ln(J_T)} \tag{S.17}
@@ -285,7 +285,7 @@ $H_S=1$.
 
 ## `G_ST_HEDRICK`
 
-Hedrick's standardized $G'_{ST}$ divides by the attainable maximum:
+Hedrick's standardized $G^\prime_{ST}$ divides by the attainable maximum:
 
 ```math
 G'_{ST,\mathrm{Hedrick}}=\frac{G_{ST}}{G_{ST}(\max)} \tag{S.18}

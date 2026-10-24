@@ -144,7 +144,7 @@ def test_batch_trajectory_domain_excludes_a_thin_samples_own_band(
 ) -> None:
     """A `sampleCount`-2 point's own wild band never widens the plotted axis.
 
-    Confirmed live: a real, staggered-stopping batch's own `D` band
+    Confirmed live: a real, staggered-stopping batch's own $D$ band
     reached `low: -2.98, high: 3.54` at its own tail (only 2 replicates
     still contributing -- Student's-t with 1 degree of freedom has an
     enormous critical value) for a statistic that never otherwise
@@ -232,7 +232,7 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
 
     Every one of the ten named statistics (the original seven plus the
     expensive, opt-in "bonus" measurements A_CGD/Delta/MI), plus the two
-    effective-allele rows derived from `H_S`/`H_T` (botanist GUI design
+    effective-allele rows derived from $H_S$ / $H_T$ (botanist GUI design
     doc §7.7, `Api._effective_allele_interval_summary`), gets a
     `.stats-table` row with a confidence interval in its hover tooltip
     (`buildCiMeter`/`buildOmittedMeter`: a statistic omitted from

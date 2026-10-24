@@ -813,7 +813,7 @@ Require exact data except rounded window and Shannon-entropy floats.
 **Returns**:
 
   Whether all fields agree, allowing only numerical rounding in
-  `window_statistics`, `E_ST`, and `MI` (relative `1e-12`, absolute
+  `window_statistics`, $E_{ST}$, and `MI` (relative `1e-12`, absolute
   `1e-14`). FFT/BLAS and the system logarithm can differ in their last
   bits across platforms. Keys, types, integers, booleans, and all other
   report fields remain exact; local parity never uses this comparator.
@@ -3668,7 +3668,7 @@ A statistic undefined on at least one generation is omitted from every row.
 written for every row or none -- there is no honest partial
 placeholder for "undefined this one generation" in a row-per-
 generation shape. Proven directly here by handing it a synthetic
-`G_ST`-style short history (only the two attributes this function
+$G_{ST}$-style short history (only the two attributes this function
 actually reads matter, so a plain stand-in is exact, not an
 approximation of a real `RunResult`), rather than trusting a real
 run to happen to reproduce a monomorphic locus.
@@ -3682,7 +3682,7 @@ def test_differentiation_q_for_state_agrees_with_e_st_under_size_weighting(
         tmp_path: Path) -> None
 ```
 
-`q = 1` under size weighting matches `E_ST`, not the unweighted value.
+`q = 1` under size weighting matches $E_{ST}$, not the unweighted value.
 
 Regression coverage carried over from `cli.py`'s own S2 test:
 `differentiation_q_for_state` must pass size weights at `q = 1`
@@ -3720,7 +3720,7 @@ is the *same* measurement, not a similar-looking second one, so
 this compares every value against the live monitor's own.
 
 Deliberately run with three replicates: at these parameters one of
-them leaves an interior gap in `G_ST` (every tracked locus briefly
+them leaves an interior gap in $G_{ST}$ (every tracked locus briefly
 monomorphic), which the reconstruction must reproduce as the same
 short list rather than papering over with a placeholder -- that
 shape is what `pooled_convergence_histories` keys its own
@@ -5911,12 +5911,12 @@ def test_stats_q1_agrees_with_e_st_under_size_weighting_and_unequal_demes(
         tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
 ```
 
-`fim stats --q 1` agrees with the run's own `E_ST` when demes are
+`fim stats --q 1` agrees with the run's own $E_{ST}$ when demes are
 unequal in size and `deme_weighting` is `"size"`.
 
-Regression test for S2: `q = 0` and `q = 2` already matched `K_ST`
-and `D` exactly, which isolated `deme_weighting` as the sole cause
-of a 32% live discrepancy between `Differentiation_1` and `E_ST` —
+Regression test for S2: `q = 0` and `q = 2` already matched $K_{ST}$
+and $D$ exactly, which isolated `deme_weighting` as the sole cause
+of a 32% live discrepancy between `Differentiation_1` and $E_{ST}$ —
 `_differentiation_q_for_state` called `differentiation_q` with no
 weights at all, while `report_for_state` passed size weights
 whenever `deme_weighting` was `"size"`, the default. Unequal `N` is
@@ -8072,31 +8072,33 @@ The source scenario relaxes over about 20,000 generations.
 def test_the_burn_in_multiple_follows_the_precision_with_a_floor() -> None
 ```
 
-`k = max(5, ln(2 / precision))`: 5.30 at 0.01, 7.6 at 0.001, 5 at 0.1.
+The multiple is $k = \max(5, \ln(2 / \mathrm{precision}))$.
+
+This gives 5.30 at 0.01, 7.6 at 0.001, and 5 at 0.1.
 
 <a id="convergence.test_defaults.test_the_burn_in_is_ceil_k_tau_and_never_zero"></a>
 
-#### [test\_the\_burn\_in\_is\_ceil\_k\_tau\_and\_never\_zero](./convergence/test_defaults.py#L87)
+#### [test\_the\_burn\_in\_is\_ceil\_k\_tau\_and\_never\_zero](./convergence/test_defaults.py#L90)
 
 ```python
 def test_the_burn_in_is_ceil_k_tau_and_never_zero() -> None
 ```
 
-`ceil(k tau)`, at least 1 so generation 0 is never averaged.
+Use $\lceil k\tau \rceil$, at least 1 so generation 0 is never averaged.
 
 <a id="convergence.test_defaults.test_derived_defaults_follow_the_burn_in_and_the_cap_rule"></a>
 
-#### [test\_derived\_defaults\_follow\_the\_burn\_in\_and\_the\_cap\_rule](./convergence/test_defaults.py#L96)
+#### [test\_derived\_defaults\_follow\_the\_burn\_in\_and\_the\_cap\_rule](./convergence/test_defaults.py#L99)
 
 ```python
 def test_derived_defaults_follow_the_burn_in_and_the_cap_rule() -> None
 ```
 
-Burn-in is `ceil(k tau)`; the cap adds `15 tau` to the burn-in.
+Burn-in is $\lceil k\tau \rceil$; the cap adds $15\tau$ to the burn-in.
 
 <a id="convergence.test_defaults.test_fast_models_keep_the_cap_floor"></a>
 
-#### [test\_fast\_models\_keep\_the\_cap\_floor](./convergence/test_defaults.py#L108)
+#### [test\_fast\_models\_keep\_the\_cap\_floor](./convergence/test_defaults.py#L111)
 
 ```python
 def test_fast_models_keep_the_cap_floor() -> None
@@ -8106,7 +8108,7 @@ A quickly relaxing model never gets a cap below the floor.
 
 <a id="convergence.test_defaults.test_a_nearly_isolated_system_stays_finite"></a>
 
-#### [test\_a\_nearly\_isolated\_system\_stays\_finite](./convergence/test_defaults.py#L117)
+#### [test\_a\_nearly\_isolated\_system\_stays\_finite](./convergence/test_defaults.py#L120)
 
 ```python
 def test_a_nearly_isolated_system_stays_finite() -> None
@@ -8116,7 +8118,7 @@ The cap is clamped at the ceiling and the burn-in cannot exceed it.
 
 <a id="convergence.test_defaults.test_the_cap_is_never_inside_the_burn_in"></a>
 
-#### [test\_the\_cap\_is\_never\_inside\_the\_burn\_in](./convergence/test_defaults.py#L126)
+#### [test\_the\_cap\_is\_never\_inside\_the\_burn\_in](./convergence/test_defaults.py#L129)
 
 ```python
 def test_the_cap_is_never_inside_the_burn_in() -> None
@@ -8126,7 +8128,7 @@ A slow model's cap includes its burn-in, so the burn-in always ends first.
 
 <a id="convergence.test_defaults.test_expert_settings_change_the_derived_values"></a>
 
-#### [test\_expert\_settings\_change\_the\_derived\_values](./convergence/test_defaults.py#L134)
+#### [test\_expert\_settings\_change\_the\_derived\_values](./convergence/test_defaults.py#L137)
 
 ```python
 def test_expert_settings_change_the_derived_values() -> None
@@ -8136,7 +8138,7 @@ The burn-in floor, the cap multiple and the cap floor are Expert Settings.
 
 <a id="convergence.test_defaults.test_lower_migration_never_shortens_the_burn_in"></a>
 
-#### [test\_lower\_migration\_never\_shortens\_the\_burn\_in](./convergence/test_defaults.py#L154)
+#### [test\_lower\_migration\_never\_shortens\_the\_burn\_in](./convergence/test_defaults.py#L157)
 
 ```python
 @pytest.mark.parametrize(("smaller", "larger"), [(1e-3, 1e-4), (1e-4, 1e-5)])
@@ -8148,7 +8150,7 @@ Monotonicity: less migration means a longer (or equal) burn-in.
 
 <a id="convergence.test_defaults.test_mutation_dominates_at_high_migration"></a>
 
-#### [test\_mutation\_dominates\_at\_high\_migration](./convergence/test_defaults.py#L173)
+#### [test\_mutation\_dominates\_at\_high\_migration](./convergence/test_defaults.py#L176)
 
 ```python
 def test_mutation_dominates_at_high_migration() -> None
@@ -8158,7 +8160,7 @@ With strong migration and mutation, tau is about 1 / (2 mu).
 
 <a id="convergence.test_defaults.test_ring_is_slower_than_the_island_model_at_equal_rate"></a>
 
-#### [test\_ring\_is\_slower\_than\_the\_island\_model\_at\_equal\_rate](./convergence/test_defaults.py#L181)
+#### [test\_ring\_is\_slower\_than\_the\_island\_model\_at\_equal\_rate](./convergence/test_defaults.py#L184)
 
 ```python
 def test_ring_is_slower_than_the_island_model_at_equal_rate() -> None
@@ -8168,7 +8170,7 @@ A ring's local migration lengthens the relaxation time.
 
 <a id="convergence.test_defaults.test_explicit_island_matrix_agrees_with_the_scalar_form"></a>
 
-#### [test\_explicit\_island\_matrix\_agrees\_with\_the\_scalar\_form](./convergence/test_defaults.py#L192)
+#### [test\_explicit\_island\_matrix\_agrees\_with\_the\_scalar\_form](./convergence/test_defaults.py#L195)
 
 ```python
 def test_explicit_island_matrix_agrees_with_the_scalar_form() -> None
@@ -8178,7 +8180,7 @@ A scalar `m` and its equivalent matrix give the same `tau`.
 
 <a id="convergence.test_defaults.test_asymmetric_matrix_has_a_finite_relaxation_time"></a>
 
-#### [test\_asymmetric\_matrix\_has\_a\_finite\_relaxation\_time](./convergence/test_defaults.py#L203)
+#### [test\_asymmetric\_matrix\_has\_a\_finite\_relaxation\_time](./convergence/test_defaults.py#L206)
 
 ```python
 def test_asymmetric_matrix_has_a_finite_relaxation_time() -> None
@@ -8188,7 +8190,7 @@ A one-way chain of demes still relaxes.
 
 <a id="convergence.test_defaults.test_unequal_sizes_use_the_recursion_route"></a>
 
-#### [test\_unequal\_sizes\_use\_the\_recursion\_route](./convergence/test_defaults.py#L210)
+#### [test\_unequal\_sizes\_use\_the\_recursion\_route](./convergence/test_defaults.py#L213)
 
 ```python
 def test_unequal_sizes_use_the_recursion_route() -> None
@@ -8198,7 +8200,7 @@ Unequal deme sizes with a scalar `m` still produce a finite `tau`.
 
 <a id="convergence.test_defaults.test_the_slowest_locus_sets_the_relaxation_time"></a>
 
-#### [test\_the\_slowest\_locus\_sets\_the\_relaxation\_time](./convergence/test_defaults.py#L218)
+#### [test\_the\_slowest\_locus\_sets\_the\_relaxation\_time](./convergence/test_defaults.py#L221)
 
 ```python
 def test_the_slowest_locus_sets_the_relaxation_time() -> None
@@ -8208,7 +8210,7 @@ The smallest per-locus rate decides, whatever the other loci do.
 
 <a id="convergence.test_defaults.test_the_slowest_locus_also_sets_the_matrix_route"></a>
 
-#### [test\_the\_slowest\_locus\_also\_sets\_the\_matrix\_route](./convergence/test_defaults.py#L234)
+#### [test\_the\_slowest\_locus\_also\_sets\_the\_matrix\_route](./convergence/test_defaults.py#L237)
 
 ```python
 def test_the_slowest_locus_also_sets_the_matrix_route() -> None
@@ -8218,7 +8220,7 @@ Unequal deme sizes take the eigenvalue route; the rule is the same.
 
 <a id="convergence.test_defaults.test_no_migration_and_no_mutation_has_no_relaxation_time"></a>
 
-#### [test\_no\_migration\_and\_no\_mutation\_has\_no\_relaxation\_time](./convergence/test_defaults.py#L242)
+#### [test\_no\_migration\_and\_no\_mutation\_has\_no\_relaxation\_time](./convergence/test_defaults.py#L245)
 
 ```python
 def test_no_migration_and_no_mutation_has_no_relaxation_time() -> None
@@ -8228,7 +8230,7 @@ Nothing to wait for: reject rather than guess.
 
 <a id="convergence.test_defaults.test_no_migration_with_mutation_uses_the_mutation_rate"></a>
 
-#### [test\_no\_migration\_with\_mutation\_uses\_the\_mutation\_rate](./convergence/test_defaults.py#L253)
+#### [test\_no\_migration\_with\_mutation\_uses\_the\_mutation\_rate](./convergence/test_defaults.py#L256)
 
 ```python
 def test_no_migration_with_mutation_uses_the_mutation_rate() -> None
@@ -8238,7 +8240,7 @@ Isolated demes still lose identity through mutation.
 
 <a id="convergence.test_defaults.test_large_explicit_matrix_is_rejected_with_guidance"></a>
 
-#### [test\_large\_explicit\_matrix\_is\_rejected\_with\_guidance](./convergence/test_defaults.py#L259)
+#### [test\_large\_explicit\_matrix\_is\_rejected\_with\_guidance](./convergence/test_defaults.py#L262)
 
 ```python
 def test_large_explicit_matrix_is_rejected_with_guidance() -> None
@@ -8248,7 +8250,7 @@ Above the eigenvalue route's size limit, `auto` is not available.
 
 <a id="convergence.test_defaults.test_large_scalar_island_uses_the_closed_form"></a>
 
-#### [test\_large\_scalar\_island\_uses\_the\_closed\_form](./convergence/test_defaults.py#L268)
+#### [test\_large\_scalar\_island\_uses\_the\_closed\_form](./convergence/test_defaults.py#L271)
 
 ```python
 def test_large_scalar_island_uses_the_closed_form() -> None
@@ -8258,38 +8260,48 @@ A scalar `m` at any `d` never needs the eigenvalue route.
 
 <a id="convergence.test_defaults.test_panmictic_burn_in_for_the_equilibrium_split_example"></a>
 
-#### [test\_panmictic\_burn\_in\_for\_the\_equilibrium\_split\_example](./convergence/test_defaults.py#L274)
+#### [test\_panmictic\_burn\_in\_for\_the\_equilibrium\_split\_example](./convergence/test_defaults.py#L277)
 
 ```python
 def test_panmictic_burn_in_for_the_equilibrium_split_example() -> None
 ```
 
-600 gene copies at `mu` 0.001: tau about 273, burn-in about 4.6 tau.
+600 gene copies at $\mu = 0.001$: $\tau \approx 273$, burn-in $4.6\tau$.
 
 The bundled equilibrium-split example (3 demes of 200, haploid). Its
-`tau` is exactly the one-deme recursion's (both are the textbook
-`1 / (1 - (1 - 1/N)(1 - mu)^2)`), and its expected heterozygosity is
-close to `theta / (1 + theta)`, `theta = 2 N mu = 1.2`.
+$\tau$ is exactly the one-deme recursion's:
+
+```math
+\tau = \frac{1}{1 - (1 - 1/N)(1 - \mu)^2}.
+```
+
+Its expected heterozygosity is close to $\theta / (1 + \theta)$,
+with $\theta = 2N\mu = 1.2$.
 
 <a id="convergence.test_defaults.test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start"></a>
 
-#### [test\_panmictic\_burn\_in\_bounds\_the\_identity\_recursion\_from\_any\_start](./convergence/test_defaults.py#L300)
+#### [test\_panmictic\_burn\_in\_bounds\_the\_identity\_recursion\_from\_any\_start](./convergence/test_defaults.py#L308)
 
 ```python
 def test_panmictic_burn_in_bounds_the_identity_recursion_from_any_start(
 ) -> None
 ```
 
-After the burn-in, the expected identity is within tolerance of F*.
+After the burn-in, the expected identity is within tolerance of $F^*$.
 
-Iterates the textbook expected recursion (drift, then each copy
-mutates: `F' = 1/N + (1 - 1/N)(1 - mu)^2 F`) from both extremes
+Iterates the textbook expected recursion, drift then mutation,
+
+```math
+F^\prime = \frac{1}{N} + \left(1 - \frac{1}{N}\right)(1 - \mu)^2 F,
+```
+
+from both extremes
 (every copy identical, and none) and checks the departure at the
 burn-in.
 
 <a id="convergence.test_defaults.test_panmictic_burn_in_follows_the_slowest_locus_and_rejects_bad_input"></a>
 
-#### [test\_panmictic\_burn\_in\_follows\_the\_slowest\_locus\_and\_rejects\_bad\_input](./convergence/test_defaults.py#L322)
+#### [test\_panmictic\_burn\_in\_follows\_the\_slowest\_locus\_and\_rejects\_bad\_input](./convergence/test_defaults.py#L335)
 
 ```python
 def test_panmictic_burn_in_follows_the_slowest_locus_and_rejects_bad_input(
@@ -8300,7 +8312,7 @@ The smallest rate sets the burn-in; a zero tolerance is refused.
 
 <a id="convergence.test_defaults.test_derived_convergence_sentence_names_burn_in_cap_and_time"></a>
 
-#### [test\_derived\_convergence\_sentence\_names\_burn\_in\_cap\_and\_time](./convergence/test_defaults.py#L342)
+#### [test\_derived\_convergence\_sentence\_names\_burn\_in\_cap\_and\_time](./convergence/test_defaults.py#L355)
 
 ```python
 def test_derived_convergence_sentence_names_burn_in_cap_and_time() -> None
@@ -8310,7 +8322,7 @@ The shared sentence carries all three numbers, with thousands separators.
 
 <a id="convergence.test_defaults.test_the_sentence_says_so_when_there_is_no_relaxation_time"></a>
 
-#### [test\_the\_sentence\_says\_so\_when\_there\_is\_no\_relaxation\_time](./convergence/test_defaults.py#L354)
+#### [test\_the\_sentence\_says\_so\_when\_there\_is\_no\_relaxation\_time](./convergence/test_defaults.py#L367)
 
 ```python
 def test_the_sentence_says_so_when_there_is_no_relaxation_time() -> None
@@ -8322,7 +8334,7 @@ A fractional burn-in is described without inventing a relaxation time.
 
 # [convergence.test\_estimate\_forms](./convergence/test_estimate_forms.py#L1)
 
-Tests of the two expected-value forms of `D` and `G_ST` (design 6.11).
+Tests of the two expected-value forms of $D$ and $G_{ST}$ (design 6.11).
 
 Every test is a pure function of its commit: fixed series, fixed seeds, and
 expected numbers computed in the test from the same formulas.
@@ -8336,7 +8348,7 @@ expected numbers computed in the test from the same formulas.
 def identity() -> dict[str, IdentityStatistic]
 ```
 
-`D` and `G_ST` for a four-deme model, as the engine builds them.
+$D$ and $G_{ST}$ for a four-deme model, as the engine builds them.
 
 <a id="convergence.test_estimate_forms.test_form_one_is_the_mean_of_the_values_and_form_two_is_the_value_of_the_means"></a>
 
@@ -8369,7 +8381,7 @@ def test_a_statistic_that_is_not_an_identity_function_has_one_form(
         identity: dict[str, IdentityStatistic]) -> None
 ```
 
-`H_S` is recorded but is no function of the identities: form one only.
+$H_S$ is recorded but is no function of the identities: form one only.
 
 <a id="convergence.test_estimate_forms.test_an_undefined_generation_is_dropped_from_form_one_and_counted"></a>
 
@@ -8380,7 +8392,7 @@ def test_an_undefined_generation_is_dropped_from_form_one_and_counted(
         identity: dict[str, IdentityStatistic]) -> None
 ```
 
-`G_ST` is undefined where `H_T` is zero; form two stays defined.
+$G_{ST}$ is undefined where $H_T$ is zero; form two stays defined.
 
 <a id="convergence.test_estimate_forms.test_auto_uses_the_value_of_means_exactly_when_the_rule_says_so"></a>
 
@@ -8412,7 +8424,7 @@ def test_degenerate_share_counts_denominators_below_the_threshold(
         identity: dict[str, IdentityStatistic]) -> None
 ```
 
-`G_ST` divides by `H_T`; `D` by `1 - H_S`.
+$G_{ST}$ divides by $H_T$; $D$ by $1 - H_S$.
 
 <a id="convergence.test_estimate_forms.test_the_gradients_match_finite_differences_of_the_formulas"></a>
 
@@ -8435,7 +8447,7 @@ def test_the_delta_method_error_of_a_flat_denominator_is_the_scaled_geyer_error(
         identity: dict[str, IdentityStatistic]) -> None
 ```
 
-With `H_T` constant, `G_ST`'s error is `H_S`'s Geyer error times `1 / H_T`.
+With $H_T$ constant, $G_{ST}$'s error is $H_S$'s Geyer error times $1 / H_T$.
 
 <a id="convergence.test_estimate_forms.test_value_of_means_is_none_for_a_short_window_and_for_an_undefined_mean"></a>
 
@@ -8457,7 +8469,7 @@ def test_a_monitor_with_identity_statistics_needs_the_heterozygosities(
         identity: dict[str, IdentityStatistic]) -> None
 ```
 
-The forms are computed from `H_S` and `H_T`, so both must be recorded.
+The forms are computed from $H_S$ and $H_T$, so both must be recorded.
 
 <a id="convergence.test_monitor_state"></a>
 
@@ -9213,7 +9225,7 @@ An exact-match tolerance a live drift process cannot satisfy hits the cap.
 `convergence_window` case in `test/model/test_params.py::
 test_post_init_validation_covers_all_scalar_contracts`);
 `precision=0.0` requires the two half-window means to
-match exactly, which a real drifting `D` trajectory essentially never
+match exactly, which a real drifting $D$ trajectory essentially never
 does in two generations.
 
 <a id="engine.test_engine.test_replicates_are_independently_reproducible"></a>
@@ -9378,10 +9390,10 @@ def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic(
 ) -> None
 ```
 
-A batch watching only an always-undefined `G_ST` runs to the full cap.
+A batch watching only an always-undefined $G_{ST}$ runs to the full cap.
 
 Regression test: every replicate here is fully monomorphic at
-its one locus, so `G_ST` is undefined for every one of them and its
+its one locus, so $G_{ST}$ is undefined for every one of them and its
 stopping-criterion window never fills. The batch correctly falls back
 to the `n_replicates` cap rather than the prior behavior, where
 substituting `0.0` for every undefined replicate produced a constant
@@ -9431,7 +9443,7 @@ def test_replicate_summary_covers_every_numeric_final_report_key(
 
 Every numeric `FinalReport` field has a `replicate_summary` entry.
 
-Regression test for S4: `H_ST` was computed into every replicate's
+Regression test for S4: $H_{ST}$ was computed into every replicate's
 `FinalReport` and printed in every `report.json`, but silently
 absent from the batch-level summary, with no test asserting the
 two stay in correspondence. Parses `FinalReport`'s own field
@@ -9503,7 +9515,7 @@ def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
 A statistic shorter than `convergence_generations` is dropped, not guessed at.
 
 `ConvergenceMonitor.record` can genuinely omit one tracked statistic
-on some round without omitting the others (`G_ST`, whenever every
+on some round without omitting the others ($G_{ST}$, whenever every
 tracked locus is currently monomorphic -- `convergence_values`'s
 own docstring), leaving that one statistic's own history shorter
 than `convergence_generations` for that one replicate. Without a
@@ -9513,7 +9525,7 @@ it drops that replicate's own contribution to that one statistic
 entirely (`pooled_convergence_histories`'s own docstring) rather
 than guessing an alignment that could silently pair a real value
 with the wrong generation. Simulated here by shortening one real
-replicate's own `G_ST` history by one entry after the fact
+replicate's own $G_{ST}$ history by one entry after the fact
 (`dataclasses.replace`, `RunResult` is frozen) -- deliberately not
 a hand-built `RunResult` from scratch, so every other field stays
 exactly what a real run actually produced.
@@ -9833,7 +9845,7 @@ field must equal `1 - mean(Gd_i) / mean(Gs_i)` computed directly
 from the same batch's own reports — the "ratio of means across
 everything" the identity recursion predicts — not `mean(D_i)`
 (`replicate_summary`'s own estimator, a mean of ratios, subject to
-a real Jensen-gap bias `D`/`G_ST` are the only statistics with).
+a real Jensen-gap bias $D$ / $G_{ST}$ are the only statistics with).
 
 <a id="engine.test_engine.test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate"></a>
 
@@ -9932,11 +9944,11 @@ A single result has no batch to resample.
 def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None
 ```
 
-A run can actually watch `H_ST` for convergence, not just report it.
+A run can actually watch $H_{ST}$ for convergence, not just report it.
 
 Regression test for `FIM-51`: `_report_statistic` used to raise
 `unsupported convergence statistic: H_ST` the instant a per-
-generation convergence check tried to read it, even though `H_ST` is
+generation convergence check tried to read it, even though $H_{ST}$ is
 a real, always-defined `DifferentiationReport` field (`fim.model.
 params._CONVERGENCE_STATISTICS` now allows selecting it in the first
 place — this is that config's own engine-level counterpart).
@@ -9950,13 +9962,13 @@ def test_final_report_gs_and_gd_match_the_pooled_h_s_and_h_t(
         tiny_params: SimulationParams) -> None
 ```
 
-`FinalReport`'s `Gs`/`Gd` are the linear closed forms of its own `H_S`/`H_T`.
+`FinalReport`'s $G_s$ / $G_d$ are linear closed forms of its $H_S$ / $H_T$.
 
 Regression/exit-criterion test for `R4` of `dev/doc/apps/selby/
 jost-finite-island-model/20260903-claude-opus-5-gene-identity-
 recursion-fim-implications.md`: run across several loci so `H_S`/
-`H_T` are themselves already averages (`report_for_state`'s own
-`mean_h_s`/`mean_h_t`) — `Gs`/`Gd` being linear in `H_S`/`H_T` means
+$H_T$ are themselves already averages (`report_for_state`'s own
+`mean_h_s`/`mean_h_t`) — $G_s$ / $G_d$ being linear in $H_S$ / $H_T$ means
 computing them from those already-pooled means must agree exactly
 with the formula in `fim.statistics.differentiation.gs`/`gd`'s own
 docstrings, not merely approximately.
@@ -9982,7 +9994,7 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None
 
 A run whose only watched statistic never becomes defined hits the cap.
 
-Regression test: `G_ST` is undefined every generation here (the
+Regression test: $G_{ST}$ is undefined every generation here (the
 single locus is fixed for the same allele in both demes throughout,
 since `mu=0.0`), so its trailing window never fills and the criterion
 can never report stability — there is no data to judge stability
@@ -10001,15 +10013,15 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None
 
 A replicate with one monomorphic and one polymorphic locus never crashes.
 
-Regression test for the multi-locus G_ST averaging defect: with two loci, one fixed
-for the same allele in every deme (undefined at that locus alone) and
-one polymorphic, the *replicate's* G_ST used to come out `None` (the
+Regression test for the multi-locus $G_{ST}$ averaging defect: with two loci,
+one fixed for the same allele in every deme (undefined at that locus alone) and
+one polymorphic, the *replicate's* $G_{ST}$ used to come out `None` (the
 old rule voided the whole multi-locus average on any single
-undefined locus) while the replicate's averaged H_T was still
+undefined locus) while the replicate's averaged $H_T$ was still
 nonzero (the polymorphic locus's own contribution) — so the adaptive
-replicate-batch monitor's old "rescue only a fully-`H_T == 0`
+replicate-batch monitor's old "rescue only a fully $H_T = 0$
 replicate" check missed this case and raised
-"G_ST is undefined for replicate ...". `G_ST` is now defined here (it
+"G_ST is undefined for replicate ...". $G_{ST}$ is now defined here (it
 drops the one undefined locus and averages the other), so this
 reaches neither the old crash nor even the drop path — it simply
 works, end to end through the adaptive stopping monitor.
@@ -10022,15 +10034,15 @@ works, end to end through the adaptive stopping monitor.
 def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None
 ```
 
-A replicate-batch monitor never raises or fabricates a value for G_ST.
+A replicate-batch monitor never raises or fabricates a value for $G_{ST}$.
 
-Every replicate here is fully monomorphic at its one locus (`G_ST`
+Every replicate here is fully monomorphic at its one locus ($G_{ST}$
 undefined for all three), so its trailing window never fills and the
 batch runs to the full `n_replicates` cap rather than ever declaring
 a fabricated early stop — mirroring
 `test_g_st_convergence_falls_back_to_the_cap_at_total_fixation`'s
 single-run case, but through the replicate-batch monitor instead of
-the within-run one. `replicate_summary` then omits `G_ST` entirely
+the within-run one. `replicate_summary` then omits $G_{ST}$ entirely
 (zero defined samples), while every always-defined statistic is
 unaffected.
 
@@ -10171,7 +10183,7 @@ def test_report_for_state_captures_the_all_demes_nei_family() -> None
 
 All eight all-demes Nei fields, matching the library functions.
 
-The arithmetic pooled identity is `Gd / Gs` (Jost's `1 - D` for the
+The arithmetic pooled identity is $G_d / G_s$ (Jost's $1 - D$ for the
 pooled locus rule), a check that shares no code with the Nei family.
 
 <a id="engine.test_engine.test_pair_statistic_values_match_the_library_pair_functions"></a>
@@ -10203,11 +10215,13 @@ def test_report_for_state_captures_the_pooled_heterozygosity_measures(
 ) -> None
 ```
 
-D_m, R_ST, both G'_ST and coancestry F_ST from the pooled H_S/H_T.
+Capture $D_m$, $R_{ST}$, both $G^\prime_{ST}$ and coancestry $F_{ST}$.
+
+All are computed from the pooled $H_S$ / $H_T$.
 
 <a id="engine.test_engine.test_reports_summary_omits_a_nei_distance_infinite_in_any_report"></a>
 
-#### [test\_reports\_summary\_omits\_a\_nei\_distance\_infinite\_in\_any\_report](./engine/test_engine.py#L1963)
+#### [test\_reports\_summary\_omits\_a\_nei\_distance\_infinite\_in\_any\_report](./engine/test_engine.py#L1966)
 
 ```python
 def test_reports_summary_omits_a_nei_distance_infinite_in_any_report() -> None
@@ -10215,11 +10229,11 @@ def test_reports_summary_omits_a_nei_distance_infinite_in_any_report() -> None
 
 `None` for a Nei distance is infinite: no finite mean, so omitted.
 
-`G_ST`'s `None` (undefined) still just drops that replicate, as before.
+$G_{ST}$'s `None` (undefined) still just drops that replicate, as before.
 
 <a id="engine.test_engine.test_report_for_state_reports_an_infinite_nei_distance_as_none"></a>
 
-#### [test\_report\_for\_state\_reports\_an\_infinite\_nei\_distance\_as\_none](./engine/test_engine.py#L1993)
+#### [test\_report\_for\_state\_reports\_an\_infinite\_nei\_distance\_as\_none](./engine/test_engine.py#L1996)
 
 ```python
 def test_report_for_state_reports_an_infinite_nei_distance_as_none() -> None
@@ -10229,18 +10243,18 @@ No allele shared between any pair: distance `None`, identity 0.
 
 <a id="engine.test_engine.test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average"></a>
 
-#### [test\_report\_for\_state\_drops\_a\_monomorphic\_locus\_from\_the\_g\_st\_average](./engine/test_engine.py#L2009)
+#### [test\_report\_for\_state\_drops\_a\_monomorphic\_locus\_from\_the\_g\_st\_average](./engine/test_engine.py#L2012)
 
 ```python
 def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average(
 ) -> None
 ```
 
-`G_ST` averages only the loci where it is defined, not zero-filled.
+$G_{ST}$ averages only the loci where it is defined, not zero-filled.
 
 Regression test: one locus fixed for the same allele in every
-deme (`G_ST` undefined there — `H_T == 0`) alongside one polymorphic
-locus. The reported `G_ST` must equal the polymorphic locus's own
+deme ($G_{ST}$ undefined there — $H_T = 0$) alongside one polymorphic
+locus. The reported $G_{ST}$ must equal the polymorphic locus's own
 value exactly, not that value averaged against a fabricated `0.0` for
 the undefined locus (which would understate real differentiation),
 and not `None` (which would discard the polymorphic locus's real
@@ -10248,24 +10262,24 @@ signal over one unrelated monomorphic locus).
 
 <a id="engine.test_engine.test_convergence_watches_the_same_d_and_g_st_report_for_state_uses"></a>
 
-#### [test\_convergence\_watches\_the\_same\_d\_and\_g\_st\_report\_for\_state\_uses](./engine/test_engine.py#L2112)
+#### [test\_convergence\_watches\_the\_same\_d\_and\_g\_st\_report\_for\_state\_uses](./engine/test_engine.py#L2115)
 
 ```python
 def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses(
 ) -> None
 ```
 
-The convergence monitor's own `D`/`G_ST` match `report_for_state`'s, always.
+The convergence monitor's own $D$ / $G_{ST}$ match `report_for_state`'s, always.
 
 Before this fix, `convergence_values` (and its vectorized
-counterpart) always aggregated `D`/`G_ST` across loci via a plain
+counterpart) always aggregated $D$ / $G_{ST}$ across loci via a plain
 per-locus mean (`"mean_of_ratios"`), regardless of `params.
 locus_aggregation` — `report_for_state`'s own `D`/`G_ST` fields, by
 contrast, already respected it. Under the default `locus_
 aggregation="ratio_of_means"`, the two estimators are materially
 different (this project's own `params.py` docstring: 0.25% vs 1.88%
 from the exact gene-identity recursion at reference scale), so a
-multi-locus run could stop its trailing window on a `D` its own
+multi-locus run could stop its trailing window on a $D$ its own
 final report never actually showed (this project's own multi-model
 engine review, 2026-09-04, `FIM-10`/finding C-02/finding P1-2 — one
 of three reviewers naming it the only finding among four full
@@ -10275,7 +10289,7 @@ either branch of `_watched_statistic_values` is caught.
 
 <a id="engine.test_engine.test_convergence_values_vectorized_watches_the_same_d_and_g_st"></a>
 
-#### [test\_convergence\_values\_vectorized\_watches\_the\_same\_d\_and\_g\_st](./engine/test_engine.py#L2152)
+#### [test\_convergence\_values\_vectorized\_watches\_the\_same\_d\_and\_g\_st](./engine/test_engine.py#L2155)
 
 ```python
 def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None
@@ -10291,14 +10305,14 @@ itself.
 
 <a id="engine.test_engine.test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched"></a>
 
-#### [test\_convergence\_values\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched](./engine/test_engine.py#L2181)
+#### [test\_convergence\_values\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched](./engine/test_engine.py#L2184)
 
 ```python
 def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
         monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-`convergence_values` never computes `E_ST`/`K_ST` when nothing watches them.
+`convergence_values` never computes $E_{ST}$ / $K_{ST}$ unless watched.
 
 `FIM-24`/`FIM-32` (Phase 7 item 4,
 `20260904-claude-sonnet-5-fim-engine-review-remediations.md`): an
@@ -10306,13 +10320,13 @@ allocation/call-count regression test at the full convergence-check
 entry point, not just at `statistics_report` directly — proves the
 `params.convergence_statistics` filter this fix adds actually
 reaches `differentiation._e_st_from_demes`/`_k_st_from_demes`,
-end to end, for the common case (only `D` watched, this project's
+end to end, for the common case (only $D$ watched, this project's
 own stated default) matching this project's own established
 `FIM-53`/`FIM-27`/`FIM-28`/`FIM-36` precedent for this kind of claim.
 
 <a id="engine.test_engine.test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watched"></a>
 
-#### [test\_convergence\_values\_vectorized\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched](./engine/test_engine.py#L2231)
+#### [test\_convergence\_values\_vectorized\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched](./engine/test_engine.py#L2234)
 
 ```python
 def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watched(
@@ -10328,15 +10342,15 @@ work, not just the dict-based path.
 
 <a id="engine.test_engine.test_convergence_values_always_includes_the_always_tracked_four"></a>
 
-#### [test\_convergence\_values\_always\_includes\_the\_always\_tracked\_four](./engine/test_engine.py#L2277)
+#### [test\_convergence\_values\_always\_includes\_the\_always\_tracked\_four](./engine/test_engine.py#L2280)
 
 ```python
 def test_convergence_values_always_includes_the_always_tracked_four() -> None
 ```
 
-`D`/`G_ST`/`H_S`/`H_T`/`H_ST` are present regardless of what is watched.
+$D$, $G_{ST}$, $H_S$, $H_T$ and $H_{ST}$ are present whatever is watched.
 
-The display-only counterpart to the two "skips E_ST/K_ST" tests
+The display-only counterpart to the two "skips $E_{ST}$ / $K_{ST}$" tests
 above: those five cost nothing extra to compute (`statistics_
 report` already computes them unconditionally — `b12679b`'s own
 docstring), so `_watched_statistic_values` no longer discards them
@@ -10348,7 +10362,7 @@ statistic_values` directly.
 
 <a id="engine.test_engine.test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t"></a>
 
-#### [test\_convergence\_values\_vectorized\_always\_includes\_d\_g\_st\_h\_s\_h\_t](./engine/test_engine.py#L2306)
+#### [test\_convergence\_values\_vectorized\_always\_includes\_d\_g\_st\_h\_s\_h\_t](./engine/test_engine.py#L2309)
 
 ```python
 def test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t(
@@ -10359,7 +10373,7 @@ The array-native path returns the identical always-tracked superset.
 
 <a id="engine.test_engine.test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched"></a>
 
-#### [test\_track\_expensive\_statistics\_computes\_e\_st\_and\_k\_st\_even\_when\_unwatched](./engine/test_engine.py#L2325)
+#### [test\_track\_expensive\_statistics\_computes\_e\_st\_and\_k\_st\_even\_when\_unwatched](./engine/test_engine.py#L2328)
 
 ```python
 def test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched(
@@ -10377,7 +10391,7 @@ values`.
 
 <a id="engine.test_engine.test_track_expensive_statistics_vectorized_computes_e_st_and_k_st"></a>
 
-#### [test\_track\_expensive\_statistics\_vectorized\_computes\_e\_st\_and\_k\_st](./engine/test_engine.py#L2384)
+#### [test\_track\_expensive\_statistics\_vectorized\_computes\_e\_st\_and\_k\_st](./engine/test_engine.py#L2387)
 
 ```python
 def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
@@ -10388,7 +10402,7 @@ The array-native path gets the identical opt-in fix.
 
 <a id="engine.test_engine.test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched"></a>
 
-#### [test\_track\_expensive\_statistics\_computes\_a\_cgd\_delta\_mi\_even\_when\_unwatched](./engine/test_engine.py#L2436)
+#### [test\_track\_expensive\_statistics\_computes\_a\_cgd\_delta\_mi\_even\_when\_unwatched](./engine/test_engine.py#L2439)
 
 ```python
 def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
@@ -10400,17 +10414,17 @@ def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
 The `A_CGD`/`Delta`/`MI` counterpart to `test_track_expensive_
 statistics_computes_e_st_and_k_st_even_when_unwatched`, above --
 proves the opt-in-but-unwatched path reaches all three, exactly
-like it already does for `E_ST`/`K_ST`. They are also watchable
+like it already does for $E_{ST}$ / $K_{ST}$. They are also watchable
 (`test_convergence_statistic_accepts_the_expensive_bonus_
 measurements`, `test_params.py`) since a real, reported request
 reversed this session's own earlier "display-only bonus
 measurement" choice — this test's own `convergence_statistic`
-stays unwatched (`D`, below) specifically to isolate the opt-in
+stays unwatched ($D$, below) specifically to isolate the opt-in
 path from the watched one.
 
 <a id="engine.test_engine.test_run_result_convergence_histories_include_always_tracked_statistics"></a>
 
-#### [test\_run\_result\_convergence\_histories\_include\_always\_tracked\_statistics](./engine/test_engine.py#L2508)
+#### [test\_run\_result\_convergence\_histories\_include\_always\_tracked\_statistics](./engine/test_engine.py#L2511)
 
 ```python
 def test_run_result_convergence_histories_include_always_tracked_statistics(
@@ -10420,18 +10434,18 @@ def test_run_result_convergence_histories_include_always_tracked_statistics(
 A real, full scalar run's own `convergence_histories` include the free five.
 
 End-to-end proof through `_run_one` itself (not just the per-
-generation helper functions above): a run watching only `D` still
-comes back with real `G_ST`/`H_S`/`H_T`/`H_ST` history too, of the
+generation helper functions above): a run watching only $D$ still
+comes back with real $G_{ST}$ / $H_S$ / $H_T$ / $H_{ST}$ history too, of the
 same length as the watched one — the exact GUI-visible symptom the
 bug report described (a trajectory panel/completed view that
 narrowed down to only the watched statistic once a run finished).
-`H_ST` joined the other three later (`fim.engine.
+$H_{ST}$ joined the other three later (`fim.engine.
 _ALWAYS_TRACKED_STATISTICS`'s own docstring has the "found live"
 account of a real, reported second instance of this same symptom).
 
 <a id="engine.test_engine.test_run_result_convergence_histories_include_e_st_k_st_when_opted_in"></a>
 
-#### [test\_run\_result\_convergence\_histories\_include\_e\_st\_k\_st\_when\_opted\_in](./engine/test_engine.py#L2544)
+#### [test\_run\_result\_convergence\_histories\_include\_e\_st\_k\_st\_when\_opted\_in](./engine/test_engine.py#L2547)
 
 ```python
 def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in(
@@ -10440,14 +10454,14 @@ def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in(
 
 `track_expensive_statistics=True` extends a real run's own recorded history.
 
-Same run as above, only with the opt-in set — `E_ST`/`K_ST`/
+Same run as above, only with the opt-in set — $E_{ST}$ / $K_{ST}$/
 `A_CGD`/`Delta`/`MI` now join the always-tracked five in `RunResult.
 convergence_histories`, each with a real per-generation history the
 same length as every other tracked statistic's own.
 
 <a id="engine.test_engine.test_locus_length_does_not_affect_the_report"></a>
 
-#### [test\_locus\_length\_does\_not\_affect\_the\_report](./engine/test_engine.py#L2587)
+#### [test\_locus\_length\_does\_not\_affect\_the\_report](./engine/test_engine.py#L2590)
 
 ```python
 def test_locus_length_does_not_affect_the_report() -> None
@@ -10463,7 +10477,7 @@ leave the report bit-for-bit unchanged.
 
 <a id="engine.test_engine.test_multi_locus_run_with_unequal_lengths_is_reproducible"></a>
 
-#### [test\_multi\_locus\_run\_with\_unequal\_lengths\_is\_reproducible](./engine/test_engine.py#L2625)
+#### [test\_multi\_locus\_run\_with\_unequal\_lengths\_is\_reproducible](./engine/test_engine.py#L2628)
 
 ```python
 def test_multi_locus_run_with_unequal_lengths_is_reproducible() -> None
@@ -10473,7 +10487,7 @@ A full run over loci with genuinely different lengths stays reproducible.
 
 <a id="engine.test_engine.test_stepping_stone_topology_run_is_reproducible"></a>
 
-#### [test\_stepping\_stone\_topology\_run\_is\_reproducible](./engine/test_engine.py#L2650)
+#### [test\_stepping\_stone\_topology\_run\_is\_reproducible](./engine/test_engine.py#L2653)
 
 ```python
 def test_stepping_stone_topology_run_is_reproducible() -> None
@@ -10488,7 +10502,7 @@ rather than the ``SimulationParams`` constructor directly.
 
 <a id="engine.test_engine.test_stochastic_migrant_sampling_run_is_reproducible"></a>
 
-#### [test\_stochastic\_migrant\_sampling\_run\_is\_reproducible](./engine/test_engine.py#L2683)
+#### [test\_stochastic\_migrant\_sampling\_run\_is\_reproducible](./engine/test_engine.py#L2686)
 
 ```python
 def test_stochastic_migrant_sampling_run_is_reproducible() -> None
@@ -10503,7 +10517,7 @@ drive the new binomial draws identically on every run.
 
 <a id="engine.test_engine.test_default_migrant_sampling_is_unaffected_by_the_stochastic_option"></a>
 
-#### [test\_default\_migrant\_sampling\_is\_unaffected\_by\_the\_stochastic\_option](./engine/test_engine.py#L2716)
+#### [test\_default\_migrant\_sampling\_is\_unaffected\_by\_the\_stochastic\_option](./engine/test_engine.py#L2719)
 
 ```python
 def test_default_migrant_sampling_is_unaffected_by_the_stochastic_option(
@@ -10519,7 +10533,7 @@ never handed an `rng` unless a config explicitly asks for it.
 
 <a id="engine.test_engine.test_finite_alleles_run_is_reproducible_and_bounds_capacity"></a>
 
-#### [test\_finite\_alleles\_run\_is\_reproducible\_and\_bounds\_capacity](./engine/test_engine.py#L2750)
+#### [test\_finite\_alleles\_run\_is\_reproducible\_and\_bounds\_capacity](./engine/test_engine.py#L2753)
 
 ```python
 def test_finite_alleles_run_is_reproducible_and_bounds_capacity() -> None
@@ -10534,7 +10548,7 @@ within `FiniteAlleleSpace`'s own unit tests.
 
 <a id="engine.test_engine.test_default_mutation_model_is_unaffected_by_the_finite_alleles_option"></a>
 
-#### [test\_default\_mutation\_model\_is\_unaffected\_by\_the\_finite\_alleles\_option](./engine/test_engine.py#L2784)
+#### [test\_default\_mutation\_model\_is\_unaffected\_by\_the\_finite\_alleles\_option](./engine/test_engine.py#L2787)
 
 ```python
 def test_default_mutation_model_is_unaffected_by_the_finite_alleles_option(
@@ -10551,7 +10565,7 @@ asks for it.
 
 <a id="engine.test_engine.test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu"></a>
 
-#### [test\_mu\_b\_run\_matches\_the\_equivalent\_explicit\_per\_locus\_mu](./engine/test_engine.py#L2819)
+#### [test\_mu\_b\_run\_matches\_the\_equivalent\_explicit\_per\_locus\_mu](./engine/test_engine.py#L2822)
 
 ```python
 def test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu() -> None
@@ -10567,7 +10581,7 @@ inspected, it is run.
 
 <a id="engine.test_engine.test_mu_b_combines_with_finite_alleles"></a>
 
-#### [test\_mu\_b\_combines\_with\_finite\_alleles](./engine/test_engine.py#L2856)
+#### [test\_mu\_b\_combines\_with\_finite\_alleles](./engine/test_engine.py#L2859)
 
 ```python
 def test_mu_b_combines_with_finite_alleles() -> None
@@ -10582,7 +10596,7 @@ that actually exercises them together end to end.
 
 <a id="engine.test_engine.test_generational_backend_matches_lineal_for_scalar_run"></a>
 
-#### [test\_generational\_backend\_matches\_lineal\_for\_scalar\_run](./engine/test_engine.py#L2903)
+#### [test\_generational\_backend\_matches\_lineal\_for\_scalar\_run](./engine/test_engine.py#L2906)
 
 ```python
 def test_generational_backend_matches_lineal_for_scalar_run(
@@ -10593,7 +10607,7 @@ def test_generational_backend_matches_lineal_for_scalar_run(
 
 <a id="engine.test_engine.test_generational_backend_matches_lineal_for_batch"></a>
 
-#### [test\_generational\_backend\_matches\_lineal\_for\_batch](./engine/test_engine.py#L2931)
+#### [test\_generational\_backend\_matches\_lineal\_for\_batch](./engine/test_engine.py#L2934)
 
 ```python
 def test_generational_backend_matches_lineal_for_batch(
@@ -10605,7 +10619,7 @@ in the same order, for a multi-replicate batch with no adaptive stop.
 
 <a id="engine.test_engine.test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal"></a>
 
-#### [test\_run\_batch\_cross\_replica\_stop\_fires\_at\_deterministic\_ordinal](./engine/test_engine.py#L2962)
+#### [test\_run\_batch\_cross\_replica\_stop\_fires\_at\_deterministic\_ordinal](./engine/test_engine.py#L2965)
 
 ```python
 def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None
@@ -10626,7 +10640,7 @@ never even reached.
 
 <a id="engine.test_engine._ReversedFinishAdvancer"></a>
 
-## [\_ReversedFinishAdvancer Objects](./engine/test_engine.py#L3010)
+## [\_ReversedFinishAdvancer Objects](./engine/test_engine.py#L3013)
 
 ```python
 class _ReversedFinishAdvancer()
@@ -10646,7 +10660,7 @@ found by searching seeds.
 
 <a id="engine.test_engine._ReversedFinishAdvancer.__init__"></a>
 
-#### [\_\_init\_\_](./engine/test_engine.py#L3024)
+#### [\_\_init\_\_](./engine/test_engine.py#L3027)
 
 ```python
 def __init__(inner: engine.Advancer, lane_count: int) -> None
@@ -10661,7 +10675,7 @@ Wrap `inner` for a batch of `lane_count` replicates.
 
 <a id="engine.test_engine._ReversedFinishAdvancer.advance"></a>
 
-#### [advance](./engine/test_engine.py#L3037)
+#### [advance](./engine/test_engine.py#L3040)
 
 ```python
 def advance(active_lanes: Sequence[ReplicaLane],
@@ -10672,7 +10686,7 @@ Step every lane through `inner`; report only released stops.
 
 <a id="engine.test_engine.test_generational_adaptive_batch_keeps_the_replicate_order_prefix"></a>
 
-#### [test\_generational\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix](./engine/test_engine.py#L3091)
+#### [test\_generational\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix](./engine/test_engine.py#L3094)
 
 ```python
 @pytest.mark.parametrize("window", [None, 8])
@@ -10693,7 +10707,7 @@ still keep exactly the replicates `LinealBackend` keeps, replicates
 
 <a id="engine.test_engine.test_generational_adaptive_batch_matches_lineal_under_real_timing"></a>
 
-#### [test\_generational\_adaptive\_batch\_matches\_lineal\_under\_real\_timing](./engine/test_engine.py#L3130)
+#### [test\_generational\_adaptive\_batch\_matches\_lineal\_under\_real\_timing](./engine/test_engine.py#L3133)
 
 ```python
 def test_generational_adaptive_batch_matches_lineal_under_real_timing(
@@ -10710,7 +10724,7 @@ through the public `simulate_params()` entry point.
 
 <a id="engine.test_engine.test_vector_adaptive_batch_keeps_the_replicate_order_prefix"></a>
 
-#### [test\_vector\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix](./engine/test_engine.py#L3171)
+#### [test\_vector\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix](./engine/test_engine.py#L3174)
 
 ```python
 def test_vector_adaptive_batch_keeps_the_replicate_order_prefix() -> None
@@ -10724,7 +10738,7 @@ replicate at a time and so admits them strictly in replicate order.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_matches_default"></a>
 
-#### [test\_fim\_engine\_backend\_generational\_matches\_default](./engine/test_engine.py#L3215)
+#### [test\_fim\_engine\_backend\_generational\_matches\_default](./engine/test_engine.py#L3218)
 
 ```python
 def test_fim_engine_backend_generational_matches_default(
@@ -10735,7 +10749,7 @@ def test_fim_engine_backend_generational_matches_default(
 
 <a id="engine.test_engine.test_fim_rejects_jit_on_lineal"></a>
 
-#### [test\_fim\_rejects\_jit\_on\_lineal](./engine/test_engine.py#L3256)
+#### [test\_fim\_rejects\_jit\_on\_lineal](./engine/test_engine.py#L3259)
 
 ```python
 def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None
@@ -10745,7 +10759,7 @@ def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None
 
 <a id="engine.test_engine.test_fim_rejects_max_workers_on_other_backends"></a>
 
-#### [test\_fim\_rejects\_max\_workers\_on\_other\_backends](./engine/test_engine.py#L3263)
+#### [test\_fim\_rejects\_max\_workers\_on\_other\_backends](./engine/test_engine.py#L3266)
 
 ```python
 def test_fim_rejects_max_workers_on_other_backends(
@@ -10763,7 +10777,7 @@ only `LinealBackend` ever builds
 
 <a id="engine.test_engine.test_fim_generational_vector_runs_infinite_alleles"></a>
 
-#### [test\_fim\_generational\_vector\_runs\_infinite\_alleles](./engine/test_engine.py#L3282)
+#### [test\_fim\_generational\_vector\_runs\_infinite\_alleles](./engine/test_engine.py#L3285)
 
 ```python
 def test_fim_generational_vector_runs_infinite_alleles(
@@ -10780,7 +10794,7 @@ enough here.
 
 <a id="engine.test_engine.test_params_and_engine_accept_stochastic_migrants_on_the_vector_backend"></a>
 
-#### [test\_params\_and\_engine\_accept\_stochastic\_migrants\_on\_the\_vector\_backend](./engine/test_engine.py#L3310)
+#### [test\_params\_and\_engine\_accept\_stochastic\_migrants\_on\_the\_vector\_backend](./engine/test_engine.py#L3313)
 
 ```python
 def test_params_and_engine_accept_stochastic_migrants_on_the_vector_backend(
@@ -10795,7 +10809,7 @@ is `test_vector_parity`'s job.)
 
 <a id="engine.test_engine.test_params_and_engine_reject_the_same_vector_jit_configuration"></a>
 
-#### [test\_params\_and\_engine\_reject\_the\_same\_vector\_jit\_configuration](./engine/test_engine.py#L3336)
+#### [test\_params\_and\_engine\_reject\_the\_same\_vector\_jit\_configuration](./engine/test_engine.py#L3339)
 
 ```python
 def test_params_and_engine_reject_the_same_vector_jit_configuration(
@@ -10808,7 +10822,7 @@ Config-time validation and `build_engine_backend` agree on `jit`.
 
 <a id="engine.test_engine.test_fim_generational_vector_runs_stochastic_migrant_sampling"></a>
 
-#### [test\_fim\_generational\_vector\_runs\_stochastic\_migrant\_sampling](./engine/test_engine.py#L3350)
+#### [test\_fim\_generational\_vector\_runs\_stochastic\_migrant\_sampling](./engine/test_engine.py#L3353)
 
 ```python
 def test_fim_generational_vector_runs_stochastic_migrant_sampling(
@@ -10819,7 +10833,7 @@ def test_fim_generational_vector_runs_stochastic_migrant_sampling(
 
 <a id="engine.test_engine.test_fim_generational_vector_rejects_jit"></a>
 
-#### [test\_fim\_generational\_vector\_rejects\_jit](./engine/test_engine.py#L3372)
+#### [test\_fim\_generational\_vector\_rejects\_jit](./engine/test_engine.py#L3375)
 
 ```python
 def test_fim_generational_vector_rejects_jit(
@@ -10834,7 +10848,7 @@ asks for `jit="numba"` explicitly gets an error, not a silent no-op.
 
 <a id="engine.test_engine.test_build_engine_backend_generational_vector_requires_numba"></a>
 
-#### [test\_build\_engine\_backend\_generational\_vector\_requires\_numba](./engine/test_engine.py#L3386)
+#### [test\_build\_engine\_backend\_generational\_vector\_requires\_numba](./engine/test_engine.py#L3389)
 
 ```python
 def test_build_engine_backend_generational_vector_requires_numba(
@@ -10855,7 +10869,7 @@ project's own multi-model engine review, 2026-09-04, `FIM-01`).
 
 <a id="engine.test_engine.test_build_engine_backend_auto_falls_back_to_generational_without_numba"></a>
 
-#### [test\_build\_engine\_backend\_auto\_falls\_back\_to\_generational\_without\_numba](./engine/test_engine.py#L3407)
+#### [test\_build\_engine\_backend\_auto\_falls\_back\_to\_generational\_without\_numba](./engine/test_engine.py#L3410)
 
 ```python
 @pytest.mark.parametrize("model", ["infinite_alleles", "finite_alleles"])
@@ -10873,7 +10887,7 @@ cannot run.
 
 <a id="engine.test_engine.test_build_engine_backend_generational_vector_accepts_numba_present"></a>
 
-#### [test\_build\_engine\_backend\_generational\_vector\_accepts\_numba\_present](./engine/test_engine.py#L3426)
+#### [test\_build\_engine\_backend\_generational\_vector\_accepts\_numba\_present](./engine/test_engine.py#L3429)
 
 ```python
 def test_build_engine_backend_generational_vector_accepts_numba_present(
@@ -10894,7 +10908,7 @@ lower-level, params-less construction form.
 
 <a id="engine.test_engine.test_build_engine_backend_vector_rejects_oversized_capacity"></a>
 
-#### [test\_build\_engine\_backend\_vector\_rejects\_oversized\_capacity](./engine/test_engine.py#L3456)
+#### [test\_build\_engine\_backend\_vector\_rejects\_oversized\_capacity](./engine/test_engine.py#L3459)
 
 ```python
 def test_build_engine_backend_vector_rejects_oversized_capacity() -> None
@@ -10904,7 +10918,7 @@ Explicit finite-alleles selection gets the same capacity ceiling `"auto"` has.
 
 <a id="engine.test_engine.test_build_engine_backend_vector_respects_custom_capacity_ceiling"></a>
 
-#### [test\_build\_engine\_backend\_vector\_respects\_custom\_capacity\_ceiling](./engine/test_engine.py#L3467)
+#### [test\_build\_engine\_backend\_vector\_respects\_custom\_capacity\_ceiling](./engine/test_engine.py#L3470)
 
 ```python
 def test_build_engine_backend_vector_respects_custom_capacity_ceiling(
@@ -10915,7 +10929,7 @@ The explicit-path ceiling is a real, configurable parameter, not a hidden one.
 
 <a id="engine.test_engine.test_build_engine_backend_vector_needs_every_locus_within_capacity"></a>
 
-#### [test\_build\_engine\_backend\_vector\_needs\_every\_locus\_within\_capacity](./engine/test_engine.py#L3479)
+#### [test\_build\_engine\_backend\_vector\_needs\_every\_locus\_within\_capacity](./engine/test_engine.py#L3482)
 
 ```python
 def test_build_engine_backend_vector_needs_every_locus_within_capacity(
@@ -10926,7 +10940,7 @@ One oversized locus disqualifies explicit selection too, not just `"auto"`.
 
 <a id="engine.test_engine.test_build_engine_backend_rejects_unknown_choice"></a>
 
-#### [test\_build\_engine\_backend\_rejects\_unknown\_choice](./engine/test_engine.py#L3490)
+#### [test\_build\_engine\_backend\_rejects\_unknown\_choice](./engine/test_engine.py#L3493)
 
 ```python
 def test_build_engine_backend_rejects_unknown_choice() -> None
@@ -10936,7 +10950,7 @@ An unrecognized `engine_backend` is a `ValueError`, not silently ignored.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_requires_params"></a>
 
-#### [test\_build\_engine\_backend\_auto\_requires\_params](./engine/test_engine.py#L3505)
+#### [test\_build\_engine\_backend\_auto\_requires\_params](./engine/test_engine.py#L3508)
 
 ```python
 def test_build_engine_backend_auto_requires_params() -> None
@@ -10946,7 +10960,7 @@ def test_build_engine_backend_auto_requires_params() -> None
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_above_threshold"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_vector\_above\_threshold](./engine/test_engine.py#L3511)
+#### [test\_build\_engine\_backend\_auto\_picks\_vector\_above\_threshold](./engine/test_engine.py#L3514)
 
 ```python
 def test_build_engine_backend_auto_picks_vector_above_threshold() -> None
@@ -10956,7 +10970,7 @@ Above the cutover, on an eligible config, `"auto"` picks Backend V.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_below_threshold"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_generational\_below\_threshold](./engine/test_engine.py#L3519)
+#### [test\_build\_engine\_backend\_auto\_picks\_generational\_below\_threshold](./engine/test_engine.py#L3522)
 
 ```python
 def test_build_engine_backend_auto_picks_generational_below_threshold(
@@ -10967,7 +10981,7 @@ Below the cutover, `"auto"` picks Backend G, not Backend V.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_for_stochastic_migration"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_vector\_for\_stochastic\_migration](./engine/test_engine.py#L3527)
+#### [test\_build\_engine\_backend\_auto\_picks\_vector\_for\_stochastic\_migration](./engine/test_engine.py#L3530)
 
 ```python
 def test_build_engine_backend_auto_picks_vector_for_stochastic_migration(
@@ -10982,7 +10996,7 @@ migration.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_when_vector_ineligible"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_generational\_when\_vector\_ineligible](./engine/test_engine.py#L3541)
+#### [test\_build\_engine\_backend\_auto\_picks\_generational\_when\_vector\_ineligible](./engine/test_engine.py#L3544)
 
 ```python
 def test_build_engine_backend_auto_picks_generational_when_vector_ineligible(
@@ -10996,7 +11010,7 @@ so a caller who asked for it gets it rather than a `ValueError`.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_for_infinite_alleles"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_vector\_for\_infinite\_alleles](./engine/test_engine.py#L3557)
+#### [test\_build\_engine\_backend\_auto\_picks\_vector\_for\_infinite\_alleles](./engine/test_engine.py#L3560)
 
 ```python
 def test_build_engine_backend_auto_picks_vector_for_infinite_alleles() -> None
@@ -11010,7 +11024,7 @@ capacity ceiling does not apply, however small it is set.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_respects_custom_threshold"></a>
 
-#### [test\_build\_engine\_backend\_auto\_respects\_custom\_threshold](./engine/test_engine.py#L3575)
+#### [test\_build\_engine\_backend\_auto\_respects\_custom\_threshold](./engine/test_engine.py#L3578)
 
 ```python
 def test_build_engine_backend_auto_respects_custom_threshold() -> None
@@ -11020,7 +11034,7 @@ The cutover is a real, configurable parameter, not a hidden constant.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_honors_a_jit_request_with_generational"></a>
 
-#### [test\_build\_engine\_backend\_auto\_honors\_a\_jit\_request\_with\_generational](./engine/test_engine.py#L3583)
+#### [test\_build\_engine\_backend\_auto\_honors\_a\_jit\_request\_with\_generational](./engine/test_engine.py#L3586)
 
 ```python
 def test_build_engine_backend_auto_honors_a_jit_request_with_generational(
@@ -11036,7 +11050,7 @@ the same either way, so the request wins.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_above_capacity_ceiling"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_generational\_above\_capacity\_ceiling](./engine/test_engine.py#L3608)
+#### [test\_build\_engine\_backend\_auto\_picks\_generational\_above\_capacity\_ceiling](./engine/test_engine.py#L3611)
 
 ```python
 def test_build_engine_backend_auto_picks_generational_above_capacity_ceiling(
@@ -11053,7 +11067,7 @@ losing at.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_respects_custom_capacity_ceiling"></a>
 
-#### [test\_build\_engine\_backend\_auto\_respects\_custom\_capacity\_ceiling](./engine/test_engine.py#L3625)
+#### [test\_build\_engine\_backend\_auto\_respects\_custom\_capacity\_ceiling](./engine/test_engine.py#L3628)
 
 ```python
 def test_build_engine_backend_auto_respects_custom_capacity_ceiling() -> None
@@ -11063,7 +11077,7 @@ The capacity ceiling is a real, configurable parameter, not a hidden constant.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_needs_every_locus_within_capacity"></a>
 
-#### [test\_build\_engine\_backend\_auto\_needs\_every\_locus\_within\_capacity](./engine/test_engine.py#L3636)
+#### [test\_build\_engine\_backend\_auto\_needs\_every\_locus\_within\_capacity](./engine/test_engine.py#L3639)
 
 ```python
 def test_build_engine_backend_auto_needs_every_locus_within_capacity() -> None
@@ -11080,7 +11094,7 @@ ceiling.
 
 <a id="engine.test_engine.test_fim_engine_backend_auto_runs_end_to_end"></a>
 
-#### [test\_fim\_engine\_backend\_auto\_runs\_end\_to\_end](./engine/test_engine.py#L3656)
+#### [test\_fim\_engine\_backend\_auto\_runs\_end\_to\_end](./engine/test_engine.py#L3659)
 
 ```python
 def test_fim_engine_backend_auto_runs_end_to_end(
@@ -11095,7 +11109,7 @@ the manifest says so.
 
 <a id="engine.test_engine.test_fim_engine_backend_auto_records_generational_without_numba"></a>
 
-#### [test\_fim\_engine\_backend\_auto\_records\_generational\_without\_numba](./engine/test_engine.py#L3675)
+#### [test\_fim\_engine\_backend\_auto\_records\_generational\_without\_numba](./engine/test_engine.py#L3678)
 
 ```python
 def test_fim_engine_backend_auto_records_generational_without_numba(
@@ -11110,7 +11124,7 @@ above, because Backend V and Backend G produce identical output.
 
 <a id="engine.test_engine.test_fim_engine_backend_auto_reaches_vector_end_to_end"></a>
 
-#### [test\_fim\_engine\_backend\_auto\_reaches\_vector\_end\_to\_end](./engine/test_engine.py#L3692)
+#### [test\_fim\_engine\_backend\_auto\_reaches\_vector\_end\_to\_end](./engine/test_engine.py#L3695)
 
 ```python
 def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None
@@ -11120,7 +11134,7 @@ def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None
 
 <a id="engine.test_engine.test_fim_records_the_explicit_engine_backend_in_the_manifest"></a>
 
-#### [test\_fim\_records\_the\_explicit\_engine\_backend\_in\_the\_manifest](./engine/test_engine.py#L3715)
+#### [test\_fim\_records\_the\_explicit\_engine\_backend\_in\_the\_manifest](./engine/test_engine.py#L3718)
 
 ```python
 def test_fim_records_the_explicit_engine_backend_in_the_manifest(
@@ -11131,7 +11145,7 @@ def test_fim_records_the_explicit_engine_backend_in_the_manifest(
 
 <a id="engine.test_engine.test_fim_default_lineal_records_engine_backend_in_the_manifest"></a>
 
-#### [test\_fim\_default\_lineal\_records\_engine\_backend\_in\_the\_manifest](./engine/test_engine.py#L3728)
+#### [test\_fim\_default\_lineal\_records\_engine\_backend\_in\_the\_manifest](./engine/test_engine.py#L3731)
 
 ```python
 def test_fim_default_lineal_records_engine_backend_in_the_manifest(
@@ -11142,7 +11156,7 @@ Even the untouched default (`"lineal"`) gets recorded, not left `None`.
 
 <a id="engine.test_engine.test_fim_records_equilibrium_split_provenance_in_the_manifest"></a>
 
-#### [test\_fim\_records\_equilibrium\_split\_provenance\_in\_the\_manifest](./engine/test_engine.py#L3740)
+#### [test\_fim\_records\_equilibrium\_split\_provenance\_in\_the\_manifest](./engine/test_engine.py#L3743)
 
 ```python
 def test_fim_records_equilibrium_split_provenance_in_the_manifest(
@@ -11160,7 +11174,7 @@ ancestral phase without a slow test.
 
 <a id="engine.test_engine.test_fim_records_equilibrium_split_provenance_under_the_generational_backend"></a>
 
-#### [test\_fim\_records\_equilibrium\_split\_provenance\_under\_the\_generational\_backend](./engine/test_engine.py#L3773)
+#### [test\_fim\_records\_equilibrium\_split\_provenance\_under\_the\_generational\_backend](./engine/test_engine.py#L3776)
 
 ```python
 def test_fim_records_equilibrium_split_provenance_under_the_generational_backend(
@@ -11174,7 +11188,7 @@ outcome` independently, so both need their own coverage.
 
 <a id="engine.test_engine.test_fim_streams_the_ancestral_phase_beside_the_trajectory"></a>
 
-#### [test\_fim\_streams\_the\_ancestral\_phase\_beside\_the\_trajectory](./engine/test_engine.py#L3811)
+#### [test\_fim\_streams\_the\_ancestral\_phase\_beside\_the\_trajectory](./engine/test_engine.py#L3814)
 
 ```python
 @pytest.mark.parametrize("backend", ["lineal", "generational"])
@@ -11193,7 +11207,7 @@ exactly the heterozygosity the manifest records for the split.
 
 <a id="engine.test_engine.test_fim_equilibrium_trajectory_is_identical_across_backends"></a>
 
-#### [test\_fim\_equilibrium\_trajectory\_is\_identical\_across\_backends](./engine/test_engine.py#L3851)
+#### [test\_fim\_equilibrium\_trajectory\_is\_identical\_across\_backends](./engine/test_engine.py#L3854)
 
 ```python
 def test_fim_equilibrium_trajectory_is_identical_across_backends(
@@ -11204,7 +11218,7 @@ The ancestral phase draws only from its own stream: same bytes either way.
 
 <a id="engine.test_engine.test_fim_keeps_an_in_memory_ancestral_trajectory_for_a_library_call"></a>
 
-#### [test\_fim\_keeps\_an\_in\_memory\_ancestral\_trajectory\_for\_a\_library\_call](./engine/test_engine.py#L3869)
+#### [test\_fim\_keeps\_an\_in\_memory\_ancestral\_trajectory\_for\_a\_library\_call](./engine/test_engine.py#L3872)
 
 ```python
 def test_fim_keeps_an_in_memory_ancestral_trajectory_for_a_library_call(
@@ -11215,7 +11229,7 @@ With no store given, the ancestral rows stay readable on the result.
 
 <a id="engine.test_engine.test_fim_dirichlet_run_writes_no_ancestral_trajectory"></a>
 
-#### [test\_fim\_dirichlet\_run\_writes\_no\_ancestral\_trajectory](./engine/test_engine.py#L3891)
+#### [test\_fim\_dirichlet\_run\_writes\_no\_ancestral\_trajectory](./engine/test_engine.py#L3894)
 
 ```python
 def test_fim_dirichlet_run_writes_no_ancestral_trajectory(
@@ -11226,7 +11240,7 @@ Every other initial condition has no ancestral phase and no file.
 
 <a id="engine.test_engine.test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none"></a>
 
-#### [test\_fim\_dirichlet\_run\_leaves\_equilibrium\_manifest\_fields\_none](./engine/test_engine.py#L3906)
+#### [test\_fim\_dirichlet\_run\_leaves\_equilibrium\_manifest\_fields\_none](./engine/test_engine.py#L3909)
 
 ```python
 def test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none(
@@ -11237,7 +11251,7 @@ An ordinary Dirichlet-prior run never populates the equilibrium-only fields.
 
 <a id="engine.test_engine.test_fim_auto_records_the_resolved_choice_not_the_literal_auto"></a>
 
-#### [test\_fim\_auto\_records\_the\_resolved\_choice\_not\_the\_literal\_auto](./engine/test_engine.py#L3921)
+#### [test\_fim\_auto\_records\_the\_resolved\_choice\_not\_the\_literal\_auto](./engine/test_engine.py#L3924)
 
 ```python
 def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None
@@ -11251,7 +11265,7 @@ both ends of the threshold, on one config.
 
 <a id="engine.test_engine.test_fim_records_jit_in_the_manifest"></a>
 
-#### [test\_fim\_records\_jit\_in\_the\_manifest](./engine/test_engine.py#L3946)
+#### [test\_fim\_records\_jit\_in\_the\_manifest](./engine/test_engine.py#L3949)
 
 ```python
 def test_fim_records_jit_in_the_manifest(
@@ -11262,7 +11276,7 @@ def test_fim_records_jit_in_the_manifest(
 
 <a id="engine.test_engine.test_fim_records_engine_backend_for_every_replicate_in_a_batch"></a>
 
-#### [test\_fim\_records\_engine\_backend\_for\_every\_replicate\_in\_a\_batch](./engine/test_engine.py#L3957)
+#### [test\_fim\_records\_engine\_backend\_for\_every\_replicate\_in\_a\_batch](./engine/test_engine.py#L3960)
 
 ```python
 def test_fim_records_engine_backend_for_every_replicate_in_a_batch(
@@ -11273,7 +11287,7 @@ A multi-replicate batch stamps every replicate's own manifest, not just one.
 
 <a id="engine.test_engine.test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_run"></a>
 
-#### [test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_scalar\_run](./engine/test_engine.py#L3978)
+#### [test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_scalar\_run](./engine/test_engine.py#L3981)
 
 ```python
 def test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_run(
@@ -11284,7 +11298,7 @@ def test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_r
 
 <a id="engine.test_engine.test_generational_backend_with_threaded_advancer_matches_lineal_for_batch"></a>
 
-#### [test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_batch](./engine/test_engine.py#L3999)
+#### [test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_batch](./engine/test_engine.py#L4002)
 
 ```python
 def test_generational_backend_with_threaded_advancer_matches_lineal_for_batch(
@@ -11300,7 +11314,7 @@ sequential case a smaller batch could pass by accident.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_uses_threaded_advancer"></a>
 
-#### [test\_fim\_engine\_backend\_generational\_uses\_threaded\_advancer](./engine/test_engine.py#L4033)
+#### [test\_fim\_engine\_backend\_generational\_uses\_threaded\_advancer](./engine/test_engine.py#L4036)
 
 ```python
 def test_fim_engine_backend_generational_uses_threaded_advancer(
@@ -11313,7 +11327,7 @@ entry point, not just `GenerationalBackend` constructed directly.
 
 <a id="engine.test_engine.test_threaded_advancer_rejects_non_positive_max_workers"></a>
 
-#### [test\_threaded\_advancer\_rejects\_non\_positive\_max\_workers](./engine/test_engine.py#L4048)
+#### [test\_threaded\_advancer\_rejects\_non\_positive\_max\_workers](./engine/test_engine.py#L4051)
 
 ```python
 def test_threaded_advancer_rejects_non_positive_max_workers() -> None
@@ -11323,7 +11337,7 @@ def test_threaded_advancer_rejects_non_positive_max_workers() -> None
 
 <a id="engine.test_engine.test_threaded_advancer_reuses_its_own_executor_across_ticks"></a>
 
-#### [test\_threaded\_advancer\_reuses\_its\_own\_executor\_across\_ticks](./engine/test_engine.py#L4054)
+#### [test\_threaded\_advancer\_reuses\_its\_own\_executor\_across\_ticks](./engine/test_engine.py#L4057)
 
 ```python
 def test_threaded_advancer_reuses_its_own_executor_across_ticks(
@@ -11345,7 +11359,7 @@ tick, by identity.
 
 <a id="engine.test_engine.test_generational_backend_with_jit_matches_lineal_bit_for_bit"></a>
 
-#### [test\_generational\_backend\_with\_jit\_matches\_lineal\_bit\_for\_bit](./engine/test_engine.py#L4108)
+#### [test\_generational\_backend\_with\_jit\_matches\_lineal\_bit\_for\_bit](./engine/test_engine.py#L4111)
 
 ```python
 def test_generational_backend_with_jit_matches_lineal_bit_for_bit(
@@ -11356,7 +11370,7 @@ def test_generational_backend_with_jit_matches_lineal_bit_for_bit(
 
 <a id="engine.test_engine.test_generational_backend_with_sequential_advancer_jit_matches_lineal_for_batch"></a>
 
-#### [test\_generational\_backend\_with\_sequential\_advancer\_jit\_matches\_lineal\_for\_batch](./engine/test_engine.py#L4146)
+#### [test\_generational\_backend\_with\_sequential\_advancer\_jit\_matches\_lineal\_for\_batch](./engine/test_engine.py#L4149)
 
 ```python
 def test_generational_backend_with_sequential_advancer_jit_matches_lineal_for_batch(
@@ -11374,7 +11388,7 @@ just `SequentialAdvancer.advance`'s own single-lane path.
 
 <a id="engine.test_engine.test_sequential_advancer_jit_matches_lineal_under_finite_alleles"></a>
 
-#### [test\_sequential\_advancer\_jit\_matches\_lineal\_under\_finite\_alleles](./engine/test_engine.py#L4182)
+#### [test\_sequential\_advancer\_jit\_matches\_lineal\_under\_finite\_alleles](./engine/test_engine.py#L4185)
 
 ```python
 def test_sequential_advancer_jit_matches_lineal_under_finite_alleles(
@@ -11398,7 +11412,7 @@ tests.
 
 <a id="engine.test_engine.test_sequential_advancer_jit_matches_lineal_under_stochastic_migration"></a>
 
-#### [test\_sequential\_advancer\_jit\_matches\_lineal\_under\_stochastic\_migration](./engine/test_engine.py#L4230)
+#### [test\_sequential\_advancer\_jit\_matches\_lineal\_under\_stochastic\_migration](./engine/test_engine.py#L4233)
 
 ```python
 def test_sequential_advancer_jit_matches_lineal_under_stochastic_migration(
@@ -11416,7 +11430,7 @@ together, only ever one operator's own ineligibility at a time.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_with_jit_matches_default"></a>
 
-#### [test\_fim\_engine\_backend\_generational\_with\_jit\_matches\_default](./engine/test_engine.py#L4273)
+#### [test\_fim\_engine\_backend\_generational\_with\_jit\_matches\_default](./engine/test_engine.py#L4276)
 
 ```python
 def test_fim_engine_backend_generational_with_jit_matches_default(
@@ -11427,7 +11441,7 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
 
 <a id="engine.test_engine.test_generational_vector_backend_matches_scope_of_lineal_reproducibility"></a>
 
-#### [test\_generational\_vector\_backend\_matches\_scope\_of\_lineal\_reproducibility](./engine/test_engine.py#L4328)
+#### [test\_generational\_vector\_backend\_matches\_scope\_of\_lineal\_reproducibility](./engine/test_engine.py#L4331)
 
 ```python
 def test_generational_vector_backend_matches_scope_of_lineal_reproducibility(
@@ -11442,7 +11456,7 @@ trajectory both times — determinism, not bit-identity to
 
 <a id="engine.test_engine.test_generational_vector_backend_bounds_capacity_and_stays_valid"></a>
 
-#### [test\_generational\_vector\_backend\_bounds\_capacity\_and\_stays\_valid](./engine/test_engine.py#L4357)
+#### [test\_generational\_vector\_backend\_bounds\_capacity\_and\_stays\_valid](./engine/test_engine.py#L4360)
 
 ```python
 def test_generational_vector_backend_bounds_capacity_and_stays_valid() -> None
@@ -11459,7 +11473,7 @@ lineal tests above already run).
 
 <a id="engine.test_engine.test_generational_vector_backend_batch_is_independently_reproducible"></a>
 
-#### [test\_generational\_vector\_backend\_batch\_is\_independently\_reproducible](./engine/test_engine.py#L4383)
+#### [test\_generational\_vector\_backend\_batch\_is\_independently\_reproducible](./engine/test_engine.py#L4386)
 
 ```python
 def test_generational_vector_backend_batch_is_independently_reproducible(
@@ -11481,7 +11495,7 @@ full multi-generation run *is* checked bit-for-bit.
 
 <a id="engine.test_engine.test_finalize_replica_lane_releases_vectorized_state"></a>
 
-#### [test\_finalize\_replica\_lane\_releases\_vectorized\_state](./engine/test_engine.py#L4419)
+#### [test\_finalize\_replica\_lane\_releases\_vectorized\_state](./engine/test_engine.py#L4422)
 
 ```python
 def test_finalize_replica_lane_releases_vectorized_state(
@@ -11501,7 +11515,7 @@ pass on a lane that never populated it in the first place.
 
 <a id="engine.test_engine.test_generational_vector_backend_windowed_batch_matches_unbounded"></a>
 
-#### [test\_generational\_vector\_backend\_windowed\_batch\_matches\_unbounded](./engine/test_engine.py#L4456)
+#### [test\_generational\_vector\_backend\_windowed\_batch\_matches\_unbounded](./engine/test_engine.py#L4459)
 
 ```python
 def test_generational_vector_backend_windowed_batch_matches_unbounded(
@@ -11522,7 +11536,7 @@ differing `max_concurrent_replicates` changing it is expected.
 
 <a id="engine.test_engine.test_generational_vector_backend_matches_lineal_exactly_without_migration"></a>
 
-#### [test\_generational\_vector\_backend\_matches\_lineal\_exactly\_without\_migration](./engine/test_engine.py#L4491)
+#### [test\_generational\_vector\_backend\_matches\_lineal\_exactly\_without\_migration](./engine/test_engine.py#L4494)
 
 ```python
 def test_generational_vector_backend_matches_lineal_exactly_without_migration(
@@ -11543,7 +11557,7 @@ carries the bookkeeping forward instead.
 
 <a id="engine.test_engine.test_vectorized_advancer_builds_a_lanes_state_only_once_each_way"></a>
 
-#### [test\_vectorized\_advancer\_builds\_a\_lanes\_state\_only\_once\_each\_way](./engine/test_engine.py#L4524)
+#### [test\_vectorized\_advancer\_builds\_a\_lanes\_state\_only\_once\_each\_way](./engine/test_engine.py#L4527)
 
 ```python
 def test_vectorized_advancer_builds_a_lanes_state_only_once_each_way(
@@ -11573,7 +11587,7 @@ counted call above.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_vector_runs_end_to_end"></a>
 
-#### [test\_fim\_engine\_backend\_generational\_vector\_runs\_end\_to\_end](./engine/test_engine.py#L4595)
+#### [test\_fim\_engine\_backend\_generational\_vector\_runs\_end\_to\_end](./engine/test_engine.py#L4598)
 
 ```python
 def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None
@@ -11583,7 +11597,7 @@ def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None
 
 <a id="engine.test_engine.test_vectorized_advancer_builds_a_migration_plan_once_per_lane"></a>
 
-#### [test\_vectorized\_advancer\_builds\_a\_migration\_plan\_once\_per\_lane](./engine/test_engine.py#L4608)
+#### [test\_vectorized\_advancer\_builds\_a\_migration\_plan\_once\_per\_lane](./engine/test_engine.py#L4611)
 
 ```python
 def test_vectorized_advancer_builds_a_migration_plan_once_per_lane() -> None
@@ -11601,7 +11615,7 @@ calls.
 
 <a id="engine.test_engine.test_vectorized_advancer_builds_no_matrix_for_a_scalar_rate"></a>
 
-#### [test\_vectorized\_advancer\_builds\_no\_matrix\_for\_a\_scalar\_rate](./engine/test_engine.py#L4638)
+#### [test\_vectorized\_advancer\_builds\_no\_matrix\_for\_a\_scalar\_rate](./engine/test_engine.py#L4641)
 
 ```python
 def test_vectorized_advancer_builds_no_matrix_for_a_scalar_rate() -> None
@@ -11616,7 +11630,7 @@ the first tick.
 
 <a id="engine.test_engine.test_every_engine_backend_visits_the_same_generations_and_output_shape"></a>
 
-#### [test\_every\_engine\_backend\_visits\_the\_same\_generations\_and\_output\_shape](./engine/test_engine.py#L4699)
+#### [test\_every\_engine\_backend\_visits\_the\_same\_generations\_and\_output\_shape](./engine/test_engine.py#L4702)
 
 ```python
 def test_every_engine_backend_visits_the_same_generations_and_output_shape(
@@ -11665,18 +11679,18 @@ run.
 
 <a id="engine.test_engine.test_the_report_carries_both_expected_value_forms_for_d_and_g_st"></a>
 
-#### [test\_the\_report\_carries\_both\_expected\_value\_forms\_for\_d\_and\_g\_st](./engine/test_engine.py#L4819)
+#### [test\_the\_report\_carries\_both\_expected\_value\_forms\_for\_d\_and\_g\_st](./engine/test_engine.py#L4822)
 
 ```python
 def test_the_report_carries_both_expected_value_forms_for_d_and_g_st(
         tiny_params: SimulationParams) -> None
 ```
 
-`D` and `G_ST` report both forms; a non-identity statistic reports one.
+$D$ and $G_{ST}$ report both forms; a non-identity statistic reports one.
 
 <a id="engine.test_engine.test_value_of_means_selection_changes_the_headline_not_the_other_form"></a>
 
-#### [test\_value\_of\_means\_selection\_changes\_the\_headline\_not\_the\_other\_form](./engine/test_engine.py#L4836)
+#### [test\_value\_of\_means\_selection\_changes\_the\_headline\_not\_the\_other\_form](./engine/test_engine.py#L4839)
 
 ```python
 def test_value_of_means_selection_changes_the_headline_not_the_other_form(
@@ -11687,7 +11701,7 @@ The setting picks the headline; both forms stay in the report.
 
 <a id="engine.test_engine.test_every_statistic_reports_the_one_shared_evidence_window"></a>
 
-#### [test\_every\_statistic\_reports\_the\_one\_shared\_evidence\_window](./engine/test_engine.py#L4850)
+#### [test\_every\_statistic\_reports\_the\_one\_shared\_evidence\_window](./engine/test_engine.py#L4853)
 
 ```python
 def test_every_statistic_reports_the_one_shared_evidence_window(
@@ -11698,7 +11712,7 @@ All entries share a window, the burn-in, the targets, and a finite `z`.
 
 <a id="engine.test_engine.test_a_short_run_reports_no_geweke_z"></a>
 
-#### [test\_a\_short\_run\_reports\_no\_geweke\_z](./engine/test_engine.py#L4878)
+#### [test\_a\_short\_run\_reports\_no\_geweke\_z](./engine/test_engine.py#L4881)
 
 ```python
 def test_a_short_run_reports_no_geweke_z(
@@ -11709,7 +11723,7 @@ A window too short for two segments has no start-against-end diagnostic.
 
 <a id="engine.test_engine.test_a_batch_matches_each_replicates_window_to_the_first_wave"></a>
 
-#### [test\_a\_batch\_matches\_each\_replicates\_window\_to\_the\_first\_wave](./engine/test_engine.py#L4898)
+#### [test\_a\_batch\_matches\_each\_replicates\_window\_to\_the\_first\_wave](./engine/test_engine.py#L4901)
 
 ```python
 def test_a_batch_matches_each_replicates_window_to_the_first_wave() -> None
@@ -11719,7 +11733,7 @@ The first wave averages for the guess; the rest for the matched window.
 
 <a id="engine.test_engine.test_every_backend_gives_the_same_matched_batch"></a>
 
-#### [test\_every\_backend\_gives\_the\_same\_matched\_batch](./engine/test_engine.py#L4920)
+#### [test\_every\_backend\_gives\_the\_same\_matched\_batch](./engine/test_engine.py#L4923)
 
 ```python
 def test_every_backend_gives_the_same_matched_batch() -> None
@@ -11729,7 +11743,7 @@ Windows come from the configuration, so no backend can change them.
 
 <a id="engine.test_engine.test_a_limit_on_concurrent_replicates_is_the_first_wave_too"></a>
 
-#### [test\_a\_limit\_on\_concurrent\_replicates\_is\_the\_first\_wave\_too](./engine/test_engine.py#L4944)
+#### [test\_a\_limit\_on\_concurrent\_replicates\_is\_the\_first\_wave\_too](./engine/test_engine.py#L4947)
 
 ```python
 def test_a_limit_on_concurrent_replicates_is_the_first_wave_too() -> None
@@ -11739,7 +11753,7 @@ def test_a_limit_on_concurrent_replicates_is_the_first_wave_too() -> None
 
 <a id="engine.test_engine.test_the_parallel_worker_path_matches_the_sequential_batch"></a>
 
-#### [test\_the\_parallel\_worker\_path\_matches\_the\_sequential\_batch](./engine/test_engine.py#L4958)
+#### [test\_the\_parallel\_worker\_path\_matches\_the\_sequential\_batch](./engine/test_engine.py#L4961)
 
 ```python
 def test_the_parallel_worker_path_matches_the_sequential_batch() -> None
@@ -11749,7 +11763,7 @@ Worker processes get the same windows, in waves, as the sequential loop.
 
 <a id="engine.test_engine.test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run"></a>
 
-#### [test\_a\_fixed\_window\_is\_the\_same\_for\_every\_replicate\_and\_for\_a\_single\_run](./engine/test_engine.py#L4970)
+#### [test\_a\_fixed\_window\_is\_the\_same\_for\_every\_replicate\_and\_for\_a\_single\_run](./engine/test_engine.py#L4973)
 
 ```python
 def test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run(
@@ -11760,7 +11774,7 @@ An explicit window is a fixed-window run, alone or in a batch.
 
 <a id="engine.test_engine.test_a_batch_summary_is_the_mean_of_the_replicates_window_means"></a>
 
-#### [test\_a\_batch\_summary\_is\_the\_mean\_of\_the\_replicates\_window\_means](./engine/test_engine.py#L4987)
+#### [test\_a\_batch\_summary\_is\_the\_mean\_of\_the\_replicates\_window\_means](./engine/test_engine.py#L4990)
 
 ```python
 def test_a_batch_summary_is_the_mean_of_the_replicates_window_means() -> None
@@ -11770,18 +11784,18 @@ Each replicate contributes what it measured over its window.
 
 <a id="engine.test_engine.test_a_value_of_means_batch_pools_the_identities_before_the_statistic"></a>
 
-#### [test\_a\_value\_of\_means\_batch\_pools\_the\_identities\_before\_the\_statistic](./engine/test_engine.py#L5001)
+#### [test\_a\_value\_of\_means\_batch\_pools\_the\_identities\_before\_the\_statistic](./engine/test_engine.py#L5004)
 
 ```python
 def test_a_value_of_means_batch_pools_the_identities_before_the_statistic(
 ) -> None
 ```
 
-Form two for a batch: `f` of the pooled `H_S`/`H_T`, delta-method interval.
+Form two for a batch: `f` of the pooled $H_S$ / $H_T$, delta-method interval.
 
 <a id="engine.test_engine.test_planned_replicates_runs_every_replicate_without_an_early_stop"></a>
 
-#### [test\_planned\_replicates\_runs\_every\_replicate\_without\_an\_early\_stop](./engine/test_engine.py#L5020)
+#### [test\_planned\_replicates\_runs\_every\_replicate\_without\_an\_early\_stop](./engine/test_engine.py#L5023)
 
 ```python
 def test_planned_replicates_runs_every_replicate_without_an_early_stop(
@@ -11792,7 +11806,7 @@ def test_planned_replicates_runs_every_replicate_without_an_early_stop(
 
 <a id="engine.test_engine.test_a_replicate_with_no_burn_in_keeps_the_within_run_rule"></a>
 
-#### [test\_a\_replicate\_with\_no\_burn\_in\_keeps\_the\_within\_run\_rule](./engine/test_engine.py#L5032)
+#### [test\_a\_replicate\_with\_no\_burn\_in\_keeps\_the\_within\_run\_rule](./engine/test_engine.py#L5035)
 
 ```python
 def test_a_replicate_with_no_burn_in_keeps_the_within_run_rule() -> None
@@ -11802,7 +11816,7 @@ With no relaxation time the fractional burn-in leaves no window to match.
 
 <a id="engine.test_engine.test_a_capped_run_reports_how_long_it_would_have_needed"></a>
 
-#### [test\_a\_capped\_run\_reports\_how\_long\_it\_would\_have\_needed](./engine/test_engine.py#L5054)
+#### [test\_a\_capped\_run\_reports\_how\_long\_it\_would\_have\_needed](./engine/test_engine.py#L5057)
 
 ```python
 def test_a_capped_run_reports_how_long_it_would_have_needed(
@@ -11813,7 +11827,7 @@ A run that hits the cap records `projected_generations` per statistic.
 
 <a id="engine.test_engine.test_a_run_that_converged_reports_no_projection"></a>
 
-#### [test\_a\_run\_that\_converged\_reports\_no\_projection](./engine/test_engine.py#L5069)
+#### [test\_a\_run\_that\_converged\_reports\_no\_projection](./engine/test_engine.py#L5072)
 
 ```python
 def test_a_run_that_converged_reports_no_projection(
@@ -11824,7 +11838,7 @@ Only a capped run has a projection.
 
 <a id="engine.test_engine.test_a_run_can_watch_any_global_statistic_and_records_its_history"></a>
 
-#### [test\_a\_run\_can\_watch\_any\_global\_statistic\_and\_records\_its\_history](./engine/test_engine.py#L5094)
+#### [test\_a\_run\_can\_watch\_any\_global\_statistic\_and\_records\_its\_history](./engine/test_engine.py#L5097)
 
 ```python
 @pytest.mark.parametrize("statistic", [*_POOLED_WATCHED, *_NEI_WATCHED])
@@ -11836,7 +11850,7 @@ The watched statistic's per-generation history ends at its report value.
 
 <a id="engine.test_engine.test_watched_extra_statistics_agree_across_backends"></a>
 
-#### [test\_watched\_extra\_statistics\_agree\_across\_backends](./engine/test_engine.py#L5117)
+#### [test\_watched\_extra\_statistics\_agree\_across\_backends](./engine/test_engine.py#L5120)
 
 ```python
 @pytest.mark.parametrize("backend", ["generational", "generational-vector"])
@@ -11844,11 +11858,11 @@ def test_watched_extra_statistics_agree_across_backends(
         tiny_params: SimulationParams, backend: EngineBackend) -> None
 ```
 
-`Gs`, `D_m` and a Nei identity have the same history under every kernel.
+$G_s$, $D_m$ and a Nei identity have the same history under every kernel.
 
 <a id="engine.test_engine.test_a_statistic_precision_override_reaches_the_monitor"></a>
 
-#### [test\_a\_statistic\_precision\_override\_reaches\_the\_monitor](./engine/test_engine.py#L5142)
+#### [test\_a\_statistic\_precision\_override\_reaches\_the\_monitor](./engine/test_engine.py#L5145)
 
 ```python
 def test_a_statistic_precision_override_reaches_the_monitor(
@@ -11859,7 +11873,7 @@ A loose override lets a run stop where the run precision never would.
 
 <a id="engine.test_engine.test_the_unbounded_statistic_uses_a_relative_target"></a>
 
-#### [test\_the\_unbounded\_statistic\_uses\_a\_relative\_target](./engine/test_engine.py#L5161)
+#### [test\_the\_unbounded\_statistic\_uses\_a\_relative\_target](./engine/test_engine.py#L5164)
 
 ```python
 def test_the_unbounded_statistic_uses_a_relative_target(
@@ -11870,7 +11884,7 @@ def test_the_unbounded_statistic_uses_a_relative_target(
 
 <a id="engine.test_engine.test_a_thinned_run_writes_the_kept_generations_only"></a>
 
-#### [test\_a\_thinned\_run\_writes\_the\_kept\_generations\_only](./engine/test_engine.py#L5198)
+#### [test\_a\_thinned\_run\_writes\_the\_kept\_generations\_only](./engine/test_engine.py#L5201)
 
 ```python
 def test_a_thinned_run_writes_the_kept_generations_only() -> None
@@ -11880,7 +11894,7 @@ Generation 0, the head, every 5th from 8, the burn-in, and the final one.
 
 <a id="engine.test_engine.test_thinning_changes_no_statistic_and_no_final_state"></a>
 
-#### [test\_thinning\_changes\_no\_statistic\_and\_no\_final\_state](./engine/test_engine.py#L5207)
+#### [test\_thinning\_changes\_no\_statistic\_and\_no\_final\_state](./engine/test_engine.py#L5210)
 
 ```python
 def test_thinning_changes_no_statistic_and_no_final_state() -> None
@@ -11890,7 +11904,7 @@ Same seed, same report and final state, whether or not frames are skipped.
 
 <a id="engine.test_engine.test_every_backend_thins_to_the_same_generations"></a>
 
-#### [test\_every\_backend\_thins\_to\_the\_same\_generations](./engine/test_engine.py#L5220)
+#### [test\_every\_backend\_thins\_to\_the\_same\_generations](./engine/test_engine.py#L5223)
 
 ```python
 @pytest.mark.parametrize("backend", ["generational", "generational-vector"])
@@ -11902,7 +11916,7 @@ Lanes of the generation-first drivers keep the same frames as a lineal run.
 
 <a id="engine.test_engine.test_a_batch_replicate_stops_on_a_generation_thinning_would_skip"></a>
 
-#### [test\_a\_batch\_replicate\_stops\_on\_a\_generation\_thinning\_would\_skip](./engine/test_engine.py#L5234)
+#### [test\_a\_batch\_replicate\_stops\_on\_a\_generation\_thinning\_would\_skip](./engine/test_engine.py#L5237)
 
 ```python
 def test_a_batch_replicate_stops_on_a_generation_thinning_would_skip() -> None
@@ -15216,7 +15230,7 @@ def test_equilibrium_reference_matches_the_statistics_functions_directly(
 ) -> None
 ```
 
-The trajectory panel's own `D`/`G_ST`/`E_ST` core matches Explore's formula.
+The trajectory panel's $D$ / $G_{ST}$ / $E_{ST}$ core matches Explore's formula.
 
 Botanist GUI design doc §6.2's own predicted-equilibrium overlay:
 `_equilibrium_reference` is the exact same core `Api.get_equilibrium_
@@ -15384,7 +15398,7 @@ def test_sampled_closed_form_starts_where_the_real_run_starts(
         tmp_path: Path) -> None
 ```
 
-The seeded initial population reproduces generation zero's `H_S`/`H_T`.
+The seeded initial population reproduces generation zero's $H_S$ / $H_T$.
 
 The matrix solver cannot read its start off the trajectory (two averages
 are not enough for unequal demes), so it rebuilds the initial state
@@ -15420,7 +15434,7 @@ No migration and no mutation has no fixed point, so no curve (not an error).
 def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None
 ```
 
-Sweeping `m` recomputes `D`/`G_ST`/`E_ST` at each point using the same N/d/mu.
+Sweeping `m` recomputes $D$, $G_{ST}$, $E_{ST}$ per point with N/d/mu fixed.
 
 <a id="gui.test_app_api.test_get_equilibrium_sweep_reports_e_st_as_none_at_mu_zero"></a>
 
@@ -15430,7 +15444,7 @@ Sweeping `m` recomputes `D`/`G_ST`/`E_ST` at each point using the same N/d/mu.
 def test_get_equilibrium_sweep_reports_e_st_as_none_at_mu_zero() -> None
 ```
 
-`E_ST` (like `D`) is undefined at `mu == 0`; `G_ST` alone stays defined.
+$E_{ST}$ (like $D$) is undefined at `mu == 0`; $G_{ST}$ alone stays defined.
 
 Mirrors `test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_
 zero`'s own case, one level down: the sweep's own per-point `mu == 0`
@@ -15484,11 +15498,11 @@ Each swept point equals the underlying formula at that point's own value.
 def test_get_equilibrium_sweep_shows_d_flat_across_population_size() -> None
 ```
 
-`D` swept against `N` is a horizontal line -- the project's core claim.
+$D$ swept against `N` is a horizontal line -- the project's core claim.
 
 `equilibrium_d` has no `N` term at all: only the migration-to-mutation
 ratio sets where it settles. Drawing that flat line beside a falling
-`G_ST` is precisely why the sweep carries every statistic rather than
+$G_{ST}$ is precisely why the sweep carries every statistic rather than
 hiding the ones that do not vary on a given axis.
 
 <a id="gui.test_app_api.test_get_equilibrium_sweep_shows_identity_recovery_flat_off_its_axes"></a>
@@ -15571,7 +15585,7 @@ actually produces for every displayed statistic today.
 def test_effective_allele_summary_matches_the_closed_form_directly() -> None
 ```
 
-Both readouts equal `effective_allele_count` applied to H_S/H_T directly.
+Both readouts equal `effective_allele_count` applied to $H_S$ / $H_T$.
 
 <a id="gui.test_app_api.test_effective_allele_summary_caution_flag_only_above_the_threshold"></a>
 
@@ -15582,7 +15596,7 @@ def test_effective_allele_summary_caution_flag_only_above_the_threshold(
 ) -> None
 ```
 
-`gStCaution` fires only once H_S exceeds the documented cutover.
+`gStCaution` fires only once $H_S$ exceeds the documented cutover.
 
 <a id="gui.test_app_api.test_effective_allele_interval_summary_matches_the_closed_form_directly"></a>
 
@@ -15618,11 +15632,11 @@ def test_effective_allele_interval_summary_clamps_an_out_of_range_edge(
 A wide, small-sample interval edge outside `H`'s own `[0, 1)` domain is
 clamped rather than crashing `effective_allele_count`.
 
-Found live: a real 2-replicate batch's own `H_S` interval reached a
+Found live: a real 2-replicate batch's own $H_S$ interval reached a
 `high` at or past `1.0` (`replicate_summary`'s own Student's-t
 interval is symmetric and domain-unaware, the identical "wild band"
 `computeBatchTrajectoryValueDomain`'s own docstring already
-documents for `D`), crashing `_drain_batch_messages`'s own
+documents for $D$), crashing `_drain_batch_messages`'s own
 background thread before `_clamped_effective_allele_count` existed.
 
 <a id="gui.test_app_api.test_effective_allele_interval_summary_caution_flag_only_above_threshold"></a>
@@ -15634,7 +15648,7 @@ def test_effective_allele_interval_summary_caution_flag_only_above_threshold(
 ) -> None
 ```
 
-`gStCaution` fires only once `H_S`'s own interval mean exceeds the cutover.
+`gStCaution` fires only once $H_S$'s own interval mean exceeds the cutover.
 
 <a id="gui.test_app_api.test_api_starts_with_the_default_significant_digits"></a>
 
@@ -17870,7 +17884,7 @@ def test_batch_trajectory_domain_excludes_a_thin_samples_own_band(
 
 A `sampleCount`-2 point's own wild band never widens the plotted axis.
 
-Confirmed live: a real, staggered-stopping batch's own `D` band
+Confirmed live: a real, staggered-stopping batch's own $D$ band
 reached `low: -2.98, high: 3.54` at its own tail (only 2 replicates
 still contributing -- Student's-t with 1 degree of freedom has an
 enormous critical value) for a statistic that never otherwise
@@ -17923,7 +17937,7 @@ A finished two-replicate batch shows a run id, two table rows, twelve stat rows.
 
 Every one of the ten named statistics (the original seven plus the
 expensive, opt-in "bonus" measurements A_CGD/Delta/MI), plus the two
-effective-allele rows derived from `H_S`/`H_T` (botanist GUI design
+effective-allele rows derived from $H_S$ / $H_T$ (botanist GUI design
 doc §7.7, `Api._effective_allele_interval_summary`), gets a
 `.stats-table` row with a confidence interval in its hover tooltip
 (`buildCiMeter`/`buildOmittedMeter`: a statistic omitted from
@@ -18997,7 +19011,7 @@ def test_engine_agrees_with_the_payload_for_every_example(
         name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Mean simulated `D` and `G_ST` sit on the offered curve, per example.
+Mean simulated $D$ and $G_{ST}$ sit on the offered curve, per example.
 
 Each example runs `REPLICATES` seeds as one scalar run, held for three
 relaxation times with no early stop (the curve does not depend on where
@@ -19016,8 +19030,8 @@ A statistic with a prediction gets a sentence in the run's messages that
 compares its average over the evidence window with the prediction averaged
 over the same generations, and gives the mean squared difference over the
 whole run. The prediction is the closed-form expected trajectory when the
-model has one (`D`, `G_ST`, `H_S`, `H_T`, `H_ST`), otherwise the predicted
-equilibrium (`D`, `G_ST`, `E_ST`): a run with stochastic migrants has no
+model has one ($D$, $G_{ST}$, $H_S$, $H_T$, $H_{ST}$), otherwise the predicted
+equilibrium ($D$, $G_{ST}$, $E_{ST}$): a run with stochastic migrants has no
 closed-form trajectory but is still compared.
 
 <a id="gui.test_closed_form_tooltip_screen.test_the_comparison_arithmetic_on_a_known_trajectory"></a>
@@ -19140,7 +19154,7 @@ full sampled history for every compared run in one call
 names_the_differing_field` proves that shape directly); this proves
 the page's own `change` handler on `compareTrajectoryStatistic`
 actually redraws ``compare`-trajectory-canvas` from that same
-already-fetched data, for a statistic other than the default `D`.
+already-fetched data, for a statistic other than the default $D$.
 
 <a id="gui.test_completed_scrubber"></a>
 
@@ -19159,15 +19173,15 @@ values no matter where the scrubber sat, a real, confirmed-live gap (not
 a hypothesis) design §6.3's own "a scrubber... letting a user drag back
 through already-computed history" already calls for. This module proves
 the fix: scrubbing away from the final frame (1) updates the watched
-convergence statistic's own row, and `D`/`G_ST`/`H_S`/`H_T`'s own rows
+convergence statistic's own row, and $D$ / $G_{ST}$ / $H_S$ / $H_T$'s own rows
 regardless of whether they are actually watched (`fim.engine._ALWAYS_
 TRACKED_STATISTICS` -- landed after this module was first written,
 folded in here rather than tracked as a second, separate change), to
-that generation's real recorded value, (2) marks `E_ST`/`K_ST` "not
+that generation's real recorded value, (2) marks $E_{ST}$ / $K_{ST}$ "not
 known at this generation" rather than a possibly-misleading final value
 whenever neither is watched nor `track_expensive_statistics` opted in
 (`ConvergenceMonitor.record` only ever records the always-tracked four
-plus whichever of `E_ST`/`K_ST` were actually requested -- with neither
+plus whichever of $E_{ST}$ / $K_{ST}$ were actually requested -- with neither
 requested here, those two alone have no per-generation history to
 show), (3) draws a moving vertical marker on the trajectory canvas at
 the scrubbed generation, and (4) restores the real, authoritative final
@@ -21211,13 +21225,13 @@ A compressed example opens like a completed user run, without a rerun.
 Headless functional tests: Settings' "Statistics shown" decides whether a
 run computes the expensive statistics every generation.
 
-Configure's old "track E_ST/K_ST/A_CGD/δG/I for display" checkbox is
-gone. `Api._merge_default_run_settings` now sets
+Configure's old "track $E_{ST}$ / $K_{ST}$ / $A_{\mathrm{CGD}}$ / $\delta_G$ / $I$
+for display" checkbox is gone. `Api._merge_default_run_settings` now sets
 `track_expensive_statistics` from what Settings shows
 (`fim.statistics.catalog.expensive_statistics_requested`). These tests
 start a real, small run from the page and check both sides of the rule:
 
-- showing `E_ST` makes the run record it every generation (the scrubbed
+- showing $E_{ST}$ makes the run record it every generation (the scrubbed
   statistics row shows a real value at generation 0) and shows its row,
   and the run's manifest records `track_expensive_statistics: true`;
 - the fresh-install choice (every expensive statistic hidden) records
@@ -21236,7 +21250,7 @@ def test_showing_an_expensive_statistic_computes_and_shows_it_every_generation(
         fast_scalar_run_settings: Path) -> None
 ```
 
-Shown in Settings: E_ST has a real value at generation 0, on screen.
+Shown in Settings: $E_{ST}$ has a real value at generation 0, on screen.
 
 <a id="gui.test_expensive_statistics_screen.test_hiding_every_expensive_statistic_skips_computing_them"></a>
 
@@ -21299,7 +21313,7 @@ Committing (`change`) a new `m` value recomputes the predictions table.
 
 `equilibrium_d`'s own formula (`fim.statistics.differentiation`)
 means a much larger migration rate, everything else held fixed,
-strictly increases `D` — a large enough gap between the two `m`
+strictly increases $D$ — a large enough gap between the two `m`
 values below is not a hand-picked coincidence, it is guaranteed by
 the formula's own monotonicity in `m`, so a real recomputation is
 distinguishable from a stale, unchanged reading by simple inequality,
@@ -22452,8 +22466,8 @@ def test_the_combinator_follows_how_many_statistics_are_watched(
 
 The combinator shows for two or more watched statistics, and hides for one.
 
-The starter form watches `D` and `G_ST`, so the field is visible from the
-start; unchecking `G_ST` leaves one statistic and hides it
+The starter form watches $D$ and $G_{ST}$, so the field is visible from the
+start; unchecking $G_{ST}$ leaves one statistic and hides it
 (`syncConditionalVisibility`, `config-modals.js`), checking it again
 brings it back. Driven as a direct DOM click on the checkbox itself.
 
@@ -22517,7 +22531,9 @@ def test_configure_has_no_expensive_statistics_checkbox(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-The "track E_ST/K_ST/... for display" checkbox is gone; nothing submits it.
+The "track $E_{ST}$ / $K_{ST}$ / ... for display" checkbox is gone.
+
+Nothing submits it.
 
 Settings' "Statistics shown" decides `track_expensive_statistics` now
 (`Api._merge_default_run_settings`), so Configure neither shows a
@@ -22525,7 +22541,7 @@ control nor sends a value that could disagree with Settings.
 
 <a id="gui.test_input_screen.test_expensive_convergence_checkboxes_warn_about_run_time"></a>
 
-#### [test\_expensive\_convergence\_checkboxes\_warn\_about\_run\_time](./gui/test_input_screen.py#L646)
+#### [test\_expensive\_convergence\_checkboxes\_warn\_about\_run\_time](./gui/test_input_screen.py#L648)
 
 ```python
 def test_expensive_convergence_checkboxes_warn_about_run_time(
@@ -22536,7 +22552,7 @@ Each expensive statistic's convergence checkbox carries the cost note.
 
 <a id="gui.test_input_screen.test_navigating_to_configure_does_not_reset_run_view_state"></a>
 
-#### [test\_navigating\_to\_configure\_does\_not\_reset\_run\_view\_state](./gui/test_input_screen.py#L667)
+#### [test\_navigating\_to\_configure\_does\_not\_reset\_run\_view\_state](./gui/test_input_screen.py#L669)
 
 ```python
 def test_navigating_to_configure_does_not_reset_run_view_state(
@@ -22555,7 +22571,7 @@ live or completed run" is the same contract either way.
 
 <a id="gui.test_input_screen.test_batch_progress_display_tracks_mean_generation_not_replicate_high_water"></a>
 
-#### [test\_batch\_progress\_display\_tracks\_mean\_generation\_not\_replicate\_high\_water](./gui/test_input_screen.py#L698)
+#### [test\_batch\_progress\_display\_tracks\_mean\_generation\_not\_replicate\_high\_water](./gui/test_input_screen.py#L700)
 
 ```python
 def test_batch_progress_display_tracks_mean_generation_not_replicate_high_water(
@@ -22577,7 +22593,7 @@ question a progress bar's own label is read for.
 
 <a id="gui.test_input_screen.test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists"></a>
 
-#### [test\_ci\_tooltip\_states\_its\_symmetric\_summary\_only\_when\_one\_exists](./gui/test_input_screen.py#L742)
+#### [test\_ci\_tooltip\_states\_its\_symmetric\_summary\_only\_when\_one\_exists](./gui/test_input_screen.py#L744)
 
 ```python
 def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
@@ -22614,7 +22630,7 @@ The positive case is *also* covered against a real batch, end to end, in
 
 <a id="gui.test_input_screen.test_every_global_statistic_can_be_watched_and_is_grouped_with_cost_notes"></a>
 
-#### [test\_every\_global\_statistic\_can\_be\_watched\_and\_is\_grouped\_with\_cost\_notes](./gui/test_input_screen.py#L814)
+#### [test\_every\_global\_statistic\_can\_be\_watched\_and\_is\_grouped\_with\_cost\_notes](./gui/test_input_screen.py#L816)
 
 ```python
 def test_every_global_statistic_can_be_watched_and_is_grouped_with_cost_notes(
@@ -22625,7 +22641,7 @@ One checkbox per eligible statistic, under group headings, slow ones marked.
 
 <a id="gui.test_input_screen.test_the_per_statistic_precision_field_is_submitted"></a>
 
-#### [test\_the\_per\_statistic\_precision\_field\_is\_submitted](./gui/test_input_screen.py#L845)
+#### [test\_the\_per\_statistic\_precision\_field\_is\_submitted](./gui/test_input_screen.py#L847)
 
 ```python
 def test_the_per_statistic_precision_field_is_submitted(
@@ -23332,7 +23348,7 @@ def test_a_statistic_can_be_hidden_and_shown_during_a_live_run(
         unreachable_convergence_run_settings: Path) -> None
 ```
 
-Hide `D` mid-run: its curve goes, stays gone across ticks, and returns.
+Hide $D$ mid-run: its curve goes, stays gone across ticks, and returns.
 
 <a id="gui.test_live_statistic_toggle_screen.test_statistics_rows_keep_their_cells_across_live_ticks"></a>
 
@@ -26400,7 +26416,7 @@ def test_completed_run_consolidates_its_messages_into_one_area(
 
 A completed run's own info/warning lines show in one bulleted list.
 
-Reported live: the derived-convergence-settings note and the G_ST
+Reported live: the derived-convergence-settings note and the $G_{ST}$
 caution note used to live in two different places on the page --
 the caution note specifically beside the statistics table, breaking
 that table's own layout. `enterCompletedState` now builds one
@@ -26412,7 +26428,7 @@ gStCaution` becomes a warning, appended by `renderEffectiveAlleles`.
 
 `fast_scalar_run_settings`'s own convergence settings are given
 explicitly (not auto-derived), so its real "done" payload carries
-`convergenceNote: ""` -- both the note and the G_ST caution are
+`convergenceNote: ""` -- both the note and the $G_{ST}$ caution are
 exercised here by mutating a captured real payload before
 re-entering `enterCompletedState` with it directly, the same
 "capture a real payload and re-drive it" pattern `test_open_run_
@@ -26444,8 +26460,8 @@ def test_differently_scaled_statistics_start_off_the_trajectory_panel(
 The trajectory panel draws every statistic against one shared
 y-axis, so a statistic that is not a `[0, 1]` differentiation
 measure decides the axis for all of them: `A_CGD` is an effective-
-allele *count* and routinely reads above 1, which flattens `D`,
-`G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, and `H_ST` into an unreadable
+allele *count* and routinely reads above 1, which flattens $D$,
+$G_{ST}$, $E_{ST}$, $K_{ST}$, $H_S$, $H_T$, and $H_{ST}$ into an unreadable
 band along the bottom of the panel. They are hidden by default, not
 removed -- this test also clicks `A_CGD`'s own row back on to prove
 the legend toggle still reaches it.
@@ -26558,7 +26574,7 @@ def test_table_headers_toggle_and_highlight_their_statistic(
 
 A results-table header is the same toggle as its stats-panel row.
 
-Clicking `D`'s header hides it everywhere (header, whole column,
+Clicking $D$'s header hides it everywhere (header, whole column,
 stats-panel row) with `aria-pressed` following; hovering highlights
 the header, the column and the stats-panel row; leaving clears it.
 
@@ -27042,7 +27058,7 @@ The scalar stats panel -- including the derived Ne rows -- tracks the scrubber.
 The named-statistic rows have moved with the scrubber since the
 completed-state scrubber first existed (`updateScrubbedTrajectory`);
 the two derived effective-allele rows (`Ne_S`/`Ne_T`, each a
-closed-form `1 / (1 - H)` transform of the same run's own H_S/H_T
+closed-form `1 / (1 - H)` transform of the same run's own $H_S$ / $H_T$
 history value at that generation) did not -- the panel again showed
 two different generations at once, the same staleness class the
 batch panel's own version of this fix was reported for. This pins
@@ -27690,7 +27706,7 @@ def test_page_evaluation_of_the_closed_form_matches_the_python_recursion(
 
 The two halves of one formula must not drift apart: the server solves
 the recursion, the page evaluates it at the run's own generations from
-the run's own first `H_S`/`H_T`.
+the run's own first $H_S$ / $H_T$.
 
 <a id="gui.test_running_screen.test_page_interpolation_of_a_sampled_closed_form_matches_numpy"></a>
 
@@ -27751,13 +27767,13 @@ once the mid-run state is captured, rather than waiting out the
 (deliberately unreachable) convergence criterion.
 
 All six report statistics are expected in the legend, not only the
-starter form's own single watched `convergence_statistic` (`D`) —
+starter form's own single watched `convergence_statistic` ($D$) —
 `accumulateLiveTrajectory`'s own module docstring names this as
 design §6.2's own explicit alternative ("...or all six report
 statistics"), deliberately different from the completed-view
 legend the test above checks. The starter form's own `N`/`m`/`mu`
 (`450`/`0.001`/`0.00003`) are all plain scalars, so the three
-predictable statistics (`D`/`G_ST`/`E_ST`) each also draw a second,
+predictable statistics ($D$ / $G_{ST}$ / $E_{ST}$) each also draw a second,
 distinctly-labeled predicted-equilibrium entry (design §6.2's own
 closing paragraph) — nine legend entries total, not six.
 
@@ -29352,7 +29368,7 @@ running this suite.
 A finished run's statistics cells show the average, not the last value.
 
 The value in the last generation is one noisy draw (the Wright-Takahata
-example's `D` ends at 0.65 while its average over the evidence window is
+example's $D$ ends at 0.65 while its average over the evidence window is
 0.29). The statistics panel therefore shows each statistic's window mean and
 standard error, and keeps the last generation's value in the tooltip,
 labeled as such. A statistic without a per-generation history is unchanged.
@@ -29388,7 +29404,7 @@ def test_the_nei_family_starts_hidden_and_the_long_standing_statistics_shown(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-A fresh install: `D` shown, every Nei row and the pair heading hidden.
+A fresh install: $D$ shown, every Nei row and the pair heading hidden.
 
 <a id="gui.test_statistics_shown_screen.test_the_chooser_lists_every_catalog_statistic_grouped"></a>
 
@@ -29410,7 +29426,9 @@ def test_the_chooser_marks_the_expensive_statistics_as_lengthening_runs(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-E_ST, K_ST, A_CGD, δG and I carry a run-time warning; they start hidden.
+Expensive statistics carry a run-time warning and start hidden.
+
+They are $E_{ST}$, $K_{ST}$, $A_{\mathrm{CGD}}$, $\delta_G$ and $I$.
 
 Showing one makes every new run compute them each generation
 (`Api._merge_default_run_settings`), so the chooser says so on each of
@@ -29418,7 +29436,7 @@ them, in a tooltip and in a visible line, and nowhere else.
 
 <a id="gui.test_statistics_shown_screen.test_the_nei_distances_preset_applies_to_the_panel_at_once"></a>
 
-#### [test\_the\_nei\_distances\_preset\_applies\_to\_the\_panel\_at\_once](./gui/test_statistics_shown_screen.py#L120)
+#### [test\_the\_nei\_distances\_preset\_applies\_to\_the\_panel\_at\_once](./gui/test_statistics_shown_screen.py#L122)
 
 ```python
 def test_the_nei_distances_preset_applies_to_the_panel_at_once(
@@ -29429,7 +29447,7 @@ The preset shows Nei's pooled-rule distances and hides the rest.
 
 <a id="gui.test_statistics_shown_screen.test_the_filter_narrows_the_list_to_matching_statistics"></a>
 
-#### [test\_the\_filter\_narrows\_the\_list\_to\_matching\_statistics](./gui/test_statistics_shown_screen.py#L143)
+#### [test\_the\_filter\_narrows\_the\_list\_to\_matching\_statistics](./gui/test_statistics_shown_screen.py#L145)
 
 ```python
 def test_the_filter_narrows_the_list_to_matching_statistics(
@@ -29440,7 +29458,7 @@ Typing "Jost" leaves only entries whose text mentions it visible.
 
 <a id="gui.test_statistics_shown_screen.test_pair_rows_follow_the_deme_pair_chosen_for_the_scatter"></a>
 
-#### [test\_pair\_rows\_follow\_the\_deme\_pair\_chosen\_for\_the\_scatter](./gui/test_statistics_shown_screen.py#L172)
+#### [test\_pair\_rows\_follow\_the\_deme\_pair\_chosen\_for\_the\_scatter](./gui/test_statistics_shown_screen.py#L174)
 
 ```python
 def test_pair_rows_follow_the_deme_pair_chosen_for_the_scatter(
@@ -30152,7 +30170,7 @@ Bold, dimming and a color swatch already say whether a statistic is plotted.
 A fourth cue says which statistics the convergence rule watches: an
 underline on the row's name, with an explanation on the name cell for
 hover and for assistive technology. It shows during the run and after it,
-for every statistic in `convergence_statistic` (by default `D` and `G_ST`)
+for every statistic in `convergence_statistic` (by default $D$ and $G_{ST}$)
 and for no other.
 
 <a id="gui.test_watched_statistics_screen.test_the_watched_statistics_are_underlined_during_a_run"></a>
@@ -30189,10 +30207,10 @@ def test_a_batch_marks_its_own_watched_statistics_not_the_previous_runs(
 A batch underlines the statistics its stop rule watches, only those.
 
 The marks come from the run on screen. The batch's completed payload is
-captured and shown again after the marks of an earlier run (here `H_S` and
-`K_ST`, which this batch does not watch) are put back, as opening a saved
-batch after another run would do. The default batch watches `D` and
-`G_ST`.
+captured and shown again after the marks of an earlier run (here $H_S$ and
+$K_{ST}$, which this batch does not watch) are put back, as opening a saved
+batch after another run would do. The default batch watches $D$ and
+$G_{ST}$.
 
 <a id="gui.test_webui_global_scope"></a>
 
@@ -31011,7 +31029,7 @@ def test_founding_condition_gs_equals_gd_equals_one_minus_h_s_0(
         heterozygosity: float, deme_count: int) -> None
 ```
 
-`R7`'s own exit condition: `Gs(0) = Gd(0) = 1 - H_S(0)`, exactly.
+`R7`'s own exit condition: $G_s(0) = G_d(0) = 1 - H_S(0)$, exactly.
 
 `dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-5-
 gene-identity-recursion-fim-implications.md` §9, `R7` — the whole
@@ -31157,7 +31175,7 @@ def test_equilibration_outcome_history_ends_at_the_final_heterozygosity(
         rng: Callable[[int], np.random.Generator]) -> None
 ```
 
-`history`'s last entry is `final_heterozygosity`, both valid `H_S` values.
+`history`'s last entry is `final_heterozygosity`, both valid $H_S$ values.
 
 <a id="model.test_initial.test_equilibrium_split_rejects_finite_alleles_mutation_model"></a>
 
@@ -32614,10 +32632,10 @@ and keeps producing the same bare string as before this extension.
 def test_convergence_statistic_accepts_h_st() -> None
 ```
 
-`H_ST` is a real, watchable convergence statistic, not report-only.
+$H_{ST}$ is a real, watchable convergence statistic, not report-only.
 
 Regression test for `FIM-51`: `fim.engine.FinalReport`/
-`replicate_summary` already report `H_ST` alongside every other
+`replicate_summary` already report $H_{ST}$ alongside every other
 differentiation measure, but `_CONVERGENCE_STATISTICS` did not
 include it, so a run could not actually watch it for convergence —
 the one statistic reportable but not watchable, with no principled
@@ -32632,7 +32650,7 @@ def test_convergence_statistic_accepts_the_expensive_bonus_measurements(
 ) -> None
 ```
 
-`A_CGD`/`Delta`/`MI` are watchable, exactly like `E_ST`/`K_ST`.
+`A_CGD`/`Delta`/`MI` are watchable, exactly like $E_{ST}$ / $K_{ST}$.
 
 They joined `_CONVERGENCE_STATISTICS` on a real, reported request,
 reversing this same session's own earlier choice to exclude them as
@@ -34128,7 +34146,7 @@ Unknown retention, a stride below 1 and a bad start are rejected by name.
 def test_a_configuration_watches_d_and_g_st_by_default() -> None
 ```
 
-The default watched set is `D` and `G_ST`, stopping when both have settled.
+The default watched set is $D$ and $G_{ST}$, stopping when both have settled.
 
 <a id="model.test_run_identity"></a>
 
@@ -35432,7 +35450,7 @@ def test_locus_statistics_match_statistics_report_bit_for_bit(
         demes: int, alleles: int) -> None
 ```
 
-`H_S`, `H_T`, `H_ST`, `G_ST` and `D` equal `statistics_report`'s bits.
+$H_S$, $H_T$, $H_{ST}$, $G_{ST}$ and $D$ equal `statistics_report`'s bits.
 
 Seeded states with 1 to 200 alleles, shared and private across demes.
 
@@ -35445,7 +35463,7 @@ def test_locus_statistics_report_g_st_undefined_when_every_deme_is_fixed_alike(
 ) -> (None)
 ```
 
-A monomorphic locus has no `G_ST`: the kernel returns `nan`, not an error.
+A monomorphic locus has no $G_{ST}$: the kernel returns `nan`, not an error.
 
 <a id="model.test_vector_kernels.test_locus_statistics_flag_a_frequency_row_that_is_not_normalized"></a>
 
@@ -37217,7 +37235,7 @@ def test_pairwise_f_st_matrix_matches_the_pair_function(
         tmp_path: Path) -> None
 ```
 
-The saved pairwise F_ST equals `pairwise_f_st` at one locus, pooled at two.
+Saved pairwise $F_{ST}$ equals `pairwise_f_st` at one locus, pooled at two.
 
 <a id="persistence.test_pairwise_file.test_pairwise_f_st_is_null_where_undefined"></a>
 
@@ -37227,7 +37245,7 @@ The saved pairwise F_ST equals `pairwise_f_st` at one locus, pooled at two.
 def test_pairwise_f_st_is_null_where_undefined(tmp_path: Path) -> None
 ```
 
-Two demes fixed for the same allele: F_ST undefined, saved as null.
+Two demes fixed for the same allele: $F_{ST}$ undefined, saved as null.
 
 <a id="persistence.test_read_only"></a>
 
@@ -42638,10 +42656,10 @@ def test_gs_and_gd_match_h_s_and_h_t_derived_values() -> None
 
 `R4` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
 claude-opus-5-gene-identity-recursion-fim-implications.md`'s own
-exit criterion: ``Gs = 1 - H_S``, ``Gd = (d * (1 - H_T) - (1 -
-H_S)) / (d - 1)`` (§4.4) — checked against every existing golden
-fixture already used for `h_s`/`h_t`/`g_st`/`jost_d` above, not a
-fresh set of hand-derived numbers, so this test cannot introduce
+exit criterion: $G_s = 1 - H_S$,
+$G_d = (d(1 - H_T) - (1 - H_S)) / (d - 1)$ (§4.4) — checked against every
+existing golden fixture already used for `h_s`/`h_t`/`g_st`/`jost_d` above,
+not a fresh set of hand-derived numbers, so this test cannot introduce
 its own arithmetic mistake independent of the formula it checks.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_gd_requires_multiple_demes"></a>
@@ -42654,7 +42672,7 @@ def test_gd_requires_multiple_demes() -> None
 
 `gd` needs at least two demes, the same requirement `g_st`/`h_st` share.
 
-A single deme has no "between" for `Gd` to describe, and the
+A single deme has no "between" for $G_d$ to describe, and the
 formula's own `d - 1` denominator is undefined at `d = 1`.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_gs_and_gd_match_the_standalone_functions"></a>
@@ -42692,7 +42710,7 @@ H, J, and q=0,1,2 Hill numbers follow their defining equations.
 def test_differentiation_endpoints_and_hill_partition() -> None
 ```
 
-q-family endpoints agree with D, E_ST, K_ST and H's partition.
+q-family endpoints agree with $D$, $E_{ST}$, $K_{ST}$ and H's partition.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_has_explicit_undefined_value_for_shared_fixation"></a>
 
@@ -42702,7 +42720,7 @@ q-family endpoints agree with D, E_ST, K_ST and H's partition.
 def test_g_st_has_explicit_undefined_value_for_shared_fixation() -> None
 ```
 
-G_ST is None, rather than NaN, for total heterozygosity of zero.
+$G_{ST}$ is `None`, rather than NaN, for total heterozygosity of zero.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_e_st_accepts_size_weights_but_d_is_always_equal_weighted"></a>
 
@@ -42712,7 +42730,7 @@ G_ST is None, rather than NaN, for total heterozygosity of zero.
 def test_e_st_accepts_size_weights_but_d_is_always_equal_weighted() -> None
 ```
 
-Only E_ST accepts optional relative deme-size weights.
+Only $E_{ST}$ accepts optional relative deme-size weights.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_malformed_frequency_tables_and_weights_are_rejected"></a>
 
@@ -42735,13 +42753,13 @@ def test_statistics_report_matches_every_independently_validated_function(
 
 The single-validation fast path agrees with each public function.
 
-`statistics_report` no longer computes `H_S`/`H_T`/`G_ST`/`D`/
-`E_ST`/`K_ST` by calling the public `h_s`/`h_t`/`g_st`/`jost_d`/
+`statistics_report` no longer computes $H_S$ / $H_T$ / $G_{ST}$ / $D$/
+$E_{ST}$ / $K_{ST}$ by calling the public `h_s`/`h_t`/`g_st`/`jost_d`/
 `e_st`/`k_st` functions (`20260903-claude-sonnet-5-fim-vg-
 performance-campaign-design.md` §6.1 item 3) — each of those,
 called directly here instead, independently re-validates the
 same table from scratch and (for `g_st`/`jost_d`) recomputes
-`H_S`/`H_T` from scratch too, so agreement here is a genuine
+$H_S$ / $H_T$ from scratch too, so agreement here is a genuine
 cross-check of the refactored fast path's own math, not
 circular. `test_golden_statistics`, above, already proves this
 for seven hand-picked fixtures; this proves it for tables that
@@ -42776,7 +42794,7 @@ def test_statistics_report_statistics_parameter_skips_unrequested_fields(
 ) -> None
 ```
 
-`statistics` skips computing `E_ST`/`K_ST`/`Gs`/`Gd` when excluded.
+`statistics` skips $E_{ST}$ / $K_{ST}$ / $G_s$ / $G_d$ when excluded.
 
 `FIM-24`/`FIM-32` (Phase 7 item 4,
 `20260904-claude-sonnet-5-fim-engine-review-remediations.md`):
@@ -42798,9 +42816,9 @@ def test_statistics_report_statistics_parameter_never_changes_computed_fields(
 
 Every field the `statistics` filter *keeps* matches the full report.
 
-Bit-for-bit, not `assertAlmostEqual`: `H_S`/`H_T`/`H_ST`/`G_ST`/
-`D` are computed by the exact same code path regardless of
-`statistics`, so excluding `E_ST`/`K_ST`/`Gs`/`Gd` must change
+Bit-for-bit, not `assertAlmostEqual`: $H_S$ / $H_T$ / $H_{ST}$ / $G_{ST}$/
+$D$ are computed by the exact same code path regardless of
+`statistics`, so excluding $E_{ST}$ / $K_{ST}$ / $G_s$ / $G_d$ must change
 nothing about them.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_differentiation_statistics_are_bounded"></a>
@@ -42933,11 +42951,11 @@ not the false one.
 def test_h_st_raises_a_named_error_instead_of_zero_division() -> None
 ```
 
-A zero H_ST denominator raises a specific, documented error.
+A zero $H_{ST}$ denominator raises a specific, documented error.
 
 Regression test for FIM-18: `h_st`'s own ``(total - within) /
 (1.0 - within)`` used to raise Python's own generic
-`ZeroDivisionError` when `within` (`H_S`) reached exactly `1.0`
+`ZeroDivisionError` when `within` ($H_S$) reached exactly `1.0`
 — confirmed "practically unreachable" through any finite,
 validated `FrequencyTable` (this function's own docstring names
 the exact mechanism), but reachable directly by calling the
@@ -42956,7 +42974,7 @@ def test_g_st_max_matches_ryman_leimar_equation_7() -> None
 
 `R6` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
 claude-opus-5-gene-identity-recursion-fim-implications.md`.
-`H_S -> 0` reaching the ceiling `1` exactly (nothing standing in
+$H_S \to 0$ reaching the ceiling `1` exactly (nothing standing in
 the way of complete differentiation when there is no within-deme
 diversity at all) is the sharpest boundary case available.
 
@@ -42968,11 +42986,11 @@ diversity at all) is the sharpest boundary case available.
 def test_g_st_prime_matches_ryman_leimar_equation_8() -> None
 ```
 
-`g_st_prime` is exactly `g_st_value / g_st_max`, including at `H_S = 0`.
+`g_st_prime` is exactly `g_st_value / g_st_max`, including at $H_S = 0$.
 
-At `H_S = 0`, `g_st_max` is exactly `1`, so `g_st_prime` must
-equal its own input `G_ST` unchanged — standardizing changes
-nothing when there is no within-deme diversity for `G_ST` to be
+At $H_S = 0$, `g_st_max` is exactly `1`, so `g_st_prime` must
+equal its own input $G_{ST}$ unchanged — standardizing changes
+nothing when there is no within-deme diversity for $G_{ST}$ to be
 standardized against in the first place.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_prime_manufactures_a_larger_apparent_difference_than_g_st"></a>
@@ -42986,13 +43004,13 @@ def test_g_st_prime_manufactures_a_larger_apparent_difference_than_g_st(
 
 Reproduces Ryman & Leimar's own Figure 2 finding, qualitatively.
 
-`N=1000, s=10, m=0.0005`: `G_ST` barely moves across mutation
-rates (`0.31` at `H_S=0.0003` versus `0.27` at `H_S=0.273` — the
+`N=1000, s=10, m=0.0005`: $G_{ST}$ barely moves across mutation
+rates (`0.31` at $H_S = 0.0003$ versus `0.27` at $H_S = 0.273$ — the
 paper's own printed numbers, §6.4 of `dev/doc/apps/selby/jost-
 finite-island-model/20260903-claude-opus-5-ryman-leimar-gene-
 identity-recursions.md`) while `H_S` itself moves enormously.
-`G'_ST` is not one of the paper's own printed numbers here (only
-`G_ST`/`H_S` are), so this checks the *qualitative* claim the
+$G^\prime_{ST}$ is not one of the paper's own printed numbers here (only
+$G_{ST}$ / $H_S$ are), so this checks the *qualitative* claim the
 paper actually makes — standardizing manufactures a
 proportionally larger apparent gap than the raw statistic shows
 — rather than a specific value neither this document nor the
@@ -43026,7 +43044,7 @@ def test_g_st_prime_rejects_a_non_finite_g_st_value() -> None
 def test_mutation_negligible_transition_matches_its_own_formula() -> None
 ```
 
-`mutation_negligible_transition` is `0.2 * H_S(0) / (2u)`, exactly.
+`mutation_negligible_transition` is $0.2 H_S(0) / (2u)$, exactly.
 
 `R6`'s own Equation 9, at the paper's own published one-fifth
 calibration. `mu=0.0` (no mutation at all) is negligible at any
@@ -43108,11 +43126,11 @@ def test_two_deme_two_allele_special_case_matches_the_guide() -> None
 Part VII's "two demes, two alleles" table, by hand from the guide.
 
 `doc/jost-differentiation-measures.md` Part VII walks through this
-exact four-row table as the one regime where G_ST and D "largely
+exact four-row table as the one regime where $G_{ST}$ and $D$ "largely
 evaporate" into agreement; unlike Part IV's own worked examples
 (`test_golden_statistics`, above), no existing fixture covers it.
-The G_ST/D values below are the guide's own printed numbers; E_ST
-and K_ST are not printed there but are asserted anyway since they
+The $G_{ST}$ / $D$ values below are the guide's own printed numbers; $E_{ST}$
+and $K_{ST}$ are not printed there but are asserted anyway since they
 are cheap to also pin down exactly at this small a table.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_d_m_matches_its_defining_algebra_and_is_never_negative"></a>
@@ -43123,15 +43141,15 @@ are cheap to also pin down exactly at this small a table.
 def test_d_m_matches_its_defining_algebra_and_is_never_negative() -> None
 ```
 
-Nei's D_m (Eq. 10) equals d/(d-1) * (H_T - H_S) and stays >= 0.
+Nei's $D_m$ (Eq. 10) equals $d/(d-1) (H_T - H_S)$ and stays $\ge 0$.
 
-Unlike every other between-deme measure in this module, `D_m` is
+Unlike every other between-deme measure in this module, $D_m$ is
 not rescaled to `[0, 1]` (see its own docstring) — but the first
-table below (both demes fixed for different alleles, `H_S = 0`,
-`H_T = 0.5`) still lands on exactly `1.0`: `d_m`'s own docstring
-explains why `H_S = 0` caps `H_T` at `(d-1)/d`, making `D_m`
+table below (both demes fixed for different alleles, $H_S = 0$,
+$H_T = 0.5$) still lands on exactly `1.0`: `d_m`'s own docstring
+explains why $H_S = 0$ caps $H_T$ at `(d-1)/d`, making $D_m$
 reach exactly `1` there for any `d`, not the looser `d/(d-1)`
-ceiling `H_T <= 1` alone would suggest.
+ceiling $H_T \le 1$ alone would suggest.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_r_st_is_d_m_over_h_s_and_none_at_zero_within_deme_diversity"></a>
 
@@ -43141,7 +43159,7 @@ ceiling `H_T <= 1` alone would suggest.
 def test_r_st_is_d_m_over_h_s_and_none_at_zero_within_deme_diversity() -> None
 ```
 
-Nei's R_ST (Eq. 11) is D_m/H_S, undefined when H_S is zero.
+Nei's $R_{ST}$ (Eq. 11) is $D_m / H_S$, undefined when $H_S$ is zero.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_allelic_distance_counts_alleles_present_in_exactly_one_deme"></a>
 
@@ -43199,7 +43217,7 @@ cost in the first place.
 def test_mutual_information_is_entropy_gain_from_deme_membership() -> None
 ```
 
-Sherwin's MI equals H_T minus the weighted mean within entropy.
+Sherwin's MI equals $H_T$ minus the weighted mean within entropy.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_log_matches_a_hand_worked_value"></a>
 
@@ -43209,9 +43227,9 @@ Sherwin's MI equals H_T minus the weighted mean within entropy.
 def test_g_st_log_matches_a_hand_worked_value() -> None
 ```
 
-The log-based large-differentiation G_ST estimator, by hand.
+The log-based large-differentiation $G_{ST}$ estimator, by hand.
 
-Design-doc worked case: `H_S = 0.18`, `H_T = 0.5`, so
+Design-doc worked case: $H_S = 0.18$, $H_T = 0.5$, so
 `J_S = 0.82`, `J_T = 0.5`, giving
 `ln(0.82/0.5) / -ln(0.5) ~= 0.713696` — larger than the ordinary
 linear `g_st` (`0.64`) at this same table, as Nei's own paper
@@ -43226,9 +43244,9 @@ endpoint.
 def test_g_st_log_agrees_with_g_st_at_the_complete_fixation_endpoint() -> None
 ```
 
-Both G_ST estimators equal exactly 1 when demes fix apart.
+Both $G_{ST}$ estimators equal exactly 1 when demes fix apart.
 
-The one case where the two necessarily agree — `H_S = 0` (no
+The one case where the two necessarily agree — $H_S = 0$ (no
 diversity within either deme) and each deme fixed for a
 different allele — checked exactly, not approximately, since
 both forms reduce to closed integers here.
@@ -43373,10 +43391,10 @@ attributes a harmless reformat cannot break.
 def test_goudet_weir_claim_1_overall_f_st_vs_g_st() -> None
 ```
 
-Claim 1: Biallelic random-mating equal-weight F_ST matches G_ST.
+Claim 1: Biallelic random-mating equal-weight $F_{ST}$ matches $G_{ST}$.
 
-In the random-mating, equal-deme-weight formulation, overall F_ST
-evaluated relative to total identity Q_T = 1 - H_T equals G_ST
+In the random-mating, equal-deme-weight formulation, overall $F_{ST}$
+evaluated relative to total identity $Q_T = 1 - H_T$ equals $G_{ST}$
 to floating-point tolerance (diff < 1e-15).
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_5_thought_experiment_limits"></a>
@@ -43387,47 +43405,52 @@ to floating-point tolerance (diff < 1e-15).
 def test_goudet_weir_claim_5_thought_experiment_limits() -> None
 ```
 
-Claim 5: Thought experiment limits (F_ST^i->1, F_ST^{1,2}->-1, others->0).
+Claim 5: Thought experiment limits.
+
+The limits are $F_{ST}^i \to 1$, $F_{ST}^{1,2} \to -1$, and $\to 0$ for
+the others.
 
 Thought experiment from Goudet & Weir (2023, p. 18):
 - Populations 1 and 2 are fixed for opposite homozygotes (0 and 1).
 - Populations 3..d maintain allele frequency 0.5 at each locus.
 As d -> inf:
-- Population-specific F_ST for pop 1 and pop 2 is 1.0.
-- Population-pair F_ST between pop 1 and pop 2 tends to -1.0.
-- Every other off-diagonal population-pair F_ST tends to 0.0.
+- Population-specific $F_{ST}$ for pop 1 and pop 2 is 1.0.
+- Population-pair $F_{ST}$ between pop 1 and pop 2 tends to -1.0.
+- Every other off-diagonal population-pair $F_{ST}$ tends to 0.0.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_6_pairwise_vs_population_pair_disagreement"></a>
 
-#### [test\_goudet\_weir\_claim\_6\_pairwise\_vs\_population\_pair\_disagreement](./statistics/test_differentiation.py#L1131)
+#### [test\_goudet\_weir\_claim\_6\_pairwise\_vs\_population\_pair\_disagreement](./statistics/test_differentiation.py#L1134)
 
 ```python
 def test_goudet_weir_claim_6_pairwise_vs_population_pair_disagreement(
 ) -> None
 ```
 
-Claim 6: Population-pair F_ST and classical pairwise F_ST disagree in sign.
+Claim 6: Population-pair and classical pairwise $F_{ST}$ disagree in sign.
 
 On the two divergent populations (0 and 1) embedded in the thought experiment,
-classical pairwise F_ST (Eq. 10) is +1.0, whereas population-pair F_ST (Eq. 9)
-is negative (approaching -1.0 as d grows).
+classical pairwise $F_{ST}$ (Eq. 10) is +1.0, whereas population-pair
+$F_{ST}$ (Eq. 9) is negative (approaching -1.0 as d grows).
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_7_zero_sum_invariant"></a>
 
-#### [test\_goudet\_weir\_claim\_7\_zero\_sum\_invariant](./statistics/test_differentiation.py#L1159)
+#### [test\_goudet\_weir\_claim\_7\_zero\_sum\_invariant](./statistics/test_differentiation.py#L1162)
 
 ```python
 def test_goudet_weir_claim_7_zero_sum_invariant() -> None
 ```
 
-Claim 7: Off-diagonal elements of F_ST matrix sum to zero by construction.
+Claim 7: Off-diagonal elements of the $F_{ST}$ matrix sum to zero.
+
+The zero sum holds by construction.
 
 For any frequency table, sum_{i != j} F_ST[i][j] == 0.0 to floating-point
 precision.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_aoki_2023_claim_1_unbiased_heterozygosity"></a>
 
-#### [test\_aoki\_2023\_claim\_1\_unbiased\_heterozygosity](./statistics/test_differentiation.py#L1194)
+#### [test\_aoki\_2023\_claim\_1\_unbiased\_heterozygosity](./statistics/test_differentiation.py#L1199)
 
 ```python
 def test_aoki_2023_claim_1_unbiased_heterozygosity() -> None
@@ -43439,7 +43462,7 @@ Claim 1: Nei (1977) finite-sample bias correction Eq. 2.
 
 <a id="statistics.test_differentiation.DerivedDifferentiationTests"></a>
 
-## [DerivedDifferentiationTests Objects](./statistics/test_differentiation.py#L1233)
+## [DerivedDifferentiationTests Objects](./statistics/test_differentiation.py#L1238)
 
 ```python
 class DerivedDifferentiationTests(unittest.TestCase)
@@ -43449,23 +43472,28 @@ class DerivedDifferentiationTests(unittest.TestCase)
 
 <a id="statistics.test_differentiation.DerivedDifferentiationTests.test_matches_each_table_based_function"></a>
 
-#### [test\_matches\_each\_table\_based\_function](./statistics/test_differentiation.py#L1236)
+#### [test\_matches\_each\_table\_based\_function](./statistics/test_differentiation.py#L1241)
 
 ```python
 def test_matches_each_table_based_function() -> None
 ```
 
-D_m, R_ST, both G'_ST and coancestry F_ST, for a three-deme table.
+Match each table function for a three-deme table.
+
+The statistics are $D_m$, $R_{ST}$, both $G^\prime_{ST}$ and coancestry
+$F_{ST}$.
 
 <a id="statistics.test_differentiation.DerivedDifferentiationTests.test_undefined_cases_are_none"></a>
 
-#### [test\_undefined\_cases\_are\_none](./statistics/test_differentiation.py#L1255)
+#### [test\_undefined\_cases\_are\_none](./statistics/test_differentiation.py#L1264)
 
 ```python
 def test_undefined_cases_are_none() -> None
 ```
 
-Fixed everywhere: R_ST, both G'_ST and F_ST undefined; D_m is 0.
+Fixed everywhere: $R_{ST}$, $G^\prime_{ST}$ and $F_{ST}$ are undefined.
+
+$D_m$ is 0.
 
 <a id="statistics.test_genetic_distance"></a>
 
@@ -43803,7 +43831,7 @@ def test_equilibrium_d_agrees_with_the_published_approximation(
         size: int, m: float, mu: float, d: int) -> None
 ```
 
-The exact fixed-point `D` is within 15% of `equilibrium_d`.
+The exact fixed-point $D$ is within 15% of `equilibrium_d`.
 
 <a id="statistics.test_identity_recursion.test_identical_founding_demes_start_with_no_differentiation"></a>
 
@@ -43813,7 +43841,7 @@ The exact fixed-point `D` is within 15% of `equilibrium_d`.
 def test_identical_founding_demes_start_with_no_differentiation() -> None
 ```
 
-`within == between == 1` is `D = G_ST = 0` at generation zero.
+`within == between == 1` is $D = G_{ST} = 0$ at generation zero.
 
 <a id="statistics.test_identity_recursion.test_statistics_match_the_frequency_table_definitions"></a>
 
@@ -43833,7 +43861,7 @@ def test_statistics_match_the_frequency_table_definitions() -> None
 def test_heterozygosities_round_trip_through_identities() -> None
 ```
 
-`identities_from_heterozygosities` inverts `H_S`/`H_T`.
+`identities_from_heterozygosities` inverts $H_S$ / $H_T$.
 
 <a id="statistics.test_identity_recursion.test_no_diversity_gives_zero_rather_than_nan"></a>
 
@@ -44263,7 +44291,7 @@ def test_heterozygosity_partition_and_ceiling(
         table: list[dict[int, float]]) -> None
 ```
 
-H_T, H_S, H_ST, and G_ST obey the Part V identities.
+$H_T$, $H_S$, $H_{ST}$, and $G_{ST}$ obey the Part V identities.
 
 <a id="statistics.test_properties.test_all_differentiation_measures_are_bounded"></a>
 
@@ -44363,7 +44391,7 @@ def test_equilibrium_d_and_g_st_are_non_increasing_in_migration(
         d: int, mu: float, m_values: list[float]) -> None
 ```
 
-More migration never raises equilibrium D or G_ST (fixed mu, d).
+More migration never raises equilibrium $D$ or $G_{ST}$ (fixed mu, d).
 
 Direct, exact-algebra check of Part VI's own "Equilibrium D" and
 "Equilibrium GST" sections: both closed forms are monotonic
@@ -44398,14 +44426,14 @@ def test_equilibrium_d_and_g_st_move_opposite_ways_in_mutation(
         d: int, m: float, mu_values: list[float]) -> None
 ```
 
-D rises and G_ST falls together as mutation rate rises (fixed m, d).
+$D$ rises and $G_{ST}$ falls together as mutation rate rises (fixed m, d).
 
 Part VI's own headline point ("Why this kills the standard
-inference"): allelic differentiation (`D`) and nearness-to-fixation
-(`G_ST`) respond to mutation rate in *opposite* directions — more
-mutation drives more allelic differentiation between demes (`D`
+inference"): allelic differentiation ($D$) and nearness-to-fixation
+($G_{ST}$) respond to mutation rate in *opposite* directions — more
+mutation drives more allelic differentiation between demes ($D$
 rises toward 1) even as it moves every deme further from fixation
-(`G_ST` falls). This test is the executable version of that
+($G_{ST}$ falls). This test is the executable version of that
 section's own prose, not a restatement of it.
 
 <a id="statistics.test_properties.test_aoki_2023_claim_4_g_st_monotonicity_in_migration"></a>
@@ -44428,9 +44456,9 @@ def test_aoki_2023_claim_4_g_st_monotonicity_in_migration(
         m_values: list[float]) -> None
 ```
 
-G_ST monotonically decreases with increasing migration rate.
+$G_{ST}$ monotonically decreases with increasing migration rate.
 
-Aoki et al. (2023) §5.3 Claim 4: G_ST responds in a strictly downward
+Aoki et al. (2023) §5.3 Claim 4: $G_{ST}$ responds in a strictly downward
 direction to higher gene flow (m). Tested as a pure property test across
 arbitrary population sizes, deme counts, and mutation rates against
 equilibrium_g_st.
@@ -44459,7 +44487,7 @@ Tests for deterministic generated API documentation.
 
 <a id="validation.test_api_docs.test_generator_documents_every_source_module"></a>
 
-#### [test\_generator\_documents\_every\_source\_module](./validation/test_api_docs.py#L48)
+#### [test\_generator\_documents\_every\_source\_module](./validation/test_api_docs.py#L51)
 
 ```python
 def test_generator_documents_every_source_module(tmp_path: Path) -> None
@@ -44469,7 +44497,7 @@ Every committed Python module receives an API section.
 
 <a id="validation.test_api_docs.test_gui_settings_results_do_not_parse_json_as_return_fields"></a>
 
-#### [test\_gui\_settings\_results\_do\_not\_parse\_json\_as\_return\_fields](./validation/test_api_docs.py#L69)
+#### [test\_gui\_settings\_results\_do\_not\_parse\_json\_as\_return\_fields](./validation/test_api_docs.py#L72)
 
 ```python
 def test_gui_settings_results_do_not_parse_json_as_return_fields(
@@ -44478,9 +44506,19 @@ def test_gui_settings_results_do_not_parse_json_as_return_fields(
 
 Dictionary examples in bridge returns stay readable in generated Markdown.
 
+<a id="validation.test_api_docs.test_generator_preserves_tex_equations"></a>
+
+#### [test\_generator\_preserves\_tex\_equations](./validation/test_api_docs.py#L102)
+
+```python
+def test_generator_preserves_tex_equations(tmp_path: Path) -> None
+```
+
+Equations remain math fences, not code blocks, in the generated reference.
+
 <a id="validation.test_api_docs.test_generator_runs_without_an_activated_virtualenv"></a>
 
-#### [test\_generator\_runs\_without\_an\_activated\_virtualenv](./validation/test_api_docs.py#L99)
+#### [test\_generator\_runs\_without\_an\_activated\_virtualenv](./validation/test_api_docs.py#L139)
 
 ```python
 def test_generator_runs_without_an_activated_virtualenv(
@@ -44769,7 +44807,7 @@ The Chao-Shannon scenario's own (differently-shaped) evidence is retained.
 
 The `chao_shannon_equilibrium` counterpart to the test above: three
 named statistics (`total_entropy`/`subpopulation_entropy`/
-`shannon_differentiation`), not the two (`G_ST`/`D`) every other
+`shannon_differentiation`), not the two ($G_{ST}$ / $D$) every other
 scenario shares -- see `dev/bin/calibrate-statistical-bands`'s own
 `_characterize_chao_shannon_equilibrium` docstring for why this one
 scenario's evidence uses its own schema instead of being folded into
@@ -44950,7 +44988,7 @@ with the observed count: `convergence-rule-calibration-evidence.json`
 (`dev/bin/calibrate-convergence-defaults`).
 
 The same evidence file records how fast the allele-spectrum statistics settle
-next to `D`, which keeps `spectrum_burn_in_multiplier` at 1, and the
+next to $D$, which keeps `spectrum_burn_in_multiplier` at 1, and the
 Dear-Nolan low scenario, whose seeded run is the committed example report.
 
 <a id="validation.test_convergence_rule_calibration.DEAR_NOLAN_LOW_REPORT"></a>
@@ -45039,10 +45077,10 @@ The evidence file states the bound the tests use and every count obeys it.
 def test_spectrum_statistics_settle_with_the_identity_statistics() -> None
 ```
 
-The allele-spectrum statistics need no longer burn-in than `D`.
+The allele-spectrum statistics need no longer burn-in than $D$.
 
 The default `spectrum_burn_in_multiplier` is 1 because, in each measured
-regime, every allele-spectrum statistic settles within the burn-in `D`
+regime, every allele-spectrum statistic settles within the burn-in $D$
 needs (and far inside the five relaxation times the burn-in never drops
 below).
 
@@ -45179,12 +45217,12 @@ Founders approach both published high-migration differentiation values.
 This functional test uses the example's ordinary two-allele founder
 initialization, not the internal identity recursion or a prepared
 equilibrium. The predetermined published-value bounds are inherited
-from the earlier validation: |G_ST - 0.02| <= 0.005 and
-0.89 <= D <= 0.92. They are not the stationarity calibration bands.
+from the earlier validation: $|G_{ST} - 0.02| \le 0.005$ and
+$0.89 \le D \le 0.92$. They are not the stationarity calibration bands.
 
 A fixed seed and 5000-generation horizon make the outcome repeatable.
 Both final values and the last 500 generations' means must satisfy
-the bounds, so a matching G_ST alone or a premature stop cannot pass.
+the bounds, so a matching $G_{ST}$ alone or a premature stop cannot pass.
 Runtime is characterized, never asserted against a wall-clock budget.
 
 <a id="validation.test_doc_links"></a>
@@ -45395,7 +45433,7 @@ The Part IV "dynamic example" bottleneck scenario, both endpoints.
 individuals each (20,000 gene copies) with `mu = 0.001` and zero
 migration. The guide's own equilibrium numbers: `D -> 1.00 "exactly"`
 (quoting Part VI's own worked sanity check, "with no migration
-(m = 0), D = 1") and `G_ST -> 1/41.4 ~= 0.0242`.
+(m = 0), D = 1") and $G_{ST} \to 1/41.4 \approx 0.0242$.
 
 <a id="validation.test_equilibrium.test_gene_copy_convention_uses_two_n_not_four_n"></a>
 
@@ -45616,7 +45654,7 @@ def test_equilibrium_shannon_differentiation_is_bounded(
         population_size: int, m: float, mu: float, d: int) -> None
 ```
 
-Shannon differentiation stays in `[0, 1]`, the same range `D`/`G_ST` share.
+Shannon differentiation stays in `[0, 1]`, the same range $D$ / $G_{ST}$ share.
 
 Chao et al. (2015) state this directly: zero when every
 subpopulation is identical to the whole, one when subpopulations
@@ -45660,7 +45698,7 @@ More mutation drives more equilibrium Shannon differentiation.
 Part VI's own "Why this kills the standard inference" pattern
 (`equilibrium_d`'s own docstring), extended to the Shannon-entropy
 family: Fig. 1/Fig. 2 of Chao et al. (2015) show Shannon
-differentiation and Jost's `D` "always exhibit consistent
+differentiation and Jost's $D$ "always exhibit consistent
 patterns" -- both increasing in `mu`, both decreasing in `m` (the
 next test, below) -- stated in the paper as a qualitative figure,
 checked here as an executable property instead.
@@ -45715,7 +45753,7 @@ is a digest of the configuration (`fim.model.params`), and the two
 configurations legitimately differ in `engine_backend`. A batch `summary.json`
 holds no run ID and is compared whole.
 
-Archived evidence-window and Shannon-entropy (`E_ST`, `MI`) floats allow
+Archived evidence-window and Shannon-entropy ($E_{ST}$, `MI`) floats allow
 numerical rounding (relative `1e-12`, absolute `1e-14`): FFT/BLAS reductions
 and the system logarithm need not round identically across platforms, even
 for identical histories. Structure, discrete values, and every other report
@@ -45802,7 +45840,7 @@ Rerunning the example on `lineal` gives the committed reports exactly.
 The same configuration with only `engine_backend` changed to `lineal`
 (the reference implementation) must give the same reports, summary, and
 kept replicates, allowing only archive-platform rounding in
-`window_statistics`, `E_ST`, and `MI`.
+`window_statistics`, $E_{ST}$, and `MI`.
 
 <a id="validation.test_git_hooks"></a>
 
@@ -46228,7 +46266,7 @@ The closed-form expected trajectory tracks the real engine, generation by genera
 `test/statistics/test_identity_recursion.py` proves the closed form equals
 the identity recursion it solves. This proves the recursion is the engine's:
 the mean of seeded engine runs must sit on the closed-form curve at every
-checkpoint, starting each run's curve from that run's own first `H_S`/`H_T`
+checkpoint, starting each run's curve from that run's own first $H_S$ / $H_T$
 exactly as the Run card does.
 
 The band is measured, not assumed: at each checkpoint the paired difference
@@ -46261,7 +46299,7 @@ def test_engine_mean_sits_on_the_closed_form_curve(
 ) -> None
 ```
 
-Mean simulated `D`/`G_ST` matches the closed form at five checkpoints.
+Mean simulated $D$ / $G_{ST}$ matches the closed form at five checkpoints.
 
 <a id="validation.test_identity_recursion_trajectory.hub_histories"></a>
 
@@ -46405,13 +46443,20 @@ Seeded validation of the textbook Wright-Fisher mutation step.
 `fim.model.operators.step` runs migrate, drift, mutate: the new
 generation's `N` gene copies are drawn from the post-migration pool and
 each copy then mutates on its own with probability `mu`. For two gene
-copies drawn with replacement from one deme (`within`, `sum_k x_k^2`) and
+copies drawn with replacement from one deme (`within`, $\sum_k x_k^2$) and
 one copy from each of two demes (`between`), the textbook recursions are
 
-    within'  = 1/N + (1 - 1/N) (1 - mu)^2 within_migrated
-    between' = (1 - mu)^2 between_migrated
+```math
+\begin{array}{rl}
+\mathrm{within}^\prime
+    &= \frac{1}{N} + \left(1 - \frac{1}{N}\right)(1 - \mu)^2
+        \mathrm{within}_{\mathrm{migrated}}, \\
+\mathrm{between}^\prime
+    &= (1 - \mu)^2 \mathrm{between}_{\mathrm{migrated}}.
+\end{array}
+```
 
-(infinite alleles), or the same with `(1 - mu)^2` replaced by the
+(infinite alleles), or the same with $(1 - \mu)^2$ replaced by the
 symmetric K-allele pair factors (finite alleles). These tests simulate
 the real operators and compare:
 
@@ -46423,32 +46468,45 @@ the real operators and compare:
   `panmictic_equilibration` and `identity_recursion` produce.
 
 Each panmictic check also asserts that the earlier, non-textbook
-recursion (`J' = 1/N + (1 - 1/N)[((1 - mu)^2 + mu(1 - mu)/N) J + mu/N]`,
-the proportional-mass mutation step this project used to run) is
-excluded, so a regression back to it would fail here.
+recursion,
+
+```math
+J^\prime = \frac{1}{N} + \left(1 - \frac{1}{N}\right)
+    \left[\left((1 - \mu)^2 + \frac{\mu(1 - \mu)}{N}\right)J
+        + \frac{\mu}{N}\right],
+```
+
+the proportional-mass mutation step this project used to run, is excluded,
+so a regression back to it would fail here.
 
 Every test is seeded, so its result is a pure function of the commit.
-Parameters are small (`N = 20`) on purpose: the gap between the textbook
-and the earlier recursion is `O(mu / (1 + 2 N mu))`, largest at small `N`.
+Parameters are small, $N = 20$, on purpose: the gap between the textbook
+and the earlier recursion is $O(\mu / (1 + 2N\mu))$, largest at small $N$.
 
 <a id="validation.test_mutation_textbook.test_panmictic_long_run_identity_matches_the_textbook_recursion"></a>
 
-#### [test\_panmictic\_long\_run\_identity\_matches\_the\_textbook\_recursion](./validation/test_mutation_textbook.py#L213)
+#### [test\_panmictic\_long\_run\_identity\_matches\_the\_textbook\_recursion](./validation/test_mutation_textbook.py#L235)
 
 ```python
 def test_panmictic_long_run_identity_matches_the_textbook_recursion(
         rng: Callable[[int], np.random.Generator]) -> None
 ```
 
-Infinite alleles: long-run mean `H` is `1 - F*` of the textbook recursion.
+Infinite alleles: long-run mean $H$ is $1 - F^*$ of the textbook recursion.
 
 `panmictic_equilibration` supplies the textbook prediction
-(`1 - F*`, `F* = (1/N) / (1 - (1 - 1/N)(1 - mu)^2)`); the earlier
+$1 - F^*$, where
+
+```math
+F^* = \frac{1/N}{1 - (1 - 1/N)(1 - \mu)^2}.
+```
+
+The earlier
 recursion's prediction lies outside the band.
 
 <a id="validation.test_mutation_textbook.test_panmictic_finite_alleles_identity_matches_the_k_allele_recursion"></a>
 
-#### [test\_panmictic\_finite\_alleles\_identity\_matches\_the\_k\_allele\_recursion](./validation/test_mutation_textbook.py#L239)
+#### [test\_panmictic\_finite\_alleles\_identity\_matches\_the\_k\_allele\_recursion](./validation/test_mutation_textbook.py#L267)
 
 ```python
 def test_panmictic_finite_alleles_identity_matches_the_k_allele_recursion(
@@ -46462,7 +46520,7 @@ the other three uniformly (`FiniteAlleleSpace.mutate_target`).
 
 <a id="validation.test_mutation_textbook.test_island_long_run_identities_match_the_textbook_recursion"></a>
 
-#### [test\_island\_long\_run\_identities\_match\_the\_textbook\_recursion](./validation/test_mutation_textbook.py#L265)
+#### [test\_island\_long\_run\_identities\_match\_the\_textbook\_recursion](./validation/test_mutation_textbook.py#L293)
 
 ```python
 def test_island_long_run_identities_match_the_textbook_recursion(
@@ -46477,7 +46535,7 @@ engine's own `step`.
 
 <a id="validation.test_mutation_textbook.test_closed_form_trajectories_match_the_simulated_mean"></a>
 
-#### [test\_closed\_form\_trajectories\_match\_the\_simulated\_mean](./validation/test_mutation_textbook.py#L293)
+#### [test\_closed\_form\_trajectories\_match\_the\_simulated\_mean](./validation/test_mutation_textbook.py#L321)
 
 ```python
 def test_closed_form_trajectories_match_the_simulated_mean(
@@ -47016,7 +47074,7 @@ program is :mod:`dev/bin/calibrate-statistical-bands`, and its raw output,
 seeds, and environment fingerprint are retained in
 ``test/validation/statistical-calibration-evidence.json``, not merely
 summarized here in a comment. An analytic bound was considered and is not
-currently available -- the per-replicate ``G_ST``/``D`` estimate is a
+currently available -- the per-replicate $G_{ST}$ / $D$ estimate is a
 ratio-of-means statistic sampled from a multi-generation stochastic
 recursion, and a closed-form variance would need delta-method propagation
 through that recursion's higher moments, which has not been derived. Re-run
@@ -47092,7 +47150,7 @@ engine.report_for_state`, specifically so this file's own published-
 value comparisons never depend on production's own cross-locus
 aggregation being correct. Before R3 (see
 `20260903-claude-opus-5-gene-identity-recursion-fim-implications.md`),
-production instead averaged each locus's own `D`/`G_ST` ratio — a
+production instead averaged each locus's own $D$ / $G_{ST}$ ratio — a
 different, measurably biased number (see CHANGELOG.md's own entry for
 this change) that this test would have failed against.
 
@@ -47100,8 +47158,8 @@ This test runs one short, deterministic simulation and asserts
 `report_for_state`'s own `"G_ST"`/`"D"` fields, under the
 `locus_aggregation="ratio_of_means"` default, equal `_pooled_g_st_d`'s
 own numbers for the identical final state — exactly, not approximately,
-since both now do the identical arithmetic (mean `H_S`/`H_T` across
-loci, then one `G_ST`/`D` from those pooled values). A regression in
+since both now do the identical arithmetic (mean $H_S$ / $H_T$ across
+loci, then one $G_{ST}$ / $D$ from those pooled values). A regression in
 either function's own pooling arithmetic would eventually show up as
 drift in some published-value scenario elsewhere in this file anyway,
 but only this test names the two functions and reports the failure as
@@ -47247,7 +47305,7 @@ def test_wright_takahata_finite_deme_correction_is_explicit(
         population_size: int, m: float, mu: float, d: int) -> None
 ```
 
-The finite-deme correction in equilibrium G_ST is tested directly.
+The finite-deme correction in equilibrium $G_{ST}$ is tested directly.
 
 Wright (1943) writes the model with a finite number of subgroups, and
 Takahata (1983) carries that finite-island correction into the multiallelic
@@ -47334,7 +47392,7 @@ no replicate count involved at all (unlike
 `test_crow_aoki_torus_scenario_via_engine`, this cannot flake and
 needed no calibration).
 
-This does **not** assert a match to the published `G_ST=0.172` --
+This does **not** assert a match to the published $G_{ST} = 0.172$ --
 it does not match, and forcing an assertion that it does would be
 exactly the "pick parameters until the test passes" pattern this
 project's own testing rules forbid. What the recursion actually
@@ -47342,7 +47400,7 @@ gives, at this project's already-established migration-rate
 convention (`m = M/N = 1.0/20 = 0.05`, split evenly across each
 deme's four neighbors -- the same convention already used to build
 `_crow_aoki_torus_matrix` for the calibrated engine test), is
-`G_ST ~= 0.324` -- notably *higher* than both the published value and
+$G_{ST} \approx 0.324$ -- notably *higher* than both the published value and
 `test_crow_aoki_torus_scenario_via_engine`'s own characterized
 engine mean (`0.272`), not lower, which revises rather than confirms
 that test's own attribution of the gap to a small-`N`, `O(1/N)`
@@ -47353,7 +47411,7 @@ even further from `0.172` than the finite-horizon engine mean did.
 A honest exploration (not committed as its own assertion, since it
 is not resolved) found that quadrupling the migration rate to
 `m = 0.2` (one full `M/N` fraction *per neighbor*, rather than split
-across all four) undershoots to `G_ST ~= 0.115`, and an intermediate
+across all four) undershoots to $G_{ST} \approx 0.115$, and an intermediate
 `m ~= 0.12` reproduces `0.172` almost exactly -- suggesting the real
 explanation is most likely an undocumented difference between this
 project's own migration-rate convention for the torus and whatever
@@ -47362,7 +47420,7 @@ words -- the paper states no explicit stepping-stone formula) used,
 not a bug in this recursion (independently cross-validated against
 three already-published, already-engine-validated island scenarios,
 exactly, just above) or in `test_crow_aoki_torus_scenario_via_engine`
-itself (which reproduces *this same* `G_ST ~= 0.32`-ish
+itself (which reproduces *this same* $G_{ST} \approx 0.32$-ish
 neighborhood, not the published `0.172`, when run long enough that
 its own equilibration lag genuinely shrinks).
 
@@ -47374,7 +47432,7 @@ its own equilibration lag genuinely shrinks).
 def test_crow_aoki_torus_under_the_papers_own_migration_convention() -> None
 ```
 
-R9: does the published `G_ST=0.172` discrepancy trace to a migration-
+R9: does the published $G_{ST} = 0.172$ discrepancy trace to a migration-
 convention mismatch, the same failure mode already found and fixed for
 Ryman & Leimar (2008)?
 
@@ -47382,7 +47440,7 @@ Ryman & Leimar (2008)?
 §8/§9's own proposed check: the test above computes `fim`'s own exact
 recursion under `fim`'s own migration convention (`rate` redrawn only
 from a deme's four neighbors, `_crow_aoki_torus_matrix`'s own default)
-and finds `G_ST ~= 0.324`, not the published `0.172` -- a long-standing,
+and finds $G_{ST} \approx 0.324$, not the published `0.172` -- a long-standing,
 documented, unresolved gap (`doc/fim-simulator-test-plan.md`, Appendix
 A). Part 3.3 of the implications document found and numerically
 verified the *identical* failure mode for Ryman & Leimar's own island-
@@ -47408,7 +47466,7 @@ and the assertion below pins whichever this run actually produces so a
 future change to either function is caught, not silently absorbed.
 
 **The finding is negative, and informative for exactly that reason.**
-`G_ST ~= 0.374` under this convention -- *further* from `0.172` than
+$G_{ST} \approx 0.374$ under this convention -- *further* from `0.172` than
 `fim`'s own convention's `0.324`, not closer. The "pool includes the
 home deme" mapping that resolved Ryman & Leimar's own island-model gap
 to about 0.1% (Part 3.3) does not resolve this one; it makes it worse.
@@ -47462,7 +47520,7 @@ per-copy mutation factor ``(1 - u)^2``, and what is left is float
 noise accumulated over up to 5000 generations. Before `fim` adopted
 the textbook mutation step, its own factor
 ``(1 - u)^2 + u (1 - u) / N`` left a structural residual of up to
-0.11% on `G_ST` and 0.45% on `D` here.
+0.11% on $G_{ST}$ and 0.45% on $D$ here.
 
 <a id="validation.test_simulator_equilibrium.test_ryman_leimar_equation_4_reproduces_figure_1"></a>
 
@@ -47522,7 +47580,7 @@ def test_ryman_leimar_equation_5_reproduces_the_published_g_st_trajectory(
         t: int, expected_g_st: float) -> None
 ```
 
-R2: the paper's own published mutation-free `G_ST` trajectory, their Eq. 5.
+R2: the paper's own published mutation-free $G_{ST}$ trajectory, their Eq. 5.
 
 Complete isolation (``m=0``) and no mutation (``u=0``), starting
 from ``(J0, J1) = (0, 0)`` -- an ancestral population with no
@@ -47536,7 +47594,7 @@ lets identity flow between islands, and there is none -- so this is
 exactly `_iterate_paper_identities` at those parameter values, not
 a separate closed form Part 6.5 states one for. At ``s=10``,
 ``2N=2000``, it reproduces the paper's own published landmark
-table (Part 6.5), including "at `t=100`, `G_ST` is close to 0.04
+table (Part 6.5), including "at `t=100`, $G_{ST}$ is close to 0.04
 for all mutation rates" -- the ``0.0441`` row.
 
 <a id="validation.test_simulator_equilibrium.test_stepping_stone_differentiation_is_at_least_the_island_models"></a>
@@ -47560,7 +47618,7 @@ def test_stepping_stone_differentiation_is_at_least_the_island_models(
         population_size: int, m: float, mu: float, d: int) -> None
 ```
 
-Kimura & Weiss (1964): stepping-stone G_ST/D >= the island model's.
+Kimura & Weiss (1964): stepping-stone $G_{ST}$ / $D$ >= the island model's.
 
 Cited by Whitlock & McCauley (1999, *Heredity* 82:117-125, read in
 full for the Crow & Aoki torus work): "the genetic differentiation
@@ -47585,7 +47643,7 @@ across however many neighbors a deme has.
 
 At `d=3` a ring and the island model are the *same* graph -- each
 deme's two neighbors are already the only two other demes there
-are -- so this scenario's own `G_ST`/`D` come out exactly equal, not
+are -- so this scenario's own $G_{ST}$ / $D$ come out exactly equal, not
 strictly greater; `>=`, not `>`, is the correct assertion, and this
 is why `d=3` stays in the parametrization rather than being dropped
 as a redundant case. Every scenario here was computed and checked
@@ -47706,7 +47764,7 @@ def test_identity_recursion_d_and_g_st_are_non_increasing_in_migration(
 ) -> None
 ```
 
-The exact finite-N oracle's D and G_ST never rise as migration rises.
+The exact finite-N oracle's $D$ and $G_{ST}$ never rise as migration rises.
 
 Same underlying claim as `test-manifest.yaml`'s own `M1`-`M5`
 migration panel (same `N`, `mu`, `d`, and even the same five `m`
@@ -47734,15 +47792,15 @@ def test_identity_recursion_d_and_g_st_move_opposite_ways_in_mutation(
 ) -> None
 ```
 
-The exact finite-N oracle's D rises and G_ST falls as mutation rises.
+The exact finite-N oracle's $D$ rises and $G_{ST}$ falls as mutation rises.
 
 The deterministic-oracle counterpart to the migration test above,
 for `test-manifest.yaml`'s own `MU1`-`MU5` mutation panel (same
 `N`, `m`, `d`, and the same five `mu` values) — which itself never
 asserted a direction at all, only "is finite" at each step. The
 direction actually implied by the model (Part VI's own headline
-point, "Why this kills the standard inference") is that `D` and
-`G_ST` move opposite ways as mutation rate rises, checked here
+point, "Why this kills the standard inference") is that $D$ and
+$G_{ST}$ move opposite ways as mutation rate rises, checked here
 exactly, with the same non-flaking, no-seed, no-calibration
 oracle as the migration test above.
 
@@ -47756,7 +47814,7 @@ oracle as the migration test above.
 def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None
 ```
 
-The engine's `Gs`/`Gd` trajectory tracks the recursion, not just its fixed point.
+Engine $G_s$ / $G_d$ trajectories track the recursion, not just its fixed point.
 
 `R5` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
 claude-opus-5-gene-identity-recursion-fim-implications.md` — the
@@ -47770,7 +47828,7 @@ sampling noise separates the two). Retains a real trajectory store
 for speed) and reconstructs `ModelState` at several sampled
 generations directly from its own rows (`ModelState.from_rows`,
 `fim.reanalyze.reanalyze_trajectory`'s own file-backed counterpart's
-in-memory analog), computing `Gs`/`Gd` at each via `report_for_state`
+in-memory analog), computing $G_s$ / $G_d$ at each via `report_for_state`
 — the same public API a real re-analysis would use, not an internal
 shortcut.
 
@@ -47782,7 +47840,7 @@ generations 200-300), and linear sampling of a longer run would put
 almost every point in the flat equilibrium region, reproducing
 `test_engine_reproduces_part_vi_equilibrium` at greater cost.
 `founding_condition_for_heterozygosity` (`R7`) starts every deme as
-an identical ancestral copy, so `Gs(0) = Gd(0)` exactly and the
+an identical ancestral copy, so $G_s(0) = G_d(0)$ exactly and the
 recursion's own starting point needs no separate argument about
 founding-condition mismatch — the whole reason `R7` exists.
 
@@ -47802,7 +47860,7 @@ flakiness.
 
 Configuration: `N=100, m=0.01, mu=0.005, d=4`, matching Part 4.2's
 own worked scenario; 8 loci, 30 replicates, horizon 300, ancestral
-`H_S(0)=0.4`, seed 20260905. Runtime is roughly 40 seconds. Verified
+$H_S(0) = 0.4$, seed 20260905. Runtime is roughly 40 seconds. Verified
 directly, not merely reasoned about, before being written here: all
 five sampled generations pass at this configuration.
 
@@ -47817,43 +47875,43 @@ def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect(
 ) -> None
 ```
 
-A different `H_S(0)` shifts the same demography's own mid-transition `G_ST`.
+A different $H_S(0)$ shifts the same demography's own mid-transition $G_{ST}$.
 
 `R8` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
 claude-opus-5-gene-identity-recursion-fim-implications.md` — Ryman
 & Leimar's own genuinely novel finding (Finding F, their Figure 3):
-during the transition phase, `G_ST` depends on the *ancestral*
-heterozygosity `H_S(0)` a set of demes split from, not only on `N`
+during the transition phase, $G_{ST}$ depends on the *ancestral*
+heterozygosity $H_S(0)$ a set of demes split from, not only on `N`
 and `m` — a claim with no equilibrium counterpart at all (an
 equilibrium run washes the starting point out entirely, which is
 exactly why `test_engine_reproduces_part_vi_equilibrium`, directly
 below, could never detect it either way). Identical demography
 (`N`, `m`, `mu`, `d`, horizon), several ancestral heterozygosities
 via `founding_condition_for_heterozygosity` (`R7`) — every other
-variable held fixed, only `H_S(0)` itself changes between runs.
+variable held fixed, only $H_S(0)$ itself changes between runs.
 
 A **directional (metamorphic) check**, per this document's own
 guidance, deliberately not a point-value calibration band: the same
 tactic `test_stepping_stone_differentiation_is_at_least_the_island_
 models` already uses for a different claim. Two statistics, both
 already known (from this same recursion, verified numerically
-before this test was written) to move the same direction as `H_S(0)`
+before this test was written) to move the same direction as $H_S(0)$
 increases here, at different sensitivities:
 
-- `G_ST` — the paper's own statistic — checked as an ordering of its
+- $G_{ST}$ — the paper's own statistic — checked as an ordering of its
   own point estimate (`bootstrap_replicate_summary`'s own `"mean"`)
-  across increasing `H_S(0)`, since the effect on `G_ST` itself is real
+  across increasing $H_S(0)$, since the effect on $G_{ST}$ itself is real
   but modest at a scale this test can afford to run. Modest means the
-  step from `H_S(0) = 0.5` to `0.9` is about the size of the bootstrap
+  step from $H_S(0) = 0.5$ to `0.9` is about the size of the bootstrap
   interval's own half-width, so a strict point-estimate ordering holds
   or fails with the particular random draws (it held for the
   `seed + i` replicate seeds and failed by 0.003 for the `SeedSequence`
   ones). The claim is therefore checked as it can honestly be made: the
   two extremes are ordered, and no step down exceeds the interval's own
   half-width.
-- `D` — far more sensitive to this same effect at this configuration
-  (a difference of `Gs`/`Gd` alone move `D`'s own bare ratio far
-  more than they move `G_ST`'s blended one — the identical Jensen-
+- $D$ — far more sensitive to this same effect at this configuration
+  (a difference of $G_s$ / $G_d$ alone move $D$'s own bare ratio far
+  more than they move $G_{ST}$'s blended one — the identical Jensen-
   style amplification `R3` part 3's own docstring describes, here
   working in this test's favor rather than as a bias to correct)
   — checked as non-overlapping confidence intervals, a stronger
@@ -48003,7 +48061,7 @@ seed 602000): per-replicate spread from the generated
 def test_crow_aoki_torus_scenario_via_engine() -> None
 ```
 
-The simulator reproduces Crow & Aoki (1984)'s own torus G_ST (Table 1).
+The simulator reproduces Crow & Aoki (1984)'s own torus $G_{ST}$ (Table 1).
 
 **Functional (public-API-only):** this test's own assertion compares
 the engine directly against the literal published number, with no
@@ -48015,7 +48073,7 @@ paragraph describes: there was no oracle available to lean on).
 Scenario: a 3-by-3 toroidal stepping-stone lattice (`_crow_aoki_torus_
 matrix`), ``N=20`` gene copies, ``mu=1e-5``, migration rate ``m=0.05``
 (``Nm=1.0``, matching Crow & Aoki's own ``M``) -- Crow & Aoki (1984)
-Table 1's ``n=9, N=20, M=1.0, u=10⁻⁵`` row, published ``G_ST=0.172``.
+Table 1's ``n=9, N=20, M=1.0, u=10⁻⁵`` row, published $G_{ST} = 0.172$.
 Source and citation confirmed directly against the paper's own full
 text (`pnas00620-0169.pdf`); see this project's own commits
 `d3adcf0`/`2dd1ea3` for the fuller citation history.
@@ -48041,10 +48099,10 @@ attempt at 100 loci / horizon 2000 landed systematically *high*
 (multiple single-replicate trials in the 0.20-0.36 range, none below
 0.20, against a published 0.172) -- not noise around the right
 answer, an actual convergence lag: re-running the same seed at
-horizon 4000 and then 8000 showed `G_ST` trending steadily down
+horizon 4000 and then 8000 showed $G_{ST}$ trending steadily down
 (0.361 -> 0.255 -> 0.213), confirming the scenario itself was sound
 and the horizon was simply too short. 60 loci, separately, proved too
-thin to reliably avoid all-loci global fixation (`G_ST` undefined)
+thin to reliably avoid all-loci global fixation ($G_{ST}$ undefined)
 over these horizons. 150 loci / horizon 6000 is the configuration
 that came out of this search: four independent trial seeds landed at
 0.198, 0.088, 0.318, and 0.218 (mean 0.206, straddling 0.172 from
@@ -48064,9 +48122,9 @@ from the generated `assertion_sigma_g` value in that same file, from a
 10-replicate characterization pass -- smaller than the other three
 scenarios' own 20-100-replicate passes, a direct, acknowledged
 consequence of this scenario's per-replicate cost; see the evidence
-file's own `elapsed_seconds` for the specific trade-off made. No `D`
-assertion: Crow & Aoki's Table 1 reports only `G_ST` for the
-stepping-stone model, never `D`.
+file's own `elapsed_seconds` for the specific trade-off made. No $D$
+assertion: Crow & Aoki's Table 1 reports only $G_{ST}$ for the
+stepping-stone model, never $D$.
 
 <a id="validation.test_simulator_equilibrium.test_chao_shannon_equilibrium_scenario_via_engine"></a>
 
@@ -48095,20 +48153,20 @@ state directly, in their own Discussion, that "the measure GST in
 FIM converges very quickly ... whereas the normalized mutual
 information based on Shannon entropy converges relatively slowly,"
 and a quick single-seed check across horizons 1000-8000 confirmed it
-for this exact scenario before committing to a horizon: `G_ST`-style
+for this exact scenario before committing to a horizon: $G_{ST}$-style
 convergence was already essentially flat by 1000, but the
 Shannon-based statistics were still measurably settling.
 
-Compares the engine's own simulated `H_T`/`H_S`/Shannon
+Compares the engine's own simulated $H_T$ / $H_S$/Shannon
 differentiation (`_pooled_shannon_statistics`, reading `log(within_
 hill_number(table, 1))`/`log(total_hill_number(table, 1))` off each
 replicate's final state -- already-exact quantities, not an
-approximation of Chao et al.'s own `¹H_S`/`¹H_T`) against
+approximation of Chao et al.'s own ${}^1H_S$ / ${}^1H_T$) against
 `equilibrium_shannon_entropy_total`/`_subpopulation`/
 `equilibrium_shannon_differentiation`'s own closed-form (Eq. 6/7D/10)
 predictions -- the same "real engine against closed-form theory"
 structure `test_engine_reproduces_part_vi_equilibrium` already uses
-for `G_ST`/`D`, applied here to a genuinely independent statistic
+for $G_{ST}$ / $D$, applied here to a genuinely independent statistic
 family (Shannon entropy, not heterozygosity) for the first time in
 this file.
 
@@ -48117,8 +48175,8 @@ convention ambiguity to contend with (same `N`/`m`/`mu`/`d` as the
 already-validated Part VI scenario, only the horizon differs) and no
 fixation risk (8 loci at `mu=0.005` is comfortably far from the
 torus's own `mu=1e-5` regime) -- a 10-replicate characterization pass
-landed tight and stable (`H_S`'s own empirical mean within `0.008` of
-its theoretical prediction; `H_T` and Shannon differentiation both
+landed tight and stable ($H_S$'s own empirical mean within `0.008` of
+its theoretical prediction; $H_T$ and Shannon differentiation both
 within about `1.5` characterized standard deviations, comfortably
 inside the wider band this test's own fewer assertion replicates
 produce). 6 replicates, base seed 715000 (distinct from every other
@@ -48135,7 +48193,7 @@ Tests for deterministic generated test-suite documentation.
 
 <a id="validation.test_test_docs.test_generator_documents_every_test_module"></a>
 
-#### [test\_generator\_documents\_every\_test\_module](./validation/test_test_docs.py#L69)
+#### [test\_generator\_documents\_every\_test\_module](./validation/test_test_docs.py#L72)
 
 ```python
 def test_generator_documents_every_test_module(tmp_path: Path) -> None
@@ -48145,7 +48203,7 @@ Every committed test module receives its own anchor in `TESTS.md`.
 
 <a id="validation.test_test_docs.test_every_test_directory_is_a_documented_group"></a>
 
-#### [test\_every\_test\_directory\_is\_a\_documented\_group](./validation/test_test_docs.py#L94)
+#### [test\_every\_test\_directory\_is\_a\_documented\_group](./validation/test_test_docs.py#L97)
 
 ```python
 def test_every_test_directory_is_a_documented_group() -> None
@@ -48155,9 +48213,19 @@ def test_every_test_directory_is_a_documented_group() -> None
 subdirectory of `test/` that actually holds `.py` files, other than
 `test/data/` (fixture JSON, not code).
 
+<a id="validation.test_test_docs.test_generator_preserves_tex_equations"></a>
+
+#### [test\_generator\_preserves\_tex\_equations](./validation/test_test_docs.py#L113)
+
+```python
+def test_generator_preserves_tex_equations(tmp_path: Path) -> None
+```
+
+Mutation and convergence equations survive generation as renderable TeX.
+
 <a id="validation.test_test_docs.test_generator_runs_without_an_activated_virtualenv"></a>
 
-#### [test\_generator\_runs\_without\_an\_activated\_virtualenv](./validation/test_test_docs.py#L110)
+#### [test\_generator\_runs\_without\_an\_activated\_virtualenv](./validation/test_test_docs.py#L146)
 
 ```python
 def test_generator_runs_without_an_activated_virtualenv(
@@ -48197,7 +48265,7 @@ value, in units of its standard error across loci.
 2. An island model (`d = 5`, `N = 100`, `m = 0.01`, `mu = 0.001`) from a
    monomorphic start: mean within- and between-deme identity at several
    generations against `fim.statistics.identity_recursion`, and the pooled
-   `D = 1 - between / within`.
+   $D = 1 - \mathrm{between} / \mathrm{within}$.
 3. The dear-nolan-low worked example's own transient (`d = 5`,
    `m = 0.0001`, `mu = 0.000001`, two founding alleles with a
    Dirichlet(1, 1) frequency start).
@@ -48228,7 +48296,7 @@ def test_island_model_identities_follow_the_recursion_from_a_monomorphic_start(
 ) -> (None)
 ```
 
-Within, between and pooled `D` track `identity_recursion` at 3 checkpoints.
+Within, between and pooled $D$ track `identity_recursion` at 3 checkpoints.
 
 <a id="validation.test_vector_statistical.test_dear_nolan_low_transient_follows_the_recursion"></a>
 

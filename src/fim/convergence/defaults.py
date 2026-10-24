@@ -23,12 +23,12 @@ MigrationInput = float | Sequence[Sequence[float]]
 
 @dataclass(frozen=True, slots=True)
 class DerivedConvergence:
-    """Convergence settings derived from a model's relaxation time.
+    r"""Convergence settings derived from a model's relaxation time.
 
     Args:
         burn_in: Generations discarded before averaging starts.
         max_generations: Hard generation cap.
-        relaxation_time: The estimated `tau`, in generations, for display.
+        relaxation_time: The estimated $\tau$, in generations, for display.
     """
 
     burn_in: int
@@ -37,11 +37,15 @@ class DerivedConvergence:
 
 
 def burn_in_multiple(precision: float, minimum: float) -> float:
-    """Return `k`, the burn-in length in relaxation times, for a precision.
+    r"""Return $k$, the burn-in length in relaxation times, for a precision.
 
-    `max(minimum, ln(2 / precision))`: the slowest mode's leftover from a
-    worst-case unit offset is `e^-k`, so `k >= ln(2 / precision)` leaves at
-    most `precision / 2` of bias, and a tighter precision lengthens the
+    ```math
+    k = \max\left(\mathrm{minimum}, \ln\frac{2}{\mathrm{precision}}\right)
+    ```
+
+    The slowest mode's leftover from a worst-case unit offset is $e^{-k}$,
+    so $k \ge \ln(2 / \mathrm{precision})$ leaves at most
+    $\mathrm{precision} / 2$ of bias, and a tighter precision lengthens the
     burn-in on its own. A precision of zero asks for an unbounded burn-in.
 
     Args:
@@ -49,7 +53,7 @@ def burn_in_multiple(precision: float, minimum: float) -> float:
         minimum: The floor (`burn_in_minimum_relaxation_times`).
 
     Returns:
-        The multiple of `tau`.
+        The multiple of $\tau$.
     """
     if precision <= 0.0:
         return math.inf
@@ -62,17 +66,18 @@ def derive_burn_in(
     expert: ExpertSettings,
     multiplier: float = 1.0,
 ) -> int:
-    """Return the burn-in, in generations, for a relaxation time and precision.
+    r"""Return the burn-in, in generations, for a relaxation time and precision.
 
     Args:
-        relaxation_time: `tau`, in generations.
+        relaxation_time: $\tau$, in generations.
         precision: The requested precision.
         expert: The run's Expert Settings (the multiple's floor).
-        multiplier: Factor on `k`, for a run that watches an allele-spectrum
+        multiplier: Factor on $k$, for a run that watches an allele-spectrum
             statistic (`spectrum_burn_in_multiplier`); 1 otherwise.
 
     Returns:
-        `ceil(multiplier * k * tau)`, at least 1 so generation 0 is never
+        $\lceil \mathrm{multiplier} \cdot k \tau \rceil$,
+        at least 1 so generation 0 is never
         averaged, and at most `expert.cap_maximum`.
     """
     multiple = burn_in_multiple(precision, expert.burn_in_minimum_relaxation_times)
@@ -92,11 +97,17 @@ def derive_convergence_defaults(
     expert: ExpertSettings | None = None,
     burn_in_multiplier: float = 1.0,
 ) -> DerivedConvergence:
-    """Return the default burn-in and cap for one model.
+    r"""Return the default burn-in and cap for one model.
 
-    The cap is `max(cap_minimum, burn_in + ceil(15 tau))`, at most
-    `cap_maximum`: the burn-in is added so a slow model is never capped inside
-    its own burn-in.
+    The cap is
+
+    ```math
+    \max\left(\mathrm{cap\_minimum},
+        \mathrm{burn\_in} + \lceil 15 \tau \rceil\right),
+    ```
+
+    at most `cap_maximum`: the burn-in is added so a slow model is never
+    capped inside its own burn-in.
 
     Args:
         deme_sizes: Gene-copy count of every deme, so `d` values.
@@ -182,13 +193,16 @@ def describe_derived_convergence(
 def island_relaxation_time(
     *, total_size: float, deme_count: int, migration: float, mutation: float
 ) -> float:
-    """Return `tau` for the symmetric island model, in closed form.
+    r"""Return $\tau$ for the symmetric island model, in closed form.
 
-    `T = N_total + (d - 1) / (2 m)` is the mean pairwise coalescence time
+    $T = N_{\mathrm{total}} + (d - 1) / (2m)$ is the mean pairwise coalescence time
     (the time for two gene copies to reach one deme, plus the time for the
     whole population to coalesce). Mutation destroys identity at an
-    independent rate `2 mu`, and independent rates add, so
-    `tau = 1 / (2 mu + 1 / T)`.
+    independent rate $2\mu$, and independent rates add, so
+
+    ```math
+    \tau = \frac{1}{2\mu + 1/T}.
+    ```
 
     Args:
         total_size: Sum of every deme's gene-copy count.
@@ -218,13 +232,14 @@ def recursion_relaxation_time(
     migration: Sequence[Sequence[float]],
     mutation: float,
 ) -> float:
-    """Return `tau` from the identity recursion's slowest mode.
+    r"""Return $\tau$ from the identity recursion's slowest mode.
 
-    The pairwise identity matrix `J` updates as migrate (`M J Mᵀ`), drift
-    (each diagonal entry `J[i][i]` keeps a fraction `1 - 1/N_i`), then
-    mutate (scale by `(1 - mu)²`) — exactly the engine's own textbook
-    step, `fim.model.operators.step`. Flattening `J` makes this a `d² by d²` matrix;
-    its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
+    The pairwise identity matrix $J$ updates as migrate, $MJM^{\mathsf{T}}$;
+    drift (each diagonal entry $J_{ii}$ keeps a fraction $1 - 1/N_i$); then
+    mutate (scale by $(1 - \mu)^2$) — exactly the engine's own textbook
+    step, `fim.model.operators.step`. Flattening $J$ makes this a
+    $d^2 \times d^2$ matrix; its spectral radius $\rho$ gives
+    $\tau = 1 / (1 - \rho)$.
 
     Args:
         deme_sizes: Gene-copy count of every deme.
@@ -264,9 +279,9 @@ def relaxation_time(
     migration: MigrationInput,
     mutation_rates: Sequence[float],
 ) -> float:
-    """Return the relaxation time `tau` for one model, choosing the route.
+    r"""Return the relaxation time $\tau$ for one model, choosing the route.
 
-    The slowest locus (the smallest mutation rate) sets `tau`, as
+    The slowest locus (the smallest mutation rate) sets $\tau$, as
     `panmictic_equilibration` already does for the ancestral phase.
 
     Equal deme sizes with a scalar `m` use the closed form. Everything else
@@ -309,18 +324,18 @@ def relaxation_time(
 
 @dataclass(frozen=True, slots=True)
 class PanmicticEquilibration:
-    """How long one panmictic population takes to reach mutation-drift equilibrium.
+    r"""How long one panmictic population takes to reach mutation-drift equilibrium.
 
     Args:
         generations: The burn-in, in generations: the first generation at
             which the expected identity (so the expected heterozygosity)
             of every locus is within the requested tolerance of its
             equilibrium, whatever the starting frequencies were.
-        relaxation_time: `tau` of the slowest-relaxing locus, in
+        relaxation_time: $\tau$ of the slowest-relaxing locus, in
             generations.
         expected_heterozygosity: The mean, across loci, of each locus's
-            equilibrium expected heterozygosity (`1 - F*`, close to
-            `theta / (1 + theta)` with `theta = 2 N mu`).
+            equilibrium expected heterozygosity, $1 - F^*$, close to
+            $\theta / (1 + \theta)$ with $\theta = 2N\mu$.
     """
 
     generations: int
@@ -331,32 +346,45 @@ class PanmicticEquilibration:
 def panmictic_equilibration(
     *, total_size: int, mutation_rates: Sequence[float], tolerance: float
 ) -> PanmicticEquilibration:
-    """Return the burn-in one panmictic population needs to reach equilibrium.
+    r"""Return the burn-in one panmictic population needs to reach equilibrium.
 
     The single-deme case of the identity recursion behind
     `recursion_relaxation_time`, exactly as this project's own operators
     run it: with `N` gene copies, `fim.model.operators.drift` (`N`
     copies drawn with replacement) and then `mutate` (each copy,
     independently, becomes a fresh allele with probability `mu`) — the
-    textbook Wright-Fisher infinite-alleles model — the probability `F`
+    textbook Wright-Fisher infinite-alleles model — the probability $F$
     that two gene copies drawn with replacement are identical obeys, in
-    expectation, `F' = 1/N + (1 - 1/N)(1 - mu)² F` (for two distinct
-    copies, the textbook `F' = (1 - mu)² [1/N + (1 - 1/N) F]`). Writing
-    `rho = (1 - 1/N)(1 - mu)²`, it settles at `F* = (1/N) / (1 - rho)`
-    and its departure from `F*` shrinks by exactly `rho` every
-    generation. `F` lies in `[0, 1]`, so after `t` generations the
-    expected departure is at most `rho^t` whatever the starting draw
-    was; the burn-in is the first `t` with `rho^t <= tolerance`, about
-    `tau ln(1 / tolerance)` with `tau = 1 / (1 - rho)` (about
-    `1 / (2 mu + 1/N)`), the same `tau` as `recursion_relaxation_time`
-    with one deme. `tau` is also the time scale on which the population's whole
+    expectation,
+
+    ```math
+    F^\prime = \frac{1}{N} + \left(1 - \frac{1}{N}\right)(1 - \mu)^2 F.
+    ```
+
+    For two distinct copies, the textbook recursion is
+
+    ```math
+    F^\prime = (1 - \mu)^2
+        \left[\frac{1}{N} + \left(1 - \frac{1}{N}\right)F\right].
+    ```
+
+    Writing $\rho = (1 - 1/N)(1 - \mu)^2$, it settles at
+    $F^* = (1/N) / (1 - \rho)$ and its departure from $F^*$ shrinks by
+    exactly $\rho$ every generation. $F$ lies in $[0,1]$, so after $t$
+    generations the expected departure is at most $\rho^t$ whatever the
+    starting draw was; the burn-in is the first $t$ with
+    $\rho^t \le \mathrm{tolerance}$, about
+    $\tau \ln(1 / \mathrm{tolerance})$ with $\tau = 1 / (1 - \rho)$,
+    approximately $1 / (2\mu + 1/N)$. This is the same $\tau$ as
+    `recursion_relaxation_time` with one deme. $\tau$ is also the time scale
+    on which the population's whole
     genealogy forgets its starting state (two
-    ancestral lineages merge or one mutates at rate about `1/N + 2 mu`),
+    ancestral lineages merge or one mutates at rate about $1/N + 2\mu$),
     so the burn-in mixes more than the first moment.
 
     A run of one population cannot be told apart from equilibrium by
     watching its own heterozygosity: at equilibrium that still wanders
-    around `1 - F*` by drift, with a spread comparable to its mean for a
+    around $1 - F^*$ by drift, with a spread comparable to its mean for a
     single locus, so no trailing-window rule of a useful length settles.
     The burn-in needs no such rule.
 
@@ -368,7 +396,7 @@ def panmictic_equilibration(
             allowed, in heterozygosity's units; greater than zero.
 
     Returns:
-        The burn-in, the slowest locus's `tau`, and the expected
+        The burn-in, the slowest locus's $\tau$, and the expected
         equilibrium heterozygosity.
 
     Raises:
@@ -407,7 +435,7 @@ def island_migration_matrix(
 ) -> list[list[float]]:
     """Return the scalar-`m` migration matrix for unequal deme sizes.
 
-    Each deme keeps `1 - m` and receives `m` from the size-weighted average
+    Each deme keeps $1 - m$ and receives $m$ from the size-weighted average
     of every other deme, as the configuration reference defines the scalar
     form.
 

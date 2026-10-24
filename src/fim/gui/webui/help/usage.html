@@ -1917,7 +1917,7 @@ Caballero-García-Dorado allelic distance <math xmlns="http://www.w3.org/1998/Ma
 <li>Nei's (1973) <var>D</var><sub>m</sub> (<code>D_m</code>) and <var>R</var><sub>ST</sub> (<code>R_ST</code>), Nei's
 logarithmic <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math> (<code>G_ST_NEI_LOG</code>), Hedrick's standardized
 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math> (<code>G_ST_HEDRICK</code>), and coancestry <var>F</var><sub>ST</sub> (<code>F_ST</code>),
-each computed from the pooled <var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> and <code>null</code> where
+each computed from the pooled <var>H</var><sub>S</sub> / <var>H</var><sub>T</sub> and <code>null</code> where
 undefined;</li>
 <li>Nei's genetic distance across all demes in four forms, and the matching
 identities: <code>NEI_D_ALL_GEO</code>, <code>NEI_D_ALL_GEO_LOCUS_MEAN</code>, <code>NEI_D_ALL_ARITH</code>,
@@ -1931,8 +1931,8 @@ without rewriting the file.</p>
 <p>Multiple loci are independent repeats. <var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>H</var><sub>ST</sub>, <var>E</var><sub>ST</sub>,
 and <var>K</var><sub>ST</sub> are arithmetic means across loci. <code>D</code> and <var>G</var><sub>ST</sub>
 instead follow <a href="#" data-fim-help="configuration" data-fim-anchor="locus_aggregation">locus_aggregation</a>:
-by default (<code>ratio_of_means</code>), <var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> are pooled across loci
-first and one <code>D</code>/<var>G</var><sub>ST</sub> is computed from those pooled values, not
+by default (<code>ratio_of_means</code>), <var>H</var><sub>S</sub> / <var>H</var><sub>T</sub> are pooled across loci
+first and one <var>D</var> / <var>G</var><sub>ST</sub> is computed from those pooled values, not
 averaged per-locus ratios; the opt-in <code>mean_of_ratios</code> restores the
 per-locus-ratio-then-average behavior. <code>D</code> and <var>K</var><sub>ST</sub> always use equal
 deme weighting. <code>deme_weighting</code> affects <var>E</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>,

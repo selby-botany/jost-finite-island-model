@@ -445,7 +445,7 @@ hold for the geometric forms.
 | Settings, "Statistics shown" | Turn forms on and off; the "Nei distances" preset shows Nei's-rule distances for pairs and all demes. "Choose…" in the panel's caption opens it directly. |
 | `report.json` | All-demes forms: `NEI_D_ALL_GEO`, `NEI_D_ALL_GEO_LOCUS_MEAN`, `NEI_D_ALL_ARITH`, `NEI_D_ALL_ARITH_LOCUS_MEAN`, and the `NEI_I_ALL_*` identities. |
 | `summary.json` (batch) | Mean and confidence interval of each all-demes form across replicates. |
-| `pairwise.json` | Every pair's four identities (each distance is $-\ln(I)$) and pairwise $F_{\mathrm{ST}}$, at the final generation. See [usage](usage.md#pairwisejson). |
+| `pairwise.json` | Every pair's four identities (each distance is $-\ln I$) and pairwise $F_{\mathrm{ST}}$, at the final generation. See [usage](usage.md#pairwisejson). |
 
 A run saved before these statistics existed still opens: the values are
 computed from its saved trajectory when you open it. Its saved files are
@@ -458,7 +458,7 @@ Computed and saved for every run, hidden until you show them:
 - `D_m` and `R_ST`: Nei's (1973) mean pairwise between-deme diversity, in
   heterozygosity units, and its ratio to within-deme diversity.
 - `G_ST_NEI_LOG` and `G_ST_HEDRICK`: two different statistics both called
-  $G'_{\mathrm{ST}}$ in the literature. Nei's is logarithmic, for large
+  $G^\prime_{\mathrm{ST}}$ in the literature. Nei's is logarithmic, for large
   differentiation; Hedrick's divides $G_{\mathrm{ST}}$ by its largest
   possible value.
 - `F_ST`: coancestry $F_{\mathrm{ST}}$ (Goudet & Weir 2023).

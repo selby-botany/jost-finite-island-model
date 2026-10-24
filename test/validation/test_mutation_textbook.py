@@ -1,15 +1,22 @@
-"""Seeded validation of the textbook Wright-Fisher mutation step.
+r"""Seeded validation of the textbook Wright-Fisher mutation step.
 
 `fim.model.operators.step` runs migrate, drift, mutate: the new
 generation's `N` gene copies are drawn from the post-migration pool and
 each copy then mutates on its own with probability `mu`. For two gene
-copies drawn with replacement from one deme (`within`, `sum_k x_k^2`) and
+copies drawn with replacement from one deme (`within`, $\sum_k x_k^2$) and
 one copy from each of two demes (`between`), the textbook recursions are
 
-    within'  = 1/N + (1 - 1/N) (1 - mu)^2 within_migrated
-    between' = (1 - mu)^2 between_migrated
+```math
+\begin{array}{rl}
+\mathrm{within}^\prime
+    &= \frac{1}{N} + \left(1 - \frac{1}{N}\right)(1 - \mu)^2
+        \mathrm{within}_{\mathrm{migrated}}, \\
+\mathrm{between}^\prime
+    &= (1 - \mu)^2 \mathrm{between}_{\mathrm{migrated}}.
+\end{array}
+```
 
-(infinite alleles), or the same with `(1 - mu)^2` replaced by the
+(infinite alleles), or the same with $(1 - \mu)^2$ replaced by the
 symmetric K-allele pair factors (finite alleles). These tests simulate
 the real operators and compare:
 
@@ -21,13 +28,20 @@ the real operators and compare:
   `panmictic_equilibration` and `identity_recursion` produce.
 
 Each panmictic check also asserts that the earlier, non-textbook
-recursion (`J' = 1/N + (1 - 1/N)[((1 - mu)^2 + mu(1 - mu)/N) J + mu/N]`,
-the proportional-mass mutation step this project used to run) is
-excluded, so a regression back to it would fail here.
+recursion,
+
+```math
+J^\prime = \frac{1}{N} + \left(1 - \frac{1}{N}\right)
+    \left[\left((1 - \mu)^2 + \frac{\mu(1 - \mu)}{N}\right)J
+        + \frac{\mu}{N}\right],
+```
+
+the proportional-mass mutation step this project used to run, is excluded,
+so a regression back to it would fail here.
 
 Every test is seeded, so its result is a pure function of the commit.
-Parameters are small (`N = 20`) on purpose: the gap between the textbook
-and the earlier recursion is `O(mu / (1 + 2 N mu))`, largest at small `N`.
+Parameters are small, $N = 20$, on purpose: the gap between the textbook
+and the earlier recursion is $O(\mu / (1 + 2N\mu))$, largest at small $N$.
 """
 
 from __future__ import annotations
@@ -69,14 +83,14 @@ def _fixed_state(loci: tuple[LocusSpec, ...], d: int) -> ModelState:
 
 
 def _identities(state: ModelState) -> tuple[np.ndarray, np.ndarray]:
-    """Return per-locus mean within- and between-deme identity.
+    r"""Return per-locus mean within- and between-deme identity.
 
     Args:
         state: Any state.
 
     Returns:
-        `(within, between)`, one entry per locus: `sum_k x_k^2` averaged
-        over demes, and `sum_k x_k y_k` averaged over unordered deme
+        `(within, between)`, one entry per locus: $\sum_k x_k^2$ averaged
+        over demes, and $\sum_k x_k y_k$ averaged over unordered deme
         pairs (zeros for one deme).
     """
     d = state.deme_count
@@ -195,13 +209,21 @@ def _earlier_panmictic_fixed_point(size: int, mu: float) -> float:
 
 
 def _kam_panmictic_fixed_point(size: int, mu: float, capacity: int) -> float:
-    """Return the textbook symmetric K-allele panmictic fixed point.
+    r"""Return the textbook symmetric $K$-allele panmictic fixed point.
 
-    Each copy keeps its state with probability `1 - mu`, else moves to
-    one of the other `K - 1` uniformly. Two distinct copies in state
-    identity `J` are identical afterward with probability `t + (s - t) J`,
-    `s = (1 - mu)^2 + mu^2 / (K - 1)`, `t = 2 mu (1 - mu) / (K - 1) +
-    mu^2 (K - 2) / (K - 1)^2`; so `J' = 1/N + (1 - 1/N)(t + (s - t) J`.
+    Each copy keeps its state with probability $1 - \mu$, else moves to
+    one of the other $K - 1$ uniformly. Two distinct copies in state
+    identity $J$ are identical afterward with probability $t + (s - t)J$,
+    where
+
+    ```math
+    \begin{array}{rl}
+    s &= (1 - \mu)^2 + \frac{\mu^2}{K - 1}, \\
+    t &= \frac{2\mu(1 - \mu)}{K - 1} + \frac{\mu^2(K - 2)}{(K - 1)^2}, \\
+    J^\prime &= \frac{1}{N}
+        + \left(1 - \frac{1}{N}\right)\left[t + (s - t)J\right].
+    \end{array}
+    ```
     """
     other = capacity - 1
     same = (1.0 - mu) ** 2 + mu**2 / other
@@ -213,10 +235,16 @@ def _kam_panmictic_fixed_point(size: int, mu: float, capacity: int) -> float:
 def test_panmictic_long_run_identity_matches_the_textbook_recursion(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """Infinite alleles: long-run mean `H` is `1 - F*` of the textbook recursion.
+    r"""Infinite alleles: long-run mean $H$ is $1 - F^*$ of the textbook recursion.
 
     `panmictic_equilibration` supplies the textbook prediction
-    (`1 - F*`, `F* = (1/N) / (1 - (1 - 1/N)(1 - mu)^2)`); the earlier
+    $1 - F^*$, where
+
+    ```math
+    F^* = \frac{1/N}{1 - (1 - 1/N)(1 - \mu)^2}.
+    ```
+
+    The earlier
     recursion's prediction lies outside the band.
     """
     size, mu, burn_in = 20, 0.025, 300

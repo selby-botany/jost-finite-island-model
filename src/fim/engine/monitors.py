@@ -209,7 +209,7 @@ def replicate_stopping_values(
     to a whole finished replicate's own final report here instead of one
     generation's own current state.
 
-    A statistic this replicate leaves undefined (only ``G_ST``, and only
+    A statistic this replicate leaves undefined (only $G_{ST}$, and only
     when every one of this replicate's tracked loci was monomorphic — see
     `mean_g_st_across_loci`) is omitted rather than raised or
     substituted: this replicate simply contributes nothing to that

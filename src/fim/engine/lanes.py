@@ -340,10 +340,10 @@ class VectorizedAdvancer:
     counter is brought up to the identities the block handed out when the
     lane stops; under finite alleles the K-allele target draws are made in
     the kernel, interleaved with the next pair's mutation counts exactly as
-    `operators.mutate` does. The convergence statistics `D`, `G_ST`, `H_S`,
-    `H_T` and `H_ST` are computed inside the kernel and equal
-    `statistics_report`'s bits; the opt-in expensive statistics (`E_ST`,
-    `K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
+    `operators.mutate` does. The convergence statistics $D$, $G_{ST}$, $H_S$,
+    $H_T$ and $H_{ST}$ are computed inside the kernel and equal
+    `statistics_report`'s bits; the opt-in expensive statistics ($E_{ST}$,
+    $K_{ST}$, `A_CGD`, `Delta`, `MI`) stay in Python.
 
     Both migrant sampling modes run in the kernel. Under
     `migrant_sampling="stochastic"` the kernel draws one binomial migrant

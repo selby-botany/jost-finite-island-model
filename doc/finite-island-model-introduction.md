@@ -118,7 +118,7 @@ migrant source does not change through drift.
 Wright also analyzed the finite subgroup case directly. In *Isolation by
 Distance* (1943), he wrote the model with $K$ subgroups of size $N$ and
 derived the finite-deme sampling correction before giving the familiar
-large-$N$, small-$m$ approximation. Later finite-island work did not invent
+large $N$, small $m$ approximation. Later finite-island work did not invent
 the finite deme count from scratch; it extended Wright's setup to multiple
 alleles, mutation models, and higher moments.
 
@@ -151,7 +151,7 @@ are drawn from the actual, finite, currently-drifting collection of all the
 
 The finite island model generates data under a known history of migration,
 drift, and diversity. Candidate statistics ($F_{ST}$, $G_{ST}$, $D$,
-$G'_{ST}$, among others) can therefore be evaluated against the a
+$G^\prime_{ST}$, among others) can therefore be evaluated against the a
 the generating process.
 
 ---
@@ -351,7 +351,7 @@ The following publications develop and evaluate differentiation
 statistics in population-genetic models. Bibliographic details and DOI
 links are provided for each cited work.
 
-- **Jost L, "$G_{ST}$ and its relatives do not measure
+- **Jost L, "$`G_{ST}`$ and its relatives do not measure
   differentiation."** *Molecular Ecology* 17(18):4015–26, 2008. DOI:
   [10.1111/j.1365-294x.2008.03887.x](https://doi.org/10.1111/j.1365-294x.2008.03887.x).
   PMID: 19238703. The foundational critique. In the language of Part 2:
@@ -373,7 +373,7 @@ links are provided for each cited work.
   derives and compares these statistics.
 - **The reply/rebuttal exchange** that followed in the same journal,
   confirmed via PubMed's "Comment in/on" links on the 2008 paper:
-  - Ryman N, Leimar O, "$G_{ST}$ is still a useful measure of genetic
+  - Ryman N, Leimar O, "$`G_{ST}`$ is still a useful measure of genetic
     differentiation — a comment on Jost's **$D$**." *Molecular Ecology*
     18(10):2084–7, 2009. DOI:
     [10.1111/j.1365-294X.2009.04187.x](https://doi.org/10.1111/j.1365-294X.2009.04187.x).
@@ -382,12 +382,12 @@ links are provided for each cited work.
     differentiation based on **$G_{ST}$** and **$D$**: forget $G_{ST}$ but not
     all of statistics!" *Molecular Ecology* 19(18):3845–52, 2010. DOI:
     [10.1111/j.1365-294X.2010.04784.x](https://doi.org/10.1111/j.1365-294X.2010.04784.x).
-  - Whitlock MC, "$G'_{ST}$ and $D$ do not replace $F_{ST}$."
+  - Whitlock MC, "$`G^\prime_{ST}`$ and $D$ do not replace $F_{ST}$."
     *Molecular Ecology* 20(6):1083–91, 2011. DOI:
     [10.1111/j.1365-294X.2010.04996.x](https://doi.org/10.1111/j.1365-294X.2010.04996.x).
-    This paper proposes the standardized $G'_{ST}$ as a partial fix to
+    This paper proposes the standardized $G^\prime_{ST}$ as a partial fix to
     the classic $G_{ST}$ ceiling problem, while arguing that $D$ and
-    $G'_{ST}$ answer a different question from $F_{ST}$ and should not
+    $G^\prime_{ST}$ answer a different question from $F_{ST}$ and should not
     fully replace it. Read together, this whole exchange is the applied
     debate over what a differentiation statistic should mean, and all
     sides generally argue by simulating some version of a finite island
@@ -396,7 +396,7 @@ links are provided for each cited work.
 - **Jost L, Archer F, Flanagan S, Gaggiotti O, Hoban S, Latch E,
   "Differentiation measures for conservation genetics."** *Evolutionary
   Applications* 11(7):1139–48, 2018. PMID: 30026802. A synthesis of the
-  statistic family ($F_{ST}$, $G_{ST}$, $G'_{ST}$, $D$, and related
+  statistic family ($F_{ST}$, $G_{ST}$, $G^\prime_{ST}$, $D$, and related
   measures) and their interpretation. See the
   [differentiation-measures guide](jost-differentiation-measures.md) for
   definitions, derivations, and worked calculations.
@@ -507,7 +507,7 @@ Thus the constrained state space preserves the finite group of coordinate
 permutations, $S_k$. In the two-allele case, this group is
 $S_2\cong\mathbb Z_2$.
 
-**On the multi-locus case and "$n=4L$."** If several independent,
+**On the multi-locus case and $n=4L$.** If several independent,
 unlinked loci are tracked simultaneously, the full
 state space becomes a product of one such sphere per locus — an ambient
 symmetry of $\mathrm{SO}(k_1)\times\mathrm{SO}(k_2)\times\cdots\times\mathrm{SO}(k_L)$ (or
@@ -523,7 +523,7 @@ that expression does not follow from the model.
 | Relabeling the $d$ islands | $S_d$ | Yes, if all island sizes and migration rates are equal |
 | Allele-frequency reflection (two-allele case, $k=2$) | $\mathbb Z_2\cong S_2$ | Yes — the $k=2$ special case of the row above |
 | Ambient rotation of the $k$-allele sphere embedding | $\mathrm{SO}(k)$ | Only before the positive-orthant constraint is applied — broken by absorbing fixation states |
-| Continuous phase rotation ($\mathrm{U}(1)$) | — | No — the model has no phase variable |
+| Continuous phase rotation, $\mathrm{U}(1)$ | — | No — the model has no phase variable |
 
 The finite island model can be described as a mean-field (or, under
 stepping-stone migration, lattice) Markov random field. Relabeling alleles

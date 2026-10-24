@@ -721,12 +721,12 @@ precision: 0.02
 - **Type:** boolean
 - **Default:** `false`
 
-Controls whether $E_{ST}$/$K_{ST}$/$A_{\mathrm{CGD}}$/Delta/MI are
+Controls whether $E_{ST}$ / $K_{ST}$ / $A_{\mathrm{CGD}}$/Delta/MI are
 computed every generation for display, even when none of them is being
 watched for convergence. D, $G_{ST}$, $H_S$, and $H_T$
 are always tracked and available for display regardless of this setting
 and regardless of convergence_statistic — each is either the shared
-$H_S$/$H_T$ input every other statistic derives from, or an
+$H_S$ / $H_T$ input every other statistic derives from, or an
 O(1) step once those are known, so computing them costs nothing extra.
 $E_{ST}$, $K_{ST}$, $A_{\mathrm{CGD}}$, Delta, and MI each require
 an additional pass over frequency tables. Enabling this setting computes
@@ -945,18 +945,18 @@ when more than one locus is tracked. Every other reported statistic
 ($H_S$, $H_T$, $H_{ST}$, $E_{ST}$, $K_{ST}$) is unaffected — each is already a
 linear mean across loci, with no such ambiguity to resolve.
 
-- `ratio_of_means` (the default): average $H_S$/$H_T$ across loci
-  first, then compute one `D`/$G_{ST}$ from those pooled values. This
+- `ratio_of_means` (the default): average $H_S$ / $H_T$ across loci
+  first, then compute one $D$ / $G_{ST}$ from those pooled values. This
   matches what the exact gene-identity recursion predicts and avoids a
   small-denominator instability a per-locus ratio can have.
-- `mean_of_ratios`: compute `D`/$G_{ST}$ at each locus independently,
+- `mean_of_ratios`: compute $D$ / $G_{ST}$ at each locus independently,
   then average the ratios. Use this when matching an analysis or publication
   that applies this estimator. The mean of ratios generally differs from
   the ratio of means; see
   [differentiation measures](jost-differentiation-measures.md) for formulas.
 
 The convergence monitor uses the same locus-aggregation setting for watched
-`D`/$G_{ST}$ as the final report.
+$D$ / $G_{ST}$ as the final report.
 
 ```yaml
 n_loci: 2

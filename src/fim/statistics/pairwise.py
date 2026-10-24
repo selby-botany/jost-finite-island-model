@@ -78,13 +78,13 @@ def _ratio(
 def pairwise_matrices(
     locus_tables: Sequence[Sequence[Mapping[Any, float]]],
 ) -> tuple[dict[tuple[NeiDenominator, NeiLocusRule], FloatMatrix], FloatMatrix]:
-    """Return all four Nei identity matrices and the pairwise F_ST matrix.
+    """Return all four Nei identity matrices and the pairwise $F_{ST}$ matrix.
 
     One pass over the loci feeds both: the Nei identities (element
     ``[k, l]`` equals `nei_pair_identity` for demes ``k`` and ``l``,
-    diagonal 1) and pairwise F_ST (Goudet & Weir 2023 Eq. 10, loci pooled
+    diagonal 1) and pairwise $F_{ST}$ (Goudet & Weir 2023 Eq. 10, loci pooled
     as in Nei's rule: ``((J_k + J_l) / 2 - J_kl) / (1 - J_kl)``, diagonal
-    0). An F_ST entry is NaN where it is undefined: both demes fixed for
+    0). An $F_{ST}$ entry is NaN where it is undefined: both demes fixed for
     the same allele (``J_kl = 1``).
 
     Args:

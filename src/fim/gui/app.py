@@ -677,27 +677,27 @@ _COMPARE_MINIMUM_RUNS: Final = 2
 def _effective_allele_summary(
     report: Mapping[str, Any], digits: int
 ) -> dict[str, str | bool]:
-    """Return `H_S`/`H_T`'s own effective-allele-count readout, plus a caution flag.
+    """Return $H_S$ / $H_T$'s own effective-allele-count readout, plus a caution flag.
 
     Design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §7.7:
     the "effective number of alleles" transform
     (`fim.statistics.effective_allele_count`) is the corrected reading
     Jost's own foundational papers argue for over a raw heterozygosity —
-    shown here beside `H_S`/`H_T`, not instead of them, so a reader
-    already used to reading `H_S`/`H_T` directly loses nothing.
+    shown here beside $H_S$ / $H_T$, not instead of them, so a reader
+    already used to reading $H_S$ / $H_T$ directly loses nothing.
 
     Args:
         report: A finished run's own `FinalReport` (or an equivalent
             mapping — the p_0 preview's own `report_for_state` result
-            shares the same shape); only `H_S`/`H_T` are read, both
-            always defined floats (unlike `G_ST`, `FinalReport`'s own
+            shares the same shape); only $H_S$ / $H_T$ are read, both
+            always defined floats (unlike $G_{ST}$, `FinalReport`'s own
             docstring has the one field that can be `None`).
         digits: The GUI's own configured display precision.
 
     Returns:
         `{"H_S": "<formatted effective count>", "H_T": "<formatted
         effective count>", "gStCaution": <bool>}` — `gStCaution` is
-        `True` exactly when this run's own `H_S` exceeds
+        `True` exactly when this run's own $H_S$ exceeds
         `_EFFECTIVE_ALLELE_CAUTION_THRESHOLD`.
     """
     within = effective_allele_count(cast("float", report["H_S"]))
@@ -738,7 +738,7 @@ def _clamped_effective_allele_count(heterozygosity_value: float) -> float:
     clamp exists. Only `_effective_allele_interval_summary`'s own
     `low`/`high` interval edges ever need it in practice
     (`replicate_summary`'s own interval construction is symmetric and
-    domain-unaware); a real report's own `H_S`/`H_T` — and therefore an
+    domain-unaware); a real report's own $H_S$ / $H_T$ — and therefore an
     interval's own `mean`, an average of such values — is already a
     valid heterozygosity by construction, so clamping it here too is
     purely defensive, never expected to change the result.
@@ -751,16 +751,16 @@ def _clamped_effective_allele_count(heterozygosity_value: float) -> float:
 def _effective_allele_interval_summary(
     raw_summary: Mapping[str, Mapping[str, Any]], digits: int
 ) -> dict[str, Any]:
-    """Return `H_S`/`H_T`'s own effective-allele-count confidence interval, batch case.
+    """Return $H_S$ / $H_T$'s effective-allele-count confidence interval, batch case.
 
     The batch counterpart to `_effective_allele_summary` immediately
     above (a single run's own point transform): `raw_summary` is
     `replicate_summary`'s own per-statistic cross-replicate confidence
     interval — or `{}`, this module's own established stand-in for "too
     few results to define one" (`_batch_done_payload`'s own docstring,
-    `summary`). `H_S`/`H_T` are always either both present or both
-    absent (`replicate_summary`'s own docstring: unlike `G_ST`, every
-    replicate's `H_S`/`H_T` are always defined floats), so checking one
+    `summary`). $H_S$ / $H_T$ are always either both present or both
+    absent (`replicate_summary`'s own docstring: unlike $G_{ST}$, every
+    replicate's $H_S$ / $H_T$ are always defined floats), so checking one
     for absence is a complete check for both.
 
     The transform (`_clamped_effective_allele_count`, `1 / (1 - H)`
@@ -773,7 +773,7 @@ def _effective_allele_interval_summary(
     transform. `sample_count` is copied unchanged; `half_width`/
     `sample_std` are deliberately not carried across the transform at
     all — an `H`-scale plus-or-minus does not become the equivalent
-    `D`-scale plus-or-minus by simple carry-over — so `_interval_payload`
+    $D$-scale plus-or-minus by simple carry-over — so `_interval_payload`
     omits both here exactly like it already does for an interval that
     came from `fim.engine.summary._bootstrap_interval`.
 
@@ -839,7 +839,7 @@ _EQUILIBRIUM_STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST")
 def _equilibrium_reference(
     n: int, m: float, mu: float, d: int, digits: int
 ) -> dict[str, str]:
-    """Predict `D`/`G_ST`/`E_ST` at equilibrium for one scalar `(N, m, mu, d)`.
+    """Predict $D$ / $G_{ST}$ / $E_{ST}$ at equilibrium for one scalar `(N, m, mu, d)`.
 
     Factored out of `Api.get_equilibrium_predictions` so the trajectory
     panel's own predicted-equilibrium overlay (`_equilibrium_reference_
@@ -856,7 +856,7 @@ def _equilibrium_reference(
     Returns:
         `{"D": ..., "G_ST": ..., "E_ST": ...}`, each `format_statistic`-
         formatted — including its own `"undefined"` convention where a
-        prediction has no defined value for these inputs (`D` when `mu`
+        prediction has no defined value for these inputs ($D$ when `mu`
         is exactly `0`, for instance).
     """
 
@@ -1063,7 +1063,7 @@ def _identity_recovery_reference_payload(
     project's typical runs (`mu > 0`) — this curve is therefore a
     genuine theoretical approximation, not a prediction consistent with
     a run's own configured mutation rate; the GUI labels it plainly as
-    such rather than implying it is a mutation-aware D/G_ST-style
+    such rather than implying it is a mutation-aware $D$ / $G_{ST}$-style
     equilibrium the way `_equilibrium_reference_payload`'s own line is.
 
     Args:
@@ -1101,13 +1101,13 @@ _SAMPLED_DENSE_GENERATIONS = 100
 def _closed_form_trajectory_payload(
     params: SimulationParams,
 ) -> dict[str, Any] | None:
-    """Build the trajectory panel's closed-form `D(t)`/`G_ST(t)` payload.
+    """Build the trajectory panel's closed-form $D(t)$ / $G_{ST}(t)$ payload.
 
     The third theoretical reference on the panel, and the only one that is
     the same quantity as the simulated curve at every generation:
     `fim.statistics` solves the engine's own migrate-drift-mutate identity
-    recursion, and `D`, `G_ST`, `H_S`, `H_T` and `H_ST` are functions of the
-    identities alone. `E_ST`, `K_ST` and the effective-allele family are
+    recursion, and $D$, $G_{ST}$, $H_S$, $H_T$ and $H_{ST}$ are functions of the
+    identities alone. $E_{ST}$, $K_{ST}$ and the effective-allele family are
     not, so they get no curve.
 
     Two shapes, chosen by the model:
@@ -1116,7 +1116,7 @@ def _closed_form_trajectory_payload(
       to two numbers (`identity_recursion`). Sent as the solved
       *ingredients* (fixed point, eigenvalues, eigenvectors, inverse), and
       the page evaluates them at whatever generations it plots, starting
-      from the run's own first `H_S`/`H_T`.
+      from the run's own first $H_S$ / $H_T$.
     - Unequal sizes and/or a migration matrix (a hub, a ring): the whole
       `d` by `d` identity matrix is needed, so the starting state comes
       from the seeded initial population
@@ -1164,7 +1164,7 @@ def _closed_form_model_applies(params: SimulationParams) -> bool:
     """Say whether the identity recursion is the engine's model for `params`.
 
     The recursion assumes every mutation makes a brand-new allele, migrants
-    move as expected fractions, and `D`/`G_ST` pool loci as a ratio of
+    move as expected fractions, and $D$ / $G_{ST}$ pool loci as a ratio of
     means. Each option
     that changes one of those changes the expected trajectory, so a curve
     drawn for it would be wrong, not just approximate:
@@ -1176,8 +1176,8 @@ def _closed_form_model_applies(params: SimulationParams) -> bool:
     - `locus_aggregation: mean_of_ratios` averages per-locus ratios.
 
     `deme_weighting` is deliberately not on the list: the engine weights
-    only `E_ST` and the literature statistics by deme size; `H_S`, `H_T`,
-    `H_ST`, `G_ST` and `D` always count demes equally
+    only $E_{ST}$ and the literature statistics by deme size; $H_S$, $H_T$,
+    $H_{ST}$, $G_{ST}$ and $D$ always count demes equally
     (`statistics_report`).
 
     Args:
@@ -1816,7 +1816,7 @@ def _parse_equilibrium_inputs(
     strictly greater than `0`, unlike every other function here) is
     deliberately left to that one prediction's own try/except instead —
     that is a real "undefined at this configuration" case, not a bad
-    input, and only `D` should read as undefined for it.
+    input, and only $D$ should read as undefined for it.
 
     Args:
         n: Population size, as typed.
@@ -2194,8 +2194,8 @@ class Api:
             run_description: Likewise, the optional run description.
 
         Returns:
-            `{"ok": True, "isBatch": ..., "equilibrium": ...,
-            "identityRecovery": ..., "closedForm": ...}` once the run has
+            A dictionary with `ok` set to `True` and the keys `isBatch`,
+            `equilibrium`, `identityRecovery` and `closedForm`, once the run has
             *started* — not once it finishes; the real outcome arrives via the pushed
             calls above. `isBatch` is `params.n_replicates > 1`, the
             identical "batch or scalar" toggle `_start_batch_run`'s own
@@ -2206,12 +2206,12 @@ class Api:
             never submits it). `equilibrium` is
             `_equilibrium_reference_payload`'s own result (design doc
             §6.2's predicted-equilibrium trajectory overlay);
-            `identityRecovery` is `_identity_recovery_reference_
-            payload`'s own result (that same section's closed-form
-            recovery *curve*, a second and different reference overlay —
-            see that function's own docstring); `closedForm` is
+            `identityRecovery` is
+            `_identity_recovery_reference_payload`'s own result (that same
+            section's closed-form recovery *curve*, a second and different
+            reference overlay — see that function's own docstring); `closedForm` is
             `_closed_form_trajectory_payload`'s own result (the same
-            section's closed-form `D(t)`/`G_ST(t)` curves). All three are
+            section's closed-form $D(t)$ / $G_{ST}(t)$ curves). All three are
             `None` for a batch (never computed there — batch has no
             trajectory panel of its own to overlay onto) or for a scalar
             run whose `N`/`m`(/`mu`, for `equilibrium` and `closedForm`)
@@ -4635,7 +4635,7 @@ class Api:
         predictions` was just called with.
 
         Every quantity `equilibrium_numeric_predictions` knows about is
-        evaluated at every swept point, not the `D`/`G_ST`/`E_ST` subset
+        evaluated at every swept point, not the $D$ / $G_{ST}$ / $E_{ST}$ subset
         that shares a `[0, 1]` domain. No statistic is privileged: each
         one is a closed-form function of `(N, m, mu, d)`, so each one has
         a real curve along each of the four axes, and the differing units
@@ -5710,8 +5710,8 @@ class Api:
     def set_shown_statistics(self, keys: list[str] | None) -> dict[str, Any]:
         """Remember which statistics are shown (Settings, "Statistics shown").
 
-        Display only, except for the five expensive statistics (`E_ST`,
-        `K_ST`, `A_CGD`, `Delta`, `MI`): showing any of them makes every
+        Display only, except for the five expensive statistics ($E_{ST}$,
+        $K_{ST}$, `A_CGD`, `Delta`, `MI`): showing any of them makes every
         later run track all five each generation, which lengthens runs,
         and hiding them all stops that (`_track_expensive_statistics_
         text`). A saved run's results never change.
@@ -7112,7 +7112,7 @@ class Api:
         Args:
             study_ids: Two or more sweep Studies.
             statistic: A statistic's catalog key, or an empty string for a
-                default (`D`, else `G_ST`, else the first they have).
+                default ($D$, else $G_{ST}$, else the first they have).
             on: The axes to join on, or `None` for every shared axis.
             labels: A label for each Study, or `None` for the Study names.
 
@@ -7167,7 +7167,7 @@ class Api:
             study_id: A sweep Study.
             options: `{"statistics": [names] | "all", "withTheory": bool,
                 "wide": bool, "includeUnfinished": bool}`; every key is
-                optional (the defaults are `D` and `G_ST`, no theory, the
+                optional (the defaults are $D$ and $G_{ST}$, no theory, the
                 long form, finished points only).
 
         Returns:
@@ -9659,7 +9659,7 @@ def _batch_done_payload(
     otherwise-successful batch.
 
     `effectiveAlleles` is `_effective_allele_interval_summary`'s own
-    result — `summary`'s own `H_S`/`H_T` intervals, transformed to the
+    result — `summary`'s own $H_S$ / $H_T$ intervals, transformed to the
     effective-number-of-alleles scale (design doc §7.7, the same
     transform a scalar run's own `effectiveAlleles` payload already
     applies to a single point) — empty (`{}`) exactly when `summary`

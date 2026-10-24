@@ -52,7 +52,7 @@ def frequency_tables(
 def test_heterozygosity_partition_and_ceiling(
     table: list[dict[int, float]],
 ) -> None:
-    """H_T, H_S, H_ST, and G_ST obey the Part V identities."""
+    """$H_T$, $H_S$, $H_{ST}$, and $G_{ST}$ obey the Part V identities."""
     within = h_s(table)
     total = h_t(table)
     between = h_st(table)
@@ -176,7 +176,7 @@ def test_equilibrium_d_and_g_st_are_non_increasing_in_migration(
     mu: float,
     m_values: list[float],
 ) -> None:
-    """More migration never raises equilibrium D or G_ST (fixed mu, d).
+    """More migration never raises equilibrium $D$ or $G_{ST}$ (fixed mu, d).
 
     Direct, exact-algebra check of Part VI's own "Equilibrium D" and
     "Equilibrium GST" sections: both closed forms are monotonic
@@ -216,14 +216,14 @@ def test_equilibrium_d_and_g_st_move_opposite_ways_in_mutation(
     m: float,
     mu_values: list[float],
 ) -> None:
-    """D rises and G_ST falls together as mutation rate rises (fixed m, d).
+    """$D$ rises and $G_{ST}$ falls together as mutation rate rises (fixed m, d).
 
     Part VI's own headline point ("Why this kills the standard
-    inference"): allelic differentiation (`D`) and nearness-to-fixation
-    (`G_ST`) respond to mutation rate in *opposite* directions — more
-    mutation drives more allelic differentiation between demes (`D`
+    inference"): allelic differentiation ($D$) and nearness-to-fixation
+    ($G_{ST}$) respond to mutation rate in *opposite* directions — more
+    mutation drives more allelic differentiation between demes ($D$
     rises toward 1) even as it moves every deme further from fixation
-    (`G_ST` falls). This test is the executable version of that
+    ($G_{ST}$ falls). This test is the executable version of that
     section's own prose, not a restatement of it.
     """
     mu_lo, mu_hi = sorted(mu_values)
@@ -251,9 +251,9 @@ def test_aoki_2023_claim_4_g_st_monotonicity_in_migration(
     mu: float,
     m_values: list[float],
 ) -> None:
-    """G_ST monotonically decreases with increasing migration rate.
+    """$G_{ST}$ monotonically decreases with increasing migration rate.
 
-    Aoki et al. (2023) §5.3 Claim 4: G_ST responds in a strictly downward
+    Aoki et al. (2023) §5.3 Claim 4: $G_{ST}$ responds in a strictly downward
     direction to higher gene flow (m). Tested as a pure property test across
     arbitrary population sizes, deme counts, and mutation rates against
     equilibrium_g_st.

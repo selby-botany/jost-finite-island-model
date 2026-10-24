@@ -58,30 +58,30 @@ def reports_summary(
     treat as invalid input. Zero or one report simply summarizes to
     nothing yet (an empty dict), the same "omitted, not blank" contract
     `replicate_summary`'s own per-statistic dropping already establishes
-    for a monomorphic ``G_ST``, extended here to the "not enough reports
+    for a monomorphic $G_{ST}$, extended here to the "not enough reports
     at all" case too.
 
     Args:
         reports: Zero or more independently seeded reports.
         confidence: Two-tailed confidence level; see
             `fim.statistics.interval.confidence_interval`.
-        deme_count: The number of demes, which `D`'s value of means needs. When
-            given and any replicate selected the value of means for `D` or
-            `G_ST` (`convergence_estimate`), that statistic's interval pools the
-            replicates' window means of `H_S` and `H_T` first
+        deme_count: The number of demes, which $D$'s value of means needs. When
+            given and any replicate selected the value of means for $D$ or
+            $G_{ST}$ (`convergence_estimate`), that statistic's interval pools the
+            replicates' window means of $H_S$ and $H_T$ first
             (`_pooled_value_of_means`); `None` leaves every statistic as a
             plain mean of replicate values.
 
     Returns:
         One `ConfidenceInterval` per statistic name in `FinalReport`
-        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
-        ``A_CGD``, ``Delta``, ``MI``, ``Gs``, ``Gd``) with at least two
+        ($D$, $G_{ST}$, $E_{ST}$, $K_{ST}$, $H_S$, $H_T$, $H_{ST}$,
+        ``A_CGD``, ``Delta``, ``MI``, $G_s$, $G_d$) with at least two
         defined values across
         `reports`; a statistic short of that (including every statistic,
         given fewer than two reports overall) is omitted entirely.
-        `Gs`/`Gd` are both linear in `H_S`/`H_T` (`fim.statistics.
+        $G_s$ / $G_d$ are both linear in $H_S$ / $H_T$ (`fim.statistics.
         differentiation.gs`/`gd`'s own docstrings), so — unlike `D`/
-        `G_ST`, whose own across-replicate treatment this project's own
+        $G_{ST}$, whose own across-replicate treatment this project's own
         Ryman & Leimar remediation, `R3` part 3, still owes a dedicated
         derivation — the ordinary Student's-t interval on the sample mean
         this function already computes for every other field is already
@@ -122,15 +122,15 @@ def _pooled_value_of_means(
 
     Averaging the statistic inside each replicate and then across replicates
     gives a number whose target depends on the window length; the value of
-    the means does not, so the replicates' window means of `H_S` and `H_T` are
+    the means does not, so the replicates' window means of $H_S$ and $H_T$ are
     averaged first, `f` is applied once, and the interval comes from the
     delta method over replicates: the spread of
-    `f_S * H_S,r + f_T * H_T,r`, the linearized replicate values.
+    $f_S H_{S,r} + f_T H_{T,r}$, the linearized replicate values.
 
     Args:
         reports: The batch's reports.
         statistic: `"D"` or `"G_ST"`.
-        function: Its `f(H_S, H_T)` with gradient.
+        function: Its $f(H_S, H_T)$ with gradient.
         confidence: Two-tailed confidence level.
 
     Returns:
@@ -188,7 +188,7 @@ def replicate_summary(
     version of that same idea meant for a *completed* batch's own final
     results, rather than a batch still in progress.
 
-    Each replicate is an independent draw of its own final ``D``, ``G_ST``,
+    Each replicate is an independent draw of its own final $D$, $G_{ST}$,
     and so on; this is a closed-form Student's-t interval on the sample
     mean of those draws (`fim.statistics.interval.confidence_interval`) —
     a standard, textbook statistical method for exactly this situation
@@ -215,14 +215,14 @@ def replicate_summary(
 
     Returns:
         One `ConfidenceInterval` per statistic name in `FinalReport`
-        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
-        ``Gs``, ``Gd`` — the same nine `reports_summary` itself lists,
+        ($D$, $G_{ST}$, $E_{ST}$, $K_{ST}$, $H_S$, $H_T$, $H_{ST}$,
+        $G_s$, $G_d$ — the same nine `reports_summary` itself lists,
         restated here rather than abbreviated, since this list had
-        silently kept naming only the first seven after ``Gs``/``Gd``
+        silently kept naming only the first seven after $G_s$ / $G_d$
         were added).
-        ``G_ST`` is undefined for a replicate whose locus is monomorphic
-        across every deme (``H_T == 0``); such replicates are dropped
-        from ``G_ST``'s own sample rather than papered over with a
+        $G_{ST}$ is undefined for a replicate whose locus is monomorphic
+        across every deme ($H_T = 0$); such replicates are dropped
+        from $G_{ST}$'s own sample rather than papered over with a
         substitute value, so its `ConfidenceInterval.sample_count` can be
         smaller than the other statistics' — and a statistic left with
         fewer than two defined replicates is omitted entirely rather
@@ -284,7 +284,7 @@ def pooled_convergence_histories(
     per point rather than sharing one external generation list the way
     `RunResult.convergence_generations` does for a single replicate:
     a statistic can go undefined for some *interior* stretch of a
-    replicate's own history (`G_ST`, whenever every tracked locus is
+    replicate's own history ($G_{ST}$, whenever every tracked locus is
     currently monomorphic — `convergence_values`'s own docstring), not
     only trail off at the end the way a stopped replicate does: without
     knowing *which* generations were skipped, this function cannot
@@ -478,19 +478,19 @@ def _interpolated_history(
 def _grand_ratio_of_means(
     reports: Sequence[FinalReport], deme_count: int
 ) -> tuple[float | None, float]:
-    """Return `(G_ST, D)` pooled across every report's own `Gs`/`Gd`, as one ratio.
+    """Return `(G_ST, D)` pooled across every report's own $G_s$ / $G_d$, as one ratio.
 
     `mean(Gs_i)`/`mean(Gd_i)` across every report, converted back to
-    `H_S`/`H_T` (inverting `fim.statistics.differentiation.gs`/`gd`'s
+    $H_S$ / $H_T$ (inverting `fim.statistics.differentiation.gs`/`gd`'s
     own formulas) and then through `g_st_from_demes`/`_jost_d_from_
     within_and_total` — the "ratio of means across everything" this
     project's own Ryman & Leimar remediation, `R3` part 3
     (`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
     5-gene-identity-recursion-fim-implications.md` §4, §9), found the
     identity recursion itself predicts — genuinely different from
-    averaging each report's own already-computed `G_ST`/`D` (a *mean of
-    ratios*, subject to a real, measured Jensen-gap bias `Gs`/`Gd`
-    themselves, being linear, never have). `Gs`/`Gd` are already each
+    averaging each report's own already-computed $G_{ST}$ / $D$ (a *mean of
+    ratios*, subject to a real, measured Jensen-gap bias $G_s$ / $G_d$
+    themselves, being linear, never have). $G_s$ / $G_d$ are already each
     report's own ratio-of-means across loci (`report_for_state`'s own
     `mean_h_s`/`mean_h_t`), so averaging them again across reports
     reaches the identical grand pooled mean a direct re-derivation from
@@ -563,21 +563,21 @@ def bootstrap_replicate_summary(
     confidence: float = 0.95,
     bootstrap_samples: int = 2000,
 ) -> dict[str, ConfidenceInterval]:
-    """Return a bootstrap confidence interval for the batch's own pooled `D`/`G_ST`.
+    """Return a bootstrap confidence interval for the batch's own pooled $D$ / $G_{ST}$.
 
-    `replicate_summary` treats each replicate's own final `D`/`G_ST` as
+    `replicate_summary` treats each replicate's own final $D$ / $G_{ST}$ as
     one independent draw and builds a closed-form Student's-t interval
     on their plain mean — correct for every *linear* statistic
-    (`H_S`, `H_T`, `H_ST`, `E_ST`, `K_ST`, `Gs`, `Gd`), but `D`/`G_ST`
-    are *ratios* of `Gs`/`Gd`, and the mean of a ratio is not, in
+    ($H_S$, $H_T$, $H_{ST}$, $E_{ST}$, $K_{ST}$, $G_s$, $G_d$), but $D$ / $G_{ST}$
+    are *ratios* of $G_s$ / $G_d$, and the mean of a ratio is not, in
     general, the ratio of the means: averaging each replicate's own
-    already-computed `D` carries a real, measured Jensen-gap bias
+    already-computed $D$ carries a real, measured Jensen-gap bias
     relative to what the identity recursion itself predicts (this
     project's own Ryman & Leimar remediation, `R3` part 3, quantifies
-    it directly: +4.84% of `D`, 3.4 standard errors from zero, on one
+    it directly: +4.84% of $D$, 3.4 standard errors from zero, on one
     measured run).
     This function instead bootstraps the *grand* ratio-of-means estimate
-    (`_grand_ratio_of_means`: pool `Gs`/`Gd` across every replicate
+    (`_grand_ratio_of_means`: pool $G_s$ / $G_d$ across every replicate
     first, then take one ratio) — resampling replicates with
     replacement `bootstrap_samples` times, recomputing that same grand
     ratio each time, and reading off a percentile interval from the

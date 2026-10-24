@@ -654,7 +654,7 @@ def test_page_evaluation_of_the_closed_form_matches_the_python_recursion() -> No
 
     The two halves of one formula must not drift apart: the server solves
     the recursion, the page evaluates it at the run's own generations from
-    the run's own first `H_S`/`H_T`.
+    the run's own first $H_S$ / $H_T$.
     """
     demes, size, migration, mutation = 4, 60, 0.05, 0.01
     recursion = identity_recursion(size, migration, mutation, demes)
@@ -819,13 +819,13 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going(
     (deliberately unreachable) convergence criterion.
 
     All six report statistics are expected in the legend, not only the
-    starter form's own single watched `convergence_statistic` (`D`) —
+    starter form's own single watched `convergence_statistic` ($D$) —
     `accumulateLiveTrajectory`'s own module docstring names this as
     design §6.2's own explicit alternative ("...or all six report
     statistics"), deliberately different from the completed-view
     legend the test above checks. The starter form's own `N`/`m`/`mu`
     (`450`/`0.001`/`0.00003`) are all plain scalars, so the three
-    predictable statistics (`D`/`G_ST`/`E_ST`) each also draw a second,
+    predictable statistics ($D$ / $G_{ST}$ / $E_{ST}$) each also draw a second,
     distinctly-labeled predicted-equilibrium entry (design §6.2's own
     closing paragraph) — nine legend entries total, not six.
     """

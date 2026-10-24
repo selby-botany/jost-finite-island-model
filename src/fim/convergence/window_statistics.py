@@ -221,15 +221,15 @@ EstimateForm = Literal["mean_of_values", "value_of_means"]
 
 @dataclass(frozen=True, slots=True)
 class IdentityStatistic:
-    """A statistic that is a function `X = f(H_S, H_T)` of the identities.
+    """A statistic that is a function $X = f(H_S, H_T)$ of the identities.
 
     Attributes:
-        function: `f(H_S, H_T)`, or `None` where `X` is undefined (`G_ST` at
-            `H_T = 0`).
+        function: $f(H_S, H_T)$, or `None` where `X` is undefined ($G_{ST}$ at
+            $H_T = 0$).
         gradient: `(df/dH_S, df/dH_T)` at a point where `f` is defined: the
             sensitivities the delta method needs.
-        denominator: The quantity `f` divides by (`H_T` for `G_ST`,
-            `1 - H_S` for `D`); a tiny one makes a per-generation value
+        denominator: The quantity `f` divides by ($H_T$ for $G_{ST}$,
+            $1 - H_S$ for $D$); a tiny one makes a per-generation value
             noisy, which `convergence_estimate: auto` looks for.
     """
 
@@ -246,7 +246,7 @@ class EstimateForms:
         mean_of_values: The window mean of the statistic's own values, with
             its standard error; `None` when fewer than
             `MINIMUM_WINDOW_VALUES` values are defined.
-        value_of_means: `f` of the window means of `H_S` and `H_T`, with a
+        value_of_means: `f` of the window means of $H_S$ and $H_T$, with a
             delta-method standard error; `None` for a statistic that is not a
             function of the identities, or when `f` is undefined at the
             means.
@@ -277,8 +277,8 @@ def degenerate_share(
     """Return the share of window generations whose denominator is below `threshold`.
 
     Args:
-        h_s: The window's `H_S` values.
-        h_t: The window's `H_T` values, parallel to `h_s`.
+        h_s: The window's $H_S$ values.
+        h_t: The window's $H_T$ values, parallel to `h_s`.
         statistic: Supplies the denominator.
         threshold: A denominator below this marks a generation degenerate.
 
@@ -331,19 +331,19 @@ def value_of_means_statistics(
     h_t: npt.NDArray[np.float64],
     statistic: IdentityStatistic,
 ) -> WindowStatistics | None:
-    """Return `f(mean H_S, mean H_T)` with a delta-method standard error.
+    r"""Return $f(\bar H_S, \bar H_T)$ with a delta-method standard error.
 
     The estimate is `f` of the two window means. Its standard error comes from
     linearizing `f` at those means: the series
-    `L_t = f_S * H_S,t + f_T * H_T,t` has the same autocorrelation structure
+    $L_t = f_S H_{S,t} + f_T H_{T,t}$ has the same autocorrelation structure
     as the estimate's error, so the Geyer standard error of `L`'s mean is the
-    standard error of `f(mean H_S, mean H_T)`, to first order, with the
+    standard error of $f(\bar H_S, \bar H_T)$, to first order, with the
     covariance of the two heterozygosities and both autocorrelations
     accounted for.
 
     Args:
-        h_s: The window's `H_S` values, in order.
-        h_t: The window's `H_T` values, parallel to `h_s`.
+        h_s: The window's $H_S$ values, in order.
+        h_t: The window's $H_T$ values, parallel to `h_s`.
         statistic: Supplies `f` and its gradient.
 
     Returns:

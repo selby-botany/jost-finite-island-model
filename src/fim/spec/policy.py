@@ -46,7 +46,7 @@ class Stopping:
             ``"D"``). A single name is accepted and becomes a one-item tuple.
         combinator: ``"all"`` stops when every watched statistic is stable;
             ``"any"`` when at least one is.
-        estimate: Which expected value is reported for `D` and `G_ST`.
+        estimate: Which expected value is reported for $D$ and $G_{ST}$.
         burn_in: Generations discarded before averaging, or ``"auto"``.
         max_generations: Hard cap on generations, or ``"auto"``.
         precision: Target half-width of the interval around each watched
@@ -146,8 +146,8 @@ class Analysis:
 
     Args:
         deme_weighting: ``"equal"`` or by deme ``"size"``.
-        locus_aggregation: ``"ratio_of_means"`` pools `H_S` and `H_T` across
-            loci before forming `D` and `G_ST`; ``"mean_of_ratios"`` forms
+        locus_aggregation: ``"ratio_of_means"`` pools $H_S$ and $H_T$ across
+            loci before forming $D$ and $G_{ST}$; ``"mean_of_ratios"`` forms
             them per locus and averages.
         track_expensive: Also track the costly opt-in statistics every
             generation, for display.

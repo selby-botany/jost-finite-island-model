@@ -64,17 +64,17 @@ class _FounderStore:
 @pytest.mark.slow
 @pytest.mark.statistical
 def test_dear_nolan_high_converges_from_founder_population() -> None:
-    """Founders approach both published high-migration differentiation values.
+    r"""Founders approach both published high-migration differentiation values.
 
     This functional test uses the example's ordinary two-allele founder
     initialization, not the internal identity recursion or a prepared
     equilibrium. The predetermined published-value bounds are inherited
-    from the earlier validation: |G_ST - 0.02| <= 0.005 and
-    0.89 <= D <= 0.92. They are not the stationarity calibration bands.
+    from the earlier validation: $|G_{ST} - 0.02| \le 0.005$ and
+    $0.89 \le D \le 0.92$. They are not the stationarity calibration bands.
 
     A fixed seed and 5000-generation horizon make the outcome repeatable.
     Both final values and the last 500 generations' means must satisfy
-    the bounds, so a matching G_ST alone or a premature stop cannot pass.
+    the bounds, so a matching $G_{ST}$ alone or a premature stop cannot pass.
     Runtime is characterized, never asserted against a wall-clock budget.
     """
     pytest.importorskip("numba")

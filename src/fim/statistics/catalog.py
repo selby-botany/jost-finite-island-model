@@ -536,7 +536,7 @@ def expensive_statistics_requested(shown: Iterable[str]) -> bool:
 
     The desktop app's rule for `SimulationParams.track_expensive_
     statistics`: true exactly when at least one ``"opt_in"`` statistic
-    (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) is shown, so a shown one
+    ($E_{ST}$, $K_{ST}$, `A_CGD`, `Delta`, `MI`) is shown, so a shown one
     has a real per-generation history on the trajectory and the
     scrubbed statistics panel, and hiding all five avoids their cost.
     The flag covers all five together: showing any one computes all

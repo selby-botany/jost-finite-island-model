@@ -17,7 +17,7 @@ def archived_report_equal(expected: dict[str, Any], actual: dict[str, Any]) -> b
 
     Returns:
         Whether all fields agree, allowing only numerical rounding in
-        `window_statistics`, `E_ST`, and `MI` (relative `1e-12`, absolute
+        `window_statistics`, $E_{ST}$, and `MI` (relative `1e-12`, absolute
         `1e-14`). FFT/BLAS and the system logarithm can differ in their last
         bits across platforms. Keys, types, integers, booleans, and all other
         report fields remain exact; local parity never uses this comparator.

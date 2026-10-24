@@ -90,8 +90,8 @@ def differentiation_q_for_state(
     calls "q": a single number that a whole family of differentiation
     measures turns out to be special cases of, once written in a common
     mathematical form — `differentiation_q(table, order=0, ...)` is
-    exactly `K_ST`, `order=1` is exactly `E_ST`, and `order=2` is exactly
-    Jost's `D`, all from literally the same underlying formula, just
+    exactly $K_{ST}$, `order=1` is exactly $E_{ST}$, and `order=2` is exactly
+    Jost's $D$, all from literally the same underlying formula, just
     evaluated at a different value of `order`. Reporting several
     different `order` values side by side for the same run — a
     "differentiation-q sweep" — is one way of seeing how sensitive a
@@ -103,9 +103,9 @@ def differentiation_q_for_state(
     `deme_weighting` has a defined effect only at ``q = 1``
     (`fim.statistics.differentiation.differentiation_q` raises if
     weights are passed at any other order) — the same order that
-    matches `E_ST`. Deriving the weights the same way
+    matches $E_{ST}$. Deriving the weights the same way
     `fim.engine.tracking.statistics_for_locus` does keeps `Differentiation_1`
-    here identical to the report's own `E_ST`, rather than the two
+    here identical to the report's own $E_{ST}$, rather than the two
     silently disagreeing whenever `deme_weighting` is `"size"`.
     """
     weights = (

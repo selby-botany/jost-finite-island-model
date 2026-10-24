@@ -1695,7 +1695,7 @@ def test_get_equilibrium_predictions_honors_significant_digits() -> None:
 
 
 def test_equilibrium_reference_matches_the_statistics_functions_directly() -> None:
-    """The trajectory panel's own `D`/`G_ST`/`E_ST` core matches Explore's formula.
+    """The trajectory panel's $D$ / $G_{ST}$ / $E_{ST}$ core matches Explore's formula.
 
     Botanist GUI design doc §6.2's own predicted-equilibrium overlay:
     `_equilibrium_reference` is the exact same core `Api.get_equilibrium_
@@ -1900,7 +1900,7 @@ def test_closed_form_trajectory_payload_is_sampled_for_unequal_sizes_and_a_matri
 
 
 def test_sampled_closed_form_starts_where_the_real_run_starts(tmp_path: Path) -> None:
-    """The seeded initial population reproduces generation zero's `H_S`/`H_T`.
+    """The seeded initial population reproduces generation zero's $H_S$ / $H_T$.
 
     The matrix solver cannot read its start off the trajectory (two averages
     are not enough for unequal demes), so it rebuilds the initial state
@@ -1977,7 +1977,7 @@ def test_closed_form_trajectory_payload_is_none_without_migration_or_mutation(
 
 
 def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None:
-    """Sweeping `m` recomputes `D`/`G_ST`/`E_ST` at each point using the same N/d/mu."""
+    """Sweeping `m` recomputes $D$, $G_{ST}$, $E_{ST}$ per point with N/d/mu fixed."""
     result = Api().get_equilibrium_sweep(
         axis="m", n="450", m="0.001", mu="0.00003", d="20"
     )
@@ -1999,7 +1999,7 @@ def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None:
 
 
 def test_get_equilibrium_sweep_reports_e_st_as_none_at_mu_zero() -> None:
-    """`E_ST` (like `D`) is undefined at `mu == 0`; `G_ST` alone stays defined.
+    """$E_{ST}$ (like $D$) is undefined at `mu == 0`; $G_{ST}$ alone stays defined.
 
     Mirrors `test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_
     zero`'s own case, one level down: the sweep's own per-point `mu == 0`
@@ -2079,11 +2079,11 @@ def test_get_equilibrium_sweep_matches_the_statistics_functions_directly() -> No
 
 
 def test_get_equilibrium_sweep_shows_d_flat_across_population_size() -> None:
-    """`D` swept against `N` is a horizontal line -- the project's core claim.
+    """$D$ swept against `N` is a horizontal line -- the project's core claim.
 
     `equilibrium_d` has no `N` term at all: only the migration-to-mutation
     ratio sets where it settles. Drawing that flat line beside a falling
-    `G_ST` is precisely why the sweep carries every statistic rather than
+    $G_{ST}$ is precisely why the sweep carries every statistic rather than
     hiding the ones that do not vary on a given axis.
     """
     result = Api().get_equilibrium_sweep(
@@ -2174,7 +2174,7 @@ def test_format_statistic_honors_an_explicit_digits_count() -> None:
 
 
 def test_effective_allele_summary_matches_the_closed_form_directly() -> None:
-    """Both readouts equal `effective_allele_count` applied to H_S/H_T directly."""
+    """Both readouts equal `effective_allele_count` applied to $H_S$ / $H_T$."""
     report = {"H_S": 0.6, "H_T": 0.8}
 
     summary = app_module._effective_allele_summary(report, digits=6)
@@ -2184,7 +2184,7 @@ def test_effective_allele_summary_matches_the_closed_form_directly() -> None:
 
 
 def test_effective_allele_summary_caution_flag_only_above_the_threshold() -> None:
-    """`gStCaution` fires only once H_S exceeds the documented cutover."""
+    """`gStCaution` fires only once $H_S$ exceeds the documented cutover."""
     below = app_module._effective_allele_summary({"H_S": 0.5, "H_T": 0.9}, digits=3)
     above = app_module._effective_allele_summary({"H_S": 0.9, "H_T": 0.95}, digits=3)
 
@@ -2237,11 +2237,11 @@ def test_effective_allele_interval_summary_clamps_an_out_of_range_edge() -> None
     """A wide, small-sample interval edge outside `H`'s own `[0, 1)` domain is
     clamped rather than crashing `effective_allele_count`.
 
-    Found live: a real 2-replicate batch's own `H_S` interval reached a
+    Found live: a real 2-replicate batch's own $H_S$ interval reached a
     `high` at or past `1.0` (`replicate_summary`'s own Student's-t
     interval is symmetric and domain-unaware, the identical "wild band"
     `computeBatchTrajectoryValueDomain`'s own docstring already
-    documents for `D`), crashing `_drain_batch_messages`'s own
+    documents for $D$), crashing `_drain_batch_messages`'s own
     background thread before `_clamped_effective_allele_count` existed.
     """
     raw_summary = {
@@ -2258,7 +2258,7 @@ def test_effective_allele_interval_summary_clamps_an_out_of_range_edge() -> None
 
 
 def test_effective_allele_interval_summary_caution_flag_only_above_threshold() -> None:
-    """`gStCaution` fires only once `H_S`'s own interval mean exceeds the cutover."""
+    """`gStCaution` fires only once $H_S$'s own interval mean exceeds the cutover."""
     below = app_module._effective_allele_interval_summary(
         {"H_S": _interval(0.5, 0.4, 0.6), "H_T": _interval(0.9, 0.8, 0.95)}, digits=3
     )

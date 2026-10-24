@@ -1,13 +1,13 @@
-"""Headless functional tests: Settings' "Statistics shown" decides whether a
+r"""Headless functional tests: Settings' "Statistics shown" decides whether a
 run computes the expensive statistics every generation.
 
-Configure's old "track E_ST/K_ST/A_CGD/δG/I for display" checkbox is
-gone. `Api._merge_default_run_settings` now sets
+Configure's old "track $E_{ST}$ / $K_{ST}$ / $A_{\mathrm{CGD}}$ / $\delta_G$ / $I$
+for display" checkbox is gone. `Api._merge_default_run_settings` now sets
 `track_expensive_statistics` from what Settings shows
 (`fim.statistics.catalog.expensive_statistics_requested`). These tests
 start a real, small run from the page and check both sides of the rule:
 
-- showing `E_ST` makes the run record it every generation (the scrubbed
+- showing $E_{ST}$ makes the run record it every generation (the scrubbed
   statistics row shows a real value at generation 0) and shows its row,
   and the run's manifest records `track_expensive_statistics: true`;
 - the fresh-install choice (every expensive statistic hidden) records
@@ -76,7 +76,7 @@ def _show(preferences_path: Path, keys: tuple[str, ...]) -> None:
 
 
 def _run_and_scrub_to_generation_0(window: webview.Window) -> dict[str, Any]:
-    """Run the tiny configuration, scrub to generation 0 and read the E_ST row."""
+    """Run the tiny configuration, scrub to generation 0 and read the $E_{ST}$ row."""
     outcome: queue.Queue[dict[str, Any] | AssertionError] = queue.Queue(maxsize=1)
 
     def poll(script: str, what: str) -> Any:
@@ -131,7 +131,7 @@ def _tracked_in_manifest(directory: str) -> bool:
 def test_showing_an_expensive_statistic_computes_and_shows_it_every_generation(
     fast_scalar_run_settings: Path,
 ) -> None:
-    """Shown in Settings: E_ST has a real value at generation 0, on screen."""
+    """Shown in Settings: $E_{ST}$ has a real value at generation 0, on screen."""
     _show(fast_scalar_run_settings, (*default_shown_keys(), "E_ST"))
 
     settled = _run_and_scrub_to_generation_0(create_window(hidden=True))
