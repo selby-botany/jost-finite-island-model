@@ -1,0 +1,122 @@
+<h1 id="settings-and-saved-preferences">Settings and saved preferences</h1>
+<p><strong>Settings</strong>, at the top of the window, holds preferences and defaults
+for new configurations. Saved Settings never change existing results or
+a configuration you have loaded. To change one configuration's run
+settings, use <a href="#" data-fim-help="gui-configure" data-fim-anchor="run-settings">Run settings…</a> in Configure.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#startup-and-display">Startup and display</a></li>
+<li><a href="#statistics-shown">Statistics shown</a></li>
+<li><a href="#background-work">Background work</a></li>
+<li><a href="#storage-location">Storage location</a></li>
+<li><a href="#defaults-for-new-configurations">Defaults for new configurations</a></li>
+<li><a href="#where-preferences-are-stored">Where preferences are stored</a></li>
+</ul>
+<h2 id="startup-and-display">Startup and display</h2>
+<ul>
+<li><strong>At startup</strong>: <strong>Restore the last submitted configuration</strong> opens the
+configuration last started with <strong>Run simulation</strong>; <strong>Restart from the
+starter configuration</strong> uses built-in model values. Both apply saved
+run settings, not those of the restored configuration.</li>
+<li><strong>Default ploidy</strong> for new configurations; <strong>Ask me each time</strong>
+requires a choice in each configuration before it runs.</li>
+<li><strong>Run card graph columns</strong> and <strong>Scatter plot points</strong> (marker style;
+alleles at the same coordinates are counted together).</li>
+<li><strong>significant digits</strong> rounds displayed values only; saved files keep
+full precision.</li>
+<li><strong>appearance</strong>: <strong>Follow system</strong>, <strong>Light</strong>, or <strong>Dark</strong>.</li>
+</ul>
+<p>The first-launch welcome panel offers <strong>Examples…</strong> or <strong>Start from
+scratch</strong>. <strong>File &gt; New configuration</strong> uses starter model values and
+saved run settings, ignoring the last submitted configuration.</p>
+<h2 id="statistics-shown">Statistics shown</h2>
+<p><strong>Statistics shown</strong> selects statistics for the statistics panel,
+results tables, trajectory chart, and sweep charts. Presets are
+<strong>Essentials</strong>, <strong>Differentiation</strong>, <strong>Nei distances</strong>, and
+<strong>Everything</strong>; a filter box and checkboxes select individually.
+<strong>Choose…</strong> beside a statistics table opens this section directly. Final
+saved results include hidden statistics.</p>
+<p>Showing any of <var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, or <var>I</var>
+enables per-generation tracking of all five for new runs, which
+increases run time, especially with many demes. Hiding all five
+disables that tracking unless one is watched for convergence. See
+<a href="#" data-fim-help="configuration" data-fim-anchor="track_expensive_statistics"><code>track_expensive_statistics</code></a>.</p>
+<p><strong>Save every deme pair for runs with up to</strong> N demes sets the
+<code>pairwise.json</code> limit (default 1024). The file grows with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>d</mi><mn>2</mn></msup></mrow></math>: about
+0.5 MB at 100 demes and 52 MB at 1024, per run and per replicate. Above
+the limit no matrix is saved; any single pair can still be recomputed
+from the saved trajectory.</p>
+<h2 id="background-work">Background work</h2>
+<p>These settings apply to jobs started after you save them.</p>
+<ul>
+<li><strong>Run priority</strong>: <strong>Normal</strong>, <strong>Lower</strong>, or <strong>Lowest</strong>. Lowest can
+make simulations several times slower on macOS. The interface always
+keeps normal priority. Each job's effective priority appears in its
+tab.</li>
+<li><strong>Keep CPU cores free</strong>: whole logical cores or a percentage, rounded
+up to whole cores. The worker budget is the remaining cores, at least
+one.</li>
+<li><strong>Keep memory free</strong>: <strong>Automatic</strong> keeps the larger of 2 GiB and 10%
+of physical memory free; you can instead reserve GiB or a percentage.
+Before a job starts, the app estimates its added memory and asks if
+the estimate would cross the reserve. While work runs, a warning
+appears if available memory falls below the reserve; each listed job
+has a <strong>Pause</strong> button. Runs pause at a checkpoint; sweeps stop at a
+resumable point.</li>
+</ul>
+<h2 id="storage-location">Storage location</h2>
+<p><strong>Storage location</strong> holds results, logs, and Study and Experiment
+data. <strong>Change…</strong> takes effect the next time you open <code>fim</code>. When a
+<code>--root</code> or <code>--results-directory</code> flag, or <code>FIM_HOME</code> or
+<code>FIM_RESULTS_DIRECTORY</code>, sets the location, the field is locked; change
+or unset that instead. See
+<a href="#" data-fim-help="usage" data-fim-anchor="where-results-logs-and-preferences-are-written">where results, logs, and preferences are written</a>.</p>
+<h2 id="defaults-for-new-configurations">Defaults for new configurations</h2>
+<p>These are the defaults that <strong>Run settings…</strong> starts from:
+<strong>execution engine</strong>, <strong>n_replicates</strong>, <strong>max generations</strong>,
+<strong>confidence</strong>, <strong>max workers</strong>, and <strong>max concurrent replicates</strong>;
+under <strong>Convergence</strong>, <strong>convergence burn-in</strong>, <strong>precision</strong>,
+<strong>expected value</strong>, <strong>precision method</strong>, and <strong>replicate averaging
+window</strong>; under <strong>Expert: engine tuning</strong>, <strong>JIT</strong>, <strong>auto-vector min
+d</strong>, and <strong>auto-vector max capacity</strong>; and under <strong>Storage</strong>,
+<strong>trajectory retention</strong>, <strong>trajectory stride</strong>, and <strong>thinning
+start</strong>.</p>
+<p><strong>Expert settings</strong> control convergence policy, statistical
+calculations, and storage. Their values are recorded in the manifest and
+contribute to the run's identity. <strong>Reset all to default</strong> restores the
+shipped values. See <a href="#" data-fim-help="configuration" data-fim-anchor="expert"><code>expert</code></a>.</p>
+<p>Each control's meaning is in the
+<a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>; the correspondence is
+listed in <a href="#" data-fim-help="gui-configure" data-fim-anchor="run-settings">run settings</a>. <strong>max workers</strong>
+describes this computer, not the run, and never changes results.</p>
+<h2 id="where-preferences-are-stored">Where preferences are stored</h2>
+<p>Preferences hold defaults and interface state. They are not the record
+of a run; each run's configuration, seed, and results are in its own
+folder under <code>results/</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td><code>~/Library/Application Support/fim/preferences.json</code></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td><code>%APPDATA%\fim\preferences.json</code></td>
+</tr>
+<tr>
+<td>Linux</td>
+<td><code>$XDG_CONFIG_HOME/fim/preferences.json</code> (usually <code>~/.config/fim/preferences.json</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><code>--preferences-file</code> or <code>FIM_PREFERENCES_FILE</code> overrides the location.
+If the file contains invalid JSON or an unsupported format, the next
+launch shows a dismissible banner and uses built-in defaults. The invalid
+file is kept as <code>preferences.invalid-&lt;timestamp&gt;.json</code>. Removing the
+preferences folder resets Settings without changing <code>results/</code>.</p>

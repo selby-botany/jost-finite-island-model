@@ -1,0 +1,185 @@
+<h1 id="sweeps">Sweeps</h1>
+<p>A sweep runs one configuration over a set of parameter values. Every
+point is an ordinary run, filed in one Study. The desktop app and
+<code>fim sweep</code> share the same specification, storage, and results; the
+command-line equivalent of each action is given in parentheses. Full
+semantics are in <a href="#" data-fim-help="usage" data-fim-anchor="sweep-a-parameter">sweep a parameter</a>.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#set-up-a-sweep">Set up a sweep</a></li>
+<li><a href="#recording-and-disk">Recording and disk</a></li>
+<li><a href="#seeds-and-reuse">Seeds and reuse</a></li>
+<li><a href="#progress">Progress</a></li>
+<li><a href="#results">Results</a></li>
+<li><a href="#point-health">Point health</a></li>
+<li><a href="#continue-retry-and-recompute">Continue, retry, and recompute</a></li>
+<li><a href="#run-names">Run names</a></li>
+</ul>
+<h2 id="set-up-a-sweep">Set up a sweep</h2>
+<ol>
+<li>In Configure, tick <strong>Sweep</strong> and choose <strong>Set up sweep…</strong>.</li>
+<li>Under <strong>What varies</strong>, choose a parameter and its values for each
+axis. <strong>Add axis</strong> adds another; there is no limit. Common parameters
+are listed first; every other sweepable setting is under <strong>More
+parameters</strong>. List- and group-valued settings (<code>p_0</code>, <code>mu_b</code>, <code>loci</code>,
+<code>expert</code>) and <code>seed</code> cannot be swept.</li>
+<li><strong>Combine the axes</strong>: <strong>Every combination (a grid)</strong>, with the first
+axis changing slowest, or <strong>Together, value by value (equal
+counts)</strong> (<code>strategy: zip</code>).</li>
+<li>Check the live point count. <strong>Show every point</strong> lists them with
+their validity; an incompatible combination, such as a torus whose
+rows × columns differs from d, is listed with its reason
+(<code>fim sweep plan</code>).</li>
+<li>Choose <strong>Done</strong>, then <strong>Run</strong>. The sweep runs in the Study selected at
+the bottom of Configure. A Study holds at most one sweep.</li>
+</ol>
+<p><code>N</code> on a sweep axis counts individuals per deme, as everywhere else. A
+<code>Nm</code> axis sets <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mi>N</mi><mi>m</mi><mo>/</mo><mi>N</mi></mrow></math> with N in individuals and replaces <code>m</code>.</p>
+<p>Explore's <strong>Sweep this for real</strong> fills the same setup; see
+<a href="#" data-fim-help="gui-explore" data-fim-anchor="from-prediction-to-simulation">Explore</a>.</p>
+<h2 id="recording-and-disk">Recording and disk</h2>
+<p><strong>Keep</strong> chooses what each point stores:</p>
+<table>
+<thead>
+<tr>
+<th>Choice</th>
+<th>YAML <code>retention</code></th>
+<th>Stores</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Everything</td>
+<td><code>full</code></td>
+<td>Every generation</td>
+</tr>
+<tr>
+<td>Every Nth generation</td>
+<td><code>thinned</code></td>
+<td>One generation in every stride after a start</td>
+</tr>
+<tr>
+<td>Recent generations, thinning further back</td>
+<td><code>tapered</code></td>
+<td>The most recent generations in full, thinning further back; frames grow with the logarithm of run length</td>
+</tr>
+<tr>
+<td>Statistics only</td>
+<td><code>statistics</code></td>
+<td>No trajectory log; report, summary, scatter plot, and a decimated history of at most 2,048 generations</td>
+</tr>
+</tbody>
+</table>
+<p>For <strong>tapered</strong>, <strong>Recent generations kept in full</strong> sets <code>keep_last</code>,
+and <strong>Keep the burn-in frames too</strong> keeps the transient. <strong>Statistic
+history</strong> is <strong>Compact</strong> (the sweep default: values rounded to about a
+hundredth of the precision, which changes no reported answer) or
+<strong>Exact</strong>.</p>
+<p>The dialog shows <strong>Time</strong>, <strong>Disk</strong>, and what was <strong>Measured</strong> for the
+points still to run. Ranges reflect unknown convergence times. The time
+estimate comes from a brief probe of this computer's engine (&quot;Measuring
+the engine…&quot;); results are cached in <code>sweep-throughput.json</code> beside your
+preferences.</p>
+<p>A point whose existing run kept less than the sweep requests is
+recomputed; a run that kept more is reused.</p>
+<h2 id="seeds-and-reuse">Seeds and reuse</h2>
+<ul>
+<li><strong>Seeds</strong>: <strong>Independent points (recommended)</strong> gives point <var>i</var> the
+seed <code>base seed + i × n_replicates</code>, so no two points share a replicate
+seed. <strong>The same seed at every point</strong> (<code>seed_policy: same</code>) uses the
+base seed throughout.</li>
+<li>A point's run ID is a hash of its configuration. A sweep that overlaps
+an earlier one reuses identical points, including seed, made by the
+same software version.</li>
+<li><strong>Points at once</strong> sets concurrency; <strong>Automatic</strong> fills the cores.
+Results do not depend on it.</li>
+</ul>
+<h2 id="progress">Progress</h2>
+<p>The progress view shows each point's state, the time remaining, and each
+finished point's duration. Points with the longest estimated duration
+start first; scheduling never changes a point's configuration or result.
+A failed point is recorded and the sweep continues. A point that fails
+for a transient reason is retried once. <strong>Cancel sweep</strong> stops the sweep
+and pauses the points in flight; finished points stay in the Study.</p>
+<p>A sweep locks its Study while it runs. Another process that tries to run
+the same Study stops with a message instead.</p>
+<h2 id="results">Results</h2>
+<p><strong>View results</strong> opens the results card. <strong>View</strong> selects:</p>
+<ul>
+<li><strong>Final values:</strong> the chosen <strong>Statistic</strong> <strong>Across</strong> one axis. To
+compare values of a second axis, set <strong>and</strong> to &quot;(none: a line)&quot; and
+choose <strong>Curves by</strong>. Each value gets a color, marker shape, error
+bars, and an optional theory curve. Two axes can also be drawn as a
+heat map, whose <strong>Show</strong> menu offers <strong>Simulation</strong>, <strong>Theory</strong>,
+<strong>Simulation minus theory</strong>, and the difference as a fraction of
+theory.</li>
+<li><strong>How each point got there:</strong> the statistic against generation, one
+curve per <strong>Curves by</strong> value. The band is the interval of the mean
+over replicates still running; a dotted line marks the end of burn-in;
+a dashed stretch marks where fewer than half the replicates are still
+running; a hollow end marker marks a point whose replicates did not
+all settle. The x axis is logarithmic automatically for runs of 1,000
+generations or more (<code>fim sweep trajectories</code>).</li>
+</ul>
+<p><strong>Error bars</strong> show <strong>Interval of the mean</strong> (95%, the default),
+<strong>Spread (standard deviation)</strong> across replicates, or <strong>Both</strong>.
+<strong>x scale</strong> and <strong>y scale</strong> are <strong>Automatic</strong>, <strong>Linear</strong>, or <strong>Log</strong>;
+Automatic uses a log axis for a geometric series. <strong>Show theory</strong> adds
+the closed-form value for <var>D</var>, <var>G</var><sub>ST</sub>, <var>E</var><sub>ST</sub>, <var>H</var><sub>S</sub>, and <var>H</var><sub>T</sub>.</p>
+<p>With the chart focused, the arrow keys move between points and Enter
+opens a point's run. Click a curve or point to open its run.</p>
+<ul>
+<li><strong>Save table…</strong> writes the results for every shown statistic, with
+the closed-form columns, plus a <code>.meta.json</code> file that records the
+sweep settings, software version, and column meanings
+(<code>fim sweep export --with-theory</code>).</li>
+<li><strong>Save chart…</strong> saves the chart as drawn, as PNG.</li>
+<li><strong>Show in Home</strong> selects the sweep's Study on Home.</li>
+</ul>
+<h2 id="point-health">Point health</h2>
+<table>
+<thead>
+<tr>
+<th>Mark</th>
+<th>Meaning</th>
+<th>Drawn as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>healthy</code></td>
+<td>Every replicate settled and the interval meets <code>precision</code></td>
+<td>Filled marker</td>
+</tr>
+<tr>
+<td><code>degraded</code></td>
+<td>Some replicates reached the generation cap, or the interval is wider than <code>precision</code></td>
+<td>Hollow ring</td>
+</tr>
+<tr>
+<td><code>unreliable</code></td>
+<td>Every replicate reached the cap before settling</td>
+<td>Ring with an X</td>
+</tr>
+</tbody>
+</table>
+<p>A point that is not healthy is flagged, never omitted. The table's
+<strong>health</strong> column and the hover text give the reason.</p>
+<h2 id="continue-retry-and-recompute">Continue, retry, and recompute</h2>
+<p>On Home, a Study that holds a sweep offers:</p>
+<ul>
+<li><strong>Continue sweep:</strong> runs the points still missing
+(<code>fim sweep resume</code>).</li>
+<li><strong>Retry failed (N):</strong> reruns only the failed points
+(<code>fim sweep resume --retry-failed</code>).</li>
+<li><strong>Recompute all…:</strong> after confirmation, recomputes every finished point
+and compares it with its stored run, bit for bit
+(<code>fim sweep resume --rerun</code>). A match replaces the old run; a
+difference keeps both and writes <code>reproducibility.json</code>.</li>
+</ul>
+<p>Each opens the sweep's progress view. To compare two or more sweeps, see
+<a href="#" data-fim-help="gui-compare" data-fim-anchor="compare-sweeps">compare sweeps</a>.</p>
+<h2 id="run-names">Run names</h2>
+<p>Each point's run is named after the Study and its values, for example
+<code>Migration and number of demes sweep m=0.001, d=8</code>. Its description
+locates it in the sweep: <code>Point 8 of 21 of the sweep &quot;Migration and number of demes&quot;: m=0.001 of m=[0.0001..0.1] (7 values); d=8 of d=[4, 8, 16].</code> A reused run keeps its existing name.</p>

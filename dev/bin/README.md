@@ -62,7 +62,7 @@ material:
 | Generated files | Source | Generator |
 |---|---|---|
 | `src/fim/API.md` | Python docstrings | `generate-api-docs` |
-| `src/fim/gui/webui/help/` | `doc/usage.md`, `doc/configuration.md`, `doc/statistics.md` | `generate-help-html` |
+| `src/fim/gui/webui/help/` | Topics listed in `doc/help-topics.json` | `generate-help-html` |
 | `src/fim/gui/webui/examples/` | `doc/examples/` | `build-examples-catalog` |
 | Marked YAML blocks in `doc/usage.md` | `doc/examples/<example>/config.yaml` | `update-worked-examples` |
 
@@ -86,7 +86,7 @@ Git hooks refresh affected files automatically.
 | [`extract-release-notes`](#extract-release-notes) | Pulls one version's own section out of `CHANGELOG.md`, for GitHub's release page |
 | [`generate-api-docs`](#generate-api-docs) | Rebuilds the generated API reference (`src/fim/API.md`) from the code's own docstrings |
 | [`generate-heatmap-queue`](#generate-heatmap-queue) | Writes a `benchmark-queue` file that measures every combination of deme count and locus length at once, to check whether the engines' own speed crossover is really a simple rectangle in that two-setting space |
-| [`generate-help-html`](#generate-help-html) | Rebuilds the desktop app's in-app Help screen content from `doc/usage.md`/`doc/configuration.md` |
+| [`generate-help-html`](#generate-help-html) | Rebuilds the desktop app's Help pages, topic list, and search index from `doc/help-topics.json` |
 | [`generate-test-docs`](#generate-test-docs) | Rebuilds the test-suite reference (`test/TESTS.md`) from test docstrings |
 | [`regenerate-example-outputs`](#regenerate-example-outputs) | Reruns the worked examples under `doc/examples/` and replaces their committed result files, so the results the desktop app ships with are exactly what the current code produces |
 | [`render-heatmap`](#render-heatmap) | Turns `generate-heatmap-queue`'s own results into two readable grids: which engine won at each combination, and by how much |
@@ -493,10 +493,12 @@ Start with a coarse grid, then refine near the measured boundary.
 
 ## `generate-help-html`
 
-Converts `doc/usage.md` and `doc/configuration.md` into offline desktop
-help under `src/fim/gui/webui/help/`, together with `doc/statistics.md`.
-First synchronizes usage-guide YAML
-through [`update-worked-examples`](#update-worked-examples).
+Converts every topic listed in `doc/help-topics.json` into offline
+desktop help under `src/fim/gui/webui/help/<topic>.html`, and writes
+`topics.json` (Help home) and `search-index.json` (one entry per section)
+beside them. Fragments for topics no longer registered are removed. To
+add a topic, add its entry to the registry and its source to the
+pre-commit hook's help trigger list; tests check both.
 
 ```console
 dev/bin/generate-help-html
@@ -504,9 +506,11 @@ dev/bin/generate-help-html --output-dir scratch-help
 ```
 
 The default overwrites committed HTML; `--output-dir` writes elsewhere.
-Edit the Markdown sources, not generated HTML. The pre-commit hook refreshes
-help when either guide changes; the pre-push hook and `./build --ci` check
-freshness.
+Edit the Markdown sources, not generated HTML. The pre-commit hook
+synchronizes usage-guide YAML through
+[`update-worked-examples`](#update-worked-examples) and refreshes help when
+a registered source or the registry changes; the pre-push hook and
+`./build --ci` check freshness.
 
 Inline TeX and fenced `math` equations are converted to native MathML by
 the pinned development dependency `latex2mathml`. Equation tags appear

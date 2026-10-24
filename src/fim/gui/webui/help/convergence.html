@@ -1,0 +1,1183 @@
+<h1 id="convergence-burn-in-then-average">Convergence: burn in, then average</h1>
+<p>This guide describes how <code>fim</code> determines run completion and derives
+burn-in and generation-cap values from model parameters.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#if-you-only-read-one-section">If you only read one section</a></li>
+<li><a href="#why-does-my-run-take-so-long">Why does my run take so long?</a></li>
+<li><a href="#quick-reference">Quick reference</a></li>
+<li><a href="#how-a-run-decides-it-is-finished">How a run decides it is finished</a></li>
+<li><a href="#how-the-numbers-are-derived">How the numbers are derived</a></li>
+<li><a href="#where-the-formula-comes-from">Where the formula comes from</a></li>
+<li><a href="#how-precise-is-the-reported-value">How precise is the reported value?</a></li>
+<li><a href="#batches-replicates-that-average">Batches: replicates that average</a></li>
+<li><a href="#which-average-two-forms-for-each-differentiation-measure">Which average? Two forms for each differentiation measure</a></li>
+<li><a href="#checking-the-numbers-yourself">Checking the numbers yourself</a></li>
+<li><a href="#limits">Limits</a></li>
+<li><a href="#notation-and-implementation-map">Notation and implementation map</a></li>
+</ul>
+<p>Mathematical quantities use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math>, such as <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi></mrow></math> for a relaxation time.
+Literal configuration keys, report fields, and Python names use backticks,
+such as <code>precision</code> and <code>standard_error</code>. Equations are numbered within
+this document as (C.1), (C.2), and so on; the prefix means
+<strong>convergence reference</strong>, not Appendix C of the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md">simulator design</a>. That design's Appendices C–F
+provide additional algebra, probability, and linear-algebra refreshers.
+Statistic definitions and saved-result identifiers are listed in the
+<a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a>.</p>
+<h2 id="if-you-only-read-one-section">If you only read one section</h2>
+<p>A run first completes a <strong>burn-in</strong>, the period during which the initial
+condition's influence decays. It then collects an <strong>evidence window</strong> until
+the estimated average reaches the requested precision (<code>precision</code> at the
+specified <code>confidence</code>). The report includes the estimated average and its
+uncertainty. If the generation cap is reached first, the run reports that
+status and the uncertainty achieved. A short run does not by itself
+demonstrate equilibrium. Check <code>convergence_burn_in</code>,
+<code>max_generations</code>, and the reported uncertainty against the model's
+timescale.</p>
+<p>There are two separate questions:</p>
+<ol>
+<li><strong>Has the initial condition's influence decayed enough?</strong> Burn-in
+addresses this possible bias.</li>
+<li><strong>Has enough evidence been collected to estimate the equilibrium
+average precisely?</strong> The averaging window and its error bar address
+sampling uncertainty.</li>
+</ol>
+<p>A long burn-in does not automatically answer the second question.
+A small error bar does not repair a burn-in that ended too early.
+The population need not stop changing for its equilibrium <strong>average</strong>
+to be estimable.</p>
+<h2 id="why-does-my-run-take-so-long">Why does my run take so long?</h2>
+<h3 id="interpretation">Interpretation</h3>
+<p>Population structure changes over generations through migration, mutation,
+and drift. Low migration can produce long relaxation times, often tens of
+thousands of generations. Drift continues to cause generation-to-generation
+variation at equilibrium; the evidence window estimates the average to the
+requested precision.</p>
+<p>Set <code>convergence_burn_in</code> and <code>max_generations</code> to <code>auto</code> to use the
+model-derived values. The app displays the expected burn-in next to the
+<strong>Run simulation</strong> button before execution, for example:</p>
+<blockquote>
+<p>Convergence: burn-in 104,338 generations, cap 399,728 (derived; this model
+needs about 19,693 generations to forget its starting state)</p>
+</blockquote>
+<p>If a run reaches the cap before meeting its precision criterion, the report
+gives the achieved uncertainty. Possible responses include increasing the
+generation cap, accepting a wider interval, adding independent loci, or
+using multiple replicates. Parallel execution can reduce elapsed time, but
+each replicate incurs its own burn-in, so a batch need not reduce total
+computation.</p>
+<h2 id="quick-reference">Quick reference</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>precision</code></td>
+<td><code>0.01</code></td>
+<td>Plus or minus, in each watched statistic's own units, at <code>confidence</code></td>
+</tr>
+<tr>
+<td><code>confidence</code></td>
+<td><code>0.95</code></td>
+<td>Nominal coverage of the interval procedure (0.90, 0.95 or 0.99), not a guarantee about one interval</td>
+</tr>
+<tr>
+<td><code>convergence_burn_in</code></td>
+<td><code>auto</code></td>
+<td>First included generation, derived from <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>⌈</mi><mi>k</mi><mi>τ</mi><mi>⌉</mi></mrow></math> with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi><mo>=</mo><mo>max</mo><mo stretchy="false">(</mo><mn>5</mn><mo>,</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>2</mn><mo>/</mo><mi>ε</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math></td>
+</tr>
+<tr>
+<td><code>max_generations</code></td>
+<td><code>auto</code></td>
+<td>Safety cap: <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>max</mo><mo stretchy="false">(</mo><mn>200000</mn><mo>,</mo><mi>b</mi><mo>+</mo><mi>⌈</mi><mn>15</mn><mi>τ</mi><mi>⌉</mi><mo stretchy="false">)</mo></mrow></math>, at most 10,000,000</td>
+</tr>
+</tbody>
+</table>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math> denotes <code>precision</code>, <var>b</var> the derived burn-in boundary, and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi></mrow></math> the estimated relaxation time of the slowest locus.
+The table gives the base identity-statistic policy; an expert multiplier
+can lengthen burn-in for spectrum statistics. Its shipped value is 1,
+so enabling a spectrum statistic alone does not currently extend burn-in.
+Any valid explicit integer you write
+replaces the derived value. If you set only one of the two, the other adapts: a
+derived cap leaves <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>15</mn><mi>τ</mi></mrow></math> after an explicit burn-in, subject to the
+10,000,000-generation ceiling. The
+<code>expert:</code> mapping changes the policy constants (the floor of 5, the factor
+15, the first check, the effective-sample-size floor and the rest; see
+<a href="#" data-fim-help="configuration" data-fim-anchor="expert">configuration.md</a>).</p>
+<p>Related settings, each described in <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration.md</a>:
+<code>convergence_statistic</code> (default <code>D</code> and <code>G_ST</code>, stopping when both have
+settled; any global statistic may be watched, an unbounded one such as an allele
+count gets a relative precision), <code>statistic_precision</code> (a plus-or-minus for one
+statistic), <code>convergence_estimate</code> (mean of values or value of means, below),
+<code>precision_method</code> and <code>replicate_averaging_window</code> (batches, below), and
+<code>trajectory_retention</code> (thin a very long run's trajectory file).</p>
+<p>Symptoms of a bad value:</p>
+<ul>
+<li><strong>Burn-in too short:</strong> the average starts inside the transient and is
+biased.</li>
+<li><strong>Cap too small:</strong> the run ends &quot;hit the cap&quot;, possibly before the burn-in
+even ends (then there is no average at all); the run logs a warning.</li>
+<li><strong>Cap too large:</strong> only a run that never reaches its precision takes longer
+to end.</li>
+</ul>
+<p><code>fim run</code> prints the derived values unless <code>--quiet</code>. They are also written as
+plain integers to <code>manifest.json</code>. Reusing them preserves the schedule;
+exact trajectory reproduction additionally requires the seed, model
+parameters, software version, and compatible numerical platform.</p>
+<h2 id="how-a-run-decides-it-is-finished">How a run decides it is finished</h2>
+<p><em>For sysops, technicians and developers.</em></p>
+<pre><code class="language-text">resolve burn-in and cap from configuration or model-derived defaults
+start the evidence window at the burn-in boundary, excluding generation 0
+first check after the configured initial evidence span
+at each check, for every watched statistic:
+    estimate its mean, standard error, and effective sample size
+    pass if both the error target and the effective-sample-size floor pass
+stop if all (or any, under `convergence_combinator: any`) pass
+otherwise grow the evidence window before the next check
+stop as capped at max_generations
+</code></pre>
+<ul>
+<li>Nothing is averaged before the burn-in, and generation 0 is never in an
+average.</li>
+<li><var>z</var> is the two-sided normal critical value (about 1.96 at 95%), so <code>precision</code>
+keeps the meaning &quot;plus or minus this much&quot;.</li>
+<li>The effective sample size, reported as <code>effective_sample_size</code>, is how many independent values the
+window's correlated generations are worth; a standard error from fewer than
+50 is not trusted by the default rule. Geyer's initial positive sequence
+estimator sums an estimated sequence of autocorrelations up to a
+data-dependent cutoff, rather than using only neighboring generations
+(see
+<a href="#how-precise-is-the-reported-value">How precise is the reported value?</a>).</li>
+<li>Every watched statistic is judged at every check, so the stop generation
+never depends on the order they are listed in.</li>
+<li>With no relaxation time (no migration and no mutation, or an explicit
+matrix beyond 24 demes) and <code>convergence_burn_in: auto</code>, the window starts
+at the first tenth of the run at each check.</li>
+<li>At the stop, every recorded statistic, watched or not, gets its mean and
+standard error over the same window, in <code>report.json</code>'s
+<code>window_statistics</code>.</li>
+</ul>
+<h3 id="window-boundaries-and-check-scheduling">Window boundaries and check scheduling</h3>
+<p>Let <var>t</var> be the current generation and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi><mo>≥</mo><mn>1</mn></mrow></math> the first included
+generation. The evidence window includes both endpoints:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>W</mi><mo>&#x0003D;</mo><mi>t</mi><mo>&#x02212;</mo><mi>b</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></math><span class="equation-tag">(C.1)</span></div>
+<p><var>W</var> counts observations, not elapsed gaps between them. If <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi><mo>=</mo><mn>100</mn></mrow></math>
+and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>t</mi><mo>=</mo><mn>150</mn></mrow></math>, the window contains 51 observations:
+generations <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>100</mn><mo>,</mo><mn>101</mn><mo>,</mo><mi>…</mi><mo>,</mo><mn>150</mn></mrow></math>. Generation 99 is excluded.
+The name <code>burn_in</code> is therefore best read as a boundary; it does not
+mean that generation <var>b</var> is discarded too.</p>
+<p>With default expert settings and an available <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi></mrow></math>, the initial
+span and first check are:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x00394;</mi><mn>0</mn></msub><mo>&#x0003D;</mo><mo>max</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>50</mn><mo>&#x0002C;</mo><mi>&#x02308;</mi><mn>2</mn><mi>&#x003C4;</mi><mi>&#x02309;</mi><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(C.2)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>t</mi><mn>0</mn></msub><mo>&#x0003D;</mo><mi>b</mi><mo>&#x0002B;</mo><msub><mi>&#x00394;</mi><mn>0</mn></msub></mrow></math><span class="equation-tag">(C.3)</span></div>
+<p>The ceiling <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>⌈</mi><mi>x</mi><mi>⌉</mi></mrow></math> means round upward to a whole generation.
+For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi><mo>=</mo><mn>100</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi><mo>=</mo><mn>20</mn></mrow></math>, the maximum in (C.2) chooses 50 rather
+than 40, so the first check is at generation 150.
+If that check fails, the implementation schedules:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>t</mi><mrow><mrow><mi mathvariant="normal">n</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">x</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mo>max</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mi>t</mi><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002C;</mo><mtext>&#x000A0;</mtext><mi>b</mi><mo>&#x0002B;</mo><mi>&#x02308;</mi><mi>g</mi><mi>W</mi><mi>&#x02309;</mi><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mo>&#x0002C;</mo><mspace width="2em" /><mi>g</mi><mo>&#x0003D;</mo><mn>2</mn></mrow></math><span class="equation-tag">(C.4)</span></div>
+<p>Here <var>g</var> is the default growth factor. For the 51-observation
+window above, the next check is at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>100</mn><mo>+</mo><mn>2</mn><mi>·</mi><mn>51</mn><mo>=</mo><mn>202</mn></mrow></math>,
+which includes 103 observations. This endpoint convention explains
+why &quot;double the window&quot; is a description of the policy rather
+than an exact doubling of the observation count.
+The run still ends at its cap if a scheduled check lies beyond it.</p>
+<p>See <a href="#check-scheduling-limit">the check-scheduling limit</a> for the
+consequences of checking only at selected generations.</p>
+<p>When no model-derived time is available, the fallback boundary at
+a check is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>⌊</mi><mn>0.1</mn><mi>t</mi><mi>⌋</mi></mrow></math>. Only generation-1 and later
+values are recorded by the run for this averaging.
+The floor <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>⌊</mi><mi>x</mi><mi>⌋</mi></mrow></math> rounds downward.
+Unlike a fixed burn-in, this window's start moves as the run grows;
+it is a fallback policy, not a demonstrated equilibrium time.</p>
+<h2 id="how-the-numbers-are-derived">How the numbers are derived</h2>
+<p><em>For developers and reviewers.</em></p>
+<h3 id="units-and-the-scalar-island-approximation">Units and the scalar island approximation</h3>
+<p>Let <var>N</var><sub>k</sub> count individuals in deme <var>k</var>, <var>c</var> count gene copies per
+individual from ploidy, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>n</mi><mi>k</mi></msub><mo>=</mo><mi>c</mi><msub><mi>N</mi><mi>k</mi></msub></mrow></math> count copies <strong>at one locus</strong>.
+The total copy count is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>n</mi><mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow></mrow></msub><mo>&#x0003D;</mo><munderover><mo>&#x02211;</mo><mrow><mi>k</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></munderover><msub><mi>n</mi><mi>k</mi></msub></mrow></math><span class="equation-tag">(C.5)</span></div>
+<p>Do not add copies across loci. Twenty diploid demes of 225 individuals
+have <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>n</mi><mi>k</mi></msub><mo>=</mo><mn>450</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>n</mi><mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow></mrow></msub><mo>=</mo><mn>9000</mn></mrow></math> at each locus.
+For the scalar island model, each destination keeps fraction <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><mi>m</mi></mrow></math>
+and receives fraction <var>m</var> from the other demes. With equal sizes and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>&gt;</mo><mn>0</mn></mrow></math>, the implemented approximation is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>T</mi><mo>&#x0003D;</mo><msub><mi>n</mi><mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow></mrow></msub><mo>&#x0002B;</mo><mfrac><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow><mrow><mn>2</mn><mi>m</mi></mrow></mfrac></mrow></math><span class="equation-tag">(C.6)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003C4;</mi><mo>&#x0003D;</mo><mfrac><mn>1</mn><mrow><mn>2</mn><msub><mi>&#x003BC;</mi><mrow><mo>min</mo></mrow></msub><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002F;</mo><mi>T</mi></mrow></mfrac></mrow></math><span class="equation-tag">(C.7)</span></div>
+<p><var>T</var> is a pairwise ancestral coalescence timescale: time for two
+lineages to reach a common ancestral copy. It is not the final
+generation number, nor the time for every copy's entire genealogy
+to coalesce. <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mrow><mo>min</mo></mrow></msub><mo>=</mo><msub><mo>min</mo><mi>l</mi></msub><msub><mi>μ</mi><mi>l</mi></msub></mrow></math> is the smallest per-locus
+mutation probability, supplied by <code>mu</code> or derived from <code>mu_b</code>.
+With shared sizes and migration, the lowest mutation rate gives the
+slowest-decaying identity mode and sets the common burn-in scale.</p>
+<p>The denominator in (C.7) is a sum of <strong>rates</strong>, each in inverse
+generations. Its reciprocal is in generations. Adding the times
+<var>T</var> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><msub><mi>μ</mi><mrow><mo>min</mo></mrow></msub><mo stretchy="false">)</mo></mrow></math> would instead describe waiting for
+two successive events, not two alternative ways to forget identity.
+These are discrete-generation, small-rate approximations, not exact
+identities for arbitrary migration and mutation probabilities.</p>
+<p>For five haploid demes of 100 copies each, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mn>0.0001</mn></mrow></math> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mrow><mo>min</mo></mrow></msub><mo>=</mo><mn>0.000001</mn></mrow></math>, calculate:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>T</mi><mo>&#x0003D;</mo><mn>5</mn><mi>&#x000B7;</mi><mn>100</mn><mo>&#x0002B;</mo><mfrac><mrow><mn>5</mn><mo>&#x02212;</mo><mn>1</mn></mrow><mrow><mn>2</mn><mi>&#x000B7;</mi><mn>0.0001</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>500</mn><mo>&#x0002B;</mo><mn>20000</mn><mo>&#x0003D;</mo><mn>20500</mn></mrow></math><span class="equation-tag">(C.8)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003C4;</mi><mo>&#x0003D;</mo><mfrac><mn>1</mn><mrow><mn>0.000002</mn><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002F;</mo><mn>20500</mn></mrow></mfrac><mo>&#x02248;</mo><mn>19692.60</mn></mrow></math><span class="equation-tag">(C.9)</span></div>
+<p>The small rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.000002</mn></mrow></math> is added to approximately <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.00004878</mn></mrow></math>.
+The resulting decay is slow even though a generation is cheap to
+simulate. At <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mn>0</mn></mrow></math>, the implementation sets the coalescence-rate
+contribution to zero without dividing by zero. Positive mutation
+then gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi><mo>=</mo><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><msub><mi>μ</mi><mrow><mo>min</mo></mrow></msub><mo stretchy="false">)</mo></mrow></math>. With both rates zero this route
+has no finite time and refuses a derived cap.</p>
+<p>The relaxation time is computed whenever a supported model permits it,
+not only when burn-in or cap is automatic. Explicit matrices and
+unequal sizes use the identity operator in the next section, with a
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>d</mi><mn>2</mn></msup></mrow></math>-by-<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>d</mi><mn>2</mn></msup></mrow></math> eigenproblem limited to 24 demes.
+The source is <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/defaults.py"><code>defaults.py</code></a>.</p>
+<p>The relevant limits are
+<a href="#scalar-approximation-limit">the scalar approximation</a>,
+<a href="#matrix-and-size-limit">unequal sizes and the eigenproblem guard</a>,
+<a href="#slowest-locus-limit">selection of the slowest locus</a>, and
+<a href="#high-migration-evidence-limit">the high-migration reference scenario</a>.</p>
+<h3 id="from-a-decay-scale-to-a-burn-in">From a decay scale to a burn-in</h3>
+<p>Let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi><mo>&gt;</mo><mn>0</mn></mrow></math> denote requested <code>precision</code>. A unit-amplitude
+mode that decays exponentially has remaining magnitude
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>exp</mi><mo stretchy="false">(</mo><mo>−</mo><mi>b</mi><mo>/</mo><mi>τ</mi><mo stretchy="false">)</mo></mrow></math> after <var>b</var> generations. Allocate half the requested
+precision to that residual as a policy heuristic:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>exp</mi><mo stretchy="false">&#x00028;</mo><mo>&#x02212;</mo><mi>b</mi><mo>&#x0002F;</mo><mi>&#x003C4;</mi><mo stretchy="false">&#x00029;</mo><mo>&#x02264;</mo><mi>&#x003B5;</mi><mo>&#x0002F;</mo><mn>2</mn></mrow></math><span class="equation-tag">(C.10)</span></div>
+<p>Taking natural logs, which preserve inequalities between positive
+numbers, gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>&#x02212;</mo><mi>b</mi><mo>&#x0002F;</mo><mi>&#x003C4;</mi><mo>&#x02264;</mo><mi>ln</mi><mo stretchy="false">&#x00028;</mo><mi>&#x003B5;</mi><mo>&#x0002F;</mo><mn>2</mn><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(C.11)</span></div>
+<p>Multiplication by the negative number <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>τ</mi></mrow></math> reverses the inequality:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>b</mi><mo>&#x02265;</mo><mi>&#x003C4;</mi><mi>ln</mi><mo stretchy="false">&#x00028;</mo><mn>2</mn><mo>&#x0002F;</mo><mi>&#x003B5;</mi><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(C.12)</span></div>
+<p>The implementation adds a minimum multiple:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>k</mi><mo>&#x0003D;</mo><mo>max</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>5</mn><mo>&#x0002C;</mo><mi>ln</mi><mo stretchy="false">&#x00028;</mo><mn>2</mn><mo>&#x0002F;</mo><mi>&#x003B5;</mi><mo stretchy="false">&#x00029;</mo><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(C.13)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>b</mi><mo>&#x0003D;</mo><mo>max</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x0002C;</mo><mo>min</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msub><mi>C</mi><mrow><mo>max</mo></mrow></msub><mo>&#x0002C;</mo><mi>&#x02308;</mi><mi>a</mi><mi>k</mi><mi>&#x003C4;</mi><mi>&#x02309;</mi><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(C.14)</span></div>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>C</mi><mrow><mo>max</mo></mrow></msub><mo>=</mo><mn>10000000</mn></mrow></math> is the default hard ceiling.
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>a</mi><mo>=</mo><mn>1</mn></mrow></math> for the base identity-statistic policy; watching an
+allele-spectrum statistic can invoke <code>spectrum_burn_in_multiplier</code>
+instead. The floor of five relaxation times prevents a loose
+precision from shortening the burn-in too much. In the measured
+two-mode example motivating the policy, bias at about <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>5.3</mn><mi>τ</mi></mrow></math>
+was <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mn>0.00016</mn></mrow></math>; that measurement is evidence for a default, not
+a universal bound.</p>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi><mo>=</mo><mn>0.01</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mn>200</mn><mo>≈</mo><mn>5.298317</mn></mrow></math>, so the
+logarithm exceeds the floor. With (C.9) and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>a</mi><mo>=</mo><mn>1</mn></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi><mo>=</mo><mi>⌈</mi><mn>104337.661877</mn><mi>…</mi><mi>⌉</mi><mo>=</mo><mn>104338</mn></mrow></math>.
+For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi><mo>=</mo><mn>0.001</mn></mrow></math> the multiple grows to <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mn>2000</mn><mo>≈</mo><mn>7.600902</mn></mrow></math>.
+For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi><mo>=</mo><mn>0.1</mn></mrow></math> it stays at five because <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mn>20</mn><mo>&lt;</mo><mn>5</mn></mrow></math>.
+Zero precision is handled specially: the derived burn-in reaches
+the ceiling rather than evaluating <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mo stretchy="false">(</mo><mn>2</mn><mo>/</mo><mn>0</mn><mo stretchy="false">)</mo></mrow></math>.</p>
+<p>The unit-offset argument explains the policy; it is <strong>not</strong> a
+proof that every nonlinear statistic's bias is bounded by
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi><mo>/</mo><mn>2</mn></mrow></math>. Mode amplitudes, nonlinear ratios, mutation model,
+and clipping at the ceiling limit that interpretation. In particular,
+clipping a requested burn-in cannot preserve a bound that required
+a longer run.</p>
+<h3 id="from-burn-in-to-a-safety-cap">From burn-in to a safety cap</h3>
+<p>The base derived cap is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>C</mi><mo>&#x0003D;</mo><mo>min</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msub><mi>C</mi><mrow><mo>max</mo></mrow></msub><mo>&#x0002C;</mo><mo>max</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>200000</mn><mo>&#x0002C;</mo><mi>b</mi><mo>&#x0002B;</mo><mi>&#x02308;</mi><mn>15</mn><mi>&#x003C4;</mi><mi>&#x02309;</mi><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(C.15)</span></div>
+<p>For the same example, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>⌈</mi><mn>15</mn><mi>τ</mi><mi>⌉</mi><mo>=</mo><mn>295390</mn></mrow></math> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>C</mi><mo>=</mo><mn>104338</mn><mo>+</mo><mn>295390</mn><mo>=</mo><mn>399728</mn></mrow></math>. The 200,000 floor does not apply
+because that sum is larger. For a much faster model it can
+dominate. The GUI example near the start of this document uses
+these values; (C.8)–(C.15) show the precise
+arithmetic for the stated example.</p>
+<p>The floor is empirical, not derived from <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi></mrow></math>. Measurements of
+single-locus <var>D</var> at target precision 0.01 needed close to
+130,000 generations in two regimes with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi></mrow></math> near 85 and 19,693.
+Fifteen relaxation times alone would leave too little averaging in
+the fast regime. Conversely, the cap is not a promise that the
+precision will be reached: the uncertainty check still decides.</p>
+<p>See <a href="#empirical-cap-limit">the empirical-cap limit</a> for the scope
+of the measurements supporting the floor.</p>
+<h2 id="where-the-formula-comes-from">Where the formula comes from</h2>
+<p><em>For the mathematically curious. The only linear algebra needed is explained
+here.</em></p>
+<h3 id="one-number-follow-the-error-instead-of-the-state">One number: follow the error instead of the state</h3>
+<p>Start with a deterministic recurrence:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>x</mi><mrow><mi>t</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></msub><mo>&#x0003D;</mo><mi>&#x003BB;</mi><msub><mi>x</mi><mi>t</mi></msub><mo>&#x0002B;</mo><msub><mi>c</mi><mn>0</mn></msub><mo>&#x0002C;</mo><mspace width="2em" /><mn>0</mn><mo>&#x0003C;</mo><mi>&#x003BB;</mi><mo>&#x0003C;</mo><mn>1</mn></mrow></math><span class="equation-tag">(C.16)</span></div>
+<p><var>t</var> counts generations, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>λ</mi></mrow></math> is the fraction of the old value
+retained, and <var>c</var><sub>0</sub> is a constant addition. The subscript distinguishes
+this constant from ploidy <var>c</var>. A fixed point <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>x</mi><mo>*</mo></msub></mrow></math> is a value that
+the recurrence leaves unchanged. Substituting it gives
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>x</mi><mo>*</mo></msub><mo>=</mo><mi>λ</mi><msub><mi>x</mi><mo>*</mo></msub><mo>+</mo><msub><mi>c</mi><mn>0</mn></msub></mrow></math>. Subtract <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>λ</mi><msub><mi>x</mi><mo>*</mo></msub></mrow></math> and divide:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>x</mi><mo>&#x0002A;</mo></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>c</mi><mn>0</mn></msub></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mi>&#x003BB;</mi></mrow></mfrac></mrow></math><span class="equation-tag">(C.17)</span></div>
+<p>Now define the error <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>e</mi><mi>t</mi></msub><mo>=</mo><msub><mi>x</mi><mi>t</mi></msub><mo>−</mo><msub><mi>x</mi><mo>*</mo></msub></mrow></math>. Subtract the fixed-point equation
+from the update. The constant terms cancel:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>e</mi><mrow><mi>t</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></msub><mo>&#x0003D;</mo><mi>&#x003BB;</mi><mo stretchy="false">&#x00028;</mo><msub><mi>x</mi><mi>t</mi></msub><mo>&#x02212;</mo><msub><mi>x</mi><mo>&#x0002A;</mo></msub><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mi>&#x003BB;</mi><msub><mi>e</mi><mi>t</mi></msub></mrow></math><span class="equation-tag">(C.18)</span></div>
+<p>Apply that rule twice to obtain <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>e</mi><mn>2</mn></msub><mo>=</mo><msup><mi>λ</mi><mn>2</mn></msup><msub><mi>e</mi><mn>0</mn></msub></mrow></math>; repeat <var>t</var>
+times:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>e</mi><mi>t</mi></msub><mo>&#x0003D;</mo><msup><mi>&#x003BB;</mi><mi>t</mi></msup><msub><mi>e</mi><mn>0</mn></msub></mrow></math><span class="equation-tag">(C.19)</span></div>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>λ</mi><mo>=</mo><mn>0.9</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>c</mi><mn>0</mn></msub><mo>=</mo><mn>0.02</mn></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>x</mi><mn>0</mn></msub><mo>=</mo><mn>0.8</mn></mrow></math>, the fixed point
+is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.2</mn></mrow></math> and the initial error is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.6</mn></mrow></math>. The next two states are
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.74</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.686</mn></mrow></math>, whose errors <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.54</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.486</mn></mrow></math> are
+exactly <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.9</mn></mrow></math> times their predecessors. After ten steps the error
+is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.6</mn><mo stretchy="false">(</mo><mn>0.9</mn><msup><mo stretchy="false">)</mo><mrow><mn>10</mn></mrow></msup><mo>≈</mo><mn>0.20921</mn></mrow></math>.</p>
+<p>An exact exponential decay scale solves <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>λ</mi><mi>τ</mi></msup><mo>=</mo><msup><mi>e</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow></math>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C4;</mi><mrow><mi>log</mi></mrow></msub><mo>&#x0003D;</mo><mo>&#x02212;</mo><mfrac><mn>1</mn><mrow><mi>ln</mi><mi>&#x003BB;</mi></mrow></mfrac></mrow></math><span class="equation-tag">(C.20)</span></div>
+<p>This follows by taking logs: <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi><mi>ln</mi><mi>λ</mi><mo>=</mo><mo>−</mo><mn>1</mn></mrow></math>.
+The code uses a closely related <strong>gap timescale</strong>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">g</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mn>1</mn><mrow><mn>1</mn><mo>&#x02212;</mo><mi>&#x003BB;</mi></mrow></mfrac></mrow></math><span class="equation-tag">(C.21)</span></div>
+<p>To connect them, put <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>δ</mi><mo>=</mo><mn>1</mn><mo>−</mo><mi>λ</mi></mrow></math>. For small <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>δ</mi></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>δ</mi><mo stretchy="false">)</mo><mo>≈</mo><mo>−</mo><mi>δ</mi></mrow></math>, so (C.20) is approximately
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>δ</mi></mrow></math>, which is (C.21).
+At <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>λ</mi><mo>=</mo><mn>0.9</mn></mrow></math> the scales are about 9.4912 and 10 generations.
+At <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>λ</mi><mo>=</mo><mn>0.5</mn></mrow></math> they are about 1.4427 and 2, so the approximation
+is less close. This document uses <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi></mrow></math> for the <strong>implemented</strong>
+timescale; it does not identify the two definitions as exactly equal.</p>
+<p>For a single positive mode the gap choice is conservative relative
+to the exact exponential scale, because
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mi>λ</mi><mo>≤</mo><mo>−</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>λ</mi><mo stretchy="false">)</mo></mrow></math> implies
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>λ</mi><mi>t</mi></msup><mo>≤</mo><mi>exp</mi><mo stretchy="false">[</mo><mo>−</mo><mi>t</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>λ</mi><mo stretchy="false">)</mo><mo stretchy="false">]</mo></mrow></math>.
+That inequality does not by itself bound every multivariate
+nonlinear statistic.</p>
+<h3 id="many-numbers-eigenvectors-are-shapes-that-keep-their-shape">Many numbers: eigenvectors are shapes that keep their shape</h3>
+<p>A vector collects several quantities. A matrix specifies which
+weighted combinations form their next values:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi mathvariant="bold-italic">x</mi><mrow><mi>t</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></msub><mo>&#x0003D;</mo><mi>A</mi><msub><mi mathvariant="bold-italic">x</mi><mi>t</mi></msub><mo>&#x0002B;</mo><mi mathvariant="bold-italic">c</mi></mrow></math><span class="equation-tag">(C.22)</span></div>
+<p>This is an <strong>affine</strong> update: a linear transformation plus a
+constant vector. Subtracting its fixed point again cancels the
+constant, leaving <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi mathvariant="bold-italic">e</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo><mi>A</mi><msub><mi mathvariant="bold-italic">e</mi><mi>t</mi></msub></mrow></math>.
+An eigenvector <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="bold-italic">v</mi><mo>≠</mo><mn>0</mn></mrow></math> is a direction that the
+matrix scales without changing its shape:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>A</mi><mi mathvariant="bold-italic">v</mi><mo>&#x0003D;</mo><mi>&#x003BB;</mi><mi mathvariant="bold-italic">v</mi></mrow></math><span class="equation-tag">(C.23)</span></div>
+<p>For example, take:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>A</mi><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.8</mn></mtd><mtd><mn>0.1</mn></mtd></mtr><mtr><mtd><mn>0.1</mn></mtd><mtd><mn>0.8</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.24)</span></div>
+<p>Multiplication gives two particularly simple directions:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>A</mi><mo>&#x00028;</mo><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mn>1</mn></mtd></mtr></mtable><mo>&#x00029;</mo><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.9</mn></mtd></mtr><mtr><mtd><mn>0.9</mn></mtd></mtr></mtable><mo>&#x00029;</mo><mo>&#x0003D;</mo><mn>0.9</mn><mo>&#x00028;</mo><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mn>1</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.25)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>A</mi><mo>&#x00028;</mo><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mo>&#x02212;</mo><mn>1</mn></mtd></mtr></mtable><mo>&#x00029;</mo><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.7</mn></mtd></mtr><mtr><mtd><mo>&#x02212;</mo><mn>0.7</mn></mtd></mtr></mtable><mo>&#x00029;</mo><mo>&#x0003D;</mo><mn>0.7</mn><mo>&#x00028;</mo><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mo>&#x02212;</mo><mn>1</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.26)</span></div>
+<p>The first direction moves the coordinates together; the second
+moves them oppositely. Their eigenvalues, 0.9 and 0.7, are the
+retained fractions per step. Decompose one initial error:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.6</mn></mtd></mtr><mtr><mtd><mn>0.2</mn></mtd></mtr></mtable><mo>&#x00029;</mo><mo>&#x0003D;</mo><mn>0.4</mn><mo>&#x00028;</mo><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mn>1</mn></mtd></mtr></mtable><mo>&#x00029;</mo><mo>&#x0002B;</mo><mn>0.2</mn><mo>&#x00028;</mo><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mo>&#x02212;</mo><mn>1</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.27)</span></div>
+<p>Applying <var>A</var> once gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.50</mn><mo>,</mo><mn>0.22</mn><msup><mo stretchy="false">)</mo><mrow><mi mathvariant="sans-serif">T</mi></mrow></msup></mrow></math>:
+the common component becomes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.4</mn><mi>·</mi><mn>0.9</mn><mo>=</mo><mn>0.36</mn></mrow></math> and the
+contrast becomes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.2</mn><mi>·</mi><mn>0.7</mn><mo>=</mo><mn>0.14</mn></mrow></math>. Applying it <var>t</var> times gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi mathvariant="bold-italic">e</mi><mi>t</mi></msub><mo>&#x0003D;</mo><mn>0.4</mn><mo stretchy="false">&#x00028;</mo><mn>0.9</mn><msup><mo stretchy="false">&#x00029;</mo><mi>t</mi></msup><mo>&#x00028;</mo><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mn>1</mn></mtd></mtr></mtable><mo>&#x00029;</mo><mo>&#x0002B;</mo><mn>0.2</mn><mo stretchy="false">&#x00028;</mo><mn>0.7</mn><msup><mo stretchy="false">&#x00029;</mo><mi>t</mi></msup><mo>&#x00028;</mo><mtable><mtr><mtd><mn>1</mn></mtd></mtr><mtr><mtd><mo>&#x02212;</mo><mn>1</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.28)</span></div>
+<p>The faster contrast vanishes sooner. The slow common component
+dominates later, provided it was present in the initial error
+and the measured quantity can see it.</p>
+<pre><code class="language-text">Starting discrepancy
+    +-- common component, multiplied by 0.9 each step --+
+    |                                                   +--&gt; sum at step t
+    +-- contrast component, multiplied by 0.7 each step -+
+             fades sooner
+</code></pre>
+<p>The spectral radius <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ρ</mi></mrow></math> is the largest absolute eigenvalue:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003C1;</mi><mo stretchy="false">&#x00028;</mo><mi>A</mi><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><msub><mo>max</mo><mi>j</mi></msub><mo stretchy="false">&#x0007C;</mo><msub><mi>&#x003BB;</mi><mi>j</mi></msub><mo stretchy="false">&#x0007C;</mo></mrow></math><span class="equation-tag">(C.29)</span></div>
+<p>The implementation takes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi><mo>=</mo><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>ρ</mi><mo stretchy="false">)</mo></mrow></math>, provided <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ρ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>.
+A radius of one leaves a nondecaying mode and no finite derived
+time. The eigenvector decomposition above applies directly when
+there is a full basis of eigenvectors, as in this example.
+More general matrices can have transient effects or polynomial
+factors as well as exponential decay; the radius describes an
+asymptotic rate, not a universal finite-time error bound.</p>
+<h3 id="pairwise-identity-why-two-migration-weights-appear">Pairwise identity: why two migration weights appear</h3>
+<p>Fix one locus under infinite alleles. For a realized frequency table,
+define <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo><msub><mo>∑</mo><mi>a</mi></msub><msub><mi>p</mi><mi>i</mi></msub><mo stretchy="false">(</mo><mi>a</mi><mo stretchy="false">)</mo><msub><mi>p</mi><mi>j</mi></msub><mo stretchy="false">(</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></math>: the probability that independent
+draws from demes <var>i</var> and <var>j</var> have the same label. On the diagonal,
+both draws are from the <strong>same distribution with replacement</strong>.
+They can select the very same physical copy, so this is frequency
+identity, not distinct-copy identity <var>F</var> in the simulator design.</p>
+<p>Equilibrium here concerns matching probabilities and frequency
+structure, not an unchanging set of absolute allele IDs. See
+<a href="#allele-label-stationarity-limit">the allele-label stationarity limit</a>.</p>
+<p>For a deterministic row-stochastic parental mixing matrix <var>M</var>,
+the post-migration identity table is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>K</mi><mo>&#x0003D;</mo><mi>M</mi><mi>J</mi><msup><mi>M</mi><mrow><mi mathvariant="sans-serif">T</mi></mrow></msup></mrow></math><span class="equation-tag">(C.30)</span></div>
+<p>The superscript <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="sans-serif">T</mi></mrow></math> means transpose: interchange rows and
+columns. It is not a generation index or the coalescence time <var>T</var>.
+To see why both sides are needed, expand one entry:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>K</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>&#x0003D;</mo><munderover><mo>&#x02211;</mo><mrow><mi>r</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></munderover><munderover><mo>&#x02211;</mo><mrow><mi>s</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></munderover><msub><mi>M</mi><mrow><mi>i</mi><mi>r</mi></mrow></msub><msub><mi>M</mi><mrow><mi>j</mi><mi>s</mi></mrow></msub><msub><mi>J</mi><mrow><mi>r</mi><mi>s</mi></mrow></msub></mrow></math><span class="equation-tag">(C.31)</span></div>
+<p>The first offspring's parent comes from source <var>r</var> with weight
+<var>M</var><sub>ir</sub>; the second comes from source <var>s</var> with weight <var>M</var><sub>js</sub>.
+For that source pair, labels match with probability <var>J</var><sub>rs</sub>.
+Multiply these factors, then add over every possible source pair.
+Mixing a single allele-frequency row needs one weight; matching
+two sampled copies needs two.</p>
+<p>This derivation uses a deterministic <var>M</var>. See
+<a href="#stochastic-migration-limit">the stochastic-migration limit</a>
+before applying it to randomly drawn migrant fractions.</p>
+<p>For a concrete calculation, use:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>M</mi><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.8</mn></mtd><mtd><mn>0.2</mn></mtd></mtr><mtr><mtd><mn>0.1</mn></mtd><mtd><mn>0.9</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.32a)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>J</mi><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.68</mn></mtd><mtd><mn>0.32</mn></mtd></mtr><mtr><mtd><mn>0.32</mn></mtd><mtd><mn>0.68</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.32b)</span></div>
+<p>The <var>J</var> table comes from frequency rows <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.8</mn><mo>,</mo><mn>0.2</mn><mo stretchy="false">)</mo></mrow></math> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.2</mn><mo>,</mo><mn>0.8</mn><mo stretchy="false">)</mo></mrow></math>, so it is an actual identity table rather than
+an arbitrary collection of probabilities.
+First multiply on the left:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>M</mi><mi>J</mi><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.608</mn></mtd><mtd><mn>0.392</mn></mtd></mtr><mtr><mtd><mn>0.356</mn></mtd><mtd><mn>0.644</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.33)</span></div>
+<p>For example, the upper-left entry is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.8</mn><mi>·</mi><mn>0.68</mn><mo>+</mo><mn>0.2</mn><mi>·</mi><mn>0.32</mn><mo>=</mo><mn>0.608</mn></mrow></math>.
+Now mix the second parent with the transposed matrix:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>K</mi><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mi>M</mi><mi>J</mi><mo stretchy="false">&#x00029;</mo><msup><mi>M</mi><mrow><mi mathvariant="sans-serif">T</mi></mrow></msup><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.5648</mn></mtd><mtd><mn>0.4136</mn></mtd></mtr><mtr><mtd><mn>0.4136</mn></mtd><mtd><mn>0.6152</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.34)</span></div>
+<p>Its upper-left entry is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.608</mn><mi>·</mi><mn>0.8</mn><mo>+</mo><mn>0.392</mn><mi>·</mi><mn>0.2</mn><mo>=</mo><mn>0.5648</mn></mrow></math>.
+As a separate check, <var>MP</var> gives frequency rows <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.68</mn><mo>,</mo><mn>0.32</mn><mo stretchy="false">)</mo></mrow></math>
+and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.26</mn><mo>,</mo><mn>0.74</mn><mo stretchy="false">)</mo></mrow></math>. Their squared sums and cross-product give
+exactly (C.34).
+Unlike <var>M</var> and <var>P</var>, rows of <var>J</var> or <var>K</var> need <strong>not</strong> sum to one.
+Their entries are separate matching probabilities, not alternatives
+partitioning a single draw.</p>
+<h3 id="drift-and-mutation-distinguish-self-pairs-from-distinct-pairs">Drift and mutation: distinguish self-pairs from distinct pairs</h3>
+<p>Write the probability that two independently selected copies both
+avoid mutation as:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B1;</mi><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>&#x003BC;</mi><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mn>2</mn><mi>&#x003BC;</mi><mo>&#x0002B;</mo><msup><mi>&#x003BC;</mi><mn>2</mn></msup></mrow></math><span class="equation-tag">(C.35)</span></div>
+<p>For distinct copies in different demes, independent mutation can
+preserve a match only when both avoid mutation:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><msubsup><mi>J</mi><mrow><mi>i</mi><mi>j</mi></mrow><mi>&#x02032;</mi></msubsup><mo>&#x02223;</mo><mi>P</mi><mo stretchy="false">]</mo><mo>&#x0003D;</mo><mi>&#x003B1;</mi><msub><mi>K</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>&#x0002C;</mo><mspace width="2em" /><mi>i</mi><mo>&#x02260;</mo><mi>j</mi></mrow></math><span class="equation-tag">(C.36)</span></div>
+<p>The prime denotes the next generation. The expectation averages over
+drift and mutation conditional on the current frequency table <var>P</var>.
+Fresh infinite-alleles mutations cannot match another copy's label.</p>
+<p>That assumption is essential. See
+<a href="#finite-alleles-limit">the finite-alleles limit</a> for recurrent
+mutations that can create matching labels.</p>
+<p>For two draws <strong>within</strong> destination <var>i</var>, the chance of selecting
+the same observed offspring copy twice is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><msub><mi>n</mi><mi>i</mi></msub></mrow></math>. Such a
+self-pair always matches, even if that offspring mutated.
+Otherwise two distinct offspring must both avoid mutation and
+have matching parental labels:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><msubsup><mi>J</mi><mrow><mi>i</mi><mi>i</mi></mrow><mi>&#x02032;</mi></msubsup><mo>&#x02223;</mo><mi>P</mi><mo stretchy="false">]</mo><mo>&#x0003D;</mo><mfrac><mn>1</mn><mrow><msub><mi>n</mi><mi>i</mi></msub></mrow></mfrac><mo>&#x0002B;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mn>1</mn><mrow><msub><mi>n</mi><mi>i</mi></msub></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mi>&#x003B1;</mi><msub><mi>K</mi><mrow><mi>i</mi><mi>i</mi></mrow></msub></mrow></math><span class="equation-tag">(C.37)</span></div>
+<p>This order of factors matters. Multiplying the entire right-hand
+side by <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>α</mi></mrow></math> would incorrectly allow mutation to make a copy
+different from itself. The actual engine still executes
+Migrate → Drift → Mutate; (C.36)–(C.37) summarize its matching
+probabilities, not a proposed rearrangement of the operators.</p>
+<p>For (C.34), take <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>n</mi><mn>1</mn></msub><mo>=</mo><msub><mi>n</mi><mn>2</mn></msub><mo>=</mo><mn>10</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>=</mo><mn>0.1</mn></mrow></math>, so <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>α</mi><mo>=</mo><mn>0.81</mn></mrow></math>.
+The upper-left output is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.1</mn><mo>+</mo><mn>0.9</mn><mi>·</mi><mn>0.81</mn><mi>·</mi><mn>0.5648</mn><mo>=</mo><mn>0.5117392</mn></mrow></math>.
+The off-diagonal output is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.81</mn><mi>·</mi><mn>0.4136</mn><mo>=</mo><mn>0.335016</mn></mrow></math>.
+The full conditional expectation is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><msup><mi>J</mi><mi>&#x02032;</mi></msup><mo>&#x02223;</mo><mi>P</mi><mo stretchy="false">]</mo><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.5117392</mn></mtd><mtd><mn>0.335016</mn></mtd></mtr><mtr><mtd><mn>0.335016</mn></mtd><mtd><mn>0.5484808</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.38)</span></div>
+<p>This table is not one random output population. It is the mean
+identity table over possible next populations.
+Linearity lets the same recurrence act on <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mi>J</mi><mo stretchy="false">]</mo></mrow></math> across
+generations, which is the key simplification.</p>
+<h3 id="flattening-the-table-into-one-vector">Flattening the table into one vector</h3>
+<p>Arrange the four entries of a two-deme table in row order:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi mathvariant="bold-italic">j</mi><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><msub><mi>J</mi><mrow><mn>11</mn></mrow></msub><mo>&#x0002C;</mo><msub><mi>J</mi><mrow><mn>12</mn></mrow></msub><mo>&#x0002C;</mo><msub><mi>J</mi><mrow><mn>21</mn></mrow></msub><mo>&#x0002C;</mo><msub><mi>J</mi><mrow><mn>22</mn></mrow></msub><msup><mo stretchy="false">&#x00029;</mo><mrow><mi mathvariant="sans-serif">T</mi></mrow></msup></mrow></math><span class="equation-tag">(C.39)</span></div>
+<p>Flattening changes the addressing, not the biology.
+Each coefficient in (C.31) becomes one entry of a larger matrix.
+For the <var>M</var> in (C.32a), that matrix is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>B</mi><mo>&#x0003D;</mo><mi>M</mi><mo>&#x02297;</mo><mi>M</mi><mo>&#x0003D;</mo><mo>&#x00028;</mo><mtable><mtr><mtd><mn>0.64</mn></mtd><mtd><mn>0.16</mn></mtd><mtd><mn>0.16</mn></mtd><mtd><mn>0.04</mn></mtd></mtr><mtr><mtd><mn>0.08</mn></mtd><mtd><mn>0.72</mn></mtd><mtd><mn>0.02</mn></mtd><mtd><mn>0.18</mn></mtd></mtr><mtr><mtd><mn>0.08</mn></mtd><mtd><mn>0.02</mn></mtd><mtd><mn>0.72</mn></mtd><mtd><mn>0.18</mn></mtd></mtr><mtr><mtd><mn>0.01</mn></mtd><mtd><mn>0.09</mn></mtd><mtd><mn>0.09</mn></mtd><mtd><mn>0.81</mn></mtd></mtr></mtable><mo>&#x00029;</mo></mrow></math><span class="equation-tag">(C.40)</span></div>
+<p>The symbol <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>⊗</mo></mrow></math> denotes a Kronecker product. Here it simply
+lists the products of the two parental source weights.
+For example, row 2 describes destination pair <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo stretchy="false">)</mo></mrow></math>:
+its weights are <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.8</mn><mi>·</mi><mn>0.1</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.8</mn><mi>·</mi><mn>0.9</mn></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.2</mn><mi>·</mi><mn>0.1</mn></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.2</mn><mi>·</mi><mn>0.9</mn></mrow></math>.
+Multiplying <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>B</mi><mi mathvariant="bold-italic">j</mi></mrow></math> reconstructs the flattened <var>K</var>.</p>
+<p>Let <var>D</var><sub>n</sub> be diagonal, with entry <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><mn>1</mn><mo>/</mo><msub><mi>n</mi><mi>i</mi></msub></mrow></math> at the address of
+<var>J</var><sub>ii</sub> and 1 at all off-diagonal addresses. Let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="bold-italic">c</mi></mrow></math>
+contain <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><msub><mi>n</mi><mi>i</mi></msub></mrow></math> at diagonal addresses and zero elsewhere.
+For the ten-copy example:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>D</mi><mi>n</mi></msub><mo>&#x0003D;</mo><mo>diag</mo><mo stretchy="false">&#x00028;</mo><mn>0.9</mn><mo>&#x0002C;</mo><mn>1</mn><mo>&#x0002C;</mo><mn>1</mn><mo>&#x0002C;</mo><mn>0.9</mn><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(C.41a)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi mathvariant="bold-italic">c</mi><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mn>0.1</mn><mo>&#x0002C;</mo><mn>0</mn><mo>&#x0002C;</mo><mn>0</mn><mo>&#x0002C;</mo><mn>0.1</mn><msup><mo stretchy="false">&#x00029;</mo><mrow><mi mathvariant="sans-serif">T</mi></mrow></msup></mrow></math><span class="equation-tag">(C.41b)</span></div>
+<p>The operator and its affine recurrence are:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>A</mi><mo>&#x0003D;</mo><mi>&#x003B1;</mi><msub><mi>D</mi><mi>n</mi></msub><mo stretchy="false">&#x00028;</mo><mi>M</mi><mo>&#x02297;</mo><mi>M</mi><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(C.42)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><msub><mi mathvariant="bold-italic">j</mi><mrow><mi>t</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></msub><mo stretchy="false">]</mo><mo>&#x0003D;</mo><mi>A</mi><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><msub><mi mathvariant="bold-italic">j</mi><mi>t</mi></msub><mo stretchy="false">]</mo><mo>&#x0002B;</mo><mi mathvariant="bold-italic">c</mi></mrow></math><span class="equation-tag">(C.43)</span></div>
+<p>Apply <var>B</var> first, multiply each output coordinate by its
+diagonal damping factor, then by <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>α</mi></mrow></math>, and finally add
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="bold-italic">c</mi></mrow></math>. This reproduces all entries of (C.38).
+The constant vector determines the fixed point but disappears
+when tracking the error from that fixed point. Thus
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/defaults.py"><code>recursion_relaxation_time()</code></a>
+needs the spectral radius of <var>A</var>, not the fixed point itself.
+For <var>d</var> demes there are <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>d</mi><mn>2</mn></msup></mrow></math> ordered pair addresses, hence a
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>d</mi><mn>2</mn></msup></mrow></math>-by-<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>d</mi><mn>2</mn></msup></mrow></math> matrix. General dense eigensolver cost grows roughly
+as <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><msup><mi>d</mi><mn>2</mn></msup><msup><mo stretchy="false">)</mo><mn>3</mn></msup><mo>=</mo><msup><mi>d</mi><mn>6</mn></msup></mrow></math>, which motivates the 24-deme guard.</p>
+<p>Within- and pooled heterozygosities are linear combinations of
+these identities. But <var>D</var> and <var>G</var><sub>ST</sub> are ratios of random
+heterozygosities: <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mi>f</mi><mo stretchy="false">(</mo><mi>J</mi><mo stretchy="false">)</mo><mo stretchy="false">]</mo></mrow></math> is generally <strong>not</strong>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi><mo stretchy="false">(</mo><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mi>J</mi><mo stretchy="false">]</mo><mo stretchy="false">)</mo></mrow></math>. The identity timescale therefore informs
+their burn-in; it does not prove that every statistic has
+exactly the same relaxation or sampling-error behavior.
+Allele richness and spectrum statistics require further caution.</p>
+<h3 id="why-a-one-lineage-migration-gap-is-not-enough">Why a one-lineage migration gap is not enough</h3>
+<p>Migration alone follows the location of <strong>one</strong> ancestral lineage.
+Identity also depends on what happens to <strong>two</strong> lineages.
+They must reach a common ancestor, or mutation must erase
+their shared identity. A location can become well mixed before
+two particular ancestral lines have coalesced.</p>
+<p>For the equal-size island matrix, the nonconstant migration
+eigenvalue is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><mi>m</mi><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>, so its positive gap is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>. With five demes and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mn>0.0001</mn></mrow></math>, the inverse
+gap is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mn>0.000125</mn><mo>=</mo><mn>8000</mn></mrow></math> generations. This is far below the
+approximately 19,693-generation identity scale in (C.9).
+In the low-migration regime their ratio is roughly <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>/</mo><mn>2</mn></mrow></math>,
+not a universal factor for every topology.
+For asymmetric or periodic matrices, even the interpretation
+of a &quot;smallest nonzero eigenvalue&quot; needs care; the symmetric
+island comparison is the simple example, not a general algorithm.</p>
+<h3 id="what-the-coalescence-approximation-assumes">What the coalescence approximation assumes</h3>
+<p>Two lineages currently in different demes each migrate with
+probability <var>m</var>. To first order in small <var>m</var>, one migrates into
+the other's deme at rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>m</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>. Simultaneous migration
+contributes terms of order <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>m</mi><mn>2</mn></msup></mrow></math> omitted from that approximation.
+The reciprocal gives the approximate time <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><mi>m</mi><mo stretchy="false">)</mo></mrow></math>
+for the pair to meet in a deme.</p>
+<p>Meeting in a deme is not yet choosing the same parental copy:
+they can separate again. The classical island coalescence
+timescale adds the total-population term to obtain (C.6).
+The addition can be derived using two ancestral states:</p>
+<pre><code class="language-text">different demes -- rate 2m/(d-1) --&gt; same deme -- rate 1/n --&gt; coalesced
+different demes &lt;-- rate 2m -------- same deme
+</code></pre>
+<p>Here <var>n</var> is the equal per-deme copy count. Let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub></mrow></math>
+and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math> be the expected remaining times
+to coalescence from those states, ignoring mutation while deriving
+the coalescence part. In the continuous-time, small-migration
+approximation:</p>
+<ol>
+<li>A pair in different demes waits on average <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><mi>m</mi><mo stretchy="false">)</mo></mrow></math>
+to enter the same-deme state. Thus
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>=</mo><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub><mo>+</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><mi>m</mi><mo stretchy="false">)</mo></mrow></math>.</li>
+<li>In the same-deme state, coalescence has rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>n</mi></mrow></math> and
+separation has rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>m</mi></mrow></math>. Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>r</mi><mo>=</mo><mn>1</mn><mo>/</mo><mi>n</mi><mo>+</mo><mn>2</mn><mi>m</mi></mrow></math> for their total.
+The mean wait to the next event is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>r</mi></mrow></math>.
+With probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>2</mn><mi>m</mi><mo stretchy="false">)</mo><mo>/</mo><mi>r</mi></mrow></math> the event is separation,
+requiring an additional <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math>.
+With probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mi>n</mi><mo stretchy="false">)</mo><mo>/</mo><mi>r</mi></mrow></math> coalescence ends the wait.
+Consequently
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub><mo>=</mo><mn>1</mn><mo>/</mo><mi>r</mi><mo>+</mo><mo stretchy="false">(</mo><mn>2</mn><mi>m</mi><mo>/</mo><mi>r</mi><mo stretchy="false">)</mo><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math>.</li>
+<li>Multiply by <var>r</var> and rearrange to get
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub><mo>/</mo><mi>n</mi><mo>=</mo><mn>1</mn><mo>+</mo><mn>2</mn><mi>m</mi><mo stretchy="false">(</mo><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>−</mo><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub><mo stretchy="false">)</mo></mrow></math>.</li>
+<li>Substitute the difference from step 1. The right-hand
+side becomes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mi>m</mi><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><mi>m</mi><mo stretchy="false">)</mo><mo>=</mo><mi>d</mi></mrow></math>.
+Therefore <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub><mo>=</mo><mi>n</mi><mi>d</mi><mo>=</mo><msub><mi>n</mi><mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow></mrow></msub></mrow></math>.</li>
+<li>Step 1 now gives
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>=</mo><msub><mi>n</mi><mrow><mrow><mi mathvariant="normal">t</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow></mrow></msub><mo>+</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><mi>m</mi><mo stretchy="false">)</mo></mrow></math>,
+the <var>T</var> used in (C.6).</li>
+</ol>
+<p>The model explicitly allows separation before coalescence;
+the total-population term is not simply one local waiting time.
+These waiting-time equations are exact for the stated
+continuous-time approximation, not for arbitrary probabilities
+in the discrete-generation engine. Using this pairwise mean
+as the inverse slow decay rate is itself an approximation.</p>
+<p>Mutation supplies another route to loss of identity.
+For two copies the exact survival is (C.35), with loss
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>μ</mi><mo>−</mo><msup><mi>μ</mi><mn>2</mn></msup><mo>≈</mo><mn>2</mn><mi>μ</mi></mrow></math>. Treating coalescence and mutation
+as small independent hazards gives an effective rate
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>T</mi><mo>+</mo><mn>2</mn><mi>μ</mi></mrow></math> and its reciprocal (C.7). This explains both
+why rates add and why the implemented closed form is approximate.</p>
+<h2 id="how-precise-is-the-reported-value">How precise is the reported value?</h2>
+<p><em>For everyone.</em> A statistic that has stopped trending still varies from
+generation to generation. Neighboring generations have shared ancestry
+and similar frequencies, so they are not independent observations.
+Counting every generation as independent can make an average's error
+bar much too small. The following derivation explains the correction.</p>
+<h3 id="averages-deviations-and-correlated-observations">Averages, deviations, and correlated observations</h3>
+<p>Within a post-burn-in window, write the statistic values as
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>Y</mi><mn>1</mn></msub><mo>,</mo><mi>…</mi><mo>,</mo><msub><mi>Y</mi><mi>W</mi></msub></mrow></math>. The subscript counts observations within this
+window, not absolute generations. Their average is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover><mi>Y</mi><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x0003D;</mo><mfrac><mn>1</mn><mi>W</mi></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>u</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>W</mi></mrow></munderover><msub><mi>Y</mi><mi>u</mi></msub></mrow></math><span class="equation-tag">(C.44)</span></div>
+<p>The bar means average; <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>∑</mo></mrow></math> means add the indicated terms.
+For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.2</mn><mo>,</mo><mn>0.4</mn><mo>,</mo><mn>0.6</mn><mo stretchy="false">)</mo></mrow></math>, this gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.4</mn></mrow></math>.
+Let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>σ</mi><mn>2</mn></msup></mrow></math> be the variance of a stationary individual
+observation, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>ρ</mi><mi>h</mi></msub></mrow></math> the correlation between observations
+separated by <var>h</var> generations. Stationarity here means that the
+distribution and lag correlations no longer depend on the
+absolute starting generation.</p>
+<p>Expand the square of the centered sum. There are <var>W</var> individual
+variance terms. For each separation <var>h</var>, there are <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi><mo>−</mo><mi>h</mi></mrow></math>
+distinct pairs, and both orders of each pair appear:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>Var</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msubsup><mo>&#x02211;</mo><mrow><mi>u</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>W</mi></mrow></msubsup><msub><mi>Y</mi><mi>u</mi></msub><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mo>&#x0003D;</mo><mi>W</mi><msup><mi>&#x003C3;</mi><mn>2</mn></msup><mo>&#x0002B;</mo><mn>2</mn><msup><mi>&#x003C3;</mi><mn>2</mn></msup><munderover><mo>&#x02211;</mo><mrow><mi>h</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>W</mi><mo>&#x02212;</mo><mn>1</mn></mrow></munderover><mo stretchy="false">&#x00028;</mo><mi>W</mi><mo>&#x02212;</mo><mi>h</mi><mo stretchy="false">&#x00029;</mo><msub><mi>&#x003C1;</mi><mi>h</mi></msub></mrow></math><span class="equation-tag">(C.45)</span></div>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi><mo>=</mo><mn>4</mn></mrow></math>, lag 1 has pairs <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo stretchy="false">)</mo><mo>,</mo><mo stretchy="false">(</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy="false">)</mo><mo>,</mo><mo stretchy="false">(</mo><mn>3</mn><mo>,</mo><mn>4</mn><mo stretchy="false">)</mo></mrow></math>,
+lag 2 has <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>,</mo><mn>3</mn><mo stretchy="false">)</mo><mo>,</mo><mo stretchy="false">(</mo><mn>2</mn><mo>,</mo><mn>4</mn><mo stretchy="false">)</mo></mrow></math>, and lag 3 has <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>,</mo><mn>4</mn><mo stretchy="false">)</mo></mrow></math>.
+This is the origin of the factor <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi><mo>−</mo><mi>h</mi></mrow></math>, not an arbitrary
+weight. Dividing the sum by <var>W</var> divides its variance by <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>W</mi><mn>2</mn></msup></mrow></math>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>Var</mo><mo stretchy="false">&#x00028;</mo><mover><mi>Y</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mfrac><mrow><msup><mi>&#x003C3;</mi><mn>2</mn></msup></mrow><mrow><mi>W</mi></mrow></mfrac><mrow><mo stretchy="true" fence="true" form="prefix">[</mo><mn>1</mn><mo>&#x0002B;</mo><mn>2</mn><msubsup><mo>&#x02211;</mo><mrow><mi>h</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>W</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msubsup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mi>h</mi><mi>W</mi></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><msub><mi>&#x003C1;</mi><mi>h</mi></msub><mo stretchy="true" fence="true" form="postfix">]</mo></mrow></mrow></math><span class="equation-tag">(C.46)</span></div>
+<p>If every <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>ρ</mi><mi>h</mi></msub><mo>=</mo><mn>0</mn></mrow></math>, only the familiar <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>σ</mi><mn>2</mn></msup><mo>/</mo><mi>W</mi></mrow></math> remains.
+For a long window with correlations that decay fast enough
+for their sum to exist, the bracket approaches the
+integrated autocorrelation factor:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x0002B;</mo><mn>2</mn><munderover><mo>&#x02211;</mo><mrow><mi>h</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mo>&#x0221E;</mo></mrow></munderover><msub><mi>&#x003C1;</mi><mi>h</mi></msub></mrow></math><span class="equation-tag">(C.47)</span></div>
+<p>The convention includes the leading 1 and both lag directions.
+Some references define this quantity with a different factor
+of two; use (C.47) when comparing values here.
+For observations at every generation, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math>
+can be interpreted as generations per equivalent independent
+observation. It is <strong>not</strong> the model-derived slow-mode
+relaxation time <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi></mrow></math>. The former depends on the statistic
+and its whole correlation curve; the latter is a model timescale.</p>
+<p>Replace the actual observation count by its equivalent-information
+count, the effective sample size:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi></mrow></mrow></msub><mo>&#x02248;</mo><mfrac><mi>W</mi><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(C.48)</span></div>
+<p>Taking the square root of (C.46), with the long-window
+approximation, gives the standard error of the mean:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>SE</mo><mo stretchy="false">&#x00028;</mo><mover><mi>Y</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo><mo>&#x02248;</mo><mfrac><mrow><mi>&#x003C3;</mi></mrow><mrow><msqrt><mrow><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi></mrow></mrow></msub></mrow></msqrt></mrow></mfrac><mo>&#x0003D;</mo><mi>&#x003C3;</mi><msqrt><mrow><mfrac><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow><mrow><mi>W</mi></mrow></mfrac></mrow></msqrt></mrow></math><span class="equation-tag">(C.49)</span></div>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi><mo>=</mo><mn>10000</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi><mo>=</mo><mn>0.1</mn></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>=</mo><mn>100</mn></mrow></math>,
+the effective count is only 100. The standard error is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.1</mn><mo>/</mo><msqrt><mrow><mn>100</mn></mrow></msqrt><mo>=</mo><mn>0.01</mn></mrow></math>, not the independent-draw value
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.1</mn><mo>/</mo><msqrt><mrow><mn>10000</mn></mrow></msqrt><mo>=</mo><mn>0.001</mn></mrow></math>. Individual values still vary
+on scale <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.1</mn></mrow></math>. The standard deviation describes that spread;
+the standard error describes uncertainty in their average.</p>
+<h3 id="why-the-estimator-uses-more-than-lag-1">Why the estimator uses more than lag 1</h3>
+<p>The estimator matters. A single-lag estimate (the correlation of neighboring
+values) gives the full sum only under an assumed geometric
+correlation curve, as for a stationary first-order autoregression.
+If <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>ρ</mi><mi>h</mi></msub><mo>=</mo><msup><mi>r</mi><mi>h</mi></msup></mrow></math> with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">|</mo><mi>r</mi><mo stretchy="false">|</mo><mo>&lt;</mo><mn>1</mn></mrow></math>, the geometric series gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x0002B;</mo><mn>2</mn><mfrac><mi>r</mi><mrow><mn>1</mn><mo>&#x02212;</mo><mi>r</mi></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn><mo>&#x0002B;</mo><mi>r</mi></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mi>r</mi></mrow></mfrac></mrow></math><span class="equation-tag">(C.50)</span></div>
+<p>A mixture need not follow that curve. Consider:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C1;</mi><mi>h</mi></msub><mo>&#x0003D;</mo><mn>0.9</mn><mo stretchy="false">&#x00028;</mo><mn>0.5</mn><msup><mo stretchy="false">&#x00029;</mo><mi>h</mi></msup><mo>&#x0002B;</mo><mn>0.1</mn><mo stretchy="false">&#x00028;</mo><mn>0.99</mn><msup><mo stretchy="false">&#x00029;</mo><mi>h</mi></msup></mrow></math><span class="equation-tag">(C.51)</span></div>
+<p>Its lag-1 correlation is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.549</mn></mrow></math>. Substituting that one
+number into (C.50) gives about 3.435. But summing both
+geometric tails gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>+</mo><mn>2</mn><mo stretchy="false">(</mo><mn>0.9</mn><mo>+</mo><mn>9.9</mn><mo stretchy="false">)</mo><mo>=</mo><mn>22.6</mn></mrow></math>.
+The small slow component contributes most of the long-run
+uncertainty even though its lag-1 contribution is only 0.099.
+Lag 1 alone cannot identify the tail's shape.</p>
+<p>In the repository's seeded two-mode measurement whose true
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math> is 469, the single-lag formula gave
+about 75 and Geyer's estimate gave 438. Those are results for
+one measured series, not deterministic guarantees for all
+series with slow modes.</p>
+<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/window_statistics.py"><code>geyer_window_statistics()</code></a>
+implements the initial positive sequence method.
+First center the observed values and estimate their lag correlations:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>&#x003C1;</mi><mo>&#x0005E;</mo></mover><mi>h</mi></msub><mo>&#x0003D;</mo><mfrac><mrow><msubsup><mo>&#x02211;</mo><mrow><mi>u</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>W</mi><mo>&#x02212;</mo><mi>h</mi></mrow></msubsup><mo stretchy="false">&#x00028;</mo><msub><mi>Y</mi><mi>u</mi></msub><mo>&#x02212;</mo><mover><mi>Y</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo><mo stretchy="false">&#x00028;</mo><msub><mi>Y</mi><mrow><mi>u</mi><mo>&#x0002B;</mo><mi>h</mi></mrow></msub><mo>&#x02212;</mo><mover><mi>Y</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo></mrow><mrow><msubsup><mo>&#x02211;</mo><mrow><mi>u</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>W</mi></mrow></msubsup><mo stretchy="false">&#x00028;</mo><msub><mi>Y</mi><mi>u</mi></msub><mo>&#x02212;</mo><mover><mi>Y</mi><mo stretchy="true">&#x000AF;</mo></mover><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup></mrow></mfrac></mrow></math><span class="equation-tag">(C.52)</span></div>
+<p>A hat means an estimate from finite data. The implementation uses
+this shared-denominator normalization, with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>ρ</mi><mo>^</mo></mover><mn>0</mn></msub><mo>=</mo><mn>1</mn></mrow></math>,
+not a separate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi><mo>−</mo><mi>h</mi></mrow></math> divisor at every lag.
+It computes the sums using a zero-padded fast Fourier transform;
+that changes computational cost, not the sums being estimated.
+A constant window is handled separately to avoid a zero denominator:
+its estimated spread and standard error are zero and its effective
+count is <var>W</var>. A finite constant sample is not proof of global
+equilibrium; burn-in and the other diagnostics still matter.</p>
+<p>Pair consecutive lag estimates:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>&#x00393;</mi><mo>&#x0005E;</mo></mover><mi>j</mi></msub><mo>&#x0003D;</mo><msub><mover><mi>&#x003C1;</mi><mo>&#x0005E;</mo></mover><mrow><mn>2</mn><mi>j</mi></mrow></msub><mo>&#x0002B;</mo><msub><mover><mi>&#x003C1;</mi><mo>&#x0005E;</mo></mover><mrow><mn>2</mn><mi>j</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></msub></mrow></math><span class="equation-tag">(C.53)</span></div>
+<p>Starting at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>j</mi><mo>=</mo><mn>0</mn></mrow></math>, keep complete pairs until the first
+nonpositive pair. If the last kept index is <var>q</var>, calculate:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>&#x003C4;</mi><mo>&#x0005E;</mo></mover><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mo>max</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x0002C;</mo><mo>&#x02212;</mo><mn>1</mn><mo>&#x0002B;</mo><mn>2</mn><msubsup><mo>&#x02211;</mo><mrow><mi>j</mi><mo>&#x0003D;</mo><mn>0</mn></mrow><mrow><mi>q</mi></mrow></msubsup><msub><mover><mi>&#x00393;</mi><mo>&#x0005E;</mo></mover><mi>j</mi></msub><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(C.54)</span></div>
+<p>The empty retained sum is zero. Why the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mn>1</mn></mrow></math>?
+The first pair includes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>ρ</mi><mo>^</mo></mover><mn>0</mn></msub><mo>=</mo><mn>1</mn></mrow></math>; doubling all
+pairs counts it twice, so subtract one to recover the
+leading 1 in (C.47).
+For pair sums <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1.8</mn><mo>,</mo><mn>1.1</mn><mo>,</mo><mn>0.4</mn><mo>,</mo><mo>−</mo><mn>0.05</mn></mrow></math>, retain only the first
+three. Their sum is 3.3, giving
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mn>1</mn><mo>+</mo><mn>2</mn><mi>·</mi><mn>3.3</mn><mo>=</mo><mn>5.6</mn></mrow></math>.
+The lower clamp of 1 prevents crediting a negatively correlated
+sample with more effective observations than actual observations.</p>
+<p>The method limits noisy long-lag contributions rather than
+literally summing every estimated lag. Initial-positive-sequence
+theory is motivated by suitable reversible stationary processes;
+using it for these recorded statistics remains an estimation
+procedure, not a proof that every slow component has been found.
+Too little evidence can hide a tail from this estimator too.</p>
+<p>See <a href="#finite-evidence-limit">the finite-evidence limit</a> for why an
+apparently quiet window is not a proof of equilibrium.</p>
+<p>The code uses the sample standard deviation
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>s</mi><mo>=</mo><msqrt><mrow><msub><mo>∑</mo><mi>u</mi></msub><mo stretchy="false">(</mo><msub><mi>Y</mi><mi>u</mi></msub><mo>−</mo><mover><mi>Y</mi><mo stretchy="true">¯</mo></mover><msup><mo stretchy="false">)</mo><mn>2</mn></msup><mo>/</mo><mo stretchy="false">(</mo><mi>W</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></msqrt></mrow></math>, then reports
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi></mrow></mrow></msub><mo>=</mo><mi>W</mi><mo>/</mo><msub><mover><mi>τ</mi><mo>^</mo></mover><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mrow><mo>SE</mo></mrow><mo>^</mo></mover><mo>=</mo><mi>s</mi><mo>/</mo><msqrt><mrow><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi></mrow></mrow></msub></mrow></msqrt></mrow></math>.
+The finite-window weights in (C.46) explain the exact variance;
+(C.52)–(C.54) describe the particular estimator actually used.</p>
+<h3 id="turning-precision-into-a-stopping-test">Turning precision into a stopping test</h3>
+<p>Let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>γ</mi></mrow></math> be <code>confidence</code>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>Φ</mi></mrow></math> the cumulative
+distribution function of a standard normal random variable.
+The two-sided critical value is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>z</mi><mi>&#x003B3;</mi></msub><mo>&#x0003D;</mo><msup><mi>&#x003A6;</mi><mrow><mo>&#x02212;</mo><mn>1</mn></mrow></msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mfrac><mrow><mn>1</mn><mo>&#x0002B;</mo><mi>&#x003B3;</mi></mrow><mrow><mn>2</mn></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(C.55)</span></div>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>γ</mi><mo>=</mo><mn>0.95</mn></mrow></math>, each tail has probability 0.025 and
+the quantile is 0.975, giving <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>z</mi><mi>γ</mi></msub><mo>≈</mo><mn>1.959964</mn></mrow></math>.
+The approximate interval is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>Y</mi><mo stretchy="true">¯</mo></mover><mi>±</mi><msub><mi>z</mi><mi>γ</mi></msub><mover><mrow><mo>SE</mo></mrow><mo>^</mo></mover></mrow></math>.
+Its half-width must not exceed <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover><mrow><mo>SE</mo></mrow><mo>&#x0005E;</mo></mover><mo>&#x02264;</mo><mfrac><mrow><mi>&#x003B5;</mi></mrow><mrow><msub><mi>z</mi><mi>&#x003B3;</mi></msub></mrow></mfrac><mspace width="1em" /><mstyle displaystyle="false" scriptlevel="0"><mtext>and</mtext></mstyle><mspace width="1em" /><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi></mrow></mrow></msub><mo>&#x02265;</mo><mn>50</mn></mrow></math><span class="equation-tag">(C.56)</span></div>
+<p>At precision 0.01 and 95% confidence, the target standard
+error is about 0.005102, <strong>not</strong> 0.01.
+With <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>s</mi><mo>=</mo><mn>0.1</mn></mrow></math>, at least approximately
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1.959964</mn><mi>·</mi><mn>0.1</mn><mo>/</mo><mn>0.01</mn><msup><mo stretchy="false">)</mo><mn>2</mn></msup><mo>=</mo><mn>384.15</mn></mrow></math> effective
+observations are needed for the error target, in addition to
+the effective-count floor. If <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>=</mo><mn>100</mn></mrow></math>,
+that suggests roughly 38,415 recorded generations.
+The monitor checks observed estimates, not this forecast.</p>
+<p>A per-statistic <code>statistic_precision</code> overrides the shared target.
+For unbounded watched statistics configured for relative precision,
+the default absolute tolerance is replaced by
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi><mo>max</mo><mo stretchy="false">(</mo><mn>1</mn><mo>,</mo><mo stretchy="false">|</mo><mover><mi>Y</mi><mo stretchy="true">¯</mo></mover><mo stretchy="false">|</mo><mo stretchy="false">)</mo></mrow></math>; for a count averaging 200
+with precision 0.01 this permits a half-width of 2.
+An explicit per-statistic override instead retains its supplied
+absolute units.</p>
+<p>Nominal 95% coverage describes a statistical procedure under
+its assumptions, not a 95% guarantee attached to each realized
+interval. Repeated adaptive checks, approximate correlations,
+and inadequate burn-in can affect coverage. The implementation
+does not claim a simultaneous 95% guarantee across all watched
+statistics or all check times.</p>
+<h3 id="reading-the-evidence-and-the-start-versus-end-diagnostic">Reading the evidence and the start-versus-end diagnostic</h3>
+<p>Every scalar run's <code>report.json</code> carries the evidence either way, in
+<code>window_statistics</code>, one entry per statistic recorded: <code>mean</code> (the window
+average, the estimate to read), <code>standard_error</code>, <code>standard_deviation</code>,
+<code>effective_sample_size</code>, <code>window</code> (its length), <code>window_start</code> and
+<code>window_end</code> (the generations it spans), <code>burn_in</code>, <code>estimator</code>,
+<code>noise_adequate</code> (whether the requested precision was reached), the
+<code>target_standard_error</code> and <code>minimum_ess</code> it was judged against, and
+<code>geweke_z</code>. Every statistic shares the one window, so the entries are
+consistent whichever statistic decided the stop. <code>geweke_z</code> compares the start
+of the window with its end in units of their combined standard error; an
+absolute value above 3 (the Expert Setting <code>start_drift_alert_z</code>) means the
+averaging may have begun before the model forgot its starting state, so the
+burn-in may have been too short. It is a diagnostic only: it never stops or
+continues a run, and it is absent for a window too short to split.</p>
+<p>The start-versus-end statistic compares the first 10% of the
+window with its last 50%, using an autocorrelation-corrected
+standard error for each segment:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>z</mi><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">t</mi><mo>&#x0002F;</mo><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">d</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mover><mi>Y</mi><mo stretchy="true">&#x000AF;</mo></mover><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>&#x02212;</mo><msub><mover><mi>Y</mi><mo stretchy="true">&#x000AF;</mo></mover><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">d</mi></mrow></mrow></msub></mrow><mrow><msqrt><mrow><msubsup><mo>SE</mo><mrow><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">t</mi></mrow></mrow><mn>2</mn></msubsup><mo>&#x0002B;</mo><msubsup><mo>SE</mo><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">d</mi></mrow></mrow><mn>2</mn></msubsup></mrow></msqrt></mrow></mfrac></mrow></math><span class="equation-tag">(C.57)</span></div>
+<p>For means 0.45 and 0.40 and segment standard errors 0.01
+and 0.012, the denominator is approximately 0.01562,
+giving <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>z</mi><mo>≈</mo><mn>3.20</mn></mrow></math>. This exceeds the default alert
+threshold. The two segment errors are added in quadrature,
+not simply added. The diagnostic treats their cross-dependence
+as negligible; it is not a definitive equilibrium test.
+If both errors are zero, the code returns zero for equal
+means and signed infinity for unequal means.</p>
+<h3 id="projecting-the-length-of-an-unfinished-run">Projecting the length of an unfinished run</h3>
+<p>A run that reaches its cap without the requested precision also reports
+<code>projected_generations</code>: how long the run would have needed. The standard error
+of a mean falls approximately as one over the square root of the
+window length if its underlying noise and correlation stay the same.
+Writing <var>s</var><sub>e</sub> for the current standard error and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>s</mi><mo>*</mo></msub></mrow></math> for its
+target, the required precision window is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">c</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mi>W</mi><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mfrac><mrow><msub><mi>s</mi><mi>e</mi></msub></mrow><mrow><msub><mi>s</mi><mo>&#x0002A;</mo></msub></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mn>2</mn></msup></mrow></math><span class="equation-tag">(C.58)</span></div>
+<p>To derive this, use
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>s</mi><mo>*</mo></msub><mo>=</mo><msub><mi>s</mi><mi>e</mi></msub><msqrt><mrow><mi>W</mi><mo>/</mo><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">c</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></msqrt></mrow></math>,
+divide by <var>s</var><sub>e</sub>, square, and solve for the new length.
+Halving the standard error requires four times the window;
+reducing it by ten requires a hundred times the window.
+The effective-count floor separately requires:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">E</mi><mi mathvariant="normal">S</mi><mi mathvariant="normal">S</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mn>50</mn><mspace width="0.167em" /><msub><mover><mi>&#x003C4;</mi><mo>&#x0005E;</mo></mover><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math><span class="equation-tag">(C.59)</span></div>
+<p>The reported projection uses the longer requirement, rounded
+up and added to the start:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>t</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">j</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">c</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">d</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mi>b</mi><mo>&#x0002B;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x02308;</mo><mo>max</mo><mo stretchy="false">&#x00028;</mo><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">c</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0002C;</mo><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">E</mi><mi mathvariant="normal">S</mi><mi mathvariant="normal">S</mi></mrow></mrow></msub><mo stretchy="false">&#x00029;</mo><mo stretchy="true" fence="true" form="postfix">&#x02309;</mo></mrow></mrow></math><span class="equation-tag">(C.60)</span></div>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi><mo>=</mo><mn>10000</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>s</mi><mi>e</mi></msub><mo>=</mo><mn>0.02</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>s</mi><mo>*</mo></msub><mo>=</mo><mn>0.005</mn></mrow></math>,
+and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>τ</mi><mo>^</mo></mover><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>=</mo><mn>100</mn></mrow></math>,
+the two requirements are 160,000 and 5,000.
+If <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi><mo>=</mo><mn>100000</mn></mrow></math>, the reported projection is generation
+260,000. It is a planning estimate, including the implementation's
+endpoint convention, not an exact promise about the next successful
+check. Unknown slow modes can change the forecast.
+At zero target error there is no finite nonzero-noise projection.</p>
+<p>The monitor makes
+the same projection after every check that fails and logs a warning once, as soon
+as the projection passes the cap, so a run that cannot finish in time says so
+long before it ends. The command line repeats it in the cap note: &quot;At this
+precision D needs about N generations; more loci or more replicates reach it
+faster&quot;. The CLI prints the watched statistic's own line after
+every run; the GUI's Run card tooltip shows the same numbers.
+Under <code>convergence_combinator: all</code>, the overall projection takes
+the latest of the watched-statistic projections; under <code>any</code>,
+it takes the earliest available one.</p>
+<h2 id="batches-replicates-that-average">Batches: replicates that average</h2>
+<p><em>For everyone.</em> A batch (<code>n_replicates</code> above 1) reaches the precision by
+averaging twice: each replicate averages over time after its own burn-in, and
+the batch then averages across replicates. A replicate has no precision check
+of its own. It burns in, averages for its window, and stops; its window mean is
+the number it contributes. The last generation's value, one noisy draw, no
+longer stands in for the replicate.</p>
+<p><em>For analysts.</em> How long a replicate should average is a trade. A long window
+makes each replicate precise and needs few replicates; a short one needs many.
+<code>fim</code> matches the window to the batch
+(<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_averaging_window"><code>replicate_averaging_window</code></a>):</p>
+<ol>
+<li>The first wave (8 replicates by default) averages for a guess, 20
+relaxation times.</li>
+<li>The wave's windows estimate the variance <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>σ</mi><mn>2</mn></msup></mrow></math> and
+integrated autocorrelation factor <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math> of each
+watched statistic; the planner averages each quantity across the wave.</li>
+<li>The planner chooses an intended replicate count <var>R</var> (twice the
+wave width, or <code>replicate_minimum</code> if larger) and computes the
+per-replicate error target and averaging window derived below.
+The longest requirement among watched statistics sets the
+window, held between 5 and 100 relaxation times.</li>
+<li>Every later replicate averages for that window. A later replicate runs up to
+the shortest window it could receive and waits for step 3, so the result is
+the same on every backend. The wave width is a number in the configuration,
+not the processor count, so it is the same on every machine too.</li>
+</ol>
+<p>Each replicate's window is recorded in its manifest. With
+<a href="#" data-fim-help="configuration" data-fim-anchor="precision_method"><code>precision_method: planned_replicates</code></a> the
+batch runs exactly <code>n_replicates</code> replicates and the window is sized so their
+interval is plus or minus the precision.</p>
+<p>The assigned window is a generation span. Consistently with
+the monitor's inclusive endpoints, a replicate starting at
+<var>b</var> stops at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi><mo>+</mo><msub><mi>A</mi><mi>w</mi></msub></mrow></math> and can include <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mi>w</mi></msub><mo>+</mo><mn>1</mn></mrow></math> observations.
+This one-observation difference is negligible for the planning
+approximation, but matters when reproducing the exact schedule.</p>
+<p>For ordinary mean-of-values statistics, <code>summary.json</code> reports the
+mean of the replicates' window means with its Student's-<var>t</var>
+interval. For <var>D</var> and <var>G</var><sub>ST</sub> under the value of means, the replicates' window
+means of <code>H_S</code> and <code>H_T</code> are pooled first and the statistic is taken once;
+averaging the statistic inside each replicate and then across replicates would
+give a number that depends on the window length. The interval then comes from
+the delta method over replicates. The early stop of a batch judges the
+per-replicate values, a close approximation of the same interval.</p>
+<h3 id="the-across-replicate-interval">The across-replicate interval</h3>
+<p>Let <var>Z</var><sub>r</sub> be one replicate's post-burn-in average, and let <var>R</var>
+be the number of completed independent replicates. Average those
+summaries with equal weight:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover><mi>Z</mi><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x0003D;</mo><mfrac><mn>1</mn><mi>R</mi></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>r</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>R</mi></mrow></munderover><msub><mi>Z</mi><mi>r</mi></msub></mrow></math><span class="equation-tag">(C.61)</span></div>
+<p>Independence is <strong>between replicates</strong> with separate random streams,
+not between the correlated generations within a replicate.
+For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>R</mi><mo>≥</mo><mn>2</mn></mrow></math>, estimate the spread of replicate summaries:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>s</mi><mi>Z</mi><mn>2</mn></msubsup><mo>&#x0003D;</mo><mfrac><mn>1</mn><mrow><mi>R</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>r</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>R</mi></mrow></munderover><mo stretchy="false">&#x00028;</mo><msub><mi>Z</mi><mi>r</mi></msub><mo>&#x02212;</mo><mover><mi>Z</mi><mo stretchy="true">&#x000AF;</mo></mover><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup></mrow></math><span class="equation-tag">(C.62)</span></div>
+<p>Subtract the mean, square each departure, and add them.
+The divisor <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>R</mi><mo>−</mo><mn>1</mn></mrow></math> accounts for estimating the mean from the same
+data; the departures must sum to zero.
+The standard error of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>Z</mi><mo stretchy="true">¯</mo></mover></mrow></math> is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>s</mi><mi>Z</mi></msub><mo>/</mo><msqrt><mi>R</mi></msqrt></mrow></math>.
+With confidence <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>γ</mi></mrow></math>, the interval is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover><mi>Z</mi><mo stretchy="true">&#x000AF;</mo></mover><mi>&#x000B1;</mi><msub><mi>t</mi><mrow><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002B;</mo><mi>&#x003B3;</mi><mo stretchy="false">&#x00029;</mo><mo>&#x0002F;</mo><mn>2</mn><mo>&#x0002C;</mo><mi>R</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msub><mfrac><mrow><msub><mi>s</mi><mi>Z</mi></msub></mrow><mrow><msqrt><mi>R</mi></msqrt></mrow></mfrac></mrow></math><span class="equation-tag">(C.63)</span></div>
+<p>The <var>t</var> here denotes a Student's-<var>t</var> critical value, <strong>not</strong>
+a generation index. The second subscript is its degrees of
+freedom. At 95% confidence and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>R</mi><mo>=</mo><mn>25</mn></mrow></math>, the critical value is
+about 2.064. If <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>Z</mi><mo stretchy="true">¯</mo></mover><mo>=</mo><mn>0.4</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>s</mi><mi>Z</mi></msub><mo>=</mo><mn>0.1</mn></mrow></math>, the standard
+error is 0.02 and the interval is approximately
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.4</mn><mi>±</mi><mn>0.04128</mn></mrow></math>, or <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.35872</mn><mo>,</mo><mn>0.44128</mn><mo stretchy="false">)</mo></mrow></math>.
+More variable replicate means require either more replicates
+or longer within-replicate windows.</p>
+<p>The Student interval is exact for independent normally distributed
+summaries of equal variance; its use with finite simulation summaries,
+adaptive windows, and early batch stopping is approximate.
+Equal weighting makes every replicate estimate count once, even
+when window lengths differ. Weighting by total generations would
+instead give longer replicates more influence.</p>
+<h3 id="solving-for-a-matched-averaging-window">Solving for a matched averaging window</h3>
+<p>For planning only, suppose each replicate mean has the same
+standard error <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>s</mi><mrow><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub></mrow></math>. Setting the batch half-width
+equal to the requested precision gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B5;</mi><mo>&#x0003D;</mo><msub><mi>t</mi><mrow><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002B;</mo><mi>&#x003B3;</mi><mo stretchy="false">&#x00029;</mo><mo>&#x0002F;</mo><mn>2</mn><mo>&#x0002C;</mo><mi>R</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msub><mfrac><mrow><msub><mi>s</mi><mrow><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub></mrow><mrow><msqrt><mi>R</mi></msqrt></mrow></mfrac></mrow></math><span class="equation-tag">(C.64)</span></div>
+<p>Multiply by <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msqrt><mi>R</mi></msqrt></mrow></math> and divide by the critical value:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>s</mi><mrow><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mi>&#x003B5;</mi><msqrt><mi>R</mi></msqrt></mrow><mrow><msub><mi>t</mi><mrow><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002B;</mo><mi>&#x003B3;</mi><mo stretchy="false">&#x00029;</mo><mo>&#x0002F;</mo><mn>2</mn><mo>&#x0002C;</mo><mi>R</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(C.65)</span></div>
+<p>Now use (C.49) for a replicate with averaging-window length <var>A</var><sub>w</sub>:
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>s</mi><mrow><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">e</mi></mrow></mrow><mn>2</mn></msubsup><mo>=</mo><msup><mi>σ</mi><mn>2</mn></msup><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>/</mo><msub><mi>A</mi><mi>w</mi></msub></mrow></math>.
+Solving for length gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>A</mi><mi>w</mi></msub><mo>&#x0003D;</mo><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mfrac><mrow><mi>&#x003C3;</mi></mrow><mrow><msub><mi>s</mi><mrow><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">e</mi></mrow></mrow></msub></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mn>2</mn></msup></mrow></math><span class="equation-tag">(C.66)</span></div>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>R</mi><mo>=</mo><mn>25</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi><mo>=</mo><mn>0.01</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>γ</mi><mo>=</mo><mn>0.95</mn></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi><mo>=</mo><mn>0.1</mn></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>τ</mi><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>=</mo><mn>100</mn></mrow></math>,
+the lane target is approximately <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.05</mn><mo>/</mo><mn>2.064</mn><mo>=</mo><mn>0.024225</mn></mrow></math>.
+The resulting window is approximately
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>100</mn><mo stretchy="false">(</mo><mn>0.1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>0.05</mn><mo>/</mo><mn>2.064</mn><mo stretchy="false">)</mo><msup><mo stretchy="false">)</mo><mn>2</mn></msup><mo>=</mo><mn>1704.0384</mn></mrow></math> generations,
+using the displayed rounded critical value throughout.
+If the model relaxation time is 100 generations, this
+is about <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>17.04</mn><mi>τ</mi></mrow></math>, between the default clamps of
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>5</mn><mi>τ</mi><mo>=</mo><mn>500</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>100</mn><mi>τ</mi><mo>=</mo><mn>10000</mn></mrow></math>.
+The planner rounds the chosen length upward to a whole generation.</p>
+<p>The first wave's noise estimates are only estimates.
+For every watched statistic the planner averages window
+variances and autocorrelation factors across that wave,
+uses their product in (C.66), and takes the largest
+result. It does not fit a new biological timescale.
+The cap's available post-burn-in space can shorten an automatic
+window further. An explicitly fixed window is not silently
+clamped; a run that cannot finish it before the cap reports that fact.</p>
+<p>Under <code>precision_method: planned_replicates</code>, the intended
+count is the requested <code>n_replicates</code>; under early stopping,
+it is a planning target, not a promised final batch size.
+The realized interval must still be checked and reported.
+This is why a matched window is not itself a precision guarantee.</p>
+<h2 id="which-average-two-forms-for-each-differentiation-measure">Which average? Two forms for each differentiation measure</h2>
+<p><em>For analysts.</em> <var>D</var> and <var>G</var><sub>ST</sub> are functions of two heterozygosities,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>X</mi><mo>=</mo><mi>f</mi><mo stretchy="false">(</mo><msub><mi>H</mi><mi>S</mi></msub><mo>,</mo><msub><mi>H</mi><mi>T</mi></msub><mo stretchy="false">)</mo></mrow></math>. Averaging a nonlinear function need not equal
+applying it to averages. This is a nonlinear averaging gap;
+Jensen's inequality gives a direction only when the needed convexity
+or concavity assumptions hold. No such direction is assumed here.
+A run can target either of two quantities:</p>
+<ul>
+<li><strong>Mean of values</strong> (default): the average of <var>X</var> over the evidence window.
+It is what a sampled population shows on average, and what published
+replicate means are.</li>
+<li><strong>Value of means</strong>: <var>f</var> of the window's average <var>H</var><sub>S</sub> and <var>H</var><sub>T</sub>. It is the
+form obtained by substituting predicted mean heterozygosities
+into a formula. Its standard error comes from the delta method,
+using the covariance and autocorrelation of both heterozygosities.</li>
+</ul>
+<p>Choose with <a href="#" data-fim-help="configuration" data-fim-anchor="convergence_estimate"><code>convergence_estimate</code></a>:
+<code>mean_of_values</code>, <code>value_of_means</code> or <code>auto</code>. The choice drives the stop, the
+headline <code>mean</code> and the interval. Whatever the choice, each of <code>D</code> and <code>G_ST</code>
+in <code>window_statistics</code> also carries <code>mean_of_values</code> and <code>value_of_means</code> (each
+<code>{mean, standard_error}</code>), <code>selected_form</code>, and <code>undefined_generations</code>: the
+window generations in which the statistic had no value, which the first form
+drops (<code>G_ST</code> where <code>H_T</code> is zero). The value of means can remain defined
+when some individual values are not, so <code>auto</code> selects it when any generation is undefined or when more
+than 1% of the window has a denominator below 0.01. Statistics that are not
+functions of the identities have one form.</p>
+<p>In the measured single-locus example motivating this option, the gap
+was about 0.011 for <var>D</var> and 0.0001 for <var>G</var><sub>ST</sub>, near the
+default precision for <var>D</var>. Those are not universal constants.
+With independent pooled loci and a well-behaved denominator,
+the gap commonly shrinks on the order of the reciprocal locus count.</p>
+<h3 id="calculate-both-forms-from-the-same-observations">Calculate both forms from the same observations</h3>
+<p>Use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mi>u</mi></msub><mo>=</mo><msub><mi>H</mi><mrow><mi>S</mi><mo>,</mo><mi>u</mi></mrow></msub></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>T</mi><mi>u</mi></msub><mo>=</mo><msub><mi>H</mi><mrow><mi>T</mi><mo>,</mo><mi>u</mi></mrow></msub></mrow></math> for one window observation;
+these symbols are heterozygosities, not copy totals.
+Let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>S</mi><mo stretchy="true">¯</mo></mover></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>T</mi><mo stretchy="true">¯</mo></mover></mrow></math> be their respective window averages.
+The two estimators are:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>X</mi><mo>&#x0005E;</mo></mover><mrow><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">o</mi><mi mathvariant="normal">f</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">v</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">s</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mn>1</mn><mi>W</mi></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>u</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>W</mi></mrow></munderover><mi>f</mi><mo stretchy="false">&#x00028;</mo><msub><mi>S</mi><mi>u</mi></msub><mo>&#x0002C;</mo><msub><mi>T</mi><mi>u</mi></msub><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(C.67)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>X</mi><mo>&#x0005E;</mo></mover><mrow><mrow><mi mathvariant="normal">v</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">e</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">o</mi><mi mathvariant="normal">f</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">s</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mi>f</mi><mo stretchy="false">&#x00028;</mo><mover><mi>S</mi><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x0002C;</mo><mover><mi>T</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(C.68)</span></div>
+<p>Consider two equally weighted observations with
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><msub><mi>S</mi><mn>1</mn></msub><mo>,</mo><msub><mi>T</mi><mn>1</mn></msub><mo stretchy="false">)</mo><mo>=</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo stretchy="false">)</mo></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><msub><mi>S</mi><mn>2</mn></msub><mo>,</mo><msub><mi>T</mi><mn>2</mn></msub><mo stretchy="false">)</mo><mo>=</mo><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo>/</mo><mn>4</mn><mo stretchy="false">)</mo></mrow></math>.
+These are attainable two-deme states: private fixed alleles
+give the first pair, and two private equally frequent alleles
+per deme give the second.
+For <var>G</var><sub>ST</sub> the function is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>f</mi><mi>G</mi></msub><mo stretchy="false">&#x00028;</mo><mi>S</mi><mo>&#x0002C;</mo><mi>T</mi><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mi>S</mi><mi>T</mi></mfrac><mo>&#x0002C;</mo><mspace width="2em" /><mi>T</mi><mo>&#x0003E;</mo><mn>0</mn></mrow></math><span class="equation-tag">(C.69)</span></div>
+<p>Its observed values are 1 and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mn>3</mn></mrow></math>, so their mean is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>G</mi><mo>&#x0005E;</mo></mover><mrow><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">o</mi><mi mathvariant="normal">f</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">v</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">s</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002F;</mo><mn>3</mn></mrow><mrow><mn>2</mn></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mn>2</mn><mn>3</mn></mfrac></mrow></math><span class="equation-tag">(C.70)</span></div>
+<p>But <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>S</mi><mo stretchy="true">¯</mo></mover><mo>=</mo><mn>1</mn><mo>/</mo><mn>4</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>T</mi><mo stretchy="true">¯</mo></mover><mo>=</mo><mn>5</mn><mo>/</mo><mn>8</mn></mrow></math>, giving:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>G</mi><mo>&#x0005E;</mo></mover><mrow><mrow><mi mathvariant="normal">v</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">e</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">o</mi><mi mathvariant="normal">f</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">s</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><mn>1</mn><mo>&#x0002F;</mo><mn>4</mn></mrow><mrow><mn>5</mn><mo>&#x0002F;</mo><mn>8</mn></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mn>3</mn><mn>5</mn></mfrac></mrow></math><span class="equation-tag">(C.71)</span></div>
+<p>The difference <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mo>/</mo><mn>3</mn><mo>−</mo><mn>3</mn><mo>/</mo><mn>5</mn><mo>=</mo><mn>1</mn><mo>/</mo><mn>15</mn></mrow></math> is not rounding error.
+The first divides each observation by its own total diversity
+before averaging. The second pools the diversity components
+before dividing. More observations reduce sampling uncertainty
+in each target; they do not force the two population targets
+to coincide.</p>
+<p>For Jost's statistic, write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>a</mi><mi>d</mi></msub><mo>=</mo><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>f</mi><mi>D</mi></msub><mo stretchy="false">&#x00028;</mo><mi>S</mi><mo>&#x0002C;</mo><mi>T</mi><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><msub><mi>a</mi><mi>d</mi></msub><mfrac><mrow><mi>T</mi><mo>&#x02212;</mo><mi>S</mi></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mi>S</mi></mrow></mfrac><mo>&#x0002C;</mo><mspace width="2em" /><mi>d</mi><mo>&#x0003E;</mo><mn>1</mn><mo>&#x0002C;</mo><mtext>&#x000A0;</mtext><mi>S</mi><mo>&#x0003C;</mo><mn>1</mn></mrow></math><span class="equation-tag">(C.72)</span></div>
+<p>Apply the same distinction to (C.72). In the particular two
+private-allele observations above, both <var>D</var> forms equal one.
+This equality is a feature of that example, not a general
+identity for <var>D</var>.</p>
+<p>For a nonzero <var>D</var> gap, keep two demes but use observations
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>S</mi><mo>,</mo><mi>T</mi><mo stretchy="false">)</mo><mo>=</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo stretchy="false">)</mo></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo>,</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo stretchy="false">)</mo></mrow></math> instead. The first again
+has distinct fixed alleles; the second has identical rows
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo>,</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo stretchy="false">)</mo></mrow></math> in both demes. The two <var>D</var> values are 1 and 0,
+averaging to <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></math>. Their component means are
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mover><mi>S</mi><mo stretchy="true">¯</mo></mover><mo>,</mo><mover><mi>T</mi><mo stretchy="true">¯</mo></mover><mo stretchy="false">)</mo><mo>=</mo><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mn>4</mn><mo>,</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo stretchy="false">)</mo></mrow></math>, so applying (C.72) once gives
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mn>2</mn><mo>−</mo><mn>1</mn><mo>/</mo><mn>4</mn><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mn>1</mn><mo>/</mo><mn>4</mn><mo stretchy="false">)</mo><mo>=</mo><mn>2</mn><mo>/</mo><mn>3</mn></mrow></math>, a different target.</p>
+<p>Undefined observations need special care. Dropping generations
+with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>T</mi><mo>=</mo><mn>0</mn></mrow></math> from (C.67) means the mean-of-values <var>G</var><sub>ST</sub>
+describes only generations where it is defined.
+Equation (C.68) can still use their <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>S</mi><mo>,</mo><mi>T</mi><mo stretchy="false">)</mo><mo>=</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy="false">)</mo></mrow></math> contributions
+in the component means. If every generation has <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>T</mi><mo>=</mo><mn>0</mn></mrow></math>,
+then <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>T</mi><mo stretchy="true">¯</mo></mover><mo>=</mo><mn>0</mn></mrow></math> and that form is undefined too. It must not
+be interpreted as automatically providing a finite answer.</p>
+<h3 id="the-delta-method-propagate-uncertainty-through-a-ratio">The delta method: propagate uncertainty through a ratio</h3>
+<p>The first-order change of a smooth function near
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mover><mi>S</mi><mo stretchy="true">¯</mo></mover><mo>,</mo><mover><mi>T</mi><mo stretchy="true">¯</mo></mover><mo stretchy="false">)</mo></mrow></math> is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>f</mi><mo stretchy="false">&#x00028;</mo><mover><mi>S</mi><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x0002B;</mo><mi>&#x003B4;</mi><mi>S</mi><mo>&#x0002C;</mo><mover><mi>T</mi><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x0002B;</mo><mi>&#x003B4;</mi><mi>T</mi><mo stretchy="false">&#x00029;</mo><mo>&#x02212;</mo><mi>f</mi><mo stretchy="false">&#x00028;</mo><mover><mi>S</mi><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x0002C;</mo><mover><mi>T</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo><mo>&#x02248;</mo><msub><mi>f</mi><mi>S</mi></msub><mi>&#x003B4;</mi><mi>S</mi><mo>&#x0002B;</mo><msub><mi>f</mi><mi>T</mi></msub><mi>&#x003B4;</mi><mi>T</mi></mrow></math><span class="equation-tag">(C.73)</span></div>
+<p><var>f</var><sub>S</sub> and <var>f</var><sub>T</sub> are partial derivatives: rates of change
+when one input changes while the other stays fixed.
+Evaluate both at the estimated component means.
+The approximation replaces the curved surface locally by a
+plane. Applying variance to this linear approximation gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>Var</mo><mo stretchy="false">[</mo><mi>f</mi><mo stretchy="false">&#x00028;</mo><mover><mi>S</mi><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x0002C;</mo><mover><mi>T</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo><mo stretchy="false">]</mo><mo>&#x02248;</mo><msubsup><mi>f</mi><mi>S</mi><mn>2</mn></msubsup><mo>Var</mo><mo stretchy="false">&#x00028;</mo><mover><mi>S</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo><mo>&#x0002B;</mo><msubsup><mi>f</mi><mi>T</mi><mn>2</mn></msubsup><mo>Var</mo><mo stretchy="false">&#x00028;</mo><mover><mi>T</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo><mo>&#x0002B;</mo><mn>2</mn><msub><mi>f</mi><mi>S</mi></msub><msub><mi>f</mi><mi>T</mi></msub><mo>Cov</mo><mo stretchy="false">&#x00028;</mo><mover><mi>S</mi><mo stretchy="true">&#x000AF;</mo></mover><mo>&#x0002C;</mo><mover><mi>T</mi><mo stretchy="true">&#x000AF;</mo></mover><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(C.74)</span></div>
+<p>Covariance measures whether the component means rise together.
+Ignoring it would treat two measurements of the same populations
+as unrelated. Autocorrelation also matters: the variances
+here are variances of <strong>means</strong>, not of individual generations.</p>
+<p>For (C.69), differentiation gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo stretchy="false">&#x00028;</mo><msub><mi>f</mi><mrow><mi>G</mi><mo>&#x0002C;</mo><mi>S</mi></mrow></msub><mo>&#x0002C;</mo><msub><mi>f</mi><mrow><mi>G</mi><mo>&#x0002C;</mo><mi>T</mi></mrow></msub><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mo>&#x02212;</mo><mfrac><mn>1</mn><mi>T</mi></mfrac><mo>&#x0002C;</mo><mfrac><mi>S</mi><mrow><msup><mi>T</mi><mn>2</mn></msup></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(C.75)</span></div>
+<p>The first derivative is immediate because <var>T</var> is fixed.
+For the second, differentiating <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>T</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow></math> gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><msup><mi>T</mi><mrow><mo>−</mo><mn>2</mn></mrow></msup></mrow></math>;
+the minus in <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>S</mi><msup><mi>T</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow></math> cancels it.
+For (C.72), the quotient rule gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo stretchy="false">&#x00028;</mo><msub><mi>f</mi><mrow><mi>D</mi><mo>&#x0002C;</mo><mi>S</mi></mrow></msub><mo>&#x0002C;</mo><msub><mi>f</mi><mrow><mi>D</mi><mo>&#x0002C;</mo><mi>T</mi></mrow></msub><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msub><mi>a</mi><mi>d</mi></msub><mfrac><mrow><mi>T</mi><mo>&#x02212;</mo><mn>1</mn></mrow><mrow><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>S</mi><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup></mrow></mfrac><mo>&#x0002C;</mo><mfrac><mrow><msub><mi>a</mi><mi>d</mi></msub></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mi>S</mi></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(C.76)</span></div>
+<p>For its first component, differentiating <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>T</mi><mo>−</mo><mi>S</mi><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>S</mi><mo stretchy="false">)</mo></mrow></math>
+produces numerator <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>S</mi><mo stretchy="false">)</mo><mo>+</mo><mo stretchy="false">(</mo><mi>T</mi><mo>−</mo><mi>S</mi><mo stretchy="false">)</mo><mo>=</mo><mi>T</mi><mo>−</mo><mn>1</mn></mrow></math> over
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>S</mi><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow></math>. These derivatives reveal why a small denominator
+can amplify input errors.</p>
+<p>The code avoids separately estimating every cross-lag
+covariance by constructing a linear series:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>L</mi><mi>u</mi></msub><mo>&#x0003D;</mo><msub><mi>f</mi><mi>S</mi></msub><msub><mi>S</mi><mi>u</mi></msub><mo>&#x0002B;</mo><msub><mi>f</mi><mi>T</mi></msub><msub><mi>T</mi><mi>u</mi></msub></mrow></math><span class="equation-tag">(C.77)</span></div>
+<p>It applies the same Geyer estimator to <var>L</var><sub>u</sub>. The standard
+error of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mi>L</mi><mo stretchy="true">¯</mo></mover></mrow></math> approximates the error of
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi><mo stretchy="false">(</mo><mover><mi>S</mi><mo stretchy="true">¯</mo></mover><mo>,</mo><mover><mi>T</mi><mo stretchy="true">¯</mo></mover><mo stretchy="false">)</mo></mrow></math> by (C.73), including component covariance
+and temporal correlation. It then reports the nonlinear value
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi><mo stretchy="false">(</mo><mover><mi>S</mi><mo stretchy="true">¯</mo></mover><mo>,</mo><mover><mi>T</mi><mo stretchy="true">¯</mo></mover><mo stretchy="false">)</mo></mrow></math> as the mean, not the generally different
+mean of <var>L</var><sub>u</sub>.</p>
+<p>At <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mover><mi>S</mi><mo stretchy="true">¯</mo></mover><mo>,</mo><mover><mi>T</mi><mo stretchy="true">¯</mo></mover><mo stretchy="false">)</mo><mo>=</mo><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mn>4</mn><mo>,</mo><mn>5</mn><mo>/</mo><mn>8</mn><mo stretchy="false">)</mo></mrow></math> the <var>G</var><sub>ST</sub> derivatives
+are <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mo>−</mo><mn>1.6</mn><mo>,</mo><mn>0.64</mn><mo stretchy="false">)</mo></mrow></math>. Suppose the <strong>component means</strong> have
+variances 0.0004 and 0.0009 and covariance 0.0003.
+Equation (C.74) gives
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2.56</mn><mo stretchy="false">(</mo><mn>0.0004</mn><mo stretchy="false">)</mo><mo>+</mo><mn>0.4096</mn><mo stretchy="false">(</mo><mn>0.0009</mn><mo stretchy="false">)</mo><mo>−</mo><mn>2.048</mn><mo stretchy="false">(</mo><mn>0.0003</mn><mo stretchy="false">)</mo><mo>=</mo><mn>0.00077824</mn></mrow></math>,
+with standard error about 0.027897.
+This is an illustrative covariance calculation, not an
+error estimate from the two-observation example.
+The delta method is local and approximate; near undefined
+ratios, linearization may be inadequate.</p>
+<p>For batch value-of-means summaries, replace the temporal
+component observations by the per-replicate component means.
+Average those components across replicates first, then apply
+<var>f</var> once. Apply covariance propagation across independent
+replicates for its interval. Averaging the per-replicate
+nonlinear values instead targets a different quantity.</p>
+<h2 id="checking-the-numbers-yourself">Checking the numbers yourself</h2>
+<ul>
+<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/dev/bin/relaxation-table"><code>dev/bin/relaxation-table</code></a> prints the
+identity operator's gap timescale beside the scalar approximation and the
+migration gap for six reference models. The unit tests in
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/test/convergence/test_defaults.py"><code>test_defaults.py</code></a> fail if the
+closed form is off by more than 5%.</li>
+<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/test/convergence/test_burn_in_monitor.py"><code>test_burn_in_monitor.py</code></a>
+pins the schedule (burn-in, first check, doubling) and the stop rule
+on exact series, and
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/test/convergence/test_window_statistics.py"><code>test_window_statistics.py</code></a>
+checks the estimator against
+hand-worked values and known autoregressive series.</li>
+<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/test/validation/test_convergence_rule_calibration.py"><code>test_convergence_rule_calibration.py</code></a>
+checks committed calibration evidence and seeded scenarios, including
+Golden Part VI and the Dear-Nolan low example. Its slow checks exercise
+the combined simulation and stopping rule.</li>
+<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/test/test_convergence_docs.py"><code>test_convergence_docs.py</code></a> checks that
+the documented burn-in and cap formulas contain the shipped policy
+constants, including their <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math> rendering here.</li>
+</ul>
+<p>These checks address different claims. Matching the table verifies the
+policy calculation; matching an analytic covariance series verifies an
+estimator; matching an equilibrium simulation adds scientific evidence
+for the combined system. None substitutes for the other two.
+Fixed-seed checks can be reproduced without rerunning until a favorable
+sample appears.</p>
+<h2 id="limits">Limits</h2>
+<p>Each limit links back to its main explanation; that explanation also
+links here so the qualification can be read in context.</p>
+<h3 id="scalar-approximation-limit">Scalar approximation limit</h3>
+<p>The scalar closed form is an approximation for the equal-size
+symmetric island model, checked within 5% of the identity operator
+in the reference tests. It is not an exact discrete-generation
+formula for all parameter values.</p>
+<p>Return to <a href="#units-and-the-scalar-island-approximation">units and the scalar island approximation</a>.</p>
+<h3 id="matrix-and-size-limit">Matrix and size limit</h3>
+<p>Unequal sizes do <strong>not</strong> merely substitute their sum into that scalar
+formula. They use the size-weighted scalar migration matrix or the
+explicitly supplied matrix and the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>d</mi><mn>2</mn></msup></mrow></math> identity eigenproblem,
+provided <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>≤</mo><mn>24</mn></mrow></math>. An explicit matrix is not reweighted by sizes.
+Larger cases needing that route require explicit run limits and
+cannot receive this model-derived timescale.</p>
+<p>Return to <a href="#units-and-the-scalar-island-approximation">the choice of timescale calculation</a>.
+The <a href="#flattening-the-table-into-one-vector">flattened operator derivation</a>
+explains why the eigenproblem grows so quickly.</p>
+<h3 id="slowest-locus-limit">Slowest-locus limit</h3>
+<p>The slowest locus is selected by its smallest mutation rate within
+this identity approximation, not by observing that every possible
+statistic has settled.</p>
+<p>Return to <a href="#units-and-the-scalar-island-approximation">the mutation-rate choice in the scalar approximation</a>.</p>
+<h3 id="empirical-cap-limit">Empirical-cap limit</h3>
+<p>The 200,000 floor is measured from two regimes, not derived from first
+principles. A third, faster-mixing regime needed far less (12,000), so the
+floor has real margin, but a configuration not yet measured could need more
+before its precision is reached, in which case the run reports the cap
+honestly, with the average and error bar it has, rather than a false
+convergence.</p>
+<p>Return to <a href="#from-burn-in-to-a-safety-cap">the safety-cap calculation</a>.</p>
+<h3 id="check-scheduling-limit">Check-scheduling limit</h3>
+<p>Checks occur at approximately doubled window lengths, not every
+generation, to keep checking cheap. If precision first becomes
+adequate between checks and remains adequate, the next check can
+require nearly twice as much evidence, apart from integer endpoint
+effects. Estimated precision need not improve monotonically.</p>
+<p>Return to <a href="#window-boundaries-and-check-scheduling">window boundaries and check scheduling</a>.</p>
+<h3 id="high-migration-evidence-limit">High-migration evidence limit</h3>
+<p>The Dear-Nolan high-migration scenario (100 demes of 2,000 gene copies) is
+not covered by the cited replicated measurement; at that measurement's
+backend and hardware it cost about 0.4 seconds per generation.
+That is not a current cross-backend performance guarantee.
+Its scalar timescale is dominated by mutation (about 499 generations).
+The dense 100-deme recursion exceeds the implementation guard, so
+that scale should not be described as a fresh direct eigensolver check.</p>
+<p>Return to <a href="#units-and-the-scalar-island-approximation">the scalar timescale and its calculation routes</a>.</p>
+<h3 id="finite-alleles-limit">Finite-alleles limit</h3>
+<p>The finite-alleles mutation model changes the mutation term and is not
+covered by the infinite-alleles derivation: independent mutations can
+produce matching labels. A timescale supplied by the current defaults
+must therefore be read as a heuristic for that model.</p>
+<p>Return to <a href="#drift-and-mutation-distinguish-self-pairs-from-distinct-pairs">the drift-and-mutation identity derivation</a>.</p>
+<h3 id="stochastic-migration-limit">Stochastic-migration limit</h3>
+<p>Stochastic migrant amounts also need a second-moment qualification.
+Conditional on a realized mixing matrix, (C.30) applies, but averaging
+generally requires <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mi>M</mi><mi>J</mi><msup><mi>M</mi><mrow><mi mathvariant="sans-serif">T</mi></mrow></msup><mo stretchy="false">]</mo></mrow></math>, not
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mi>M</mi><mo stretchy="false">]</mo><mi>J</mi><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mi>M</mi><msup><mo stretchy="false">]</mo><mrow><mi mathvariant="sans-serif">T</mi></mrow></msup></mrow></math>. In particular, the
+two weights for a same-deme pair share a random migrant fraction.
+The defaults do not build that augmented second-moment operator;
+do not interpret their timescale as an exact recursion for this variant.</p>
+<p>Return to <a href="#pairwise-identity-why-two-migration-weights-appear">the two-parent migration-weight derivation</a>.</p>
+<h3 id="finite-evidence-limit">Finite-evidence limit</h3>
+<p>A constant or apparently stationary evidence window can miss rare
+transitions. The error bar is conditional on the stationarity and
+correlation assumptions used to estimate it. Increasing the
+effective-count floor cannot prove those assumptions.</p>
+<p>Return to <a href="#why-the-estimator-uses-more-than-lag-1">the autocorrelation estimator and its cutoff</a>.</p>
+<h3 id="allele-label-stationarity-limit">Allele-label stationarity limit</h3>
+<p>Infinite-alleles stationarity refers to frequency structure and
+statistics modulo allele relabeling. Absolute newly assigned allele
+IDs keep increasing when mutation continues; those labels do not
+have a stationary registry distribution.</p>
+<p>Return to <a href="#pairwise-identity-why-two-migration-weights-appear">what the pairwise identity table measures</a>.</p>
+<h2 id="notation-and-implementation-map">Notation and implementation map</h2>
+<table>
+<thead>
+<tr>
+<th>Mathematics</th>
+<th>Meaning</th>
+<th>Configuration, report, or implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><var>N</var><sub>k</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>n</mi><mi>k</mi></msub><mo>=</mo><mi>c</mi><msub><mi>N</mi><mi>k</mi></msub></mrow></math></td>
+<td>Individuals and copies at one locus</td>
+<td><code>N</code>, <code>ploidy</code>, engine gene-copy sizes</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mi>l</mi></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mrow><mo>min</mo></mrow></msub></mrow></math></td>
+<td>Mutation probability per locus and its smallest value</td>
+<td><code>mu</code>, or conversion from <code>mu_b</code></td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>τ</mi></mrow></math></td>
+<td>Model-derived gap or scalar-approximation timescale</td>
+<td><code>relaxation_time</code> in <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/defaults.py"><code>defaults.py</code></a></td>
+</tr>
+<tr>
+<td><var>b</var>, <var>C</var></td>
+<td>First included generation and hard generation cap</td>
+<td><code>convergence_burn_in</code>, <code>max_generations</code></td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ε</mi></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>γ</mi></mrow></math></td>
+<td>Allowed half-width and nominal confidence</td>
+<td><code>precision</code>, <code>confidence</code></td>
+</tr>
+<tr>
+<td><var>W</var>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mrow><mrow><mi mathvariant="normal">e</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi></mrow></mrow></msub></mrow></math></td>
+<td>Window observation count and effective sample size</td>
+<td><code>window</code>, <code>effective_sample_size</code></td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>σ</mi></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover><mrow><mo>SE</mo></mrow><mo>^</mo></mover></mrow></math></td>
+<td>Individual spread and estimated mean uncertainty</td>
+<td><code>standard_deviation</code>, <code>standard_error</code></td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>τ</mi><mo>^</mo></mover><mrow><mrow><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math></td>
+<td>Estimated integrated correlation factor</td>
+<td><code>WindowStatistics.tau_int</code>, equal to <code>window / effective_sample_size</code></td>
+</tr>
+<tr>
+<td><var>J</var>, <var>M</var>, <var>A</var></td>
+<td>Pair identities, migration weights, and flattened identity operator</td>
+<td><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/defaults.py"><code>recursion_relaxation_time()</code></a></td>
+</tr>
+<tr>
+<td><var>Z</var><sub>r</sub>, <var>A</var><sub>w</sub></td>
+<td>Replicate summary and its averaging length</td>
+<td><code>replicate_averaging_window</code>, <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/batch_window.py"><code>batch_window.py</code></a></td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi><mo stretchy="false">(</mo><mi>S</mi><mo>,</mo><mi>T</mi><mo stretchy="false">)</mo></mrow></math></td>
+<td>A nonlinear differentiation function of heterozygosities</td>
+<td><code>convergence_estimate</code>, <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/window_statistics.py"><code>window_statistics.py</code></a></td>
+</tr>
+</tbody>
+</table>
+<p>The evidence-window schedule and per-statistic verdicts live in
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/monitor.py"><code>BurnInMonitor</code></a>.
+The parameter reference, not the notation table, is authoritative
+for accepted literal keys and expert overrides:
+<a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>.
+For programmatic use, see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md">Python API guide</a> and generated
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md">API reference</a>. The API delegates convergence-default
+calculation to <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/defaults.py"><code>derive_convergence_defaults()</code></a>
+and <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/convergence/defaults.py"><code>relaxation_time()</code></a>.</p>

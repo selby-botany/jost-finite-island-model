@@ -115,7 +115,8 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
         # hand-written `help.css` as "only in" the committed tree, since
         # it is never generated and rightly has no scratch-directory
         # counterpart at all.
-        for generated in "${help_temporary}"/*.html; do
+        for generated in "${help_temporary}"/*.html \
+            "${help_temporary}"/*.json; do
             diff -u -- "src/fim/gui/webui/help/$(basename -- "${generated}")" \
                 "${generated}"
         done

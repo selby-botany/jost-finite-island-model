@@ -44,7 +44,7 @@ also average over generations, and a batch summary averages across
 replicates. Consult the
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.engine.report.report_for_state">report API</a>,
 <a href="#" data-fim-help="usage" data-fim-anchor="output-schemas">output schemas</a>, and
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">convergence reference</a> before comparing these quantities.
+<a href="#" data-fim-help="convergence" data-fim-anchor="">convergence reference</a> before comparing these quantities.
 An undefined value is not evidence of zero differentiation.</p>
 <h2 id="d"><code>D</code></h2>
 <p>Jost's frequency-weighted allelic differentiation:</p>
@@ -129,7 +129,7 @@ The entropies in this calculation use the configured deme weights.</p>
 <p>Sampling is with replacement.
 Identity here means identity in allelic state, not a recorded pedigree
 relationship.</p>
-<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Mathematical guide</a> ·
+<p><a href="#" data-fim-help="finite-island-model-introduction" data-fim-anchor="">Mathematical guide</a> ·
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.gs">Python API: gs</a></p>
 <h2 id="gd"><code>Gd</code></h2>
 <p>Mean between-deme gene identity. With equal weights,</p>
@@ -137,7 +137,7 @@ relationship.</p>
 <p>This quantity is reported as <code>Gd</code>.
 It is the mean probability of an allelic match between gene copies
 drawn from distinct demes.</p>
-<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Mathematical guide</a> ·
+<p><a href="#" data-fim-help="finite-island-model-introduction" data-fim-anchor="">Mathematical guide</a> ·
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.gd">Python API: gd</a></p>
 <h2 id="d_m"><code>D_m</code></h2>
 <p>Nei's mean pairwise between-deme gene diversity:</p>
@@ -236,7 +236,7 @@ For more than two demes, the geometric normalization can produce
 are properties of that normalization, not negative evolutionary time.
 Saved JSON represents non-finite distances as <code>null</code>; the desktop
 displays infinity explicitly.</p>
-<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/nei-distances.md">Mathematical derivation and worked examples</a> ·
+<p><a href="#" data-fim-help="nei-distances" data-fim-anchor="">Mathematical derivation and worked examples</a> ·
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.genetic_distance.nei_family_from_identities">Python API: nei_family_from_identities</a></p>
 <h2 id="effective-allele-counts">Effective allele counts</h2>
 <p>The displayed <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mi>S</mi></msub></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mi>T</mi></msub></mrow></math> are
@@ -272,13 +272,13 @@ closed-form reference computed from the configuration alone, not a
 measurement of the run it is drawn beside: it assumes zero mutation and
 a single common ancestor at generation zero, neither of which a typical
 run's own settings need match.</p>
-<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Model assumptions</a> ·
+<p><a href="#" data-fim-help="finite-island-model-introduction" data-fim-anchor="">Model assumptions</a> ·
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.identity_recovery_trajectory">Python API</a></p>
 <h2 id="mutation-negligible-equilibrium">Mutation negligible equilibrium</h2>
 <p>Explore's indicator tests whether mutation is negligible relative to
 migration in the equilibrium approximation. It is a regime check,
 not a measured statistic or proof that mutation has no effect.</p>
-<p><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md">Model assumptions</a> ·
+<p><a href="#" data-fim-help="finite-island-model-introduction" data-fim-anchor="">Model assumptions</a> ·
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md#fim.statistics.differentiation.mutation_negligible_equilibrium">Python API</a></p>
 <h2 id="worked-example-two-demes-and-two-alleles">Worked example: two demes and two alleles</h2>
 <p>This example uses one locus and equal deme weights. Deme <var>X</var> has
@@ -331,7 +331,7 @@ These measures answer different questions about the same frequencies.</p>
 <ul>
 <li><a href="#" data-fim-help="usage" data-fim-anchor="">Command reference and desktop workflow</a></li>
 <li><a href="#" data-fim-help="configuration" data-fim-anchor="">Configuration reference</a></li>
-<li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence and uncertainty</a></li>
+<li><a href="#" data-fim-help="convergence" data-fim-anchor="">Convergence and uncertainty</a></li>
 <li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md">Python scripting guide</a></li>
 <li><a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md">Generated Python API</a></li>
 </ul>

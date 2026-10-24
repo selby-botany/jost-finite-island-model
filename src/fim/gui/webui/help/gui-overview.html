@@ -1,0 +1,183 @@
+<h1 id="desktop-app-guide">Desktop app guide</h1>
+<p>This guide covers the <code>fim</code> desktop app (<code>fim-gui</code>). It assumes you know
+the finite island model and differentiation statistics. It records what
+this implementation does, which conventions it uses, and where each
+control lives. For the model itself, start with the
+<a href="#" data-fim-help="finite-island-model-introduction" data-fim-anchor="">introduction to the finite island model</a>.</p>
+<p>In the app, open this guide with <strong>Help</strong> in the left rail or
+<strong>Help &gt; Desktop help</strong>. Press <strong>F1</strong> for help on the focused field or
+the current screen.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#before-you-compare-with-the-literature">Before you compare with the literature</a></li>
+<li><a href="#screens">Screens</a></li>
+<li><a href="#open-documents">Open documents</a></li>
+<li><a href="#keyboard-shortcuts">Keyboard shortcuts</a></li>
+<li><a href="#menus">Menus</a></li>
+<li><a href="#network-access-and-reproducibility">Network access and reproducibility</a></li>
+<li><a href="#all-desktop-topics">All desktop topics</a></li>
+</ul>
+<h2 id="before-you-compare-with-the-literature">Before you compare with the literature</h2>
+<p>Read <a href="#" data-fim-help="gui-conventions" data-fim-anchor="">implementation conventions</a> before you compare a
+result with a published value. Four conventions most often explain an
+apparent disagreement:</p>
+<ul>
+<li><code>N</code> counts <strong>individuals</strong> per deme; the engine uses
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi><mi>×</mi><mtext>ploidy</mtext></mrow></math> gene copies.</li>
+<li>The scalar <code>m</code> is the fraction of a deme's parents drawn from the
+<strong>other</strong> <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></math> demes, not a redraw from all <var>d</var> demes.</li>
+<li>A generation is migrate, then drift, then mutate.</li>
+<li>Generation 0 is a Dirichlet prior (or explicit <var>p</var><sub>0</sub>), not a sampled
+population.</li>
+</ul>
+<h2 id="screens">Screens</h2>
+<p>The left rail is available on every screen. Run and Results share one
+run view.</p>
+<table>
+<thead>
+<tr>
+<th>Rail item</th>
+<th>Purpose</th>
+<th>Help</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Home</td>
+<td>Experiments, Studies, runs, saved runs, and the Examples experiment</td>
+<td><a href="#" data-fim-help="gui-organize" data-fim-anchor="">Home and organization</a></td>
+</tr>
+<tr>
+<td>Configure</td>
+<td>Model parameters, structure, stopping rule, and sweep setup</td>
+<td><a href="#" data-fim-help="gui-configure" data-fim-anchor="">Configure</a></td>
+</tr>
+<tr>
+<td>Explore</td>
+<td>Closed-form equilibrium and identity-recovery predictions; no simulation</td>
+<td><a href="#" data-fim-help="gui-explore" data-fim-anchor="">Explore</a></td>
+</tr>
+<tr>
+<td>Run, Results</td>
+<td>Live and completed run view, batch summaries, playback</td>
+<td><a href="#" data-fim-help="gui-run-results" data-fim-anchor="">Run and results</a></td>
+</tr>
+<tr>
+<td>Compare</td>
+<td>Overlay two or more completed runs</td>
+<td><a href="#" data-fim-help="gui-compare" data-fim-anchor="">Compare runs and sweeps</a></td>
+</tr>
+<tr>
+<td>Help</td>
+<td>This guide and the bundled references</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>The parameter strip at the top shows N, d, m, and μ for the selected
+document. Select a value to open Configure. A <strong>run settings</strong> item
+appears when a loaded configuration's run settings differ from your
+Settings; see <a href="#" data-fim-help="gui-configure" data-fim-anchor="loaded-run-settings">loaded run settings</a>.
+<strong>Back</strong> and <strong>Forward</strong> move through screen history for the selected
+document. <strong>Settings</strong> opens <a href="#" data-fim-help="gui-settings" data-fim-anchor="">preferences</a>.</p>
+<h2 id="open-documents">Open documents</h2>
+<p>The tab bar below the title lists open configurations, runs, and
+studies. Each tab keeps its own screen and history. Switching tabs does
+not stop work in another tab.</p>
+<ul>
+<li>Opening a result that is already open selects its existing tab. A new
+configuration always starts as a separate draft.</li>
+<li>Open tabs are held in memory for this window; they are not restored
+after a restart. Saved results are unaffected.</li>
+<li>Close a tab with its <strong>×</strong>, <strong>File &gt; Close tab</strong>, or <strong>Delete</strong> while
+the tab has focus. A configuration with unsaved changes asks whether
+to save, discard, or keep it. An active run, saved run, or sweep
+offers the appropriate pause or stop action. Closing a tab never
+deletes saved results.</li>
+<li>Right-click a tab for <strong>Close other tabs</strong> and <strong>Close all results</strong>.
+<strong>Close all results</strong> closes completed run and sweep-result tabs, not
+configurations or saved runs. Unsaved or active tabs use the usual
+close dialog one at a time: <strong>Keep</strong> skips that tab; Escape cancels
+the rest of the bulk close.</li>
+<li>With more than 12 tabs open, a notice offers <strong>Close all results</strong>.
+This is a reminder, not a limit.</li>
+</ul>
+<h2 id="keyboard-shortcuts">Keyboard shortcuts</h2>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>macOS</th>
+<th>Windows and Linux</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New configuration</td>
+<td>Command+N</td>
+<td>Control+N</td>
+</tr>
+<tr>
+<td>Close selected tab</td>
+<td>Command+W</td>
+<td>Control+W</td>
+</tr>
+<tr>
+<td>Next tab</td>
+<td>Control+Tab or Command+Shift+]</td>
+<td>Control+Tab</td>
+</tr>
+<tr>
+<td>Previous tab</td>
+<td>Control+Shift+Tab or Command+Shift+[</td>
+<td>Control+Shift+Tab</td>
+</tr>
+<tr>
+<td>Help for the focused field or screen</td>
+<td>F1</td>
+<td>F1</td>
+</tr>
+</tbody>
+</table>
+<h2 id="menus">Menus</h2>
+<ul>
+<li><strong>File:</strong> <strong>New configuration</strong>, <strong>Close tab</strong>, <strong>Next tab</strong>,
+<strong>Previous tab</strong>, <strong>Close other tabs</strong>, <strong>Close all results</strong>,
+<strong>Open configuration…</strong>, <strong>Save configuration…</strong>, <strong>Load example…</strong>,
+<strong>Open run…</strong>, <strong>Reveal output folder</strong>, and <strong>Quit fim</strong>.</li>
+<li><strong>Run:</strong> <strong>Run simulation</strong> and <strong>Cancel run</strong>.</li>
+<li><strong>Help:</strong> <strong>Desktop help</strong> (this guide), <strong>Configuration reference</strong>,
+<strong>Statistics reference</strong>, <strong>Command-line reference</strong>, <strong>Documentation
+on GitHub</strong>, <strong>Check for updates</strong>, and <strong>About fim</strong>.</li>
+</ul>
+<p><strong>Quit fim</strong> and closing the window use the same
+<a href="#" data-fim-help="gui-troubleshooting" data-fim-anchor="closing-the-window">close-window guard</a>.</p>
+<h2 id="network-access-and-reproducibility">Network access and reproducibility</h2>
+<p>The app uses the same simulation code and <code>results/</code> folder as the
+<code>fim</code> command line. A run started in the app produces the same
+<code>report.json</code> and <code>trajectory.tlog</code>, byte for byte, as the same
+configuration and seed run from the terminal; see
+<a href="#" data-fim-help="usage" data-fim-anchor="reproduce-a-run">reproduce a run</a>.</p>
+<p>The only network access is <strong>Help &gt; Check for updates</strong>, which is
+explicit. Help pages are bundled with the app and work offline. Links
+to source code and to documents that are not bundled open on GitHub in
+your browser.</p>
+<h2 id="all-desktop-topics">All desktop topics</h2>
+<ul>
+<li><a href="#" data-fim-help="gui-conventions" data-fim-anchor="">Implementation conventions</a></li>
+<li><a href="#" data-fim-help="gui-configure" data-fim-anchor="">Configure</a></li>
+<li><a href="#" data-fim-help="gui-run-results" data-fim-anchor="">Run and results</a></li>
+<li><a href="#" data-fim-help="gui-explore" data-fim-anchor="">Explore</a></li>
+<li><a href="#" data-fim-help="gui-sweeps" data-fim-anchor="">Sweeps</a></li>
+<li><a href="#" data-fim-help="gui-compare" data-fim-anchor="">Compare runs and sweeps</a></li>
+<li><a href="#" data-fim-help="gui-organize" data-fim-anchor="">Home and organization</a></li>
+<li><a href="#" data-fim-help="gui-settings" data-fim-anchor="">Settings and saved preferences</a></li>
+<li><a href="#" data-fim-help="gui-troubleshooting" data-fim-anchor="">Troubleshooting</a></li>
+</ul>
+<p>Reference documents:
+<a href="#" data-fim-help="configuration" data-fim-anchor="">configuration</a>,
+<a href="#" data-fim-help="statistics" data-fim-anchor="">statistics</a>,
+<a href="#" data-fim-help="convergence" data-fim-anchor="">convergence</a>,
+<a href="#" data-fim-help="run-lifecycle" data-fim-anchor="">saved runs</a>,
+<a href="#" data-fim-help="migration-conventions" data-fim-anchor="">migration conventions</a>, and the
+<a href="#" data-fim-help="usage" data-fim-anchor="">command-line reference</a>.</p>

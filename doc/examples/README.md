@@ -12,7 +12,7 @@ The desktop app restores them automatically when you open an example.
 
 The desktop app includes every example as a read-only run in its Examples
 experiment, grouped by the classes in [`classes.yaml`](classes.yaml)
-(see [The Examples experiment](../usage.md#the-examples-experiment)).
+(see [The Examples experiment](../gui/organize.md#the-examples-experiment)).
 The [Configure card examples](#configure-card-examples) are also
 mirrored inline in `doc/usage.md`.
 

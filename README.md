@@ -43,7 +43,7 @@ it, or run it with no arguments) and the **command line** (the same
 executable with a command, e.g. `run`). Both read and write the same
 `results/` folder, so a run started from one can be opened, re-analyzed, or
 animated from the other. See the
-[desktop GUI section of the command reference](doc/usage.md#desktop-gui-fim-gui)
+[desktop app guide](doc/gui/README.md)
 for what each screen does.
 
 ### Windows release
@@ -257,6 +257,8 @@ defines the complete scientific and architectural contract.
 - [Externally accessible engine API](doc/fim-simulator-functional-api.md)
 - [Engine backend benchmark results](doc/fim-engine-backend-benchmarks.md)
 - [Desktop GUI design](doc/fim-gui-design.md)
+- [GUI-first help design](doc/fim-gui-help-design.md) — desktop Help
+  topics, contextual help, search, and documentation integration
 - [Operational logging design](doc/fim-logging-design.md)
 - [Desktop GUI test plan](doc/fim-gui-test-plan.md)
 - [Source-tree orientation](src/README.md)

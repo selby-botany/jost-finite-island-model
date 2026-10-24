@@ -854,7 +854,7 @@ function wireNavRail() {
                     window.fim.menu.compareRuns();
                     break;
                 case "help":
-                    window.fim.menu.help("usage");
+                    window.fim.menu.help();
                     break;
                 default:
                     break;

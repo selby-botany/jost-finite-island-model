@@ -1,0 +1,271 @@
+{
+  "groups": [
+    {
+      "id": "desktop",
+      "title": "Desktop app"
+    },
+    {
+      "id": "reference",
+      "title": "Reference"
+    },
+    {
+      "id": "science",
+      "title": "Model and statistics background"
+    },
+    {
+      "id": "command-line",
+      "title": "Command line"
+    }
+  ],
+  "topics": [
+    {
+      "aliases": [
+        "overview",
+        "screens",
+        "shortcuts",
+        "menus",
+        "tabs"
+      ],
+      "group": "desktop",
+      "id": "gui-overview",
+      "source": "doc/gui/README.md",
+      "summary": "Screens, open documents, keyboard shortcuts, menus, and where each task lives",
+      "title": "Desktop app guide"
+    },
+    {
+      "aliases": [
+        "units",
+        "convention",
+        "literature",
+        "gene copies",
+        "generation order"
+      ],
+      "group": "desktop",
+      "id": "gui-conventions",
+      "source": "doc/gui/conventions.md",
+      "summary": "Units of N, the migration convention, generation order, estimands, and stopping semantics",
+      "title": "Implementation conventions"
+    },
+    {
+      "aliases": [
+        "fields",
+        "parameters",
+        "yaml",
+        "run settings"
+      ],
+      "group": "desktop",
+      "id": "gui-configure",
+      "source": "doc/gui/configure.md",
+      "summary": "Each Configure field and its YAML key, run settings, and validation",
+      "title": "Configure"
+    },
+    {
+      "aliases": [
+        "graphs",
+        "trajectory",
+        "results",
+        "batch",
+        "replicates"
+      ],
+      "group": "desktop",
+      "id": "gui-run-results",
+      "source": "doc/gui/run-and-results.md",
+      "summary": "The run view, graphs, trajectories, references, readouts, and saved output",
+      "title": "Run and results"
+    },
+    {
+      "aliases": [
+        "theory",
+        "prediction",
+        "closed form",
+        "surface"
+      ],
+      "group": "desktop",
+      "id": "gui-explore",
+      "source": "doc/gui/explore.md",
+      "summary": "Closed-form predictions, curves and surfaces, and choosing sweep points",
+      "title": "Explore"
+    },
+    {
+      "aliases": [
+        "sweep",
+        "grid",
+        "axes",
+        "health",
+        "retry"
+      ],
+      "group": "desktop",
+      "id": "gui-sweeps",
+      "source": "doc/gui/sweeps.md",
+      "summary": "Setting up, running, reading, and repairing a parameter sweep",
+      "title": "Sweeps"
+    },
+    {
+      "aliases": [
+        "compare",
+        "overlay",
+        "welch",
+        "difference"
+      ],
+      "group": "desktop",
+      "id": "gui-compare",
+      "source": "doc/gui/compare.md",
+      "summary": "Overlaying runs and comparing sweeps with a Welch difference",
+      "title": "Compare runs and sweeps"
+    },
+    {
+      "aliases": [
+        "home",
+        "experiment",
+        "study",
+        "examples",
+        "delete",
+        "clone"
+      ],
+      "group": "desktop",
+      "id": "gui-organize",
+      "source": "doc/gui/organize.md",
+      "summary": "Experiments, Studies, saved runs, examples, and read-only items",
+      "title": "Home and organization"
+    },
+    {
+      "aliases": [
+        "preferences",
+        "workers",
+        "storage",
+        "dark mode"
+      ],
+      "group": "desktop",
+      "id": "gui-settings",
+      "source": "doc/gui/settings.md",
+      "summary": "Display, statistics shown, background work, storage location, and defaults",
+      "title": "Settings and saved preferences"
+    },
+    {
+      "aliases": [
+        "problems",
+        "errors",
+        "shutdown",
+        "logs",
+        "close"
+      ],
+      "group": "desktop",
+      "id": "gui-troubleshooting",
+      "source": "doc/gui/troubleshooting.md",
+      "summary": "Disagreements with published values, long runs, closing the window, and logs",
+      "title": "Troubleshooting"
+    },
+    {
+      "aliases": [
+        "keys",
+        "yaml",
+        "options"
+      ],
+      "group": "reference",
+      "id": "configuration",
+      "source": "doc/configuration.md",
+      "summary": "Every configuration key: type, default, constraints, and meaning",
+      "title": "Configuration reference"
+    },
+    {
+      "aliases": [
+        "formulas",
+        "definitions",
+        "G_ST",
+        "D",
+        "F_ST"
+      ],
+      "group": "reference",
+      "id": "statistics",
+      "source": "doc/statistics.md",
+      "summary": "Definition and formula of every reported statistic",
+      "title": "Statistics reference"
+    },
+    {
+      "aliases": [
+        "burn-in",
+        "precision",
+        "stopping",
+        "equilibrium"
+      ],
+      "group": "reference",
+      "id": "convergence",
+      "source": "doc/convergence.md",
+      "summary": "Burn-in detection, averaging, precision, and stopping rules",
+      "title": "Convergence"
+    },
+    {
+      "aliases": [
+        "pause",
+        "resume",
+        "checkpoint",
+        "states"
+      ],
+      "group": "reference",
+      "id": "run-lifecycle",
+      "source": "doc/run-lifecycle.md",
+      "summary": "Saved-run states, checkpoints, and recovery",
+      "title": "Saved runs: pause, resume, and recover"
+    },
+    {
+      "aliases": [
+        "migration",
+        "identity",
+        "literature"
+      ],
+      "group": "science",
+      "id": "migration-conventions",
+      "source": "doc/migration-conventions.md",
+      "summary": "Mapping fim's parameters and identities to published models",
+      "title": "Migration and identity conventions"
+    },
+    {
+      "aliases": [
+        "D",
+        "G_ST",
+        "differentiation"
+      ],
+      "group": "science",
+      "id": "jost-differentiation-measures",
+      "source": "doc/jost-differentiation-measures.md",
+      "summary": "Jost's D, G_ST, and related measures for conservation genetics",
+      "title": "Differentiation measures"
+    },
+    {
+      "aliases": [
+        "nei",
+        "distance"
+      ],
+      "group": "science",
+      "id": "nei-distances",
+      "source": "doc/nei-distances.md",
+      "summary": "Nei's distances: two denominators, pairs and all demes",
+      "title": "Nei distances"
+    },
+    {
+      "aliases": [
+        "introduction",
+        "island model"
+      ],
+      "group": "science",
+      "id": "finite-island-model-introduction",
+      "source": "doc/finite-island-model-introduction.md",
+      "summary": "A plain-language introduction to the model, for readers new to it",
+      "title": "The finite island model: an introduction"
+    },
+    {
+      "aliases": [
+        "cli",
+        "terminal",
+        "commands",
+        "fim run",
+        "output files"
+      ],
+      "group": "command-line",
+      "id": "usage",
+      "source": "doc/usage.md",
+      "summary": "fim commands, flags, worked examples, and output file formats",
+      "title": "Command-line reference"
+    }
+  ]
+}

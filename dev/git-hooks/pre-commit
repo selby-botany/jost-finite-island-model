@@ -65,14 +65,18 @@ if ((${#python_files[@]})); then
     fi
 fi
 
-# Refresh the Help screen's generated HTML whenever a Tier 1 source doc,
-# a canonical worked-example config, or either generator is staged (design doc
-# `20260822-claude-sonnet-5-in-app-help-design.md` §4.1's own freshness
-# discipline, mirroring the API-doc refresh above).
+# Refresh the Help screen's generated HTML and manifests whenever the
+# registry (`doc/help-topics.json`), any source it lists, a canonical
+# worked-example config, or either generator is staged. This mirrors the
+# API-doc refresh above; see `doc/fim-gui-help-design.md`.
 help_sources_staged=false
 while IFS= read -r -d '' path; do
     case "${path}" in
         doc/usage.md | doc/configuration.md | doc/statistics.md \
+        | doc/convergence.md | doc/run-lifecycle.md \
+        | doc/migration-conventions.md | doc/jost-differentiation-measures.md \
+        | doc/nei-distances.md | doc/finite-island-model-introduction.md \
+        | doc/gui/*.md | doc/help-topics.json \
         | doc/examples/*/config.yaml \
         | dev/bin/generate-help-html | dev/bin/update-worked-examples \
         | dev/lib/docslug.py)
@@ -87,7 +91,7 @@ if "${help_sources_staged}"; then
     if [[ -x dev/bin/generate-help-html ]] \
         && python3 -c 'import markdown_it' >/dev/null 2>&1; then
         dev/bin/generate-help-html
-        git add -- src/fim/gui/webui/help
+        git add --all -- src/fim/gui/webui/help
     else
         printf 'pre-commit: help-HTML generator unavailable; refresh skipped\n'
     fi

@@ -1,0 +1,49 @@
+<h1 id="compare-runs-and-sweeps">Compare runs and sweeps</h1>
+<p>Comparison reads saved results. Nothing is rerun, and nothing is saved:
+reopening a comparison recomputes it.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#compare-runs">Compare runs</a></li>
+<li><a href="#compare-sweeps">Compare sweeps</a></li>
+</ul>
+<h2 id="compare-runs">Compare runs</h2>
+<ol>
+<li>Choose <strong>Compare</strong> in the rail.</li>
+<li>Select two or more completed runs from the list (<strong>Run</strong>, <strong>Ended</strong>,
+<strong>Outcome</strong>), then choose <strong>Compare</strong>.</li>
+</ol>
+<p>The screen shows two overlays:</p>
+<ul>
+<li><strong>Small multiples:</strong> one final-state scatter panel per run, deme 1
+against deme 2. Panels name the parameters that differ between runs.</li>
+<li><strong>Trajectory overlay:</strong> one statistic over generations, one color per
+run. <strong>Statistic</strong> selects <var>D</var>, <var>G</var><sub>ST</sub>, <var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>, <var>H</var><sub>S</sub>,
+<var>H</var><sub>T</sub>, or <var>H</var><sub>ST</sub>; switching redraws without another computation.</li>
+</ul>
+<p>Runs with different seeds, configurations, or retention are compared as
+saved. Check that differences in N, ploidy, or migration convention are
+intended before you interpret a difference; see
+<a href="#" data-fim-help="gui-conventions" data-fim-anchor="">implementation conventions</a>.</p>
+<h2 id="compare-sweeps">Compare sweeps</h2>
+<p>Start on Home, in either of two ways:</p>
+<ul>
+<li><strong>Compare sweeps…</strong> on an Experiment's row compares the sweep Studies
+inside it.</li>
+<li><strong>Select</strong>, tick sweep Studies from any Experiments, then choose
+<strong>Compare selected sweeps…</strong>.</li>
+</ul>
+<p>The comparison screen draws one curve per sweep, each with a distinct
+color and marker, over the axis you pick. Other shared axes are held at
+a value. It has the error-bar, scale, and theory controls of the sweep
+results screen; each theory curve uses its own sweep's settings.
+Degraded and unreliable points stay flagged.</p>
+<p>With exactly two sweeps, a second panel shows their difference (first
+minus second) with a 95% Welch interval and a zero line. That interval
+assumes the sweeps' replicates are independent. Two sweeps built from
+the same seed and grid share seeds point for point; the command-line
+<code>fim sweep compare</code> reports whether seeds were different, shared, or
+partly shared, and does not adjust for sharing.</p>
+<p>Sweeps can be compared only on axes they all vary, at values they
+share, and with the same ploidy. Otherwise the comparison is refused
+with the reason. See <a href="#" data-fim-help="usage" data-fim-anchor="sweep-a-parameter">sweep a parameter</a>
+for <code>fim sweep compare</code>.</p>

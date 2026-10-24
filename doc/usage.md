@@ -1,6 +1,7 @@
 # Using `fim`
 
-This guide covers commands, desktop workflows, and output files. See
+This guide covers commands and output files. The desktop app has its
+own [desktop app guide](gui/README.md), also bundled in the app. See
 [what this simulates](../README.md#what-this-simulates) for the model,
 the [configuration reference](configuration.md) for parameter types and
 defaults, and the [statistics reference](statistics.md) for definitions,
@@ -22,10 +23,6 @@ $\text{U}$ tags.
 - [Re-analyze a trajectory](#re-analyze-a-trajectory)
 - [Check for updates](#check-for-updates)
 - [Desktop GUI (`fim-gui`)](#desktop-gui-fim-gui)
-- [Names, descriptions, and documentation](#names-descriptions-and-documentation)
-- [The Examples experiment](#the-examples-experiment)
-- [Read-only items](#read-only-items)
-- [Opening a saved example](#opening-a-saved-example)
 - [Global flags](#global-flags)
 - [Output schemas](#output-schemas)
 - [Reproduce a run](#reproduce-a-run)
@@ -198,14 +195,14 @@ example's values fill the form, and its name and description fill the
 "Run name" and "Run description" boxes, which you can change before you
 run it. Its run settings (engine, replicates and so on) are used for this
 run only; your Settings do not change, and a notice lists any that differ
-(see [Loading a configuration does not change your Settings](#loading-a-configuration-does-not-change-your-settings)).
+(see [Loading a configuration does not change your Settings](gui/configure.md#loaded-run-settings)).
 **View YAML** shows the example's configuration file, ready to
 copy. An example that the form cannot represent (a different `mu` for each
 locus that no single per-base rate `mu_b` produces, for example) or that has
 no configuration file says so in the dialog, and
 **Load into Configure** stays unavailable for it. **Open saved result**
 shows the bundled result without running
-anything (see [Opening a saved example](#opening-a-saved-example)); it is
+anything (see [Opening a saved example](gui/organize.md#opening-a-saved-example)); it is
 unavailable for an example whose result has not been saved yet.
 
 ### Unequal island sizes with a migration hub
@@ -966,7 +963,7 @@ app, loading this example uses its `generational-vector`
 engine and 16 replicates, whatever your Settings hold, and leaves your
 Settings unchanged; a notice lists the differences and offers to make
 them your Settings (see
-[Loading a configuration does not change your Settings](#loading-a-configuration-does-not-change-your-settings)).
+[Loading a configuration does not change your Settings](gui/configure.md#loaded-run-settings)).
 
 ### A long-locus batch under the generational engine
 
@@ -1128,8 +1125,8 @@ about a hundredth of the precision, roughly 80 times smaller, which changes no
 answer the sweep reports. `exact` writes full precision (what a single `fim run`
 does). The plan prints the disk each level would take; a sweep whose estimate
 for the level it keeps reaches 50 GB (change it with `--confirm-disk SIZE`)
-needs `--yes`. In the desktop app the **Keep** choice in the Sweep dialog shows
-the same figures next to each option.
+needs `--yes`. The desktop Sweep dialog's **Keep** choice shows the same
+figures; see [desktop sweeps](gui/sweeps.md#recording-and-disk).
 
 A sweep can also be made smaller after it has run, once its answers are in:
 
@@ -1172,15 +1169,6 @@ fim sweep compact STUDY_ID [--keep corners] [--to tapered]   # make a finished s
 fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
 ```
 
-- In the desktop app the sweep results card has a **View** menu. **How each
-  point got there** draws the statistic against generation, one curve per
-  value of **Curves by**, with the interval of the mean as a band, a dotted
-  line where the burn-in ended, a dashed stretch where fewer than half the
-  replicates are still running, a hollow end marker for a point whose
-  replicates did not all settle, and the closed-form value as a dashed
-  horizontal line when **Show theory** is ticked. The x axis is logarithmic
-  automatically for runs of 1,000 generations or more (the **x scale** menu
-  overrides it). Click a curve to open that point's run.
 - `trajectories` writes how each point approached equilibrium, not only where
   it ended: for each finished point, at most 512 generations (generation 0, then
   closely spaced early generations and evenly spaced later ones), with the mean
@@ -1196,8 +1184,6 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   stepped one generation): at least the burn-in for the fewest replicates a
   point may stop at, at most the generation cap for every replicate. It is a
   range because convergence time is not known in advance.
-  The same range appears in the app's
-  Sweep dialog.
   `plan` (and `run`, before it starts) then times the engine for a few seconds
   and adds how long the sweep may take and how much disk it may use, for
   example `time about 35 s to 1 h 50 min (1 point(s) at once on 10 core(s))`
@@ -1207,11 +1193,7 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   of a similar size share one measurement, and the results are remembered
   beside your preferences file (`sweep-throughput.json`) for reuse.
   `--no-probe` skips the measurement and prints the work range only.
-  The app's Sweep dialog shows the same three lines (time, disk, and what was
-  measured) under the plan, for the points that still have to run; it says
-  "Measuring the engine…" for the first few seconds of a new size, and a
-  running sweep's progress view shows the time left and how long each point
-  took.
+  The desktop Sweep dialog shows the same range, time, and disk figures.
 - A sweep starts the points with the longest estimated duration first.
   Scheduling does not change point configurations or results.
   Each finished point's line reports its duration.
@@ -1258,8 +1240,8 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   of large lineal batches one point at a time.
   `--points-at-once N` sets the number, `--workers N` the worker processes each
   batch point uses, and `--sequential` runs one point at a time with one
-  worker. In the app, the Sweep dialog's **Points at once** does the same, and
-  the Settings value "max workers" applies. Results do not depend on the
+  worker. In the app, the Sweep dialog's **Points at once** does the same.
+  Results do not depend on the
   setting: each point is fixed by its configuration and seed.
 - A point that fails for a transient reason, such as a worker process the
   system ended, is tried again once; `--max-attempts N` sets how many tries in
@@ -1278,20 +1260,8 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   `E_ST`, `H_S` and `H_T` have one). A `.jsonl` file name writes JSON Lines.
   Points with no result yet are left out unless you pass `--include-unfinished`.
   The command will not replace a file that exists unless you pass `--force`.
-  In the app, the sweep results screen has the same two things as buttons:
-  **Save table…** writes the table (and its `.meta.json` file) for every
-  statistic you have chosen to show, with the closed-form columns, and **Save
-  chart…** saves the chart as it is drawn as a PNG image.
-  In the app, the sweep results screen draws one curve for a sweep over one
-  axis. To compare values of a second axis, set **and** to "(none: a line)"
-  and choose **Curves by**: each value gets a color, marker shape,
-  error bars, and optional theory curve. **Error
-  bars** show the 95% interval of the mean (the default), the spread across
-  replicates, or both. Axes are linear or log; "Automatic" uses a log axis for a
-  geometric series of values. With the chart selected, the arrow keys move from
-  point to point and Enter opens that point's run. The heat map's **Show** menu
-  also offers the difference from theory as a fraction of the theory, next to
-  the absolute difference; `fim sweep export --with-theory` writes both.
+  The desktop sweep results screen offers the same table as **Save
+  table…**; see [desktop sweeps](gui/sweeps.md#results).
 - `fim sweep compare` lines up two or more sweeps on the axes they all vary and
   prints one statistic from each at every value they share, so you can ask
   whether a ring behaves like an island or whether 100 individuals per deme
@@ -1307,25 +1277,15 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   seed and grid use the same seeds, point for point), or partly shared. It
   does not adjust the method for shared seeds. The comparison is recomputed
   on request rather than stored.
-  In the app, comparing starts on Home: an experiment row has **Compare
-  sweeps…** for the sweep studies inside it, and **Select** lets you tick any
-  sweep studies, from any experiment, and choose **Compare selected sweeps…**.
-  The comparison screen draws one curve per sweep with a distinct color and
-  marker shape, over the axis you pick (the other shared axes are held at a
-  value), with the error-bar, scale and theory controls of the results screen.
-  With exactly two sweeps a second panel shows their difference with its
-  interval and a zero line. Each theory curve uses its sweep's
-  settings. A point flagged as degraded or unreliable stays flagged. Nothing is
-  saved: reopening the screen recomputes the comparison.
+  For the desktop comparison screen, see
+  [compare sweeps](gui/compare.md#compare-sweeps).
 - Each point has a health mark. A point is `unreliable` if every replicate
   stopped at the generation limit before its statistics settled, `degraded` if
   some did or if the interval is wider than the `precision` you asked for, and
   `healthy` otherwise. The mark is in the `health` column of the export and in
   `fim sweep report`. A point that is not healthy is flagged, never left out.
-  In the app, the sweep results screen draws a `degraded` point as a hollow ring
-  and an `unreliable` one as a ring with an X through it, on the chart and on
-  the heat map, with a key on the chart. The table has a **health** column that
-  says why, and pointing at a point or cell shows the same reason.
+  The desktop app draws the marks on its charts; see
+  [point health](gui/sweeps.md#point-health).
 - A sweep holds a lock on its Study while it runs. A second `fim sweep resume`
   (or the app) on the same Study stops at once with a message that another
   process is running it, instead of both writing the same files. The system
@@ -1355,20 +1315,8 @@ fim sweep run sweep.yaml --points-at-once 4 --workers 2   # or --sequential
   are missing or failed follow the usual rules (`--retry-failed` for failed
   points). If you cancel a rerun, run it again to start the recompute over;
   plain `resume` only runs the points still missing.
-- In the desktop app a sweep is part of Configure. Tick **Sweep**, choose
-  what varies in the **Set up sweep…** dialog (a live count and, on request,
-  every point; the parameter menu lists the common ones first and every other
-  setting under **More parameters**, there is no limit to the number of axes,
-  and **Combine the axes** chooses a grid or values taken together), and press
-  **Run**. With **Sweep** enabled, Run executes the
-  configuration over those ranges in the study chosen at the bottom of
-  Configure. That study then holds the sweep; a study holds at most one.
-- On Home, a study that holds a sweep has two more buttons beside **Continue
-  sweep**. **Retry failed (N)** appears while N points have failed and runs
-  only those points (`fim sweep resume --retry-failed`). **Recompute all…**
-  asks you to confirm, then recomputes every finished point and compares each
-  with its stored run (`fim sweep resume --rerun`). Both open the sweep's
-  progress view.
+- In the desktop app, a sweep is set up in Configure and continued, retried,
+  or recomputed from Home; see [desktop sweeps](gui/sweeps.md).
 - A failed point is recorded and the sweep continues. Press Ctrl+C to stop;
   finished points stay in the study.
 - Every point keeps its full trajectories. A sweep multiplies disk use by its
@@ -1421,422 +1369,32 @@ fim-gui
 The desktop app renders local HTML, CSS, and JavaScript in the operating
 system's native web view. It uses the same simulation functions and
 `results/` folder as the command line. `python -m pip install .` provides
-both `fim` and `fim-gui`. Packaged executables open the GUI with no arguments:
-double-click `fim-windows-x64.exe` or `fim.app`, or run
+both `fim` and `fim-gui`. Packaged executables open the GUI with no
+arguments: double-click `fim-windows-x64.exe` or `fim.app`, or run
 `fim-gui`/`fim --graphical` on Linux.
 
-### Open documents
+The desktop app has its own guide, bundled offline in the app under
+**Help > Desktop help**: the [desktop app guide](gui/README.md). It covers:
 
-The toolbar below the title lists open configurations, runs, and studies.
-Select a document to return to its own form, results, or sweep view. Switching
-does not stop work in another document. Opening a result that is already open
-selects its existing document; a new configuration starts as a separate
-draft. Open documents are kept in memory for this window and are not restored
-after a restart.
-
-Use the **+** button or **File > New configuration** to start a draft. Use
-the **×** on a document, **File > Close tab**, or **Delete** while a document
-button has focus to close it. Closing a dirty configuration asks whether to
-save, discard, or keep it open. Closing an active run, saved run, or sweep
-offers the appropriate stop or pause action. Closing a document does not
-delete its saved results.
-
-Right-click a document for **Close other tabs** and **Close all results**.
-The same actions are in the File menu. Close other tabs keeps the chosen
-document open; Close all results closes completed run and sweep-result
-documents, not configurations or saved runs. Dirty documents and active jobs
-use the usual close dialog one at a time. **Keep** skips that document and
-continues; pressing Escape cancels the remaining bulk close.
-
-When more than 12 documents are open, a notice offers **Close all results**.
-The limit is a reminder, not a cap; you can keep opening documents.
-
-| Action | macOS | Windows and Linux |
-|---|---|---|
-| New configuration | Command+N | Control+N |
-| Close selected tab | Command+W | Control+W |
-| Next tab | Control+Tab or Command+Shift+] | Control+Tab |
-| Previous tab | Control+Shift+Tab or Command+Shift+[ | Control+Shift+Tab |
-
-The File menu also has **Next tab**, **Previous tab**, **Close other tabs**,
-and **Close all results**. Quit remains an application-wide action and uses
-the separate window-close guard described below.
-
-`n_replicates` selects a single run or batch; there is no separate batch-mode
-control. The run view has initial, running, and completed states.
-**Run simulation** starts from the current configuration, including when a
-previous result is displayed. Cancellation or an error preserves the last
-rendered view and adds a status banner.
-
-The left navigation rail provides Home, Configure, Explore, Run, Results,
-Compare, and Help throughout a run. Run and Results share the run view.
-The parameter strip shows N/d/m/mu; selecting a value opens Configure.
-Back and Forward traverse screen history, and Settings opens preferences.
-
-The native File/Run/Help menus provide the same actions as on-screen
-controls. File covers configuration and output files; Run starts and
-cancels simulations. Help opens this guide, the
-[configuration reference](configuration.md), and **Statistics reference**
-([definitions and implementation links](statistics.md)) offline in the app.
-It also provides the full documentation on GitHub, Check for updates, and
-About.
-
-| Screen/state | What it does | Same as |
-|---|---|---|
-| Home | Browse Experiments, Studies, runs, and batch replicates. Open results, clone configurations, and manage membership. Rows show summaries from `report.json`/`summary.json`; batch results are reconstructed from saved replicates. Default Study/Experiment groups are created when needed. A Study's pooled results can combine different parameters, identified by a “varies across members” note. The protected Examples experiment appears last. **Select** exposes deletion checkboxes; confirmation names runs affected by group deletion. Opening a trajectory supports retained-generation analysis and differentiation-`q` sweeps | [Re-analyze a trajectory](#re-analyze-a-trajectory), [Read-only items](#read-only-items) |
-| Configure | Edit parameters and structure in independently scrolling panels with hover/focus help. Parameters include ploidy, `N` in individuals (scalar or per-deme), `d`, `m`, `mu`, and seed. Both YAML and the form use individuals; the engine converts to gene copies. Ploidy starts from Settings (initially diploid); “Ask me each time” requires selection before running. Structure covers initial conditions, sampling/mutation models, weighting, loci, watched statistics, and batch stopping. Settings supplies execution, convergence, storage, Expert, plot, and concurrency defaults; **Run settings...** edits the pending run. Load/save YAML, select an example, or open the File menu's preset picker (with YAML copying and duplication). **Run**/**Explore** use current inputs; invalid input returns here and marks the field | [Create a configuration](#create-a-configuration), [Loading settings](#loading-a-configuration-does-not-change-your-settings) |
-| Run view — running | Follow live allele frequencies, statistic trajectories, progress, and cancellation. **Graphs** selects visible graphs; Settings controls columns. The statistics table is the trajectory legend and line-visibility control. Batch scatter plots pool advancing replicates. Deme selectors apply to subsequent updates. Cancellation or an error preserves the last view with a status banner | [Run a simulation](#run-a-simulation), [Batches](#batches-n_replicates-greater-than-one) |
-| Run view — completed | Inspect reports, stop outcomes, scatter plots, and persisted histories. Scalar runs show within-run $\sigma$ bands and playback/scrubbing when multiple generations are retained. Batch results pool final-state scatter and list each replicate's status, final generation, and statistics, with intervals labeled “uncertainty across N independent replicates”. **Open** on a replicate displays scalar results; **Open output folder** reveals artifacts. Deme selectors (initially 1 versus 2) update scatter and pairwise statistics during execution, completion, and scrubbing. Frequency axes span 0–1. **Statistics shown**/**Choose…** controls visible statistics, not saved final reports; supplementary histories can add computation. Statistic names open their [reference sections](statistics.md) | [Output schemas](#output-schemas), [Supplementary histories](configuration.md#track_expensive_statistics) |
-| Explore | Evaluate analytic predictions from `N` (individuals), `d`, `m`, and `mu`, converting by the form's ploidy. The table includes differentiation, diversity, entropy, effective allele counts, identity-recovery metrics, and mutation-negligibility information. Typical-deme entropy is approximate, especially at $d=2$. Committing a field updates predictions without simulation. Select a statistic row to chart it over any parameter range; charts group compatible units (proportions, nats, allele counts, generations). Parameter-independent predictions appear flat: analytic `D` is independent of `N`, and recovery metrics of mutation rate. The slider evaluates along the range without changing inputs. **Run this for real** copies inputs to Configure with a new Study selected | [Statistics reference](statistics.md), [Python statistics API](fim-simulator-functional-api.md#4-fimstatistics--differentiation-and-diversity-measures) |
-| Compare | Select at least two completed runs. Scatter panels identify differing parameters, and a trajectory overlay shows one statistic with one color per run. No rerun is required | No direct CLI equivalent; compare exported trajectories and reports in an analysis tool |
-| Help | Read this guide, the [configuration reference](configuration.md), and the [statistics reference](statistics.md) offline with cross-links. Other documents open on GitHub in the default browser. Available from the rail or Help menu; Back/Forward uses screen history | The same three Markdown guides are available in the repository |
-
-**Trajectory references and averages.** Scalar trajectories include
-analytic equilibrium lines for $D$, $G_{ST}$, and $E_{ST}$, and dash-dot
-expected trajectories for $D$, $G_{ST}$, $H_S$, $H_T$, and $H_{ST}$ where
-available. Expected trajectories start from the seeded founding state and
-support unequal deme sizes and explicit migration matrices up to 24 demes.
-They are omitted for per-locus mutation rates, equilibrium-split founding,
-and larger matrices. These are model expectations, not individual
-stochastic paths; with few loci, the mean of a ratio can differ from a
-ratio of expectations. See
-[convergence estimates](configuration.md#convergence_estimate).
-
-**Show** selects per-generation values, trailing means, or cumulative
-means. **Band** selects ±1 or ±2 (default) standard errors for means;
-the per-generation display instead shows standard deviations over the
-evidence window. Reference curves are averaged over matching windows.
-Cumulative averaging begins at the recorded averaging start, or after one
-convergence window if that information is absent.
-Solid colored lines with flags mark averaging-window starts; the windows
-are shaded. Per-statistic colors distinguish different starts, and the
-scrubber uses a dashed gray marker. Display choices are remembered and do
-not alter computed or saved results.
-
-Hover a statistic row for its window mean, standard error, generation
-range, and standardized difference from the window-averaged prediction:
-
-```text
-mean 0.5506 ± 0.0048 over generations 1,399–174,966
-(173,568 generations; 1 SE); predicted 0.5448, +1.2 SE
-```
-
-At the final generation, the displayed window is the monitor's stopping
-window. It may be longer than the configured convergence window because
-the monitor widens it to assess precision. “Not yet noise-adequate” marks
-a mean that has not met that precision requirement.
-The first-order autoregressive standard-error estimate accounts for
-neighboring-generation correlation, but can underestimate uncertainty when
-relaxation involves several time scales.
-
-The row also shows $\Delta_p$ (observed minus predicted at the selected
-generation) and trajectory mean squared error, for example
-$\Delta D_p=+0.012$, $\mathrm{MSE}=4.1\times10^{-5}$.
-Both update during execution and scrubbing.
-The prediction uses the expected trajectory when supported, otherwise
-the equilibrium line (including $E_{ST}$). The tooltip identifies which
-reference applies. See the [statistics reference](statistics.md) for
-definitions and API/source links.
-
-A GUI-authored run with the same parameters and seed produces byte-identical
-`report.json` and `trajectory.tlog` to the same configuration run from the
-terminal — see [Reproduce a run](#reproduce-a-run). The GUI performs network
-access only for the same explicit, opt-in release check the terminal's `fim
-update --check` performs (Help menu → "Check for updates") — otherwise, like
-the CLI, none at all.
-
-On Linux, the GUI needs WebKitGTK, a system package most desktop
-distributions already have installed — see
-[installation alternatives](../install/README.md) if `fim-gui` reports it
-is missing rather than opening a window.
+| Topic | Desktop guide page |
+|---|---|
+| Screens, open documents, shortcuts, and menus | [Desktop app guide](gui/README.md) |
+| Units, migration convention, generation order, and stopping semantics | [Implementation conventions](gui/conventions.md) |
+| Configure fields and their YAML keys, run settings, loaded run settings | [Configure](gui/configure.md) |
+| The run view, trajectories, references, and hover readouts | [Run and results](gui/run-and-results.md) |
+| Closed-form predictions and sweep-point selection | [Explore](gui/explore.md) |
+| Sweep setup, results, and point health | [Sweeps](gui/sweeps.md) |
+| Comparing runs and sweeps | [Compare runs and sweeps](gui/compare.md) |
+| Home, names, saved runs, examples, and read-only items | [Home and organization](gui/organize.md) |
+| Settings and saved preferences | [Settings and saved preferences](gui/settings.md) |
+| Closing the window, shutdown, and other problems | [Troubleshooting](gui/troubleshooting.md) |
 
 A double-clicked or `fim --graphical`-launched GUI accepts no logging
-flags. Set `FIM_LOG_LEVEL` and `FIM_LOG_OPTIONS` before launching;
-they correspond to `-l` and `-L` below. See the
-[operational logging design](fim-logging-design.md) §5.
-The separate `fim-gui` entry point also accepts directory flags; see
+flags. Set `FIM_LOG_LEVEL` and `FIM_LOG_OPTIONS` before launching; they
+correspond to `-l` and `-L` below. The separate `fim-gui` entry point also
+accepts directory flags; see
 [Where results, logs, and preferences are
 written](#where-results-logs-and-preferences-are-written), below.
-
-### Names, descriptions, and documentation
-
-Hundreds of runs are hard to tell apart later, so every Experiment, Study,
-and Run can say what it is and why it exists:
-
-| | Name | Description | Documentation |
-|---|---|---|---|
-| Experiment | Required | One line, optional | Longer notes, optional |
-| Study | Required | One line, optional | Longer notes, optional |
-| Run | Optional (the folder name stands in) | One line, optional | — |
-
-- **Description** is the short summary. Hover any Experiment, Study, or Run
-  name (in Home, in the Run card's title, in Configure's study choice, and on
-  a sweep's screen) to see it.
-- **Documentation** is free-form text for the longer story: the question, the
-  rationale, the setup, what was found.
-- **To read or change them**, click the name, or the **ⓘ** button beside it,
-  to open the details dialog. **Save** keeps the changes; **Cancel**, Escape,
-  or a click outside the dialog discards them. Leaving a field empty clears
-  it.
-- **When creating**: Home's "Create experiment…" and Configure's
-  "New study…" each take an optional description beside the
-  name. Configure's **Run name** and **Run description** boxes name the next
-  run; they empty once it starts. A sweep names its runs itself (see
-  [Sweep a parameter](#sweep-a-parameter)), so the boxes are hidden while
-  **Sweep** is ticked.
-- **The Run card's title** names the Experiment first, then what is shown:
-  `Ring vs island — Baseline (run-20261005-101500-000000)` for a finished
-  run, `… — initial conditions (p₀)` before one, `… — in progress` while one
-  runs. The Experiment is the one holding the study chosen in Configure, or
-  the one holding the run once it finishes.
-
-From the terminal, `fim study create` and `fim experiment create` take
-`--description` and `--documentation`. A run gets its name and
-description either from `fim run --name` and `--description`, or from the
-`name` and `description` [run labels](configuration.md#run-labels) in its
-configuration file (with an optional `class`); the options win over the
-labels. A run's name, description, and class live in
-`metadata.json`, beside `manifest.json`, which they never change, and are
-never part of the run's ID: renaming a configuration does not make it a
-different run. The labels are written only when the run has no
-`metadata.json` yet, so they never overwrite a name you changed later.
-
-### The Examples experiment
-
-Home lists the **Examples** experiment after user-created experiments.
-It holds the worked examples bundled with the app, one Study per
-example class (a class inside another is named "Parent — Child"), each
-holding that class's examples as runs with their saved results. The app
-writes these when it starts, into an `examples` folder inside your results
-folder, and writes them again if you remove them; a newer version of the
-app replaces them with its bundled versions. An example whose result has not been saved
-yet is not listed here, but is still in the Examples dialog, ready to load
-into Configure.
-
-### Read-only items
-
-The Examples experiment, its Studies, and their runs are **read-only**. A
-lock beside the name marks them in Home, in the details dialog, and in the
-Run card's title. You can open, view, compare, and clone their run
-configurations, but not
-rename, describe, document, or delete them, or add or remove members:
-those controls are unavailable, and hovering one says why. To work with
-one:
-
-- **A run:** click **Clone** on its Home row, or load its configuration
-  from the Examples dialog. Configure receives an editable copy,
-  with the example's name and description in the Run name and Run
-  description boxes; running it creates an editable result.
-Home's **Clone** action is available for regular runs too.
-It fills the parameters, Run name, and Run description without changing
-the source run or adding it to another Study. Modify the configuration
-and run it to create a separate result. Configure's Study selector starts
-at **Default study**, where runs go unless you choose another destination.
-Its configuration buttons are ordered **Load configuration…**,
-**Save configuration…**, then **Examples…**.
-
-Home's Experiment, Study, and Run rows do not offer **Create study…**,
-**Create run…**, **Open…**, **Delete runs…**, or **Copy** actions.
-Expand a group to see its runs, double-click a run to open its saved
-result, or use **Clone** to prepare an editable configuration. Details
-buttons, selection controls, and sweep-specific actions remain available.
-
-"Select all" never selects a
-read-only item, and a deletion that names one is refused as a whole:
-nothing at all is deleted. From the terminal, the same edits stop with an
-error naming the read-only item. A configuration marks its run read-only
-with [`_read_only`](configuration.md#_read_only); only the shipped examples
-should use it.
-
-An example linked into an editable Study is different: its checkbox
-selects only that Study's link. **Delete selected** removes the link,
-not the example or its saved results. The confirmation states that the
-example is kept. Its row in the Examples experiment remains protected,
-and links in other Studies are unchanged.
-
-### Opening a saved example
-
-Open an example from Home (double-click its row) or with **Open saved
-result** in the Examples dialog. It includes the complete finished run:
-statistics, messages, scatter plot, statistic trajectories, other graphs,
-and a scrubber for reviewing earlier generations. No simulation is needed.
-Large examples may take longer to open while their saved data is prepared.
-
-Every result is retained. To keep the download manageable, trajectory
-files are stored losslessly compressed; the app reconstructs them
-automatically. You do not need to unpack files or manage archive parts.
-
-Use **Load into Configure** to run an editable copy without replacing the
-read-only example. Batch examples include every
-kept replicate's full results and the shared batch summary.
-
-### Closing the window
-
-When you close the window, `fim` asks first if closing would lose something.
-This happens when:
-
-- The Configure form has changes you have not saved.
-- A saved run is in progress. This includes runs started with
-  **Run simulation**; the desktop app saves those as Run objects.
-- A sweep is in progress.
-
-The dialog lists every unsaved document by name, including documents that
-are not currently open on screen. It also identifies the run or sweep that
-will be paused or stopped. The dialog offers these choices:
-
-| Button | What it does |
-|---|---|
-| **Save and close** | Keeps the configuration under **Saved runs** on Home, then closes. A configuration that is not complete yet is saved as a Draft. A configuration that is ready to run is saved as Planned. |
-| **Close without saving** | Closes and drops the unsaved changes. |
-| **Pause and close** | Shown when only a saved run is in progress. The run stops at a checkpoint, and you can resume it from the same document's Run button or from **Saved runs** on Home. |
-| **Stop and close** | Shown when only a sweep is in progress. Closing stops it. |
-| **Keep working** | Leaves the window open. |
-
-Choosing **Save and close** or **Close without saving** also pauses a running
-saved run or stops a running sweep. If the save fails, the dialog stays open
-and shows the reason, so nothing is lost.
-
-If nothing would be lost, the window closes at once.
-
-### If the window closes but `fim` keeps running
-
-If shutdown has not completed 20 seconds after the window closes,
-`fim` records diagnostics and forces an exit with status `3`:
-
-```text
-fim: shutdown did not complete within 20s; forcing exit
-```
-
-Completed results remain on disk. A saved run resumes from its latest
-committed checkpoint; work since that checkpoint may need to be repeated.
-Command-line runs stopped before publication do not produce a completed
-result.
-
-A diagnostic report is written at the same time, to `logs/fim.log` as well
-as to the terminal, including when launched without a terminal.
-Report the section beginning `shutdown deadman fired`, together with
-your platform and launch method. See
-[known issues](../ISSUES.md#intermittent-hang-during-gui-shutdown).
-
-For shutdown investigation, set `FIM_GUI_SHUTDOWN_TIMEOUT` to a longer
-timeout in seconds, or `0` to disable forced exit:
-
-```console
-FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
-```
-
-### Loading a configuration does not change your Settings
-
-The run settings — execution engine, n_replicates,
-max_generations, convergence burn-in, precision, confidence,
-JIT, the `auto` engine's two thresholds, and max concurrent replicates —
-have defaults in Settings. **Run settings...** on Configure edits their
-effective values for the pending configuration only. A configuration you
-load can supply values for them. This applies to:
-
-- **Examples…** → **Load into Configure**, and **Run it** on a saved example
-- File menu → **Load example…** (built-in or user-saved presets)
-- **Load configuration…** (a YAML file)
-- **Clone** on a run listed on Home
-
-The loaded values are used **for this run only**. Your Settings stay
-unchanged, so **New configuration** starts from saved defaults.
-A setting omitted from the loaded file takes the
-simulator default, as in `fim run` for that
-file.
-
-When any loaded run setting differs from your Settings, a notice appears
-on Configure and on the Run card before you run. It lists each setting
-that differs, with this run's value and your Settings value side by side.
-For example, if your Settings use the `auto` engine with 200 replicates
-and you load an example that uses the `lineal` engine with 1 replicate,
-the notice lists both settings.
-
-- **Make these my Settings** saves the loaded values as your Settings, so
-  new configurations use them too. Max workers is not changed: it
-  describes your computer, and no configuration names it.
-- **Edit this run...** opens the per-run editor with the effective values.
-  **Apply to this run** validates and applies the edits without changing
-  saved defaults. Closing without applying discards edits.
-- In the editor, **Use saved Settings** fills the controls from your saved
-  defaults; **Restore loaded settings** restores the originally loaded
-  values, even after edits. Neither action applies until you choose
-  **Apply to this run**.
-- **Dismiss** hides the notice. The run still uses the loaded values. A
-  "run settings" item in the parameter strip at the top of the window
-  stays while they differ; click it to see the notice again.
-
-If you change Settings after loading, the notice is updated to compare
-against the new Settings; the loaded configuration retains its
-values. To use your Settings for the run, choose **Run settings...** →
-**Use saved Settings** → **Apply to this run**. This copies a snapshot:
-later edits to saved Settings do not silently change it. The editor is
-available even when no values differ. File menu → **New configuration**
-and Explore's **Run this for real** start from your Settings.
-
-The editor validates settings against the current model. For example,
-`max_generations: auto` cannot be derived for a model with both migration
-and mutation zero: supply an explicit cap or change the model. The editor
-reports the error and keeps the pending configuration unchanged.
-
-When the app restores the last submitted configuration at launch, the run
-settings come from your Settings, not from that configuration.
-
-### Saved preferences
-
-The GUI saves display preferences, startup behavior, execution defaults,
-and the last submitted configuration between launches:
-
-- Significant digits and **Statistics shown**. Showing $E_{ST}$,
-  $K_{ST}$, $A_{\mathrm{CGD}}$, $\delta_G$, or I enables computation
-  of all five each generation; see
-  [`track_expensive_statistics`](configuration.md#track_expensive_statistics).
-- The pairwise-output deme limit and light/dark choice. An absent or
-  `null` theme follows the operating system.
-- Whether the welcome panel has been dismissed.
-- Startup configuration policy and execution/convergence defaults.
-- Background-work priority and CPU reserve. A percentage reserve rounds
-  up to whole logical cores; the worker budget is derived from the cores
-  left, with at least one worker. Changes affect jobs started afterward,
-  and each job's effective priority appears in its document tab.
-- The memory reserve for desktop jobs. **Automatic** keeps the larger of
-  2 GiB and 10% of physical memory available; you can instead reserve a
-  whole number of GiB or a percentage. Before a job starts, the app
-  estimates its added memory and asks before starting if that estimate
-  would cross the reserve. While work is active, a warning appears if
-  available memory falls below the reserve. Each listed job has a
-  **Pause** button: runs pause at a saved checkpoint, and sweeps stop at
-  a resumable point so you can continue them from their Study.
-- The configuration last submitted with **Run simulation**.
-
-**Restore the last submitted configuration** opens that configuration at
-launch; **Restart from the starter configuration** uses built-in model
-values. Both apply saved execution defaults. The first-launch welcome
-panel offers **Examples…** or **Start from scratch**.
-File → **New configuration** uses starter model values and saved
-execution defaults, ignoring the last submitted configuration.
-Loading a file, preset, worked example, or saved run does not change saved
-defaults; see
-[Loading a configuration does not change your Settings](#loading-a-configuration-does-not-change-your-settings).
-
-Preferences supply defaults and interface state; they are not the record
-of a completed run. Its configuration, seed, and results remain in
-`manifest.json`, `trajectory.tlog`, and related artifacts under `results/`.
-
-It lives in the platform's normal per-user settings location — you do not
-need to find or edit it for ordinary use:
-
-| Platform | Location |
-|---|---|
-| macOS | `~/Library/Application Support/fim/preferences.json` |
-| Windows | `%APPDATA%\fim\preferences.json` |
-| Linux | `$XDG_CONFIG_HOME/fim/preferences.json` (usually `~/.config/fim/preferences.json`) |
-
-If preferences contain invalid JSON or an unsupported format, the next
-launch shows a dismissible error banner and uses built-in defaults.
-The invalid file is retained as `preferences.invalid-<timestamp>.json`
-beside a newly written preferences file. Removing the preferences folder
-resets saved settings without changing `results/`.
 
 ## Global flags
 
@@ -1891,7 +1449,7 @@ four flags directly. For `fim --graphical` or a double-clicked build,
 set matching environment variables before launching, as with
 `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`.
 Settings additionally provides a **Storage location** field for
-results — see the in-app Help screen.
+results; see [storage location](gui/settings.md#storage-location).
 
 ## Output schemas
 

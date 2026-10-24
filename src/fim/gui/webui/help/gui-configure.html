@@ -1,0 +1,296 @@
+<h1 id="configure">Configure</h1>
+<p>Configure edits one configuration: the model, its structure, the
+stopping rule, and an optional sweep. Each field shows a short tooltip on
+hover or keyboard focus. Press <strong>F1</strong> in a field to open its entry in the
+<a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#field-and-key-correspondence">Field and key correspondence</a></li>
+<li><a href="#run-settings">Run settings</a></li>
+<li><a href="#loaded-run-settings">Loaded run settings</a></li>
+<li><a href="#load-save-and-examples">Load, save, and examples</a></li>
+<li><a href="#naming-the-next-run">Naming the next run</a></li>
+<li><a href="#run-sweep-and-explore">Run, sweep, and explore</a></li>
+<li><a href="#validation">Validation</a></li>
+</ul>
+<h2 id="field-and-key-correspondence">Field and key correspondence</h2>
+<p>The form and the YAML file use the same units. In particular, <code>N</code> is in
+individuals in both. Saving the form writes these keys.</p>
+<table>
+<thead>
+<tr>
+<th>Panel</th>
+<th>Field or choice</th>
+<th>YAML key</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FIM parameters</td>
+<td>ploidy</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="ploidy"><code>ploidy</code></a></td>
+<td>Default comes from Settings; <strong>Ask me each time</strong> requires a choice before running</td>
+</tr>
+<tr>
+<td>FIM parameters</td>
+<td>N (individuals/deme): same for every deme, per-deme</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="n"><code>N</code></a></td>
+<td>Individuals; multiplied by ploidy</td>
+</tr>
+<tr>
+<td>FIM parameters</td>
+<td>d (demes)</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="d"><code>d</code></a></td>
+<td>At least 2</td>
+</tr>
+<tr>
+<td>FIM parameters</td>
+<td>seed</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="seed"><code>seed</code></a></td>
+<td>One PCG64 stream per run</td>
+</tr>
+<tr>
+<td>m (migration)</td>
+<td>scalar rate, named topology, full matrix</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="m"><code>m</code></a></td>
+<td>Topology: ring, linear, or torus (rows × columns = d, each side ≥ 3)</td>
+</tr>
+<tr>
+<td>μ (mutation rate)</td>
+<td>specify μ directly</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="mu"><code>mu</code></a></td>
+<td>Per gene copy per generation</td>
+</tr>
+<tr>
+<td>μ (mutation rate)</td>
+<td>derive from μb</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="deriving-mu-from-a-per-base-rate"><code>mu_b</code></a></td>
+<td>Per-locus μ from μb and locus length</td>
+</tr>
+<tr>
+<td>Structure</td>
+<td>migrant sampling</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="migrant_sampling"><code>migrant_sampling</code></a></td>
+<td><code>continuous</code> or <code>stochastic</code></td>
+</tr>
+<tr>
+<td>Structure</td>
+<td>mutation model</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="mutation_model"><code>mutation_model</code></a></td>
+<td><code>infinite_alleles</code> or <code>finite_alleles</code></td>
+</tr>
+<tr>
+<td>Structure</td>
+<td>deme weighting</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="deme_weighting"><code>deme_weighting</code></a></td>
+<td>Affects <var>E</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, <var>I</var> only</td>
+</tr>
+<tr>
+<td>initial conditions</td>
+<td>Dirichlet draw</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="initial_allele_count"><code>initial_allele_count</code></a>, <a href="#" data-fim-help="configuration" data-fim-anchor="initial_concentration"><code>initial_concentration</code></a></td>
+<td>Generation 0 is a prior</td>
+</tr>
+<tr>
+<td>initial conditions</td>
+<td>equilibrium split</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations"><code>equilibrium_convergence_window</code>, <code>equilibrium_convergence_tolerance</code>, <code>equilibrium_max_generations</code></a></td>
+<td>Ancestral pre-run, then split</td>
+</tr>
+<tr>
+<td>initial conditions</td>
+<td>explicit p₀</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="p_0"><code>p_0</code></a></td>
+<td>One frequency vector per deme</td>
+</tr>
+<tr>
+<td>initial conditions</td>
+<td>fixed per deme</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="p_0"><code>p_0</code></a></td>
+<td>All different, all the same, or all but one</td>
+</tr>
+<tr>
+<td>loci</td>
+<td>length(s) only, custom locus IDs, <strong>Add locus</strong></td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="loci"><code>loci</code></a></td>
+<td>Lengths matter for μb and finite alleles</td>
+</tr>
+<tr>
+<td>convergence statistic(s)</td>
+<td>statistic checkboxes</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="convergence_statistic"><code>convergence_statistic</code></a></td>
+<td>Default <code>D</code> and <code>G_ST</code></td>
+</tr>
+<tr>
+<td>convergence statistic(s)</td>
+<td>per-statistic precision</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="statistic_precision"><code>statistic_precision</code></a></td>
+<td><code>NAME=value</code>, comma-separated</td>
+</tr>
+<tr>
+<td>stop the run when</td>
+<td>all watched statistics have settled, any one has settled</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="convergence_combinator"><code>convergence_combinator</code></a></td>
+<td>Shown with two or more watched statistics</td>
+</tr>
+<tr>
+<td>convergence statistic(s)</td>
+<td>stop the batch early</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="stop_batch_early"><code>stop_batch_early</code></a></td>
+<td>Batches only; inert when <code>n_replicates</code> is 1</td>
+</tr>
+<tr>
+<td>convergence statistic(s)</td>
+<td>replicate minimum</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="replicate_minimum"><code>replicate_minimum</code></a></td>
+<td>Batches only</td>
+</tr>
+</tbody>
+</table>
+<p>Allele statistics (<var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>,
+<var>I</var>) are slower. Watching one computes it every generation; the derived
+burn-in targets the identity statistics. See
+<a href="#" data-fim-help="configuration" data-fim-anchor="track_expensive_statistics"><code>track_expensive_statistics</code></a>.</p>
+<h2 id="run-settings">Run settings</h2>
+<p><strong>Run settings…</strong> opens <strong>Run settings for this configuration</strong>: the
+Settings dialog's execution, convergence, Expert, and storage controls,
+scoped to this configuration only:</p>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>YAML key</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>execution engine</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="engine_backend"><code>engine_backend</code></a></td>
+</tr>
+<tr>
+<td>n_replicates</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="n_replicates"><code>n_replicates</code></a></td>
+</tr>
+<tr>
+<td>max generations</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="max_generations"><code>max_generations</code></a></td>
+</tr>
+<tr>
+<td>confidence</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="confidence"><code>confidence</code></a></td>
+</tr>
+<tr>
+<td>convergence burn-in</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="convergence_burn_in"><code>convergence_burn_in</code></a></td>
+</tr>
+<tr>
+<td>precision</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="precision"><code>precision</code></a></td>
+</tr>
+<tr>
+<td>expected value</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="convergence_estimate"><code>convergence_estimate</code></a></td>
+</tr>
+<tr>
+<td>precision method</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="precision_method"><code>precision_method</code></a></td>
+</tr>
+<tr>
+<td>replicate averaging window</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="replicate_averaging_window"><code>replicate_averaging_window</code></a></td>
+</tr>
+<tr>
+<td>max concurrent replicates</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="max_concurrent_replicates"><code>max_concurrent_replicates</code></a></td>
+</tr>
+<tr>
+<td>JIT</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="jit"><code>jit</code></a></td>
+</tr>
+<tr>
+<td>auto-vector min d, auto-vector max capacity</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="auto_vector_min_d"><code>auto_vector_min_d</code></a>, <a href="#" data-fim-help="configuration" data-fim-anchor="auto_vector_max_capacity"><code>auto_vector_max_capacity</code></a></td>
+</tr>
+<tr>
+<td>trajectory retention, trajectory stride, thinning start</td>
+<td><a href="#" data-fim-help="configuration" data-fim-anchor="trajectory_retention-trajectory_stride-trajectory_thinning_start-trajectory_keep_last-trajectory_keep_burn_in">trajectory retention keys</a></td>
+</tr>
+</tbody>
+</table>
+<p>Defaults come from <a href="#" data-fim-help="gui-settings" data-fim-anchor="defaults-for-new-configurations">Settings</a>.
+<strong>Apply to this run</strong> validates the values against the current model and
+applies them without changing saved Settings. For example,
+<code>max_generations: auto</code> cannot be derived when both migration and
+mutation are zero; the editor reports the error and leaves the
+configuration unchanged.</p>
+<p><strong>max workers</strong> is a property of this computer, not of the run. It is
+not written to the configuration and does not affect results.</p>
+<h2 id="loaded-run-settings">Loaded run settings</h2>
+<p>A configuration you load can supply its own run settings. This applies
+to <strong>Examples…</strong> (<strong>Load into Configure</strong> and <strong>Run it</strong>),
+<strong>File &gt; Load example…</strong>, <strong>Load configuration…</strong>, and <strong>Clone</strong> on Home.
+The loaded values apply <strong>to this run only</strong>; your Settings are not
+changed. A run setting omitted from the file takes the simulator
+default, as <code>fim run</code> would.</p>
+<p>When any loaded value differs from your Settings, a notice on Configure
+and on the run view lists each difference side by side:</p>
+<ul>
+<li><strong>Make these my Settings</strong> saves the loaded values as your Settings.
+Max workers is not changed.</li>
+<li><strong>Edit this run…</strong> opens the run settings editor. <strong>Use saved
+Settings</strong> fills it from your Settings; <strong>Restore loaded settings</strong>
+restores the loaded values. Neither applies until you choose <strong>Apply
+to this run</strong>.</li>
+<li><strong>Dismiss</strong> hides the notice; the run still uses the loaded values. The
+<strong>run settings</strong> item in the parameter strip remains while values
+differ; select it to show the notice again.</li>
+</ul>
+<p>If you change Settings later, the notice compares against the new
+Settings. To adopt your Settings for this run, choose <strong>Run settings…</strong>,
+then <strong>Use saved Settings</strong>, then <strong>Apply to this run</strong>. That copies a
+snapshot; later changes to Settings do not alter it.</p>
+<p><strong>File &gt; New configuration</strong> and Explore's <strong>Run this for real</strong> start
+from your Settings. When the app restores the last submitted
+configuration at launch, run settings come from Settings, not from that
+configuration.</p>
+<h2 id="load-save-and-examples">Load, save, and examples</h2>
+<ul>
+<li><strong>Load configuration…</strong> and <strong>Save configuration…</strong> read and write
+YAML in the same format as <code>fim run</code>.</li>
+<li><strong>Examples…</strong> opens the bundled worked examples. <strong>View YAML</strong> shows
+the configuration; <strong>Load into Configure</strong> gives an editable copy;
+<strong>Open saved result</strong> opens the finished result without computing.
+See <a href="#" data-fim-help="gui-organize" data-fim-anchor="the-examples-experiment">examples</a>.</li>
+<li><strong>File &gt; Load example…</strong> opens the preset picker, which also lists
+presets you saved with <strong>Save current as…</strong>.</li>
+</ul>
+<h2 id="naming-the-next-run">Naming the next run</h2>
+<ul>
+<li><strong>Run name</strong> and <strong>Run description</strong> label the next run, then clear
+when it starts. They are hidden while <strong>Sweep</strong> is ticked, because a
+sweep names its own runs.</li>
+<li>The study selector at the bottom chooses where the run is filed.
+It starts at <strong>Default study</strong>. <strong>New study…</strong> creates a study with a
+name and an optional description.</li>
+<li>Names and descriptions are stored in <code>metadata.json</code> and are never part
+of the run ID. See <a href="#" data-fim-help="gui-organize" data-fim-anchor="names-descriptions-and-documentation">names and documentation</a>.</li>
+</ul>
+<h2 id="run-sweep-and-explore">Run, sweep, and explore</h2>
+<ul>
+<li><strong>Run</strong> starts the configuration. With <code>n_replicates</code> above 1, the
+run is a batch.</li>
+<li>Before you start, the run view shows the derived burn-in and cap
+beside <strong>Run simulation</strong>. Check them against the model's timescale.</li>
+<li>If a completed result already exists for the same configuration and
+software version, the app reuses it instead of computing again.</li>
+<li>Tick <strong>Sweep</strong> and choose <strong>Set up sweep…</strong> to vary parameters. <strong>Run</strong>
+then executes the sweep in the chosen study. See <a href="#" data-fim-help="gui-sweeps" data-fim-anchor="">sweeps</a>.</li>
+<li><strong>Explore</strong> opens closed-form predictions for the current N, d, m,
+and μ. See <a href="#" data-fim-help="gui-explore" data-fim-anchor="">Explore</a>.</li>
+</ul>
+<h2 id="validation">Validation</h2>
+<p>Invalid input is reported when you run. The app returns to Configure
+and marks the field. Unknown or misspelled YAML keys are rejected, never
+ignored. A configuration that is incomplete or invalid can still be kept
+with <strong>Save for later</strong>; it is saved as a Draft.</p>

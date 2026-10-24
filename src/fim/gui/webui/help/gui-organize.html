@@ -1,0 +1,155 @@
+<h1 id="home-and-organization">Home and organization</h1>
+<p>Home lists everything saved in your results folder: Experiments, the
+Studies inside them, their runs and batch replicates, and unfinished
+saved runs. Rows summarize <code>report.json</code> or <code>summary.json</code>; batch results
+are reconstructed from their saved replicates.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#experiments-studies-and-runs">Experiments, Studies, and runs</a></li>
+<li><a href="#names-descriptions-and-documentation">Names, descriptions, and documentation</a></li>
+<li><a href="#open-clone-and-delete">Open, clone, and delete</a></li>
+<li><a href="#saved-runs">Saved runs</a></li>
+<li><a href="#the-examples-experiment">The Examples experiment</a></li>
+<li><a href="#read-only-items">Read-only items</a></li>
+<li><a href="#opening-a-saved-example">Opening a saved example</a></li>
+</ul>
+<h2 id="experiments-studies-and-runs">Experiments, Studies, and runs</h2>
+<ul>
+<li>An <strong>Experiment</strong> groups Studies; a <strong>Study</strong> groups runs. A run can
+belong to more than one Study and counts once in an Experiment.</li>
+<li><strong>Default study</strong> and a default Experiment are created when needed.
+Configure files new runs in the Study selected at its foot.</li>
+<li>A Study's pooled results can combine runs with different parameters;
+a &quot;varies across members&quot; note identifies them.</li>
+<li>A Study that holds a sweep has sweep actions; see
+<a href="#" data-fim-help="gui-sweeps" data-fim-anchor="continue-retry-and-recompute">sweeps</a>.</li>
+<li><strong>Close</strong> freezes a group's membership; <strong>Reopen</strong> reverses it. A
+group cannot be closed while one of its runs executes, and closing
+never pauses or stops a run.</li>
+<li>The Examples experiment appears last.</li>
+</ul>
+<h2 id="names-descriptions-and-documentation">Names, descriptions, and documentation</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Name</th>
+<th>Description</th>
+<th>Documentation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Experiment</td>
+<td>Required</td>
+<td>One line, optional</td>
+<td>Longer notes, optional</td>
+</tr>
+<tr>
+<td>Study</td>
+<td>Required</td>
+<td>One line, optional</td>
+<td>Longer notes, optional</td>
+</tr>
+<tr>
+<td>Run</td>
+<td>Optional (the folder name stands in)</td>
+<td>One line, optional</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Hover an Experiment, Study, or run name, in Home, the run view's
+title, Configure's Study choice, or a sweep screen, to see its
+description.</li>
+<li>Click the name, or the <strong>ⓘ</strong> beside it, to open the details dialog.
+<strong>Save</strong> keeps changes; <strong>Cancel</strong>, Escape, or a click outside
+discards them. An empty field clears the value.</li>
+<li><strong>Create experiment…</strong> on Home and <strong>New study…</strong> in Configure take an
+optional description beside the name. Configure's <strong>Run name</strong> and
+<strong>Run description</strong> label the next run.</li>
+<li>The run view's title names the Experiment first, then the subject, for
+example <code>Ring vs island — Baseline (run-20261005-101500-000000)</code>,
+<code>… — initial conditions (p₀)</code> before a run, or <code>… — in progress</code>.</li>
+<li>Names, descriptions, and class are stored in <code>metadata.json</code>, beside
+<code>manifest.json</code>. They never change the manifest or the run ID. The
+command-line equivalents are <code>--description</code> and <code>--documentation</code> on
+<code>fim study create</code> and <code>fim experiment create</code>, and <code>fim run --name</code>
+and <code>--description</code>.</li>
+</ul>
+<h2 id="open-clone-and-delete">Open, clone, and delete</h2>
+<ul>
+<li>Double-click a run to open its saved result. Expand a group to see its
+runs.</li>
+<li><strong>Clone</strong> fills Configure with the run's parameters, Run name, and Run
+description. It does not change the source run or its Study. Loaded run
+settings follow the rules in
+<a href="#" data-fim-help="gui-configure" data-fim-anchor="loaded-run-settings">loaded run settings</a>.</li>
+<li><strong>Select</strong> shows checkboxes; <strong>Select all</strong>, <strong>Clear selection</strong>, and
+<strong>Delete selected</strong> act on them. Confirmation names every run that a
+group deletion affects. A run that is still executing has no checkbox:
+pause, cancel, or stop it first.</li>
+<li>Opening a trajectory supports retained-generation analysis and
+differentiation-order (<var>q</var>) evaluation; see
+<a href="#" data-fim-help="usage" data-fim-anchor="re-analyze-a-trajectory">re-analyze a trajectory</a>.</li>
+</ul>
+<h2 id="saved-runs">Saved runs</h2>
+<p><strong>Saved runs</strong> lists saved runs that have not completed, in any of the
+<a href="#" data-fim-help="run-lifecycle" data-fim-anchor="states">lifecycle states</a> from <code>draft</code> to
+<code>cancelled</code>. Each row offers only the actions its state
+allows: <strong>Watch</strong>, <strong>Start</strong>, <strong>Resume</strong>, <strong>Resurrect</strong>, <strong>Clone</strong>,
+<strong>Edit</strong>, <strong>Cancel</strong>, <strong>Kill</strong>, and <strong>Delete</strong>. A row in transition
+refreshes every few seconds.</p>
+<ul>
+<li><strong>Resurrect</strong> appears for a cancelled run whose latest checkpoint is
+verified and compatible. It continues exactly from that checkpoint.</li>
+<li>An unnamed saved run is listed by its settings, for example
+&quot;225 diploid, d=10, m=0.01, mu=1e-05, 200 replicates&quot;. Hover the name
+for every setting, the object ID, and the run ID.</li>
+<li><strong>Watch</strong> returns to the running view of a run this window executes.
+A run executing in another window or from the command line has no
+<strong>Watch</strong>.</li>
+<li>Completed runs move to the run list.</li>
+</ul>
+<p>Saved runs are shared with <code>fim object</code>; a run created in the app can be
+paused or resumed from the command line, and the reverse. See
+<a href="#" data-fim-help="run-lifecycle" data-fim-anchor="">saved runs: pause, resume, and recover</a>.</p>
+<h2 id="the-examples-experiment">The Examples experiment</h2>
+<p>The <strong>Examples</strong> experiment holds the worked examples bundled with the
+app. Each example class is a Study (a nested class is named
+&quot;Parent — Child&quot;), holding that class's examples as runs with their saved
+results. The app writes them into an <code>examples</code> folder inside your
+results folder at startup, writes them again if they are removed, and
+replaces them when a newer version of the app ships new versions. An
+example whose result has not been saved is not listed here, but it is
+still available in the <strong>Examples…</strong> dialog.</p>
+<p>The examples and the questions each one addresses are described in
+<a href="#" data-fim-help="usage" data-fim-anchor="worked-examples">worked examples</a>.</p>
+<h2 id="read-only-items">Read-only items</h2>
+<p>The Examples experiment, its Studies, and their runs are <strong>read-only</strong>.
+A lock beside the name marks them in Home, the details dialog, and the
+run view's title. You can open, view, compare, and clone them. You
+cannot rename, describe, document, or delete them, or change their
+membership; those controls are unavailable, and hovering one says why.</p>
+<ul>
+<li><strong>Select all</strong> never selects a read-only item. A deletion that names
+one is refused as a whole: nothing is deleted. The command line refuses
+the same edits with an error naming the item.</li>
+<li>An example linked into an editable Study is different: its checkbox
+selects only that link. <strong>Delete selected</strong> removes the link, not the
+example or its results; the confirmation says the example is kept.</li>
+<li>Read-only status comes from
+<a href="#" data-fim-help="configuration" data-fim-anchor="_read_only"><code>_read_only</code></a>; only shipped examples
+use it.</li>
+</ul>
+<h2 id="opening-a-saved-example">Opening a saved example</h2>
+<p>Double-click an example's row on Home, or choose <strong>Open saved result</strong> in
+the <strong>Examples…</strong> dialog. The complete finished run opens: statistics,
+messages, graphs, and the scrubber. No simulation runs. Large examples
+can take longer to open while their compressed trajectory is
+reconstructed; the trajectory is stored losslessly and needs no manual
+unpacking. Batch examples include every kept replicate and the batch
+summary.</p>
+<p><strong>Load into Configure</strong> gives an editable copy; running it creates a new,
+editable result.</p>

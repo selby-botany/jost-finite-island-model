@@ -983,16 +983,43 @@
     </section>
   </section>
 
+  <!-- Help (`doc/fim-gui-help-design.md`): Back and Forward move between
+       Help pages; on the first page, Back returns to the screen Help was
+       opened from, as Return to work always does. -->
   <section id="screen-help" class="screen" hidden>
-    <div class="actions">
-      <button type="button" id="help-back-button" data-history-back disabled>
+    <div class="actions help-toolbar">
+      <button type="button" id="help-back-button"
+              title="Previous Help page, or return to your work">
         <svg class="button-icon" aria-hidden="true">
           <use href="icons/fim-icons.svg#icon-back"></use>
         </svg>
         Back
       </button>
+      <button type="button" id="help-forward-button" disabled
+              title="Next Help page">
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-forward"></use>
+        </svg>
+        Forward
+      </button>
+      <button type="button" id="help-home-button"
+              title="All Help topics">
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-help"></use>
+        </svg>
+        Help home
+      </button>
+      <button type="button" id="help-screen-button" hidden></button>
+      <input type="search" id="help-search" class="help-search"
+             placeholder="Search help" aria-label="Search help">
+      <button type="button" id="help-return-button"
+              title="Leave Help and return to the screen you came from">
+        Return to work
+      </button>
     </div>
-    <div id="help-content" class="help-content"></div>
+    <nav id="help-breadcrumb" class="help-breadcrumb"
+         aria-label="Help location"></nav>
+    <div id="help-content" class="help-content" tabindex="-1"></div>
   </section>
 
   <!-- Sweep (`20260923-claude-sonnet-5-sweep-as-study-implementation-

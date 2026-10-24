@@ -1,0 +1,172 @@
+<h1 id="run-and-results">Run and results</h1>
+<p>The run view shows one configuration's run in three states: initial,
+running, and completed. <strong>Run</strong> and <strong>Results</strong> in the rail both open it.
+A single run (<code>n_replicates: 1</code>) and a batch share the view; the batch
+view adds replicate summaries.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#before-a-run">Before a run</a></li>
+<li><a href="#while-a-run-executes">While a run executes</a></li>
+<li><a href="#graphs">Graphs</a></li>
+<li><a href="#statistic-trajectories">Statistic trajectories</a></li>
+<li><a href="#statistics-table-and-hover-readouts">Statistics table and hover readouts</a></li>
+<li><a href="#completed-single-runs">Completed single runs</a></li>
+<li><a href="#completed-batches">Completed batches</a></li>
+<li><a href="#pause-save-for-later-and-resume">Pause, save for later, and resume</a></li>
+<li><a href="#files">Files</a></li>
+</ul>
+<h2 id="before-a-run">Before a run</h2>
+<p>The initial state shows the founding state (generation 0) and the derived
+convergence schedule beside <strong>Run simulation</strong>, for example:</p>
+<blockquote>
+<p>Convergence: burn-in 104,338 generations, cap 399,728 (derived; this
+model needs about 19,693 generations to forget its starting state)</p>
+</blockquote>
+<p>Check the burn-in and cap against the model's timescale before you
+start. See <a href="#" data-fim-help="convergence" data-fim-anchor="why-does-my-run-take-so-long">why a run takes so long</a>.</p>
+<p><strong>Run simulation</strong> always starts from the current configuration, even
+when a previous result is displayed. <strong>Edit configuration</strong> returns to
+Configure.</p>
+<h2 id="while-a-run-executes">While a run executes</h2>
+<ul>
+<li>Allele frequencies, statistic trajectories, and progress update live.
+Batch scatter plots pool the replicates in progress.</li>
+<li>Deme selectors (initially deme 1 against deme 2) apply to subsequent
+updates of the scatter plot and pairwise statistics.</li>
+<li><strong>Cancel</strong> stops the run. Cancellation or an error keeps the last
+rendered view and adds a status banner.</li>
+<li><strong>Pause</strong> appears while a saved run executes; it stops at a checkpoint.</li>
+<li>The run continues if you switch tabs or screens.</li>
+</ul>
+<h2 id="graphs">Graphs</h2>
+<p><strong>Graphs</strong> selects which graphs are visible. <a href="#" data-fim-help="gui-settings" data-fim-anchor="">Settings</a>
+controls how many sit side by side and the scatter-plot point style.</p>
+<table>
+<thead>
+<tr>
+<th>Graph</th>
+<th>Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Allele frequencies by deme pair</td>
+<td>Each allele's frequency in one deme against another; axes span 0–1</td>
+</tr>
+<tr>
+<td>Statistic trajectories</td>
+<td>Each shown statistic against generation, with references</td>
+</tr>
+<tr>
+<td>Allele composition by deme</td>
+<td>Stacked allele composition of each deme</td>
+</tr>
+<tr>
+<td>Allele-frequency spectrum</td>
+<td>Empirical frequency spectrum, with an optional Wright beta overlay</td>
+</tr>
+<tr>
+<td>Isolation-by-distance identity decay</td>
+<td>Pairwise identity against migration-graph distance</td>
+</tr>
+</tbody>
+</table>
+<p>The last three are drawn for completed results; batches pool them across
+replicates. Double-click a graph to open it in a larger frame
+with the scrubber and statistics table. The frame offers zoom (<strong>−</strong>,
+<strong>+</strong>), <strong>Fit</strong>, <strong>Reset view</strong>, and <strong>Export image…</strong>. Escape or
+<strong>Close</strong> returns it to the run view.</p>
+<h2 id="statistic-trajectories">Statistic trajectories</h2>
+<p><strong>References.</strong> Single runs draw the analytic equilibrium line and,
+where available, the expected trajectory for <var>D</var>, <var>G</var><sub>ST</sub>, <var>H</var><sub>S</sub>,
+<var>H</var><sub>T</sub>, and <var>H</var><sub>ST</sub>. Expected trajectories start from the seeded
+founding state and support unequal deme sizes and explicit migration
+matrices up to 24 demes. They are omitted for per-locus mutation rates,
+equilibrium-split founding, and larger matrices. They are model
+expectations, not stochastic paths; with few loci, the mean of a ratio
+can differ from the ratio of expectations. See
+<a href="#" data-fim-help="configuration" data-fim-anchor="convergence_estimate"><code>convergence_estimate</code></a>.</p>
+<p><strong>f₀ (identity recovery)</strong> overlays Whitlock's (1992) closed-form
+identity-by-descent recovery after a founder event, computed from this
+configuration's N and m alone. It is a reference, not a measurement of
+this run. It is off by default and hidden when N or m is not a plain
+scalar. See <a href="#" data-fim-help="statistics" data-fim-anchor="identity-recovery">identity recovery</a>.</p>
+<p><strong>Show</strong> selects <strong>Every generation</strong>, <strong>Trailing mean</strong>, or
+<strong>Cumulative mean</strong>. <strong>Band</strong> selects ±1 or ±2 (the default) standard
+errors for means. With <strong>Every generation</strong>, the band shows standard
+deviations over the evidence window instead. Reference curves are
+averaged over the same windows. Cumulative averaging begins at the
+recorded averaging start, or after one convergence window when that
+record is absent.</p>
+<p>Solid colored lines with flags mark each statistic's averaging-window
+start, and the windows are shaded. The scrubber's position is a dashed
+gray line. Display choices are remembered and never alter computed or
+saved results.</p>
+<h2 id="statistics-table-and-hover-readouts">Statistics table and hover readouts</h2>
+<p>The statistics table is also the trajectory legend: select a row to
+show or hide its line. Select an underlined statistic name to open its
+<a href="#" data-fim-help="statistics" data-fim-anchor="">reference entry</a>. <strong>Choose…</strong> in the table caption
+opens <a href="#" data-fim-help="gui-settings" data-fim-anchor="statistics-shown">Statistics shown</a> in Settings, which
+chooses the rows; hidden statistics are still in the saved report.</p>
+<p>Hover a row for its window mean, standard error, generation range, and
+standardized difference from the window-averaged prediction:</p>
+<pre><code class="language-text">mean 0.5506 ± 0.0048 over generations 1,399–174,966
+(173,568 generations; 1 SE); predicted 0.5448, +1.2 SE
+</code></pre>
+<ul>
+<li>At the final generation, the window is the monitor's stopping window.
+It can be longer than the configured convergence window, because the
+monitor widens it to assess precision.</li>
+<li>&quot;Not yet noise-adequate&quot; marks a mean that has not met the precision
+requirement.</li>
+<li>The first-order autoregressive standard error used here accounts for
+correlation between neighboring generations. It can underestimate
+uncertainty when relaxation has several time scales. The stopping rule
+itself uses Geyer's initial positive sequence; see
+<a href="#" data-fim-help="convergence" data-fim-anchor="how-precise-is-the-reported-value">how precise is the reported value?</a></li>
+<li>The row also shows <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>Δ</mi><mi>p</mi></msub></mrow></math> (observed minus predicted at the
+selected generation) and the trajectory mean squared error, for example
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>Δ</mi><msub><mi>D</mi><mi>p</mi></msub><mo>=</mo><mo>+</mo><mn>0.012</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">M</mi><mi mathvariant="normal">S</mi><mi mathvariant="normal">E</mi></mrow><mo>=</mo><mn>4.1</mn><mi>×</mi><msup><mn>10</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow></math>. The prediction
+is the expected trajectory when supported, otherwise the equilibrium
+line. The tooltip names which reference applies.</li>
+</ul>
+<h2 id="completed-single-runs">Completed single runs</h2>
+<ul>
+<li>The report shows each statistic, the stop outcome (converged or
+reached the cap), and the precision achieved.</li>
+<li>With more than one retained generation, the scrubber plays back or
+scrubs through the saved trajectory. Thinned runs scrub only retained
+generations.</li>
+<li>Deme selectors update the scatter plot and pairwise statistics at the
+scrubbed generation. Pairs not saved in <code>pairwise.json</code> are recomputed
+from the trajectory on demand.</li>
+</ul>
+<h2 id="completed-batches">Completed batches</h2>
+<ul>
+<li>The scatter plot pools the final states of all replicates.</li>
+<li>A table lists each replicate's status, final generation, and
+statistics. <strong>Open</strong> on a replicate shows it as a single run.</li>
+<li>Intervals are labeled &quot;uncertainty across N independent replicates&quot;.
+They are Student's-<var>t</var> intervals over replicate window means; see
+<a href="#" data-fim-help="convergence" data-fim-anchor="the-across-replicate-interval">the across-replicate interval</a>.</li>
+<li>A batch can stop before <code>n_replicates</code> when <strong>stop the batch early</strong>
+is on; the number of replicates shown is the number that ran.</li>
+</ul>
+<h2 id="pause-save-for-later-and-resume">Pause, save for later, and resume</h2>
+<ul>
+<li><strong>Save for later</strong> keeps the configuration as a saved run under
+<strong>Saved runs</strong> on Home. An incomplete or invalid configuration is
+saved as a Draft.</li>
+<li><strong>Run simulation</strong> creates and starts a saved run. After <strong>Pause</strong>,
+<strong>Run simulation</strong> in the same tab resumes it from its checkpoint.</li>
+<li>A resumed run reproduces an uninterrupted run. The desktop app runs
+one saved run at a time.</li>
+</ul>
+<p>See <a href="#" data-fim-help="run-lifecycle" data-fim-anchor="saved-runs-in-the-desktop-app">saved runs in the desktop app</a>
+for every state and action.</p>
+<h2 id="files">Files</h2>
+<p><strong>Open output folder</strong> (or <strong>File &gt; Reveal output folder</strong>) shows the
+run's files: <code>manifest.json</code>, <code>report.json</code>, <code>trajectory.tlog</code>,
+<code>pairwise.json</code>, and, for a batch, <code>summary.json</code> plus one
+<code>replicate-NNN/</code> folder per replicate. See
+<a href="#" data-fim-help="usage" data-fim-anchor="output-schemas">output schemas</a>.</p>

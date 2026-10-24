@@ -13979,7 +13979,7 @@ pywebview's own API instead of Tk's.
 
 <a id="fim.gui.app.shutdown_timeout"></a>
 
-#### [shutdown\_timeout](./gui/app.py#L10866)
+#### [shutdown\_timeout](./gui/app.py#L10867)
 
 ```python
 def shutdown_timeout() -> float
@@ -14004,7 +14004,7 @@ outcome than the hang it guards against.
 
 <a id="fim.gui.app.main"></a>
 
-#### [main](./gui/app.py#L11176)
+#### [main](./gui/app.py#L11177)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int

@@ -26,7 +26,7 @@ If shutdown has not finished 20 seconds after the window closes, `fim`
 records thread diagnostics and exits with status `3`.
 `FIM_GUI_SHUTDOWN_TIMEOUT` sets the timeout in seconds; `0` disables it.
 Disable it only when investigating shutdown. See
-[shutdown troubleshooting](doc/usage.md#if-the-window-closes-but-fim-keeps-running).
+[shutdown troubleshooting](doc/gui/troubleshooting.md#if-the-window-closes-but-fim-keeps-running).
 
 Closing the window waits for in-flight Python/JavaScript bridge calls,
 rejects further calls, and stops active work. Saved runs pause at a

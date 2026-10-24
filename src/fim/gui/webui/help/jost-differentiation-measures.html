@@ -1,0 +1,2012 @@
+<h1 id="differentiation-measures-for-conservation-genetics">Differentiation measures for conservation genetics</h1>
+<p>This guide examines the measures presented in:</p>
+<blockquote>
+<p>Jost L, Archer F, Flanagan S, Gaggiotti O, Hoban S, Latch E (2018).
+&quot;Differentiation measures for conservation genetics.&quot;
+<em>Evolutionary Applications</em> 11(7):1139–1148.
+DOI: <a href="#" data-fim-external="https://doi.org/10.1111/eva.12590">10.1111/eva.12590</a> ·
+PMID: <a href="#" data-fim-external="https://pubmed.ncbi.nlm.nih.gov/30026802/">30026802</a></p>
+</blockquote>
+<p>Quotations and equation numbers refer to the publicly available
+accepted-article version of the paper, which carries a notice that it
+precedes copyediting, typesetting, and proofreading. A short note near the
+end of this document records the handful of places where recomputing the
+paper's own numbers turned up a discrepancy from the printed text.</p>
+<p>For definitions, reporting conventions, and API links for all statistics
+supported by the simulator, use the <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a>.
+This guide explains the cited literature rather than serving as the
+simulator's statistic catalog.</p>
+<p>Mathematical symbols and formulas use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math>; literal API identifiers,
+result keys, and sequence labels use backticks. Displayed equations in
+this guide have unique tags beginning with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mtext>J</mtext></mrow></math>. These local tags
+are distinct from equation numbers cited from the papers.</p>
+<ul>
+<li><a href="#differentiation-measures-for-conservation-genetics">Differentiation measures for conservation genetics</a>
+<ul>
+<li><a href="#who-this-document-is-for-and-how-to-read-it">Who this document is for, and how to read it</a></li>
+<li><a href="#the-one-paragraph-version">The one-paragraph version</a></li>
+<li><a href="#part-i--foundations-biological-concepts">Part I — Foundations: biological concepts</a></li>
+<li><a href="#part-ii--measuring-diversity-inside-one-group">Part II — Measuring diversity inside one group</a></li>
+<li><a href="#part-iii--two-groups-or-more-differentiation-splits-in-two">Part III — Two groups or more: &quot;differentiation&quot; splits in two</a></li>
+<li><a href="#part-iv--worked-examples">Part IV — Worked examples</a></li>
+<li><a href="#part-v--classical-measures-and-their-limitations">Part V — Classical measures and their limitations</a></li>
+<li><a href="#part-vi--what-controls-what-if-the-model-runs-to-equilibrium">Part VI — What controls what, if the model runs to equilibrium</a></li>
+<li><a href="#part-vii--the-two-allele-special-case">Part VII — The two-allele special case</a></li>
+<li><a href="#part-viii--what-the-paper-recommends">Part VIII — What the paper recommends</a></li>
+<li><a href="#part-ix--common-interpretations">Part IX — Common interpretations</a></li>
+<li><a href="#part-x--using-these-measures-outside-population-genetics">Part X — Using these measures outside population genetics</a></li>
+<li><a href="#appendix-a-notation-and-formula-sheet">Appendix A: notation and formula sheet</a></li>
+<li><a href="#appendix-b-errata-and-ambiguities-in-the-accepted-article-text">Appendix B: errata and ambiguities in the accepted-article text</a></li>
+<li><a href="#appendix-c-where-this-paper-sits-in-josts-larger-program">Appendix C: where this paper sits in Jost's larger program</a></li>
+<li><a href="#appendix-d-works-cited">Appendix D: works cited</a></li>
+<li><a href="#appendix-e-the-differentiation-debate-20082011">Appendix E: the differentiation debate, 2008–2011</a></li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="who-this-document-is-for-and-how-to-read-it">Who this document is for, and how to read it</h2>
+<p>Part I defines the biological terms and allele-frequency notation used in
+the subsequent sections. The derivations use arithmetic, algebra, and
+logarithms; worked examples show the intermediate calculations.</p>
+<p>The discussion follows the cited paper and the additional published sources
+listed in the references. Numeric examples are recomputed from the
+definitions in the paper; Appendix B records a discrepancy between one
+recalculated value and the accepted-article text.</p>
+<p>Suggested reading paths:</p>
+<table>
+<thead>
+<tr>
+<th>If you want</th>
+<th>Read</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The gist in five minutes</td>
+<td>The one-paragraph version, then Part IX</td>
+</tr>
+<tr>
+<td>To understand the argument</td>
+<td>Parts I–V</td>
+</tr>
+<tr>
+<td>To compute the measures yourself</td>
+<td>Parts II–IV, Appendix A</td>
+</tr>
+<tr>
+<td>To apply the same math to non-genetic data</td>
+<td>Part X (read Parts II and V first)</td>
+</tr>
+</tbody>
+</table>
+<p>Every numeric claim in Part IV was recomputed from the paper's own
+definitions rather than copied from its text; see Appendix B for the one
+place a recomputation disagrees with a printed value.</p>
+<hr />
+<h2 id="the-one-paragraph-version">The one-paragraph version</h2>
+<p>The statistics commonly grouped under &quot;differentiation&quot; quantify
+different properties. The classical family (<var>G</var><sub>ST</sub>,
+<var>F</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>θ</mi></mrow></math>) is related to the reduction in
+within-population variation. Jost's <var>D</var>, entropy differentiation
+<var>E</var><sub>ST</sub>, and allele-count differentiation
+<var>K</var><sub>ST</sub> quantify separation among allele-frequency
+distributions in other ways. The values need not covary: a parameter set
+can produce a high value for one family and a low value for another.</p>
+<p>Under the finite-island model and the mutation assumptions analyzed in the
+paper, equilibrium nearness to fixation depends on <var>Nm</var>, whereas
+equilibrium <var>D</var> depends on <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>/</mo><mo stretchy="false">(</mo><mi>μ</mi><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math>, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> is the
+mutation rate and <var>d</var> is the number of demes. These relationships apply to
+the stated infinite-time mutation-migration-drift equilibrium. Away from
+that setting, including finite-allele mutation models and short timescales
+with negligible mutation, population size, elapsed time, and the allele
+model can affect the results directly. See the <a href="#" data-fim-help="finite-island-model-introduction" data-fim-anchor="">finite-island model
+introduction</a> for the process model.
+The project-wide <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> maps names to
+definitions and result identifiers.</p>
+<hr />
+<h2 id="part-i--foundations-biological-concepts">Part I — Foundations: biological concepts</h2>
+<h3 id="genes-loci-and-alleles">Genes, loci, and alleles</h3>
+<p>An organism's genome is a long string over a four-letter alphabet
+(<code>A</code>, <code>C</code>, <code>G</code>, <code>T</code>) — think of it as a very long array of characters,
+copied, with rare errors, from parent to offspring.</p>
+<ul>
+<li>A <strong>locus</strong> (plural <strong>loci</strong>) is a <em>region</em> of that array — a contiguous
+interval, fixed by where it starts and how far it runs. It says <strong>where to
+look</strong>, never what is found there. A locus may span a single character or
+a run of thousands.</li>
+<li>An <strong>allele</strong> is a <em>value</em> that can occupy that region — the whole
+sequence a given copy carries across the interval, read as one
+indivisible label. If some individuals carry <code>AAGCT</code> over a
+five-character locus and others carry <code>AAGGT</code>, those are two alleles of
+that locus.</li>
+<li>A <strong>gene</strong> is a locus whose sequence codes for something functional.
+Whether a locus is a gene or not changes no formula in this paper — it
+affects the biological interpretation of the result.</li>
+</ul>
+<p>The analogy that survives the whole document: a locus is a <strong>field</strong>, an
+allele is a <strong>value that field can hold</strong>, and a population is a
+<strong>collection of records</strong>. Every measure discussed here is a statistic
+computed from the histogram of values in one field, across a collection of
+records.</p>
+<p>Alleles are treated throughout as <strong>unordered categorical labels</strong> — <code>AAGCT</code>
+is not &quot;greater than&quot; <code>AAGGT</code>, merely different. Every measure here depends
+only on the <em>frequencies</em> of the labels, never on any similarity between
+them. That assumption is also the main limit on reusing these measures on
+non-genetic data — see Part X.</p>
+<h3 id="distance-between-alleles-is-a-different-model">Distance between alleles is a different model</h3>
+<p>An allele label can be given a metric in a different
+model, and then mutation becomes something like a transition in a space of
+sequence states. That is a perfectly sensible model for <strong>sequence
+divergence</strong> or <strong>evolutionary distance</strong>, but it is not the model used here.</p>
+<p>The paper is not asking, &quot;How far apart are these allele labels in a
+sequence or mutational metric?&quot; It is asking, &quot;How different are the
+frequency distributions of the labels across demes, and how much of the
+variation is unique to one deme rather than shared across them?&quot; The metric
+space model and the categorical-label model answer different questions.</p>
+<p>For a sequence-space model, one typically needs additional structure:</p>
+<ul>
+<li>a way to compare allele labels to each other,</li>
+<li>a mutation model that says how one label turns into another,</li>
+<li>and usually a distance or similarity matrix that depends on the biology of
+the locus.</li>
+</ul>
+<p>With that extra structure, one can define actual genetic distance, pairwise
+sequence divergence, or a diffusion-like mutation process in a continuous or
+discrete state space. In that setting, mutation really is a transition in a
+state-space, and distance can matter very much.</p>
+<p>This paper deliberately does not choose that structure. It keeps only the
+coarsest information the conservation question needs: the frequency of each
+label in each deme, and whether the labels are shared or unique across demes.
+The formulas in Parts II–V then depend on <strong>overlap, frequency weights, and
+partitioning of diversity</strong>, not on any assumed distance between alleles.</p>
+<p>That is why a sequence-distance model can be useful in some applications and
+yet leave no trace in the formulas here: it is a different model with a
+different inferential target. In the Jost family, a mutation is not defined as
+&quot;a rotation in allele space&quot;; it is simply a change in the frequency vector
+that can create or destroy new labels. The paper's statistics are built to
+track that population-level effect without introducing a metric that may not
+exist, or may not be biologically stable, for the marker being used.</p>
+<p>A useful way to phrase the distinction is this: in a full mutation model, the
+allele itself is a state with internal structure, and one must model how that
+state changes over time or how it relates to other states. In the Jost model,
+by contrast, the allele is treated as a category label, and the entire state
+for a locus is the list of category frequencies in a deme. The model says
+nothing about how similar or distant those labels are; it is built only from
+whether they are the same label, how often they appear, and how much of the
+category distribution is shared versus unique to each deme. That choice is
+not a simplification for convenience alone: it is what keeps the statistics
+portable across markers whose underlying mutation processes and sequence
+spaces are themselves very different.</p>
+<p><strong>Where does the locus's length go?</strong> It vanishes the moment alleles are named, and returns in exactly one place. Once
+the interval is fixed, each distinct sequence across it becomes a single categorical label, and every statistic in Parts
+II–V sees nothing but the frequencies of those labels. A one-character locus and a five-thousand-character locus that
+happen to produce the same frequency vector give identical values of <var>H</var>, <var>G</var><sub>ST</sub>,
+<var>D</var>, <var>E</var><sub>ST</sub>, and <var>K</var><sub>ST</sub>. Length sits upstream of
+the statistics: it is part of how alleles are <em>individuated</em>, not part of any formula that consumes them.</p>
+<p>Length re-enters only in the model half (Part VI), through the mutation
+rate. A longer interval offers proportionally more sites at which a copying
+error can land, so <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>≈</mo><msub><mi>μ</mi><mi>b</mi></msub><mi>L</mi></mrow></math> for a per-base-pair rate
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mi>b</mi></msub></mrow></math> and length <var>L</var> — which is the whole content of Eq. 5. The
+consequence is sharp, and it is one more instance of the dissociation this
+paper is built around: <strong>locus length is invisible to <var>G</var><sub>ST</sub> and
+decisive for <var>D</var>.</strong> Length acts only through <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> cancels out
+of the equilibrium <var>G</var><sub>ST</sub> (Eq. 2) whenever <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>≪</mo><mi>m</mi></mrow></math>, while
+it sits in the denominator of the equilibrium <var>D</var> (Eq. 4).</p>
+<p>Length has one further role, an assumption rather than a formula: it governs
+whether <strong>infinite alleles</strong> is reasonable. A single-character locus admits
+at most four alleles, so &quot;every mutation yields a never-before-seen allele&quot;
+is plainly false; across thousands of characters the space of possible
+sequences is astronomically large and the assumption is nearly exact. Hence
+the paper's qualifier that infinite alleles is a valid approximation for
+loci comprising many base pairs.</p>
+<h3 id="diploidy-homozygous-heterozygous">Diploidy, homozygous, heterozygous</h3>
+<p>Most organisms of conservation interest are <strong>diploid</strong>: each individual
+carries <strong>two</strong> copies of every locus, one from each parent.</p>
+<ul>
+<li><strong>Homozygous</strong> at a locus: the two copies are the same allele.</li>
+<li><strong>Heterozygous</strong> at a locus: the two copies are different alleles.</li>
+</ul>
+<p>A group of <var>N</var> diploid individuals therefore contains <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math> gene copies at
+any given locus. That factor of 2 is the only reason <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>4</mn></mrow></math> keep
+appearing in the formulas below; it carries no conceptual weight.</p>
+<h3 id="populations-and-demes">Populations and demes</h3>
+<p>A <strong>population</strong> is all the individuals of one species in the area of
+interest. A <strong>deme</strong> (or subpopulation) is a sub-group that mostly breeds
+within itself — an island, a mountain valley, a forest fragment cut off by
+a highway. &quot;Mostly&quot; does real work: demes usually still exchange a trickle
+of individuals.</p>
+<p>The paper uses <var>d</var> for the number of demes and <var>N</var> for individuals per
+deme. Habitat destruction takes one large interbreeding population and
+shatters it into small, isolated demes; each small deme then loses
+variation quickly (see drift, below). Whether that loss is recoverable
+depends on whether the fragments still hold <em>different</em> variants — exactly
+the question these statistics answer.</p>
+<h3 id="the-only-state-variable-that-matters-here">The only state variable that matters here</h3>
+<p>For a single locus in a single deme, the complete state used by every
+formula in this document is a <strong>probability vector</strong>: the list of allele
+frequencies.</p>
+<table>
+<thead>
+<tr>
+<th>Deme</th>
+<th>Allele frequencies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>A: 0.70, B: 0.25, C: 0.05</td>
+</tr>
+<tr>
+<td>2</td>
+<td>A: 0.10, D: 0.90</td>
+</tr>
+</tbody>
+</table>
+<p>Entries are non-negative and sum to 1 within each deme. It is worth being
+precise about <strong>why</strong> they sum to 1, because the reason is narrower than it
+first appears. The normalization runs over <strong>gene copies at one locus</strong>,
+not over the genome: each of the deme's <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math> copies carries exactly one
+sequence across the interval, so the alleles are mutually exclusive and
+exhaustive <em>per copy</em>, and their frequencies partition the copies. This
+holds locus by locus and asks nothing whatever of any other locus — not
+disjointness, not independence, not a carving of the genome into loci. Two
+deliberately overlapping loci would each still have frequencies summing
+to 1; you would be double-counting the shared characters, but neither
+vector's normalization would break.</p>
+<p>Independence across loci is a genuine requirement, but it buys something
+else entirely: the right to <strong>combine</strong> loci — averaging <var>G</var><sub>ST</sub>
+across many markers to estimate <var>Nm</var>, taking harmonic means of <var>D</var> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>, and attaching confidence intervals (all in Part VI). For that
+purpose non-overlap is necessary and nowhere near sufficient: two disjoint
+loci a few thousand characters apart on the same chromosome are inherited
+together and stay strongly correlated through linkage. Real independence
+needs physical separation — different chromosomes, or enough distance for
+recombination to break the association — and even then every locus in a
+species shares one population history, which is part of why the paper
+hedges its cross-locus averaging with &quot;provided all other assumptions of
+the island model are met.&quot;</p>
+<p>The genome, in short, is not canonically carved into loci. Loci are
+<strong>chosen</strong> by the analyst, and in practice chosen disjoint and far apart.
+The frequency vector above requires neither property; the multi-locus
+machinery requires both, and more.</p>
+<p>That vector is the entire input — individual genotypes, pedigrees, and
+geography are all discarded before any of these statistics is computed. That discarding is itself one
+of the paper's arguments: <var>F</var><sub>ST</sub> was <em>originally</em> defined in terms of
+pedigrees, and <var>G</var><sub>ST</sub> — its allele-frequency stand-in — is therefore
+not quite measuring the same thing (Part III).</p>
+<h3 id="the-forces-that-move-allele-frequencies">The forces that move allele frequencies</h3>
+<p>Between one generation and the next, a deme's frequency vector changes
+under up to four processes; only the first three appear in this paper's
+models.</p>
+<p><strong>Genetic drift</strong> is finite sampling noise. The next generation's <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math>
+gene copies are drawn from the current pool; whichever alleles happen to
+get drawn more often become more common, for no reason at all. This is a
+random walk with absorbing boundaries at 0 and 1. Two properties matter:</p>
+<ul>
+<li>Drift is <strong>stronger in small demes</strong> — the variance of the frequency
+change per generation scales roughly as <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><mi>N</mi><mo stretchy="false">)</mo></mrow></math>.</li>
+<li>Drift is <strong>irreversible in aggregate</strong>: it always erodes variation
+within a deme, because 0 and 1 are absorbing. Left alone, every deme
+eventually ends up with a single allele.</li>
+</ul>
+<p><strong>Migration (gene flow)</strong> replaces a fraction <var>m</var> of a deme's gene pool
+each generation with arrivals from elsewhere. Migration pushes demes
+<em>towards each other</em>, counteracting drift's tendency to make them differ.
+Since <var>m</var> is a per-generation proportion, <var>Nm</var> is roughly the number of
+migrant individuals per generation.</p>
+<p><strong>Mutation</strong> introduces brand-new alleles at rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> per locus per
+generation. Mutation is the only source of <em>new</em> variation — drift and
+migration only redistribute what already exists. Typical rates span many
+orders of magnitude, which is central to the paper's argument:</p>
+<table>
+<thead>
+<tr>
+<th>Marker type</th>
+<th>Rough mutation rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> per generation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Single nucleotide site</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>10</mn><mrow><mo>−</mo><mn>9</mn></mrow></msup><mi>…</mi><msup><mn>10</mn><mrow><mo>−</mo><mn>8</mn></mrow></msup></mrow></math></td>
+</tr>
+<tr>
+<td>Typical protein-coding gene</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>10</mn><mrow><mo>−</mo><mn>6</mn></mrow></msup><mi>…</mi><msup><mn>10</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow></math></td>
+</tr>
+<tr>
+<td>Microsatellite</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><mi>…</mi><msup><mn>10</mn><mrow><mo>−</mo><mn>3</mn></mrow></msup></mrow></math></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Selection</strong> improves the survival or reproduction of some alleles over
+others. The models here assume <strong>neutral</strong> loci — no selection — which is
+standard, and which the paper flags as a limitation when the loci that
+actually matter to a decision are functional ones.</p>
+<h3 id="fixation">Fixation</h3>
+<p>A deme is <strong>fixed</strong> at a locus when every gene copy in it is the same
+allele — the frequency vector is a one-hot vector. All internal variation
+at that locus is gone; only mutation or immigration can restore it.</p>
+<p>This word is the hinge of the whole paper. Two facts to hold onto:</p>
+<ol>
+<li>Fixation is a property of <strong>one deme in isolation</strong>. A deme is fixed or
+it is not; the question does not mention any other deme.</li>
+<li>Whether two demes are fixed for the <strong>same</strong> allele or for <strong>different</strong>
+alleles is a completely separate question.</li>
+</ol>
+<p>The older family of statistics answers question 1 (averaged across demes).
+The newer family answers question 2. Conflating them is the error this
+paper exists to correct.</p>
+<h3 id="markers-what-actually-gets-measured">Markers: what actually gets measured</h3>
+<p>Researchers rarely sequence whole genomes for this purpose. They pick
+<strong>markers</strong> — loci that are cheap to type — and hope those markers
+represent the genome.</p>
+<ul>
+<li><strong>SNP</strong> (single nucleotide polymorphism): one character position, so at
+most 4 alleles and in practice usually 2. Cheap, abundant, very low
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>.</li>
+<li><strong>Microsatellite</strong>: a short repeated motif whose repeat count varies,
+e.g. <code>CACACACA…</code>. Many alleles, very high <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>. Historically the
+workhorse marker of this field.</li>
+<li><strong>MHC loci</strong> and similar functional genes: not neutral, directly tied to
+fitness (disease resistance, in the MHC case). Expensive but, the paper
+argues, the ones that ought to drive decisions.</li>
+</ul>
+<p>The gap between &quot;the fast-mutating marker that was measured&quot; and &quot;the
+functional locus that is actually of interest&quot; becomes decisive in Part
+VI: allelic differentiation depends strongly on <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>, so a marker with a
+very different mutation rate from the locus of real interest gives a very
+different answer.</p>
+<hr />
+<h2 id="part-ii--measuring-diversity-inside-one-group">Part II — Measuring diversity inside one group</h2>
+<h3 id="expected-heterozygosity">Expected heterozygosity</h3>
+<p>Given one deme's frequency vector <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo>=</mo><mo stretchy="false">(</mo><msub><mi>p</mi><mn>1</mn></msub><mo>,</mo><msub><mi>p</mi><mn>2</mn></msub><mo>,</mo><mi>…</mi><mo>,</mo><msub><mi>p</mi><mi>k</mi></msub><mo stretchy="false">)</mo></mrow></math>, the
+standard diversity statistic is <strong>expected heterozygosity</strong>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>H</mi><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><munder><mo>&#x02211;</mo><mi>i</mi></munder><msubsup><mi>p</mi><mi>i</mi><mn>2</mn></msubsup></mrow></math><span class="equation-tag">(J.1)</span></div>
+<p>Interpretation: draw two gene copies at random, with replacement, from the
+deme's pool. <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mo>∑</mo><mi>i</mi></msub><msubsup><mi>p</mi><mi>i</mi><mn>2</mn></msubsup></mrow></math> is the probability they are the <strong>same</strong>
+allele, so <var>H</var> is the probability they are <strong>different</strong>. The name comes
+from diploidy — under random mating, <var>H</var> is the fraction of individuals
+expected to be heterozygous at that locus. Statisticians will recognize it
+as the Gini–Simpson index; information theorists as one minus the
+collision probability; ecologists call the same quantity Simpson
+diversity.</p>
+<p>Range and behavior:</p>
+<ul>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>H</mi><mo>=</mo><mn>0</mn></mrow></math> exactly when the deme is fixed.</li>
+<li><var>H</var> increases with more alleles and with more even frequencies.</li>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>H</mi><mo>&lt;</mo><mn>1</mn></mrow></math> always, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>H</mi><mo>→</mo><mn>1</mn></mrow></math> only as the number of alleles
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>→</mo><mo>∞</mo></mrow></math>.</li>
+</ul>
+<p>That last point is the seed of the whole problem. <var>H</var> is bounded above
+by 1 no matter how much variation exists, so once a deme has, say, 20
+equally common alleles, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>H</mi><mo>=</mo><mn>0.95</mn></mrow></math> and there is very little room left on
+the scale — piling on another 20 alleles moves <var>H</var> only from <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.95</mn></mrow></math> to
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.975</mn></mrow></math>. The measure saturates.</p>
+<h3 id="gene-identity-the-mirror-image">Gene identity, the mirror image</h3>
+<p>Nei's <strong>gene identity</strong> is the complement:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>J</mi><mo>&#x0003D;</mo><munder><mo>&#x02211;</mo><mi>i</mi></munder><msubsup><mi>p</mi><mi>i</mi><mn>2</mn></msubsup><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mi>H</mi></mrow></math><span class="equation-tag">(J.2)</span></div>
+<p><var>J</var> is the probability two random gene copies match. Working in <var>J</var>
+instead of <var>H</var> makes several later formulas much cleaner, and gives
+Jost's <var>D</var> a form simple enough to read off directly (Part III).</p>
+<h3 id="heterozygosity-and-effective-allelic-diversity">Heterozygosity and effective allelic diversity</h3>
+<p><var>H</var> is a perfectly good <em>probability</em>, but a poor <em>diversity</em>, because
+diversities get compared as ratios and <var>H</var> does not behave sensibly under
+ratios. The fix, due to Kimura and Crow (1964), is the <strong>effective number
+of alleles</strong>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><mi>D</mi><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mi>H</mi></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>J</mi></mrow></mfrac></mrow></math><span class="equation-tag">(J.3)</span></div>
+<p>Read <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><mi>D</mi></mrow></math> as &quot;the number of <em>equally common</em> alleles a deme would
+need, to have this much heterozygosity.&quot; Check it: if a deme has <var>n</var>
+equally common alleles, each at frequency <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>n</mi></mrow></math>, then
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>J</mi><mo>=</mo><mi>n</mi><mi>·</mi><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mi>n</mi><msup><mo stretchy="false">)</mo><mn>2</mn></msup><mo>=</mo><mn>1</mn><mo>/</mo><mi>n</mi></mrow></math>, so <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><mi>D</mi><mo>=</mo><mi>n</mi></mrow></math> exactly. The
+transformation inverts perfectly on the uniform case, which is what makes
+it interpretable.</p>
+<p>Comparing the two scales on the same data makes the saturation problem
+concrete:</p>
+<table>
+<thead>
+<tr>
+<th>Deme composition</th>
+<th><var>H</var></th>
+<th><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><mi>D</mi></mrow></math> (effective alleles)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2 equally common alleles</td>
+<td>0.500</td>
+<td>2.0</td>
+</tr>
+<tr>
+<td>5 equally common alleles</td>
+<td>0.800</td>
+<td>5.0</td>
+</tr>
+<tr>
+<td>20 equally common alleles</td>
+<td>0.950</td>
+<td>20.0</td>
+</tr>
+<tr>
+<td>40 equally common alleles</td>
+<td>0.975</td>
+<td>40.0</td>
+</tr>
+</tbody>
+</table>
+<p>On the <var>H</var> scale, going from 20 alleles to 40 looks like a trivial change
+(0.950 → 0.975). On the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><mi>D</mi></mrow></math> scale, it is what it actually is: a
+doubling. <strong>Diversity doubled; heterozygosity moved by 2.5%.</strong> Every &quot;most
+of the diversity is within populations&quot; claim in the conservation
+literature that was computed on the <var>H</var> scale is suspect for exactly
+this reason — Part V makes that precise.</p>
+<h3 id="hill-numbers-and-the-order-q">Hill numbers and the order q</h3>
+<p>The effective number of alleles generalizes to a one-parameter family, the
+<strong>Hill numbers</strong>, indexed by an order <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>≥</mo><mn>0</mn></mrow></math> that sets how much
+weight rare alleles get:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mi>q</mi></mrow></msup><mi>D</mi><mo>&#x0003D;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msub><mo>&#x02211;</mo><mi>i</mi></msub><msubsup><mi>p</mi><mi>i</mi><mi>q</mi></msubsup><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mrow><mn>1</mn><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>q</mi><mo stretchy="false">&#x00029;</mo></mrow></msup><mspace width="1em" /><mo stretchy="false">&#x00028;</mo><mi>q</mi><mo>&#x02260;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(J.4)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mn>1</mn></mrow></msup><mi>D</mi><mo>&#x0003D;</mo><mi>exp</mi><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mo>&#x02212;</mo><msub><mo>&#x02211;</mo><mi>i</mi></msub><msub><mi>p</mi><mi>i</mi></msub><mi>ln</mi><msub><mi>p</mi><mi>i</mi></msub><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mspace width="1em" /><mo stretchy="false">&#x00028;</mo><mtext>the&#x000A0;</mtext><mi>q</mi><mo>&#x02192;</mo><mn>1</mn><mtext>&#x000A0;limit</mtext><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(J.5)</span></div>
+<p>All of them return <var>n</var> for <var>n</var> equally common alleles; they differ only
+in how they treat unevenness.</p>
+<table>
+<thead>
+<tr>
+<th><var>q</var></th>
+<th>Name</th>
+<th>What it counts</th>
+<th>Rare alleles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0</mn></mrow></math></td>
+<td>Allele richness</td>
+<td>Every allele present, however rare</td>
+<td>Full weight</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn></mrow></math></td>
+<td>Shannon diversity, exponential of entropy</td>
+<td>Alleles weighted by their frequency</td>
+<td>Proportional weight</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn></mrow></math></td>
+<td>Effective number of alleles, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>H</mi><mo stretchy="false">)</mo></mrow></math></td>
+<td>Alleles weighted by squared frequency</td>
+<td>Nearly ignored</td>
+</tr>
+</tbody>
+</table>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>2</mn></mrow></math> is the heterozygosity case above — check it by substituting
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>2</mn></mrow></math> into the general formula:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mn>2</mn></mrow></msup><mi>D</mi><mo>&#x0003D;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msub><mo>&#x02211;</mo><mi>i</mi></msub><msubsup><mi>p</mi><mi>i</mi><mn>2</mn></msubsup><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mrow><mn>1</mn><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mn>2</mn><mo stretchy="false">&#x00029;</mo></mrow></msup><mo>&#x0003D;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msub><mo>&#x02211;</mo><mi>i</mi></msub><msubsup><mi>p</mi><mi>i</mi><mn>2</mn></msubsup><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mrow><mo>&#x02212;</mo><mn>1</mn></mrow></msup><mo>&#x0003D;</mo><mn>1</mn><mo>&#x0002F;</mo><mi>J</mi></mrow></math><span class="equation-tag">(J.5a)</span></div>
+<p>This ladder
+matters because the paper's three recommended differentiation measures are exactly the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>2</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>1</mn></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>0</mn></mrow></math>
+members of one family (Part III). They are not three rival proposals — they are three settings of one dial, and the
+paper recommends reporting several precisely because the <em>disagreement between them</em> is informative (Part IV).</p>
+<hr />
+<h2 id="part-iii--two-groups-or-more-differentiation-splits-in-two">Part III — Two groups or more: &quot;differentiation&quot; splits in two</h2>
+<h3 id="the-two-building-blocks-hs-and-ht">The two building blocks: <var>H</var><sub>S</sub> and <var>H</var><sub>T</sub></h3>
+<p>With <var>d</var> demes, two heterozygosities get computed:</p>
+<ul>
+<li><var>H</var><sub>S</sub> — the mean <strong>within-deme</strong> heterozygosity: compute <var>H</var>
+separately for each deme, then average. &quot;How much variation does a
+typical deme hold internally?&quot;</li>
+<li><var>H</var><sub>T</sub> — the <strong>total</strong> heterozygosity: pool all demes into one combined
+frequency vector, then compute <var>H</var> once. &quot;How much variation is there
+altogether?&quot;</li>
+</ul>
+<p>One detail changes answers: when comparing <em>relative</em> allele frequencies,
+the paper gives <strong>each deme equal statistical weight</strong> — the pooled
+frequency of an allele is the unweighted mean of its per-deme frequencies,
+not a count-weighted mean. (For <var>E</var><sub>ST</sub>, size weighting is available
+and is in fact one of its selling points; see below.)</p>
+<p>Necessarily <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>≥</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math>: pooling different
+demes can only add variation. The gap <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>−</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math> is the raw material both families of statistics work with — and the two
+families normalize that same gap by <strong>different denominators</strong>. That one choice of denominator is the whole
+disagreement.</p>
+<h3 id="family-1-fixation-measures">Family 1: fixation measures</h3>
+<p><var>F</var><sub>ST</sub> (Wright, 1943, 1965) was originally defined in pedigree terms:
+the probability that two homologous genes drawn at random from a
+subpopulation both descend from a single ancestral gene <em>in that
+subpopulation</em>. Notice what this definition mentions — ancestry within one
+deme — and what it does not mention — any other deme, or any actual
+allele identity.</p>
+<p><var>G</var><sub>ST</sub> (Nei, 1973) is the multi-allele version expressed purely in
+allele frequencies:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub></mrow><mrow><msub><mi>H</mi><mi>T</mi></msub></mrow></mfrac><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>H</mi><mi>S</mi></msub></mrow><mrow><msub><mi>H</mi><mi>T</mi></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.6)</span></div>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>θ</mi></mrow></math> (Weir &amp; Cockerham, 1984) is an unbiased <em>estimator</em> of
+<var>F</var><sub>ST</sub> that corrects for finite sample size.</p>
+<p>Because <var>G</var><sub>ST</sub> is a function only of allele frequencies, the paper
+notes it is <strong>not measuring exactly the same thing as Wright's original</strong>
+<var>F</var><sub>ST</sub> — it is a frequency-based stand-in, used throughout the paper
+for analytical simplicity, on the premise that <var>F</var><sub>ST</sub> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>θ</mi></mrow></math>
+behave broadly similarly.</p>
+<p>Denominator: <var>H</var><sub>T</sub>.</p>
+<p>Wright himself, quoted in the paper, was unambiguous about what this
+family measures (Wright, 1978, p. 84):</p>
+<blockquote>
+<p>&quot;…is thus not a measure of the degree of differentiation in the sense
+implied in the extreme case by the absence of any common allele. It
+measures differentiation within the total array in the sense of the
+extent to which the process of fixation has gone toward completion… it
+must again be borne in mind that it measures the degree of completion of
+the process of fixation, not absolute differentiation.&quot;</p>
+</blockquote>
+<p>Wright had a good reason to want exactly that. Allelic differentiation
+necessarily varies from locus to locus with the mutation rate. Wright
+deliberately wanted a statistic sensitive <strong>only to demographic
+variables</strong> — population size and migration rate — which affect every
+locus equally. Nearness to fixation has that property; allelic
+differentiation does not. The older family is not a failed attempt at the
+newer one — it is a successful attempt at something else.</p>
+<p><var>G</var><sub>ST</sub> is <strong>undefined</strong> when all demes are fixed for the same allele,
+since then <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>=</mo><mn>0</mn></mrow></math> and the formula divides by zero — an awkwardness
+that recurs repeatedly in the paper's examples.</p>
+<h3 id="family-2-allelic-differentiation-measures">Family 2: allelic differentiation measures</h3>
+<p>This family targets Wright's &quot;absolute differentiation&quot; — differentiation
+&quot;in the sense implied in the extreme case by the absence of any common
+allele.&quot; The design contract:</p>
+<ul>
+<li>equals <strong>1</strong> if and only if the demes share <strong>no</strong> alleles at all;</li>
+<li>equals <strong>0</strong> if and only if the demes are <strong>identical</strong> (same alleles,
+same frequencies).</li>
+</ul>
+<p><strong>Jost's D</strong>, the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>2</mn></mrow></math> member:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mrow><mo stretchy="true" fence="true" form="prefix">[</mo><mfrac><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">]</mo></mrow><mfrac><mrow><mi>d</mi></mrow><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.7)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.7a)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mi>exp</mi><mo stretchy="false">&#x00028;</mo><mo>&#x02212;</mo><mrow><mi mathvariant="normal">N</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(J.7b)</span></div>
+<p>where <var>J</var> is Nei's gene identity and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">N</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></math> denotes the
+arithmetic-denominator genetic distance
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>/</mo><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo stretchy="false">)</mo></mrow></math>. The arithmetic
+denominator is required for this equality; it differs from Nei's
+original geometric denominator (Nei, 1972). See
+<a href="#" data-fim-help="nei-distances" data-fim-anchor="">Nei distances</a>. Denominator for <var>D</var>:
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math>, i.e. <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></math>.</p>
+<p>The middle form is the one that makes <var>D</var> obvious:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mtext>mean&#x000A0;over&#x000A0;demes&#x000A0;of&#x000A0;</mtext><munder><mo>&#x02211;</mo><mi>i</mi></munder><msubsup><mi>p</mi><mi>i</mi><mn>2</mn></msubsup></mrow></math><span class="equation-tag">(J.8)</span></div>
+<p>(the chance two copies drawn from the <em>same</em> deme match)</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mtext>mean&#x000A0;over&#x000A0;deme&#x000A0;pairs&#x000A0;of&#x000A0;</mtext><munder><mo>&#x02211;</mo><mi>i</mi></munder><msub><mi>p</mi><mrow><mi>A</mi><mo>&#x0002C;</mo><mi>i</mi></mrow></msub><mspace width="0.167em" /><msub><mi>p</mi><mrow><mi>B</mi><mo>&#x0002C;</mo><mi>i</mi></mrow></msub></mrow></math><span class="equation-tag">(J.9)</span></div>
+<p>(the chance two copies drawn from <em>different</em> demes match)</p>
+<p>In words: <strong>draw one gene copy from each of two different demes, and ask
+how often they match — relative to how often two copies from the same
+deme match.</strong> If demes share nothing, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>=</mo><mn>0</mn></mrow></math> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>1</mn></mrow></math>. If demes are identical, $J_{\mathrm{between}} =
+J_{\mathrm{within}} &gt; 0<var>and</var>D = 0$. No saturation, no ceiling imported
+from <var>H</var>. The <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math> factor rescales so the maximum is exactly 1
+rather than <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo>/</mo><mi>d</mi></mrow></math>.</p>
+<p><strong>Entropy differentiation</strong> <var>E</var><sub>ST</sub>, the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>1</mn></mrow></math> member:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>E</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>E</mi><mi>T</mi></msub><mo>&#x02212;</mo><msub><mi>E</mi><mi>S</mi></msub></mrow><mrow><msub><mi>E</mi><mi>w</mi></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.10)</span></div>
+<p><var>E</var><sub>T</sub> is the Shannon entropy of the pooled demes,
+<var>E</var><sub>S</sub> the mean within-deme entropy weighted by deme size, and
+<var>E</var><sub>w</sub> the entropy of the <em>relative deme sizes</em> — <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>E</mi><mi>w</mi></msub><mo>=</mo><mi>ln</mi><mi>d</mi></mrow></math> for <strong><var>d</var></strong>
+equally sized demes.</p>
+<p>Two advantages the paper claims for <var>E</var><sub>ST</sub>:</p>
+<ol>
+<li>It handles <strong>unequal deme sizes</strong> natively, which <strong><var>D</var></strong> does not
+(<strong><var>D</var></strong> gives all demes equal statistical weight by construction).</li>
+<li>It has <strong>stronger monotonicity</strong>: adding a new private allele to a
+deme <em>always</em> increases <var>E</var><sub>ST</sub>. That is not true of <strong><var>D</var></strong> — because
+<strong><var>D</var></strong> weights alleles by squared frequency, adding a rare private
+allele slightly dilutes the squared frequencies of <em>common unshared</em>
+alleles, and <strong><var>D</var></strong> can tick <strong>down</strong>. The paper flags this as a genuine
+wart on <strong><var>D</var></strong> and a reason to prefer <var>E</var><sub>ST</sub> in conservation
+settings, where discovering a new unique allele should never make a
+differentiation index fall.</li>
+</ol>
+<p><strong>Allele-number differentiation</strong> <var>K</var><sub>ST</sub>, the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>0</mn></mrow></math> member:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>K</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>K</mi><mi>T</mi></msub><mo>&#x0002F;</mo><msub><mi>K</mi><mi>S</mi></msub><mo>&#x02212;</mo><mi>d</mi></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mi>d</mi></mrow></mfrac></mrow></math><span class="equation-tag">(J.11)</span></div>
+<p><var>K</var><sub>T</sub> is the total number of distinct alleles across all demes;
+<var>K</var><sub>S</sub> is the unweighted mean number of alleles per deme. Frequencies are ignored
+entirely — only presence/absence counts. <var>K</var><sub>ST</sub> has the <strong>strongest</strong> monotonicity
+of the three. Read it, roughly, as: the fraction of a typical deme's alleles that are unique to it.</p>
+<h3 id="one-formula-that-generates-the-whole-family">One formula that generates the whole family</h3>
+<p>All three measures come from a single expression (the one-complement of a
+similarity measure from Jost, Chao &amp; Chazdon, 2011):</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mrow><mi mathvariant="normal">D</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">n</mi></mrow><mi>q</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><mo stretchy="false">&#x00028;</mo><msup><mrow /><mrow><mi>q</mi></mrow></msup><msub><mi>D</mi><mi>S</mi></msub><mo>&#x0002F;</mo><msup><mrow /><mrow><mi>q</mi></mrow></msup><msub><mi>D</mi><mi>T</mi></msub><msup><mo stretchy="false">&#x00029;</mo><mrow><mi>q</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msup><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002F;</mo><mi>d</mi><msup><mo stretchy="false">&#x00029;</mo><mrow><mi>q</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msup></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002F;</mo><mi>d</mi><msup><mo stretchy="false">&#x00029;</mo><mrow><mi>q</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msup></mrow></mfrac></mrow></math><span class="equation-tag">(J.12)</span></div>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>q</mi></mrow></msup><msub><mi>D</mi><mi>T</mi></msub></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>q</mi></mrow></msup><msub><mi>D</mi><mi>S</mi></msub></mrow></math> are the
+total and mean-within-deme Hill numbers of order <strong><var>q</var></strong>. Setting the dial: <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>2</mn></mrow></math> gives Jost's <strong><var>D</var></strong>; <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>1</mn></mrow></math>, taken
+as a limit, gives <var>E</var><sub>ST</sub>; <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>0</mn></mrow></math> gives <var>K</var><sub>ST</sub>.</p>
+<p>Two notes on that formula worth keeping:</p>
+<ul>
+<li>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>≠</mo><mn>0</mn><mo>,</mo><mn>1</mn></mrow></math>, demes <strong>must</strong> be given equal statistical weight if the goal is to compare <em>relative</em> allele
+frequencies between demes.</li>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>q</mi></mrow></msup><msub><mi>D</mi><mi>T</mi></msub><mo>/</mo><msup><mrow /><mrow><mi>q</mi></mrow></msup><msub><mi>D</mi><mi>S</mi></msub></mrow></math> is itself the
+<strong>between-group diversity</strong> (beta diversity) of order <strong><var>q</var></strong>. Every measure in this family is that beta diversity,
+normalized onto <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow></math>. Nothing exotic is being introduced — the family is a rescaling of a quantity ecologists
+have used for decades.</li>
+</ul>
+<h3 id="side-by-side-summary">Side-by-side summary</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Fixation family (<var>G</var><sub>ST</sub>)</th>
+<th>Allelic differentiation family (<var>D</var>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Formula</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo stretchy="false">)</mo><mo>/</mo><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub></mrow></math></td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mo stretchy="false">(</mo><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo stretchy="false">)</mo><mo>/</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo stretchy="false">)</mo><mo stretchy="false">]</mo><mi>·</mi><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math></td>
+</tr>
+<tr>
+<td>Denominator</td>
+<td><var>H</var><sub>T</sub></td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow></math></td>
+</tr>
+<tr>
+<td>Question answered</td>
+<td>Have demes lost internal variation?</td>
+<td>Do demes hold different alleles?</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>=</mo><mn>1</mn></mrow></math> when</td>
+<td>All demes fixed (same or different alleles)</td>
+<td>Demes share no alleles</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>=</mo><mn>0</mn></mrow></math> when</td>
+<td>Demes identical <strong>or</strong> all have high <var>H</var></td>
+<td>Demes identical, and only then</td>
+</tr>
+<tr>
+<td>Undefined when</td>
+<td>All demes fixed for the same allele</td>
+<td>Never</td>
+</tr>
+<tr>
+<td>Depends on <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>?</td>
+<td>Barely, when <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>≪</mo><mi>m</mi></mrow></math></td>
+<td>Strongly, always</td>
+</tr>
+<tr>
+<td>Equilibrium driver</td>
+<td><var>Nm</var> (absolute migrant count)</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>/</mo><mo stretchy="false">(</mo><mi>μ</mi><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math></td>
+</tr>
+<tr>
+<td>Comparable across loci?</td>
+<td>Yes (that is its design goal)</td>
+<td>Only among loci with similar <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math></td>
+</tr>
+<tr>
+<td>Comparable across species?</td>
+<td>Not reliably (<var>H</var><sub>T</sub> varies)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Right tool for</td>
+<td>Estimating demography, gene flow</td>
+<td>Deciding which demes to protect</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="part-iv--worked-examples">Part IV — Worked examples</h2>
+<p>All values below were recomputed from the definitions (see Appendix B for
+the one place a recomputation disagrees with the paper's printed value).</p>
+<h3 id="ten-fixed-demes-three-ways">Ten fixed demes, three ways</h3>
+<p>Three hypothetical species, each with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>10</mn></mrow></math> demes. In every case <strong>all ten demes are fixed</strong>, so <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>H</mi><mo>=</mo><mn>0</mn></mrow></math> in each one
+and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>=</mo><mn>0</mn></mrow></math> throughout — which makes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>=</mo><mo stretchy="false">(</mo><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>−</mo><mn>0</mn><mo stretchy="false">)</mo><mo>/</mo><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>=</mo><mn>1</mn></mrow></math> identically, no matter how the fixed alleles
+are distributed.</p>
+<p><strong>Nine demes fixed for allele A, one for allele B:</strong></p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>p</mi><mi>A</mi></msub><mo>&#x0003D;</mo><mn>0.9</mn></mrow></math><span class="equation-tag">(J.13)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>p</mi><mi>B</mi></msub><mo>&#x0003D;</mo><mn>0.1</mn></mrow></math><span class="equation-tag">(J.14)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><msup><mn>0.9</mn><mn>2</mn></msup><mo>&#x0002B;</mo><msup><mn>0.1</mn><mn>2</mn></msup><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mn>0.18</mn></mrow></math><span class="equation-tag">(J.15)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>0.18</mn><mo>&#x0002F;</mo><mn>0.18</mn><mo>&#x0003D;</mo><mn>1.0</mn></mrow></math><span class="equation-tag">(J.16)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mfrac><mrow><mn>0.18</mn></mrow><mrow><mn>1</mn></mrow></mfrac><mi>&#x000B7;</mi><mfrac><mrow><mn>10</mn></mrow><mrow><mn>9</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>0.20</mn></mrow></math><span class="equation-tag">(J.17)</span></div>
+<p><strong>Five demes fixed for A, five for B:</strong></p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>p</mi><mi>A</mi></msub><mo>&#x0003D;</mo><msub><mi>p</mi><mi>B</mi></msub><mo>&#x0003D;</mo><mn>0.5</mn></mrow></math><span class="equation-tag">(J.18)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>0.25</mn><mo>&#x0002B;</mo><mn>0.25</mn><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mn>0.5</mn></mrow></math><span class="equation-tag">(J.19)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>0.5</mn><mo>&#x0002F;</mo><mn>0.5</mn><mo>&#x0003D;</mo><mn>1.0</mn></mrow></math><span class="equation-tag">(J.20)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mfrac><mrow><mn>0.5</mn></mrow><mrow><mn>1</mn></mrow></mfrac><mi>&#x000B7;</mi><mfrac><mrow><mn>10</mn></mrow><mrow><mn>9</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>0.5556</mn></mrow></math><span class="equation-tag">(J.21)</span></div>
+<p><strong>All ten demes fixed for a different allele:</strong></p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mn>10</mn><mi>&#x000B7;</mi><mo stretchy="false">&#x00028;</mo><msup><mn>0.1</mn><mn>2</mn></msup><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mn>0.9</mn></mrow></math><span class="equation-tag">(J.22)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>0.9</mn><mo>&#x0002F;</mo><mn>0.9</mn><mo>&#x0003D;</mo><mn>1.0</mn></mrow></math><span class="equation-tag">(J.23)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mfrac><mrow><mn>0.9</mn></mrow><mrow><mn>1</mn></mrow></mfrac><mi>&#x000B7;</mi><mfrac><mrow><mn>10</mn></mrow><mrow><mn>9</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>1.0</mn></mrow></math><span class="equation-tag">(J.24)</span></div>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th><var>H</var><sub>S</sub></th>
+<th><var>H</var><sub>T</sub></th>
+<th><var>G</var><sub>ST</sub></th>
+<th><var>D</var></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>9 + 1</td>
+<td>0.00</td>
+<td>0.18</td>
+<td><strong>1.00</strong></td>
+<td><strong>0.20</strong></td>
+</tr>
+<tr>
+<td>5 + 5</td>
+<td>0.00</td>
+<td>0.50</td>
+<td><strong>1.00</strong></td>
+<td><strong>0.5556</strong></td>
+</tr>
+<tr>
+<td>All different</td>
+<td>0.00</td>
+<td>0.90</td>
+<td><strong>1.00</strong></td>
+<td><strong>1.00</strong></td>
+</tr>
+</tbody>
+</table>
+<p><var>G</var><sub>ST</sub> is 1.00 in all three cases and cannot distinguish them — which
+is correct, since all three are fully fixed. But the conservation
+implications differ completely. A manager acting on <var>G</var><sub>ST</sub> alone would
+conclude every deme must be protected in every case. In fact, at this
+locus, the first scenario needs only <strong>two demes</strong> to capture all the
+variation there is, while the third needs <strong>all ten</strong>; every one is
+irreplaceable.</p>
+<p><strong><var>D</var></strong> distinguishes them (0.20, 0.56, 1.00), and it has a direct,
+intuitive reading. Write out all <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>10</mn><mi>·</mi><mn>9</mn><mo>/</mo><mn>2</mn><mo>=</mo><mn>45</mn></mrow></math> pairs of demes; for
+each pair, score 0 if the two demes are fixed for the same allele and 1 if
+fixed for different alleles. In the first scenario, the one odd deme
+differs from each of the other nine (nine differing pairs), and the
+remaining 36 pairs are between identical demes:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mrow><mi>d</mi></mrow><mo stretchy="true">&#x000AF;</mo></mover><mrow><mtext>pairs</mtext></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>9</mn><mi>&#x000B7;</mi><mn>1</mn><mo>&#x0002B;</mo><mn>36</mn><mi>&#x000B7;</mi><mn>0</mn></mrow><mrow><mn>45</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>0.20</mn></mrow></math><span class="equation-tag">(J.25)</span></div>
+<p>which matches <strong><var>D</var></strong> exactly. The same reading works for the other two
+scenarios (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>25</mn><mo>/</mo><mn>45</mn><mo>≈</mo><mn>0.5556</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>45</mn><mo>/</mo><mn>45</mn><mo>=</mo><mn>1.0</mn></mrow></math>). So <strong><var>D</var> is the mean
+pairwise allelic differentiation over deme pairs</strong> — a property worth
+remembering, since it means the same <strong><var>D</var></strong> value carries the same meaning
+whether it came from two demes or two hundred.</p>
+<h3 id="three-species-gst-near-zero-in-all-of-them">Three species, GST near zero in all of them</h3>
+<p>The complementary embarrassment. Three species, each with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>2</mn></mrow></math> demes,
+all alleles equally frequent within a deme. Here <var>G</var><sub>ST</sub> is near
+<strong>zero</strong> in all three, while <strong><var>D</var></strong> sweeps its entire possible range.</p>
+<p><strong>Species A — both demes share the same 20 alleles at the same
+frequencies:</strong></p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>S</mi></msub><mo>&#x0003D;</mo><msub><mi>H</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mn>0.95</mn></mrow></math><span class="equation-tag">(J.26)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>0.00</mn></mrow></math><span class="equation-tag">(J.27)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mn>0.00</mn></mrow></math><span class="equation-tag">(J.28)</span></div>
+<p><strong>Species B — each deme has 6 alleles, 3 shared and 3 private (9 distinct
+total):</strong></p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>S</mi></msub><mo>&#x0003D;</mo><mn>0.8333</mn></mrow></math><span class="equation-tag">(J.29)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">[</mo><mn>3</mn><mi>&#x000B7;</mi><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002F;</mo><mn>6</mn><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mo>&#x0002B;</mo><mn>6</mn><mi>&#x000B7;</mi><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002F;</mo><mn>12</mn><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">]</mo><mo>&#x0003D;</mo><mn>0.875</mn></mrow></math><span class="equation-tag">(J.30)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>0.875</mn><mo>&#x02212;</mo><mn>0.8333</mn></mrow><mrow><mn>0.875</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>0.0476</mn></mrow></math><span class="equation-tag">(J.31)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mfrac><mrow><mn>0.041667</mn></mrow><mrow><mn>0.166667</mn></mrow></mfrac><mi>&#x000B7;</mi><mn>2</mn><mo>&#x0003D;</mo><mn>0.50</mn></mrow></math><span class="equation-tag">(J.32)</span></div>
+<p><strong>Species C — 20 equally common alleles per deme, none shared:</strong></p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>S</mi></msub><mo>&#x0003D;</mo><mn>0.95</mn></mrow></math><span class="equation-tag">(J.33)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mn>40</mn><mi>&#x000B7;</mi><mo stretchy="false">&#x00028;</mo><msup><mn>0.025</mn><mn>2</mn></msup><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mn>0.975</mn></mrow></math><span class="equation-tag">(J.34)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>0.975</mn><mo>&#x02212;</mo><mn>0.95</mn></mrow><mrow><mn>0.975</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>0.0256</mn></mrow></math><span class="equation-tag">(J.35)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mfrac><mrow><mn>0.025</mn></mrow><mrow><mn>0.05</mn></mrow></mfrac><mi>&#x000B7;</mi><mn>2</mn><mo>&#x0003D;</mo><mn>1.00</mn></mrow></math><span class="equation-tag">(J.36)</span></div>
+<table>
+<thead>
+<tr>
+<th>Species</th>
+<th>Shared alleles</th>
+<th><var>H</var><sub>S</sub></th>
+<th><var>H</var><sub>T</sub></th>
+<th><var>G</var><sub>ST</sub></th>
+<th><strong><var>D</var></strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>all 20</td>
+<td>0.950</td>
+<td>0.950</td>
+<td><strong>0.000</strong></td>
+<td><strong>0.00</strong></td>
+</tr>
+<tr>
+<td>B</td>
+<td>3 of 6</td>
+<td>0.833</td>
+<td>0.875</td>
+<td><strong>0.0476</strong></td>
+<td><strong>0.50</strong></td>
+</tr>
+<tr>
+<td>C</td>
+<td><strong>none</strong></td>
+<td>0.950</td>
+<td>0.975</td>
+<td><strong>0.0256</strong></td>
+<td><strong>1.00</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Read the last two rows against each other: <strong>species C shares no alleles
+at all and yet has a <em>lower</em> <var>G</var><sub>ST</sub> than species B, which shares half
+of them.</strong> A manager ranking by <var>G</var><sub>ST</sub> would rank species B as the
+more structured one and, under scarce resources, would preserve both
+demes of species B while letting one deme of species C go — precisely
+backwards. Losing a deme of species C destroys half of that species'
+allelic diversity irrecoverably; losing a deme of species B costs only its
+3 private alleles.</p>
+<h3 id="interpreting-the-proportion-of-diversity-within-demes">Interpreting the proportion of diversity within demes</h3>
+<p>A population with two equally large demes, each holding many low-frequency
+alleles, almost none shared. The paper reports <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>=</mo><mn>0.97</mn></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>=</mo><mn>0.95</mn></mrow></math>, with effective numbers 38.8 and 20.4. Back-solving from
+the effective numbers gives the more precise <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>=</mo><mn>0.9742</mn><mo>,</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>=</mo><mn>0.9510</mn></mrow></math>; the calculation below uses those.</p>
+<p><strong>The standard — and wrong — analysis:</strong></p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mtext>"within-group&#x000A0;share"</mtext><mo>&#x0003D;</mo><msub><mi>H</mi><mi>S</mi></msub><mo>&#x0002F;</mo><msub><mi>H</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mn>0.95</mn><mo>&#x0002F;</mo><mn>0.97</mn><mo>&#x02248;</mo><mn>98</mn><mi>&#x00025;</mi></mrow></math><span class="equation-tag">(J.37)</span></div>
+<p>Conclusion typically drawn: 98% of the diversity is within demes,
+differentiation is negligible, protecting one deme saves nearly
+everything. Every step of this is wrong, and yet it is a completely
+standard paragraph in the literature.</p>
+<p><strong>The correct analysis</strong> — convert to effective numbers of alleles first:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mi>S</mi></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mn>0.9510</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>20.4</mn><mtext>&#x000A0;effective&#x000A0;alleles</mtext></mrow></math><span class="equation-tag">(J.38)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mn>0.9742</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>38.8</mn><mtext>&#x000A0;effective&#x000A0;alleles</mtext></mrow></math><span class="equation-tag">(J.39)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B2;</mi><mo>&#x0003D;</mo><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mi>T</mi></msub><mo>&#x0002F;</mo><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mi>S</mi></msub><mo>&#x0003D;</mo><mn>1.902</mn></mrow></math><span class="equation-tag">(J.40)</span></div>
+<p>Pooling the two demes <strong>nearly doubles</strong> the diversity. With only two
+demes, a ratio approaching its maximum of 2 means they have almost nothing
+in common:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1.902</mn></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mi>&#x000B7;</mi><mfrac><mrow><mn>2</mn></mrow><mrow><mn>1</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>0.4742</mn><mi>&#x000B7;</mi><mn>2</mn><mo>&#x0003D;</mo><mn>0.948</mn><mo>&#x02248;</mo><mn>0.95</mn></mrow></math><span class="equation-tag">(J.41)</span></div>
+<table>
+<thead>
+<tr>
+<th>Statistic</th>
+<th>Value</th>
+<th>Story it tells</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><var>G</var><sub>ST</sub></td>
+<td>0.024</td>
+<td>Demes are far from fixation — <strong>true, and irrelevant</strong></td>
+</tr>
+<tr>
+<td>&quot;98% within-group&quot;</td>
+<td>—</td>
+<td>An artifact of <strong><var>H</var></strong>'s ceiling — <strong>meaningless</strong></td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mi>T</mi></msub><mo>/</mo><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mi>S</mi></msub></mrow></math></td>
+<td>1.90 of a max 2.00</td>
+<td>Demes are nearly disjoint</td>
+</tr>
+<tr>
+<td><strong><var>D</var></strong></td>
+<td><strong>0.95</strong></td>
+<td>Demes are 95% allelically differentiated</td>
+</tr>
+<tr>
+<td><var>E</var><sub>ST</sub></td>
+<td>0.90</td>
+<td>Same conclusion, frequency-weighted</td>
+</tr>
+<tr>
+<td><var>K</var><sub>ST</sub></td>
+<td>0.77</td>
+<td>77% of each deme's alleles are unique to it</td>
+</tr>
+</tbody>
+</table>
+<p>Both demes must be protected — the <var>G</var><sub>ST</sub>-driven analysis says the
+opposite. The paper also flags that the ordering <var>D</var> (0.95) &gt; <var>E</var><sub>ST</sub>
+(0.90) &gt; <var>K</var><sub>ST</sub> (0.77) is itself informative: <strong><var>D</var></strong> weights by squared
+frequency (dominated by the most common alleles), <var>E</var><sub>ST</sub> weights by
+plain frequency (the average allele), and <var>K</var><sub>ST</sub> ignores frequency
+entirely (every allele counted equally). That ordering says the common
+alleles are more differentiated than the average ones, which are in turn
+more differentiated than the full allele list — the alleles the demes do
+share are all at very low frequency, a conclusion no single index could
+have delivered on its own.</p>
+<h3 id="where-d-and-kst-disagree-completely">Where <var>D</var> and <var>K</var><sub>ST</sub> disagree completely</h3>
+<p>Two demes sharing <strong>all 11</strong> of their alleles, but at nearly reversed
+frequencies (allele 1 at 0.95 in deme 1 and 0.005 in deme 2; allele 11 the
+mirror image; nine more alleles at 0.005 each in both demes):</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>S</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">[</mo><msup><mn>0.95</mn><mn>2</mn></msup><mo>&#x0002B;</mo><mn>10</mn><mi>&#x000B7;</mi><mo stretchy="false">&#x00028;</mo><msup><mn>0.005</mn><mn>2</mn></msup><mo stretchy="false">&#x00029;</mo><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">]</mo><mo>&#x0003D;</mo><mn>0.09725</mn></mrow></math><span class="equation-tag">(J.42)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">[</mo><mn>2</mn><mi>&#x000B7;</mi><mo stretchy="false">&#x00028;</mo><msup><mn>0.4775</mn><mn>2</mn></msup><mo stretchy="false">&#x00029;</mo><mo>&#x0002B;</mo><mn>9</mn><mi>&#x000B7;</mi><mo stretchy="false">&#x00028;</mo><msup><mn>0.005</mn><mn>2</mn></msup><mo stretchy="false">&#x00029;</mo><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">]</mo><mo>&#x0003D;</mo><mn>0.5438</mn></mrow></math><span class="equation-tag">(J.43)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>0.5438</mn><mo>&#x02212;</mo><mn>0.09725</mn></mrow><mrow><mn>0.5438</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>0.8211</mn></mrow></math><span class="equation-tag">(J.44)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mfrac><mrow><mn>0.44651</mn></mrow><mrow><mn>0.90275</mn></mrow></mfrac><mi>&#x000B7;</mi><mn>2</mn><mo>&#x0003D;</mo><mn>0.99</mn></mrow></math><span class="equation-tag">(J.45)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>K</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><mn>11</mn><mo>&#x0002F;</mo><mn>11</mn><mo>&#x02212;</mo><mn>2</mn></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mn>2</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mn>1</mn><mo>&#x0003D;</mo><mn>0</mn></mrow></math><span class="equation-tag">(J.46)</span></div>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Value</th>
+<th>What it is reporting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><var>D</var></strong></td>
+<td><strong>0.99</strong></td>
+<td>The <em>common</em> alleles are not shared at all</td>
+</tr>
+<tr>
+<td><var>K</var><sub>ST</sub></td>
+<td><strong>0.00</strong></td>
+<td>Every allele is present in both demes; none is unique</td>
+</tr>
+</tbody>
+</table>
+<p>Neither is wrong; they answer different questions, and a manager needs
+both answers. If the goal is preserving <em>allelic presence</em>, one deme
+suffices — every allele exists in both. If the goal is preserving the
+<em>genetic character</em> of the populations — which alleles are actually
+common, and therefore which ones drive phenotype — the demes are nearly
+disjoint and both must be kept.</p>
+<h3 id="the-dynamic-example">The dynamic example</h3>
+<p>A deliberately extreme time-series case, meant to make the point visible;
+a realistic case shows the same pattern more mildly. An initially
+continuous population suffers a severe bottleneck that splits it into 100
+tiny demes with zero migration between them; the demes then recover to
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi><mo>=</mo><mn>10</mn><mrow><mo>,</mo></mrow><mn>000</mn></mrow></math> individuals each, migration still zero. At the start, 99
+demes are fixed for one allele and one for a different allele (that one
+odd deme exists purely to keep <var>G</var><sub>ST</sub> from dividing by zero). The
+locus is neutral with a high mutation rate, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>=</mo><mn>0.001</mn></mrow></math> per
+generation, under the infinite-alleles model — every mutation produces an
+allele never seen before.</p>
+<p>With no migration, every new allele stays where it arose. The end state is
+unambiguous: every deme eventually holds only private alleles, with high
+internal diversity. Allelic differentiation runs from almost nothing (99
+of 100 demes identical) to total.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow></math></th>
+<th>at equilibrium</th>
+<th>Direction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Truth (allelic differentiation)</td>
+<td>near zero</td>
+<td>maximal</td>
+<td>↑</td>
+</tr>
+<tr>
+<td><strong><var>D</var></strong></td>
+<td>near 0</td>
+<td>→ 1.00</td>
+<td>↑ <strong>correct</strong></td>
+</tr>
+<tr>
+<td><var>G</var><sub>ST</sub></td>
+<td>1.00</td>
+<td>≈ 0.02</td>
+<td>↓ <strong>backwards</strong></td>
+</tr>
+</tbody>
+</table>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x0002B;</mo><mi>m</mi><mo>&#x0002F;</mo><mo stretchy="false">[</mo><mi>&#x003BC;</mi><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo stretchy="false">]</mo></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x0002B;</mo><mn>0</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>1.00</mn><mtext>&#x000A0;exactly</mtext></mrow></math><span class="equation-tag">(J.47)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mi>&#x000B7;</mi><mn>4</mn><mi>N</mi><mi>m</mi><mo>&#x0002B;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo stretchy="false">&#x00029;</mo><mi>&#x000B7;</mi><mn>4</mn><mi>N</mi><mi>&#x003BC;</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.48)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>0</mn><mo>&#x0002B;</mo><mn>1.0101</mn><mi>&#x000B7;</mi><mn>40</mn><mo>&#x0002B;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.48a)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>41.4</mn></mrow></mfrac><mo>&#x02248;</mo><mn>0.0242</mn></mrow></math><span class="equation-tag">(J.48b)</span></div>
+<p><var>G</var><sub>ST</sub> <strong>falls monotonically from unity to near zero over exactly the interval in
+which the demes become completely differentiated</strong> — the opposite of what a differentiation measure should do. As a
+measure of nearness to fixation it behaves perfectly: the demes started fixed and ended diverse. (Hedrick's
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mrow><mi>′</mi></mrow></msubsup></mrow></math>, a well-known rescaling of <var>G</var><sub>ST</sub> by its
+maximum attainable value, patches this only at the high-diversity end; the paper notes it does not fix the equally
+serious failure at low diversity, which this example spans.)</p>
+<hr />
+<h2 id="part-v--classical-measures-and-their-limitations">Part V — Classical measures and their limitations</h2>
+<p>The &quot;98% within demes&quot; reasoning above is standard, and the paper states
+flatly that every step leading to it is mathematically and biologically
+incorrect. Here are the steps, separately.</p>
+<h3 id="the-ceiling-argument">The ceiling argument</h3>
+<p>A short proof with large consequences. Since <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>≤</mo><mn>1</mn></mrow></math> always,</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>H</mi><mi>S</mi></msub></mrow><mrow><msub><mi>H</mi><mi>T</mi></msub></mrow></mfrac><mo>&#x02264;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow><mrow><mn>1</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow></math><span class="equation-tag">(J.49)</span></div>
+<p>So if within-deme heterozygosity is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>S</mi></msub><mo>=</mo><mn>0.95</mn></mrow></math>, then
+<var>G</var><sub>ST</sub> cannot exceed 0.05 — <strong>no matter what</strong>. The demes could share no alleles.
+They could be different species, incapable of interbreeding at all. <var>G</var><sub>ST</sub> still
+cannot exceed 0.05.</p>
+<p>This makes nonsense of the common habit of reading <var>G</var><sub>ST</sub> against a
+fixed verbal scale (&quot;below 0.05 is negligible structure, above 0.25 is
+strong&quot;). With high-diversity markers such as microsatellites — chosen
+<em>because</em> they are informative — the entire upper range of <var>G</var><sub>ST</sub> is
+mathematically unreachable. At the descriptive level this behavior is, the
+paper stresses, <strong>correct</strong>: a population with low <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow></math> really is
+far from fixation, and <var>G</var><sub>ST</sub> is a nearness-to-fixation measure. The
+defect lies entirely in the interpretation people give it.</p>
+<h3 id="heterozygosity-is-subadditive">Heterozygosity is subadditive</h3>
+<p>The classical partition assumes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>=</mo><msub><mi>H</mi><mi>S</mi></msub><mo>+</mo><msub><mi>H</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></math>,
+so that <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>−</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math> is &quot;the between-group component&quot; and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>S</mi></msub><mo>/</mo><msub><mi>H</mi><mi>T</mi></msub></mrow></math> is &quot;the fraction of diversity found within
+demes.&quot; Shannon entropy really is additive this way — <strong>heterozygosity is not</strong>; it is subadditive. The correct
+partition into independent within- and between-group components (Jost, 2007), with equal deme weights, is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>&#x0002B;</mo><msub><mi>H</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02212;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mi>&#x000B7;</mi><msub><mi>H</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub></mrow></math><span class="equation-tag">(J.50)</span></div>
+<p>Solving for the between-group component gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>&#x02212;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.51)</span></div>
+<p>which is exactly the first bracket of <strong><var>D</var></strong>. So: <strong><var>D</var> is nothing more
+than the correctly-partitioned between-group component of heterozygosity,
+normalized onto <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow></math>.</strong> It is not a rival index invented to compete
+with <var>G</var><sub>ST</sub> — it is what falls out of doing the partition correctly
+instead of incorrectly. (The paper notes the same <var>D</var> also falls out of
+partitioning <em>effective number of alleles</em>, where the partition is
+multiplicative — two different correct routes, one destination.)</p>
+<h3 id="the-replication-principle">The replication principle</h3>
+<p>The deeper requirement, and the reason effective numbers are mandatory
+before taking ratios: if a diversity measure is to be compared as a
+<strong>ratio</strong>, it must be <strong>linear under pooling of equally large, equally
+diverse, completely distinct groups</strong>. Pool two groups that share nothing
+and are equally diverse, and the measure must <strong>double</strong>. Testing both
+candidates on species C from above (20 private alleles per deme, two
+demes, nothing shared):</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>H</mi><mtext>&#x000A0;scale:&#x000A0;</mtext><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>&#x0003D;</mo><mn>0.950</mn><mo>&#x02192;</mo><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>0.975</mn><mspace width="1em" /><mo stretchy="false">&#x00028;</mo><mi>&#x000D7;</mi><mn>1.026</mn><mo stretchy="false">&#x00029;</mo><mspace width="1em" /><mtext>fails</mtext></mrow></math><span class="equation-tag">(J.52)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><mi>D</mi><mtext>&#x000A0;scale:&#x000A0;</mtext><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mrow><mi>S</mi></mrow></msub><mo>&#x0003D;</mo><mn>20.0</mn><mo>&#x02192;</mo><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mrow><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>40.0</mn><mspace width="1em" /><mo stretchy="false">&#x00028;</mo><mi>&#x000D7;</mi><mn>2.000</mn><mo stretchy="false">&#x00029;</mo><mspace width="1em" /><mtext>passes</mtext></mrow></math><span class="equation-tag">(J.53)</span></div>
+<p>Heterozygosity moved by 2.6% where the true diversity doubled. Any ratio
+taken on the <strong><var>H</var></strong> scale is therefore meaningless, and &quot;98% of diversity
+is within demes&quot; is an artifact of the scale rather than a fact about the
+population. This replication principle is the axiom underpinning Jost's
+whole research program across ecology, genetics, and phylogenetics.</p>
+<h3 id="d-also-has-a-ceiling-and-that-one-is-honest"><var>D</var> also has a ceiling, and that one is honest</h3>
+<p>For balance: <strong><var>D</var></strong> has a range restriction too. <strong>When the number of
+alleles is fewer than the number of demes, <var>D</var> cannot reach 1.00.</strong> But
+this is not the same kind of defect. With 3 alleles and 10 demes, the
+pigeonhole principle guarantees some demes share an allele — so they are
+<em>not</em> completely differentiated, and a measure of actual allelic
+differentiation <em>should</em> report less than 1. The constraint is a true
+fact about the data. <var>G</var><sub>ST</sub>'s ceiling is different in kind: it depends
+on <var>H</var><sub>S</sub>, a property of within-deme diversity that has <strong>nothing to do
+with</strong> how much the demes actually share.</p>
+<hr />
+<h2 id="part-vi--what-controls-what-if-the-model-runs-to-equilibrium">Part VI — What controls what, if the model runs to equilibrium</h2>
+<p>Parts I–V were purely descriptive — statistics computed on a snapshot, no
+model, no assumptions. This part changes register: it asks what values
+these statistics <em>settle to</em> under a specific generative model, which is
+what lets researchers try to run the inference backwards, from statistic
+to demography.</p>
+<h3 id="the-finite-island-model-briefly">The finite island model, briefly</h3>
+<p>The setting for both formulas below (fully covered in a
+<a href="#" data-fim-help="finite-island-model-introduction" data-fim-anchor="">companion document</a>):
+<strong><var>d</var></strong> demes of <strong><var>N</var></strong> diploid individuals each; discrete, non-overlapping
+generations; each generation, a fraction <strong><var>m</var></strong> of each deme's gene pool is
+replaced by migrants drawn from the other demes; mutation creates novel
+alleles at rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> under the infinite-alleles assumption (every
+mutation produces an allele never seen before — a good approximation for
+loci spanning many base pairs); reproduction resamples <strong><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math></strong> copies from
+the local post-migration pool, which is where drift enters.</p>
+<p>&quot;Finite&quot; is not decoration. Wright's original <em>infinite</em> island model (Wright, 1931 — see Appendix D; Whitlock &amp;
+McCauley, 1999, credit this specific paper, not the more commonly cited Wright 1943 &quot;isolation by distance,&quot; as the
+origin of both the island model itself and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>F</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≈</mo><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>4</mn><mi>N</mi><mi>m</mi><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>) draws migrants from
+an infinitely large external reservoir that never itself drifts, which is what makes the classical closed-form
+<var>F</var><sub>ST</sub> equilibrium easy to write down. The finite version removes that fiction:
+there are only <strong><var>d</var></strong> demes and no reservoir, so migrants come from the actual, currently-drifting other demes, and the
+whole metapopulation is a closed finite system that drifts as a whole. The system settles into a <strong>stochastic
+equilibrium</strong>: individual allele frequencies never stop moving, but the <em>distribution</em> of summary statistics stabilizes.</p>
+<p>Note the phrase &quot;<strong><var>d</var></strong> demes of <strong><var>N</var></strong> diploid individuals <strong>each</strong>.&quot; Every
+deme is the same size, and that single word is carrying more weight than
+its length suggests. It is revisited below, once both equilibrium formulas
+are on the table.</p>
+<h3 id="equilibrium-gst-controlled-by-nm">Equilibrium <var>G</var><sub>ST</sub>: controlled by <var>Nm</var></h3>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mi>&#x000B7;</mi><mn>4</mn><mi>N</mi><mi>m</mi><mo>&#x0002B;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo stretchy="false">&#x00029;</mo><mi>&#x000B7;</mi><mn>4</mn><mi>N</mi><mi>&#x003BC;</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.54)</span></div>
+<p>The <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow></math> factor multiplying the migration term is the
+finite-number-of-demes correction from Crow &amp; Aoki (1984) — see
+Appendix D — confirmed directly against their Eq. 7/Eq. 8
+(<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≈</mo><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>4</mn><mi>N</mi><mi>m</mi><mi>α</mi><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>α</mi><mo>=</mo><mo stretchy="false">[</mo><mi>n</mi><mo>/</mo><mo stretchy="false">(</mo><mi>n</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><msup><mo stretchy="false">]</mo><mn>2</mn></msup></mrow></math>, their <var>n</var> this document's <var>d</var>),
+not to this paper or to Wright's own original (infinite-island)
+derivation; it vanishes as <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>→</mo><mo>∞</mo></mrow></math>, recovering Wright's classical
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>4</mn><mi>N</mi><mi>m</mi><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>, exactly as Crow &amp; Aoki's own paper notes. One boundary of
+that attribution worth being precise about: Crow &amp; Aoki's own Eq. 7
+carries <strong>no mutation term at all</strong> — dropping it entirely is the
+&quot;pleasing result&quot; their own paper highlights, valid under their stated
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>≪</mo><mi>m</mi><mo>,</mo><mn>1</mn><mo>/</mo><mi>N</mi><mo>≪</mo><mn>1</mn></mrow></math> approximation. The <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo stretchy="false">)</mo><mi>·</mi><mn>4</mn><mi>N</mi><mi>μ</mi></mrow></math> mutation term
+above is this project's own retention of a term Crow &amp; Aoki chose to
+drop, not something their paper itself provides; Crow &amp; Aoki's own
+references (their eq. 6, with mutation retained) instead credit
+Takahata (1983) for the general finite-<var>K</var>-allele solution and Nei's
+1975 textbook for an exact infinite-allele solution — see Appendix D.</p>
+<p>When <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>≫</mo><mi>μ</mi></mrow></math> — the usual case for slowly mutating loci — the
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>4</mn><mi>N</mi><mi>μ</mi></mrow></math> term is negligible and this collapses to a function of <strong><var>Nm</var></strong>
+and <strong><var>d</var></strong> alone:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mi>&#x000B7;</mi><mn>4</mn><mi>N</mi><mi>m</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.55)</span></div>
+<p>Two consequences follow. First, <var>G</var><sub>ST</sub> depends on the <strong>absolute
+number of migrants per generation</strong>, <var>Nm</var>, not on <strong><var>m</var></strong> and <strong><var>N</var></strong>
+separately — ten migrants into a deme of 100 and ten into a deme of 10,000
+give the same expected <var>G</var><sub>ST</sub>. Second, because <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> has dropped
+out, the expected <var>G</var><sub>ST</sub> is <strong>the same for all loci</strong> with
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>≪</mo><mi>m</mi></mrow></math>, so estimates from many loci can legitimately be averaged
+and used to estimate <var>Nm</var> — provided every island-model assumption
+holds. This is Wright's design goal achieved: a statistic sensitive only
+to demography, comparable across loci.</p>
+<h3 id="equilibrium-d-controlled-by-the-mutation-ratio">Equilibrium <var>D</var>: controlled by the mutation ratio</h3>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x0002B;</mo><mi>m</mi><mo>&#x0002F;</mo><mo stretchy="false">[</mo><mi>&#x003BC;</mi><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo stretchy="false">]</mo></mrow></mfrac></mrow></math><span class="equation-tag">(J.56)</span></div>
+<p>Note what is present and what is absent: <strong><var>N</var> does not appear at all.</strong>
+The controlling quantity is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>/</mo><mo stretchy="false">(</mo><mi>μ</mi><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math> — a ratio of migration rate to
+mutation rate, scaled by deme count. The same quantity controls Nei's
+genetic distance, and <var>D</var> is a simple monotonic function of it (Jost,
+2009). Sanity checks: with no migration (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mn>0</mn></mrow></math>), <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>1</mn></mrow></math>, and demes
+diverge completely; with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>≫</mo><mi>μ</mi><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>→</mo><mn>0</mn></mrow></math> and migration
+homogenizes them.</p>
+<h3 id="limits-of-equilibrium-based-inference">Limits of equilibrium-based inference</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Controlled by</th>
+<th>Contains <var>N</var>?</th>
+<th>Contains <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><var>G</var><sub>ST</sub> (nearness to fixation)</td>
+<td><var>Nm</var></td>
+<td>yes</td>
+<td>barely, when <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>≪</mo><mi>m</mi></mrow></math></td>
+</tr>
+<tr>
+<td><var>D</var> (allelic differentiation)</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>/</mo><mo stretchy="false">(</mo><mi>μ</mi><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math></td>
+<td><strong>no</strong></td>
+<td><strong>strongly</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A widely repeated rule of thumb claims: <em>&quot;when mutation rate is low, the
+absolute number of migrants <var>Nm</var> determines the genetic differentiation
+between demes.&quot;</em> It does not. <var>Nm</var> determines <strong>nearness to fixation</strong>.
+Allelic differentiation is governed by an entirely different combination,
+one in which <strong><var>N</var></strong> plays no part and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> plays a decisive one. This
+matters practically, because the &quot;one migrant per generation is enough&quot;
+rule of thumb that circulates in conservation genetics rests on the
+refuted version.</p>
+<p>Since <strong><var>D</var></strong>'s equilibrium depends strongly on <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> spans
+five orders of magnitude across marker types, the <em>same</em> pair of demes
+shows different <strong><var>D</var></strong> at a microsatellite than at a coding gene. The paper
+insists this is &quot;a real effect, not a flaw in the differentiation
+measures&quot; — the demes really are more differentiated at the fast-mutating
+locus. If the absolute magnitude of differentiation at a specific locus is
+what matters, measure <strong><var>D</var></strong> at that locus, or at loci with comparable
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>; fast-mutating markers remain valid for <em>ranking</em> deme pairs, just
+not for reporting an absolute value at a locus of different interest.</p>
+<h3 id="the-equal-deme-size-assumption">The equal-deme-size assumption</h3>
+<p>Both equilibrium formulas assume every deme holds exactly <strong><var>N</var></strong>
+individuals. This is one of the model's largest simplifications, and it is
+worth separating from a different equal-size question that Part III has
+already settled, because the two are easy to run together.</p>
+<ul>
+<li><strong>A weighting choice</strong> (Part III): given real data from demes of
+differing size, do you weight each deme equally or in proportion to its
+size? <strong><var>D</var></strong> weights every deme equally by construction; <var>E</var><sub>ST</sub>
+weights within-deme entropy by deme size, which is precisely why the
+paper recommends it &quot;when relative sizes of the demes differ.&quot; This is a
+decision you make, and it is available to you regardless of any model.</li>
+<li><strong>A model assumption</strong> (here): the <em>generative process</em> that produced
+the data had equal demes. Nothing you choose at analysis time repairs a
+mismatch here. This is what (J.54) and (J.56) rest on.</li>
+</ul>
+<p><strong>What goes wrong.</strong> Drift acts at rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>2</mn><mi>N</mi><mo stretchy="false">)</mo></mrow></math>, so unequal demes drift
+at unequal rates: small demes lose variation and reach fixation far faster
+than large ones, and <var>H</var><sub>S</sub> becomes an average over demes with genuinely
+different equilibrium heterozygosities rather than <strong><var>d</var></strong> draws from one
+distribution. The standard result is that a subdivided population behaves
+like one whose size is closer to the <strong>harmonic</strong> mean of the deme sizes
+than the arithmetic mean — and the harmonic mean is dominated by the
+<em>smallest</em> demes.</p>
+<p>The gap is not subtle. Take <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>10</mn></mrow></math>, one deme of 10,000 and nine of 100:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mrow><mi>N</mi></mrow><mo stretchy="true">&#x000AF;</mo></mover><mrow><mtext>arithmetic</mtext></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>10000</mn><mo>&#x0002B;</mo><mn>9</mn><mo stretchy="false">&#x00028;</mo><mn>100</mn><mo stretchy="false">&#x00029;</mo></mrow><mrow><mn>10</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>1090</mn></mrow></math><span class="equation-tag">(J.57)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mrow><mi>N</mi></mrow><mo stretchy="true">&#x000AF;</mo></mover><mrow><mtext>harmonic</mtext></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>10</mn></mrow><mrow><mstyle displaystyle="false" scriptlevel="0"><mfrac><mrow><mn>1</mn></mrow><mrow><mn>10000</mn></mrow></mfrac></mstyle><mo>&#x0002B;</mo><mstyle displaystyle="false" scriptlevel="0"><mfrac><mrow><mn>9</mn></mrow><mrow><mn>100</mn></mrow></mfrac></mstyle></mrow></mfrac><mo>&#x02248;</mo><mn>111</mn></mrow></math><span class="equation-tag">(J.58)</span></div>
+<p>A factor of 9.8. Feeding each into (J.54) with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mn>0.01</mn></mrow></math> and negligible
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>:</p>
+<table>
+<thead>
+<tr>
+<th><var>N</var> used</th>
+<th><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>4</mn><mi>N</mi><mi>m</mi></mrow></math></th>
+<th><var>G</var><sub>ST</sub> from (J.54)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1090 (arithmetic mean)</td>
+<td>43.6</td>
+<td>0.018</td>
+</tr>
+<tr>
+<td>111 (harmonic mean)</td>
+<td>4.44</td>
+<td><strong>0.153</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Plugging in the <em>average</em> deme size understates <var>G</var><sub>ST</sub> by roughly
+<strong>8.5-fold</strong>. Run backwards — the direction people actually use it — the
+same error inflates the estimate of <var>Nm</var> by about the same factor, and
+&quot;how many migrants per generation are these populations exchanging?&quot; is
+exactly the question <var>Nm</var> gets recruited to answer.</p>
+<p><strong><var>Nm</var> also stops being one number.</strong> With unequal demes, a common
+exchange <em>rate</em> of 1% moves 100 individuals out of the large deme and 1 out
+of a small one; a common <em>count</em> of ten migrants means 0.1% for the large
+deme and 10% for a small one. Whether <var>m</var> or <var>Nm</var> is the quantity held
+constant across demes is a modeling decision with no default, and &quot;the
+absolute number of migrants per generation&quot; quietly presumes it has been
+made.</p>
+<p><strong><var>D</var> fares better, and for a structural reason.</strong> Look again at (J.56): <var>N</var> does not appear in it at all. Allelic
+differentiation at equilibrium is set by the migration–mutation balance governing whether two lineages drawn from
+<em>different</em> demes are identical, and the deme-size dependence that dominates within-deme identity largely cancels in the
+ratio <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>/</mo><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></math> on which <var>D</var> is built. For the
+numbers above, (J.56) returns <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>≈</mo><mn>0.083</mn></mrow></math> whichever deme size you use, because it never asks. This is the same robustness
+the paper is pointing at when it calls <var>D</var> &quot;more stable against variation in deme size.&quot;</p>
+<p>Do not over-read it as immunity, though. Equation (J.56) still assumes demes are
+<em>exchangeable</em>, sharing one migration rate <var>m</var> and one mutation rate
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>; unequal sizes in real metapopulations usually come with unequal
+migration rates, and then <var>m</var> is not a scalar and the derivation's
+premise is gone. The <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>≈</mo></mrow></math> is doing real work.</p>
+<p><strong>Scope of the assumption.</strong> The equal-size assumption applies to the
+equilibrium relationships in Part VI. Everything in Parts II–V — the ceiling argument
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≤</mo><mn>1</mn><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow></math>, the subadditivity of heterozygosity, the
+replication principle, and every worked example in Part IV — is computed
+from allele frequency vectors alone and assumes <strong>nothing whatever</strong> about
+deme sizes, migration, mutation, or equilibrium. The paper's central thesis
+(that the two families measure different things, and that swapping one for
+the other can lead to inappropriate conservation advice) is unaffected.</p>
+<p><strong>Where the constraint gets relaxed.</strong> The <strong>structured coalescent</strong> is the
+standard modern framework: it accommodates arbitrary deme sizes and an
+arbitrary migration matrix rather than one scalar <var>m</var>, at the cost of
+closed forms. For the effective size of a subdivided population with
+unequal demes, see Whitlock MC &amp; Barton NH (1997), &quot;The effective size of a
+subdivided population,&quot; <em>Genetics</em> 146:427–441. Relaxations of the
+migration <em>topology</em> rather than deme size — stepping-stone and
+continent-island models — are a separate axis, and equally absent from
+equations (J.54) and (J.56).</p>
+<h3 id="equilibrium-assumptions-in-conservation-applications">Equilibrium assumptions in conservation applications</h3>
+<p>The paper cautions against using the equilibrium relationships to infer
+current migration. <strong>Neither <var>G</var><sub>ST</sub> nor <var>D</var> should be used to
+estimate current migration</strong>, common practice in conservation genetics
+until recently. Present-day values reflect an accumulation of historic
+<em>and</em> recent migration and population sizes; populations that are now
+completely isolated can still show a low <var>G</var><sub>ST</sub> simply because
+isolation has not yet had time to leave its mark. Threatened populations
+are, by definition, not at equilibrium — they are of concern precisely
+<em>because</em> their deme numbers, sizes, and migration rates have recently
+changed, and bottlenecks and fragmentation do not have to be recent to
+still be distorting these statistics. <var>D</var> is somewhat more robust here,
+since it is independent of within-group diversity and therefore more
+stable against variation in deme size, but past variation in migration
+rate still leaves a mark on it too.</p>
+<p>The paper's own recommendation follows from this: work at the <strong>descriptive</strong> level, measuring present-day magnitudes of
+<var>D</var>, <var>E</var><sub>ST</sub>, and <var>K</var><sub>ST</sub> at the loci of actual
+interest, rather than making inferences based on unverifiable equilibrium assumptions.</p>
+<hr />
+<h2 id="part-vii--the-two-allele-special-case">Part VII — The two-allele special case</h2>
+<p>SNPs usually have only two alleles, and modern studies use them by the
+thousand — a low-diversity regime worth treating separately.</p>
+<p><strong>Many demes, two alleles.</strong> The same ambiguity as the infinite-allele
+case: with ten demes, nine fixed for one base and one for the other,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>=</mo><mn>1.00</mn></mrow></math> while <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0.20</mn></mrow></math> — numerically identical to the first
+worked example above. Split five-five and <var>G</var><sub>ST</sub> is still <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1.00</mn></mrow></math>
+(all demes remain fixed), while <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0.5556</mn></mrow></math>. Note that with two alleles
+and ten demes, <var>D</var> <strong>cannot</strong> reach 1.00 — and, per the ceiling
+discussion above, that is the honest answer: with fewer alleles than
+demes, some demes necessarily share.</p>
+<p><strong>Two demes, two alleles — the measures converge.</strong> This is the case
+where the distinction largely evaporates, and the paper says so plainly.
+With only two alleles, <var>G</var><sub>ST</sub>'s dependence on within-group
+heterozygosity stops mattering much:</p>
+<table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th><var>G</var><sub>ST</sub></th>
+<th><var>D</var></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Both demes fixed, different alleles</td>
+<td>1.0000</td>
+<td>1.0000</td>
+</tr>
+<tr>
+<td>Identical allele frequencies (not both fixed on the same allele)</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>One deme 50/50, other fixed</td>
+<td>0.3333</td>
+<td>0.3333</td>
+</tr>
+<tr>
+<td>Both demes fixed for the <strong>same</strong> allele</td>
+<td>undefined</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>They differ in other configurations, but broadly both families give useful
+answers for pairwise SNP analysis. <var>D</var> retains one edge: it is never
+undefined. For <strong>multi-deme</strong> SNP analyses, or for any more polymorphic
+locus, the two families diverge and the choice matters a great deal —
+since real studies routinely do global multi-population analyses, this
+narrow area of agreement covers less ground than it first appears to.
+Where the goal is describing differentiation at multiple nested levels
+(individuals within demes within regions), the paper points instead to
+entropy-based measures, since entropy decomposes cleanly across
+hierarchical levels.</p>
+<hr />
+<h2 id="part-viii--what-the-paper-recommends">Part VIII — What the paper recommends</h2>
+<ol>
+<li><strong>Report both families, and label them by what they measure.</strong> Interpret <var>G</var><sub>ST</sub>,
+<var>F</var><sub>ST</sub>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>θ</mi></mrow></math> as <strong>nearness to fixation</strong> (as Wright himself did), and <var>D</var>,
+<var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub> as <strong>allelic
+differentiation</strong>. They are complementary, not competing.</li>
+<li><strong><var>D</var> is not an estimator of <var>F</var><sub>ST</sub> or
+<var>G</var><sub>ST</sub>.</strong> Treating it as a &quot;corrected
+<var>G</var><sub>ST</sub>&quot; is a category error the paper names explicitly.</li>
+<li><strong>For conservation questions about which demes to protect, use allelic differentiation measures.</strong> In most
+threatened-species cases, this is the information that actually bears on the decision.</li>
+<li><strong>Report the profile across <var>q</var>, not one index.</strong> <var>D</var> (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>2</mn></mrow></math>), <var>E</var><sub>ST</sub> (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>1</mn></mrow></math>),
+and <var>K</var><sub>ST</sub> (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>0</mn></mrow></math>) weight allele frequencies differently, and their
+<em>disagreement</em> diagnoses the frequency structure of the data (see the worked examples above). <var>D</var> has the simplest
+connection to genetic models and is easiest to estimate reliably from small samples;
+<var>E</var><sub>ST</sub> has the most robust monotonicity and partitioning properties, handles
+unequal deme sizes, and suits hierarchical analysis; <var>K</var><sub>ST</sub> has the strongest
+monotonicity of all and answers &quot;how many alleles are unique to this deme.&quot;</li>
+<li><strong>Measure at the loci that matter.</strong> For absolute magnitudes, use the functional loci of interest (e.g. MHC) or
+loci with similar mutation rates. Fast-mutating markers are valid for <em>ranking</em> deme pairs, not for absolute
+values; run both neutral and putatively adaptive markers where possible.</li>
+<li><strong>Interpret magnitudes and confidence intervals, not p-values.</strong> Statistical significance against an always-false
+null model is not the question; effect size is. Relatedly, <var>H</var><sub>T</sub> varies across
+pairwise comparisons, so pairwise <var>G</var><sub>ST</sub> values are not truly comparable to
+each other, whereas the same value of <var>D</var> means the same degree of allelic differentiation across deme pairs and
+even across species.</li>
+<li><strong>Do not use either family to estimate current migration</strong> (Part VI).</li>
+<li><strong>Convert to effective numbers before any ratio comparison.</strong> Diversity claims of the form &quot;X% of diversity is
+within demes&quot; must be computed on Hill numbers, never on raw heterozygosity.</li>
+<li><strong>An acknowledged open problem.</strong> The paper is explicit that &quot;maximize genetic diversity&quot; is not yet a well-posed
+conservation goal, because the <em>unit</em> of diversity is unsettled — SNPs, functional alleles, allele pairs, or whole
+genotypes? Preserving genotypes has real justification (crop collections do exactly this, to maintain phenotypes),
+but the number of multi-locus combinations explodes beyond any possibility of preserving them all. Left as future
+work.</li>
+</ol>
+<hr />
+<h2 id="part-ix--common-interpretations">Part IX — Common interpretations</h2>
+<table>
+<thead>
+<tr>
+<th>Common claim</th>
+<th>Status</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&quot;<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>F</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>/</mo><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub></mrow></math> measures how different populations are.&quot;</td>
+<td><strong>False.</strong> It measures nearness to fixation.</td>
+<td>Part III</td>
+</tr>
+<tr>
+<td>&quot;<var>D</var> is a corrected or standardized <var>F</var><sub>ST</sub>.&quot;</td>
+<td><strong>False.</strong> Different quantity, different question.</td>
+<td>Part III, VIII</td>
+</tr>
+<tr>
+<td>&quot;High <var>G</var><sub>ST</sub> means the demes hold different alleles.&quot;</td>
+<td><strong>False.</strong> <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>=</mo><mn>1</mn></mrow></math> when 9 of 10 demes are identical.</td>
+<td>Part IV</td>
+</tr>
+<tr>
+<td>&quot;Low <var>G</var><sub>ST</sub> means the demes are genetically similar.&quot;</td>
+<td><strong>False.</strong> Species C shares zero alleles at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>=</mo><mn>0.026</mn></mrow></math>.</td>
+<td>Part IV</td>
+</tr>
+<tr>
+<td>&quot;<var>G</var><sub>ST</sub> below 0.05 means negligible structure.&quot;</td>
+<td><strong>Unsound.</strong> <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≤</mo><mn>1</mn><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow></math>, so with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>=</mo><mn>0.95</mn></mrow></math> it can never exceed 0.05.</td>
+<td>Part V</td>
+</tr>
+<tr>
+<td>&quot;<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow></math> is the between-group diversity.&quot;</td>
+<td><strong>False.</strong> <var>H</var> is subadditive; the correct form is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>=</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>+</mo><msub><mi>H</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>−</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><msub><mi>H</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub></mrow></math>.</td>
+<td>Part V</td>
+</tr>
+<tr>
+<td>&quot;98% of diversity is within demes, so protect one.&quot;</td>
+<td><strong>False.</strong> Artifact of the <var>H</var> scale; on effective alleles the demes are nearly disjoint.</td>
+<td>Part IV, V</td>
+</tr>
+<tr>
+<td>&quot;<var>Nm</var> determines allelic differentiation when <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> is low.&quot;</td>
+<td><strong>False.</strong> <var>Nm</var> determines nearness to fixation; <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>/</mo><mo stretchy="false">(</mo><mi>μ</mi><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math> determines differentiation.</td>
+<td>Part VI</td>
+</tr>
+<tr>
+<td>&quot;<var>D</var> varies across loci, so it is unreliable.&quot;</td>
+<td><strong>False.</strong> That variation is a real biological effect of differing <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>.</td>
+<td>Part VI</td>
+</tr>
+<tr>
+<td>&quot;Hedrick's <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mrow><mi>′</mi></mrow></msubsup></mrow></math> fixes <var>G</var><sub>ST</sub>.&quot;</td>
+<td><strong>Partial at best.</strong> Addresses only the high-heterozygosity end, not the low.</td>
+<td>Part IV</td>
+</tr>
+<tr>
+<td>&quot;<var>G</var><sub>ST</sub> and <var>D</var> can be used to estimate current migration.&quot;</td>
+<td><strong>False.</strong> Both integrate historical demography.</td>
+<td>Part VI</td>
+</tr>
+<tr>
+<td>&quot;These disagreements are estimation artifacts.&quot;</td>
+<td><strong>False.</strong> They hold for exact population values, with no sampling involved.</td>
+<td>Part III</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="part-x--using-these-measures-outside-population-genetics">Part X — Using these measures outside population genetics</h2>
+<p>Nothing in Parts II–V is genetic. Those measures are functions of one
+abstract object: <strong>a set of groups, each carrying a frequency distribution
+over categorical labels.</strong> The genetics is packaging — the direction of
+travel was, in fact, originally reversed: <var>D</var> came <em>into</em> genetics from
+ecology, where the same formulas describe species in communities rather
+than alleles in demes.</p>
+<p>The substitution is mechanical:</p>
+<table>
+<thead>
+<tr>
+<th>In this document</th>
+<th>In the general case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Allele</td>
+<td>Category / label / state</td>
+</tr>
+<tr>
+<td>Locus</td>
+<td>The variable being tabulated</td>
+</tr>
+<tr>
+<td>Deme</td>
+<td>Group, site, sample, class</td>
+</tr>
+<tr>
+<td>Allele frequency vector</td>
+<td>Composition of one group</td>
+</tr>
+<tr>
+<td><var>H</var><sub>S</sub>, <var>H</var><sub>T</sub></td>
+<td>Mean within-group and pooled diversity</td>
+</tr>
+<tr>
+<td><var>D</var>, <var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub></td>
+<td>How little the groups' repertoires overlap</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-carries-over">What carries over</h3>
+<p><strong>The effective-numbers rule, without qualification.</strong> Any claim of the
+form &quot;X% of the variation is within groups,&quot; computed on a raw index
+bounded at 1 (Simpson, Gini–Simpson, plain heterozygosity), is
+untrustworthy for the same reason as in Part V. Convert to Hill numbers
+before taking any ratio — this is the single most portable result in the
+paper.</p>
+<p><strong>The saturation trap.</strong> A variable with many categories behaves exactly
+like a high-heterozygosity locus: the index saturates near its ceiling and
+stops discriminating. Two groups with completely disjoint repertoires can
+look nearly identical on a saturating index. Any procedure that <em>ranks
+variables</em> by a saturating diversity index will systematically undervalue
+the high-cardinality variables — often the most informative ones.</p>
+<p><strong>The <var>q</var>-profile as a diagnostic.</strong> Computing overlap at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>0</mn></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn></mrow></math> and reading the <em>ordering</em> transfers cleanly.
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>K</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≪</mo><mi>D</mi></mrow></math> says the groups share their rare categories but differ
+in their typical ones; <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>K</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≫</mo><mi>D</mi></mrow></math> says the reverse. Neither fact is
+visible from a single number.</p>
+<p><strong>Name the quantity by what it measures.</strong> The paper's central practical
+lesson is that a naming collision — two inequivalent quantities both
+called &quot;differentiation&quot; — caused decades of wrong conclusions. The same
+hazard attaches to any function called <code>distance</code>, <code>similarity</code>, or
+<code>difference</code> without a statement of which of several inequivalent things
+it computes.</p>
+<p><strong>The relation to Jaccard and Sørensen.</strong> <var>K</var><sub>ST</sub> is the one-complement
+of the multiple-community Sørensen index, and the general Eq. 6 formula
+above is the one-complement of a general similarity measure (Jost, Chao &amp;
+Chazdon, 2011) — the familiar presence/absence similarity coefficients are
+the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>=</mo><mn>0</mn></mrow></math> end of this same family, and the general formula is the
+generalization that adds frequency weighting to them.</p>
+<h3 id="what-does-not-carry-over">What does not carry over</h3>
+<p><strong>All of Part VI.</strong> Those formulas are properties of Wright's finite
+island model — mutation, migration, drift, discrete generations. Absent
+that generative process, there is no <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>, <var>m</var>, <var>N</var>, or
+equilibrium, and none of those formulas means anything.</p>
+<p><strong><var>G</var><sub>ST</sub> and the whole fixation family.</strong> &quot;Nearness to fixation&quot; is a
+statement about a population losing variation over generations; it has no
+meaning for data with no generational process, and the conventional
+<var>F</var><sub>ST</sub> interpretive scales should not be imported.</p>
+<p><strong>The exchangeable-labels assumption — the important caveat.</strong> Every
+measure here treats categories as unordered and equidistant. Two alleles
+are simply different; neither is &quot;closer&quot; to a third. Much non-genetic
+data violates this: ordinal categories have an order these measures
+discard entirely; continuous variables are not categorical at all without
+binning, and the binning choice would drive the answer; semantically
+nested categories (labels drawn from an ontology or taxonomy) have real
+similarity structure, which these measures ignore by construction. For
+mixed-type data, general-purpose coefficients that respect variable type
+(Gower's, and its relatives) remain the right default; the measures here
+are the right tool only for the unordered-categorical part.</p>
+<p><strong>Group weighting has no default.</strong> <var>D</var> weights every group equally;
+<var>E</var><sub>ST</sub> can weight by group size. Outside genetics the analogous choice
+is usually a substantive domain decision with no obvious answer, and it
+changes results — make it explicitly and record it.</p>
+<hr />
+<h2 id="appendix-a-notation-and-formula-sheet">Appendix A: notation and formula sheet</h2>
+<h3 id="symbols">Symbols</h3>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><var>d</var></td>
+<td>Number of demes (subpopulations)</td>
+</tr>
+<tr>
+<td><var>N</var></td>
+<td>Diploid individuals per deme (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math> gene copies)</td>
+</tr>
+<tr>
+<td><var>m</var></td>
+<td>Migration rate — fraction of a deme's gene pool replaced per generation</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math></td>
+<td>Mutation rate per locus per generation</td>
+</tr>
+<tr>
+<td><var>p</var><sub>i</sub></td>
+<td>Frequency of allele <var>i</var></td>
+</tr>
+<tr>
+<td><var>H</var></td>
+<td>Expected heterozygosity of one deme</td>
+</tr>
+<tr>
+<td><var>H</var><sub>S</sub></td>
+<td>Mean within-deme heterozygosity</td>
+</tr>
+<tr>
+<td><var>H</var><sub>T</sub></td>
+<td>Total (pooled) heterozygosity</td>
+</tr>
+<tr>
+<td><var>H</var><sub>ST</sub></td>
+<td>Correctly partitioned between-group heterozygosity</td>
+</tr>
+<tr>
+<td><var>J</var></td>
+<td>Nei's gene identity (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><mi>H</mi></mrow></math>)</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mrow /><mrow><mi>q</mi></mrow></msup><mi>D</mi></mrow></math></td>
+<td>Hill number of order <var>q</var> (effective number of alleles)</td>
+</tr>
+<tr>
+<td><var>E</var><sub>T</sub>, <var>E</var><sub>S</sub>, <var>E</var><sub>w</sub></td>
+<td>Total / mean-within / deme-size Shannon entropies</td>
+</tr>
+<tr>
+<td><var>K</var><sub>T</sub>, <var>K</var><sub>S</sub></td>
+<td>Total / mean-per-deme allele counts</td>
+</tr>
+<tr>
+<td><var>q</var></td>
+<td>Order of a diversity measure (rare-allele weighting)</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">N</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></math></td>
+<td>Arithmetic-denominator genetic distance used in the identity for <var>D</var></td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mrow><mi>D</mi></mrow><mo stretchy="true">¯</mo></mover><mi>m</mi></msub></mrow></math></td>
+<td>Nei's absolute mean pairwise between-deme gene diversity</td>
+</tr>
+<tr>
+<td><var>R</var><sub>ST</sub></td>
+<td>Nei's <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mrow><mi>D</mi></mrow><mo stretchy="true">¯</mo></mover><mi>m</mi></msub></mrow></math> relative to within-deme diversity</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mrow><mi>′</mi></mrow></msubsup></mrow></math> (Nei)</td>
+<td>Nei's log-based large-differentiation <var>G</var><sub>ST</sub> estimator</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mrow><mi>′</mi></mrow></msubsup></mrow></math> (Hedrick)</td>
+<td>Hedrick's standardized <var>G</var><sub>ST</sub> — a <em>different</em> quantity from Nei's own <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mrow><mi>′</mi></mrow></msubsup></mrow></math> above, despite the shared name</td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo stretchy="false">(</mo><mo>max</mo><mo stretchy="false">)</mo></mrow></math></td>
+<td>Hedrick's own attainable <var>G</var><sub>ST</sub> ceiling given <var>H</var><sub>S</sub></td>
+</tr>
+<tr>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></math></td>
+<td>Within-/between-deme gene identities, reported as <code>Gs</code> and <code>Gd</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="within-one-deme">Within one deme</h3>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>H</mi><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><munder><mo>&#x02211;</mo><mi>i</mi></munder><msubsup><mi>p</mi><mi>i</mi><mn>2</mn></msubsup></mrow></math><span class="equation-tag">(J.59)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>J</mi><mo>&#x0003D;</mo><munder><mo>&#x02211;</mo><mi>i</mi></munder><msubsup><mi>p</mi><mi>i</mi><mn>2</mn></msubsup><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mi>H</mi></mrow></math><span class="equation-tag">(J.60)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mi>H</mi></mrow></msup><mi>D</mi><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mi>H</mi></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>J</mi></mrow></mfrac></mrow></math><span class="equation-tag">(J.61)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mi>q</mi></mrow></msup><mi>D</mi><mo>&#x0003D;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msub><mo>&#x02211;</mo><mi>i</mi></msub><msubsup><mi>p</mi><mi>i</mi><mi>q</mi></msubsup><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mrow><mn>1</mn><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>q</mi><mo stretchy="false">&#x00029;</mo></mrow></msup><mtext>&#x000A0;</mtext><mo stretchy="false">&#x00028;</mo><mi>q</mi><mo>&#x02260;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(J.62)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mrow /><mrow><mn>1</mn></mrow></msup><mi>D</mi><mo>&#x0003D;</mo><mi>exp</mi><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mo>&#x02212;</mo><msub><mo>&#x02211;</mo><mi>i</mi></msub><msub><mi>p</mi><mi>i</mi></msub><mi>ln</mi><msub><mi>p</mi><mi>i</mi></msub><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow></mrow></math><span class="equation-tag">(J.63)</span></div>
+<h3 id="across-demes">Across demes</h3>
+<p>Ryman &amp; Leimar (2008) work in gene identities, <var>J</var><sub>0</sub> within demes
+and <var>J</var><sub>1</sub> between demes, rather than heterozygosities. The simulator's
+within- and between-deme identities are reported as <code>Gs</code> and <code>Gd</code>
+and calculated by <code>gs</code> and <code>gd</code> in <code>fim.statistics.differentiation</code>.
+In the simulator's with-replacement convention, they relate to <var>H</var><sub>S</sub>
+and <var>H</var><sub>T</sub> as follows. See <a href="#" data-fim-help="migration-conventions" data-fim-anchor="">migration conventions</a>
+for the distinct-pair convention used in the paper and the exact
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>O</mi><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mi>N</mi><mo stretchy="false">)</mo></mrow></math> mapping between the two conventions.</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math><span class="equation-tag">(J.64)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mi>d</mi><mspace width="0.167em" /><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mi>T</mi></msub><mo stretchy="false">&#x00029;</mo><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub><mo stretchy="false">&#x00029;</mo></mrow><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.65)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>&#x02212;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub></mrow></mfrac><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.66)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mi>&#x000B7;</mi><mn>4</mn><mi>N</mi><mi>m</mi><mo>&#x0002B;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo stretchy="false">&#x00029;</mo><mi>&#x000B7;</mi><mn>4</mn><mi>N</mi><mi>&#x003BC;</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.67)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mrow><mo stretchy="true" fence="true" form="prefix">[</mo><mfrac><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">]</mo></mrow><mfrac><mrow><mi>d</mi></mrow><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.68)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.68a)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mi>exp</mi><mo stretchy="false">&#x00028;</mo><mo>&#x02212;</mo><mrow><mi mathvariant="normal">N</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(J.68b)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x0002B;</mo><mi>m</mi><mo>&#x0002F;</mo><mo stretchy="false">[</mo><mi>&#x003BC;</mi><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo stretchy="false">]</mo></mrow></mfrac></mrow></math><span class="equation-tag">(J.69)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mrow><mi mathvariant="normal">D</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">n</mi></mrow><mi>q</mi></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><mo stretchy="false">&#x00028;</mo><msup><mrow /><mrow><mi>q</mi></mrow></msup><msub><mi>D</mi><mrow><mi>S</mi></mrow></msub><mo>&#x0002F;</mo><msup><mrow /><mrow><mi>q</mi></mrow></msup><msub><mi>D</mi><mrow><mi>T</mi></mrow></msub><msup><mo stretchy="false">&#x00029;</mo><mrow><mi>q</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msup><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002F;</mo><mi>d</mi><msup><mo stretchy="false">&#x00029;</mo><mrow><mi>q</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msup></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x0002F;</mo><mi>d</mi><msup><mo stretchy="false">&#x00029;</mo><mrow><mi>q</mi><mo>&#x02212;</mo><mn>1</mn></mrow></msup></mrow></mfrac></mrow></math><span class="equation-tag">(J.70)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>E</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>E</mi><mrow><mi>T</mi></mrow></msub><mo>&#x02212;</mo><msub><mi>E</mi><mrow><mi>S</mi></mrow></msub></mrow><mrow><msub><mi>E</mi><mrow><mi>w</mi></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.71)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo stretchy="false">&#x00028;</mo><msub><mi>E</mi><mrow><mi>w</mi></mrow></msub><mo>&#x0003D;</mo><mi>ln</mi><mi>d</mi><mtext>&#x000A0;for&#x000A0;equal&#x000A0;deme&#x000A0;sizes</mtext><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(J.72)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>K</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>K</mi><mrow><mi>T</mi></mrow></msub><mo>&#x0002F;</mo><msub><mi>K</mi><mrow><mi>S</mi></mrow></msub><mo>&#x02212;</mo><mi>d</mi></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><mi>d</mi></mrow></mfrac></mrow></math><span class="equation-tag">(J.73)</span></div>
+<p>Nei (1973) also defines three further statistics this project implements (<code>d_m</code>,
+<code>r_st</code>, <code>g_st_log</code>) but does not otherwise discuss above: an <em>absolute</em>, not-<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow></math>-bounded
+pairwise diversity, its ratio to within-deme diversity, and a log-based alternative to
+<var>G</var><sub>ST</sub> recommended specifically for strong (subspecies-level) differentiation,
+where linear <var>G</var><sub>ST</sub> saturates.
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mrow><mi>D</mi></mrow><mo stretchy="true">¯</mo></mover><mrow><mi>m</mi></mrow></msub></mrow></math> and <var>R</var><sub>ST</sub> assume equal deme weights, the same
+restriction <var>D</var>, above, already carries and for the same reason (Nei's own Eq. 4 derivation assumes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>w</mi><mrow><mi>i</mi></mrow></msub><mo>=</mo><mn>1</mn><mo>/</mo><mi>s</mi></mrow></math>):</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mrow><mi>D</mi></mrow><mo stretchy="true">&#x000AF;</mo></mover><mi>m</mi></msub><mo>&#x0003D;</mo><mfrac><mrow><mi>d</mi></mrow><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac><mo stretchy="false">&#x00028;</mo><msub><mi>H</mi><mi>T</mi></msub><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(J.74)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>R</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mover><mrow><mi>D</mi></mrow><mo stretchy="true">&#x000AF;</mo></mover><mi>m</mi></msub></mrow><mrow><msub><mi>H</mi><mi>S</mi></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.75)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>&#x02032;</mi></msubsup><mtext>&#x000A0;(Nei)</mtext><mo>&#x0003D;</mo><mfrac><mrow><mo>&#x02212;</mo><mi>ln</mi><mo stretchy="false">&#x00028;</mo><msub><mi>J</mi><mi>T</mi></msub><mo>&#x0002F;</mo><msub><mi>J</mi><mi>S</mi></msub><mo stretchy="false">&#x00029;</mo></mrow><mrow><mo>&#x02212;</mo><mi>ln</mi><msub><mi>J</mi><mi>T</mi></msub></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mrow><mi>ln</mi><mo stretchy="false">&#x00028;</mo><msub><mi>J</mi><mi>S</mi></msub><mo>&#x0002F;</mo><msub><mi>J</mi><mi>T</mi></msub><mo stretchy="false">&#x00029;</mo></mrow><mrow><mo>&#x02212;</mo><mi>ln</mi><msub><mi>J</mi><mi>T</mi></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.76)</span></div>
+<p>Hedrick (2005)'s own, differently defined <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mrow><mi>′</mi></mrow></msubsup></mrow></math> — Ryman &amp; Leimar
+(2008)'s own Equations 7–8, <code>g_st_max</code> / <code>g_st_prime</code> in
+<code>fim.statistics.differentiation</code> — rescales ordinary <var>G</var><sub>ST</sub> by its own attainable
+ceiling instead. In the following formula, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>s</mi><mo>=</mo><mi>d</mi></mrow></math> is the paper's
+number of demes:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo stretchy="false">&#x00028;</mo><mo>max</mo><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mfrac><mrow><mo stretchy="false">&#x00028;</mo><mi>s</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub><mo stretchy="false">&#x00029;</mo></mrow><mrow><mi>s</mi><mo>&#x02212;</mo><mn>1</mn><mo>&#x0002B;</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.77)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>&#x02032;</mi></msubsup><mtext>&#x000A0;(Hedrick)</mtext><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub></mrow><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo stretchy="false">&#x00028;</mo><mo>max</mo><mo stretchy="false">&#x00029;</mo></mrow></mfrac></mrow></math><span class="equation-tag">(J.78)</span></div>
+<p>Ryman &amp; Leimar's own two transition-phase/equilibrium mutation-
+negligibility conditions (Equations 9–10,
+<code>mutation_negligible_transition</code> / <code>mutation_negligible_equilibrium</code>),
+each at the paper's own
+published calibration factor for a 10% effect on <var>G</var><sub>ST</sub>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>t</mi><mo>&#x0226A;</mo><mfrac><mrow><msub><mi>H</mi><mi>S</mi></msub><mo stretchy="false">&#x00028;</mo><mn>0</mn><mo stretchy="false">&#x00029;</mo></mrow><mrow><mn>2</mn><mi>&#x003BC;</mi></mrow></mfrac><mtext>&#x000A0;(one-fifth)</mtext></mrow></math><span class="equation-tag">(J.79)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003BC;</mi><mo>&#x0226A;</mo><mi>m</mi><mo>&#x0002B;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>4</mn><mi>N</mi></mrow></mfrac><mtext>&#x000A0;(one-tenth)</mtext></mrow></math><span class="equation-tag">(J.80)</span></div>
+<h3 id="useful-identities">Useful identities</h3>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>&#x0002B;</mo><msub><mi>H</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02212;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mi>&#x000B7;</mi><msub><mi>H</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub></mrow></math><span class="equation-tag">(J.81)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>&#x02212;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow><mrow><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(J.82)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>&#x003B2;</mi></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mi>&#x000B7;</mi><mfrac><mrow><mi>d</mi></mrow><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac></mrow></math><span class="equation-tag">(J.83)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B2;</mi><mo>&#x0003D;</mo><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mrow><mi>T</mi></mrow></msub><mo>&#x0002F;</mo><msup><mrow /><mrow><mi>H</mi></mrow></msup><msub><mi>D</mi><mrow><mi>S</mi></mrow></msub></mrow></math><span class="equation-tag">(J.84)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>&#x02264;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math><span class="equation-tag">(J.85)</span></div>
+<p>The middle form of <var>D</var> in Part III,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>/</mo><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></math>, also links
+<var>D</var> to Nei's genetic distance with an arithmetic-mean denominator:
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mrow><mi mathvariant="normal">N</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi></mrow></mrow></msub><mo>=</mo><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>D</mi><mo stretchy="false">)</mo></mrow></math>. <code>fim</code> reports that distance,
+Nei's original geometric-mean form, and pair and all-demes versions of
+both; see <a href="#" data-fim-help="nei-distances" data-fim-anchor="">Nei distances in fim</a>.</p>
+<hr />
+<h2 id="appendix-b-errata-and-ambiguities-in-the-accepted-article-text">Appendix B: errata and ambiguities in the accepted-article text</h2>
+<p>The accepted-article version is explicitly marked as preceding copyediting and
+proofreading. Recomputing its own numbers from its own definitions turned up
+several small discrepancies. None affects the central argument; all are minor
+editorial or typographical issues, and some may already have been corrected in the
+final published version of record.</p>
+<p><strong>1. Figure 2, middle scenario: <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0.5</mn></mrow></math> should be <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.5556</mn></mrow></math>.</strong></p>
+<p>The text reports <var>D</var> values of &quot;0.2, 0.5, and 1.0&quot; for the three ten-deme
+scenarios. The first and third are exact. The middle case (five demes fixed for
+one allele and five fixed for another) computes as:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>&#x0003D;</mo><mn>0</mn></mrow></math><span class="equation-tag">(J.86)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>H</mi><mrow><mi>T</mi></mrow></msub><mo>&#x0003D;</mo><mn>0.5</mn></mrow></math><span class="equation-tag">(J.87)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mn>0.5</mn><mo>&#x0002F;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mi>&#x000B7;</mi><mo stretchy="false">&#x00028;</mo><mn>10</mn><mo>&#x0002F;</mo><mn>9</mn><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mn>0.5556</mn></mrow></math><span class="equation-tag">(J.88)</span></div>
+<p>The pairwise derivation the paper itself offers agrees: <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>25</mn></mrow></math> differing pairs out
+of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>45</mn></mrow></math> gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>25</mn><mo>/</mo><mn>45</mn><mo>≈</mo><mn>0.5556</mn></mrow></math>. The printed <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.5</mn></mrow></math> appears to be a rounding or
+transcription slip. Nothing in the argument depends on the exact figure — the
+point is only that <var>D</var> differs across the three scenarios while <var>G</var><sub>ST</sub> does
+not.</p>
+<p><strong>2. Equation 5 omits <var>L</var>.</strong> The paper gives a refinement of the <var>D</var>
+equilibrium formula for sets of loci with a roughly constant per-base-pair
+mutation rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>μ</mi><mi>b</mi></msub></mrow></math> and locus length <var>L</var> (harmonic mean, in base pairs):</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>&#x0002B;</mo><mi>m</mi><mo>&#x0002F;</mo><mo stretchy="false">[</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mi>&#x000B7;</mi><msub><mi>&#x003BC;</mi><mrow><mi>b</mi></mrow></msub><mi>&#x000B7;</mi><mi>L</mi><mo stretchy="false">]</mo></mrow></mfrac></mrow></math><span class="equation-tag">(J.89)</span></div>
+<p>As printed in the accepted article, the <var>L</var> term is missing from the denominator,
+even though the sentence immediately following the equation defines <var>L</var>.
+Substituting <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi><mo>≈</mo><msub><mi>μ</mi><mi>b</mi></msub><mi>L</mi></mrow></math> into Eq. 4 gives the intended form above,
+which is the version used in this document and is clearly the intended reading of
+the surrounding text.</p>
+<p><strong>3. The discussion of &quot;low <var>G</var><sub>ST</sub> and high <var>m</var>&quot; is a wording problem rather
+than a mathematical one.</strong> In the source sentence, &quot;high <var>m</var>&quot; must mean &quot;high
+inferred migration rate&quot; rather than an actual high migration value in the
+scenario being described, because the populations in question are explicitly
+stipulated to be isolated. The point is that the inference is wrong, not that the
+migration rate is truly high.</p>
+<p><strong>4. Cross-reference slip in the SNP discussion.</strong> In the bi-allelic SNP
+section, the nine-plus-one configuration is compared to &quot;Species A in Figure 2&quot;.
+Figure 2's scenarios are unlabeled, while the species labels A/B/C belong to
+Figure 3, where species A is the &quot;all alleles shared&quot; case (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0</mn></mrow></math>). The intended
+referent is the leftmost scenario of Figure 2, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi><mo>=</mo><mn>0.20</mn></mrow></math>, which matches the
+quoted value.</p>
+<p><strong>5. Reference-list inconsistencies.</strong> The bibliography contains a few mix-ups:</p>
+<ul>
+<li>&quot;Gregorius and Roberds (1986)&quot; is cited in text as &quot;Gregorius et al. 1986&quot;.</li>
+<li>Hedrick (2005) appears in the reference list and Figure 4 legend but is not
+cited in the body text.</li>
+<li>&quot;Gilner et al. 2001&quot; is almost certainly &quot;Gliner et al. 2001&quot;.</li>
+<li>The &quot;Chao et al. (2015)&quot; entry spells &quot;Hseih&quot; instead of &quot;Hsieh&quot;.</li>
+</ul>
+<p>These are editorial inconsistencies, not substantive scientific errors, but they
+are real and can confuse citation matching.</p>
+<p><strong>6. Author-name inconsistency.</strong> The author list gives &quot;Frederick Archer&quot;
+while the corresponding contact address is <code>eric.archer@noaa.gov</code>. This is not a
+mathematical issue, but it is a genuine name mismatch and could confuse readers
+trying to reconcile the paper with the author metadata.</p>
+<p><strong>7. Table S1 rounding.</strong> The text gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>=</mo><mn>0.97</mn></mrow></math> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>S</mi></mrow></msub><mo>=</mo><mn>0.95</mn></mrow></math> but reports effective numbers <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>38.8</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>20.4</mn></mrow></math>, which correspond to
+the more precise values <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>T</mi></msub><mo>=</mo><mn>0.9742</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mi>S</mi></msub><mo>=</mo><mn>0.9510</mn></mrow></math>.
+Using the rounded two-decimal figures gives
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mn>0.97</mn><mo stretchy="false">)</mo><mo>≈</mo><mn>33.3</mn></mrow></math>, not <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>38.8</mn></mrow></math>. Part IV.3 back-solves from
+the effective numbers, which are the relevant precise figures.</p>
+<hr />
+<h2 id="appendix-c-where-this-paper-sits-in-josts-larger-program">Appendix C: where this paper sits in Jost's larger program</h2>
+<p>This paper is one late node in a research program that has run since 2006 and
+asks a single question: <strong>how should biological diversity be measured?</strong> The
+program's answer, and its consequences, arrive in a recognisable order.</p>
+<p><strong>The foundation (2006).</strong> <em>Entropy and diversity</em> establishes that entropy
+measures are not diversities — they are the <em>logarithms</em> of diversities. True
+diversity is the exponential of entropy, an &quot;effective number&quot; of equally common
+types. Part II of this document is that result applied to alleles.</p>
+<p><strong>The partitioning machinery (2007).</strong> <em>Partitioning diversity into independent
+alpha and beta components</em> derives the correct decomposition of diversity into
+within- and between-group parts, and shows the classical additive partition of
+non-additive indices is invalid. This is where <var>D</var> itself is born, and it
+supplies Part V.2 directly.</p>
+<p><strong>The genetics polemic (2008–2009).</strong> <em><var>G</var><sub>ST</sub> and its relatives do not measure
+differentiation</em> carries the argument into population genetics and provoked a
+sustained exchange (Heller &amp; Siegismund 2009, Ryman &amp; Leimar 2009, Meirmans &amp;
+Hedrick 2011, Whitlock 2011), to which Jost (2009) is the reply.</p>
+<p><strong>The similarity framework (2011).</strong> <em>Compositional similarity and beta diversity</em> generalises the machinery into a
+parametric family of similarity measures indexed by <var>q</var>; its Eq. 6.12 is the direct parent of this paper's Eq. 6, and
+hence of <var>D</var>, <var>E</var><sub>ST</sub>, and <var>K</var><sub>ST</sub> together.</p>
+<p><strong>The synthesis (2018).</strong> The paper summarized here, alongside its companion
+Gaggiotti et al. (2018) in the same special issue of <em>Evolutionary
+Applications</em>, is the constructive successor to the 2008 polemic. Where the
+2008 paper argued that <var>G</var><sub>ST</sub> does not measure differentiation, this one grants
+<var>G</var><sub>ST</sub> a legitimate job — nearness to fixation — and argues that the two
+families are complementary rather than rivals. The tone has shifted from
+correction to synthesis, and the six-author list reflects a working group rather
+than a lone critic.</p>
+<p><strong>The through-line</strong> is the <strong>replication principle</strong> (V.3): a measure that will
+be compared as a ratio must double when you pool two equally diverse, completely
+distinct groups. Nearly every specific error the program identifies — in
+ecology, genetics, and phylogenetics alike — is a violation of that one axiom.</p>
+<hr />
+<h2 id="appendix-d-works-cited">Appendix D: works cited</h2>
+<p>Bibliographic details as given in the paper's reference list. DOIs are supplied
+only where verifiable from the source text itself; the remaining entries are
+listed with full citation details for lookup.</p>
+<h3 id="the-paper-summarized-here">The paper summarized here</h3>
+<ul>
+<li>Jost L, Archer F, Flanagan S, Gaggiotti O, Hoban S, Latch E (2018).
+Differentiation measures for conservation genetics. <em>Evolutionary
+Applications</em> 11(7):1139–1148.
+DOI: <a href="#" data-fim-external="https://doi.org/10.1111/eva.12590">10.1111/eva.12590</a></li>
+</ul>
+<h3 id="jost-and-collaborators">Jost and collaborators</h3>
+<ul>
+<li>Jost L (2006). Entropy and diversity. <em>Oikos</em> 113(2):363–375.</li>
+<li>Jost L (2007). Partitioning diversity into independent alpha and beta
+components. <em>Ecology</em> 88(10):2427–2439.</li>
+<li>Jost L (2008). <var>G</var><sub>ST</sub> and its relatives do not measure differentiation.
+<em>Molecular Ecology</em> 17(18):4015–4026.
+DOI: <a href="#" data-fim-external="https://doi.org/10.1111/j.1365-294X.2008.03887.x">10.1111/j.1365-294X.2008.03887.x</a></li>
+<li>Jost L (2009). <var>D</var> vs. <var>G</var><sub>ST</sub>: response to Heller and Siegismund (2009) and
+Ryman and Leimar (2009). <em>Molecular Ecology</em> 18:2088–2091.</li>
+<li>Jost L (2010). The relation between evenness and diversity. <em>Diversity</em>
+2(2):207–232.
+DOI: <a href="#" data-fim-external="https://doi.org/10.3390/d2020207">10.3390/d2020207</a></li>
+<li>Jost L, DeVries PJ, Walla T, Greeney H, Chao A, Ricotta C (2010).
+Partitioning diversity for conservation analyses. <em>Diversity and
+Distributions</em> 16:65–76.</li>
+<li>Jost L, Chao A, Chazdon RL (2011). Compositional similarity and beta
+diversity. Pages 66–84 in Magurran AE, McGill BJ (eds), <em>Biological
+Diversity: Frontiers in Measurement and Assessment</em>. Oxford University Press.</li>
+<li>Chao A, Chiu CH, Jost L (2010). Phylogenetic diversity measures based on Hill
+numbers. <em>Philosophical Transactions of the Royal Society B</em> 365:3599–3609.</li>
+<li>Chao A, Jost L, Hsieh TC, Ma KH, Sherwin B, Rollins LA (2015). Expected
+Shannon entropy and Shannon differentiation between subpopulations for neutral
+genes under the finite island model. <em>PLoS ONE</em>.
+DOI: <a href="#" data-fim-external="https://doi.org/10.1371/journal.pone.0125471">10.1371/journal.pone.0125471</a></li>
+<li>Gaggiotti OE, Chao A, Peres-Neto P, Chiu C-H, Edwards C, Fortin M-J, Jost L,
+Richards CM, Selkoe KA (2018). Diversity from genes to ecosystems: a unifying
+framework to study variation across biological metrics and scales.
+<em>Evolutionary Applications</em>.</li>
+</ul>
+<h3 id="classical-sources-for-the-fixation-family">Classical sources for the fixation family</h3>
+<ul>
+<li>Wright S (1931). Evolution in Mendelian populations. <em>Genetics</em>
+16(2):97–159. The island model and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>F</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≈</mo><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>4</mn><mi>N</mi><mi>m</mi><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math> itself — per
+Whitlock &amp; McCauley (1999) below, not the more commonly cited Wright
+1943 paper (a different contribution, on isolation by distance). Added
+here because this document referenced &quot;Wright's original infinite
+island model&quot; without it; not independently verified against Wright's
+own 1931 text, only against Whitlock &amp; McCauley's account of it.</li>
+<li>Wright S (1943). Isolation by distance. <em>Genetics</em> 28(2):114.</li>
+<li>Wright S (1965). The interpretation of population structure by <var>F</var>-statistics
+with special regard to systems of mating. <em>Evolution</em> 19(3):395–420.</li>
+<li>Wright S (1978). <em>Evolution and the Genetics of Populations, vol. 4:
+Variability Within and Among Populations.</em> (Source of the p. 84 quotation.)</li>
+<li>Crow JF, Kimura M (1970). <em>An Introduction to Population Genetics Theory.</em>
+Harper and Row, New York.</li>
+<li>Kimura M, Crow JF (1964). The number of alleles that can be maintained in a
+finite population. <em>Genetics</em> 49:725–738.</li>
+<li>Nei M (1972). Genetic distance between populations. <em>American Naturalist</em>
+106(949):283–292.</li>
+<li>Nei M (1973). Analysis of gene diversity in subdivided populations.
+<em>Proceedings of the National Academy of Sciences</em> 70(12):3321–3323.</li>
+<li>Crow JF, Aoki K (1984). Group selection for a polygenic behavioral trait:
+estimating the degree of population subdivision. <em>Proceedings of the
+National Academy of Sciences</em> 81(19):6073–6077. Confirmed directly
+(full text) as the source of the finite-deme <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow></math> migration-term
+correction Part VI's (J.54) and Appendix A carry — added here because
+those sections previously stated the correction with no attribution at
+all. Their own Eq. 7 has no mutation term; see Part VI for the
+distinction from this document's own (J.54).</li>
+<li>Takahata N (1983). Gene identity and genetic differentiation of
+populations in the finite island model. <em>Genetics</em> 104(3):497–512.
+Cited by Crow &amp; Aoki (1984) as the source of the general
+finite-<var>K</var>-allele solution (their eq. 6) their own Eq. 7 simplifies by
+dropping the mutation term — not independently verified here.</li>
+<li>Weir BS, Cockerham CC (1984). Estimating <var>F</var>-statistics for the analysis of
+population structure. <em>Evolution</em> 38(6):1358–1370.</li>
+</ul>
+<h3 id="the-surrounding-debate">The surrounding debate</h3>
+<ul>
+<li>Gerlach G, Jueterbock A, Kraemer P, Deppermann J, Harmand P (2010). Calculations of population differentiation
+based on <var>G</var><sub>ST</sub> and <var>D</var>: forget <var>G</var><sub>ST</sub> but
+not all of statistics! <em>Molecular Ecology</em> 19(18):3845–3852.</li>
+<li>Gregorius HR, Roberds JH (1986). Measurement of genetical differentiation among subpopulations. <em>Theoretical and
+Applied Genetics</em> 71:826–834.</li>
+<li>Gregorius HR (2010). Linking diversity and differentiation. <em>Diversity</em> 2:370–394.</li>
+<li>Hedrick PW (2005). A standardized genetic differentiation measure. <em>Evolution</em> 59(8):1633–1638.</li>
+<li>Heller R, Siegismund HR (2009). Relationship between three measures of genetic differentiation
+<var>G</var><sub>ST</sub>, <var>D</var><sub>EST</sub> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mrow><mi>′</mi></mrow></msubsup></mrow></math>: how wrong have we been? <em>Molecular Ecology</em> 18(10):2080–2083.</li>
+<li>Meirmans PG, Hedrick PW (2011). Assessing population structure: <var>F</var><sub>ST</sub> and
+related measures. <em>Molecular Ecology Resources</em> 11(1):5–18.</li>
+<li>Wang J (2012). On the measurements of genetic differentiation among populations. <em>Genetics Research</em> 94:275–289.</li>
+<li>Whitlock MC (2011). <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mrow><mi>′</mi></mrow></msubsup></mrow></math> and <var>D</var> do not replace
+<var>F</var><sub>ST</sub>. <em>Molecular Ecology</em> 20(6):1083–1091.</li>
+<li>Whitlock MC, McCauley DE (1999). Indirect measures of gene flow and migration:
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>F</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≠</mo><mn>1</mn><mo>/</mo><mo stretchy="false">(</mo><mn>4</mn><mi>N</mi><mi>m</mi><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>. <em>Heredity</em> 82:117–125.
+DOI: <a href="#" data-fim-external="https://doi.org/10.1046/j.1365-2540.1999.00496.x">10.1046/j.1365-2540.1999.00496.x</a></li>
+</ul>
+<h3 id="other-works-cited-in-the-argument">Other works cited in the argument</h3>
+<ul>
+<li>Caballero A, Garcia-Dorado A (2013). Allelic diversity and its implications
+for the rate of adaptation. <em>Genetics</em> 195:1373–1384.</li>
+<li>Flanagan SP, Forester B, Latch EK, Aitken S, Hoban S (2017). Guidelines for
+using genomic assessment and monitoring of adaptive variation to inform species
+conservation. <em>Evolutionary Applications.</em></li>
+<li>Funk WC, McKay JK, Hohenlohe PA, Allendorf FW (2012). Harnessing genomics for
+delineating conservation units. <em>Trends in Ecology &amp; Evolution</em>
+27(9):489–496.</li>
+<li>Gliner JA, Morgan GA, Leech NL, Harmon RJ (2001). Problems with null
+hypothesis significance testing. <em>Journal of the American Academy of Child and
+Adolescent Psychiatry</em> 40(2):250–252. (Cited in the paper as &quot;Gilner&quot;.)</li>
+<li>Leng L, Zhang DX (2013). Time matters: some interesting properties of the
+population differentiation measures <var>G</var><sub>ST</sub> and <var>D</var> overlooked in the
+equilibrium perspective. <em>Journal of Systematics and Evolution</em> 51(1):44–60.</li>
+<li>Sherwin W (2010). Entropy and information approaches to genetic diversity and
+its expression: genomic geography. <em>Entropy</em> 12(7):1765–1798.</li>
+<li>Strand TM, Segelbacher G, Quintela M, Xiao L, Axelsson T, Höglund J (2012).
+Can balancing selection on MHC loci counteract genetic drift in small
+fragmented populations of black grouse? <em>Ecology and Evolution</em> 2(2):341–353.</li>
+<li>Vilas A, Pérez-Figueroa A, Quesada H, Caballero A (2015). Allelic diversity
+for neutral markers retains a higher adaptive potential for quantitative
+traits than expected heterozygosity. <em>Molecular Ecology</em> 24:4419–4432.</li>
+</ul>
+<hr />
+<h2 id="appendix-e-the-differentiation-debate-20082011">Appendix E: the differentiation debate, 2008–2011</h2>
+<p>The 2008–2011 exchange over <var>G</var><sub>ST</sub> and <var>D</var> is best read not as a contest over
+which formula is numerically larger on a given dataset, but as a dispute over which
+question addressed by an analysis. One question is how close demes are to
+fixation; another is how different their allele compositions are. The
+classical and Jost families address different quantities, a distinction
+discussed in the 2008–2011 exchange.</p>
+<p><strong>Jost's position.</strong> In the 2008 paper, Jost argued that the classical
+<var>G</var><sub>ST</sub> family, and by extension many uses of
+<var>F</var><sub>ST</sub> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>θ</mi></mrow></math>, was being interpreted as if it measured absolute genetic
+differentiation when it in fact measured the opposite: the degree to which a population has moved toward fixation within
+the pooled array. The formal point was not trivial. The classical family normalizes by
+<var>H</var><sub>T</sub>, while the allelic family normalizes by <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>H</mi><mi>S</mi></msub></mrow></math>. Those are
+different denominators, and therefore different concepts. Once this is
+acknowledged, the apparent paradoxes in the paper's worked examples are no longer paradoxes at all: a population can be
+nearly fixed within demes and yet retain almost no common allele content across demes, producing a very low
+<var>G</var><sub>ST</sub> and a very high <var>D</var>.</p>
+<p><strong>The counter-argument.</strong> The critics were not simply defending a formula; they
+were defending a working interpretation that had become standard in a large body
+of empirical work. In that interpretive regime, <var>F</var><sub>ST</sub>-type statistics were used
+as summaries of population structure and were sometimes interpreted as
+measures of absolute allelic differentiation. Critics argued that
+fixation-based measures remain useful summaries for some demographic
+questions, even when they do not quantify allelic differentiation directly.</p>
+<p>The debate concerned the domains in which each statistic is informative.
+Fixation-based measures can summarize demographic processes under
+drift–migration models, while allelic differentiation measures address
+questions about unique alleles and distinct allele pools.</p>
+<p><strong>Interpretation of the exchange.</strong> The 2008–2011 discussion distinguished
+the domains of the two statistic families. The classical family remains relevant
+to demographic inference, including questions about effective migration,
+drift, and population size. The Jost family addresses allelic
+differentiation, turnover, and differences in allele composition. Neither
+family substitutes for the other across all research questions.</p>
+<p><strong>Where the controversy remains.</strong> The disagreement concerns application,
+not the basic algebra. Researchers must select measures according to the
+research question. For demographic inference, <var>G</var><sub>ST</sub> and
+<var>F</var><sub>ST</sub> remain informative; for allelic diversity, the Jost family
+may be more relevant. The cited literature treats these as complementary
+quantities rather than interchangeable measures.</p>
+<p><strong>Applications.</strong> Conservation analyses may use these measures when
+selecting management units, assessing allelic richness, or prioritizing
+populations for restoration. The cited literature recommends distinguishing
+fixation-based statistics from measures of allelic turnover and unique
+diversity (Jost et al. 2010; Funk et al. 2012; Gaggiotti et al. 2018;
+Flanagan et al. 2017).</p>
+<!--
+**Why the debate matter.** The 2008–2011 exchange helped define the terms on
+which the field now operates. The modern view is narrower and more precise than
+the original polemic: the classical family remains central to demographic
+inference, particularly questions about effective migration, drift, and the
+relative importance of population size and migration rate. The Jost family remains
+central to allelic differentiation, total turnover, and conservation decisions
+about which demes hold unique genetic material. Neither family is a drop-in
+replacement for the other.
+
+This is why the current paper is written in a synthetic tone rather than a
+combative one. It does not say that <var>G</var><sub>ST</sub> is useless. It says it is the wrong
+index for a distinct question. The value of the debate is that it made that
+separation explicit. The field has not simply chosen one side and discarded the
+other; instead, it has largely accepted the more careful distinction: report the
+measurement family by what it represents, and do not read a nearness-to-fixation
+statistic as if it were a measure of absolute allelic dissimilarity.
+
+**Where the controversy remains.** The disagreement persists in application, not in the basic algebra. The debate is
+still alive when researchers ask which measure to lead with in a particular study, or whether a high
+<var>G</var><sub>ST</sub> can be interpreted as meaningful differentiation in a management context. The
+paper's position is that such interpretations are valid only when the correct question is being asked. If the goal is
+estimating demography, <var>G</var><sub>ST</sub> and <var>F</var><sub>ST</sub> remain
+highly informative. If the goal is protecting allelic diversity, the Jost family is the more relevant object. The
+contemporary field largely treats these as complementary quantities rather than rival replacements.
+
+**Real-world impact.** The largest impact of the work has been methodological, not regulatory: it changed the way
+conservation biologists frame management questions. Programs concerned with preserving genetic diversity, identifying
+management units, or prioritizing populations for restoration are explicitly advised to distinguish fixation-based
+statistics from measures of allelic turnover and unique diversity (Jost et al. 2010; Funk et al. 2012; Gaggiotti et al.
+2018; Flanagan et al. 2017). In other words, the practical consequence is not that classical population-genetic tools
+were abandoned, but that they are now read more carefully: a low <var>G</var><sub>ST</sub> or a low
+<var>F</var><sub>ST</sub> does not by itself imply that demes are equivalent in the sense that matters
+for preserving unique alleles. That distinction matters in real conservation decisions about habitat fragmentation,
+translocation, and the prioritization of populations with non-overlapping genetic repertoires.
+
+The same point appears in the more recent literature on genomic monitoring and
+adaptive variation, where authors emphasize that conservation decisions should
+consider allelic richness and functional diversity, not just drift-based
+summaries (Flanagan et al. 2017; Funk et al. 2012). Jost's work therefore had
+its clearest applied effect in the conceptual and analytical language of
+conservation genetics: it pushed the field toward reporting multiple measures, and
+away from treating a single fixation statistic as a stand-in for all forms of
+“differentiation.”
+
+The real legacy of the 2008–2011 polemic is therefore not that one statistic
+won and the other lost. It is that the field became much more explicit about the
+fact that “differentiation” is not a single thing.
+
+---
+
+-->

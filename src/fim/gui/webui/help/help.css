@@ -107,12 +107,9 @@
     border: 1px solid var(--fim-border);
 }
 
-/* The GUI-only reframing note `dev/bin/generate-help-html` prepends to
- * each fragment (2026-09-11 documentation drift audit) -- exists only
- * in the generated HTML, never in `doc/usage.md`/`doc/configuration.md`
- * themselves, so it needs its own visual treatment distinct from the
- * embedded doc's own prose: a subtle, accent-bordered callout, not
- * another plain paragraph a reader could mistake for doc content.
+/* The note `dev/bin/generate-help-html` prepends to the command-line and
+ * configuration references. It exists only in the generated HTML, so it
+ * is styled as a callout rather than another paragraph of the document.
  */
 .help-gui-note {
     border-left: 3px solid var(--fim-accent);
@@ -128,4 +125,81 @@
 
 .help-content th {
     background: var(--fim-border);
+}
+
+/* Toolbar: page history, Help home, search, and Return to work. */
+.help-toolbar {
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.help-search {
+    flex: 1 1 14rem;
+    max-width: 22rem;
+}
+
+#help-return-button {
+    margin-left: auto;
+}
+
+.help-breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.9em;
+    color: var(--fim-muted);
+}
+
+.help-breadcrumb a {
+    color: var(--fim-accent);
+}
+
+.help-breadcrumb-separator {
+    opacity: 0.6;
+}
+
+.help-breadcrumb-current:last-child {
+    font-weight: 600;
+}
+
+/* Help home: one section per topic group. */
+.help-home-intro {
+    max-width: 44rem;
+}
+
+.help-home-group h2 {
+    font-size: 1.05rem;
+}
+
+.help-topic-list,
+.help-search-results {
+    list-style: none;
+    padding: 0;
+}
+
+.help-topic-list li,
+.help-search-results li {
+    margin: 0.5rem 0;
+}
+
+.help-topic-summary,
+.help-search-topic {
+    display: block;
+    font-size: 0.9em;
+    color: var(--fim-muted);
+}
+
+.help-search-snippet {
+    margin: 0.2rem 0 0;
+    font-size: 0.9em;
+}
+
+.help-error {
+    border-left: 3px solid var(--fim-error-mark);
+    padding: 0.5rem 0.75rem;
+}
+
+.help-home,
+.help-search-page {
+    max-width: 52rem;
 }

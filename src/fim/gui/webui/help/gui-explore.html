@@ -1,0 +1,73 @@
+<h1 id="explore">Explore</h1>
+<p>Explore evaluates closed-form predictions from N, d, m, and μ without
+running a simulation. Use it to locate a regime, check a timescale, or
+choose sweep points before you spend computation.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#inputs-and-units">Inputs and units</a></li>
+<li><a href="#predictions">Predictions</a></li>
+<li><a href="#curves-and-surfaces">Curves and surfaces</a></li>
+<li><a href="#from-prediction-to-simulation">From prediction to simulation</a></li>
+<li><a href="#limits">Limits</a></li>
+</ul>
+<h2 id="inputs-and-units">Inputs and units</h2>
+<ul>
+<li><strong>N (individuals/deme)</strong> is in individuals. Explore applies the ploidy
+of the current configuration to obtain gene copies.</li>
+<li><strong>d (demes)</strong>, <strong>m (migration rate)</strong>, and <strong>μ (mutation rate)</strong> use
+the scalar island-model conventions; see
+<a href="#" data-fim-help="gui-conventions" data-fim-anchor="migration">migration</a>.</li>
+<li>A field commits when you leave it or press Enter. Predictions then
+update. Explore never changes Configure until you choose <strong>Run this
+for real</strong> or <strong>Sweep this for real</strong>.</li>
+</ul>
+<h2 id="predictions">Predictions</h2>
+<p>The table groups predictions under <strong>Statistics</strong>, <strong>Equilibrium
+diversity</strong>, and <strong>Identity and regime</strong>. It covers differentiation
+measures, diversity, entropy, effective allele counts, identity-recovery
+timescales, and whether mutation is negligible. Definitions are in the
+<a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a>, including
+<a href="#" data-fim-help="statistics" data-fim-anchor="identity-recovery">identity recovery</a> and
+<a href="#" data-fim-help="statistics" data-fim-anchor="mutation-negligible-equilibrium">mutation-negligible equilibrium</a>.</p>
+<p>Predictions that do not depend on a parameter are flat along it. For
+example, analytic <var>D</var> is independent of N, and identity-recovery
+metrics are independent of μ.</p>
+<h2 id="curves-and-surfaces">Curves and surfaces</h2>
+<ul>
+<li><strong>View</strong> selects <strong>Curve: one parameter</strong> or <strong>Surface: two
+parameters</strong>. A surface uses <strong>Rows</strong> and <strong>Columns</strong> as its two axes.</li>
+<li>Select a statistic row to chart it over the chosen parameter range.
+Charts group compatible units (proportions, nats, allele counts,
+generations).</li>
+<li>The slider evaluates predictions along the range without changing the
+input fields.</li>
+</ul>
+<h2 id="from-prediction-to-simulation">From prediction to simulation</h2>
+<ul>
+<li><strong>Run this for real</strong> copies the four inputs to Configure, selects a
+new Study, and starts from your Settings.</li>
+<li><strong>Choose a sweep…</strong> picks sweep points for the displayed parameters:
+an interval, a count, and a spacing. The spacing is the axis scale
+(linear or log) or even steps of a predicted response chosen in
+<strong>Place points by the response of</strong> (<var>D</var>, <var>G</var><sub>ST</sub>, <var>E</var><sub>ST</sub>, <var>H</var><sub>S</sub>,
+or <var>H</var><sub>T</sub>). Response spacing crowds points where the prediction
+changes fastest, such as the migration threshold. The exact points and
+the planned sweep size are shown. Removing a point switches to an
+explicit list.</li>
+<li><strong>Sweep this for real</strong> copies the inputs to Configure, ticks
+<strong>Sweep</strong>, and stores the axes. See <a href="#" data-fim-help="gui-sweeps" data-fim-anchor="">sweeps</a>.</li>
+</ul>
+<p>Response spacing produces an explicit list of values, so the sweep stays
+reproducible without the closed form.</p>
+<h2 id="limits">Limits</h2>
+<ul>
+<li>Predictions assume equilibrium and the scalar finite island model.
+They do not represent topologies, matrices, unequal sizes, stochastic
+migrant sampling, or finite alleles.</li>
+<li>Typical-deme entropy is approximate, especially at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>2</mn></mrow></math>.</li>
+<li>Explore makes no claim about how long a run takes to reach the
+prediction. Use the derived burn-in shown before a run, and see
+<a href="#" data-fim-help="convergence" data-fim-anchor="">convergence</a>.</li>
+<li>For programmatic access, see the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-functional-api.md#4-fimstatistics--differentiation-and-diversity-measures">Python statistics API</a>.</li>
+</ul>

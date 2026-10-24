@@ -1,4 +1,4 @@
-<div class="help-gui-note"><p><strong>Configuration reference</strong> This page lists YAML keys, types, defaults, and constraints. Configure and Settings expose the corresponding desktop controls; advanced options are available in Expert Settings.</p></div><h1 id="fim-configuration-reference"><code>fim</code> configuration reference</h1>
+<div class="help-gui-note"><p><strong>Configuration reference</strong> This page lists YAML keys, types, defaults, and constraints. The <a href="#" data-fim-help="gui-configure" data-fim-anchor="field-and-key-correspondence">Configure field table</a> maps each desktop control to its key.</p></div><h1 id="fim-configuration-reference"><code>fim</code> configuration reference</h1>
 <p><code>fim run</code> accepts one YAML mapping. Unknown keys, incompatible shapes, and
 out-of-range values are errors. See <a href="#" data-fim-help="usage" data-fim-anchor="">Using <code>fim</code></a> for commands and
 the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md">project overview</a> for installation.</p>
@@ -389,7 +389,7 @@ See the <a href="#" data-fim-external="https://github.com/selby-botany/jost-fini
 selection that changes over a run — are outside the current configuration
 surface. A bounded 2D lattice can be expressed as a sparse neighbor map;
 <code>torus</code> covers the wrapped case. See the
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/migration-conventions.md">migration conventions</a> for matrix orientation
+<a href="#" data-fim-help="migration-conventions" data-fim-anchor="">migration conventions</a> for matrix orientation
 and comparisons with the literature.</p>
 <h3 id="mu"><code>mu</code></h3>
 <ul>
@@ -480,7 +480,7 @@ locus_lengths: [50, 8000]
 <li>infinite_alleles (the default): each mutation produces a globally unique
 label. This approximates mutation at a locus that
 spans many base pairs — see
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md#distance-between-alleles-is-a-different-model">the differentiation-measures guide</a> —
+<a href="#" data-fim-help="jost-differentiation-measures" data-fim-anchor="distance-between-alleles-is-a-different-model">the differentiation-measures guide</a> —
 but increasingly unrealistic for a short locus, where the same state
 can plausibly arise more than once by chance (a <em>recurrence</em>).</li>
 <li>finite_alleles: each locus gets a bounded state space of exactly
@@ -561,7 +561,7 @@ fluctuates around its expectation. The model describes the rate at which
 dependence on the initial state decays. With <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub></mrow></math> ancestral
 gene copies and mutation rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math>, its approximate relaxation time is:</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x003C4;</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mo>&#x02248;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>2</mn><mi>&#x003BC;</mi><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002F;</mo><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(CFG.2)</span></div>
-<p>This is the same idea as <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence defaults</a>, for one deme. The first phase
+<p>This is the same idea as <a href="#" data-fim-help="convergence" data-fim-anchor="">Convergence defaults</a>, for one deme. The first phase
 runs until the population's expected diversity, from any starting frequencies,
 is within your tolerance of its equilibrium value. Define:</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B8;</mi><mo>&#x0003D;</mo><mn>2</mn><msub><mi>N</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi></mrow></mrow></msub><mi>&#x003BC;</mi></mrow></math><span class="equation-tag">(CFG.3)</span></div>
@@ -702,7 +702,7 @@ is about 104,000 generations and the cap about 399,000. A run ending after
 100 generations cannot provide an equilibrium estimate for that configuration.</p>
 <p>Choose a positive integer to override. Too short a burn-in starts averaging
 inside the transient and biases the average. Why the formula has this form,
-and how its numbers were chosen, is in <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence</a>.</p>
+and how its numbers were chosen, is in <a href="#" data-fim-help="convergence" data-fim-anchor="">Convergence</a>.</p>
 <pre><code class="language-yaml">convergence_burn_in: 5000
 </code></pre>
 <h3 id="convergence_estimate">convergence_estimate</h3>
@@ -812,7 +812,7 @@ and <code>fim sweep</code> use the file's value.</p>
 outcome that did not reach the requested precision, with the average and error
 bar the run has. <code>auto</code> derives it as <code>max(200000, burn_in + ceil(15 tau))</code>, at
 most 10,000,000 (at least 200,000, so a single locus has room to average its
-variation down to the configured precision — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md#how-precise-is-the-reported-value">How precise is the reported
+variation down to the configured precision — see <a href="#" data-fim-help="convergence" data-fim-anchor="how-precise-is-the-reported-value">How precise is the reported
 value?</a>); see
 <a href="#convergence_burn_in">convergence_burn_in</a>. A cap at or below the burn-in ends
 the run before any averaging, and the run logs a warning. Setting only a
@@ -909,7 +909,7 @@ trajectory_stride: 20
 <li><strong>Default:</strong> empty (every Expert Setting at its default)</li>
 </ul>
 <p>Overrides for convergence and storage policy constants. The defaults and
-their calibration are documented in <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/convergence.md">Convergence</a>.
+their calibration are documented in <a href="#" data-fim-help="convergence" data-fim-anchor="">Convergence</a>.
 Only nondefault values are written to <code>manifest.json</code>.
 Convergence-policy overrides affect run identity; storage-policy overrides
 do not. See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md#what-decides-a-runs-identity">run identity</a>.</p>
@@ -1106,7 +1106,7 @@ small-denominator instability a per-locus ratio can have.</li>
 then average the ratios. Use this when matching an analysis or publication
 that applies this estimator. The mean of ratios generally differs from
 the ratio of means; see
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md">differentiation measures</a> for formulas.</li>
+<a href="#" data-fim-help="jost-differentiation-measures" data-fim-anchor="">differentiation measures</a> for formulas.</li>
 </ul>
 <p>The convergence monitor uses the same locus-aggregation setting for watched
 <code>D</code>/<var>G</var><sub>ST</sub> as the final report.</p>
@@ -1267,7 +1267,7 @@ matches the other two exactly for the same seed.</li>
 <pre><code class="language-yaml">migrant_sampling: stochastic
 </code></pre>
 <p>This is the finite island model variant described in
-<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/finite-island-model-introduction.md#32-one-generation-in-two-steps">the finite island model introduction, §3.2</a>:
+<a href="#" data-fim-help="finite-island-model-introduction" data-fim-anchor="32-one-generation-in-two-steps">the finite island model introduction, §3.2</a>:
 sampling migrant counts instead of treating migration as an
 idealized continuous fraction. It adds one random process to the pipeline
 (how many migrate) without duplicating the one already there (<code>drift</code>

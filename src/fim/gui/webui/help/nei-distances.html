@@ -1,0 +1,424 @@
+<h1 id="nei-distances-in-fim-two-denominators-pairs-and-all-demes">Nei distances in <code>fim</code>: two denominators, pairs and all demes</h1>
+<p><code>fim</code> reports Nei's genetic distance in eight forms, together with the
+corresponding genetic identities. This guide defines each form, explains
+why they can differ, and describes the conditions under which the
+all-demes geometric distance is negative.</p>
+<p>Mathematical symbols use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math>; literal setting names, statistic keys,
+and code identifiers use backticks. Each displayed equation has one
+unique tag beginning with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mtext>N</mtext></mrow></math> for this document.</p>
+<ul>
+<li><a href="#who-this-is-for">Who this is for</a></li>
+<li><a href="#the-short-version">The short version</a></li>
+<li><a href="#what-a-nei-distance-measures">What a Nei distance measures</a></li>
+<li><a href="#the-two-denominators">The two denominators</a></li>
+<li><a href="#a-pair-of-demes-or-all-of-them">A pair of demes, or all of them</a></li>
+<li><a href="#several-loci-two-ways-to-combine-them">Several loci: two ways to combine them</a></li>
+<li><a href="#when-the-distance-is-infinite">When the distance is infinite</a></li>
+<li><a href="#when-the-distance-is-negative">When the distance is negative</a></li>
+<li><a href="#how-the-forms-relate-to-josts-d">How the forms relate to Jost's D</a></li>
+<li><a href="#where-to-find-the-values">Where to find the values</a></li>
+<li><a href="#other-measures-captured-alongside">Other measures captured alongside</a></li>
+<li><a href="#a-short-mathematical-refresher">A short mathematical refresher</a></li>
+<li><a href="#formula-sheet">Formula sheet</a></li>
+<li><a href="#references">References</a></li>
+</ul>
+<h2 id="who-this-is-for">Who this is for</h2>
+<p>Written first for a researcher reading <code>fim</code>'s results, with no
+programming assumed. The derivations and worked examples are for anyone
+who wants to check the arithmetic step by step. Statistic keys such as
+<code>NEI_D_PAIR_ARITH</code> are the literal names used in saved results and in the
+Settings dialog; they are not mathematical variables. The
+<a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> lists statistic definitions and
+result identifiers.</p>
+<h2 id="the-short-version">The short version</h2>
+<ul>
+<li>Nei's distance compares how often two gene copies match <strong>between</strong>
+demes with how often they match <strong>within</strong> demes. Zero means the demes
+are alike; it grows as they diverge. It is infinite when the selected
+identity rule yields zero.</li>
+<li>The <strong>denominator</strong> (the &quot;within&quot; part) can be a geometric mean (Nei's
+1972 original) or an arithmetic mean (the version Jost uses). The
+arithmetic-denominator distance is never smaller; the two agree
+exactly when the demes are equally diverse.</li>
+<li><strong>Pair</strong> forms compare the two demes chosen for the scatter plot.
+<strong>All-demes</strong> forms summarize every deme at once.</li>
+<li>With several loci, Nei's own rule combines loci first and takes one
+ratio (the default). The <strong>per-locus mean</strong> takes one distance per
+locus and averages them.</li>
+<li>The all-demes geometric form <strong>can be negative</strong>. That is not an error;
+it means within-deme diversity is very uneven across demes. See
+<a href="#when-the-distance-is-negative">When the distance is negative</a>.</li>
+<li>Every form is computed and saved for every run. Choose which ones to
+<em>see</em> in Settings, &quot;Statistics shown&quot;; the Nei family starts hidden.</li>
+</ul>
+<h2 id="what-a-nei-distance-measures">What a Nei distance measures</h2>
+<p>At one locus, let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mrow><mi>k</mi><mo>,</mo><mi>i</mi></mrow></msub></mrow></math> be the frequency of allele <var>i</var> in deme <var>k</var>.
+If two copies are sampled independently from that deme, both copies
+carry allele <var>i</var> with probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mrow><mi>k</mi><mo>,</mo><mi>i</mi></mrow></msub><msub><mi>p</mi><mrow><mi>k</mi><mo>,</mo><mi>i</mi></mrow></msub></mrow></math>. Add those
+non-overlapping allele cases to obtain the within-deme gene identity:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mi>k</mi></msub><mo>&#x0003D;</mo><munder><mo>&#x02211;</mo><mi>i</mi></munder><msubsup><mi>p</mi><mrow><mi>k</mi><mo>&#x0002C;</mo><mi>i</mi></mrow><mn>2</mn></msubsup></mrow></math><span class="equation-tag">(N.1)</span></div>
+<p>For example, if deme X has frequencies <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.75</mn><mo>,</mo><mn>0.25</mn><mo stretchy="false">)</mo></mrow></math>, then:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mi>X</mi></msub><mo>&#x0003D;</mo><msup><mn>0.75</mn><mn>2</mn></msup><mo>&#x0002B;</mo><msup><mn>0.25</mn><mn>2</mn></msup><mo>&#x0003D;</mo><mn>0.5625</mn><mo>&#x0002B;</mo><mn>0.0625</mn><mo>&#x0003D;</mo><mn>0.625</mn></mrow></math><span class="equation-tag">(N.2)</span></div>
+<p>For one copy from deme X and one from deme Y, the probability that both
+are allele <var>i</var> is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mrow><mi>X</mi><mo>,</mo><mi>i</mi></mrow></msub><msub><mi>p</mi><mrow><mi>Y</mi><mo>,</mo><mi>i</mi></mrow></msub></mrow></math>. Summing over the alleles present in
+either deme gives the between-deme identity:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mi>X</mi><mi>Y</mi></mrow></msub><mo>&#x0003D;</mo><munder><mo>&#x02211;</mo><mi>i</mi></munder><msub><mi>p</mi><mrow><mi>X</mi><mo>&#x0002C;</mo><mi>i</mi></mrow></msub><msub><mi>p</mi><mrow><mi>Y</mi><mo>&#x0002C;</mo><mi>i</mi></mrow></msub></mrow></math><span class="equation-tag">(N.3)</span></div>
+<p>If Y has frequencies <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.25</mn><mo>,</mo><mn>0.75</mn><mo stretchy="false">)</mo></mrow></math> over the same two alleles, the
+products are <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.75</mn><mo stretchy="false">(</mo><mn>0.25</mn><mo stretchy="false">)</mo><mo>=</mo><mn>0.1875</mn></mrow></math> for the first allele and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.25</mn><mo stretchy="false">(</mo><mn>0.75</mn><mo stretchy="false">)</mo><mo>=</mo><mn>0.1875</mn></mrow></math> for the second. Therefore:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mi>X</mi><mi>Y</mi></mrow></msub><mo>&#x0003D;</mo><mn>0.1875</mn><mo>&#x0002B;</mo><mn>0.1875</mn><mo>&#x0003D;</mo><mn>0.375</mn></mrow></math><span class="equation-tag">(N.4)</span></div>
+<p>The between-deme identity is smaller here because each deme favors a
+different allele. Nei's identity <var>I</var> compares <var>J</var><sub>XY</sub> with a chosen
+average of the within-deme identities. Identical allele-frequency
+distributions give <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>I</mi><mo>=</mo><mn>1</mn></mrow></math>; less between-deme matching gives a smaller
+identity.</p>
+<p>The distance transforms identity with the negative natural logarithm:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>D</mi><mo>&#x0003D;</mo><mo>&#x02212;</mo><mi>ln</mi><mo stretchy="false">&#x00028;</mo><mi>I</mi><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(N.5)</span></div>
+<p>Since <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>1</mn><mo stretchy="false">)</mo><mo>=</mo><mn>0</mn></mrow></math>, identical populations have distance zero. As <var>I</var>
+falls toward zero, the distance grows; at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>I</mi><mo>=</mo><mn>0</mn></mrow></math>, the limiting distance
+is infinite. Under Nei's mutation model, this logarithm makes the
+distance increase approximately in proportion to elapsed time after
+isolated populations separate.</p>
+<h2 id="the-two-denominators">The two denominators</h2>
+<p>&quot;A typical within-deme identity&quot; can be averaged two ways.</p>
+<table>
+<thead>
+<tr>
+<th>Form</th>
+<th>Pair denominator</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Geometric</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msqrt><mrow><msub><mi>J</mi><mi>X</mi></msub><msub><mi>J</mi><mi>Y</mi></msub></mrow></msqrt></mrow></math></td>
+<td>Nei (1972)</td>
+</tr>
+<tr>
+<td>Arithmetic</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><msub><mi>J</mi><mi>X</mi></msub><mo>+</mo><msub><mi>J</mi><mi>Y</mi></msub><mo stretchy="false">)</mo><mo>/</mo><mn>2</mn></mrow></math></td>
+<td>Jost, L. (2026) private communication</td>
+</tr>
+</tbody>
+</table>
+<p>For positive within identities, the arithmetic-geometric mean
+inequality says that the arithmetic mean across <var>d</var> demes is at least
+the geometric mean. The pair case is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>2</mn></mrow></math>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac><mrow><mn>1</mn></mrow><mrow><mi>d</mi></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>k</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></munderover><msub><mi>J</mi><mi>k</mi></msub><mo>&#x02265;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msubsup><mo>&#x0220F;</mo><mrow><mi>k</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></msubsup><msub><mi>J</mi><mi>k</mi></msub><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mrow><mn>1</mn><mo>&#x0002F;</mo><mi>d</mi></mrow></msup></mrow></math><span class="equation-tag">(N.6)</span></div>
+<p>For a pair, equality holds exactly when <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mi>X</mi></msub><mo>=</mo><msub><mi>J</mi><mi>Y</mi></msub></mrow></math>; across all demes,
+it holds exactly when every <var>J</var><sub>k</sub> is equal. Both identities divide
+the same between-deme identity by these denominators, so:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi></mrow></mrow></msub><mo>&#x02264;</mo><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">g</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">o</mi></mrow></mrow></msub></mrow></math><span class="equation-tag">(N.7)</span></div>
+<p>For a pair, the cross-identity is an inner product of two frequency
+vectors. Cauchy-Schwarz bounds it by the product of their lengths:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mi>X</mi><mi>Y</mi></mrow></msub><mo>&#x02264;</mo><msqrt><mrow><msub><mi>J</mi><mi>X</mi></msub><msub><mi>J</mi><mi>Y</mi></msub></mrow></msqrt></mrow></math><span class="equation-tag">(N.6a)</span></div>
+<p>Thus the pair geometric identity cannot exceed one; (N.7) bounds the
+pair arithmetic identity as well. Across all demes,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mi>k</mi><mi>ℓ</mi></mrow></msub><mo>≤</mo><mo stretchy="false">(</mo><msub><mi>J</mi><mi>k</mi></msub><mo>+</mo><msub><mi>J</mi><mi>ℓ</mi></msub><mo stretchy="false">)</mo><mo>/</mo><mn>2</mn></mrow></math> for each pair, so averaging every pair
+also bounds the all-demes arithmetic numerator:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x02264;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>d</mi></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>k</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></munderover><msub><mi>J</mi><mi>k</mi></msub></mrow></math><span class="equation-tag">(N.6b)</span></div>
+<p>This proves that the all-demes arithmetic identity is at most one.
+Only the all-demes geometric identity lacks that bound.</p>
+<p>Applying <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mi>·</mi><mo stretchy="false">)</mo></mrow></math> reverses that ordering:</p>
+<ul>
+<li>the <strong>arithmetic identity is never larger</strong> than the geometric one, and
+the <strong>arithmetic distance is never smaller</strong>;</li>
+<li>they <strong>agree exactly when the two demes are equally diverse</strong>
+(<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mi>X</mi></msub><mo>=</mo><msub><mi>J</mi><mi>Y</mi></msub></mrow></math>), and differ most when one deme is much more diverse than
+the other.</li>
+</ul>
+<p>Comparing the two is therefore itself informative: a large gap between
+them says the demes differ in diversity, not only in which alleles they
+carry. For the example above, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mi>X</mi></msub><mo>=</mo><msub><mi>J</mi><mi>Y</mi></msub><mo>=</mo><mn>0.625</mn></mrow></math>, so the denominators
+coincide even though the allele frequencies differ. The two forms then
+give the same identity:
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>I</mi><mo>=</mo><msub><mi>J</mi><mrow><mi>X</mi><mi>Y</mi></mrow></msub><mo>/</mo><mn>0.625</mn><mo>=</mo><mn>0.375</mn><mo>/</mo><mn>0.625</mn><mo>=</mo><mn>0.6</mn></mrow></math>. The distance is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>0.6</mn><mo stretchy="false">)</mo><mo>≈</mo><mn>0.511</mn></mrow></math>. A denominator difference appears only when
+the within-deme identities differ.</p>
+<h2 id="a-pair-of-demes-or-all-of-them">A pair of demes, or all of them</h2>
+<p><strong>Pair forms</strong> (<code>NEI_D_PAIR_*</code>) compare two demes: the pair selected in the
+scatter plot, or Demes 1 and 2 by default. Values update with the selected
+pair in the live view, in completed runs, and across generations. A deme
+compared with itself has distance 0.</p>
+<p><strong>All-demes forms</strong> (<code>NEI_D_ALL_*</code>) summarize every deme at once. At one
+locus, for <var>d</var> demes, the numerator averages <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mi>k</mi><mi>ℓ</mi></mrow></msub></mrow></math> over all
+unordered pairs; the denominator averages or geometrically combines the
+<var>d</var> within-deme identities:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>2</mn></mrow><mrow><mi>d</mi><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo></mrow></mfrac><munder><mo>&#x02211;</mo><mrow><mi>k</mi><mo>&#x0003C;</mo><mi>&#x02113;</mi></mrow></munder><msub><mi>J</mi><mrow><mi>k</mi><mi>&#x02113;</mi></mrow></msub></mrow></math><span class="equation-tag">(N.8)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">l</mi><mo>&#x0002C;</mo><mi mathvariant="normal">g</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">o</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow><mrow><mi>&#x00028;</mi><msubsup><mo>&#x0220F;</mo><mrow><mi>k</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></msubsup><msub><mi>J</mi><mi>k</mi></msub><msup><mi>&#x00029;</mi><mrow><mn>1</mn><mo>&#x0002F;</mo><mi>d</mi></mrow></msup></mrow></mfrac></mrow></math><span class="equation-tag">(N.9)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">l</mi><mo>&#x0002C;</mo><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow><mrow><mfrac><mrow><mn>1</mn></mrow><mrow><mi>d</mi></mrow></mfrac><msubsup><mo>&#x02211;</mo><mrow><mi>k</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></msubsup><msub><mi>J</mi><mi>k</mi></msub></mrow></mfrac></mrow></math><span class="equation-tag">(N.10)</span></div>
+<p>For two demes, there is one unordered pair and the all-demes numerator
+is exactly <var>J</var><sub>12</sub>. Its two within identities are <var>J</var><sub>1</sub> and <var>J</var><sub>2</sub>, so
+each all-demes form equals its matching pair form.</p>
+<p>Every run also saves the pair values for <strong>every</strong> pair of demes in
+<code>pairwise.json</code>, so a pair you did not look at during the run can still be
+compared later (see <a href="#where-to-find-the-values">Where to find the values</a>).</p>
+<h2 id="several-loci-two-ways-to-combine-them">Several loci: two ways to combine them</h2>
+<p>Most runs track <var>L</var> loci, and the two rules for combining them can give
+different answers. Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mi>k</mi><mo>,</mo><mi>ℓ</mi></mrow></msub></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mi>X</mi><mi>Y</mi><mo>,</mo><mi>ℓ</mi></mrow></msub></mrow></math> for the
+within- and between-deme identities at locus <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math>.</p>
+<p><strong>Nei's pooled rule</strong> averages each identity over loci first. For a
+pair, these pooled quantities are:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mi>X</mi></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>L</mi></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>&#x02113;</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>L</mi></mrow></munderover><msub><mi>J</mi><mrow><mi>X</mi><mo>&#x0002C;</mo><mi>&#x02113;</mi></mrow></msub></mrow></math><span class="equation-tag">(N.11)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mi>Y</mi></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>L</mi></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>&#x02113;</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>L</mi></mrow></munderover><msub><mi>J</mi><mrow><mi>Y</mi><mo>&#x0002C;</mo><mi>&#x02113;</mi></mrow></msub></mrow></math><span class="equation-tag">(N.12)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mrow><mi>X</mi><mi>Y</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>L</mi></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>&#x02113;</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>L</mi></mrow></munderover><msub><mi>J</mi><mrow><mi>X</mi><mi>Y</mi><mo>&#x0002C;</mo><mi>&#x02113;</mi></mrow></msub></mrow></math><span class="equation-tag">(N.13)</span></div>
+<p>Then <code>fim</code> applies the chosen denominator once to those three pooled
+identities and takes one logarithm:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">l</mi><mo>&#x0002C;</mo><mi mathvariant="normal">g</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">o</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mrow><mi>X</mi><mi>Y</mi></mrow></msub></mrow><mrow><msqrt><mrow><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mi>X</mi></msub><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mi>Y</mi></msub></mrow></msqrt></mrow></mfrac></mrow></math><span class="equation-tag">(N.14)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">l</mi><mo>&#x0002C;</mo><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mrow><mi>X</mi><mi>Y</mi></mrow></msub></mrow><mrow><mo stretchy="false">&#x00028;</mo><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mi>X</mi></msub><mo>&#x0002B;</mo><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mi>Y</mi></msub><mo stretchy="false">&#x00029;</mo><mo>&#x0002F;</mo><mn>2</mn></mrow></mfrac></mrow></math><span class="equation-tag">(N.15)</span></div>
+<p>The same sequence applies to all demes. First average each within-deme
+identity and the between-deme identity across loci:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mi>k</mi></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>L</mi></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>&#x02113;</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>L</mi></mrow></munderover><msub><mi>J</mi><mrow><mi>k</mi><mo>&#x0002C;</mo><mi>&#x02113;</mi></mrow></msub></mrow></math><span class="equation-tag">(N.16)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>J</mi><mo accent="true">&#x02015;</mo></mover><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>L</mi></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>&#x02113;</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>L</mi></mrow></munderover><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow><mo>&#x0002C;</mo><mi>&#x02113;</mi></mrow></msub></mrow></math><span class="equation-tag">(N.17)</span></div>
+<p>Then insert those averages in the all-demes ratios (N.9) and (N.10).
+A locus contributes according to how much identity it supplies; it is
+not assigned an independent, equal-weight distance.</p>
+<p><strong>Per-locus mean</strong> (the <code>_LOCUS_MEAN</code> forms) instead computes one
+identity and distance at each locus, then averages the distances. If
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>I</mi><mi>ℓ</mi></msub></mrow></math> is the selected pair or all-demes identity for locus <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>D</mi><mrow><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">c</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">s</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mi>L</mi></mrow></mfrac><munderover><mo>&#x02211;</mo><mrow><mi>&#x02113;</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>L</mi></mrow></munderover><mo>&#x02212;</mo><mi>ln</mi><mo stretchy="false">&#x00028;</mo><msub><mi>I</mi><mi>&#x02113;</mi></msub><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(N.18)</span></div>
+<p>Using <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mo stretchy="false">(</mo><mo>∏</mo><msub><mi>x</mi><mi>ℓ</mi></msub><mo stretchy="false">)</mo><mo>=</mo><mo>∑</mo><mi>ln</mi><mo stretchy="false">(</mo><msub><mi>x</mi><mi>ℓ</mi></msub><mo stretchy="false">)</mo></mrow></math> shows that the corresponding
+reported identity is the geometric mean of the per-locus identities:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">c</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">s</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mi>exp</mi><mo stretchy="false">&#x00028;</mo><mo>&#x02212;</mo><msub><mi>D</mi><mrow><mrow><mi mathvariant="normal">l</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">c</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">s</mi><mtext>&#x000A0;</mtext><mi mathvariant="normal">m</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><msubsup><mo>&#x0220F;</mo><mrow><mi>&#x02113;</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>L</mi></mrow></msubsup><msub><mi>I</mi><mi>&#x02113;</mi></msub><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mrow><mn>1</mn><mo>&#x0002F;</mo><mi>L</mi></mrow></msup></mrow></math><span class="equation-tag">(N.19)</span></div>
+<p>For example, if two loci have identities <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.8</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.2</mn></mrow></math>, their
+per-locus mean distance is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>0.8</mn><mo stretchy="false">)</mo><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>0.2</mn><mo stretchy="false">)</mo><mo stretchy="false">]</mo><mo>/</mo><mn>2</mn><mo>≈</mo><mn>0.9163</mn></mrow></math>, and the equivalent identity
+is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msqrt><mrow><mn>0.8</mn><mo stretchy="false">(</mo><mn>0.2</mn><mo stretchy="false">)</mo></mrow></msqrt><mo>=</mo><mn>0.4</mn></mrow></math>. This is not the arithmetic mean of the
+locus identities (which would be <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.5</mn></mrow></math>).</p>
+<p>The two rules differ most when loci behave differently. If any single
+locus has zero identity, its distance is infinite, so the per-locus mean
+is infinite. The pooled rule can remain finite if other loci have
+positive between-deme identity: a zero at one locus does not make the
+average between-deme identity zero.</p>
+<p>Cost: the per-locus mean reuses the identities Nei's rule already
+computes; it adds one ratio and one logarithm per locus, which is not
+measurable next to the rest of a run.</p>
+<h2 id="when-the-distance-is-infinite">When the distance is infinite</h2>
+<p>For a pair, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mi>X</mi><mi>Y</mi><mo>,</mo><mi>ℓ</mi></mrow></msub><mo>=</mo><mn>0</mn></mrow></math> when the demes share no allele at locus
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math>. Under the pooled rule, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>I</mi><mo>=</mo><mn>0</mn></mrow></math> only if the mean
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>J</mi><mo accent="true">―</mo></mover><mrow><mi>X</mi><mi>Y</mi></mrow></msub></mrow></math> is zero, which requires zero cross-identity at every
+locus. Under the per-locus mean, one locus with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>I</mi><mi>ℓ</mi></msub><mo>=</mo><mn>0</mn></mrow></math> is enough:
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mn>0</mn><mo stretchy="false">)</mo></mrow></math> is infinite, and averaging that distance remains infinite.
+The same distinction applies to all-demes identities, where the
+per-locus numerator averages cross-identities over all deme pairs.</p>
+<p>The screen shows <strong>∞</strong>, with the tooltip &quot;infinite (no allele is
+shared)&quot;. Strict JSON cannot represent infinity, so <code>report.json</code>
+stores <code>null</code> for the distance; the matching identity in <code>NEI_I_...</code> is
+finite and is zero in this case. A batch summary omits a distance that
+is infinite in any replicate, because the mean then has no finite value.</p>
+<h2 id="when-the-distance-is-negative">When the distance is negative</h2>
+<p>Only one form can be negative: the <strong>all-demes geometric</strong> form
+(<code>NEI_D_ALL_GEO</code> and <code>NEI_D_ALL_GEO_LOCUS_MEAN</code>). Every pair form and every
+arithmetic form stays at or above 0.</p>
+<h3 id="what-is-going-on">What is going on</h3>
+<p>The all-demes geometric identity divides average between-deme sharing
+by the geometric mean of the within-deme identities. By (N.6), a
+geometric mean is no larger than the arithmetic mean. If one deme is
+much more diverse than the others, its within identity is small and
+pulls the geometric denominator downward. The numerator can then be
+larger than that denominator, giving <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>I</mi><mo>&gt;</mo><mn>1</mn></mrow></math>. Since <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mo stretchy="false">(</mo><mi>I</mi><mo stretchy="false">)</mo><mo>&gt;</mo><mn>0</mn></mrow></math> for <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>I</mi><mo>&gt;</mo><mn>1</mn></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mi>I</mi><mo stretchy="false">)</mo></mrow></math> is negative. This can happen only for the all-demes geometric
+form; pair identities are bounded by one through the Cauchy-Schwarz
+inequality, and the all-demes arithmetic identity is bounded by one.</p>
+<h3 id="a-worked-example">A worked example</h3>
+<p>One locus, three demes:</p>
+<table>
+<thead>
+<tr>
+<th>Deme</th>
+<th>Allele frequencies</th>
+<th>Within-deme identity <var>J</var><sub>k</sub></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>fixed for allele A</td>
+<td>1</td>
+</tr>
+<tr>
+<td>2</td>
+<td>fixed for allele A</td>
+<td>1</td>
+</tr>
+<tr>
+<td>3</td>
+<td>1000 alleles, each at frequency <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.001</mn></mrow></math>, including A</td>
+<td>0.001</td>
+</tr>
+</tbody>
+</table>
+<p>The third deme's within identity is the sum of one thousand equal
+squared frequencies. For any deme, its own identity is calculated from
+the squared frequency of each allele:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mn>3</mn></msub><mo>&#x0003D;</mo><mn>1000</mn><mo stretchy="false">&#x00028;</mo><mn>0.001</mn><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mo>&#x0003D;</mo><mn>0.001</mn></mrow></math><span class="equation-tag">(N.20)</span></div>
+<p>The between-deme identities are <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mn>12</mn></mrow></msub><mo>=</mo><mn>1</mn></mrow></math> (both demes are fixed for
+A), <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mn>13</mn></mrow></msub><mo>=</mo><mn>0.001</mn></mrow></math>, and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mn>23</mn></mrow></msub><mo>=</mo><mn>0.001</mn></mrow></math> (A is the only shared allele
+with deme 3). Average the three unordered pairs:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>1</mn><mo>&#x0002B;</mo><mn>0.001</mn><mo>&#x0002B;</mo><mn>0.001</mn></mrow><mrow><mn>3</mn></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mrow><mn>1.002</mn></mrow><mrow><mn>3</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>0.334</mn></mrow></math><span class="equation-tag">(N.21)</span></div>
+<p>The geometric mean of <var>d</var> positive values is their product raised to
+the power <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>d</mi></mrow></math>, as in the denominator of (N.9). For two values,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>2</mn></mrow></math>, this is the familiar square root. Here there are three
+within-deme identities, so <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>3</mn></mrow></math> and the exponent is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mn>3</mn></mrow></math>: taking
+the cube root. This gives the single value whose product with itself
+three times equals the original product. Since
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.1</mn><mi>·</mi><mn>0.1</mn><mi>·</mi><mn>0.1</mn><mo>=</mo><mn>0.001</mn></mrow></math>, the denominator is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mo>&#x0002C;</mo><mi mathvariant="normal">g</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">o</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mi>&#x000B7;</mi><mn>1</mn><mi>&#x000B7;</mi><mn>0.001</mn><msup><mo stretchy="false">&#x00029;</mo><mrow><mn>1</mn><mo>&#x0002F;</mo><mn>3</mn></mrow></msup><mo>&#x0003D;</mo><mn>0.1</mn></mrow></math><span class="equation-tag">(N.22)</span></div>
+<p>Divide the pair average by that denominator, then take the negative
+logarithm:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">l</mi><mo>&#x0002C;</mo><mi mathvariant="normal">g</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">o</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><mn>0.334</mn></mrow><mrow><mn>0.1</mn></mrow></mfrac><mo>&#x0003D;</mo><mn>3.34</mn></mrow></math><span class="equation-tag">(N.23)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>D</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">l</mi><mo>&#x0002C;</mo><mi mathvariant="normal">g</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">o</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mo>&#x02212;</mo><mi>ln</mi><mo stretchy="false">&#x00028;</mo><mn>3.34</mn><mo stretchy="false">&#x00029;</mo><mo>&#x02248;</mo><mo>&#x02212;</mo><mn>1.206</mn></mrow></math><span class="equation-tag">(N.24)</span></div>
+<p>For comparison, the arithmetic denominator is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><mn>1</mn><mo>+</mo><mn>0.001</mn><mo stretchy="false">)</mo><mo>/</mo><mn>3</mn><mo>≈</mo><mn>0.667</mn></mrow></math>. It gives identity approximately <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.501</mn></mrow></math>
+and distance approximately <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.692</mn></mrow></math>, which is positive. The numerator
+did not change; the choice of within-deme averaging changed the
+denominator.</p>
+<h3 id="how-to-read-it">How to read it</h3>
+<p>A negative value does not mean the demes are &quot;closer than identical&quot;.
+It means the question this form asks, &quot;how does typical between-deme
+sharing compare with the geometric mean of within-deme sharing&quot;, is being
+dominated by a few very diverse demes. Read it as a signal that
+<strong>within-deme diversity is highly unequal</strong>, and:</p>
+<ul>
+<li>look at the arithmetic form beside it, which is not pulled toward the
+most diverse deme and stays in its ordinary range;</li>
+<li>look at <code>H_S</code> and the effective number of alleles to see the uneven
+diversity directly;</li>
+<li>use pair forms to find which demes drive the difference.</li>
+</ul>
+<p><code>fim</code> reports the value as computed and never clamps it to 0, because
+clamping would hide exactly this signal. A value within rounding of 0 is
+shown as 0.</p>
+<h2 id="how-the-forms-relate-to-josts-d">How the forms relate to Jost's D</h2>
+<p>Let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></math> be the arithmetic mean of within-deme
+identities and let <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></math> be the mean between-deme
+identity. Jost's differentiation statistic (reported under the literal
+key <code>D</code>) is one minus their ratio:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>D</mi><mrow><mrow><mi mathvariant="normal">J</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow><mrow><msub><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi></mrow></mrow></msub></mrow></mfrac></mrow></math><span class="equation-tag">(N.25)</span></div>
+<p>The all-demes arithmetic Nei identity is that same ratio, and its
+distance applies the negative logarithm. Therefore:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>I</mi><mrow><mrow><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">l</mi><mo>&#x0002C;</mo><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>D</mi><mrow><mrow><mi mathvariant="normal">J</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub></mrow></math><span class="equation-tag">(N.26)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>D</mi><mrow><mrow><mi mathvariant="normal">N</mi><mi mathvariant="normal">E</mi><mi mathvariant="normal">I</mi><mo>&#x0002C;</mo><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">l</mi><mo>&#x0002C;</mo><mi mathvariant="normal">a</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">h</mi></mrow></mrow></msub><mo>&#x0003D;</mo><mo>&#x02212;</mo><mi>ln</mi><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>D</mi><mrow><mrow><mi mathvariant="normal">J</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msub><mo stretchy="false">&#x00029;</mo></mrow></math><span class="equation-tag">(N.27)</span></div>
+<p><code>fim</code>'s default <code>D</code> combines loci by the same pooled rule
+(<a href="#" data-fim-help="configuration" data-fim-anchor="locus_aggregation">locus_aggregation</a> <code>ratio_of_means</code>),
+so the relation holds exactly for every report; with <code>mean_of_ratios</code> it
+holds locus by locus. The same relation, applied to two demes, links each
+pair arithmetic distance to Jost's <code>D</code> for that pair. It is a useful check:
+the two are computed by independent code in <code>fim</code>. The equality requires
+matching locus aggregation and the arithmetic denominator; it does not
+hold for the geometric forms.</p>
+<h2 id="where-to-find-the-values">Where to find the values</h2>
+<table>
+<thead>
+<tr>
+<th>Place</th>
+<th>What is there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Run card, statistics panel</td>
+<td>Rows for the forms you choose to show. Pair forms sit under a heading naming the pair (&quot;Demes 1 and 3&quot;). Hover a row for its value and a one-sentence description.</td>
+</tr>
+<tr>
+<td>Settings, &quot;Statistics shown&quot;</td>
+<td>Turn forms on and off; the &quot;Nei distances&quot; preset shows Nei's-rule distances for pairs and all demes. &quot;Choose…&quot; in the panel's caption opens it directly.</td>
+</tr>
+<tr>
+<td><code>report.json</code></td>
+<td>All-demes forms: <code>NEI_D_ALL_GEO</code>, <code>NEI_D_ALL_GEO_LOCUS_MEAN</code>, <code>NEI_D_ALL_ARITH</code>, <code>NEI_D_ALL_ARITH_LOCUS_MEAN</code>, and the <code>NEI_I_ALL_*</code> identities.</td>
+</tr>
+<tr>
+<td><code>summary.json</code> (batch)</td>
+<td>Mean and confidence interval of each all-demes form across replicates.</td>
+</tr>
+<tr>
+<td><code>pairwise.json</code></td>
+<td>Every pair's four identities (each distance is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mi>I</mi><mo stretchy="false">)</mo></mrow></math>) and pairwise <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>F</mi><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">T</mi></mrow></mrow></msub></mrow></math>, at the final generation. See <a href="#" data-fim-help="usage" data-fim-anchor="pairwisejson">usage</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>A run saved before these statistics existed still opens: the values are
+computed from its saved trajectory when you open it. Its saved files are
+not changed.</p>
+<h2 id="other-measures-captured-alongside">Other measures captured alongside</h2>
+<p>Computed and saved for every run, hidden until you show them:</p>
+<ul>
+<li><code>D_m</code> and <code>R_ST</code>: Nei's (1973) mean pairwise between-deme diversity, in
+heterozygosity units, and its ratio to within-deme diversity.</li>
+<li><code>G_ST_NEI_LOG</code> and <code>G_ST_HEDRICK</code>: two different statistics both called
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">T</mi></mrow></mrow><mi>′</mi></msubsup></mrow></math> in the literature. Nei's is logarithmic, for large
+differentiation; Hedrick's divides <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">T</mi></mrow></mrow></msub></mrow></math> by its largest
+possible value.</li>
+<li><code>F_ST</code>: coancestry <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>F</mi><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">T</mi></mrow></mrow></msub></mrow></math> (Goudet &amp; Weir 2023).</li>
+<li><code>F_ST_PAIR</code>: pairwise <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>F</mi><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">T</mi></mrow></mrow></msub></mrow></math> for the scatter's pair, from
+those two demes' data alone; every pair is in <code>pairwise.json</code>.</li>
+<li><code>Gs</code> and <code>Gd</code>: the within- and between-deme gene identities themselves.</li>
+</ul>
+<p>None of these can be chosen as a convergence statistic: the convergence
+monitor was designed for the long-standing differentiation measures.</p>
+<h2 id="a-short-mathematical-refresher">A short mathematical refresher</h2>
+<p>The formulas use only a few familiar operations:</p>
+<ul>
+<li><strong>Add mutually exclusive cases.</strong> At a locus, two copies either both
+carry allele 1, both carry allele 2, and so on. Those cases cannot
+happen at once, so their probabilities add. This gives (N.1) within a
+deme and (N.3) between demes.</li>
+<li><strong>Multiply independent choices.</strong> To match on allele <var>i</var>, the first
+draw must carry it and the second draw must carry it. Their
+probabilities multiply, giving <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mrow><mi>X</mi><mo>,</mo><mi>i</mi></mrow></msub><msub><mi>p</mi><mrow><mi>Y</mi><mo>,</mo><mi>i</mi></mrow></msub></mrow></math> in (N.3).</li>
+<li><strong>Compare like quantities.</strong> A Nei identity divides a between-deme
+match rate by a within-deme reference match rate. The numerator is
+unchanged when choosing the geometric or arithmetic denominator;
+only the reference changes.</li>
+<li><strong>Use the logarithm to convert a ratio to a distance.</strong> If <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>I</mi><mo>=</mo><mn>1</mn></mrow></math>,
+then <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>−</mo><mi>ln</mi><mo stretchy="false">(</mo><mi>I</mi><mo stretchy="false">)</mo><mo>=</mo><mn>0</mn></mrow></math>. If <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0</mn><mo>&lt;</mo><mi>I</mi><mo>&lt;</mo><mn>1</mn></mrow></math>, then <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ln</mi><mo stretchy="false">(</mo><mi>I</mi><mo stretchy="false">)</mo><mo>&lt;</mo><mn>0</mn></mrow></math>, so the distance is
+positive. If <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>I</mi><mo>&gt;</mo><mn>1</mn></mrow></math>, the distance is negative; that case is possible
+only for the all-demes geometric identity.</li>
+<li><strong>Keep aggregation order visible.</strong> Averaging identities and then
+taking a ratio is not generally the same as taking one ratio per locus
+and averaging the resulting distances. Equations (N.11)–(N.19) spell
+out the two orders rather than hiding them in a formula name.</li>
+</ul>
+<p>The worked three-deme example above combines frequency vectors, squared
+probabilities, pair products, averages, a geometric mean, and the
+logarithm. Each intermediate value is shown for independent verification.</p>
+<h2 id="formula-sheet">Formula sheet</h2>
+<p>For one locus, calculate the within identities with (N.1), the
+between-deme identities with (N.3), and the all-demes between average
+with (N.8). Select the geometric or arithmetic denominator with
+(N.6), (N.9), or (N.10). For multiple loci, use the pooled route in
+(N.11)–(N.17), or the per-locus route in (N.18) and (N.19).
+Convert any selected identity to distance with (N.5).</p>
+<p>The corresponding result keys use <code>PAIR</code> for a selected pair and <code>ALL</code>
+for all demes; <code>GEO</code> and <code>ARITH</code> select the denominator. The optional
+<code>_LOCUS_MEAN</code> suffix selects per-locus distance averaging. For example,
+<code>NEI_D_PAIR_GEO_LOCUS_MEAN</code> is the geometric-denominator mean of
+per-locus pair distances, while <code>NEI_D_ALL_ARITH</code> is the pooled
+all-demes arithmetic-denominator distance.</p>
+<p>The identities use <code>fim</code>'s with-replacement convention,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mi>k</mi></msub><mo>=</mo><msub><mo>∑</mo><mi>i</mi></msub><msubsup><mi>p</mi><mrow><mi>k</mi><mo>,</mo><mi>i</mi></mrow><mn>2</mn></msubsup></mrow></math> (see <a href="#" data-fim-help="migration-conventions" data-fim-anchor="">migration conventions</a>).
+The <a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> maps saved identifiers to
+definitions. The <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md">Python API guide</a> and generated
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md">API reference</a> document programmatic access. The
+pair and all-demes calculations are implemented by
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/genetic_distance.py"><code>nei_pair_distance()</code> and <code>nei_all_demes_distance()</code></a>.</p>
+<h2 id="references">References</h2>
+<ul>
+<li>Nei M (1972). Genetic distance between populations. <em>American
+Naturalist</em> 106(949):283–292.
+DOI: <a href="#" data-fim-external="https://doi.org/10.1086/282771">10.1086/282771</a></li>
+<li>Nei M (1973). Analysis of gene diversity in subdivided populations.
+<em>Proceedings of the National Academy of Sciences</em> 70(12):3321–3323.
+DOI: <a href="#" data-fim-external="https://doi.org/10.1073/pnas.70.12.3321">10.1073/pnas.70.12.3321</a></li>
+<li>Hedrick PW (2005). A standardized genetic differentiation measure.
+<em>Evolution</em> 59(8):1633–1638.</li>
+<li>Goudet J, Weir BS (2023): the coancestry-based F_ST estimators.
+<code>fim.statistics.differentiation</code> cites the equations it implements
+(coancestry F_ST, Eq. 4 and 8; pairwise F_ST, Eq. 10).</li>
+<li>Jost L (2008). G_ST and its relatives do not measure differentiation.
+<em>Molecular Ecology</em> 17(18):4015–4026.
+DOI: <a href="#" data-fim-external="https://doi.org/10.1111/j.1365-294X.2008.03887.x">10.1111/j.1365-294X.2008.03887.x</a></li>
+<li>Jost, L. (2026) private communication: the arithmetic-mean denominator.</li>
+</ul>

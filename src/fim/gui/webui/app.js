@@ -419,6 +419,7 @@ const fim = {
             // here at all.
             document.getElementById("open-folder-button").click();
         },
+        /** Open a Help topic, or Help home when `topic` is omitted. */
         help(topic) {
             window.fim.showHelp(topic);
         },

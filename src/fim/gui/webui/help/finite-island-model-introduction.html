@@ -1,0 +1,579 @@
+<h1 id="the-finite-island-model-a-plain-language-introduction">The finite island model: a plain-language introduction</h1>
+<ul>
+<li><a href="#the-finite-island-model-a-plain-language-introduction">The finite island model: a plain-language introduction</a>
+<ul>
+<li><a href="#who-this-document-is-for">Who this document is for</a></li>
+<li><a href="#1-why-scientists-model-population-differentiation">1. Why scientists model population differentiation</a></li>
+<li><a href="#2-wrights-island-model-the-starting-point">2. Wright's island model: the starting point</a>
+<ul>
+<li><a href="#21-the-setup">2.1 The setup</a></li>
+<li><a href="#22-finite-versus-infinite-migrant-reservoirs">2.2 Finite versus infinite migrant reservoirs</a></li>
+</ul>
+</li>
+<li><a href="#3-the-model-as-a-repeating-random-process">3. The model as a repeating random process</a>
+<ul>
+<li><a href="#31-what-is-being-tracked">3.1 What is being tracked</a></li>
+<li><a href="#32-one-generation-in-two-steps">3.2 One generation, in two steps</a></li>
+<li><a href="#33-variations-found-in-the-literature">3.3 Variations found in the literature</a></li>
+</ul>
+</li>
+<li><a href="#4-software-implementations-and-scope">4. Software implementations and scope</a></li>
+<li><a href="#5-reading-lou-josts-papers-with-this-model-in-hand">5. Reading Lou Jost's papers with this model in hand</a></li>
+<li><a href="#6-a-note-on-sources">6. A note on sources</a></li>
+<li><a href="#appendix-a-relation-to-statistical-mechanics">Appendix A: relation to statistical mechanics</a></li>
+<li><a href="#appendix-b-relation-to-ancestry-inference">Appendix B: relation to ancestry inference</a></li>
+</ul>
+</li>
+</ul>
+<h2 id="who-this-document-is-for">Who this document is for</h2>
+<p>The main text introduces the biological terms, probability model, and
+discrete-generation update before discussing applications to genetic
+differentiation. It assumes familiarity with basic probability and algebra;
+the first sections define the population-genetics terms used here. The
+appendices provide optional connections to statistical mechanics and
+population-structure inference.</p>
+<p>The discussion draws on published papers and public documentation for the
+software cited below. Citations identify sources for claims that depend on
+particular publications or implementations.</p>
+<p>Mathematical quantities use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math>; configuration keys and executable
+expressions use backticks. Displayed equations have unique local tags
+beginning with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mtext>I</mtext></mrow></math>. This introduction uses <var>N</var> for diploid
+individuals, so <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math> is the gene-copy count. The simulator's internal
+population size instead counts gene copies; the configuration's <code>N</code>
+counts individuals and is converted using <code>ploidy</code>.</p>
+<hr />
+<h2 id="1-why-scientists-model-population-differentiation">1. Why scientists model population differentiation</h2>
+<p>An important question in population genetics is: <strong>how genetically
+different are two or more populations of the same species?</strong></p>
+<p>The answer matters in several ways:</p>
+<ul>
+<li><strong>Conservation.</strong> If two frog populations are genetically almost
+identical, losing one is a setback. If they are strongly differentiated,
+losing one destroys variation that cannot be recovered from the other.</li>
+<li><strong>Taxonomy.</strong> Whether two plant populations are different varieties or
+different species often turns on exactly this question.</li>
+<li><strong>Evolutionary biology.</strong> Watching differentiation build up over time
+shows how quickly isolation turns one population into two lineages.</li>
+</ul>
+<p>Answering it quantitatively takes two separate pieces of machinery:</p>
+<ol>
+<li>A <strong>model of the process</strong> that produces genetic differences between
+populations over time. This is the island model, the subject of this
+document.</li>
+<li>A <strong>statistic</strong> computed from observed or simulated data that reports
+the extent of differentiation. Lou Jost's <var>D</var> is one measure proposed
+for quantifying differentiation alongside the classical <var>F</var><sub>ST</sub> and
+<var>G</var><sub>ST</sub> family. (A companion document,
+<a href="#" data-fim-help="jost-differentiation-measures" data-fim-anchor="">the differentiation-measures guide</a>,
+covers that half in detail.)</li>
+</ol>
+<p>The island model is the <em>generative</em> component: simulations characterize
+the differentiation values expected under specified assumptions and allow
+candidate statistics to be evaluated against a known model-generated
+history.</p>
+<hr />
+<h2 id="2-wrights-island-model-the-starting-point">2. Wright's island model: the starting point</h2>
+<p>The finite island model is a variant of a much older and simpler model due
+to Sewall Wright (1931, 1943), usually just called <em>the island model</em>.
+Understanding the plain version first makes the word &quot;finite&quot; easy to
+place.</p>
+<h3 id="21-the-setup">2.1 The setup</h3>
+<ul>
+<li>There are <var>d</var> separate subpopulations, called demes or, by metaphor,
+islands, each holding a fixed number <var>N</var> of individuals. Most species of
+conservation interest are diploid — each individual carries two copies of
+every gene, one from each parent — so each island holds <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math> gene copies
+at any one location in the genome.</li>
+<li>Time moves in <strong>discrete, non-overlapping generations</strong>: generation
+<var>t</var> is entirely replaced by generation <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></math>. There is no smooth,
+continuous change to track — only a sequence of discrete snapshots, each
+produced from the one before it by a fixed rule.</li>
+<li>Each generation, a fraction <var>m</var> of each island's gene pool is replaced
+by migrants. In the <em>classic</em> island model, those migrants come from an
+infinitely large, well-mixed pool that represents the <em>average</em> allele
+frequency across all the other islands combined. Mathematically, this
+means the source that supplies migrants never itself changes through
+drift or depletion — it behaves like a fixed, external reservoir that
+never runs low or shifts composition.</li>
+<li>After migration, each island rebuilds its population by drawing <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math>
+gene copies at random from its own (post-migration) local pool. This
+drawing step is where <strong>genetic drift</strong> happens: with only a finite
+number of individuals, allele frequencies wander randomly from one
+generation to the next, purely because of which individuals happened to
+have offspring — the same way a modest number of coin flips will drift
+away from an exact 50/50 split of heads and tails, just from chance.</li>
+</ul>
+<h3 id="22-finite-versus-infinite-migrant-reservoirs">2.2 Finite versus infinite migrant reservoirs</h3>
+<p>In Wright's original formulation, only the <strong>individual islands</strong> are
+finite in size (<var>N</var>
+each); the <em>total</em> collection of all islands that supplies migrants is
+implicitly <strong>infinite</strong> — migrants always arrive from a fixed background
+frequency that itself never drifts. This assumption permits a simple
+closed-form formula for the equilibrium value of <var>F</var><sub>ST</sub>, because the
+migrant source does not change through drift.</p>
+<p>Wright also analyzed the finite subgroup case directly. In <em>Isolation by
+Distance</em> (1943), he wrote the model with <var>K</var> subgroups of size <var>N</var> and
+derived the finite-deme sampling correction before giving the familiar
+large-<var>N</var>, small-<var>m</var> approximation. Later finite-island work did not invent
+the finite deme count from scratch; it extended Wright's setup to multiple
+alleles, mutation models, and higher moments.</p>
+<p>The <strong>finite island model</strong> used here is that finite-subgroup version. There
+are only a <em>finite</em> number of islands, <var>d</var>, each of finite size <var>N</var>, and no
+infinite external reservoir standing behind them. Migrants in generation <var>t</var>
+are drawn from the actual, finite, currently-drifting collection of all the
+<em>other</em> islands' current frequencies. Three consequences follow:</p>
+<ul>
+<li>The whole set of islands together forms a <strong>finite, closed system</strong> with
+no fixed external background.</li>
+<li>Because it is closed and finite, the <em>entire</em> collection of islands also
+drifts as a whole and, given long enough with low enough migration, can
+eventually converge on a single allele everywhere, losing all variation,
+unless new mutations replenish it.</li>
+<li>This changes how differentiation statistics <em>behave at equilibrium</em>. The
+classic <var>F</var><sub>ST</sub> formula assumes an infinite source, which caps
+<var>F</var><sub>ST</sub> at a ceiling set purely by <var>N</var> and <var>m</var>; once the source is
+finite, the achievable range of <var>F</var><sub>ST</sub>-like statistics depends on
+<var>d</var> as well. More importantly, <var>F</var><sub>ST</sub> and <var>G</var><sub>ST</sub> statistics have a
+known limitation: their maximum attainable value can be <em>well below 1</em>
+whenever the genetic marker being used is highly variable (many alleles,
+high internal diversity) — even when the islands share <em>no</em> alleles at
+all, representing complete differentiation by allele sharing. This
+limitation is central to Jost's critique: the maximum value depends on
+within-population diversity as well as on differences among populations.
+His <var>D</var> statistic separates these quantities. The finite island model
+provides a controlled setting for evaluating this distinction because
+diversity and differentiation can be varied independently.</li>
+</ul>
+<p>The finite island model generates data under a known history of migration,
+drift, and diversity. Candidate statistics (<var>F</var><sub>ST</sub>, <var>G</var><sub>ST</sub>, <var>D</var>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math>, among others) can therefore be evaluated against the a
+the generating process.</p>
+<hr />
+<h2 id="3-the-model-as-a-repeating-random-process">3. The model as a repeating random process</h2>
+<p>Set aside islands and alleles for a moment. The mechanics of this model are
+easiest to see as an ordinary repeating process: a set of numbers gets
+updated by a fixed rule involving some randomness, once per tick, over and
+over.</p>
+<h3 id="31-what-is-being-tracked">3.1 What is being tracked</h3>
+<p>At generation <var>t</var>, the complete state of the model is a table of allele
+frequencies — one row per island, one column per possible allele at the
+genetic location being tracked:</p>
+<ul>
+<li><var>d</var> is the number of islands, distinct from Jost's statistic <var>D</var>.</li>
+<li><var>k</var> is the number of distinct alleles possible at that location.</li>
+<li><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mrow><mi>t</mi><mo>,</mo><mi>i</mi><mo>,</mo><mi>j</mi></mrow></msub></mrow></math> is the frequency (a number between 0 and 1) of allele <var>j</var>
+on island <var>i</var> at generation <var>t</var>. Every row sums to exactly 1:</li>
+</ul>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><munderover><mo>&#x02211;</mo><mrow><mi>j</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>k</mi></mrow></munderover><msub><mi>p</mi><mrow><mi>t</mi><mo>&#x0002C;</mo><mi>i</mi><mo>&#x0002C;</mo><mi>j</mi></mrow></msub><mo>&#x0003D;</mo><mn>1</mn></mrow></math><span class="equation-tag">(I.1)</span></div>
+<p>For a location with only two possible alleles (a &quot;SNP,&quot; short for single
+nucleotide polymorphism, the most common type of genetic marker in modern
+studies), <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi><mo>=</mo><mn>2</mn></mrow></math> and the whole row compresses to one number per island,
+since the second allele's frequency is always 1 minus the first.
+Other markers, especially the short repeated-sequence markers called
+<em>microsatellites</em>, can have many alleles — <var>k</var> in the range of 5 to 20 is
+common — which is one reason Jost's statistics are built to generalize
+cleanly past the two-allele case, unlike some of the older <var>F</var><sub>ST</sub>
+variants.</p>
+<h3 id="32-one-generation-in-two-steps">3.2 One generation, in two steps</h3>
+<p>Producing generation <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></math> from generation <var>t</var> is two operations
+applied to the whole table: one deterministic blending step, and one
+random re-sampling step.</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>p</mi><mrow><mi>t</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></msub><mo>&#x0003D;</mo><mrow><mi mathvariant="normal">D</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">t</mi></mrow><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">(</mo><mrow><mi mathvariant="normal">M</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">g</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">e</mi></mrow><mo stretchy="false">&#x00028;</mo><msub><mi>p</mi><mi>t</mi></msub><mo stretchy="false">&#x00029;</mo><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">)</mo></mrow></math><span class="equation-tag">(I.2)</span></div>
+<p><strong>Step A — migration (a weighted blend, given the finite pool that
+generation).</strong></p>
+<p>For each island <var>i</var>, compute a post-migration frequency as a weighted
+average of the island's own pre-migration frequency and the frequency of
+the &quot;migrant pool&quot; it draws from:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>p</mi><mrow><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">g</mi></mrow><mo>&#x0002C;</mo><mi>i</mi></mrow></msub><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>m</mi><mo stretchy="false">&#x00029;</mo><mspace width="0.167em" /><msub><mi>p</mi><mrow><mi>t</mi><mo>&#x0002C;</mo><mi>i</mi></mrow></msub><mspace width="0.278em" /><mo>&#x0002B;</mo><mspace width="0.278em" /><mi>m</mi><mspace width="0.167em" /><msub><mover><mi>p</mi><mo stretchy="true">&#x000AF;</mo></mover><mi>i</mi></msub></mrow></math><span class="equation-tag">(I.3)</span></div>
+<p>Here <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>p</mi><mo stretchy="true">¯</mo></mover><mi>i</mi></msub></mrow></math> is the frequency vector of the migrant pool available to
+island <var>i</var>. Two common choices for what <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>p</mi><mo stretchy="true">¯</mo></mover><mi>i</mi></msub></mrow></math> is, both still
+called &quot;the finite island model&quot;:</p>
+<ul>
+<li><strong>The island model proper</strong> (the default meaning of the term, absent
+other qualifiers). <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>p</mi><mo stretchy="true">¯</mo></mover><mi>i</mi></msub></mrow></math> is the average allele frequency across
+<em>all the other islands</em> — either an unweighted mean, or a mean weighted
+by island size if they differ. Every island exchanges migrants with one
+shared pool built from everyone else.</li>
+<li><strong>The stepping-stone model</strong> (a different, spatial relative, easily
+confused with the island model in casual reading). <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>p</mi><mo stretchy="true">¯</mo></mover><mi>i</mi></msub></mrow></math> is the
+frequency of only the islands that are <em>physically adjacent</em> — a
+one- or two-dimensional lattice of islands exchanging migrants only with
+their neighbors. Under this model, differentiation grows with geographic
+distance; under the plain island model it does not, since every island is
+&quot;equally distant&quot; from every other. Jost's use of the finite island model
+is normally the plain, non-spatial, all-to-all version.</li>
+</ul>
+<p>This step is written above as a deterministic blend <em>given</em> the current
+frequencies — but because <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>p</mi><mo stretchy="true">¯</mo></mover><mi>i</mi></msub></mrow></math> is itself built from <var>p</var><sub>t</sub>, which
+was produced by the <em>previous</em> generation's random drift step, the entire
+process is random from end to end, even though this one step, in
+isolation, involves no dice roll. Some more detailed simulators add an
+extra layer of randomness here too — sampling the actual number of
+migrating individuals, rather than treating migration as an idealized
+continuous fraction. <code>fim</code> supports this as an opt-in
+<code>migrant_sampling: stochastic</code> configuration option (default:
+<code>continuous</code>, the idealized fraction above) — see
+<a href="#" data-fim-help="configuration" data-fim-anchor="m">the configuration reference</a>.</p>
+<p><strong>Step B — drift (the actual random step).</strong></p>
+<p>Each island's next generation is formed by drawing <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math> gene copies from
+a probability distribution set by <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mrow><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">g</mi></mrow><mo>,</mo><mi>i</mi></mrow></msub></mrow></math>. For a two-allele
+marker this is a <strong>binomial draw</strong> — the same kind of randomness as
+counting heads in a batch of biased coin flips:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>X</mi><mi>i</mi></msub><mi>&#x0007E;</mi><mrow><mi mathvariant="normal">B</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">(</mo><mn>2</mn><mi>N</mi><mo>&#x0002C;</mo><mtext>&#x000A0;</mtext><msub><mi>p</mi><mrow><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">g</mi></mrow><mo>&#x0002C;</mo><mi>i</mi></mrow></msub><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">)</mo></mrow></math><span class="equation-tag">(I.4)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>p</mi><mrow><mi>t</mi><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002C;</mo><mi>i</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>X</mi><mrow><mi>i</mi></mrow></msub></mrow><mrow><mn>2</mn><mi>N</mi></mrow></mfrac></mrow></math><span class="equation-tag">(I.5)</span></div>
+<p>For a marker with more than two alleles (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi><mo>&gt;</mo><mn>2</mn></mrow></math>), the same idea
+generalizes to a <strong>multinomial draw</strong> — like rolling a <var>k</var>-sided weighted
+die <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math> times and counting how often each face comes up:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x1D417;</mi><mi>i</mi></msub><mi>&#x0007E;</mi><mrow><mi mathvariant="normal">M</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">l</mi></mrow><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">(</mo><mn>2</mn><mi>N</mi><mo>&#x0002C;</mo><mtext>&#x000A0;</mtext><msub><mi>&#x1D429;</mi><mrow><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">g</mi></mrow><mo>&#x0002C;</mo><mi>i</mi></mrow></msub><mo stretchy="true" fence="true" minsize="1.2em" maxsize="1.2em">)</mo></mrow></math><span class="equation-tag">(I.6)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>&#x1D429;</mi><mrow><mi>t</mi><mo>&#x0002B;</mo><mn>1</mn><mo>&#x0002C;</mo><mi>i</mi></mrow></msub><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>&#x1D417;</mi><mrow><mi>i</mi></mrow></msub></mrow><mrow><mn>2</mn><mi>N</mi></mrow></mfrac></mrow></math><span class="equation-tag">(I.7)</span></div>
+<p>(<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>𝐗</mi><mi>i</mi></msub></mrow></math> here is a list of <var>k</var> counts, one per allele, rather
+than a single number.)</p>
+<p>That is the entire model: one weighted blend and one random draw, applied
+every generation, for as many generations as wanted, independently on
+every island. Real studies usually track many independent genetic
+locations in parallel — they behave as independent repeats of the same
+process, assuming the locations are far enough apart in the genome not to
+be inherited together — so in practice the same two-step rule just runs
+many times over, once per location.</p>
+<h3 id="33-variations-found-in-the-literature">3.3 Variations found in the literature</h3>
+<ul>
+<li><strong>Mutation.</strong> With some small probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>μ</mi></mrow></math> each generation, each
+newly drawn gene copy can change its allele's identity outright,
+independently of every other copy (the textbook Wright-Fisher model;
+<code>fim</code> applies it after drift, to the copies drift has just drawn). This matters for studies of long-run
+equilibrium between mutation, migration, and drift; it usually is not
+needed for simulations covering only a few dozen or a few hundred
+generations from a defined starting point, where migration and drift
+alone dominate the outcome.</li>
+<li><strong>Unequal island sizes.</strong> Letting <var>N</var> vary by island changes both the
+drift step (each island draws its own <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><msub><mi>N</mi><mi>i</mi></msub></mrow></math> copies) and the weighting
+used to build the migrant pool <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>p</mi><mo stretchy="true">¯</mo></mover><mi>i</mi></msub></mrow></math>.</li>
+<li><strong>Unequal or asymmetric migration.</strong> Letting the migration rate <var>m</var>
+vary by island, or specifying a full matrix of pairwise migration rates
+between specific island pairs, generalizes the model into what is
+sometimes called a general migration-matrix model; the plain island
+model is the special case where every rate is the same.</li>
+<li><strong>Selection.</strong> Not part of the base model, which assumes every allele is
+<em>neutral</em> — meaning no allele carries any survival or reproductive
+advantage over another. Neutral markers remain the cleanest way to make
+observed differentiation reflect demography (migration and drift) rather
+than natural selection. Modern conservation-genomics studies also compute
+these statistics on candidate adaptive loci, often by contrasting those
+loci against a neutral genomic background. In that use, selection is not a
+nuisance to hide; it is the signal being sought. Balancing selection can
+also mask demographic fragmentation by holding differentiation low at a
+functional locus even when neutral loci have diverged. Where selection is
+added to the model itself, an extra step reweighting frequencies by
+fitness is inserted before drift.</li>
+</ul>
+<hr />
+<h2 id="4-software-implementations-and-scope">4. Software implementations and scope</h2>
+<p>Several tools implement discrete-time population-genetic models with
+migration and drift. Their state representations, migration models, and
+outputs differ.</p>
+<p><strong><a href="#" data-fim-external="https://www2.unil.ch/popgen/softwares/quantinemo/">quantiNemo 2</a></strong>, from
+Jérôme Goudet's lab (Neuenschwander, Michaud &amp; Goudet, <em>Bioinformatics</em>,
+2019, DOI:
+<a href="#" data-fim-external="https://doi.org/10.1093/bioinformatics/bty737">10.1093/bioinformatics/bty737</a>;
+source at
+<a href="#" data-fim-external="https://github.com/jgx65/quantinemo">github.com/jgx65/quantinemo</a>), is an
+individual-based, forward-time population-genetics simulator for
+structured populations connected by migration, configured through a text
+settings file. Its C++ implementation provides individual-based and
+population-based modes.</p>
+<p><strong><a href="#" data-fim-external="https://cran.r-project.org/package=hierfstat">hierfstat</a></strong>, an R
+package also from Goudet's group (source:
+<a href="#" data-fim-external="https://github.com/jgx65/hierfstat">github.com/jgx65/hierfstat</a>), includes
+functions — <code>sim.freq.t</code>, <code>sim.genot.t</code>, and the more general
+<code>sim.freq.metapop.t</code> — that simulate the discrete-time
+migration-plus-drift process described in Part 3, generation by
+generation, with an arbitrary migration matrix, including stepping-stone
+layouts.</p>
+<p>The <code>fim</code> package also implements finite-island migration, drift, and
+mutation with per-generation statistic histories. Its
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md">Python API guide</a> documents programmatic simulation, and
+the generated <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md">API reference</a> lists the public Python
+symbols. The <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md">model design</a> describes the update
+pipeline and supported variants.</p>
+<hr />
+<h2 id="5-reading-lou-josts-papers-with-this-model-in-hand">5. Reading Lou Jost's papers with this model in hand</h2>
+<p>The following publications develop and evaluate differentiation
+statistics in population-genetic models. Bibliographic details and DOI
+links are provided for each cited work.</p>
+<ul>
+<li><strong>Jost L, &quot;<var>G</var><sub>ST</sub> and its relatives do not measure
+differentiation.&quot;</strong> <em>Molecular Ecology</em> 17(18):4015–26, 2008. DOI:
+<a href="#" data-fim-external="https://doi.org/10.1111/j.1365-294x.2008.03887.x">10.1111/j.1365-294x.2008.03887.x</a>.
+PMID: 19238703. The foundational critique. In the language of Part 2:
+under the finite island model, as the diversity within a population goes
+up, the <em>maximum possible</em> value <var>G</var><sub>ST</sub> can reach — even at complete
+differentiation between islands, meaning zero shared alleles — goes
+<em>down</em>, sometimes sharply. A highly diverse marker showing <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>=</mo><mn>0.2</mn></mrow></math>
+might represent <em>complete</em> differentiation, while a low-diversity
+marker showing the same 0.2 represents only mild differentiation. The
+statistic is therefore not directly comparable across markers or studies
+with different diversity levels (see also the
+<a href="#" data-fim-external="https://en.wikipedia.org/wiki/Fixation_index">Fixation index</a> discussion
+of the upper-bound issue: &quot;the interpretation of <var>F</var><sub>ST</sub>
+can be difficult when the data analyzed are highly polymorphic ...
+<var>F</var><sub>ST</sub> can have an arbitrarily low upper bound&quot;). Jost proposes
+<strong><var>D</var></strong>, defined to isolate the differentiation component independent of
+within-population diversity. The
+<a href="#" data-fim-help="jost-differentiation-measures" data-fim-anchor="">differentiation-measures guide</a>
+derives and compares these statistics.</li>
+<li><strong>The reply/rebuttal exchange</strong> that followed in the same journal,
+confirmed via PubMed's &quot;Comment in/on&quot; links on the 2008 paper:
+<ul>
+<li>Ryman N, Leimar O, &quot;<var>G</var><sub>ST</sub> is still a useful measure of genetic
+differentiation — a comment on Jost's <strong><var>D</var></strong>.&quot; <em>Molecular Ecology</em>
+18(10):2084–7, 2009. DOI:
+<a href="#" data-fim-external="https://doi.org/10.1111/j.1365-294X.2009.04187.x">10.1111/j.1365-294X.2009.04187.x</a>.</li>
+<li>Heller R, Siegismund HR, a further 2009 comment in the same exchange
+(PMID 19645078), and Gerlach G et al., &quot;Calculations of population
+differentiation based on <strong><var>G</var><sub>ST</sub></strong> and <strong><var>D</var></strong>: forget <var>G</var><sub>ST</sub> but not
+all of statistics!&quot; <em>Molecular Ecology</em> 19(18):3845–52, 2010. DOI:
+<a href="#" data-fim-external="https://doi.org/10.1111/j.1365-294X.2010.04784.x">10.1111/j.1365-294X.2010.04784.x</a>.</li>
+<li>Whitlock MC, &quot;<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math> and <var>D</var> do not replace <var>F</var><sub>ST</sub>.&quot;
+<em>Molecular Ecology</em> 20(6):1083–91, 2011. DOI:
+<a href="#" data-fim-external="https://doi.org/10.1111/j.1365-294X.2010.04996.x">10.1111/j.1365-294X.2010.04996.x</a>.
+This paper proposes the standardized <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math> as a partial fix to
+the classic <var>G</var><sub>ST</sub> ceiling problem, while arguing that <var>D</var> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math> answer a different question from <var>F</var><sub>ST</sub> and should not
+fully replace it. Read together, this whole exchange is the applied
+debate over what a differentiation statistic should mean, and all
+sides generally argue by simulating some version of a finite island
+model and comparing candidate statistics against the same known
+reference expectation.</li>
+</ul>
+</li>
+<li><strong>Jost L, Archer F, Flanagan S, Gaggiotti O, Hoban S, Latch E,
+&quot;Differentiation measures for conservation genetics.&quot;</strong> <em>Evolutionary
+Applications</em> 11(7):1139–48, 2018. PMID: 30026802. A synthesis of the
+statistic family (<var>F</var><sub>ST</sub>, <var>G</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow><mi>′</mi></msubsup></mrow></math>, <var>D</var>, and related
+measures) and their interpretation. See the
+<a href="#" data-fim-help="jost-differentiation-measures" data-fim-anchor="">differentiation-measures guide</a> for
+definitions, derivations, and worked calculations.</li>
+</ul>
+<p>These works address distinct questions about differentiation, population
+structure, and conservation. Finite-island simulations provide one
+controlled setting for comparing statistics; they are not the only method
+used in the cited literature.</p>
+<hr />
+<h2 id="6-a-note-on-sources">6. A note on sources</h2>
+<p>The model description follows standard population-genetics treatments of
+Wright's island model and Wright-Fisher drift (see
+<a href="#" data-fim-external="https://en.wikipedia.org/wiki/Population_genetics">Population genetics</a>
+and <a href="#" data-fim-external="https://en.wikipedia.org/wiki/Fixation_index">Fixation index</a> on
+Wikipedia for supplementary summaries). Bibliographic information is linked
+to the cited publications. Software descriptions refer to the linked
+project pages and repositories.</p>
+<hr />
+<h2 id="appendix-a-relation-to-statistical-mechanics">Appendix A: relation to statistical mechanics</h2>
+<p><em>Optional. This appendix uses concepts from statistical mechanics,
+including symmetry groups and mean-field models.</em></p>
+<p>The finite island model's coupling structure — each island's next state
+depends on a weighted combination of some set of other islands' states,
+plus a random local update — resembles what physicists call a Markov
+random field. One question is whether it can be described as a Markov random
+field whose local variable lives in some continuous rotation group —
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow></math> for some <var>n</var> — with allele frequency playing the role of a
+continuous angular/positional variable, the way a spin lives on a circle
+or sphere in an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow></math>-symmetric physics model. A related question is what
+actually <em>is</em> the symmetry group of the finite island model, given that
+some kind of discrete transform seems to be involved?</p>
+<p>The coupling-structure analogy holds up well, but no continuous rotation
+group survives as an exact symmetry of the model itself. It helps to
+separate three different questions: the <em>graph structure</em> of who is
+coupled to whom; the <em>ambient continuous symmetry</em> that appears when the
+model is transformed into a more convenient coordinate system; and the
+<em>actual symmetry group</em> of the physically constrained state space, once
+that continuous symmetry is broken by a hard boundary.</p>
+<p><strong>Coupling structure.</strong> Symmetric all-to-all migration, where every island
+exchanges with the population-wide average frequency, is exactly a
+complete-graph coupling — the population-genetics equivalent of a
+mean-field spin model (the Curie–Weiss model, infinite-range Ising
+interaction on a complete graph, being the classic physics example). The
+stepping-stone model, coupling each island only to its physically adjacent
+neighbors, is the finite-range or lattice analogue. So &quot;island model ≈
+mean-field random field, stepping-stone model ≈ local/lattice random
+field&quot; is a genuine and useful correspondence.</p>
+<p><strong>The multi-allele sphere embedding.</strong> For a two-allele marker
+(frequency <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo>∈</mo><mo stretchy="false">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow></math>), Wright's 1945 arcsine square-root transform,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>θ</mi><mo>=</mo><mi>arcsin</mi><mo stretchy="false">(</mo><msqrt><mrow><mi>p</mi></mrow></msqrt><mo stretchy="false">)</mo></mrow></math> — used extensively by Kimura in solving the
+Wright–Fisher diffusion equation — turns the state-dependent diffusion
+coefficient <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo stretchy="false">)</mo></mrow></math> into a <em>constant</em> coefficient on
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>θ</mi><mo>∈</mo><mo stretchy="false">[</mo><mn>0</mn><mo>,</mo><mi>π</mi><mo>/</mo><mn>2</mn><mo stretchy="false">]</mo></mrow></math>, so the drift process looks like Brownian motion confined to
+a quarter-circle arc. This has a direct, well-known generalization to a
+marker with <var>k</var> alleles (covered in standard mathematical population
+genetics references, e.g. Warren Ewens's <em>Mathematical Population
+Genetics</em>). Define a new coordinate for each allele's frequency:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>z</mi><mi>i</mi></msub><mo>&#x0003D;</mo><msqrt><mrow><msub><mi>p</mi><mi>i</mi></msub></mrow></msqrt></mrow></math><span class="equation-tag">(I.8)</span></div>
+<p>The frequency constraint is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><munderover><mo>&#x02211;</mo><mrow><mi>i</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>k</mi></mrow></munderover><msub><mi>p</mi><mi>i</mi></msub><mo>&#x0003D;</mo><mn>1</mn></mrow></math><span class="equation-tag">(I.9)</span></div>
+<p>Substitution gives:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><munderover><mo>&#x02211;</mo><mrow><mi>i</mi><mo>&#x0003D;</mo><mn>1</mn></mrow><mrow><mi>k</mi></mrow></munderover><msubsup><mi>z</mi><mi>i</mi><mn>2</mn></msubsup><mo>&#x0003D;</mo><mn>1</mn></mrow></math><span class="equation-tag">(I.10)</span></div>
+<p>Thus <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi mathvariant="bold">z</mi><mo>=</mo><mo stretchy="false">(</mo><msub><mi>z</mi><mn>1</mn></msub><mo>,</mo><mi>…</mi><mo>,</mo><msub><mi>z</mi><mi>k</mi></msub><mo stretchy="false">)</mo></mrow></math> lies on the unit sphere
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>S</mi><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow></msup></mrow></math> in <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi mathvariant="double-struck">R</mi><mi>k</mi></msup></mrow></math>. Under this transform, the Wright–Fisher diffusion
+generator becomes (proportional to) the <strong>Laplace–Beltrami operator on
+that sphere</strong>, the operator governing diffusion on a curved surface; its
+eigenfunctions are spherical harmonics. The continuous symmetry group of a round sphere in
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi mathvariant="double-struck">R</mi><mi>k</mi></msup></mrow></math> is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow></math> (or <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow></math>, including reflections). Here, the
+dimension <var>k</var> is the number of alleles at the locus; the transform does
+not yield a dimension of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>4</mn><mi>L</mi></mrow></math> or another fixed function of the number of
+loci <var>L</var>.</p>
+<p><strong>Why <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow></math> is not a symmetry of the constrained model.</strong> The physically meaningful
+region is not the <em>whole</em> sphere, only the positive orthant of it, since
+each <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>z</mi><mi>i</mi></msub><mo>=</mo><msqrt><mrow><msub><mi>p</mi><mi>i</mi></msub></mrow></msqrt><mo>≥</mo><mn>0</mn></mrow></math> by definition — an allele frequency cannot
+be negative. That positive-orthant patch covers only <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><msup><mn>2</mn><mi>k</mi></msup></mrow></math> of the
+sphere's surface, and its boundary faces (where some <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>z</mi><mi>i</mi></msub><mo>=</mo><mn>0</mn></mrow></math>, i.e. some
+allele has gone extinct on that island) are exactly the absorbing
+fixation states already identified in the two-allele case. A generic
+rotation in <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow></math> does not map this patch to itself — a rotation can make
+coordinates negative, which is not a valid allele-frequency state. The
+elements of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow></math> that map
+the positive orthant back to itself are <strong>permutations of the <var>k</var>
+coordinates</strong> (relabeling which allele is called &quot;1,&quot; &quot;2,&quot; and so on).
+Thus the constrained state space preserves the finite group of coordinate
+permutations, <var>S</var><sub>k</sub>. In the two-allele case, this group is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mn>2</mn></msub><mo>≅</mo><msub><mi mathvariant="double-struck">Z</mi><mn>2</mn></msub></mrow></math>.</p>
+<p><strong>On the multi-locus case and &quot;<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>4</mn><mi>L</mi></mrow></math>.&quot;</strong> If several independent,
+unlinked loci are tracked simultaneously, the full
+state space becomes a product of one such sphere per locus — an ambient
+symmetry of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><msub><mi>k</mi><mn>1</mn></msub><mo stretchy="false">)</mo><mi>×</mi><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><msub><mi>k</mi><mn>2</mn></msub><mo stretchy="false">)</mo><mi>×</mi><mo>⋯</mo><mi>×</mi><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><msub><mi>k</mi><mi>L</mi></msub><mo stretchy="false">)</mo></mrow></math> (or
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><mi>k</mi><msup><mo stretchy="false">)</mo><mi>L</mi></msup></mrow></math> if every locus has the same number of alleles <var>k</var>), possibly
+with an extra factor of <var>S</var><sub>L</sub> if the loci themselves are statistically
+exchangeable. This product structure captures the dependence of the
+ambient symmetry on the loci and their allele counts. No derivation here produces <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>4</mn><mi>L</mi></mrow></math>;
+that expression does not follow from the model.</p>
+<table>
+<thead>
+<tr>
+<th>Symmetry</th>
+<th>Group</th>
+<th>Present in the model?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relabeling the <var>k</var> alleles at one locus</td>
+<td><var>S</var><sub>k</sub></td>
+<td>Yes, absent mutation bias or selection</td>
+</tr>
+<tr>
+<td>Relabeling the <var>d</var> islands</td>
+<td><var>S</var><sub>d</sub></td>
+<td>Yes, if all island sizes and migration rates are equal</td>
+</tr>
+<tr>
+<td>Allele-frequency reflection (two-allele case, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi><mo>=</mo><mn>2</mn></mrow></math>)</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi mathvariant="double-struck">Z</mi><mn>2</mn></msub><mo>≅</mo><msub><mi>S</mi><mn>2</mn></msub></mrow></math></td>
+<td>Yes — the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi><mo>=</mo><mn>2</mn></mrow></math> special case of the row above</td>
+</tr>
+<tr>
+<td>Ambient rotation of the <var>k</var>-allele sphere embedding</td>
+<td><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow></math></td>
+<td>Only before the positive-orthant constraint is applied — broken by absorbing fixation states</td>
+</tr>
+<tr>
+<td>Continuous phase rotation (<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>U</mi><mo stretchy="false">(</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>)</td>
+<td>—</td>
+<td>No — the model has no phase variable</td>
+</tr>
+</tbody>
+</table>
+<p>The finite island model can be described as a mean-field (or, under
+stepping-stone migration, lattice) Markov random field. Relabeling alleles
+and demes gives the discrete permutation symmetries <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>S</mi><mi>k</mi></msub><mi>×</mi><msub><mi>S</mi><mi>d</mi></msub></mrow></math>
+under the stated symmetry assumptions. The square-root
+embedding introduces ambient <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow></math> symmetry, but the nonnegative
+frequency constraint restricts the valid state space and leaves only
+coordinate permutations as its symmetries. Thus <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">S</mi><mi mathvariant="normal">O</mi></mrow><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow></math> describes the
+embedding, not a continuous symmetry of the constrained population model.</p>
+<hr />
+<h2 id="appendix-b-relation-to-ancestry-inference">Appendix B: relation to ancestry inference</h2>
+<p><em>Optional. This appendix uses mixture models, likelihood methods, and
+population-structure inference.</em></p>
+<p>The finite island model's state representation—discrete groups, each with
+its own allele-frequency vector, and individuals drawn from those
+frequencies—is related to standard statistical clustering techniques. The
+allele-frequency table treated here as <em>simulated ground truth</em> (Part 3) is
+an <em>unknown parameter</em> inferred by some population-genetics tools from
+observed genetic data.</p>
+<p><strong>The direct connection: STRUCTURE and its descendants.</strong> Pritchard JK,
+Stephens M, Donnelly P, &quot;Inference of population structure using
+multilocus genotype data.&quot; <em>Genetics</em> 155(2):945–59, 2000. PMID: 10835412.
+DOI:
+<a href="#" data-fim-external="https://doi.org/10.1093/genetics/155.2.945">10.1093/genetics/155.2.945</a>.
+This paper introduced STRUCTURE, software for model-based genetic
+clustering. Its generative model shares the allele-frequency and
+individual-assignment structure of the finite island model, but does not
+model the same migration-and-drift process:</p>
+<ul>
+<li>Assume <var>K</var> discrete, unobserved source populations, each with its own
+allele-frequency vector at every genetic location — exactly the
+frequency table from Part 3.</li>
+<li>Each observed individual's genetic data is generated by (softly)
+assigning it to one or a mixture of the <var>K</var> populations, then sampling
+alleles from that population's frequency vector.</li>
+<li>Statistical inference — originally by Markov-chain Monte Carlo sampling
+— recovers <em>both</em> the per-population allele frequencies <em>and</em> each
+individual's population membership from the observed data alone, with
+nothing about population membership given in advance.</li>
+</ul>
+<p>Faster descendants followed, most notably Alexander DH, Novembre J, Lange
+K, &quot;Fast model-based estimation of ancestry in unrelated individuals.&quot;
+<em>Genome Research</em> 19(9):1655–64, 2009. PMID: 19648217. DOI:
+<a href="#" data-fim-external="https://doi.org/10.1101/gr.094052.109">10.1101/gr.094052.109</a>. This paper
+introduced ADMIXTURE, which fits the same underlying model as STRUCTURE by
+direct likelihood maximization instead of random sampling, trading some
+flexibility for large speed gains on genome-scale data sets.</p>
+<p><strong>Comparison of the model roles:</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Finite island model</th>
+<th>STRUCTURE-family clustering</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direction</td>
+<td>Forward: given demography, simulate the frequency table forward through time</td>
+<td>Inverse: given observed genetic data, infer the frequency table (and each individual's group) that could have produced it</td>
+</tr>
+<tr>
+<td>Role of the frequency table</td>
+<td>Known ground truth, produced by migration and drift</td>
+<td>Unknown parameter, estimated from data</td>
+</tr>
+<tr>
+<td>Groups</td>
+<td>Physical demes, connected by an explicit migration process</td>
+<td>Statistical clusters — a fixed mixture, with no migration process linking them</td>
+</tr>
+</tbody>
+</table>
+<p>Forward simulation provides a controlled way to assess a clustering
+method: data generated under a specified finite-island model can be
+analyzed with STRUCTURE or ADMIXTURE, and inferred groups and frequencies
+can then be compared with the generating parameters.</p>
+<p><strong>The broader family.</strong> STRUCTURE's underlying model is a finite mixture
+model — the same statistical structure as a Gaussian mixture model, but
+with categorical rather than continuous outcomes. This is also, as is
+often noted, structurally identical to Latent Dirichlet Allocation, the
+widely used topic-modeling technique from natural-language processing:
+&quot;documents&quot; play the role of &quot;individuals,&quot; &quot;topics&quot; play the role of
+&quot;source populations,&quot; and &quot;words&quot; play the role of &quot;alleles.&quot; (STRUCTURE,
+published in 2000, predates the LDA paper by Blei, Ng &amp; Jordan, published
+in 2003, by a few years.) Stochastic block models, used for clustering
+nodes in a network, follow the same shape again: discrete latent group
+labels, group-conditional outcome probabilities, and graph-based coupling
+— here, the finite island model's migration graph plays the same role as
+an observed network's edges. One practical consequence shows up across all
+of these: because permuting the <var>K</var> group labels leaves the underlying
+mathematics completely unchanged, iterative fitting procedures can — and
+in practice sometimes do — swap label identities partway through a run, a
+well-known headache in this literature usually called <em>label switching</em>,
+and a direct consequence of the same discrete symmetry discussed in
+Appendix A.</p>

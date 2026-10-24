@@ -1,0 +1,143 @@
+<h1 id="troubleshooting">Troubleshooting</h1>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#a-result-disagrees-with-a-published-value">A result disagrees with a published value</a></li>
+<li><a href="#a-run-takes-very-long-or-reaches-the-cap">A run takes very long or reaches the cap</a></li>
+<li><a href="#a-run-finished-in-a-few-hundred-generations">A run finished in a few hundred generations</a></li>
+<li><a href="#configure-rejects-a-value">Configure rejects a value</a></li>
+<li><a href="#memory-warning">Memory warning</a></li>
+<li><a href="#sweep-messages">Sweep messages</a></li>
+<li><a href="#an-item-cannot-be-edited-or-deleted">An item cannot be edited or deleted</a></li>
+<li><a href="#closing-the-window">Closing the window</a></li>
+<li><a href="#if-the-window-closes-but-fim-keeps-running">If the window closes but fim keeps running</a></li>
+<li><a href="#settings-were-reset">Settings were reset</a></li>
+<li><a href="#logs-and-diagnostics">Logs and diagnostics</a></li>
+<li><a href="#the-app-does-not-open-on-linux">The app does not open on Linux</a></li>
+</ul>
+<h2 id="a-result-disagrees-with-a-published-value">A result disagrees with a published value</h2>
+<p>Check, in order:</p>
+<ol>
+<li>Units of N: individuals × ploidy = gene copies.</li>
+<li>Migration convention: <code>fim</code>'s scalar <code>m</code> draws from the other <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></math>
+demes; a redraw-from-all-<var>d</var> rate converts by <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>.</li>
+<li>Estimand: population statistic, not a sample estimator; ratio of
+means across loci, not mean of ratios.</li>
+<li>Equilibrium: was the burn-in long enough, and did the run converge?</li>
+</ol>
+<p>See <a href="#" data-fim-help="gui-conventions" data-fim-anchor="">implementation conventions</a> and the
+<a href="#" data-fim-help="migration-conventions" data-fim-anchor="3-comparison-protocol">comparison protocol</a>.</p>
+<h2 id="a-run-takes-very-long-or-reaches-the-cap">A run takes very long or reaches the cap</h2>
+<p>Low migration or mutation can need tens of thousands of generations, or
+more, for the initial state to decay. The derived burn-in and cap appear
+beside <strong>Run simulation</strong> before you start.</p>
+<p>Reaching <strong>max generations</strong> is a valid, non-converged result; the
+report gives the precision achieved. Options: raise <strong>max generations</strong>,
+accept a larger <strong>precision</strong>, add independent loci, or use a batch. A
+batch can reduce elapsed time but not total computation, because each
+replicate has its own burn-in. See
+<a href="#" data-fim-help="convergence" data-fim-anchor="why-does-my-run-take-so-long">why does my run take so long?</a></p>
+<h2 id="a-run-finished-in-a-few-hundred-generations">A run finished in a few hundred generations</h2>
+<p>Check whether <strong>convergence burn-in</strong> or <strong>max generations</strong> in
+<a href="#" data-fim-help="gui-configure" data-fim-anchor="run-settings">Run settings…</a> is a small fixed number,
+perhaps from a loaded configuration. Use <code>auto</code> for both unless you have
+a specific reason not to.</p>
+<h2 id="configure-rejects-a-value">Configure rejects a value</h2>
+<p>The app returns to Configure and marks the field. Press <strong>F1</strong> in that
+field for its reference entry. A loaded YAML file with an unknown or
+misspelled key is rejected, never silently ignored; compare the key with
+the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>.</p>
+<h2 id="memory-warning">Memory warning</h2>
+<p>The app estimates each job's added memory before it starts and asks if
+the estimate would cross the reserve in
+<a href="#" data-fim-help="gui-settings" data-fim-anchor="background-work">Background work</a>. While work runs, a
+warning lists jobs with <strong>Pause</strong> buttons when available memory falls
+below the reserve.</p>
+<h2 id="sweep-messages">Sweep messages</h2>
+<ul>
+<li><strong>Another process is running this sweep:</strong> a sweep locks its Study.
+The lock is released when the other process exits, including after a
+crash.</li>
+<li><strong>The stored sweep plan no longer matches:</strong> a newer release changed
+what a run ID covers. Run <code>fim sweep replan STUDY_ID --dry-run</code>, then
+<code>fim sweep replan STUDY_ID</code>. See
+<a href="#" data-fim-help="usage" data-fim-anchor="sweep-a-parameter">sweep a parameter</a>.</li>
+<li><strong>A point failed:</strong> the sweep continues. Use <strong>Retry failed (N)</strong> on
+Home. A failure the engine reports is not retried automatically,
+because the same configuration fails the same way.</li>
+</ul>
+<h2 id="an-item-cannot-be-edited-or-deleted">An item cannot be edited or deleted</h2>
+<p>Examples are <a href="#" data-fim-help="gui-organize" data-fim-anchor="read-only-items">read-only</a>. A deletion that
+includes a read-only item is refused as a whole. A run that is executing
+cannot be deleted; pause, cancel, or stop it first.</p>
+<h2 id="closing-the-window">Closing the window</h2>
+<p>When closing would lose something, <code>fim</code> asks first. That happens when a
+configuration has unsaved changes, a saved run is in progress (runs
+started with <strong>Run simulation</strong> are saved runs), or a sweep is in
+progress. The dialog lists every affected document, including tabs not
+on screen.</p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Save and close</strong></td>
+<td>Saves configurations under <strong>Saved runs</strong> on Home (Draft if incomplete, Planned if valid), then closes</td>
+</tr>
+<tr>
+<td><strong>Close without saving</strong></td>
+<td>Discards unsaved changes and closes</td>
+</tr>
+<tr>
+<td><strong>Pause and close</strong></td>
+<td>Shown when only a saved run is active; it pauses at a checkpoint for later <strong>Resume</strong></td>
+</tr>
+<tr>
+<td><strong>Stop and close</strong></td>
+<td>Shown when only a sweep is active; the sweep stops</td>
+</tr>
+<tr>
+<td><strong>Keep working</strong></td>
+<td>Leaves the window open</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Save and close</strong> and <strong>Close without saving</strong> also pause a running
+saved run or stop a running sweep. If saving fails, the dialog stays open
+with the reason.</p>
+<p>A sweep setup is not stored with a saved run. If a sweep setup was
+edited, <strong>Save and close</strong> saves the run configuration and keeps the
+dialog open with an explanation: <strong>Keep working</strong> retains the setup for
+this session; <strong>Close without saving</strong> discards it.</p>
+<h2 id="if-the-window-closes-but-fim-keeps-running">If the window closes but fim keeps running</h2>
+<p>If shutdown has not finished 20 seconds after the window closes, <code>fim</code>
+records diagnostics and exits with status 3:</p>
+<pre><code class="language-text">fim: shutdown did not complete within 20s; forcing exit
+</code></pre>
+<p>Completed results remain on disk. A saved run resumes from its latest
+checkpoint; work since that checkpoint may be repeated. The diagnostic
+report is written to <code>logs/fim.log</code>. Report the section that begins
+<code>shutdown deadman fired</code>, with your platform and launch method; see
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/ISSUES.md#intermittent-hang-during-gui-shutdown">known issues</a>.</p>
+<p>To investigate, set <code>FIM_GUI_SHUTDOWN_TIMEOUT</code> to a longer timeout in
+seconds, or <code>0</code> to disable the forced exit, before launching:</p>
+<pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
+</code></pre>
+<h2 id="settings-were-reset">Settings were reset</h2>
+<p>If <code>preferences.json</code> is invalid, the app shows a banner, uses built-in
+defaults, and keeps the invalid file as
+<code>preferences.invalid-&lt;timestamp&gt;.json</code>. See
+<a href="#" data-fim-help="gui-settings" data-fim-anchor="where-preferences-are-stored">where preferences are stored</a>.</p>
+<h2 id="logs-and-diagnostics">Logs and diagnostics</h2>
+<p>The app writes a rotated log to <code>logs/fim.log</code> under the storage
+location. A double-clicked app or <code>fim --graphical</code> accepts no logging
+flags; set <code>FIM_LOG_LEVEL</code> and <code>FIM_LOG_OPTIONS</code> before launching. They
+correspond to the command line's <code>-l</code> and <code>-L</code>. See the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-logging-design.md">logging design</a> and
+<a href="#" data-fim-help="usage" data-fim-anchor="global-flags">global flags</a>.</p>
+<h2 id="the-app-does-not-open-on-linux">The app does not open on Linux</h2>
+<p>The app needs WebKitGTK, a system package most desktop distributions
+already include. See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/install/README.md">installation alternatives</a>.</p>

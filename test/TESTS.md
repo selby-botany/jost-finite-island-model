@@ -17373,7 +17373,7 @@ Configure/View included) was written under.
 
 <a id="gui.test_app_api.test_build_menu_dispatches_document_actions_to_workspace"></a>
 
-#### [test\_build\_menu\_dispatches\_document\_actions\_to\_workspace](./gui/test_app_api.py#L5447)
+#### [test\_build\_menu\_dispatches\_document\_actions\_to\_workspace](./gui/test_app_api.py#L5448)
 
 ```python
 def test_build_menu_dispatches_document_actions_to_workspace() -> None
@@ -17383,7 +17383,7 @@ Native document menu items dispatch through the workspace API.
 
 <a id="gui.test_app_api.test_no_menu_title_contains_a_paren"></a>
 
-#### [test\_no\_menu\_title\_contains\_a\_paren](./gui/test_app_api.py#L5498)
+#### [test\_no\_menu\_title\_contains\_a\_paren](./gui/test_app_api.py#L5499)
 
 ```python
 def test_no_menu_title_contains_a_paren() -> None
@@ -17407,7 +17407,7 @@ rather than crashing a real Linux build the same way.
 
 <a id="gui.test_app_api.test_open_external_link_opens_the_os_default_browser"></a>
 
-#### [test\_open\_external\_link\_opens\_the\_os\_default\_browser](./gui/test_app_api.py#L5523)
+#### [test\_open\_external\_link\_opens\_the\_os\_default\_browser](./gui/test_app_api.py#L5524)
 
 ```python
 def test_open_external_link_opens_the_os_default_browser(
@@ -17421,7 +17421,7 @@ follows for OS-dispatched actions — no real browser opens in a test.
 
 <a id="gui.test_app_api.test_get_about_info_reports_the_dev_checkout_commit"></a>
 
-#### [test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit](./gui/test_app_api.py#L5603)
+#### [test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit](./gui/test_app_api.py#L5604)
 
 ```python
 def test_get_about_info_reports_the_dev_checkout_commit(
@@ -17438,7 +17438,7 @@ process's own live value, so the assertion is exact either way.
 
 <a id="gui.test_app_api.test_main_returns_2_on_a_malformed_fim_log_level"></a>
 
-#### [test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level](./gui/test_app_api.py#L5662)
+#### [test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level](./gui/test_app_api.py#L5663)
 
 ```python
 def test_main_returns_2_on_a_malformed_fim_log_level(
@@ -17465,7 +17465,7 @@ testing standard forbids.
 
 <a id="gui.test_app_api.test_main_logging_config_flag_wins_over_fim_logging_config_env_var"></a>
 
-#### [test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var](./gui/test_app_api.py#L5720)
+#### [test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var](./gui/test_app_api.py#L5721)
 
 ```python
 def test_main_logging_config_flag_wins_over_fim_logging_config_env_var(
@@ -17480,7 +17480,7 @@ instead of successfully applying the flag's own valid one.
 
 <a id="gui.test_app_api.test_main_honors_fim_logging_config_env_var_with_no_flag"></a>
 
-#### [test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag](./gui/test_app_api.py#L5757)
+#### [test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag](./gui/test_app_api.py#L5758)
 
 ```python
 def test_main_honors_fim_logging_config_env_var_with_no_flag(
@@ -17499,7 +17499,7 @@ coverage for this exact call path.
 
 <a id="gui.test_app_api.test_main_applies_root_results_directory_log_directory_and_preferences_file"></a>
 
-#### [test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file](./gui/test_app_api.py#L5798)
+#### [test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file](./gui/test_app_api.py#L5799)
 
 ```python
 def test_main_applies_root_results_directory_log_directory_and_preferences_file(
@@ -17516,7 +17516,7 @@ just before that.
 
 <a id="gui.test_app_api.test_initial_window_size_is_the_largest_polite_16_by_9"></a>
 
-#### [test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9](./gui/test_app_api.py#L5846)
+#### [test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9](./gui/test_app_api.py#L5847)
 
 ```python
 @pytest.mark.parametrize(
@@ -17537,7 +17537,7 @@ The window is 16:9, inside the display with a margin, and capped.
 
 <a id="gui.test_app_api.test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing"></a>
 
-#### [test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing](./gui/test_app_api.py#L5858)
+#### [test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing](./gui/test_app_api.py#L5859)
 
 ```python
 def test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing(
@@ -17548,7 +17548,7 @@ After a Study is deleted, its Experiment counts and lists only what exists.
 
 <a id="gui.test_app_api.test_list_studies_reports_closed_and_a_lifecycle_summary"></a>
 
-#### [test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary](./gui/test_app_api.py#L5875)
+#### [test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary](./gui/test_app_api.py#L5876)
 
 ```python
 def test_list_studies_reports_closed_and_a_lifecycle_summary(
@@ -17559,7 +17559,7 @@ Home receives each group's open/closed flag and its derived summary.
 
 <a id="gui.test_app_api.test_set_study_closed_reports_a_refusal_as_a_message"></a>
 
-#### [test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message](./gui/test_app_api.py#L5911)
+#### [test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message](./gui/test_app_api.py#L5912)
 
 ```python
 def test_set_study_closed_reports_a_refusal_as_a_message(
@@ -17570,7 +17570,7 @@ A missing or default group is a message, never an exception.
 
 <a id="gui.test_app_api.test_list_experiments_heals_studies_deleted_by_the_old_behavior"></a>
 
-#### [test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior](./gui/test_app_api.py#L5930)
+#### [test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior](./gui/test_app_api.py#L5931)
 
 ```python
 def test_list_experiments_heals_studies_deleted_by_the_old_behavior(
@@ -17581,7 +17581,7 @@ A manifest left naming a missing Study is repaired when Home lists it.
 
 <a id="gui.test_app_api.test_explore_predictions_count_individuals_and_multiply_by_ploidy"></a>
 
-#### [test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy](./gui/test_app_api.py#L6041)
+#### [test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy](./gui/test_app_api.py#L6042)
 
 ```python
 def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
@@ -17592,7 +17592,7 @@ def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
 
 <a id="gui.test_app_api.test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning"></a>
 
-#### [test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning](./gui/test_app_api.py#L6053)
+#### [test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning](./gui/test_app_api.py#L6054)
 
 ```python
 def test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning(
@@ -17603,7 +17603,7 @@ No ploidy argument means N is the gene-copy count, as before.
 
 <a id="gui.test_app_api.test_explore_rejects_a_ploidy_outside_one_to_four"></a>
 
-#### [test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four](./gui/test_app_api.py#L6065)
+#### [test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four](./gui/test_app_api.py#L6066)
 
 ```python
 @pytest.mark.parametrize("bad", ["0", "5", "diploid", ""])
@@ -17614,7 +17614,7 @@ Every Explore method refuses an unusable ploidy with one message.
 
 <a id="gui.test_app_api.test_explore_sweeps_the_n_axis_in_individuals"></a>
 
-#### [test\_explore\_sweeps\_the\_n\_axis\_in\_individuals](./gui/test_app_api.py#L6080)
+#### [test\_explore\_sweeps\_the\_n\_axis\_in\_individuals](./gui/test_app_api.py#L6081)
 
 ```python
 def test_explore_sweeps_the_n_axis_in_individuals() -> None
@@ -17624,7 +17624,7 @@ The axis values are individuals; each is evaluated at value * ploidy.
 
 <a id="gui.test_app_api.test_explore_grid_and_sweep_evaluate_at_gene_copies"></a>
 
-#### [test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies](./gui/test_app_api.py#L6098)
+#### [test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies](./gui/test_app_api.py#L6099)
 
 ```python
 def test_explore_grid_and_sweep_evaluate_at_gene_copies() -> None
@@ -17634,7 +17634,7 @@ The held N of a sweep or a grid is individuals times ploidy too.
 
 <a id="gui.test_app_api.test_list_studies_counts_only_the_member_runs_that_exist"></a>
 
-#### [test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist](./gui/test_app_api.py#L6113)
+#### [test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist](./gui/test_app_api.py#L6114)
 
 ```python
 def test_list_studies_counts_only_the_member_runs_that_exist(
@@ -17645,7 +17645,7 @@ def test_list_studies_counts_only_the_member_runs_that_exist(
 
 <a id="gui.test_app_api.test_create_study_and_experiment_store_documentation_and_list_it"></a>
 
-#### [test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it](./gui/test_app_api.py#L6144)
+#### [test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it](./gui/test_app_api.py#L6145)
 
 ```python
 def test_create_study_and_experiment_store_documentation_and_list_it(
@@ -17656,7 +17656,7 @@ Documentation given at creation is listed; blank text is stored as unset.
 
 <a id="gui.test_app_api.test_update_study_and_experiment_details_round_trip"></a>
 
-#### [test\_update\_study\_and\_experiment\_details\_round\_trip](./gui/test_app_api.py#L6166)
+#### [test\_update\_study\_and\_experiment\_details\_round\_trip](./gui/test_app_api.py#L6167)
 
 ```python
 def test_update_study_and_experiment_details_round_trip(
@@ -17667,7 +17667,7 @@ The details dialog's Save replaces name, description and documentation.
 
 <a id="gui.test_app_api.test_update_details_reports_a_blank_name_or_unknown_id"></a>
 
-#### [test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id](./gui/test_app_api.py#L6194)
+#### [test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id](./gui/test_app_api.py#L6195)
 
 ```python
 def test_update_details_reports_a_blank_name_or_unknown_id(
@@ -17678,7 +17678,7 @@ A failed save leaves a message for the dialog, and changes nothing.
 
 <a id="gui.test_app_api.test_update_run_details_writes_the_sidecar_and_home_lists_it"></a>
 
-#### [test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it](./gui/test_app_api.py#L6218)
+#### [test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it](./gui/test_app_api.py#L6219)
 
 ```python
 def test_update_run_details_writes_the_sidecar_and_home_lists_it(
@@ -17689,7 +17689,7 @@ A run's name and description are saved and shown in its Home row.
 
 <a id="gui.test_app_api.test_update_run_details_clears_with_blank_text_and_rejects_a_non_run"></a>
 
-#### [test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run](./gui/test_app_api.py#L6245)
+#### [test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run](./gui/test_app_api.py#L6246)
 
 ```python
 def test_update_run_details_clears_with_blank_text_and_rejects_a_non_run(
@@ -17700,7 +17700,7 @@ Blank clears a field; a directory with no manifest is not a run.
 
 <a id="gui.test_app_api.test_get_run_context_names_a_runs_study_and_experiment"></a>
 
-#### [test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment](./gui/test_app_api.py#L6263)
+#### [test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment](./gui/test_app_api.py#L6264)
 
 ```python
 def test_get_run_context_names_a_runs_study_and_experiment(
@@ -17711,7 +17711,7 @@ A run filed in a chosen Study is shown under it, not under the default.
 
 <a id="gui.test_app_api.test_get_run_context_before_a_run_uses_the_selected_or_default_study"></a>
 
-#### [test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study](./gui/test_app_api.py#L6289)
+#### [test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study](./gui/test_app_api.py#L6290)
 
 ```python
 def test_get_run_context_before_a_run_uses_the_selected_or_default_study(
@@ -17722,7 +17722,7 @@ With no run yet, the title names the chosen Study's Experiment.
 
 <a id="gui.test_app_api.test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest"></a>
 
-#### [test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest](./gui/test_app_api.py#L6312)
+#### [test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest](./gui/test_app_api.py#L6313)
 
 ```python
 def test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest(
@@ -21748,7 +21748,7 @@ fixture called twice — its own driver destroys the window in a
 
 <a id="gui.test_help_screen.test_external_doc_link_reaches_the_browser_and_settles"></a>
 
-#### [test\_external\_doc\_link\_reaches\_the\_browser\_and\_settles](./gui/test_help_screen.py#L77)
+#### [test\_external\_doc\_link\_reaches\_the\_browser\_and\_settles](./gui/test_help_screen.py#L83)
 
 ```python
 def test_external_doc_link_reaches_the_browser_and_settles(
@@ -21777,7 +21777,7 @@ cancel_run_settled` for the full mechanism, traced there via
 
 <a id="gui.test_help_screen.test_help_screen_returns_to_results_when_opened_from_there"></a>
 
-#### [test\_help\_screen\_returns\_to\_results\_when\_opened\_from\_there](./gui/test_help_screen.py#L131)
+#### [test\_help\_screen\_returns\_to\_results\_when\_opened\_from\_there](./gui/test_help_screen.py#L137)
 
 ```python
 def test_help_screen_returns_to_results_when_opened_from_there(
@@ -21792,7 +21792,7 @@ screen's own fixed-target "Back" button: recording
 
 <a id="gui.test_help_screen.test_statistic_name_opens_its_definition_without_toggling_the_plot"></a>
 
-#### [test\_statistic\_name\_opens\_its\_definition\_without\_toggling\_the\_plot](./gui/test_help_screen.py#L190)
+#### [test\_statistic\_name\_opens\_its\_definition\_without\_toggling\_the\_plot](./gui/test_help_screen.py#L196)
 
 ```python
 @pytest.mark.parametrize("label_source", ["row", "column"])
@@ -21801,6 +21801,59 @@ def test_statistic_name_opens_its_definition_without_toggling_the_plot(
 ```
 
 Statistic help preserves plot visibility and returns to the same screen.
+
+<a id="gui.test_help_screen.test_help_home_lists_every_topic_by_group"></a>
+
+#### [test\_help\_home\_lists\_every\_topic\_by\_group](./gui/test_help_screen.py#L326)
+
+```python
+def test_help_home_lists_every_topic_by_group(window: webview.Window) -> None
+```
+
+The rail and Help menu open Help home: grouped topics, no CLI first.
+
+<a id="gui.test_help_screen.test_help_pages_have_their_own_history_and_return_to_work"></a>
+
+#### [test\_help\_pages\_have\_their\_own\_history\_and\_return\_to\_work](./gui/test_help_screen.py#L354)
+
+```python
+def test_help_pages_have_their_own_history_and_return_to_work(
+        window: webview.Window) -> None
+```
+
+Back and Forward move between pages; Return to work leaves Help.
+
+<a id="gui.test_help_screen.test_help_search_finds_desktop_sections_offline"></a>
+
+#### [test\_help\_search\_finds\_desktop\_sections\_offline](./gui/test_help_screen.py#L402)
+
+```python
+def test_help_search_finds_desktop_sections_offline(
+        window: webview.Window) -> None
+```
+
+Search ranks section-level results and opens one at its heading.
+
+<a id="gui.test_help_screen.test_f1_opens_the_focused_fields_reference_and_returns"></a>
+
+#### [test\_f1\_opens\_the\_focused\_fields\_reference\_and\_returns](./gui/test_help_screen.py#L434)
+
+```python
+def test_f1_opens_the_focused_fields_reference_and_returns(
+        window: webview.Window) -> None
+```
+
+F1 in a Configure field opens its configuration key; Return goes back.
+
+<a id="gui.test_help_screen.test_missing_help_page_offers_recovery"></a>
+
+#### [test\_missing\_help\_page\_offers\_recovery](./gui/test_help_screen.py#L464)
+
+```python
+def test_missing_help_page_offers_recovery(window: webview.Window) -> None
+```
+
+A page that fails to load says so and offers Retry, home, and return.
 
 <a id="gui.test_home_hierarchy_screen"></a>
 
@@ -23643,7 +23696,7 @@ Back/forward card-navigation controls carry explicit arrow icons.
 
 <a id="gui.test_nav_rail.test_home_is_the_default_highlighted_destination"></a>
 
-#### [test\_home\_is\_the\_default\_highlighted\_destination](./gui/test_nav_rail.py#L178)
+#### [test\_home\_is\_the\_default\_highlighted\_destination](./gui/test_nav_rail.py#L180)
 
 ```python
 def test_home_is_the_default_highlighted_destination(
@@ -23658,7 +23711,7 @@ Home, not Run, and the rail agrees.
 
 <a id="gui.test_nav_rail.test_top_strip_back_and_forward_are_disabled_on_launch"></a>
 
-#### [test\_top\_strip\_back\_and\_forward\_are\_disabled\_on\_launch](./gui/test_nav_rail.py#L206)
+#### [test\_top\_strip\_back\_and\_forward\_are\_disabled\_on\_launch](./gui/test_nav_rail.py#L208)
 
 ```python
 def test_top_strip_back_and_forward_are_disabled_on_launch(
@@ -23675,7 +23728,7 @@ prove.
 
 <a id="gui.test_nav_rail.test_top_strip_back_and_forward_walk_screen_history"></a>
 
-#### [test\_top\_strip\_back\_and\_forward\_walk\_screen\_history](./gui/test_nav_rail.py#L229)
+#### [test\_top\_strip\_back\_and\_forward\_walk\_screen\_history](./gui/test_nav_rail.py#L231)
 
 ```python
 def test_top_strip_back_and_forward_walk_screen_history(
@@ -23686,7 +23739,7 @@ The shared Back/Forward controls follow browser-style screen history.
 
 <a id="gui.test_nav_rail.test_settings_dialog_controls_startup_behavior"></a>
 
-#### [test\_settings\_dialog\_controls\_startup\_behavior](./gui/test_nav_rail.py#L269)
+#### [test\_settings\_dialog\_controls\_startup\_behavior](./gui/test_nav_rail.py#L271)
 
 ```python
 def test_settings_dialog_controls_startup_behavior(
@@ -23697,7 +23750,7 @@ The top-strip settings button persists the startup behavior choice.
 
 <a id="gui.test_nav_rail.test_parameter_strip_shows_the_starter_configuration_on_launch"></a>
 
-#### [test\_parameter\_strip\_shows\_the\_starter\_configuration\_on\_launch](./gui/test_nav_rail.py#L299)
+#### [test\_parameter\_strip\_shows\_the\_starter\_configuration\_on\_launch](./gui/test_nav_rail.py#L301)
 
 ```python
 def test_parameter_strip_shows_the_starter_configuration_on_launch(
@@ -23708,7 +23761,7 @@ The strip is populated before any field is touched, on launch.
 
 <a id="gui.test_nav_rail.test_clicking_configure_shows_the_landing_screen_and_updates_the_rail"></a>
 
-#### [test\_clicking\_configure\_shows\_the\_landing\_screen\_and\_updates\_the\_rail](./gui/test_nav_rail.py#L316)
+#### [test\_clicking\_configure\_shows\_the\_landing\_screen\_and\_updates\_the\_rail](./gui/test_nav_rail.py#L318)
 
 ```python
 def test_clicking_configure_shows_the_landing_screen_and_updates_the_rail(
@@ -23719,7 +23772,7 @@ Rail navigation both switches the screen and moves the highlight.
 
 <a id="gui.test_nav_rail.test_configure_shows_both_panels_with_their_own_fields"></a>
 
-#### [test\_configure\_shows\_both\_panels\_with\_their\_own\_fields](./gui/test_nav_rail.py#L345)
+#### [test\_configure\_shows\_both\_panels\_with\_their\_own\_fields](./gui/test_nav_rail.py#L347)
 
 ```python
 def test_configure_shows_both_panels_with_their_own_fields(
@@ -23735,7 +23788,7 @@ the moment Configure is showing, not behind a per-section dialog.
 
 <a id="gui.test_nav_rail.test_parameter_strip_click_jumps_to_configure"></a>
 
-#### [test\_parameter\_strip\_click\_jumps\_to\_configure](./gui/test_nav_rail.py#L379)
+#### [test\_parameter\_strip\_click\_jumps\_to\_configure](./gui/test_nav_rail.py#L381)
 
 ```python
 def test_parameter_strip_click_jumps_to_configure(
@@ -23746,7 +23799,7 @@ Design §3.2: clicking any strip value jumps straight to Configure.
 
 <a id="gui.test_nav_rail.test_parameter_strip_updates_live_as_a_field_changes"></a>
 
-#### [test\_parameter\_strip\_updates\_live\_as\_a\_field\_changes](./gui/test_nav_rail.py#L394)
+#### [test\_parameter\_strip\_updates\_live\_as\_a\_field\_changes](./gui/test_nav_rail.py#L396)
 
 ```python
 def test_parameter_strip_updates_live_as_a_field_changes(
@@ -23757,7 +23810,7 @@ The strip reflects an in-progress edit, not only a submitted/valid form.
 
 <a id="gui.test_nav_rail.test_clicking_the_brand_mark_opens_the_about_dialog"></a>
 
-#### [test\_clicking\_the\_brand\_mark\_opens\_the\_about\_dialog](./gui/test_nav_rail.py#L415)
+#### [test\_clicking\_the\_brand\_mark\_opens\_the\_about\_dialog](./gui/test_nav_rail.py#L417)
 
 ```python
 def test_clicking_the_brand_mark_opens_the_about_dialog(
@@ -23772,7 +23825,7 @@ only that the button exists (`test_branding.py`'s own static check).
 
 <a id="gui.test_nav_rail.test_configure_back_button_returns_to_whichever_screen_preceded_it"></a>
 
-#### [test\_configure\_back\_button\_returns\_to\_whichever\_screen\_preceded\_it](./gui/test_nav_rail.py#L434)
+#### [test\_configure\_back\_button\_returns\_to\_whichever\_screen\_preceded\_it](./gui/test_nav_rail.py#L436)
 
 ```python
 def test_configure_back_button_returns_to_whichever_screen_preceded_it(
@@ -46058,7 +46111,7 @@ Tests for heading anchors and freshness of generated in-app Help pages.
 
 <a id="validation.test_help_html.inject_header_ids"></a>
 
-#### [inject\_header\_ids](./validation/test_help_html.py#L24)
+#### [inject\_header\_ids](./validation/test_help_html.py#L48)
 
 ```python
 @pytest.fixture(scope="module")
@@ -46069,7 +46122,7 @@ Load the Help generator without running its command-line entry point.
 
 <a id="validation.test_help_html.test_help_heading_ids_preserve_rendered_text"></a>
 
-#### [test\_help\_heading\_ids\_preserve\_rendered\_text](./validation/test_help_html.py#L44)
+#### [test\_help\_heading\_ids\_preserve\_rendered\_text](./validation/test_help_html.py#L68)
 
 ```python
 @pytest.mark.parametrize(
@@ -46093,7 +46146,7 @@ Rendered code is literal text, not a second pass of Markdown emphasis.
 
 <a id="validation.test_help_html.test_generated_help_is_current_and_local_links_resolve"></a>
 
-#### [test\_generated\_help\_is\_current\_and\_local\_links\_resolve](./validation/test_help_html.py#L56)
+#### [test\_generated\_help\_is\_current\_and\_local\_links\_resolve](./validation/test_help_html.py#L80)
 
 ```python
 def test_generated_help_is_current_and_local_links_resolve(
@@ -46104,7 +46157,7 @@ Committed Help matches the generator and every local jump has a target.
 
 <a id="validation.test_help_html.test_every_statistic_has_a_bundled_definition_and_implementation_link"></a>
 
-#### [test\_every\_statistic\_has\_a\_bundled\_definition\_and\_implementation\_link](./validation/test_help_html.py#L94)
+#### [test\_every\_statistic\_has\_a\_bundled\_definition\_and\_implementation\_link](./validation/test_help_html.py#L119)
 
 ```python
 def test_every_statistic_has_a_bundled_definition_and_implementation_link(
@@ -46115,7 +46168,7 @@ Every catalog row has a bundled definition and a resolvable API link.
 
 <a id="validation.test_help_html.test_statistics_api_links_resolve_without_redundant_guide_or_source_links"></a>
 
-#### [test\_statistics\_api\_links\_resolve\_without\_redundant\_guide\_or\_source\_links](./validation/test_help_html.py#L108)
+#### [test\_statistics\_api\_links\_resolve\_without\_redundant\_guide\_or\_source\_links](./validation/test_help_html.py#L133)
 
 ```python
 def test_statistics_api_links_resolve_without_redundant_guide_or_source_links(
@@ -46126,7 +46179,7 @@ The reference owns statistic definitions; API sections link to source.
 
 <a id="validation.test_help_html.test_derived_display_rows_have_bundled_definitions"></a>
 
-#### [test\_derived\_display\_rows\_have\_bundled\_definitions](./validation/test_help_html.py#L120)
+#### [test\_derived\_display\_rows\_have\_bundled\_definitions](./validation/test_help_html.py#L145)
 
 ```python
 def test_derived_display_rows_have_bundled_definitions() -> None
@@ -46136,7 +46189,7 @@ Non-catalog predictions and effective counts also resolve offline.
 
 <a id="validation.test_help_html.test_statistics_reference_is_regenerated_by_the_commit_hook"></a>
 
-#### [test\_statistics\_reference\_is\_regenerated\_by\_the\_commit\_hook](./validation/test_help_html.py#L136)
+#### [test\_statistics\_reference\_is\_regenerated\_by\_the\_commit\_hook](./validation/test_help_html.py#L161)
 
 ```python
 def test_statistics_reference_is_regenerated_by_the_commit_hook() -> None
@@ -46146,7 +46199,7 @@ A reference-only edit refreshes the bundled page before committing.
 
 <a id="validation.test_help_html.test_help_renders_tex_as_native_mathml"></a>
 
-#### [test\_help\_renders\_tex\_as\_native\_mathml](./validation/test_help_html.py#L156)
+#### [test\_help\_renders\_tex\_as\_native\_mathml](./validation/test_help_html.py#L181)
 
 ```python
 @pytest.mark.parametrize(
@@ -46168,7 +46221,7 @@ Fractions, sums, roots, and scripts are real math, not raw TeX.
 
 <a id="validation.test_help_html.test_statistics_equations_have_unique_visible_tags_and_no_raw_tex"></a>
 
-#### [test\_statistics\_equations\_have\_unique\_visible\_tags\_and\_no\_raw\_tex](./validation/test_help_html.py#L166)
+#### [test\_statistics\_equations\_have\_unique\_visible\_tags\_and\_no\_raw\_tex](./validation/test_help_html.py#L191)
 
 ```python
 def test_statistics_equations_have_unique_visible_tags_and_no_raw_tex(
@@ -46179,7 +46232,7 @@ Every tagged source equation survives generation as offline display math.
 
 <a id="validation.test_help_html.test_help_math_preserves_code_examples_and_literal_identifiers"></a>
 
-#### [test\_help\_math\_preserves\_code\_examples\_and\_literal\_identifiers](./validation/test_help_html.py#L182)
+#### [test\_help\_math\_preserves\_code\_examples\_and\_literal\_identifiers](./validation/test_help_html.py#L207)
 
 ```python
 def test_help_math_preserves_code_examples_and_literal_identifiers() -> None
@@ -46189,7 +46242,7 @@ Math conversion never interprets the contents of code spans or fences.
 
 <a id="validation.test_help_html.test_inline_tex_subscripts_do_not_split_literal_identifiers"></a>
 
-#### [test\_inline\_tex\_subscripts\_do\_not\_split\_literal\_identifiers](./validation/test_help_html.py#L203)
+#### [test\_inline\_tex\_subscripts\_do\_not\_split\_literal\_identifiers](./validation/test_help_html.py#L228)
 
 ```python
 @pytest.mark.parametrize(
@@ -46211,13 +46264,84 @@ Single-character TeX subscripts render without mangling legacy names.
 
 <a id="validation.test_help_html.test_help_rejects_unsupported_tex_commands"></a>
 
-#### [test\_help\_rejects\_unsupported\_tex\_commands](./validation/test_help_html.py#L211)
+#### [test\_help\_rejects\_unsupported\_tex\_commands](./validation/test_help_html.py#L236)
 
 ```python
 def test_help_rejects_unsupported_tex_commands() -> None
 ```
 
 A new macro cannot silently degrade to visible backslash text.
+
+<a id="validation.test_help_html.test_registry_covers_every_desktop_guide_page_and_keeps_stable_ids"></a>
+
+#### [test\_registry\_covers\_every\_desktop\_guide\_page\_and\_keeps\_stable\_ids](./validation/test_help_html.py#L243)
+
+```python
+def test_registry_covers_every_desktop_guide_page_and_keeps_stable_ids(
+) -> None
+```
+
+Every `doc/gui/` page is a Help topic; long-standing ids still exist.
+
+<a id="validation.test_help_html.test_commit_hook_regenerates_help_for_every_registered_source"></a>
+
+#### [test\_commit\_hook\_regenerates\_help\_for\_every\_registered\_source](./validation/test_help_html.py#L255)
+
+```python
+def test_commit_hook_regenerates_help_for_every_registered_source() -> None
+```
+
+Editing any registered source refreshes the committed Help pages.
+
+<a id="validation.test_help_html.test_desktop_guide_links_resolve_relative_to_their_own_directory"></a>
+
+#### [test\_desktop\_guide\_links\_resolve\_relative\_to\_their\_own\_directory](./validation/test_help_html.py#L270)
+
+```python
+def test_desktop_guide_links_resolve_relative_to_their_own_directory() -> None
+```
+
+`../configuration.md` from `doc/gui/` stays inside Help.
+
+<a id="validation.test_help_html.test_search_index_entries_point_at_real_sections"></a>
+
+#### [test\_search\_index\_entries\_point\_at\_real\_sections](./validation/test_help_html.py#L278)
+
+```python
+def test_search_index_entries_point_at_real_sections() -> None
+```
+
+Every search result opens an existing topic and heading.
+
+<a id="validation.test_help_html.test_topic_manifest_omits_sources_and_lists_registry_order"></a>
+
+#### [test\_topic\_manifest\_omits\_sources\_and\_lists\_registry\_order](./validation/test_help_html.py#L293)
+
+```python
+def test_topic_manifest_omits_sources_and_lists_registry_order() -> None
+```
+
+Help home reads titles and summaries, never repository paths.
+
+<a id="validation.test_help_html.test_every_configure_field_has_an_f1_help_target"></a>
+
+#### [test\_every\_configure\_field\_has\_an\_f1\_help\_target](./validation/test_help_html.py#L304)
+
+```python
+def test_every_configure_field_has_an_f1_help_target() -> None
+```
+
+`FIELD_HELP` and the F1 map list the same keys, and anchors exist.
+
+<a id="validation.test_help_html.test_every_screen_help_target_exists"></a>
+
+#### [test\_every\_screen\_help\_target\_exists](./validation/test_help_html.py#L328)
+
+```python
+def test_every_screen_help_target_exists() -> None
+```
+
+F1 and "Help for this screen" open real screens' real topics.
 
 <a id="validation.test_identity_recursion_trajectory"></a>
 

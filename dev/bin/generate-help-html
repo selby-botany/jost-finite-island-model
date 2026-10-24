@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Generate bundled desktop help from the Markdown references.
+"""Generate bundled desktop help from the Markdown documentation.
 
-Renders doc/usage.md, doc/configuration.md, and doc/statistics.md as
-HTML fragments in src/fim/gui/webui/help/. These pages are available
-offline. Links between bundled pages stay in the application; links
-to other documentation and source open in the system browser.
+Renders every topic listed in doc/help-topics.json as an HTML fragment
+in src/fim/gui/webui/help/<topic>.html, and writes two manifests beside
+them: topics.json (the Help home's groups and topics) and
+search-index.json (one entry per section, for offline search). These
+pages are available offline. Links between bundled pages stay in the
+application; links to other documentation and source open in the system
+browser.
 
 Edit the Markdown sources, then regenerate the committed HTML.
 TeX math is converted to native MathML at build time, without runtime
@@ -23,6 +26,7 @@ from __future__ import annotations
 import argparse
 import html
 import importlib.util
+import json
 import os
 import re
 import sys
@@ -30,6 +34,7 @@ from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 from re import Match
+from typing import Any
 from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -107,55 +112,73 @@ from docslug import (  # noqa: E402 -- must follow the sys.path insert above
 
 DOC_DIR = ROOT / "doc"
 HELP_DIR = ROOT / "src" / "fim" / "gui" / "webui" / "help"
+REGISTRY_PATH = DOC_DIR / "help-topics.json"
 REPO_URL = "https://github.com/selby-botany/jost-finite-island-model"
+TOPIC_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
+TOPICS_MANIFEST = "topics.json"
+SEARCH_INDEX = "search-index.json"
+# Search text per section is capped so the index stays small enough to
+# load on first use; headings and the opening text carry most matches.
+SEARCH_TEXT_LIMIT = 1200
 
-# Tier 1 (design §3.1): embedded, rendered in-app. Every other `doc/*.md`
-# file is Tier 2 (design §3.2) -- linked out to GitHub's own rendering at
-# `main`, never converted here.
-EMBEDDED_DOCS: tuple[tuple[str, str], ...] = (
-    ("usage", "usage.md"),
-    ("configuration", "configuration.md"),
-    ("statistics", "statistics.md"),
-)
-EMBEDDED_FILENAMES = {filename for _, filename in EMBEDDED_DOCS}
-SLUG_FOR_FILENAME = {filename: slug for slug, filename in EMBEDDED_DOCS}
 
-# A short, GUI-only reframing note prepended to each rendered fragment
-# (2026-09-11 documentation drift audit). `usage.md`/`configuration.md`
-# are written once, for every reader (CLI and GUI alike, per their own
-# "Who this document is for" framing) -- deliberately: embedding them
-# verbatim (this script's own module docstring, above) avoids a second,
-# separately-drifting GUI-only copy. That leaves every terminal
-# invocation (`fim run CONFIG ...`, `fim stats ...`) and CLI flag in
-# these two files rendering unchanged inside a desktop app with no
-# terminal in sight -- not wrong, since the GUI performs the identical
-# underlying operation, but liable to read as "something I need to type"
-# to a reader who has never opened a shell. Rather than stripping or
-# reorganizing the source docs (the CLI-only and universally-useful
-# content in both files is interleaved sentence by sentence, not
-# separable into whole sections a marker could cleanly skip -- a worked
-# example's own science narrative is exactly what a GUI user loading it
-# as a preset needs, only its trailing `fim run ...` line is not), one
-# short note is injected here, at generation time, reframing what
-# follows without touching a single word of the source Markdown: the
-# single-source-of-truth property this whole pipeline exists for is
-# unaffected, since this text exists only in the generated fragment, not
-# in `doc/usage.md`/`doc/configuration.md` themselves.
-_GUI_REFRAME_NOTE: dict[str, str] = {
+def load_registry(path: Path = REGISTRY_PATH) -> dict[str, list[dict[str, Any]]]:
+    """Read and validate the help topic registry.
+
+    Args:
+        path: The registry JSON file.
+
+    Returns:
+        The parsed registry, with `groups` and `topics` lists.
+
+    Raises:
+        ValueError: A topic has a malformed or duplicate id, an unknown
+            group, or a source file that does not exist.
+    """
+    registry: dict[str, list[dict[str, Any]]] = json.loads(
+        path.read_text(encoding="utf-8")
+    )
+    group_ids = {group["id"] for group in registry["groups"]}
+    seen: set[str] = set()
+    for topic in registry["topics"]:
+        topic_id = topic["id"]
+        if not TOPIC_ID_PATTERN.fullmatch(topic_id) or topic_id in seen:
+            raise ValueError(f"Invalid or duplicate help topic id: {topic_id}")
+        seen.add(topic_id)
+        if topic["group"] not in group_ids:
+            raise ValueError(
+                f"Help topic {topic_id} has unknown group {topic['group']}"
+            )
+        if not (ROOT / topic["source"]).is_file():
+            raise ValueError(
+                f"Help topic {topic_id} source not found: {topic['source']}"
+            )
+    return registry
+
+
+REGISTRY = load_registry()
+TOPIC_FOR_PATH: dict[Path, str] = {
+    (ROOT / str(topic["source"])).resolve(): str(topic["id"])
+    for topic in REGISTRY["topics"]
+}
+
+# A short note prepended to two reference fragments. `usage.md` is the
+# command-line reference; desktop readers reach it from Help but have
+# their own guide. `configuration.md` names YAML keys; Configure shows
+# labels, so the note points at the label-to-key table.
+_TOPIC_NOTE: dict[str, str] = {
     "usage": (
-        '<div class="help-gui-note"><p><strong>Desktop and command line</strong> '
-        "Use the desktop screens for the workflows described below. "
-        "Commands such as <code>fim run CONFIG</code> show the terminal "
-        "equivalent; entering them is not required for desktop use. "
-        "Select a statistic name to open its "
-        '<a href="#" data-fim-help="statistics">definition and formula</a>.'
-        "</p></div>"
+        '<div class="help-gui-note"><p><strong>Command-line reference</strong> '
+        "This page documents the <code>fim</code> commands. For the desktop "
+        'screens, see the <a href="#" data-fim-help="gui-overview" '
+        'data-fim-anchor="">desktop app guide</a>.</p></div>'
     ),
     "configuration": (
         '<div class="help-gui-note"><p><strong>Configuration reference</strong> '
         "This page lists YAML keys, types, defaults, and constraints. "
-        "Configure and Settings expose the corresponding desktop controls; "
-        "advanced options are available in Expert Settings.</p></div>"
+        'The <a href="#" data-fim-help="gui-configure" '
+        'data-fim-anchor="field-and-key-correspondence">Configure field '
+        "table</a> maps each desktop control to its key.</p></div>"
     ),
 }
 
@@ -302,7 +325,17 @@ def inject_header_ids(rendered_html: str) -> str:
 _ANCHOR_HREF_PATTERN = re.compile(r'<a href="([^"]*)">')
 
 
-def _rewrite_href(match: Match[str]) -> str:
+def _rewrite_href(match: Match[str], base_dir: Path) -> str:
+    """Route one link: bundled topic, same-page anchor, or system browser.
+
+    Args:
+        match: An `<a href="...">` match.
+        base_dir: The directory of the Markdown source that contains the
+            link; relative links resolve against it, as on GitHub.
+
+    Returns:
+        The rewritten opening tag.
+    """
     target = html.unescape(match.group(1))
     if target.startswith(("http://", "https://", "mailto:")):
         return f'<a href="#" data-fim-external="{html.escape(target, quote=True)}">'
@@ -310,11 +343,11 @@ def _rewrite_href(match: Match[str]) -> str:
     if not path_part:
         # Same-document anchor: left as native browser scroll behavior.
         return match.group(0)
-    resolved = (DOC_DIR / path_part).resolve()
-    if resolved.name in EMBEDDED_FILENAMES:
-        target_slug = SLUG_FOR_FILENAME[resolved.name]
+    resolved = (base_dir / path_part).resolve()
+    target_topic = TOPIC_FOR_PATH.get(resolved)
+    if target_topic is not None:
         return (
-            f'<a href="#" data-fim-help="{html.escape(target_slug, quote=True)}" '
+            f'<a href="#" data-fim-help="{html.escape(target_topic, quote=True)}" '
             f'data-fim-anchor="{html.escape(fragment, quote=True)}">'
         )
     try:
@@ -322,8 +355,8 @@ def _rewrite_href(match: Match[str]) -> str:
     except ValueError:
         # Outside the checkout entirely (a malformed `../../` climb) --
         # link to the repository root rather than raise mid-render; a
-        # broken Tier 2 link here is still `check-doc-links`' own job to
-        # catch against the real source file, not this generator's.
+        # broken link here is `check-doc-links`' job to catch against
+        # the real source file, not this generator's.
         doc_relative = "README.md"
     external_url = f"{REPO_URL}/blob/main/{doc_relative}"
     if fragment:
@@ -331,14 +364,19 @@ def _rewrite_href(match: Match[str]) -> str:
     return f'<a href="#" data-fim-external="{html.escape(external_url, quote=True)}">'
 
 
-def rewrite_links(rendered_html: str) -> str:
-    """Rewrite every `<a href>` per the Tier 1 / Tier 2 / external table above."""
-    return _ANCHOR_HREF_PATTERN.sub(_rewrite_href, rendered_html)
+def rewrite_links(rendered_html: str, base_dir: Path = DOC_DIR) -> str:
+    """Rewrite every `<a href>` relative to the source's own directory."""
+    return _ANCHOR_HREF_PATTERN.sub(
+        lambda match: _rewrite_href(match, base_dir), rendered_html
+    )
 
 
-def render_doc(filename: str) -> str:
-    """Render one embedded doc's Markdown source to a body-only HTML fragment."""
-    source = (DOC_DIR / filename).read_text(encoding="utf-8")
+def render_doc(topic_id: str) -> str:
+    """Render one registered topic's Markdown source to an HTML fragment."""
+    source_path = next(
+        path for path, candidate in TOPIC_FOR_PATH.items() if candidate == topic_id
+    )
+    source = source_path.read_text(encoding="utf-8")
     source = render_inline_math(source)
     renderer = markdown_it.MarkdownIt("gfm-like", {"html": True}).disable("linkify")
 
@@ -358,14 +396,73 @@ def render_doc(filename: str) -> str:
     renderer.add_render_rule("fence", render_fence)
     rendered = renderer.render(source)
     rendered = inject_header_ids(rendered)
-    rendered = rewrite_links(rendered)
-    slug = SLUG_FOR_FILENAME[filename]
-    note = _GUI_REFRAME_NOTE.get(slug)
+    rendered = rewrite_links(rendered, source_path.parent)
+    note = _TOPIC_NOTE.get(topic_id)
     return rendered if note is None else note + rendered
 
 
+_SECTION_HEADING_PATTERN = re.compile(r'<(h[1-3]) id="([^"]*)">(.*?)</\1>', re.DOTALL)
+_MATH_ELEMENT_PATTERN = re.compile(r"<math\b.*?</math>", re.DOTALL)
+_WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
+def _plain_text(fragment: str) -> str:
+    """Reduce an HTML fragment to collapsed plain text, dropping MathML."""
+    without_math = _MATH_ELEMENT_PATTERN.sub(" ", fragment)
+    text = html.unescape(HTML_TAG_PATTERN.sub(" ", without_math))
+    return _WHITESPACE_PATTERN.sub(" ", text).strip()
+
+
+def search_entries(topic_id: str, fragment: str) -> list[dict[str, str]]:
+    """Split a rendered topic into one search entry per h1-h3 section.
+
+    Args:
+        topic_id: The registered topic id.
+        fragment: The topic's rendered HTML.
+
+    Returns:
+        Entries with `topic`, `anchor`, `heading`, and `text`. The h1
+        entry's anchor is empty, meaning the top of the page.
+    """
+    headings = list(_SECTION_HEADING_PATTERN.finditer(fragment))
+    entries: list[dict[str, str]] = []
+    for index, heading in enumerate(headings):
+        end = (
+            headings[index + 1].start() if index + 1 < len(headings) else len(fragment)
+        )
+        heading_text = _plain_text(heading.group(3))
+        if heading_text == "Contents":
+            continue
+        entries.append(
+            {
+                "anchor": "" if heading.group(1) == "h1" else heading.group(2),
+                "heading": heading_text,
+                "text": _plain_text(fragment[heading.end() : end])[:SEARCH_TEXT_LIMIT],
+                "topic": topic_id,
+            }
+        )
+    return entries
+
+
+def topics_manifest() -> dict[str, object]:
+    """Return the Help home manifest: groups and topics without sources."""
+    return {
+        "groups": REGISTRY["groups"],
+        "topics": [
+            {key: value for key, value in topic.items() if key != "source"}
+            for topic in REGISTRY["topics"]
+        ],
+    }
+
+
+def _write_json(path: Path, value: object) -> None:
+    """Write deterministic, compact JSON so regeneration is byte-stable."""
+    text = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    path.write_text(text + "\n", encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Regenerate every Tier 1 doc's HTML fragment.
+    """Regenerate every registered topic and both manifests.
 
     Args:
         argv: Command-line arguments, excluding the program name. `None`
@@ -375,8 +472,9 @@ def main(argv: list[str] | None = None) -> int:
             equivalent shape via a subprocess with explicit arguments.
 
     Returns:
-        0 after writing (or overwriting) every embedded doc's own
-        `<slug>.html` file in the target directory.
+        0 after writing every topic's `<topic>.html`, `topics.json`, and
+        `search-index.json` in the target directory, and removing any
+        `.html` fragment left from a topic no longer registered.
     """
     parser = argparse.ArgumentParser(
         prog="generate-help-html",
@@ -395,11 +493,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    for slug, filename in EMBEDDED_DOCS:
-        fragment = render_doc(filename)
-        target = output_dir / f"{slug}.html"
+    index: list[dict[str, str]] = []
+    written: set[str] = set()
+    for topic in REGISTRY["topics"]:
+        topic_id = str(topic["id"])
+        fragment = render_doc(topic_id)
+        target = output_dir / f"{topic_id}.html"
         target.write_text(fragment, encoding="utf-8")
+        written.add(target.name)
+        index.extend(search_entries(topic_id, fragment))
         print(f"generate-help-html: wrote {target}")
+    for stale in output_dir.glob("*.html"):
+        if stale.name not in written:
+            stale.unlink()
+            print(f"generate-help-html: removed {stale}")
+    _write_json(output_dir / TOPICS_MANIFEST, topics_manifest())
+    _write_json(output_dir / SEARCH_INDEX, index)
+    print(f"generate-help-html: wrote {TOPICS_MANIFEST} and {SEARCH_INDEX}")
     return 0
 
 

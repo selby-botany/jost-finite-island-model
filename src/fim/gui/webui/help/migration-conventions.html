@@ -1,0 +1,337 @@
+<h1 id="migration-and-identity-conventions-mapping-fim-to-the-literature">Migration and identity conventions: mapping <code>fim</code> to the literature</h1>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#who-this-document-is-for">Who this document is for</a></li>
+<li><a href="#notation-and-comparison-procedure">Notation and comparison procedure</a></li>
+<li><a href="#1-fims-four-conventions">1. <code>fim</code>'s four conventions</a></li>
+<li><a href="#2-per-paper-mappings">2. Per-paper mappings</a>
+<ul>
+<li><a href="#21-ryman--leimar-2008">2.1 Ryman &amp; Leimar (2008)</a></li>
+<li><a href="#22-crow--aoki-1984">2.2 Crow &amp; Aoki (1984)</a></li>
+</ul>
+</li>
+<li><a href="#3-comparison-protocol">3. Comparison protocol</a></li>
+</ul>
+<p>Mathematical symbols and operations use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi>T</mi><mspace width="-.14em" /><mpadded height="-.5ex" depth="+.5ex" voffset="-.5ex"><mrow><mi>E</mi></mrow></mpadded><mspace width="-.115em" /><mi>X</mi></mrow></mrow></math>; literal configuration
+keys, Python names, and report fields use backticks. For example,
+<var>m</var> is a migration fraction, while <code>m</code> is the configuration key
+that holds it. Each displayed equation has one unique tag beginning
+with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mtext>M</mtext></mrow></math> for this migration-conventions reference.</p>
+<h2 id="who-this-document-is-for">Who this document is for</h2>
+<p>Anyone comparing <code>fim</code>'s own output — a simulated run, or the exact
+gene-identity recursion implemented in
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/test/validation/test_simulator_equilibrium.py"><code>test_simulator_equilibrium.py</code></a> —
+against a published population-genetics paper. Every
+comparison of this kind needs a mapping between two independently
+chosen sets of conventions before the numbers mean the same thing; get
+the mapping wrong, or skip it, and an entirely correct simulator and an
+entirely correct paper can disagree substantially while both sides are
+right (§2.1). This document derives that mapping once rather than
+leaving it implicit in each test — the arrangement that let the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-test-plan.md#appendix-a-open-issues">Crow &amp; Aoki discrepancy</a>
+go unexplained for as long as it did.</p>
+<p>The aim is not to make a published number match at any cost. First
+translate the paper's definitions into the simulator's definitions.
+Then compare the resulting recursions or statistics. If a discrepancy
+remains, report it as unresolved rather than tuning parameters until
+the desired number appears.</p>
+<h2 id="notation-and-comparison-procedure">Notation and comparison procedure</h2>
+<p>Use one locus and a fixed generation while making each comparison.
+Let <var>d</var> be the number of demes, <var>N</var><sub>k</sub> the number of individuals in
+deme <var>k</var>, <var>c</var> the number of gene copies per individual, and <var>n</var><sub>k</sub>
+the number of copies at that locus:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>n</mi><mi>k</mi></msub><mo>&#x0003D;</mo><mi>c</mi><msub><mi>N</mi><mi>k</mi></msub></mrow></math><span class="equation-tag">(M.1)</span></div>
+<p>For haploids, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>c</mi><mo>=</mo><mn>1</mn></mrow></math>; for diploids, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>c</mi><mo>=</mo><mn>2</mn></mrow></math>. This conversion is made
+before using any formula stated in gene copies.
+For example, 100 diploid individuals have <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>200</mn></mrow></math> gene copies at
+one autosomal locus. Tracking another locus does not double <var>n</var>.</p>
+<p>Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mi>k</mi></msub><mo stretchy="false">(</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></math> for the frequency of allele <var>a</var> in deme <var>k</var>.
+The with-replacement within-deme identity is the probability that
+two independent draws from that frequency distribution match:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>J</mi><mi>k</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msubsup><mo>&#x0003D;</mo><munder><mo>&#x02211;</mo><mi>a</mi></munder><msub><mi>p</mi><mi>k</mi></msub><mo stretchy="false">&#x00028;</mo><mi>a</mi><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup></mrow></math><span class="equation-tag">(M.2)</span></div>
+<p>The <strong><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></math></strong> superscript means with replacement: the two
+draws may select the same physical copy. Write <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>J</mi><mi>k</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msubsup></mrow></math>
+for the probability that two distinct copies match, sampled without
+replacement. These are both valid identity probabilities, but they
+are not interchangeable at finite population size.</p>
+<p>For each published comparison, check the assumptions in this order:</p>
+<ol>
+<li>Convert individuals to gene copies, if needed.</li>
+<li>Match which demes and copy fractions contribute to a destination's
+parental pool.</li>
+<li>Match whether identity draws permit selecting one physical copy
+twice.</li>
+<li>Align the generation boundary and mutation step.</li>
+<li>Only then compare recursions, trajectories, or statistics.</li>
+</ol>
+<p>Changing only one convention at a time makes each correction
+auditable. A fit at one equilibrium point is weaker evidence than
+agreement across a trajectory, because distinct recursions can share
+one fixed point.</p>
+<h2 id="1-fims-four-conventions">1. <code>fim</code>'s four conventions</h2>
+<p>Four independent choices distinguish the <code>fim</code> conventions from those used
+in some cited papers. Each convention formalizes the same biological
+process under different assumptions or definitions.</p>
+<h3 id="11-population-unit">1.1 Population unit</h3>
+<p>The configuration key <code>N</code> accepts individual counts and <code>ploidy</code>;
+the engine uses <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>n</mi><mi>k</mi></msub><mo>=</mo><mi>c</mi><msub><mi>N</mi><mi>k</mi></msub></mrow></math> gene copies per deme and locus.
+See the <a href="#" data-fim-help="configuration" data-fim-anchor="n">configuration reference</a>.
+A paper that gives an individual count must be converted before
+substituting its value into a gene-copy equation. This factor is
+not an extra factor to apply when the paper already defines its
+<var>N</var> as a copy count.</p>
+<p>For example, a paper's 100 diploid individuals and <code>fim</code>'s
+<code>N: 200, ploidy: haploid</code> represent the same 200 copies at a locus.
+By contrast, <code>N: 100, ploidy: diploid</code> also represents 200 copies.
+Comparing the bare numbers 100 and 200 without their units would
+make the drift terms differ by a factor of two.</p>
+<h3 id="12-migration-source">1.2 Migration source</h3>
+<p>In the equal-size scalar island model, <code>fim</code> retains a fraction
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub></mrow></math> locally and distributes its incoming fraction
+equally among the other <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></math> demes:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>M</mi><mrow><mi>k</mi><mi>j</mi></mrow><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msubsup><mo>&#x0003D;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x0007B;</mo><mtable><mtr><mtd columnalign="left"><mn>1</mn><mo>&#x02212;</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mo>&#x0002C;</mo></mtd><mtd columnalign="left"><mi>j</mi><mo>&#x0003D;</mo><mi>k</mi><mo>&#x0002C;</mo></mtd></mtr><mtr><mtd columnalign="left"><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mo>&#x0002F;</mo><mo stretchy="false">&#x00028;</mo><mi>d</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><mo>&#x0002C;</mo></mtd><mtd columnalign="left"><mi>j</mi><mo>&#x02260;</mo><mi>k</mi><mo>&#x0002E;</mo></mtd></mtr></mtable></mrow></mrow></math><span class="equation-tag">(M.3)</span></div>
+<p><var>M</var><sub>kj</sub> is the share of destination <var>k</var>'s parental pool supplied
+by source deme <var>j</var>. Every row sums to one: the diagonal supplies
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub></mrow></math>, and the other <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></math> entries sum to
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub></mrow></math>.</p>
+<p>Some papers instead designate fraction <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub></mrow></math> for
+redrawing from a pool of all <var>d</var> demes, including home:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>M</mi><mrow><mi>k</mi><mi>j</mi></mrow><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msubsup><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mo stretchy="false">&#x00029;</mo><msub><mn mathvariant="bold">1</mn><mrow><mo stretchy="false">&#x0007B;</mo><mi>j</mi><mo>&#x0003D;</mo><mi>k</mi><mo stretchy="false">&#x0007D;</mo></mrow></msub><mo>&#x0002B;</mo><mfrac><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub></mrow><mrow><mi>d</mi></mrow></mfrac></mrow></math><span class="equation-tag">(M.4)</span></div>
+<p>The indicator <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mn mathvariant="bold">1</mn><mrow><mo stretchy="false">{</mo><mi>j</mi><mo>=</mo><mi>k</mi><mo stretchy="false">}</mo></mrow></msub></mrow></math> is one for the home source and
+zero otherwise. The home weight is therefore
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mo>+</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mo>/</mo><mi>d</mi></mrow></math>; every other source
+has weight <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mo>/</mo><mi>d</mi></mrow></math>. Equate an off-diagonal source
+weight in (M.3) and (M.4):</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub></mrow><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub></mrow><mrow><mi>d</mi></mrow></mfrac></mrow></math><span class="equation-tag">(M.5)</span></div>
+<p>Solving for either rate gives the conversion:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mo>&#x0003D;</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mfrac><mi>d</mi><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac><mo>&#x0002C;</mo><mspace width="2em" /><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mo>&#x0003D;</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mfrac><mrow><mi>d</mi><mo>&#x02212;</mo><mn>1</mn></mrow><mrow><mi>d</mi></mrow></mfrac></mrow></math><span class="equation-tag">(M.6)</span></div>
+<p>This conversion equates the <strong>complete matrix row</strong>, not just
+the word &quot;migration.&quot; For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>4</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mo>=</mo><mn>0.06</mn></mrow></math>,
+the paper's equivalent redraw rate is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.08</mn></mrow></math>.
+The paper's home weight is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.92</mn></mrow></math> and each other weight <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.02</mn></mrow></math>;
+<code>fim</code>'s home weight is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.94</mn></mrow></math> and each of three other weights
+is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.02</mn></mrow></math>. The destination-1 row in each matrix is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>0.94</mn><mo>,</mo><mn>0.02</mn><mo>,</mo><mn>0.02</mn><mo>,</mo><mn>0.02</mn><mo stretchy="false">)</mo></mrow></math>.</p>
+<p>For unequal deme sizes, <code>fim</code>'s scalar all-other pool is
+copy-size-weighted; for a general matrix, each row already gives
+the full weights. Do not apply (M.6) to a spatial topology merely
+because its migration parameter has the same name. See
+the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#34-the-generation-update-pipeline">migration definition in the design</a>
+and <a href="#" data-fim-help="configuration" data-fim-anchor="m">configuration reference</a>.</p>
+<h3 id="13-identity-sampling">1.3 Identity sampling</h3>
+<p>Suppose a deme contains exactly <var>n</var> copies and its observed
+frequency of allele <var>a</var> is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo stretchy="false">(</mo><mi>a</mi><mo stretchy="false">)</mo></mrow></math>. Two independent draws with
+replacement match with probability:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msup><mo>&#x0003D;</mo><munder><mo>&#x02211;</mo><mi>a</mi></munder><mi>p</mi><mo stretchy="false">&#x00028;</mo><mi>a</mi><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup></mrow></math><span class="equation-tag">(M.7)</span></div>
+<p>There are <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>n</mi><mn>2</mn></msup></mrow></math> ordered pairs of copy positions if repetition
+is allowed. Of those, <var>n</var> are self-pairs and always match.
+The remaining <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo stretchy="false">(</mo><mi>n</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math> are ordered distinct-copy pairs;
+their matching fraction is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msup></mrow></math>. Thus:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msup><mo>&#x0003D;</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><mo>&#x0002B;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msup></mrow></math><span class="equation-tag">(M.8)</span></div>
+<p>The first term is the probability of selecting the same physical
+copy twice. The coefficient of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msup></mrow></math> is the chance
+of selecting different copies. Solve for the paper's distinct-pair
+identity:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msup><mo>&#x0003D;</mo><mfrac><mrow><mi>n</mi><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msup><mo>&#x02212;</mo><mn>1</mn></mrow><mrow><mi>n</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac><mo>&#x0002C;</mo><mspace width="2em" /><mi>n</mi><mo>&#x0003E;</mo><mn>1</mn></mrow></math><span class="equation-tag">(M.9)</span></div>
+<p>For counts 7 and 3 among ten copies,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msup><mo>=</mo><mo stretchy="false">(</mo><mn>7</mn><mo>/</mo><mn>10</mn><msup><mo stretchy="false">)</mo><mn>2</mn></msup><mo>+</mo><mo stretchy="false">(</mo><mn>3</mn><mo>/</mo><mn>10</mn><msup><mo stretchy="false">)</mo><mn>2</mn></msup><mo>=</mo><mn>0.58</mn></mrow></math>.
+There are seven self-pairs, plus <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>7</mn><mi>·</mi><mn>6</mn><mo>+</mo><mn>3</mn><mi>·</mi><mn>2</mn><mo>=</mo><mn>48</mn></mrow></math>
+matching ordered distinct pairs among <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>10</mn><mi>·</mi><mn>9</mn><mo>=</mo><mn>90</mn></mrow></math>:
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msup><mo>=</mo><mn>48</mn><mo>/</mo><mn>90</mn><mo>=</mo><mn>0.5333</mn><mi>…</mi></mrow></math>.
+Equation (M.9) gives the same result:
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>10</mn><mi>·</mi><mn>0.58</mn><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mo>/</mo><mn>9</mn><mo>=</mo><mn>0.5333</mn><mi>…</mi></mrow></math>.</p>
+<p>Between-deme draws already refer to distinct physical copies
+because they come from different demes, so their identity
+probability requires no same-deme correction. When <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow></math>,
+there are no distinct pairs within the deme and (M.9) is
+undefined; do not divide by zero or invent a value for that
+sampling question.</p>
+<h3 id="14-operator-order-and-generation-boundaries">1.4 Operator order and generation boundaries</h3>
+<p><code>fim</code> advances a generation as Migrate → Drift → Mutate:
+migration changes parental frequencies, drift draws whole copies,
+and mutation independently replaces newly drawn labels.
+The design document gives the
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#34-the-generation-update-pipeline">generation pipeline</a>.
+Ryman &amp; Leimar write their corresponding cycle as
+Drift → Migrate → Mutate. A different written starting point
+does not automatically mean a different model: for a deterministic
+linear migration map and the paired identity state, the two
+cycle descriptions can be aligned by translating the state at
+the generation boundary.</p>
+<p>The relevant state translation is (M.8) for within-deme identity.
+Between-deme identity is already a distinct-copy probability.
+With the migration-rate conversion (M.6), the comparison in §2.1
+shows the resulting recursions agree generation by generation.
+Do not add an arbitrary one-generation lag after applying this
+translation; that would compare different biological phases.
+This equivalence is established for the specific symmetric,
+equal-size, infinite-alleles recursions under discussion, not for
+any possible pair of operators that happen to be reordered.</p>
+<h2 id="2-per-paper-mappings">2. Per-paper mappings</h2>
+<h3 id="21-ryman--leimar-2008">2.1 Ryman &amp; Leimar (2008)</h3>
+<p>Their island model uses <var>s</var> for the number of islands, <var>N</var> for
+the number of diploid individuals per island, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mi>N</mi></mrow></math> gene copies
+per locus, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub></mrow></math> for migration from a pool that
+includes home, and <var>u</var> for the per-copy infinite-alleles mutation
+probability. To compare against <code>fim</code>, use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mi>s</mi></mrow></math> and the
+gene-copy count:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>n</mi><mo>&#x0003D;</mo><mn>2</mn><mi>N</mi></mrow></math><span class="equation-tag">(M.10)</span></div>
+<p>This is a unit conversion, not an extra factor on a value that
+already counts copies. The table and derivations below use <var>n</var>
+for <code>fim</code>'s per-deme gene-copy count to avoid overloading the
+paper's individual-count symbol <var>N</var>.</p>
+<h4 id="match-the-migration-coefficients">Match the migration coefficients</h4>
+<p>For the paper's self-inclusive redraw, a lineage in island <var>i</var>
+has source probabilities $1-m_{\mathrm{paper}}+
+m_{\mathrm{paper}}/s<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi><mi>o</mi><mi>r</mi><mi>s</mi><mi>o</mi><mi>u</mi><mi>r</mi><mi>c</mi><mi>e</mi></mrow></math>i$, and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mo>/</mo><mi>s</mi></mrow></math> for each other source.
+For two copies starting in that same island, the probability
+their ancestral sources coincide is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>a</mi><mo>&#x0003D;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>m</mi><mo>&#x0002B;</mo><mfrac><mi>m</mi><mi>s</mi></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mn>2</mn></msup><mo>&#x0002B;</mo><mo stretchy="false">&#x00028;</mo><mi>s</mi><mo>&#x02212;</mo><mn>1</mn><mo stretchy="false">&#x00029;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mfrac><mi>m</mi><mi>s</mi></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mn>2</mn></msup><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>m</mi><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mo>&#x0002B;</mo><mfrac><mrow><mi>m</mi><mo stretchy="false">&#x00028;</mo><mn>2</mn><mo>&#x02212;</mo><mi>m</mi><mo stretchy="false">&#x00029;</mo></mrow><mi>s</mi></mfrac></mrow></math><span class="equation-tag">(M.11)</span></div>
+<p>Here <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub></mrow></math>. The first squared term is the
+chance both trace to the home island. The remaining <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>s</mi><mo>−</mo><mn>1</mn></mrow></math>
+squared terms cover their matching on any one of the other
+islands. Expanding and collecting the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>s</mi></mrow></math> terms gives the
+rightmost form.</p>
+<p>For two copies starting in different islands <var>i</var> and <var>j</var>,
+there are two ways for both ancestral sources to be <var>i</var> or <var>j</var>,
+plus the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>s</mi><mo>−</mo><mn>2</mn></mrow></math> other common sources:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>b</mi><mo>&#x0003D;</mo><mn>2</mn><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>m</mi><mo>&#x0002B;</mo><mfrac><mi>m</mi><mi>s</mi></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mfrac><mi>m</mi><mi>s</mi></mfrac><mo>&#x0002B;</mo><mo stretchy="false">&#x00028;</mo><mi>s</mi><mo>&#x02212;</mo><mn>2</mn><mo stretchy="false">&#x00029;</mo><msup><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mfrac><mi>m</mi><mi>s</mi></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mn>2</mn></msup><mo>&#x0003D;</mo><mfrac><mrow><mi>m</mi><mo stretchy="false">&#x00028;</mo><mn>2</mn><mo>&#x02212;</mo><mi>m</mi><mo stretchy="false">&#x00029;</mo></mrow><mi>s</mi></mfrac></mrow></math><span class="equation-tag">(M.12)</span></div>
+<p>The rightmost equality follows by expanding the first term:
+$2m(1-m)/s+2m^2/s^2+(s-2)m^2/s^2
+=2m(1-m)/s+m^2/s$.
+Thus <var>a</var> is a same-island source-match probability and <var>b</var>
+is a different-island source-match probability.</p>
+<p>Set <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>s</mi><mo>=</mo><mi>d</mi></mrow></math> and convert <var>m</var> with (M.6). For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>4</mn></mrow></math> and
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mo>=</mo><mn>0.06</mn></mrow></math>, the paper uses <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mn>0.08</mn></mrow></math>.
+Equation (M.12) gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi><mo>=</mo><mn>0.08</mn><mo stretchy="false">(</mo><mn>1.92</mn><mo stretchy="false">)</mo><mo>/</mo><mn>4</mn><mo>=</mo><mn>0.0384</mn></mrow></math>;
+(M.11) gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>a</mi><mo>=</mo><msup><mn>0.92</mn><mn>2</mn></msup><mo>+</mo><mn>0.0384</mn><mo>=</mo><mn>0.8848</mn></mrow></math>.
+These coefficients describe pair ancestry under the paper's
+migration convention; they are not themselves allele frequencies.</p>
+<h4 id="translate-identity-and-write-the-papers-recursion">Translate identity and write the paper's recursion</h4>
+<p>Let <var>J</var><sub>0</sub> be distinct-copy identity within an island and <var>J</var><sub>1</sub>
+identity between islands. Drift in one deme first changes the
+within identity to:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mover><mi>J</mi><mo>&#x0007E;</mo></mover><mn>0</mn></msub><mo>&#x0003D;</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><mo>&#x0002B;</mo><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><msub><mi>J</mi><mn>0</mn></msub></mrow></math><span class="equation-tag">(M.13)</span></div>
+<p>The probability <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>n</mi></mrow></math> of sampling the same parental copy
+creates the first term. If two copies are distinct, probability
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>−</mo><mn>1</mn><mo>/</mo><mi>n</mi></mrow></math>, their identity is the previous distinct-pair value.
+Between-island identity has no same-deme self-pair term.</p>
+<p>Pairwise migration then mixes the same-island and different-island
+cases using <var>a</var> and <var>b</var>. Finally, both copies must avoid independent
+mutation to remain identical. With <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>α</mi><mo>=</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>u</mi><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow></math>:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>J</mi><mn>0</mn><mi>&#x02032;</mi></msubsup><mo>&#x0003D;</mo><mi>&#x003B1;</mi><mrow><mo stretchy="true" fence="true" form="prefix">[</mo><mi>a</mi><msub><mover><mi>J</mi><mo>&#x0007E;</mo></mover><mn>0</mn></msub><mo>&#x0002B;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>a</mi><mo stretchy="false">&#x00029;</mo><msub><mi>J</mi><mn>1</mn></msub><mo stretchy="true" fence="true" form="postfix">]</mo></mrow></mrow></math><span class="equation-tag">(M.14)</span></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>J</mi><mn>1</mn><mi>&#x02032;</mi></msubsup><mo>&#x0003D;</mo><mi>&#x003B1;</mi><mrow><mo stretchy="true" fence="true" form="prefix">[</mo><mi>b</mi><msub><mover><mi>J</mi><mo>&#x0007E;</mo></mover><mn>0</mn></msub><mo>&#x0002B;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>b</mi><mo stretchy="false">&#x00029;</mo><msub><mi>J</mi><mn>1</mn></msub><mo stretchy="true" fence="true" form="postfix">]</mo></mrow></mrow></math><span class="equation-tag">(M.15)</span></div>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msubsup><mi>J</mi><mn>0</mn><mi>′</mi></msubsup></mrow></math>, migration traces both copies to the same island
+with probability <var>a</var>, where their match probability is
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mover><mi>J</mi><mo>~</mo></mover><mn>0</mn></msub></mrow></math>; otherwise they trace to different islands
+with identity <var>J</var><sub>1</sub>. Equation (M.15) uses probability <var>b</var> for
+the corresponding same-island ancestry when the current demes
+are different. In both cases, mutation preserves the old label
+only if both copies avoid mutation.</p>
+<p><code>fim</code> stores <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msup></mrow></math> within each deme. Convert it to
+the paper's distinct-copy state with (M.9), while retaining
+between-deme identity:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>J</mi><mn>0</mn></msub><mo>&#x0003D;</mo><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">d</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi><mi mathvariant="normal">t</mi></mrow></mrow></msup><mo>&#x0003D;</mo><mfrac><mrow><mi>n</mi><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msup><mo>&#x02212;</mo><mn>1</mn></mrow><mrow><mi>n</mi><mo>&#x02212;</mo><mn>1</mn></mrow></mfrac><mo>&#x0002C;</mo><mspace width="2em" /><msub><mi>J</mi><mn>1</mn></msub><mo>&#x0003D;</mo><msubsup><mi>J</mi><mrow><mrow><mi mathvariant="normal">b</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">w</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi></mrow></mrow><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msubsup></mrow></math><span class="equation-tag">(M.16)</span></div>
+<p>For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>10</mn></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>J</mi><mrow><mrow><mi mathvariant="normal">w</mi><mi mathvariant="normal">r</mi></mrow></mrow></msup><mo>=</mo><mn>0.58</mn></mrow></math>, this gives
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>J</mi><mn>0</mn></msub><mo>=</mo><mn>0.5333</mn><mi>…</mi></mrow></math>. Then apply (M.13)–(M.15) with the
+mapped migration rate. This state translation, together with
+(M.6), is why the different written cycle boundaries do not
+require an extra generation of lag in the tested comparison.</p>
+<p>Once the identity convention is aligned, calculate each
+differentiation statistic from the corresponding within and
+between identities using the same paper formulas. Do not confuse
+<var>J</var><sub>0</sub> or <var>J</var><sub>1</sub> with <var>G</var><sub>ST</sub>: they are identity inputs to the
+statistics, not differentiation statistics themselves.
+Because between-deme draws are already distinct, no conversion
+is applied to <var>J</var><sub>1</sub>.</p>
+<h4 id="numerical-verification-and-size-of-the-corrections">Numerical verification and size of the corrections</h4>
+<p>The mapping is checked by comparing the paper's Eqs. 2–3 as
+transcribed in
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/test/validation/test_simulator_equilibrium.py"><code>test_simulator_equilibrium.py</code></a>
+against <code>fim</code>'s exact identity recursion. The test grid includes
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>∈</mo><mo stretchy="false">{</mo><mn>200</mn><mo>,</mo><mn>2000</mn><mo>,</mo><mn>20000</mn><mo stretchy="false">}</mo></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>∈</mo><mo stretchy="false">{</mo><mn>2</mn><mo>,</mo><mn>5</mn><mo>,</mo><mn>10</mn><mo>,</mo><mn>50</mn><mo stretchy="false">}</mo></mrow></math>,
+migration rates in <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">{</mo><mn>0</mn><mo>,</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><mo>,</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>3</mn></mrow></msup><mo>,</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>2</mn></mrow></msup><mo>,</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>1</mn></mrow></msup><mo stretchy="false">}</mo></mrow></math>,
+and mutation rates in <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">{</mo><mn>0</mn><mo>,</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>6</mn></mrow></msup><mo>,</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><mo>,</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>3</mn></mrow></msup><mo stretchy="false">}</mo></mrow></math>.
+The test source records a broader 240-combination analysis,
+sampled at 714 generations across each 5000-generation trajectory;
+the committed regression exercises representative parameter
+combinations at 1, 10, 100, 1000, and 5000 generations.
+Paper units and migration rates are mapped before comparison.
+Across the grid, differences in <var>G</var><sub>ST</sub> and <var>D</var> stay at
+floating-point accumulation scale under the shared
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>u</mi><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow></math> mutation rule.</p>
+<p>Without those mappings, the broader comparison recorded up to
+58% relative error; after mapping, the historical maximum residual
+was about 0.1%. The current regression does not rerun every point
+of that larger analysis.</p>
+<p>An unmapped migration comparison can be large. At <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>10</mn></mrow></math>,
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mo>/</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mo>=</mo><mn>10</mn><mo>/</mo><mn>9</mn></mrow></math>; at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>2</mn></mrow></math>
+the ratio is 2. These rates are not numerically equal because
+one redraw distributes mass across <var>d</var> sources and the other
+only across <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></math> external sources.</p>
+<p>The identity conversion is an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>O</mi><mo stretchy="false">(</mo><mn>1</mn><mo>/</mo><mi>n</mi><mo stretchy="false">)</mo></mrow></math> correction to the
+with-replacement probability. When identity is near one early
+in a trajectory, even that small absolute correction can be
+large relative to a small differentiation statistic. The
+validation analysis recorded a 22% relative gap in <var>G</var><sub>ST</sub>
+at <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>2000</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>10</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>u</mi><mo>=</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow></math>, generation 10, before
+conversion. This is why checking only a large-population
+equilibrium can conceal a convention mismatch that matters
+for trajectory comparisons.</p>
+<p>The mutation update is also part of the comparison. For two
+distinct copies under infinite alleles, the shared-label
+survival factor is:</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B1;</mi><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mn>1</mn><mo>&#x02212;</mo><mi>u</mi><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup></mrow></math><span class="equation-tag">(M.17)</span></div>
+<p>Either copy mutating makes its label new, so both must avoid
+mutation. A proportional update that includes the sampling correction
+adds the term <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>u</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>u</mi><mo stretchy="false">)</mo><mo>/</mo><mi>n</mi></mrow></math> and does not match the distinct-copy recursion.</p>
+<h3 id="22-crow--aoki-1984">2.2 Crow &amp; Aoki (1984)</h3>
+<p><strong>Unresolved.</strong> Crow &amp; Aoki's Table 1 reports <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>=</mo><mn>0.172</mn></mrow></math>
+for a two-dimensional stepping-stone (torus) scenario with
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>9</mn></mrow></math> demes, 20 individuals per deme, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>M</mi><mo>=</mo><mn>1.0</mn></mrow></math> expected migrants,
+and mutation rate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>10</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow></math>. The test uses the project's
+interpretation <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mi>M</mi><mo>/</mo><mi>N</mi><mo>=</mo><mn>1</mn><mo>/</mo><mn>20</mn><mo>=</mo><mn>0.05</mn></mrow></math>, divided evenly among each
+deme's four neighbors. The exact identity recursion under that
+matrix gives <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>G</mi><mrow><mi>S</mi><mi>T</mi></mrow></msub><mo>≈</mo><mn>0.324</mn></mrow></math>, without random sampling
+noise. The applicable source is
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/test/validation/test_simulator_equilibrium.py"><code>test_simulator_equilibrium.py</code></a>,
+test <code>test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus</code>.</p>
+<p>Applying a spatial analogue of the self-inclusive pool
+convention—distributing the pool across the home deme and its
+four neighbors—gives approximately <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.374</mn></mrow></math>, farther from
+the reported <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.172</mn></mrow></math>. This rejects that specific migration
+mapping as the explanation; it does not identify the paper's
+actual convention.</p>
+<p>An exploratory rate near <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mn>0.12</mn></mrow></math> gives approximately <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.172</mn></mrow></math>,
+while <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>=</mo><mn>0.2</mn></mrow></math> gives approximately <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.115</mn></mrow></math>. This is a clue
+that the rate interpretation may matter, not evidence that
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.12</mn></mrow></math> is the authors' intended value. The paper describes its
+stepping-stone values as unpublished numerical calculations
+and does not specify the exact division of migrants among
+the four neighbors. The discrepancy therefore remains unresolved.
+See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-test-plan.md#appendix-a-open-issues">the test plan's Appendix A</a>
+for the broader record.</p>
+<p>The island-model conversion (M.6) cannot be transplanted blindly
+to this topology. The island derivation assumes equal weighting
+of all <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></math> other demes; a torus has only four local neighbors.
+One must specify the entire row of the spatial migration matrix,
+including whether the home deme participates, before comparing
+rates.</p>
+<h2 id="3-comparison-protocol">3. Comparison protocol</h2>
+<p>This reference makes the assumptions in each literature comparison
+inspectable and prevents equations from being compared under incompatible
+units or definitions. For each paper, list its variables and source-pool rule,
+derive any conversion, show the identity definition, state the
+operator phase, and record both positive and unresolved checks.</p>
+<p>Numerical agreement is evidence only after the translation is
+derived independently of the target value. Pin deterministic
+recursion comparisons with fixed tolerances. For stochastic
+simulations, separately account for Monte Carlo uncertainty;
+do not use a seed search to force agreement.</p>
+<p>The relevant implementation points are
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/statistics/identity_recursion.py"><code>identity_recursion()</code></a>
+and <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/model/operators.py"><code>migrate()</code></a>. The
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/python-api.md">Python API guide</a> and generated
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/src/fim/API.md">API reference</a> document programmatic access; the
+<a href="#" data-fim-help="statistics" data-fim-anchor="">statistics reference</a> lists result identifiers.</p>

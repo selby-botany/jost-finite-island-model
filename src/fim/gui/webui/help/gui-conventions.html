@@ -1,0 +1,161 @@
+<h1 id="implementation-conventions">Implementation conventions</h1>
+<p>This page lists the conventions that most often matter when you compare a
+<code>fim</code> result with a published formula or another simulator. Each item
+links to the authoritative reference. The desktop app and the command
+line follow the same conventions.</p>
+<h2 id="contents">Contents</h2>
+<ul>
+<li><a href="#population-size-and-ploidy">Population size and ploidy</a></li>
+<li><a href="#migration">Migration</a></li>
+<li><a href="#generation-order">Generation order</a></li>
+<li><a href="#generation-0-and-founding">Generation 0 and founding</a></li>
+<li><a href="#mutation">Mutation</a></li>
+<li><a href="#statistics">Statistics</a></li>
+<li><a href="#when-a-run-stops">When a run stops</a></li>
+<li><a href="#batches-and-replicates">Batches and replicates</a></li>
+<li><a href="#engines-and-seeds">Engines and seeds</a></li>
+</ul>
+<h2 id="population-size-and-ploidy">Population size and ploidy</h2>
+<ul>
+<li>The <strong>N (individuals/deme)</strong> field and the YAML key <code>N</code> count
+<strong>individuals</strong>. The engine uses <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mi>N</mi><mi>×</mi><mi>c</mi></mrow></math> gene copies per deme
+and locus, where <var>c</var> is the ploidy (haploid 1 through tetraploid 4).
+The conversion happens once, when the configuration is read.</li>
+<li>Every statistic, closed-form prediction, and derived timescale uses
+gene copies. Explore and sweeps also take <code>N</code> in individuals and apply
+the form's ploidy.</li>
+<li><code>N: 225</code> with <code>ploidy: diploid</code> and <code>N: 450</code> with <code>ploidy: haploid</code>
+are the same genetic process. They are recorded as different
+population descriptions and receive different run IDs.</li>
+<li>Per-deme sizes are supported. Every operator and size-weighted option
+uses each deme's gene-copy count.</li>
+</ul>
+<p>See <a href="#" data-fim-help="configuration" data-fim-anchor="n"><code>N</code></a>, <a href="#" data-fim-help="configuration" data-fim-anchor="ploidy"><code>ploidy</code></a>,
+and <a href="#" data-fim-help="migration-conventions" data-fim-anchor="11-population-unit">population unit</a>.</p>
+<h2 id="migration">Migration</h2>
+<ul>
+<li>A scalar <code>m</code> is the fraction of a deme's parental pool drawn from the
+<strong>other</strong> <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></math> demes. That incoming fraction is size-weighted across
+the other demes; with equal sizes each contributes <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>.</li>
+<li>Some papers instead redraw a fraction from all <var>d</var> demes, including
+home. Convert with <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">p</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">p</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi></mrow></mrow></msub><mo>=</mo><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mspace width="0.167em" /><mi>d</mi><mo>/</mo><mo stretchy="false">(</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math>.
+For <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi><mo>=</mo><mn>4</mn></mrow></math>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>m</mi><mrow><mrow><mi mathvariant="normal">f</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">m</mi></mrow></mrow></msub><mo>=</mo><mn>0.06</mn></mrow></math> equals a redraw rate of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>0.08</mn></mrow></math>.</li>
+<li>A full matrix row <var>k</var> gives destination <var>k</var>'s source weights. Rows must
+sum to 1. Matrix weights are authoritative and are <strong>not</strong> rescaled by
+deme size.</li>
+<li>A named topology's <strong>rate</strong> is each deme's total outgoing fraction,
+split evenly among its neighbors. Do not apply the island-model
+conversion above to a topology.</li>
+<li><strong>migrant sampling</strong> <code>continuous</code> (the default) mixes frequencies
+deterministically. <code>stochastic</code> draws migrant gene-copy counts each
+generation; the mean is unchanged, and <code>N</code> sets the variance.</li>
+</ul>
+<p>See <a href="#" data-fim-help="configuration" data-fim-anchor="m"><code>m</code></a>,
+<a href="#" data-fim-help="configuration" data-fim-anchor="migrant_sampling"><code>migrant_sampling</code></a>, and
+<a href="#" data-fim-help="migration-conventions" data-fim-anchor="12-migration-source">migration source</a>.</p>
+<h2 id="generation-order">Generation order</h2>
+<p>One generation is <strong>migrate → drift → mutate</strong>: migration changes
+parental frequencies, drift draws whole gene copies, and each new copy
+mutates independently with probability μ. Papers that write
+drift → migrate → mutate can describe the same process when the state is
+translated at the generation boundary; do not add a one-generation lag.</p>
+<p>See <a href="#" data-fim-help="migration-conventions" data-fim-anchor="14-operator-order-and-generation-boundaries">operator order</a>
+and the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#34-the-generation-update-pipeline">generation pipeline</a>.</p>
+<h2 id="generation-0-and-founding">Generation 0 and founding</h2>
+<ul>
+<li>Generation 0 is the <strong>initial conditions</strong> draw: a continuous
+Dirichlet prior, an equilibrium split, an explicit <var>p</var><sub>0</sub>, or fixed
+alleles per deme. A Dirichlet or explicit <var>p</var><sub>0</sub> need not lie on the
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>n</mi></mrow></math> lattice. Treat a generation-0 statistic as a property of the
+prior, not of a sampled population.</li>
+<li>Generation 1 is the first generation on the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>/</mo><mi>n</mi></mrow></math> lattice.</li>
+<li>Generation 0 is never included in a convergence average.</li>
+<li><strong>Equilibrium split</strong> simulates an ancestral population first and
+splits it. Its window, tolerance, and cap are separate from the main
+run's.</li>
+</ul>
+<p>See <a href="#" data-fim-help="configuration" data-fim-anchor="initial-conditions">initial conditions</a>.</p>
+<h2 id="mutation">Mutation</h2>
+<ul>
+<li>μ is a per-gene-copy probability per generation, applied after drift.</li>
+<li><strong>Derive from μb</strong> sets each locus's μ from a per-base rate and the
+locus length. Edit μb, not the derived per-locus μ.</li>
+<li><strong>infinite_alleles</strong> (the default) gives every mutation a new, globally
+unique allele ID. <strong>finite_alleles</strong> bounds a locus to <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>4</mn><mrow><mi>ℓ</mi></mrow></msup></mrow></math>
+states for length <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>ℓ</mi></mrow></math>; mutations can recur to existing states.</li>
+<li>Founding alleles use locus-relative IDs.</li>
+</ul>
+<p>See <a href="#" data-fim-help="configuration" data-fim-anchor="mu"><code>mu</code></a>,
+<a href="#" data-fim-help="configuration" data-fim-anchor="deriving-mu-from-a-per-base-rate">deriving <code>mu</code> from a per-base rate</a>,
+and <a href="#" data-fim-help="configuration" data-fim-anchor="mutation_model">mutation model</a>.</p>
+<h2 id="statistics">Statistics</h2>
+<ul>
+<li>Reported statistics are functions of the <strong>population</strong> frequencies,
+not finite-sample estimators. No sample-size correction is applied.</li>
+<li>Pooled frequencies use equal deme weights except where <strong>deme
+weighting</strong> applies. That setting affects only <var>E</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>
+(<code>Delta</code>), and <var>I</var> (<code>MI</code>).</li>
+<li>Across loci, <code>D</code> and <var>G</var><sub>ST</sub> default to a ratio of mean
+heterozygosities (<code>locus_aggregation: ratio_of_means</code>). A mean of
+per-locus ratios is a different estimand.</li>
+<li>For time averages, <strong>expected value</strong> chooses between the mean of a
+statistic's values and the statistic of the mean heterozygosities.
+Every report carries both.</li>
+<li>An undefined value is not evidence of zero differentiation.</li>
+<li>The app shows mathematical symbols (<var>H</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>δ</mi><mi>G</mi></msub></mrow></math>, <var>I</var>).
+Configuration fields, saved files, and exports keep literal keys
+(<code>H_ST</code>, <code>Delta</code>, <code>MI</code>).</li>
+</ul>
+<p>See <a href="#" data-fim-help="statistics" data-fim-anchor="notation-and-aggregation">notation and aggregation</a>,
+<a href="#" data-fim-help="configuration" data-fim-anchor="deme_weighting"><code>deme_weighting</code></a>,
+<a href="#" data-fim-help="configuration" data-fim-anchor="locus_aggregation"><code>locus_aggregation</code></a>, and
+<a href="#" data-fim-help="configuration" data-fim-anchor="convergence_estimate"><code>convergence_estimate</code></a>.</p>
+<h2 id="when-a-run-stops">When a run stops</h2>
+<ul>
+<li>A run first discards a <strong>burn-in</strong>, then averages each watched
+statistic over an evidence window. It stops when each average's
+standard error meets <strong>precision</strong> at the chosen <strong>confidence</strong>, and
+the effective sample size reaches its floor.</li>
+<li><strong>convergence burn-in</strong> and <strong>max generations</strong> default to <code>auto</code>,
+derived from the slowest locus's relaxation time. The derived values
+appear beside <strong>Run simulation</strong> before you start.</li>
+<li>With several watched statistics, <strong>all</strong> (the default) waits for every
+one. <strong>any</strong> stops at the first, so the others may not be converged.</li>
+<li>Reaching <strong>max generations</strong> is a valid, <strong>non-converged</strong> result. The
+report gives the precision achieved.</li>
+<li>A short run is not evidence of equilibrium.</li>
+</ul>
+<p>See <a href="#" data-fim-help="convergence" data-fim-anchor="if-you-only-read-one-section">convergence</a> and the
+<a href="#" data-fim-help="convergence" data-fim-anchor="quick-reference">quick reference</a>.</p>
+<h2 id="batches-and-replicates">Batches and replicates</h2>
+<ul>
+<li><strong>n_replicates</strong> defaults to <strong>200</strong>, not 1. Set it to 1 for a single
+run; there is no separate batch-mode control.</li>
+<li>Replicate <var>i</var> uses child <var>i</var> of <code>numpy.random.SeedSequence(seed)</code>.</li>
+<li>With <strong>stop the batch early</strong> on (the default), a batch stops when
+every watched statistic's across-replicate Student's-<var>t</var> interval has
+half-width at most <strong>precision</strong>, after at least <strong>replicate minimum</strong>
+replicates. <strong>n_replicates</strong> remains a hard cap.</li>
+<li>Replicates are considered in replicate order on every engine, not in
+completion order.</li>
+<li>Batch intervals describe uncertainty across independent replicates.
+The app labels them &quot;uncertainty across N independent replicates&quot;.</li>
+</ul>
+<p>See <a href="#" data-fim-help="configuration" data-fim-anchor="n_replicates"><code>n_replicates</code></a>,
+<a href="#" data-fim-help="configuration" data-fim-anchor="stop_batch_early"><code>stop_batch_early</code></a>, and
+<a href="#" data-fim-help="convergence" data-fim-anchor="batches-replicates-that-average">batches</a>.</p>
+<h2 id="engines-and-seeds">Engines and seeds</h2>
+<ul>
+<li><strong>execution engine</strong> changes speed, not results. <code>lineal</code> (the
+reference), <code>generational</code>, and <code>generational-vector</code> produce the same
+trajectory, bit for bit, for the same seed on the same machine. <code>auto</code>
+chooses one from the deme count and locus capacity.</li>
+<li>Across machines, the compiled engines are reproducible statistically,
+not necessarily bit for bit.</li>
+<li><strong>max workers</strong> affects only elapsed time. <strong>max concurrent
+replicates</strong> is recorded and can change adaptive-batch results.</li>
+<li>Run IDs are hashes of the configuration. Names and descriptions are
+not part of the ID.</li>
+</ul>
+<p>See <a href="#" data-fim-help="configuration" data-fim-anchor="engine_backend"><code>engine_backend</code></a> and
+<a href="#" data-fim-help="usage" data-fim-anchor="reproduce-a-run">reproduce a run</a>.</p>

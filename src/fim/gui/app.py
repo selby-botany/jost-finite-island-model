@@ -10845,11 +10845,12 @@ def _build_menu(
     help_menu = Menu(
         "Help",
         [
-            MenuAction("Usage guide", dispatch("fim.menu.help('usage')")),
+            MenuAction("Desktop help", dispatch("fim.menu.help()")),
             MenuAction(
                 "Configuration reference", dispatch("fim.menu.help('configuration')")
             ),
             MenuAction("Statistics reference", dispatch("fim.menu.help('statistics')")),
+            MenuAction("Command-line reference", dispatch("fim.menu.help('usage')")),
             MenuSeparator(),
             MenuAction(
                 "Documentation on GitHub",

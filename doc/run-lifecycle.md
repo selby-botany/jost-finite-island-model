@@ -318,7 +318,7 @@ for real data. `fim object reclaim --dry-run` lists them, and
   configuration with changes you have not saved, or work that is still
   running. The dialog offers to save the configuration (as a Draft or Planned
   run), and pauses a running saved run at a checkpoint so you can resume it
-  next time. See [closing the window](usage.md#closing-the-window).
+  next time. See [closing the window](gui/troubleshooting.md#closing-the-window).
 - The desktop app runs one saved run at a time. It starts single runs and
   batches, and **Clone** on a saved run makes an editable copy.
 

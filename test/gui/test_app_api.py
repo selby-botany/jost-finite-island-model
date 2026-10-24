@@ -5435,9 +5435,10 @@ def test_build_menu_has_exactly_file_run_and_help() -> None:
     assert run_items == ["Run simulation", "Cancel run"]
     help_items = [item.title for item in menus[2].items if hasattr(item, "title")]
     assert help_items == [
-        "Usage guide",
+        "Desktop help",
         "Configuration reference",
         "Statistics reference",
+        "Command-line reference",
         "Documentation on GitHub",
         "Check for updates",
         "About fim",

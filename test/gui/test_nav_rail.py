@@ -148,7 +148,8 @@ def test_card_navigation_buttons_have_directional_icons(
             ".querySelector('use')?.getAttribute('href')), "
             "forwardButtons: ["
             "'history-forward-button', "
-            "'results-history-forward-button'"
+            "'results-history-forward-button', "
+            "'help-forward-button'"
             "].map(id => document.getElementById(id)"
             ".querySelector('use')?.getAttribute('href'))"
             "})"
@@ -169,6 +170,7 @@ def test_card_navigation_buttons_have_directional_icons(
         # sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §7) --
         # its row-level "Create run…" successor is plain text, no icon.
         "forwardButtons": [
+            "icons/fim-icons.svg#icon-forward",
             "icons/fim-icons.svg#icon-forward",
             "icons/fim-icons.svg#icon-forward",
         ],

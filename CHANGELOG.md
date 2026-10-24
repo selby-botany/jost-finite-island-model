@@ -8,6 +8,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **GUI-first desktop Help.** Help now opens a topic list instead of the
+  command-line reference. A new [desktop app guide](doc/gui/README.md)
+  covers each screen, with an
+  [implementation conventions](doc/gui/conventions.md) page that states
+  the choices to check before comparing results with published values
+  (units of `N`, the migration convention, generation order, estimands,
+  stopping). The convergence, saved-run, migration-convention,
+  differentiation-measure, and Nei-distance documents are now bundled
+  offline. Help has its own Back and Forward, **Return to work**,
+  **Help for** the current screen, offline section search, and recovery
+  when a page fails to load. **F1** opens the focused Configure field's
+  configuration-reference entry, or the visible screen's topic. The Help
+  menu's **Usage guide** item is now **Desktop help**, and the command
+  reference is **Command-line reference**. See the
+  [GUI-first help design](doc/fim-gui-help-design.md).
 - **GUI runs are resumable Run objects.** Starting from **Run simulation**
   creates a saved Run object, associates completed results with the selected
   Study, and exposes pause/resume from the same document. Matching completed
@@ -349,7 +364,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so no worker is left to hold the process open. The shutdown log now names
   any bridge call that blocked the close, and the page's late calls are
   declined once the window is closing. See [closing the
-  window](doc/usage.md#closing-the-window).
+  window](doc/gui/troubleshooting.md#closing-the-window).
 - **Expert Settings.** The policy constants behind the new rule (the burn-in
   floor of 5 relaxation times, the cap's 15, the first check, the effective
   sample size floor, the spectrum burn-in multiplier, and the rest) live in an
@@ -435,7 +450,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   run is named after its study and its values, with a description placing it
   in the sweep. `fim study create` and `fim experiment create` take
   `--documentation`. See
-  [Names, descriptions, and documentation](doc/usage.md#names-descriptions-and-documentation).
+  [Names, descriptions, and documentation](doc/gui/organize.md#names-descriptions-and-documentation).
 - **Nei's genetic distance, two ways, for a pair of demes and for all of
   them.** Every run now reports Nei's distance with Nei's own geometric-mean
   denominator and with the arithmetic-mean denominator (Jost, L. (2026)
@@ -1491,7 +1506,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a Dismiss button; a "run settings" item in the parameter strip stays
   while they differ. Max workers, a machine setting no configuration
   names, is unchanged. See
-  [Loading a configuration does not change your Settings](doc/usage.md#loading-a-configuration-does-not-change-your-settings).
+  [Loading a configuration does not change your Settings](doc/gui/configure.md#loaded-run-settings).
 - **Settings decides whether the expensive statistics are tracked.**
   Configure's "track E<sub>ST</sub>/K<sub>ST</sub>/A<sub>CGD</sub>/δ<sub>G</sub>/I
   for display" checkbox is gone. The desktop app now sets

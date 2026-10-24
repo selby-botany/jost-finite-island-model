@@ -1194,8 +1194,7 @@ The standard error of $\bar Z$ is $s_Z/\sqrt R$.
 With confidence $\gamma$, the interval is:
 
 ```math
-\bar Z\ \mathbin{\pm}\
-t_{(1+\gamma)/2,R-1}\frac{s_Z}{\sqrt R} \tag{C.63}
+\bar Z \pm t_{(1+\gamma)/2,R-1}\frac{s_Z}{\sqrt R} \tag{C.63}
 ```
 
 The $t$ here denotes a Student's-$t$ critical value, **not**
