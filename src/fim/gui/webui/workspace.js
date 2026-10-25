@@ -45,6 +45,7 @@ const workspace = (() => {
         "__fimExploreSweepReady",
         "__fimGroupTogglesPending",
         "__fimHelpExternalLinkSettled",
+        "__fimHelpRendered",
         "__fimHomeRunLoadSettled",
         "__fimMenuOpenExternalSettled",
         "__fimOpen",
