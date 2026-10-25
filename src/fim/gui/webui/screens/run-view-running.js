@@ -698,6 +698,18 @@ function renderRunProgress(state, payload, jobId = null) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
     progressLabel.textContent = `${payload.generation} / ${payload.maxGenerations}`;
+    // The parameter strip's own `alleles` slot: alleles are minted and
+    // retired as the run proceeds (`fim.gui.app._segregating_allele_
+    // count`'s own docstring), so unlike N/d/m/mu/loci it keeps moving
+    // after the run starts -- only `alleles` itself is touched here
+    // (`writeParameterStripSlots`'s own "a summary missing a key leaves
+    // that slot's text in place" contract), leaving the rest of the
+    // strip showing this run's own already-correct configuration.
+    if (payload.currentAlleleCount !== undefined && window.fim.updateParameterStripFromSummary) {
+        window.fim.updateParameterStripFromSummary({
+            alleles: String(payload.currentAlleleCount),
+        });
+    }
     if (!state.liveDemeSelectorWired) {
         wireLiveDemePairSelector(payload.demeCount, state, jobId);
         state.liveDemeSelectorWired = true;

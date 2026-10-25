@@ -180,6 +180,8 @@ def test_an_unnamed_row_summarizes_its_settings(api: Api) -> None:
         "d",
         "m",
         "mu",
+        "alleles",
+        "loci",
         "mutation_model",
         "replicates",
         "seed",

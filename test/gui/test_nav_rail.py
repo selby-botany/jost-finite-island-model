@@ -308,11 +308,124 @@ def test_parameter_strip_shows_the_starter_configuration_on_launch(
             "({N: document.getElementById('parameter-strip-N').textContent,"
             " d: document.getElementById('parameter-strip-d').textContent,"
             " m: document.getElementById('parameter-strip-m').textContent,"
-            " mu: document.getElementById('parameter-strip-mu').textContent})"
+            " mu: document.getElementById('parameter-strip-mu').textContent,"
+            " alleles: document.getElementById('parameter-strip-alleles')"
+            ".textContent,"
+            " loci: document.getElementById('parameter-strip-loci').textContent})"
         ),
     )
     # Individuals with the ploidy the test fixtures seed as the default.
-    assert values == {"N": "225 haploid", "d": "20", "m": "0.001", "mu": "3e-07"}
+    assert values == {
+        "N": "225 haploid",
+        "d": "20",
+        "m": "0.001",
+        "mu": "3e-07",
+        "alleles": "2",
+        "loci": "200",
+    }
+
+
+@pytest.mark.parametrize(
+    ("mode_values", "expected_alleles"),
+    [
+        pytest.param(
+            "{initial_conditions_mode: 'dirichlet', initial_allele_count: '4'}",
+            "4",
+            id="dirichlet",
+        ),
+        pytest.param(
+            "{initial_conditions_mode: 'equilibrium_split', initial_allele_count: '6'}",
+            "6",
+            id="equilibrium_split",
+        ),
+        pytest.param(
+            "{initial_conditions_mode: 'explicit_p0', "
+            "p0_json: JSON.stringify([[{0: 0.5, 1: 0.5}], [{0: 1}]])}",
+            "2",
+            id="explicit_p0",
+        ),
+        pytest.param(
+            "{initial_conditions_mode: 'fixed_per_deme', "
+            "fixed_per_deme_choice: 'all_different', d: '5'}",
+            "5",
+            id="fixed_per_deme-all_different",
+        ),
+        pytest.param(
+            "{initial_conditions_mode: 'fixed_per_deme', "
+            "fixed_per_deme_choice: 'all_same', d: '5'}",
+            "1",
+            id="fixed_per_deme-all_same",
+        ),
+        pytest.param(
+            "{initial_conditions_mode: 'fixed_per_deme', "
+            "fixed_per_deme_choice: 'all_but_one', d: '5'}",
+            "2",
+            id="fixed_per_deme-all_but_one",
+        ),
+    ],
+)
+def test_parameter_strip_alleles_tracks_each_initial_conditions_mode(
+    window: webview.Window, mode_values: str, expected_alleles: str
+) -> None:
+    """Each of the four initial-conditions modes gets its own allele count.
+
+    `initial_allele_count` (a Dirichlet draw's own founding count) is
+    also the right answer for an equilibrium split, whose own ancestral
+    population draws its own founding alleles from that same field
+    before forwarding to equilibrium
+    (`fim.model.initial.EquilibriumSplitInitialCondition`) — only
+    `explicit_p0` (counted from its own distinct allele IDs) and
+    `fixed_per_deme` (derived from its own sub-choice and `d`) need
+    their own derivation instead. Driven through `window.fim.update
+    ParameterStrip` directly, with only the fields each case's own
+    derivation actually reads — the same function `revalidate()` calls
+    on every real field change, so this exercises the real production
+    code path without needing to drive the Configure form's own radio
+    buttons and grid editors end to end.
+    """
+
+    def steps(_poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(f"window.fim.updateParameterStrip({mode_values});")
+        return window.evaluate_js(
+            "document.getElementById('parameter-strip-alleles').textContent"
+        )
+
+    assert _drive(window, steps) == expected_alleles
+
+
+@pytest.mark.parametrize(
+    ("locus_lengths", "expected_loci"),
+    [
+        pytest.param("200", "200", id="single-locus"),
+        pytest.param("150,150,150", "150", id="constant-per-locus"),
+        pytest.param("100,200,300", "avg 200", id="varying-rounds-to-whole"),
+        pytest.param("100,150", "avg 125", id="varying-with-a-fraction"),
+    ],
+)
+def test_parameter_strip_loci_shows_the_shared_length_or_its_average(
+    window: webview.Window, locus_lengths: str, expected_loci: str
+) -> None:
+    """`loci` shows the one shared length, or its average when lengths differ.
+
+    Reported botanist request, alongside `alleles`: the top parameter
+    strip (N, d, m, mu) named neither the number of starting alleles nor
+    the locus length(s) a configuration uses, both of which this project's
+    own worked examples routinely sweep (`finite-length-alleles-the-k-
+    allele-model`, `per-base-mutation-rate-across-unequal-locus-lengths`).
+    """
+
+    def steps(_poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(
+            "window.fim.updateParameterStrip("
+            "{loci_mode: 'lengths', locus_lengths: "
+            f"{locus_lengths!r}}});"
+        )
+        return window.evaluate_js(
+            "document.getElementById('parameter-strip-loci').textContent"
+        )
+
+    value = _drive(window, steps)
+    assert value == expected_loci
 
 
 def test_clicking_configure_shows_the_landing_screen_and_updates_the_rail(

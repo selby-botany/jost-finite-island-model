@@ -607,14 +607,114 @@ function updateRailHighlight(screenId) {
 window.fim.updateRailHighlight = updateRailHighlight;
 
 /**
- * Format the FIM-parameters strip's own compact `N`/`d`/`m`/`mu` text
- * (design §3.2: "always shows the current configuration's N, d, m, and
- * mu in compact, always-current form... a compact summary" for a
- * non-scalar shape). Pure and synchronous -- every value it reads is
- * already on the page (`collectFormValues`'s own live `FormData` scan),
- * no bridge round trip needed just to keep this strip current.
+ * Return the number of distinct allele IDs an explicit `p_0`'s own JSON
+ * text names, across every deme and locus -- `"explicit p₀"` mode's own
+ * contribution to `formatAlleleCountSummary`, below.
+ * @param {string} p0Json `field-p0_json`'s own current value
+ *     (`webui/screens/p0-grid.js`'s own serialized `{alleleId:
+ *     frequency}`-per-cell shape, one row per deme, one column per
+ *     locus).
+ * @returns {string} `"—"` if `p0Json` is empty, not valid JSON, or
+ *     names no alleles at all.
+ */
+function distinctAlleleCountFromP0Json(p0Json) {
+    let demes;
+    try {
+        demes = JSON.parse(p0Json || "[]");
+    } catch {
+        return "—";
+    }
+    const ids = new Set();
+    for (const deme of demes) {
+        for (const locus of deme) {
+            for (const id of Object.keys(locus)) {
+                ids.add(id);
+            }
+        }
+    }
+    return ids.size > 0 ? String(ids.size) : "—";
+}
+
+/**
+ * Format the parameter strip's own `alleles` text: the configured
+ * starting allele count, mirroring `fim.gui.app._initial_allele_count_
+ * text`'s own identical per-mode derivation for a completed run's
+ * `SimulationParams`.
+ *
+ * `initial_allele_count` (the Dirichlet draw's own founding count) is
+ * also the right answer for `"equilibrium split"` mode -- its own
+ * ancestral population draws its own founding alleles from that same
+ * field before forwarding to equilibrium (`fim.model.initial.
+ * EquilibriumSplitInitialCondition`) -- so only `"explicit p₀"` and
+ * `"fixed per deme"` need their own derivation instead, since both set
+ * an explicit `p_0` that `initial_allele_count` has nothing to do with.
  * @param {Record<string, string>} values
- * @returns {{N: string, d: string, m: string, mu: string}}
+ * @returns {string}
+ */
+function formatAlleleCountSummary(values) {
+    const mode = values.initial_conditions_mode;
+    if (mode === "explicit_p0") {
+        return distinctAlleleCountFromP0Json(values.p0_json);
+    }
+    if (mode === "fixed_per_deme") {
+        if (values.fixed_per_deme_choice === "all_different") {
+            const d = Number(values.d);
+            return Number.isInteger(d) && d > 0 ? String(d) : "—";
+        }
+        return values.fixed_per_deme_choice === "all_but_one" ? "2" : "1";
+    }
+    return values.initial_allele_count || "—";
+}
+
+/**
+ * Format the parameter strip's own `loci` text: the configured locus
+ * length, or its average when the loci do not share one, mirroring
+ * `fim.gui.app._locus_length_text`'s own identical formatting (one
+ * decimal place, a trailing `.0` trimmed) for a completed run's
+ * `SimulationParams`.
+ * @param {Record<string, string>} values
+ * @returns {string}
+ */
+function formatLocusLengthSummary(values) {
+    let lengths;
+    if (values.loci_mode === "custom") {
+        try {
+            lengths = JSON.parse(values.loci_json || "[]").map((locus) =>
+                Number(locus.length)
+            );
+        } catch {
+            lengths = [];
+        }
+    } else {
+        lengths = (values.locus_lengths || "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter((item) => item !== "")
+            .map(Number);
+    }
+    lengths = lengths.filter((length) => Number.isFinite(length));
+    if (lengths.length === 0) {
+        return "—";
+    }
+    if (new Set(lengths).size === 1) {
+        return String(lengths[0]);
+    }
+    const average = lengths.reduce((sum, length) => sum + length, 0) / lengths.length;
+    const rounded = average.toFixed(1);
+    return `avg ${rounded.endsWith(".0") ? rounded.slice(0, -2) : rounded}`;
+}
+
+/**
+ * Format the FIM-parameters strip's own compact `N`/`d`/`m`/`mu`/
+ * `alleles`/`loci` text (design §3.2: "always shows the current
+ * configuration's N, d, m, and mu in compact, always-current form...
+ * a compact summary" for a non-scalar shape). Pure and synchronous --
+ * every value it reads is already on the page (`collectFormValues`'s
+ * own live `FormData` scan), no bridge round trip needed just to keep
+ * this strip current.
+ * @param {Record<string, string>} values
+ * @returns {{N: string, d: string, m: string, mu: string,
+ *     alleles: string, loci: string}}
  */
 function formatParameterStripSummary(values) {
     const nItems = (values.N || "")
@@ -657,7 +757,14 @@ function formatParameterStripSummary(values) {
         mu = `derived from μᵦ`;
     }
 
-    return { N: n, d, m, mu };
+    return {
+        N: n,
+        d,
+        m,
+        mu,
+        alleles: formatAlleleCountSummary(values),
+        loci: formatLocusLengthSummary(values),
+    };
 }
 
 /**
@@ -673,17 +780,22 @@ function updateParameterStrip(values) {
 window.fim.updateParameterStrip = updateParameterStrip;
 
 /**
- * Write `{N, d, m, mu}` straight into the strip's own four slots --
- * shared by `updateParameterStrip` (above, from the live Configure
- * form) and `updateParameterStripFromSummary` (below, from an already-
- * displayed run's own configuration), so the two can never format the
- * same four slots two different ways.
- * @param {{N: string, d: string, m: string, mu: string}} summary
+ * Write `{N, d, m, mu, alleles, loci}` straight into the strip's own
+ * six slots -- shared by `updateParameterStrip` (above, from the live
+ * Configure form) and `updateParameterStripFromSummary` (below, from an
+ * already-displayed run's own configuration), so the two can never
+ * format the same six slots two different ways. A summary missing a
+ * key (a bridge payload this page predates) simply leaves that slot's
+ * own last text in place, rather than clearing it to blank.
+ * @param {{N?: string, d?: string, m?: string, mu?: string,
+ *     alleles?: string, loci?: string}} summary
  */
 function writeParameterStripSlots(summary) {
-    for (const key of /** @type {const} */ (["N", "d", "m", "mu"])) {
+    for (const key of /** @type {const} */ (
+        ["N", "d", "m", "mu", "alleles", "loci"]
+    )) {
         const slot = document.getElementById(`parameter-strip-${key}`);
-        if (slot !== null) {
+        if (slot !== null && summary[key] !== undefined) {
             slot.textContent = summary[key];
         }
     }
@@ -691,9 +803,12 @@ function writeParameterStripSlots(summary) {
 
 /**
  * Set the parameter strip from a *displayed run's own* configuration --
- * `Api._run_config_summary`'s own already-formatted `{N, d, m, mu}`
- * strings, exactly as `list_recent_runs`/`compare_runs`/`open_run`/
- * `_pooled_batch_payload` already send them.
+ * `Api._run_config_summary`'s own already-formatted `{N, d, m, mu,
+ * alleles, loci, mutation_model, seed}` strings, exactly as `list_
+ * recent_runs`/`compare_runs`/`open_run`/`_pooled_batch_payload`
+ * already send them (the strip itself only ever reads its own six
+ * slots out of that dict; `mutation_model`/`seed` are Compare's/Home's
+ * own, not shown here).
  *
  * Reported live: the strip is a single, always-visible widget shared
  * across every screen, but until this function existed it had exactly
@@ -711,7 +826,8 @@ function writeParameterStripSlots(summary) {
  * calls `revalidate()` to hand the strip back to the live form the
  * moment Configure is shown again, so neither writer's own value is
  * ever left stale on the other's screen.
- * @param {{N: string, d: string, m: string, mu: string}} summary
+ * @param {{N: string, d: string, m: string, mu: string, alleles: string,
+ *     loci: string}} summary
  */
 function updateParameterStripFromSummary(summary) {
     writeParameterStripSlots(summary);

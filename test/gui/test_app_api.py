@@ -3516,6 +3516,72 @@ def test_drain_run_messages_keeps_summary_progress_payload_compact() -> None:
     }.intersection(progress_payload)
 
 
+def test_drain_run_messages_reports_the_current_allele_count_every_tick() -> None:
+    """Every `"progress"` push carries the live state's own current allele count.
+
+    Reported botanist follow-up: the parameter strip's own `alleles`
+    slot used to show only the run's founding count, unchanged for its
+    whole life — wrong once any generation has actually run, since
+    alleles are minted and retired along the way. `currentAlleleCount`
+    rides every `"progress"` push, computed from that tick's own state
+    (`message[6]`, always present, unlike the panel/visual fields a
+    `"summary"` view level omits) so the strip can track it live, not
+    only once the run finishes.
+    """
+    state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(1): 0.25, AlleleId(2): 0.75},),
+        ),
+    )
+    params = SimulationParams(
+        gene_copies=20,
+        m=0.1,
+        mu=0.01,
+        d=2,
+        seed=20260814,
+        loci=(LocusSpec(1, 200),),
+        precision=1.0,
+        max_generations=10,
+        n_replicates=1,
+        stop_batch_early=False,
+    )
+    message_queue: queue.Queue[runner_module.RunMessage] = queue.Queue()
+    message_queue.put(
+        runner_module.progress_message(
+            state,
+            3,
+            params,
+            run_id="run-1",
+            view_level="summary",
+        )
+    )
+    message_queue.put(("cancelled", 3))
+    window = _FakeWindow()
+    publisher = Publisher()
+
+    app_module._drain_run_messages(
+        window,
+        message_queue,
+        max_generations=10,
+        deme_count=2,
+        output_directory=Path("/unused"),
+        live_deme_pair=lambda: (1, 2),
+        publisher=publisher,
+        job_admission=jobs_module.JobAdmission(),
+        job_id=_TEST_JOB_ID,
+    )
+    assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
+
+    progress_payload = _one_call_payload(window, "onRunProgress")
+    # Alleles 0, 1, 2 across the two demes -- three distinct, not four
+    # (summing each deme's own count) and not one (only what both agree
+    # on): `test_segregating_allele_count_unions_demes_and_sums_loci`'s
+    # own identical union rule.
+    assert progress_payload["currentAlleleCount"] == 3
+
+
 def test_statistics_catalog_starts_on_the_catalog_defaults(tmp_path: Path) -> None:
     """A fresh install shows the catalog's defaults and sends every entry."""
     result = Api(
@@ -4011,18 +4077,22 @@ def test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run(
         "seed": "1",
         "m": "0.1",
         "mu": "0.01",
+        "alleles": "2",
+        "loci": "200",
         "mutation_model": "infinite_alleles",
     }
     # Dict equality above doesn't check key order, but the client does
     # care: `formatRowConfigSummary`'s own `Object.entries` walk (and
     # JSON, which preserves object key order over the bridge) render
     # this in insertion order. `seed` sorts last -- the field a reader
-    # cares about least when scanning "what's different about this run".
+    # cares about least when scanning for "what's different about this run".
     assert list(row["configSummary"].keys()) == [
         "N",
         "d",
         "m",
         "mu",
+        "alleles",
+        "loci",
         "mutation_model",
         "seed",
     ]
@@ -4031,6 +4101,42 @@ def test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run(
         assert row["statistics"][name] == format_statistic(
             live_report[name], api._significant_digits
         )
+
+
+def test_segregating_allele_count_unions_demes_and_sums_loci() -> None:
+    """Counts distinct present alleles per locus, unioned across demes.
+
+    Reported botanist follow-up: alleles are minted and retired as a run
+    proceeds, so `configSummary["alleles"]` (the founding count,
+    `_initial_allele_count_text`) goes stale the moment any generation
+    actually runs — `_segregating_allele_count` is the live replacement,
+    read straight off a state's own sparse frequency maps rather than
+    the configuration that produced it.
+
+    Two loci, two demes: locus 1 has alleles {0, 1} in deme 1 and {1, 2}
+    in deme 2 — three distinct alleles once unioned (0, 1, and 2), not
+    four (naively summing each deme's own count) and not two (only
+    counting what both demes agree on). Locus 2 has a single allele
+    fixed identically in both demes — one distinct allele, not two. The
+    total is the *sum* across loci (3 + 1 = 4), since the same allele id
+    at two different loci is two different alleles, not one
+    (`fim.viz.scatter.frequency_points`'s own identical (locus, allele)
+    pairing).
+    """
+    state = ModelState(
+        loci=(LocusSpec(1, 200), LocusSpec(2, 50)),
+        frequencies=(
+            (
+                {AlleleId(0): 0.5, AlleleId(1): 0.5},
+                {AlleleId(0): 1.0},
+            ),
+            (
+                {AlleleId(1): 0.5, AlleleId(2): 0.5},
+                {AlleleId(0): 1.0},
+            ),
+        ),
+    )
+    assert app_module._segregating_allele_count(state) == 4
 
 
 def test_list_home_runs_attaches_a_confidence_interval_per_statistic_for_a_batch_run(

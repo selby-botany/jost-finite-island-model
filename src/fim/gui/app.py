@@ -1282,18 +1282,21 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
             params` from `reanalyze_trajectory`.
 
     Returns:
-        `{"N", "d", "m", "mu", "mutation_model", "seed"}` — every value
-        a short, human-readable string, `seed` last (the field a reader
-        cares about least when scanning for "what's different about
-        this run," `Api.list_home_runs`'s own home enrichment design
-        doc `20260909-claude-sonnet-5-home-enrichment-design.md`,
-        `selby/restricted`). `m`/`mu` collapse their own
-        composite modes to one representative string each (a scalar
-        rate, a `"<topology> @ <rate>"` pair, `"matrix"`,
-        `"mu_b=<rate>"`, or a comma-separated rate per locus for a
-        `mu` the form cannot show) rather than every sub-field, so a `d`-by-`d`
-        matrix or a `mu_b`-derived rate compares as a single field like
-        every other, not several.
+        `{"N", "d", "m", "mu", "alleles", "loci", "mutation_model",
+        "seed"}` — every value a short, human-readable string, `seed`
+        last (the field a reader cares about least when scanning for
+        "what's different about this run," `Api.list_home_runs`'s own
+        home enrichment design doc `20260909-claude-sonnet-5-home-
+        enrichment-design.md`, `selby/restricted`). `m`/`mu` collapse
+        their own composite modes to one representative string each (a
+        scalar rate, a `"<topology> @ <rate>"` pair, `"matrix"`,
+        `"mu_b=<rate>"`, or a comma-separated rate per locus for a `mu`
+        the form cannot show) rather than every sub-field, so a `d`-by-
+        `d` matrix or a `mu_b`-derived rate compares as a single field
+        like every other, not several. `alleles`/`loci` are the
+        parameter-strip's own two extra fields (`webui/screens/nav-
+        rail.js`'s `formatParameterStripSummary`, kept in lockstep with
+        this function's own derivation for a live form's values).
     """
     # Individuals with their ploidy ("225 diploid"): the same two things the
     # Configure form shows and asks for.
@@ -1324,9 +1327,102 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
         "d": str(params.d),
         "m": m_text,
         "mu": mu_text,
+        "alleles": _initial_allele_count_text(params),
+        "loci": _locus_length_text(params),
         "mutation_model": params.mutation_model,
         "seed": str(params.seed),
     }
+
+
+def _initial_allele_count_text(params: SimulationParams) -> str:
+    """Return the configured starting allele count, as the strip shows it.
+
+    `params.initial_allele_count` is the real founding count whenever
+    generation 0 is actually drawn from it — a Dirichlet draw, or the
+    ancestral population an equilibrium split forwards before splitting
+    (`fim.model.initial.EquilibriumSplitInitialCondition`, which itself
+    draws its own founding alleles from `initial_allele_count`/
+    `initial_concentration`, the same way the plain Dirichlet condition
+    does). Once `initial_frequencies` is set instead (an explicit `p_0`,
+    whether typed in directly or expanded from the Configure form's own
+    "fixed per deme" convenience), `initial_allele_count` stops meaning
+    anything — it keeps whatever `field-initial_allele_count` last held
+    while that field was visible, unrelated to the explicit frequencies
+    actually in force — so the real count is the number of distinct
+    allele IDs `initial_frequencies` itself actually names, across every
+    deme and locus.
+    """
+    if params.initial_frequencies is None:
+        return str(params.initial_allele_count)
+    allele_ids = {
+        allele_id
+        for deme in params.initial_frequencies
+        for locus in deme
+        for allele_id in locus
+    }
+    return str(len(allele_ids))
+
+
+def _locus_length_text(params: SimulationParams) -> str:
+    """Return the configured locus length, or its average when not constant.
+
+    One length shared by every locus is the common case (`webui/screens/
+    nav-rail.js`'s own identical wording for the live form's `locus_
+    lengths` field) and needs no qualifier; a per-locus length that
+    varies has no single "the" length, so this names the average
+    instead, rounded to one decimal place and trimmed of a trailing
+    `.0` (`"avg 150"`, not `"avg 150.0"`).
+    """
+    lengths = [locus.length for locus in params.loci]
+    if len(set(lengths)) == 1:
+        return str(lengths[0])
+    average = sum(lengths) / len(lengths)
+    return f"avg {f'{average:.1f}'.removesuffix('.0')}"
+
+
+def _segregating_allele_count(state: ModelState) -> int:
+    """Count distinct (locus, allele) pairs currently at a positive frequency.
+
+    Reported live: `_initial_allele_count_text`'s own "configured
+    starting count" is only ever that -- a starting point. Mutation
+    mints new allele IDs and drift carries old ones to extinction as a
+    run proceeds, so the population's own allele count moves over time,
+    not fixed at its founding value once any generation has actually
+    run. This counts what is *currently* present instead: one allele ID
+    at one locus, unioned across every deme (present in even one deme
+    counts; absent from all of them does not), the same (locus, allele)
+    pairing `fim.viz.scatter.frequency_points` already treats as "one
+    allele." `ModelState.frequency_map`'s own sparse representation
+    never stores a zero-frequency entry (`ModelState.support_sizes`'s
+    own docstring: "the set of alleles that actually have a nonzero
+    frequency"), so simply counting each locus's own present keys,
+    unioned across demes, is exactly "alleles with p > 0" — no
+    filtering needed.
+
+    Used for the parameter strip's own `alleles` slot while a scalar
+    run is live or has just finished, or once a past one is reopened
+    (`webui/screens/run-view-running.js`'s own `renderProgress`,
+    `run-view-completed.js`'s own `enterCompletedState`) — each
+    overrides `configSummary`'s own founding count with this current
+    one for that one slot; `configSummary.alleles` itself keeps meaning
+    "what the run started with," a stable, comparable configuration
+    property Compare's and Home's own listings still want. Not yet
+    computed for a batch's own live/completed view: each replicate's
+    own current count can differ from every other's, the identical
+    ambiguity the scatter plot's own pooled "most frequent" marker had
+    before its own per-replicate fix, and resolving it the same way is
+    future work, not done here.
+    """
+    return sum(
+        len(
+            {
+                allele_id
+                for deme_index in range(state.deme_count)
+                for allele_id in state.frequency_map(deme_index, locus_index)
+            }
+        )
+        for locus_index in range(state.locus_count)
+    )
 
 
 def _saved_run_config_summary(params: SimulationParams) -> dict[str, str]:
@@ -7705,6 +7801,11 @@ class Api:
             "runId": reanalyzed.manifest.run_id,
             "directoryName": trajectory_path.parent.name,
             "configSummary": _run_config_summary(reanalyzed.params),
+            # The parameter strip's own `alleles` slot, overriding
+            # `configSummary`'s own founding count with the reopened
+            # generation's own current one (`_segregating_allele_count`'s
+            # own docstring).
+            "currentAlleleCount": _segregating_allele_count(reanalyzed.state),
             # Sourced from the manifest, not `reanalyzed.params` directly
             # -- see `_derived_convergence_note_from_manifest`'s own
             # docstring for why a reopened run's own `params` alone
@@ -9113,6 +9214,11 @@ def _drain_run_messages(
                     )
                     for name in _RESULT_STATISTIC_NAMES
                 },
+                # The parameter strip's own `alleles` slot while the run
+                # is live (`_segregating_allele_count`'s own docstring):
+                # `message[6]` is always this tick's own `ModelState`,
+                # unlike `message[2]`/`message[3]`/`message[5]` below.
+                "currentAlleleCount": _segregating_allele_count(message[6]),
             }
             if (
                 message[2] is not None
@@ -9150,6 +9256,12 @@ def _drain_run_messages(
                 "runId": result.run_id,
                 "directoryName": output_directory.name,
                 "configSummary": _run_config_summary(result.params),
+                # The parameter strip's own `alleles` slot, overriding
+                # `configSummary`'s own founding count with the final
+                # state's own current one (`_segregating_allele_count`'s
+                # own docstring) — `enterCompletedState` (`webui/screens/
+                # run-view-completed.js`) applies the override.
+                "currentAlleleCount": _segregating_allele_count(result.final_state),
                 # The Run card's own consolidated message area (`webui/
                 # screens/run-view-completed.js`'s own `renderRunMessages`)
                 # -- `""` when the window/cap were both given explicitly,

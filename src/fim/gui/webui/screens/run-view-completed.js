@@ -4724,7 +4724,24 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     // not this run's own -- see `updateParameterStripFromSummary`'s own
     // doc comment (`nav-rail.js`) for the reported defect this fixes.
     if (payload.configSummary && window.fim.updateParameterStripFromSummary) {
-        window.fim.updateParameterStripFromSummary(payload.configSummary);
+        // `configSummary.alleles` is the run's own founding count --
+        // still what Compare's/Home's own listings want, a stable
+        // configuration property, but stale for a *finished* run's own
+        // strip once any generation has actually run (alleles are
+        // minted and retired along the way, `fim.gui.app._segregating_
+        // allele_count`'s own docstring). `currentAlleleCount`, present
+        // whenever this payload came from an actual state (a live run's
+        // own "done" push, or a reopened/re-analyzed generation, not a
+        // report-only artifact with no state to count), overrides just
+        // that one slot.
+        const stripSummary =
+            payload.currentAlleleCount === undefined
+                ? payload.configSummary
+                : {
+                      ...payload.configSummary,
+                      alleles: String(payload.currentAlleleCount),
+                  };
+        window.fim.updateParameterStripFromSummary(stripSummary);
     }
     window.fim.setCompletedOutputDirectory(payload.outputDirectory);
     // `undefined` (a batch's own payload carries no such key at all) is

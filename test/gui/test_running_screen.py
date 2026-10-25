@@ -63,6 +63,7 @@ import pytest
 import webview
 from conftest import poll_or_fail, wait_or_fail
 
+from fim.gui import app as app_module
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.preferences import GuiPreferences, save_preferences
@@ -259,6 +260,67 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress(
     # only that `Api`'s own Python-level helper computes the right
     # number in isolation (`test_app_api.py`'s own coverage of that).
     assert settled["neSText"] != ""
+
+
+def test_parameter_strip_alleles_tracks_the_final_state_not_the_founding_count(
+    fast_scalar_run_settings: Path,
+) -> None:
+    """The strip's own `alleles` slot shows a real run's own final count.
+
+    Reported botanist follow-up to the newly-added `alleles` strip slot
+    (`test_app_api.py`'s own `test_drain_run_messages_reports_the_
+    current_allele_count_every_tick`/`test_segregating_allele_count_
+    unions_demes_and_sums_loci` prove the backend computation in
+    isolation): alleles are minted and retired as a run proceeds, so
+    the strip must show what the run's own *final* state actually has,
+    not the static founding count it started from. Proves the full
+    stack -- `Api`'s own `"done"` push carries `currentAlleleCount`,
+    and `run-view-completed.js`'s own `enterCompletedState` applies it
+    to the real DOM -- not only that the Python-level computation is
+    correct in isolation.
+    """
+    done_event = threading.Event()
+    messages: list[RunMessage | BatchMessage] = []
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        messages.append(message)
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            wait_or_fail(done_event, "run end (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "stripAlleles: document.getElementById('parameter-strip-alleles')"
+                ".textContent"
+                "})"
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "completed"
+    assert messages[-1][0] == "done"
+    # A scalar run's own "done" payload is one `RunResult`/`GuiRunResult`,
+    # never the tuple-of-results a batch's own "done" message can carry --
+    # `_SET_TINY_FIELDS` never sets `n_replicates` above 1.
+    done_result = messages[-1][1]
+    assert not isinstance(done_result, tuple)
+    expected = app_module._segregating_allele_count(done_result.final_state)
+    assert settled["stripAlleles"] == str(expected)
 
 
 @pytest.mark.parametrize("is_batch", [False, True])

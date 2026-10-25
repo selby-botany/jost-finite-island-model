@@ -126,8 +126,8 @@
         Close all results
       </button>
     </div>
-    <!-- The always-visible N/d/m/mu parameter strip (design §3.2):
-         read-only, always current; clicking any value jumps to
+    <!-- The always-visible N/d/m/mu/alleles/loci parameter strip (design
+         §3.2): read-only, always current; clicking any value jumps to
          Configure (design's own click-through behavior). `screens/
          nav-rail.js`'s `updateParameterStrip` fills these in from the
          same `collectFormValues()` every other live-form read already
@@ -149,6 +149,14 @@
       <button type="button" class="parameter-strip-item" data-param="mu">
         <span class="parameter-strip-label">μ</span>
         <span class="parameter-strip-value" id="parameter-strip-mu"></span>
+      </button>
+      <button type="button" class="parameter-strip-item" data-param="alleles">
+        <span class="parameter-strip-label">alleles</span>
+        <span class="parameter-strip-value" id="parameter-strip-alleles"></span>
+      </button>
+      <button type="button" class="parameter-strip-item" data-param="loci">
+        <span class="parameter-strip-label">loci</span>
+        <span class="parameter-strip-value" id="parameter-strip-loci"></span>
       </button>
       <!-- Shown only while a loaded configuration's own run settings
            differ from Settings (`screens/run-settings-notice.js`). -->

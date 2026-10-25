@@ -235,6 +235,8 @@ def _stub_row(
             "d": "10",
             "m": "0.01",
             "mu": "1e-05",
+            "alleles": "2",
+            "loci": "200",
             "mutation_model": "kam",
             "replicates": "200",
             "seed": "7",
