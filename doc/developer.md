@@ -460,6 +460,19 @@ changes:
 dev/bin/generate-api-docs
 ```
 
+Docstrings feed the generated references directly. Write mathematical prose
+with inline TeX, for example `$H_S$` or `$\tau = 1 / (1 - \rho)$`, and use
+fenced `math` blocks for display equations, not indented code or `.. math::`
+directives. Use raw Python docstrings (`r"""..."""`) when TeX contains
+backslashes. Keep Python expressions, configuration keys, and output fields
+in code spans when describing their programming interface.
+
+After changing test docstrings, regenerate the test reference too:
+
+```console
+dev/bin/generate-test-docs
+```
+
 Run `dev/bin/check-doc-links` after moving headings or files. The pre-commit
 hook refreshes API docs, the pre-push hook checks freshness, and CI repeats
 both checks. See [source-tree orientation](../src/README.md) and

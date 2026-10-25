@@ -303,13 +303,13 @@ class BurnInMonitor:
     `extra_statistics` are recorded for display and reporting but never decide
     the stop.
 
-    A statistic named in `identity_statistics` is a function of `H_S` and
-    `H_T`, so it has two expected-value forms (design 6.11): the mean of its
+    A statistic named in `identity_statistics` is a function of $H_S$ and
+    $H_T$, so it has two expected-value forms (design 6.11): the mean of its
     values and the value of the mean identities. `estimate` selects the form
     each check judges and the report headlines; `"auto"` applies its rule to
     the window as it stands at that check, so the form reported at the stop is
-    the form the stop was judged on. Such a monitor must record `H_S` and
-    `H_T` every generation (as extras or watched).
+    the form the stop was judged on. Such a monitor must record $H_S$ and
+    $H_T$ every generation (as extras or watched).
     """
 
     def __init__(
@@ -354,7 +354,7 @@ class BurnInMonitor:
             fractional_burn_in: Share of the run discarded when `burn_in` is
                 `None`.
             identity_statistics: Recorded statistics that are functions of
-                `H_S` and `H_T`, by name; they get both expected-value forms.
+                $H_S$ and $H_T$, by name; they get both expected-value forms.
             estimate: `"mean_of_values"`, `"value_of_means"` or `"auto"`.
             auto_denominator: Under `"auto"`, the denominator below which a
                 generation counts as degenerate.
@@ -373,7 +373,7 @@ class BurnInMonitor:
 
         Raises:
             ValueError: If a number is out of range, a name repeats, or an
-                identity statistic's `H_S`/`H_T` are not recorded.
+                identity statistic's $H_S$ / $H_T$ are not recorded.
         """
         _check_settings(
             max_generations=max_generations,

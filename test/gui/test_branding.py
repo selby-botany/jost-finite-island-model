@@ -33,6 +33,11 @@ def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None:
     `icon-results` is still in use: the merged "Run" button itself
     references it (a chart, not `icon-run`'s own bare play-triangle).
 
+    26, not 23: the Run card's "Edit configuration" button
+    (`edit-configuration-button`, one `icon-configure`) added one, and
+    the Help toolbar (`doc/fim-gui-help-design.md`) added two -- Help's
+    own Forward (`icon-forward`) and "Help home" (`icon-help`).
+
     23, not 21: the sweep feature added two -- the sweep screen's Back
     (`icon-back`) and Explore's "Sweep this for real" (`icon-run`).
 
@@ -49,7 +54,7 @@ def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None:
     icons = (_WEBUI / "icons" / "fim-icons.svg").read_text(encoding="utf-8")
 
     assert html.count('class="rail-icon"') == 6
-    assert html.count('href="icons/fim-icons.svg#icon-') == 23
+    assert html.count('href="icons/fim-icons.svg#icon-') == 26
     for icon_id in (
         "home",
         "configure",

@@ -117,7 +117,7 @@ READABLE_SESSION_CHECKPOINT_VERSIONS: Final = (1, 2)
 """Payload versions this build restores."""
 
 EQUILIBRATION_HISTORY: Final = "equilibration.history"
-"""Array holding the ancestral phase's `H_S` history, when there was one."""
+"""Array holding the ancestral phase's $H_S$ history, when there was one."""
 
 VECTOR_PREFIX: Final = "vector."
 """Prefix of the vector block's arrays inside a checkpoint."""

@@ -104,9 +104,10 @@ class IdentityRecursion:
 def identities_from_heterozygosities(
     h_s: float, h_t: float, deme_count: int
 ) -> tuple[float, float]:
-    """Return `(within, between)` identities implied by `H_S` and `H_T`.
+    r"""Return `(within, between)` identities implied by $H_S$ and $H_T$.
 
-    Inverts `H_S = 1 - within` and `H_T = 1 - (within + (d - 1) between) / d`.
+    Inverts $H_S = 1 - \mathrm{within}$ and
+    $H_T = 1 - (\mathrm{within} + (d - 1) \mathrm{between}) / d$.
     For equal demes and symmetric migration, only these two averages
     matter: the recursion commutes with permuting demes, so an uneven
     starting state relaxes exactly as its symmetrized average does.
@@ -131,7 +132,7 @@ def identities_to_statistics(
 
     The pooled forms of `h_s`, `h_t`, `g_st` and `jost_d` written in terms
     of the two identities. A zero denominator (no diversity left) gives
-    `0.0` for `G_ST` and `D` rather than `nan`.
+    `0.0` for $G_{ST}$ and $D$ rather than `nan`.
 
     Args:
         within: Within-deme identity.
@@ -153,23 +154,34 @@ def identities_to_statistics(
 def identity_recursion(
     population_size: int, m: float, mu: float, d: int
 ) -> IdentityRecursion:
-    """Solve the engine's identity recursion for one configuration.
+    r"""Solve the engine's identity recursion for one configuration.
 
     One generation is migrate, drift, mutate — the textbook Wright-Fisher
     island model. Migration maps the two identities by fixed coefficients
-    of `m` and `d`; drift adds `1/N` to within-deme identity (the chance
+    of $m$ and $d$; drift adds $1/N$ to within-deme identity (the chance
     two copies drawn with replacement are the same copy) and keeps
-    `1 - 1/N` of the rest; mutation then keeps two distinct copies
-    identical only if neither mutated, a factor `(1 - mu)^2` (one copy
-    compared with itself stays identical, so the `1/N` term is not
+    $1 - 1/N$ of the rest; mutation then keeps two distinct copies
+    identical only if neither mutated, a factor $(1 - \mu)^2$ (one copy
+    compared with itself stays identical, so the $1/N$ term is not
     scaled):
 
-        within'  = 1/N + (1 - 1/N) (1 - mu)^2 within_migrated
-        between' = (1 - mu)^2 between_migrated
+    ```math
+    \begin{array}{rl}
+    \mathrm{within}^\prime
+        &= \frac{1}{N} + \left(1 - \frac{1}{N}\right)(1 - \mu)^2
+            \mathrm{within}_{\mathrm{migrated}}, \\
+    \mathrm{between}^\prime
+        &= (1 - \mu)^2 \mathrm{between}_{\mathrm{migrated}}.
+    \end{array}
+    ```
 
     Without migration, and for two *distinct* copies
-    (`F = (within - 1/N) / (1 - 1/N)`), this is the textbook
-    `F' = (1 - mu)^2 [1/N + (1 - 1/N) F]`.
+    with $F = (\mathrm{within} - 1/N) / (1 - 1/N)$, this is the textbook
+
+    ```math
+    F^\prime = (1 - \mu)^2
+        \left[\frac{1}{N} + \left(1 - \frac{1}{N}\right)F\right].
+    ```
 
     Args:
         population_size: Gene copies `N` per deme.
@@ -267,12 +279,12 @@ type LocusFrequencies[AlleleKey: SupportsIndex] = Sequence[
 def identity_matrix_from_frequencies[AlleleKey: SupportsIndex](
     frequencies: LocusFrequencies[AlleleKey],
 ) -> NDArray[np.float64]:
-    """Return the `d` by `d` identity matrix of a starting population.
+    r"""Return the $d$ by $d$ identity matrix of a starting population.
 
-    Entry `[i][j]` is `sum_k x_ik x_jk` averaged over loci: the chance that
+    Entry `[i][j]` is $\sum_k x_{ik} x_{jk}$ averaged over loci: the chance that
     one gene copy drawn from deme `i` and one from deme `j` are the same
     allele. The diagonal is the with-replacement within-deme identity,
-    `1 - H_S`'s per-deme term.
+    $1 - H_S$'s per-deme term.
 
     Args:
         frequencies: `frequencies[deme][locus]` maps allele to frequency
@@ -303,16 +315,33 @@ def matrix_identity_trajectory(
     initial_identities: NDArray[np.float64],
     generations: Sequence[int],
 ) -> dict[str, list[float]]:
-    """Return the expected statistics at each of `generations`.
+    r"""Return the expected statistics at each of `generations`.
 
-    One generation (migrate, drift, mutate) is `J -> (1 - mu)^2 M J M^T`
-    off the diagonal and `J_ii -> 1/N_i + (1 - 1/N_i)(1 - mu)^2
-    (M J M^T)_ii` on it, with `M` the row-stochastic migration matrix:
-    drift's same-copy term `1/N_i` is a copy compared with itself, which
-    mutation cannot make differ. That is
-    affine in the flattened matrix, `x' = A x + c`, so
-    `x_t = x* + V diag(lambda^t) V^-1 (x_0 - x*)` (eigenvalues may be
-    complex; the result is real). `D`, `G_ST`, `H_S`, `H_T` and `H_ST` use
+    One generation (migrate, drift, mutate) is
+
+    ```math
+    J \mapsto (1 - \mu)^2 M J M^{\mathsf{T}}
+    ```
+
+    off the diagonal and
+
+    ```math
+    J_{ii} \mapsto \frac{1}{N_i}
+        + \left(1 - \frac{1}{N_i}\right)(1 - \mu)^2
+            (M J M^{\mathsf{T}})_{ii}
+    ```
+
+    on it, with $M$ the row-stochastic migration matrix: drift's same-copy
+    term $1/N_i$ is a copy compared with itself, which mutation cannot make
+    differ. That is affine in the flattened matrix,
+    $x^\prime = Ax + c$, so
+
+    ```math
+    x_t = x^* + V \operatorname{diag}(\lambda^t) V^{-1} (x_0 - x^*)
+    ```
+
+    (eigenvalues may be
+    complex; the result is real). $D$, $G_{ST}$, $H_S$, $H_T$ and $H_{ST}$ use
     equal deme weights, as the engine's reports do.
 
     Args:

@@ -159,7 +159,7 @@ def test_cap_is_a_valid_nonconverged_result(
     `convergence_window` case in `test/model/test_params.py::
     test_post_init_validation_covers_all_scalar_contracts`);
     `precision=0.0` requires the two half-window means to
-    match exactly, which a real drifting `D` trajectory essentially never
+    match exactly, which a real drifting $D$ trajectory essentially never
     does in two generations.
     """
     params = SimulationParams.from_mapping(
@@ -466,10 +466,10 @@ def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None:
 
 
 def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() -> None:
-    """A batch watching only an always-undefined `G_ST` runs to the full cap.
+    """A batch watching only an always-undefined $G_{ST}$ runs to the full cap.
 
     Regression test: every replicate here is fully monomorphic at
-    its one locus, so `G_ST` is undefined for every one of them and its
+    its one locus, so $G_{ST}$ is undefined for every one of them and its
     stopping-criterion window never fills. The batch correctly falls back
     to the `n_replicates` cap rather than the prior behavior, where
     substituting `0.0` for every undefined replicate produced a constant
@@ -557,7 +557,7 @@ def test_replicate_summary_covers_every_numeric_final_report_key(
 ) -> None:
     """Every numeric `FinalReport` field has a `replicate_summary` entry.
 
-    Regression test for S4: `H_ST` was computed into every replicate's
+    Regression test for S4: $H_{ST}$ was computed into every replicate's
     `FinalReport` and printed in every `report.json`, but silently
     absent from the batch-level summary, with no test asserting the
     two stay in correspondence. Parses `FinalReport`'s own field
@@ -717,7 +717,7 @@ def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
     """A statistic shorter than `convergence_generations` is dropped, not guessed at.
 
     `ConvergenceMonitor.record` can genuinely omit one tracked statistic
-    on some round without omitting the others (`G_ST`, whenever every
+    on some round without omitting the others ($G_{ST}$, whenever every
     tracked locus is currently monomorphic -- `convergence_values`'s
     own docstring), leaving that one statistic's own history shorter
     than `convergence_generations` for that one replicate. Without a
@@ -727,7 +727,7 @@ def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
     entirely (`pooled_convergence_histories`'s own docstring) rather
     than guessing an alignment that could silently pair a real value
     with the wrong generation. Simulated here by shortening one real
-    replicate's own `G_ST` history by one entry after the fact
+    replicate's own $G_{ST}$ history by one entry after the fact
     (`dataclasses.replace`, `RunResult` is frozen) -- deliberately not
     a hand-built `RunResult` from scratch, so every other field stays
     exactly what a real run actually produced.
@@ -1156,7 +1156,7 @@ def test_bootstrap_replicate_summary_point_estimate_matches_the_pooled_ratio(
     from the same batch's own reports — the "ratio of means across
     everything" the identity recursion predicts — not `mean(D_i)`
     (`replicate_summary`'s own estimator, a mean of ratios, subject to
-    a real Jensen-gap bias `D`/`G_ST` are the only statistics with).
+    a real Jensen-gap bias $D$ / $G_{ST}$ are the only statistics with).
     """
     params = SimulationParams.from_mapping(
         {**tiny_params.to_dict(), "n_replicates": 8, "stop_batch_early": False}
@@ -1294,11 +1294,11 @@ def test_bootstrap_replicate_summary_requires_at_least_two_results(
 
 
 def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None:
-    """A run can actually watch `H_ST` for convergence, not just report it.
+    """A run can actually watch $H_{ST}$ for convergence, not just report it.
 
     Regression test for `FIM-51`: `_report_statistic` used to raise
     `unsupported convergence statistic: H_ST` the instant a per-
-    generation convergence check tried to read it, even though `H_ST` is
+    generation convergence check tried to read it, even though $H_{ST}$ is
     a real, always-defined `DifferentiationReport` field (`fim.model.
     params._CONVERGENCE_STATISTICS` now allows selecting it in the first
     place — this is that config's own engine-level counterpart).
@@ -1315,13 +1315,13 @@ def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None:
 def test_final_report_gs_and_gd_match_the_pooled_h_s_and_h_t(
     tiny_params: SimulationParams,
 ) -> None:
-    """`FinalReport`'s `Gs`/`Gd` are the linear closed forms of its own `H_S`/`H_T`.
+    """`FinalReport`'s $G_s$ / $G_d$ are linear closed forms of its $H_S$ / $H_T$.
 
     Regression/exit-criterion test for `R4` of `dev/doc/apps/selby/
     jost-finite-island-model/20260903-claude-opus-5-gene-identity-
     recursion-fim-implications.md`: run across several loci so `H_S`/
-    `H_T` are themselves already averages (`report_for_state`'s own
-    `mean_h_s`/`mean_h_t`) — `Gs`/`Gd` being linear in `H_S`/`H_T` means
+    $H_T$ are themselves already averages (`report_for_state`'s own
+    `mean_h_s`/`mean_h_t`) — $G_s$ / $G_d$ being linear in $H_S$ / $H_T$ means
     computing them from those already-pooled means must agree exactly
     with the formula in `fim.statistics.differentiation.gs`/`gd`'s own
     docstrings, not merely approximately.
@@ -1353,7 +1353,7 @@ def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None
 def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
     """A run whose only watched statistic never becomes defined hits the cap.
 
-    Regression test: `G_ST` is undefined every generation here (the
+    Regression test: $G_{ST}$ is undefined every generation here (the
     single locus is fixed for the same allele in both demes throughout,
     since `mu=0.0`), so its trailing window never fills and the criterion
     can never report stability — there is no data to judge stability
@@ -1394,15 +1394,15 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
 def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
     """A replicate with one monomorphic and one polymorphic locus never crashes.
 
-    Regression test for the multi-locus G_ST averaging defect: with two loci, one fixed
-    for the same allele in every deme (undefined at that locus alone) and
-    one polymorphic, the *replicate's* G_ST used to come out `None` (the
+    Regression test for the multi-locus $G_{ST}$ averaging defect: with two loci,
+    one fixed for the same allele in every deme (undefined at that locus alone) and
+    one polymorphic, the *replicate's* $G_{ST}$ used to come out `None` (the
     old rule voided the whole multi-locus average on any single
-    undefined locus) while the replicate's averaged H_T was still
+    undefined locus) while the replicate's averaged $H_T$ was still
     nonzero (the polymorphic locus's own contribution) — so the adaptive
-    replicate-batch monitor's old "rescue only a fully-`H_T == 0`
+    replicate-batch monitor's old "rescue only a fully $H_T = 0$
     replicate" check missed this case and raised
-    "G_ST is undefined for replicate ...". `G_ST` is now defined here (it
+    "G_ST is undefined for replicate ...". $G_{ST}$ is now defined here (it
     drops the one undefined locus and averages the other), so this
     reaches neither the old crash nor even the drop path — it simply
     works, end to end through the adaptive stopping monitor.
@@ -1438,15 +1438,15 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
 
 
 def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
-    """A replicate-batch monitor never raises or fabricates a value for G_ST.
+    """A replicate-batch monitor never raises or fabricates a value for $G_{ST}$.
 
-    Every replicate here is fully monomorphic at its one locus (`G_ST`
+    Every replicate here is fully monomorphic at its one locus ($G_{ST}$
     undefined for all three), so its trailing window never fills and the
     batch runs to the full `n_replicates` cap rather than ever declaring
     a fabricated early stop — mirroring
     `test_g_st_convergence_falls_back_to_the_cap_at_total_fixation`'s
     single-run case, but through the replicate-batch monitor instead of
-    the within-run one. `replicate_summary` then omits `G_ST` entirely
+    the within-run one. `replicate_summary` then omits $G_{ST}$ entirely
     (zero defined samples), while every always-defined statistic is
     unaffected.
     """
@@ -1583,10 +1583,10 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
 
 
 def _monomorphic_any_params(engine_backend: EngineBackend) -> SimulationParams:
-    """Return a run where, under `any`, D settles and G_ST never can.
+    """Return a run where, under `any`, $D$ settles and $G_{ST}$ never can.
 
     One founding allele and no mutation keep every deme fixed for it: D is
-    exactly 0 every generation, while G_ST is undefined (0/0) every
+    exactly 0 every generation, while $G_{ST}$ is undefined (0/0) every
     generation and so never accumulates a history to be stable on.
     """
     return SimulationParams(
@@ -1854,7 +1854,7 @@ def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
 def test_report_for_state_captures_the_all_demes_nei_family() -> None:
     """All eight all-demes Nei fields, matching the library functions.
 
-    The arithmetic pooled identity is `Gd / Gs` (Jost's `1 - D` for the
+    The arithmetic pooled identity is $G_d / G_s$ (Jost's $1 - D$ for the
     pooled locus rule), a check that shares no code with the Nei family.
     """
     loci = (LocusSpec(1, 100), LocusSpec(2, 100))
@@ -1937,7 +1937,10 @@ def test_history_free_values_equal_the_reports_gs_gd_and_nei() -> None:
 
 
 def test_report_for_state_captures_the_pooled_heterozygosity_measures() -> None:
-    """D_m, R_ST, both G'_ST and coancestry F_ST from the pooled H_S/H_T."""
+    r"""Capture $D_m$, $R_{ST}$, both $G^\prime_{ST}$ and coancestry $F_{ST}$.
+
+    All are computed from the pooled $H_S$ / $H_T$.
+    """
     loci = (LocusSpec(1, 100), LocusSpec(2, 100))
     frequencies = (
         ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
@@ -1963,7 +1966,7 @@ def test_report_for_state_captures_the_pooled_heterozygosity_measures() -> None:
 def test_reports_summary_omits_a_nei_distance_infinite_in_any_report() -> None:
     """`None` for a Nei distance is infinite: no finite mean, so omitted.
 
-    `G_ST`'s `None` (undefined) still just drops that replicate, as before.
+    $G_{ST}$'s `None` (undefined) still just drops that replicate, as before.
     """
     loci = (LocusSpec(1, 100),)
     params = SimulationParams(gene_copies=10, m=0.1, mu=0.0, d=2, seed=7, loci=loci)
@@ -2007,11 +2010,11 @@ def test_report_for_state_reports_an_infinite_nei_distance_as_none() -> None:
 
 
 def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average() -> None:
-    """`G_ST` averages only the loci where it is defined, not zero-filled.
+    """$G_{ST}$ averages only the loci where it is defined, not zero-filled.
 
     Regression test: one locus fixed for the same allele in every
-    deme (`G_ST` undefined there — `H_T == 0`) alongside one polymorphic
-    locus. The reported `G_ST` must equal the polymorphic locus's own
+    deme ($G_{ST}$ undefined there — $H_T = 0$) alongside one polymorphic
+    locus. The reported $G_{ST}$ must equal the polymorphic locus's own
     value exactly, not that value averaged against a fabricated `0.0` for
     the undefined locus (which would understate real differentiation),
     and not `None` (which would discard the polymorphic locus's real
@@ -2060,17 +2063,17 @@ def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average() -> N
 
 
 def _two_locus_state_with_divergent_per_locus_estimates() -> ModelState:
-    """Two loci whose own `H_S`/`H_T` genuinely differ, one deme pair, two alleles each.
+    """Two loci whose $H_S$ / $H_T$ genuinely differ, one deme pair, two alleles each.
 
     Deliberately not the same per-locus differentiation everywhere:
     `"ratio_of_means"`/`"mean_of_ratios"` agree exactly whenever every
-    locus has identical `H_S`/`H_T` (both estimators reduce to the same
+    locus has identical $H_S$ / $H_T$ (both estimators reduce to the same
     single value averaged with itself), so a regression test built from
     such a state could pass by coincidence even without `_convergence_
     values` respecting `locus_aggregation` at all. These two loci's own
     allele frequencies are deliberately different enough (one lightly,
     one heavily differentiated) that the two estimators give genuinely
-    different `D`/`G_ST` — see `test_convergence_watches_the_same_d_
+    different $D$ / $G_{ST}$ — see `test_convergence_watches_the_same_d_
     and_g_st_report_for_state_uses`. Locus length `1` (capacity `4`), not
     this file's own usual `100` — inert for the dict-based statistics
     either way (`test_locus_length_does_not_affect_the_report`), but
@@ -2110,17 +2113,17 @@ def _vector_block_for(state: ModelState, params: SimulationParams) -> VectorBloc
 
 
 def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses() -> None:
-    """The convergence monitor's own `D`/`G_ST` match `report_for_state`'s, always.
+    """The convergence monitor's own $D$ / $G_{ST}$ match `report_for_state`'s, always.
 
     Before this fix, `convergence_values` (and its vectorized
-    counterpart) always aggregated `D`/`G_ST` across loci via a plain
+    counterpart) always aggregated $D$ / $G_{ST}$ across loci via a plain
     per-locus mean (`"mean_of_ratios"`), regardless of `params.
     locus_aggregation` — `report_for_state`'s own `D`/`G_ST` fields, by
     contrast, already respected it. Under the default `locus_
     aggregation="ratio_of_means"`, the two estimators are materially
     different (this project's own `params.py` docstring: 0.25% vs 1.88%
     from the exact gene-identity recursion at reference scale), so a
-    multi-locus run could stop its trailing window on a `D` its own
+    multi-locus run could stop its trailing window on a $D$ its own
     final report never actually showed (this project's own multi-model
     engine review, 2026-09-04, `FIM-10`/finding C-02/finding P1-2 — one
     of three reviewers naming it the only finding among four full
@@ -2181,7 +2184,7 @@ def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
 def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`convergence_values` never computes `E_ST`/`K_ST` when nothing watches them.
+    """`convergence_values` never computes $E_{ST}$ / $K_{ST}$ unless watched.
 
     `FIM-24`/`FIM-32` (Phase 7 item 4,
     `20260904-claude-sonnet-5-fim-engine-review-remediations.md`): an
@@ -2189,7 +2192,7 @@ def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
     entry point, not just at `statistics_report` directly — proves the
     `params.convergence_statistics` filter this fix adds actually
     reaches `differentiation._e_st_from_demes`/`_k_st_from_demes`,
-    end to end, for the common case (only `D` watched, this project's
+    end to end, for the common case (only $D$ watched, this project's
     own stated default) matching this project's own established
     `FIM-53`/`FIM-27`/`FIM-28`/`FIM-36` precedent for this kind of claim.
     """
@@ -2275,9 +2278,9 @@ def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watche
 
 
 def test_convergence_values_always_includes_the_always_tracked_four() -> None:
-    """`D`/`G_ST`/`H_S`/`H_T`/`H_ST` are present regardless of what is watched.
+    """$D$, $G_{ST}$, $H_S$, $H_T$ and $H_{ST}$ are present whatever is watched.
 
-    The display-only counterpart to the two "skips E_ST/K_ST" tests
+    The display-only counterpart to the two "skips $E_{ST}$ / $K_{ST}$" tests
     above: those five cost nothing extra to compute (`statistics_
     report` already computes them unconditionally — `b12679b`'s own
     docstring), so `_watched_statistic_values` no longer discards them
@@ -2441,12 +2444,12 @@ def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
     The `A_CGD`/`Delta`/`MI` counterpart to `test_track_expensive_
     statistics_computes_e_st_and_k_st_even_when_unwatched`, above --
     proves the opt-in-but-unwatched path reaches all three, exactly
-    like it already does for `E_ST`/`K_ST`. They are also watchable
+    like it already does for $E_{ST}$ / $K_{ST}$. They are also watchable
     (`test_convergence_statistic_accepts_the_expensive_bonus_
     measurements`, `test_params.py`) since a real, reported request
     reversed this session's own earlier "display-only bonus
     measurement" choice — this test's own `convergence_statistic`
-    stays unwatched (`D`, below) specifically to isolate the opt-in
+    stays unwatched ($D$, below) specifically to isolate the opt-in
     path from the watched one.
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
@@ -2509,12 +2512,12 @@ def test_run_result_convergence_histories_include_always_tracked_statistics() ->
     """A real, full scalar run's own `convergence_histories` include the free five.
 
     End-to-end proof through `_run_one` itself (not just the per-
-    generation helper functions above): a run watching only `D` still
-    comes back with real `G_ST`/`H_S`/`H_T`/`H_ST` history too, of the
+    generation helper functions above): a run watching only $D$ still
+    comes back with real $G_{ST}$ / $H_S$ / $H_T$ / $H_{ST}$ history too, of the
     same length as the watched one — the exact GUI-visible symptom the
     bug report described (a trajectory panel/completed view that
     narrowed down to only the watched statistic once a run finished).
-    `H_ST` joined the other three later (`fim.engine.
+    $H_{ST}$ joined the other three later (`fim.engine.
     _ALWAYS_TRACKED_STATISTICS`'s own docstring has the "found live"
     account of a real, reported second instance of this same symptom).
     """
@@ -2544,7 +2547,7 @@ def test_run_result_convergence_histories_include_always_tracked_statistics() ->
 def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in() -> None:
     """`track_expensive_statistics=True` extends a real run's own recorded history.
 
-    Same run as above, only with the opt-in set — `E_ST`/`K_ST`/
+    Same run as above, only with the opt-in set — $E_{ST}$ / $K_{ST}$/
     `A_CGD`/`Delta`/`MI` now join the always-tracked five in `RunResult.
     convergence_histories`, each with a real per-generation history the
     same length as every other tracked statistic's own.
@@ -4819,7 +4822,7 @@ def test_every_engine_backend_visits_the_same_generations_and_output_shape() -> 
 def test_the_report_carries_both_expected_value_forms_for_d_and_g_st(
     tiny_params: SimulationParams,
 ) -> None:
-    """`D` and `G_ST` report both forms; a non-identity statistic reports one."""
+    """$D$ and $G_{ST}$ report both forms; a non-identity statistic reports one."""
     result = _run(tiny_params)
 
     window = result.report["window_statistics"]
@@ -4999,7 +5002,7 @@ def test_a_batch_summary_is_the_mean_of_the_replicates_window_means() -> None:
 
 
 def test_a_value_of_means_batch_pools_the_identities_before_the_statistic() -> None:
-    """Form two for a batch: `f` of the pooled `H_S`/`H_T`, delta-method interval."""
+    """Form two for a batch: `f` of the pooled $H_S$ / $H_T$, delta-method interval."""
     params = _matched_batch_params(convergence_estimate="value_of_means")
     output = simulate_params(params=params, clock=_clock)
     assert isinstance(output, tuple)
@@ -5117,7 +5120,7 @@ def test_a_run_can_watch_any_global_statistic_and_records_its_history(
 def test_watched_extra_statistics_agree_across_backends(
     tiny_params: SimulationParams, backend: EngineBackend
 ) -> None:
-    """`Gs`, `D_m` and a Nei identity have the same history under every kernel."""
+    """$G_s$, $D_m$ and a Nei identity have the same history under every kernel."""
     if backend == "generational-vector":
         pytest.importorskip("numba")
     watched = ("Gs", "D_m", "NEI_I_ALL_GEO")

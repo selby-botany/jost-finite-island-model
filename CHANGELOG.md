@@ -1864,6 +1864,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   superscripts from the statistic catalog. Native statistic menus spell out
   script positions and show the selected mathematical symbol alongside.
   Configuration keys, command-line names, and saved output fields are unchanged.
+- Generated references now render statistical symbols with the same
+  scientific notation as the hand-written docs. Docstrings use math
+  forms such as `$G_{ST}$`, `$H_S$`, `$H_T$`, `$D_m$`, and
+  `$G^\prime_{ST}$` in prose contexts, while configuration keys and
+  output-field names remain code-form identifiers where the text
+  refers to machine interfaces. Convergence, identity-recursion, migration,
+  and comparison equations use TeX math fences instead of code blocks.
+  The generated `src/fim/API.md` and `test/TESTS.md` now render correctly
+  under GitHub Flavored Markdown.
 
 - **Run simulation no longer starts a second run during a run.** The desktop
   app accepted a second run while one was in flight, from Run, the Run menu,

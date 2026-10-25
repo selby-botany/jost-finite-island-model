@@ -154,7 +154,7 @@ def test_generate_initial_state_uses_seed_when_rng_is_omitted() -> None:
 def test_founding_condition_gs_equals_gd_equals_one_minus_h_s_0(
     heterozygosity: float, deme_count: int
 ) -> None:
-    """`R7`'s own exit condition: `Gs(0) = Gd(0) = 1 - H_S(0)`, exactly.
+    """`R7`'s own exit condition: $G_s(0) = G_d(0) = 1 - H_S(0)$, exactly.
 
     `dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-5-
     gene-identity-recursion-fim-implications.md` §9, `R7` — the whole
@@ -343,7 +343,7 @@ def test_on_generation_observes_every_ancestral_generation_without_changing_anyt
 def test_equilibration_outcome_history_ends_at_the_final_heterozygosity(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """`history`'s last entry is `final_heterozygosity`, both valid `H_S` values."""
+    """`history`'s last entry is `final_heterozygosity`, both valid $H_S$ values."""
     params = _params(gene_copies=20, d=2, mu=0.02)
 
     _state, outcome = _equilibrium_condition().generate_with_outcome(params, rng(0))

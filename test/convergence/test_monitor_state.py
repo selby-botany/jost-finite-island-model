@@ -40,7 +40,7 @@ def _monitor(**changes: object) -> BurnInMonitor:
 
 
 def _series(length: int, seed: int) -> list[dict[str, float]]:
-    """A seeded AR(1) series per statistic; `H_S` is undefined every 7th step."""
+    """A seeded AR(1) series per statistic; $H_S$ is undefined every 7th step."""
     rng = random.Random(seed)
     level = {"F_ST": 0.3, "H_S": 0.6, "H_T": 0.7}
     value = dict(level)

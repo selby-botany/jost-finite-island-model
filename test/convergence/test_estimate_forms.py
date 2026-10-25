@@ -1,4 +1,4 @@
-"""Tests of the two expected-value forms of `D` and `G_ST` (design 6.11).
+"""Tests of the two expected-value forms of $D$ and $G_{ST}$ (design 6.11).
 
 Every test is a pure function of its commit: fixed series, fixed seeds, and
 expected numbers computed in the test from the same formulas.
@@ -28,7 +28,7 @@ DEMES = 4
 
 @pytest.fixture
 def identity() -> dict[str, IdentityStatistic]:
-    """`D` and `G_ST` for a four-deme model, as the engine builds them."""
+    """$D$ and $G_{ST}$ for a four-deme model, as the engine builds them."""
     params = SimulationParams.from_mapping(
         {"N": 20, "ploidy": "haploid", "d": DEMES, "m": 0.1, "mu": 0.01, "seed": 1}
     )
@@ -38,7 +38,7 @@ def identity() -> dict[str, IdentityStatistic]:
 def _heterozygosities(
     length: int, *, seed: int, floor: float = 0.2
 ) -> tuple[list[float], list[float]]:
-    """Seeded, positively correlated `H_S`/`H_T` series with `H_S <= H_T`."""
+    r"""Seeded, positively correlated $H_S$ / $H_T$ series with $H_S \le H_T$."""
     rng = random.Random(seed)
     within, total = 0.4, 0.6
     h_s, h_t = [], []
@@ -53,7 +53,7 @@ def _heterozygosities(
 def _monitor(
     identity: dict[str, IdentityStatistic], **changes: object
 ) -> BurnInMonitor:
-    """A monitor watching `D` with `G_ST`, `H_S` and `H_T` recorded alongside."""
+    """A monitor watching $D$ with $G_{ST}$, $H_S$ and $H_T$ recorded alongside."""
     settings: dict[str, object] = {
         "max_generations": 100_000,
         "precision": 0.0,
@@ -76,7 +76,7 @@ def _record(
     *,
     stop_at: int | None = None,
 ) -> None:
-    """Record each generation's `D`, `G_ST` (when defined), `H_S` and `H_T`."""
+    """Record each generation's $D$, $G_{ST}$ (when defined), $H_S$ and $H_T$."""
     for generation, (within, total) in enumerate(zip(h_s, h_t, strict=True)):
         values = {"H_S": within, "H_T": total}
         d_value = identity["D"].function(within, total)
@@ -137,7 +137,7 @@ def test_the_selected_form_is_the_default_headline(
 def test_a_statistic_that_is_not_an_identity_function_has_one_form(
     identity: dict[str, IdentityStatistic],
 ) -> None:
-    """`H_S` is recorded but is no function of the identities: form one only."""
+    """$H_S$ is recorded but is no function of the identities: form one only."""
     h_s, h_t = _heterozygosities(200, seed=13)
     monitor = _monitor(identity, estimate="value_of_means")
     _record(monitor, identity, h_s, h_t)
@@ -151,7 +151,7 @@ def test_a_statistic_that_is_not_an_identity_function_has_one_form(
 def test_an_undefined_generation_is_dropped_from_form_one_and_counted(
     identity: dict[str, IdentityStatistic],
 ) -> None:
-    """`G_ST` is undefined where `H_T` is zero; form two stays defined."""
+    """$G_{ST}$ is undefined where $H_T$ is zero; form two stays defined."""
     h_s, h_t = _heterozygosities(200, seed=14)
     h_s[50] = h_t[50] = 0.0
     h_s[60] = h_t[60] = 0.0
@@ -209,7 +209,7 @@ def test_select_form_applies_the_two_thresholds_exactly() -> None:
 def test_degenerate_share_counts_denominators_below_the_threshold(
     identity: dict[str, IdentityStatistic],
 ) -> None:
-    """`G_ST` divides by `H_T`; `D` by `1 - H_S`."""
+    """$G_{ST}$ divides by $H_T$; $D$ by $1 - H_S$."""
     h_s = np.array([0.1, 0.5, 0.995, 0.3])
     h_t = np.array([0.2, 0.005, 0.999, 0.4])
     assert degenerate_share(h_s, h_t, identity["G_ST"], 0.01) == 0.25
@@ -239,7 +239,7 @@ def test_the_gradients_match_finite_differences_of_the_formulas(
 def test_the_delta_method_error_of_a_flat_denominator_is_the_scaled_geyer_error(
     identity: dict[str, IdentityStatistic],
 ) -> None:
-    """With `H_T` constant, `G_ST`'s error is `H_S`'s Geyer error times `1 / H_T`."""
+    """With $H_T$ constant, $G_{ST}$'s error is $H_S$'s Geyer error times $1 / H_T$."""
     h_s, _ = _heterozygosities(500, seed=16)
     total = 0.7
     window_s = np.array(h_s)
@@ -268,7 +268,7 @@ def test_value_of_means_is_none_for_a_short_window_and_for_an_undefined_mean(
 def test_a_monitor_with_identity_statistics_needs_the_heterozygosities(
     identity: dict[str, IdentityStatistic],
 ) -> None:
-    """The forms are computed from `H_S` and `H_T`, so both must be recorded."""
+    """The forms are computed from $H_S$ and $H_T$, so both must be recorded."""
     with pytest.raises(ValueError, match="H_S and H_T"):
         _monitor(identity, extra_statistics=("G_ST",))
     with pytest.raises(ValueError, match="not recorded"):

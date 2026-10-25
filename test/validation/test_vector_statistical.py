@@ -1,4 +1,4 @@
-"""Backend V reproduces the textbook infinite-alleles recursions, statistically.
+r"""Backend V reproduces the textbook infinite-alleles recursions, statistically.
 
 The exactness tests (`test/model/test_vector_block.py`,
 `test/engine/test_vector_parity.py`) prove Backend V equals Backends L and
@@ -15,7 +15,7 @@ value, in units of its standard error across loci.
 2. An island model (`d = 5`, `N = 100`, `m = 0.01`, `mu = 0.001`) from a
    monomorphic start: mean within- and between-deme identity at several
    generations against `fim.statistics.identity_recursion`, and the pooled
-   `D = 1 - between / within`.
+   $D = 1 - \mathrm{between} / \mathrm{within}$.
 3. The dear-nolan-low worked example's own transient (`d = 5`,
    `m = 0.0001`, `mu = 0.000001`, two founding alleles with a
    Dirichlet(1, 1) frequency start).
@@ -120,7 +120,7 @@ def _check_island_trajectory(
     start_between: float,
     checkpoints: tuple[int, ...],
 ) -> list[float]:
-    """Return every |z| for within, between and pooled `D` at the checkpoints."""
+    """Return every |z| for within, between and pooled $D$ at the checkpoints."""
     demes = block.deme_count
     loci = block.freq.shape[0]
     recursion = identity_recursion(GENE_COPIES, m, mu, demes)
@@ -160,7 +160,7 @@ def _check_island_trajectory(
 def test_island_model_identities_follow_the_recursion_from_a_monomorphic_start() -> (
     None
 ):
-    """Within, between and pooled `D` track `identity_recursion` at 3 checkpoints."""
+    """Within, between and pooled $D$ track `identity_recursion` at 3 checkpoints."""
     loci, m, mu = 1000, 0.01, 0.001
     block = _block(_monomorphic(loci, 5), m, mu)
     rng = np.random.Generator(np.random.PCG64(SEED + 1))

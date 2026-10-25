@@ -4,7 +4,7 @@ Bold, dimming and a color swatch already say whether a statistic is plotted.
 A fourth cue says which statistics the convergence rule watches: an
 underline on the row's name, with an explanation on the name cell for
 hover and for assistive technology. It shows during the run and after it,
-for every statistic in `convergence_statistic` (by default `D` and `G_ST`)
+for every statistic in `convergence_statistic` (by default $D$ and $G_{ST}$)
 and for no other.
 """
 
@@ -63,7 +63,7 @@ setField('locus_lengths', '200');
 
 
 def _assert_default_watch(marks: dict[str, dict[str, Any]]) -> None:
-    """D and G_ST are marked, with an explanation; nothing else is."""
+    """$D$ and $G_{ST}$ are marked, with an explanation; nothing else is."""
     for name in ("D", "G_ST"):
         assert marks[name]["watched"] is True, name
         assert marks[name]["underlined"] is True, name
@@ -129,10 +129,10 @@ def test_a_batch_marks_its_own_watched_statistics_not_the_previous_runs(
     """A batch underlines the statistics its stop rule watches, only those.
 
     The marks come from the run on screen. The batch's completed payload is
-    captured and shown again after the marks of an earlier run (here `H_S` and
-    `K_ST`, which this batch does not watch) are put back, as opening a saved
-    batch after another run would do. The default batch watches `D` and
-    `G_ST`.
+    captured and shown again after the marks of an earlier run (here $H_S$ and
+    $K_{ST}$, which this batch does not watch) are put back, as opening a saved
+    batch after another run would do. The default batch watches $D$ and
+    $G_{ST}$.
     """
     done_event = threading.Event()
 

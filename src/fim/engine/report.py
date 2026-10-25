@@ -260,8 +260,8 @@ def replicate_statistic(report: FinalReport, statistic: str) -> float | None:
     A replicate that averaged contributes its window mean, in the form it
     selected, not the last generation's value: the last generation is one
     noisy draw, the window mean is what the replicate measured (design 6.7).
-    For a statistic that is recorded every generation (`D`, `G_ST`, `H_S`,
-    `H_T`, `H_ST` and anything watched) a replicate with a window but no
+    For a statistic that is recorded every generation ($D$, $G_{ST}$, $H_S$,
+    $H_T$, $H_{ST}$ and anything watched) a replicate with a window but no
     defined window mean contributes nothing, as an undefined replicate always
     has. Any other statistic, and any report with no window at all (a live
     progress report), contributes its final-state value.
@@ -309,7 +309,7 @@ def report_statistic(report: FinalReport, statistic: str) -> float | None:
         statistic: A key from `fim.statistics.catalog.report_keys`.
 
     Returns:
-        The value; ``None`` where the statistic is undefined (`G_ST` at a
+        The value; ``None`` where the statistic is undefined ($G_{ST}$ at a
         monomorphic locus) or infinite (a Nei distance with no allele
         shared).
 

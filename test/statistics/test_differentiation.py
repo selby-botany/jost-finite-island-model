@@ -113,10 +113,10 @@ class DifferentiationStatisticsTests(unittest.TestCase):
 
         `R4` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
         claude-opus-5-gene-identity-recursion-fim-implications.md`'s own
-        exit criterion: ``Gs = 1 - H_S``, ``Gd = (d * (1 - H_T) - (1 -
-        H_S)) / (d - 1)`` (§4.4) — checked against every existing golden
-        fixture already used for `h_s`/`h_t`/`g_st`/`jost_d` above, not a
-        fresh set of hand-derived numbers, so this test cannot introduce
+        exit criterion: $G_s = 1 - H_S$,
+        $G_d = (d(1 - H_T) - (1 - H_S)) / (d - 1)$ (§4.4) — checked against every
+        existing golden fixture already used for `h_s`/`h_t`/`g_st`/`jost_d` above,
+        not a fresh set of hand-derived numbers, so this test cannot introduce
         its own arithmetic mistake independent of the formula it checks.
         """
         for fixture_name in (
@@ -143,7 +143,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
     def test_gd_requires_multiple_demes(self) -> None:
         """`gd` needs at least two demes, the same requirement `g_st`/`h_st` share.
 
-        A single deme has no "between" for `Gd` to describe, and the
+        A single deme has no "between" for $G_d$ to describe, and the
         formula's own `d - 1` denominator is undefined at `d = 1`.
         """
         with self.assertRaisesRegex(ValueError, "at least two demes"):
@@ -177,7 +177,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         self.assertAlmostEqual(hill_number(deme, 2), 1 / 0.375)
 
     def test_differentiation_endpoints_and_hill_partition(self) -> None:
-        """q-family endpoints agree with D, E_ST, K_ST and H's partition."""
+        """q-family endpoints agree with $D$, $E_{ST}$, $K_{ST}$ and H's partition."""
         table = [{0: 0.5, 1: 0.5}, {0: 0.25, 2: 0.75}]
         self.assertAlmostEqual(differentiation_q(table, 0), k_st(table))
         self.assertAlmostEqual(differentiation_q(table, 1), e_st(table))
@@ -196,14 +196,14 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         )
 
     def test_g_st_has_explicit_undefined_value_for_shared_fixation(self) -> None:
-        """G_ST is None, rather than NaN, for total heterozygosity of zero."""
+        """$G_{ST}$ is `None`, rather than NaN, for total heterozygosity of zero."""
         table = [{9: 1.0}, {9: 1.0}]
         self.assertIsNone(g_st(table))
         self.assertIsNone(statistics_report(table)["G_ST"])
         self.assertIsNone(g_st_log(table))
 
     def test_e_st_accepts_size_weights_but_d_is_always_equal_weighted(self) -> None:
-        """Only E_ST accepts optional relative deme-size weights."""
+        """Only $E_{ST}$ accepts optional relative deme-size weights."""
         table = [{0: 1.0}, {1: 1.0}, {1: 1.0}]
         self.assertNotAlmostEqual(e_st(table), e_st(table, [10, 1, 1]))
         self.assertAlmostEqual(jost_d(table), 2 / 3)
@@ -234,13 +234,13 @@ class DifferentiationStatisticsTests(unittest.TestCase):
     ) -> None:
         """The single-validation fast path agrees with each public function.
 
-        `statistics_report` no longer computes `H_S`/`H_T`/`G_ST`/`D`/
-        `E_ST`/`K_ST` by calling the public `h_s`/`h_t`/`g_st`/`jost_d`/
+        `statistics_report` no longer computes $H_S$ / $H_T$ / $G_{ST}$ / $D$/
+        $E_{ST}$ / $K_{ST}$ by calling the public `h_s`/`h_t`/`g_st`/`jost_d`/
         `e_st`/`k_st` functions (`20260903-claude-sonnet-5-fim-vg-
         performance-campaign-design.md` §6.1 item 3) — each of those,
         called directly here instead, independently re-validates the
         same table from scratch and (for `g_st`/`jost_d`) recomputes
-        `H_S`/`H_T` from scratch too, so agreement here is a genuine
+        $H_S$ / $H_T$ from scratch too, so agreement here is a genuine
         cross-check of the refactored fast path's own math, not
         circular. `test_golden_statistics`, above, already proves this
         for seven hand-picked fixtures; this proves it for tables that
@@ -302,7 +302,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
     def test_statistics_report_statistics_parameter_skips_unrequested_fields(
         self,
     ) -> None:
-        """`statistics` skips computing `E_ST`/`K_ST`/`Gs`/`Gd` when excluded.
+        """`statistics` skips $E_{ST}$ / $K_{ST}$ / $G_s$ / $G_d$ when excluded.
 
         `FIM-24`/`FIM-32` (Phase 7 item 4,
         `20260904-claude-sonnet-5-fim-engine-review-remediations.md`):
@@ -349,9 +349,9 @@ class DifferentiationStatisticsTests(unittest.TestCase):
     ) -> None:
         """Every field the `statistics` filter *keeps* matches the full report.
 
-        Bit-for-bit, not `assertAlmostEqual`: `H_S`/`H_T`/`H_ST`/`G_ST`/
-        `D` are computed by the exact same code path regardless of
-        `statistics`, so excluding `E_ST`/`K_ST`/`Gs`/`Gd` must change
+        Bit-for-bit, not `assertAlmostEqual`: $H_S$ / $H_T$ / $H_{ST}$ / $G_{ST}$/
+        $D$ are computed by the exact same code path regardless of
+        `statistics`, so excluding $E_{ST}$ / $K_{ST}$ / $G_s$ / $G_d$ must change
         nothing about them.
         """
         table = [
@@ -485,11 +485,11 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         )
 
     def test_h_st_raises_a_named_error_instead_of_zero_division(self) -> None:
-        """A zero H_ST denominator raises a specific, documented error.
+        """A zero $H_{ST}$ denominator raises a specific, documented error.
 
         Regression test for FIM-18: `h_st`'s own ``(total - within) /
         (1.0 - within)`` used to raise Python's own generic
-        `ZeroDivisionError` when `within` (`H_S`) reached exactly `1.0`
+        `ZeroDivisionError` when `within` ($H_S$) reached exactly `1.0`
         — confirmed "practically unreachable" through any finite,
         validated `FrequencyTable` (this function's own docstring names
         the exact mechanism), but reachable directly by calling the
@@ -500,11 +500,11 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             differentiation._h_st_from_within_and_total(1.0, 1.0)
 
     def test_g_st_max_matches_ryman_leimar_equation_7(self) -> None:
-        """`g_st_max` matches its own defining formula and boundary behavior.
+        r"""`g_st_max` matches its own defining formula and boundary behavior.
 
         `R6` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
         claude-opus-5-gene-identity-recursion-fim-implications.md`.
-        `H_S -> 0` reaching the ceiling `1` exactly (nothing standing in
+        $H_S \to 0$ reaching the ceiling `1` exactly (nothing standing in
         the way of complete differentiation when there is no within-deme
         diversity at all) is the sharpest boundary case available.
         """
@@ -514,11 +514,11 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         )
 
     def test_g_st_prime_matches_ryman_leimar_equation_8(self) -> None:
-        """`g_st_prime` is exactly `g_st_value / g_st_max`, including at `H_S = 0`.
+        """`g_st_prime` is exactly `g_st_value / g_st_max`, including at $H_S = 0$.
 
-        At `H_S = 0`, `g_st_max` is exactly `1`, so `g_st_prime` must
-        equal its own input `G_ST` unchanged — standardizing changes
-        nothing when there is no within-deme diversity for `G_ST` to be
+        At $H_S = 0$, `g_st_max` is exactly `1`, so `g_st_prime` must
+        equal its own input $G_{ST}$ unchanged — standardizing changes
+        nothing when there is no within-deme diversity for $G_{ST}$ to be
         standardized against in the first place.
         """
         self.assertAlmostEqual(g_st_prime(0.5, 0.0, 5), 0.5, places=12)
@@ -529,15 +529,15 @@ class DifferentiationStatisticsTests(unittest.TestCase):
     def test_g_st_prime_manufactures_a_larger_apparent_difference_than_g_st(
         self,
     ) -> None:
-        """Reproduces Ryman & Leimar's own Figure 2 finding, qualitatively.
+        r"""Reproduces Ryman & Leimar's own Figure 2 finding, qualitatively.
 
-        `N=1000, s=10, m=0.0005`: `G_ST` barely moves across mutation
-        rates (`0.31` at `H_S=0.0003` versus `0.27` at `H_S=0.273` — the
+        `N=1000, s=10, m=0.0005`: $G_{ST}$ barely moves across mutation
+        rates (`0.31` at $H_S = 0.0003$ versus `0.27` at $H_S = 0.273$ — the
         paper's own printed numbers, §6.4 of `dev/doc/apps/selby/jost-
         finite-island-model/20260903-claude-opus-5-ryman-leimar-gene-
         identity-recursions.md`) while `H_S` itself moves enormously.
-        `G'_ST` is not one of the paper's own printed numbers here (only
-        `G_ST`/`H_S` are), so this checks the *qualitative* claim the
+        $G^\prime_{ST}$ is not one of the paper's own printed numbers here (only
+        $G_{ST}$ / $H_S$ are), so this checks the *qualitative* claim the
         paper actually makes — standardizing manufactures a
         proportionally larger apparent gap than the raw statistic shows
         — rather than a specific value neither this document nor the
@@ -575,7 +575,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             g_st_prime(math.nan, 0.2, 4)
 
     def test_mutation_negligible_transition_matches_its_own_formula(self) -> None:
-        """`mutation_negligible_transition` is `0.2 * H_S(0) / (2u)`, exactly.
+        """`mutation_negligible_transition` is $0.2 H_S(0) / (2u)$, exactly.
 
         `R6`'s own Equation 9, at the paper's own published one-fifth
         calibration. `mu=0.0` (no mutation at all) is negligible at any
@@ -686,11 +686,11 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         """Part VII's "two demes, two alleles" table, by hand from the guide.
 
         `doc/jost-differentiation-measures.md` Part VII walks through this
-        exact four-row table as the one regime where G_ST and D "largely
+        exact four-row table as the one regime where $G_{ST}$ and $D$ "largely
         evaporate" into agreement; unlike Part IV's own worked examples
         (`test_golden_statistics`, above), no existing fixture covers it.
-        The G_ST/D values below are the guide's own printed numbers; E_ST
-        and K_ST are not printed there but are asserted anyway since they
+        The $G_{ST}$ / $D$ values below are the guide's own printed numbers; $E_{ST}$
+        and $K_{ST}$ are not printed there but are asserted anyway since they
         are cheap to also pin down exactly at this small a table.
         """
         cases = (
@@ -721,15 +721,15 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                 self.assertAlmostEqual(report["D"], expected_d, places=6)
 
     def test_d_m_matches_its_defining_algebra_and_is_never_negative(self) -> None:
-        """Nei's D_m (Eq. 10) equals d/(d-1) * (H_T - H_S) and stays >= 0.
+        r"""Nei's $D_m$ (Eq. 10) equals $d/(d-1) (H_T - H_S)$ and stays $\ge 0$.
 
-        Unlike every other between-deme measure in this module, `D_m` is
+        Unlike every other between-deme measure in this module, $D_m$ is
         not rescaled to `[0, 1]` (see its own docstring) — but the first
-        table below (both demes fixed for different alleles, `H_S = 0`,
-        `H_T = 0.5`) still lands on exactly `1.0`: `d_m`'s own docstring
-        explains why `H_S = 0` caps `H_T` at `(d-1)/d`, making `D_m`
+        table below (both demes fixed for different alleles, $H_S = 0$,
+        $H_T = 0.5$) still lands on exactly `1.0`: `d_m`'s own docstring
+        explains why $H_S = 0$ caps $H_T$ at `(d-1)/d`, making $D_m$
         reach exactly `1` there for any `d`, not the looser `d/(d-1)`
-        ceiling `H_T <= 1` alone would suggest.
+        ceiling $H_T \le 1$ alone would suggest.
         """
         tables = (
             [{0: 1.0}, {1: 1.0}],
@@ -745,7 +745,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         self.assertAlmostEqual(d_m([{0: 1.0}, {1: 1.0}]), 1.0)
 
     def test_r_st_is_d_m_over_h_s_and_none_at_zero_within_deme_diversity(self) -> None:
-        """Nei's R_ST (Eq. 11) is D_m/H_S, undefined when H_S is zero."""
+        """Nei's $R_{ST}$ (Eq. 11) is $D_m / H_S$, undefined when $H_S$ is zero."""
         table = [{0: 0.1, 1: 0.9}, {0: 0.9, 1: 0.1}]
         actual_r_st = r_st(table)
         assert actual_r_st is not None
@@ -847,7 +847,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             self.assertAlmostEqual(actual, expected, places=9)
 
     def test_mutual_information_is_entropy_gain_from_deme_membership(self) -> None:
-        """Sherwin's MI equals H_T minus the weighted mean within entropy."""
+        """Sherwin's MI equals $H_T$ minus the weighted mean within entropy."""
         self.assertAlmostEqual(
             mutual_information([{0: 1.0}, {1: 1.0}]),
             math.log(2),
@@ -865,9 +865,9 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         self.assertAlmostEqual(weighted, expected)
 
     def test_g_st_log_matches_a_hand_worked_value(self) -> None:
-        """The log-based large-differentiation G_ST estimator, by hand.
+        """The log-based large-differentiation $G_{ST}$ estimator, by hand.
 
-        Design-doc worked case: `H_S = 0.18`, `H_T = 0.5`, so
+        Design-doc worked case: $H_S = 0.18$, $H_T = 0.5$, so
         `J_S = 0.82`, `J_T = 0.5`, giving
         `ln(0.82/0.5) / -ln(0.5) ~= 0.713696` — larger than the ordinary
         linear `g_st` (`0.64`) at this same table, as Nei's own paper
@@ -886,9 +886,9 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         self.assertGreater(actual_g_st_log, actual_g_st)
 
     def test_g_st_log_agrees_with_g_st_at_the_complete_fixation_endpoint(self) -> None:
-        """Both G_ST estimators equal exactly 1 when demes fix apart.
+        """Both $G_{ST}$ estimators equal exactly 1 when demes fix apart.
 
-        The one case where the two necessarily agree — `H_S = 0` (no
+        The one case where the two necessarily agree — $H_S = 0$ (no
         diversity within either deme) and each deme fixed for a
         different allele — checked exactly, not approximately, since
         both forms reduce to closed integers here.
@@ -1046,10 +1046,10 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         )
 
     def test_goudet_weir_claim_1_overall_f_st_vs_g_st(self) -> None:
-        """Claim 1: Biallelic random-mating equal-weight F_ST matches G_ST.
+        """Claim 1: Biallelic random-mating equal-weight $F_{ST}$ matches $G_{ST}$.
 
-        In the random-mating, equal-deme-weight formulation, overall F_ST
-        evaluated relative to total identity Q_T = 1 - H_T equals G_ST
+        In the random-mating, equal-deme-weight formulation, overall $F_{ST}$
+        evaluated relative to total identity $Q_T = 1 - H_T$ equals $G_{ST}$
         to floating-point tolerance (diff < 1e-15).
         """
         tables: list[list[dict[int, float]]] = [
@@ -1082,15 +1082,18 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                     self.assertAlmostEqual(gst or 0.0, 0.0, places=12)
 
     def test_goudet_weir_claim_5_thought_experiment_limits(self) -> None:
-        """Claim 5: Thought experiment limits (F_ST^i->1, F_ST^{1,2}->-1, others->0).
+        r"""Claim 5: Thought experiment limits.
+
+        The limits are $F_{ST}^i \to 1$, $F_{ST}^{1,2} \to -1$, and $\to 0$ for
+        the others.
 
         Thought experiment from Goudet & Weir (2023, p. 18):
         - Populations 1 and 2 are fixed for opposite homozygotes (0 and 1).
         - Populations 3..d maintain allele frequency 0.5 at each locus.
         As d -> inf:
-        - Population-specific F_ST for pop 1 and pop 2 is 1.0.
-        - Population-pair F_ST between pop 1 and pop 2 tends to -1.0.
-        - Every other off-diagonal population-pair F_ST tends to 0.0.
+        - Population-specific $F_{ST}$ for pop 1 and pop 2 is 1.0.
+        - Population-pair $F_{ST}$ between pop 1 and pop 2 tends to -1.0.
+        - Every other off-diagonal population-pair $F_{ST}$ tends to 0.0.
         """
         # Test for increasing d
         for d in (5, 10, 50, 100):
@@ -1131,11 +1134,11 @@ class DifferentiationStatisticsTests(unittest.TestCase):
     def test_goudet_weir_claim_6_pairwise_vs_population_pair_disagreement(
         self,
     ) -> None:
-        """Claim 6: Population-pair F_ST and classical pairwise F_ST disagree in sign.
+        """Claim 6: Population-pair and classical pairwise $F_{ST}$ disagree in sign.
 
         On the two divergent populations (0 and 1) embedded in the thought experiment,
-        classical pairwise F_ST (Eq. 10) is +1.0, whereas population-pair F_ST (Eq. 9)
-        is negative (approaching -1.0 as d grows).
+        classical pairwise $F_{ST}$ (Eq. 10) is +1.0, whereas population-pair
+        $F_{ST}$ (Eq. 9) is negative (approaching -1.0 as d grows).
         """
         table: list[dict[int, float]] = [
             {0: 1.0, 1: 0.0},
@@ -1157,7 +1160,9 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         self.assertLess(pair_f_st, -0.8)
 
     def test_goudet_weir_claim_7_zero_sum_invariant(self) -> None:
-        """Claim 7: Off-diagonal elements of F_ST matrix sum to zero by construction.
+        """Claim 7: Off-diagonal elements of the $F_{ST}$ matrix sum to zero.
+
+        The zero sum holds by construction.
 
         For any frequency table, sum_{i != j} F_ST[i][j] == 0.0 to floating-point
         precision.
@@ -1234,7 +1239,11 @@ class DerivedDifferentiationTests(unittest.TestCase):
     """`derived_differentiation` equals the table-based functions at one locus."""
 
     def test_matches_each_table_based_function(self) -> None:
-        """D_m, R_ST, both G'_ST and coancestry F_ST, for a three-deme table."""
+        r"""Match each table function for a three-deme table.
+
+        The statistics are $D_m$, $R_{ST}$, both $G^\prime_{ST}$ and coancestry
+        $F_{ST}$.
+        """
         table = [{0: 0.5, 1: 0.5}, {1: 0.2, 2: 0.8}, {0: 0.1, 2: 0.9}]
         within, total = h_s(table), h_t(table)
         values = derived_differentiation(within, total, 3)
@@ -1253,7 +1262,10 @@ class DerivedDifferentiationTests(unittest.TestCase):
             self.assertAlmostEqual(actual, value)
 
     def test_undefined_cases_are_none(self) -> None:
-        """Fixed everywhere: R_ST, both G'_ST and F_ST undefined; D_m is 0."""
+        r"""Fixed everywhere: $R_{ST}$, $G^\prime_{ST}$ and $F_{ST}$ are undefined.
+
+        $D_m$ is 0.
+        """
         values = derived_differentiation(0.0, 0.0, 2)
         self.assertEqual(values["D_m"], 0.0)
         self.assertIsNone(values["R_ST"])

@@ -1,4 +1,4 @@
-"""Pairwise genetic distance and identity statistics between populations.
+r"""Pairwise genetic distance and identity statistics between populations.
 
 This module implements genetic distance measures between pairs of
 populations, following Nei (1972, *American Naturalist* 106(949):283-292,
@@ -15,7 +15,7 @@ Key measures implemented:
 - `nei_identity` — normalized genetic identity ``I`` across one or more
   loci (Nei 1972 Eq. 1 and Eq. 2). Bounded in ``[0, 1]``.
 - `nei_standard_distance` (alias `nei_d`) — Nei's standard genetic
-  distance ``D = -ln(I)`` (Nei 1972 Eq. 3). Bounded in ``[0, +inf)``;
+  distance $D = -\ln(I)$ (Nei 1972 Eq. 3). Bounded in ``[0, +inf)``;
   equals 0 iff allele frequencies are identical at every locus.
 - `nei_geometric_identity` — normalized genetic identity ``I'`` computed
   via geometric means across loci (Nei 1972 Eq. 4).
@@ -34,7 +34,7 @@ The Nei distance family (`nei_pair_identity`, `nei_pair_distance`,
 along two independent choices:
 
 - **Denominator.** ``"geometric"`` is Nei's own ``sqrt(J_X * J_Y)``, and
-  for ``d`` demes the geometric mean ``(J_1 * ... * J_d)^(1/d)``.
+  for ``d`` demes the geometric mean $(J_1 \cdots J_d)^{1/d}$.
   ``"arithmetic"`` is ``(J_X + J_Y) / 2``, and for ``d`` demes the mean
   within-deme identity ``J_within`` (Jost, L. (2026) private
   communication). The numerator is ``J_XY`` for a pair and, for all
@@ -49,7 +49,7 @@ along two independent choices:
 Two facts follow and are relied on by tests and documentation:
 
 - The arithmetic all-demes identity is ``J_between / J_within``, which is
-  ``1 - D`` for Jost's ``D``, so its distance is ``-ln(1 - D)``.
+  $1 - D$ for Jost's $D$, so its distance is $-\ln(1 - D)$.
 - The geometric all-demes identity is *not* bounded by 1. When demes
   differ greatly in diversity, the pair-averaged numerator can exceed the
   geometric mean of the within-deme identities, and the distance is
@@ -165,7 +165,7 @@ def nei_d(
     loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
     loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
 ) -> float:
-    """Return Nei's standard genetic distance ``D`` (alias for `nei_standard_distance`).
+    """Return Nei's standard genetic distance $D$ (alias for `nei_standard_distance`).
 
     Args:
         loci_x: Allele frequencies for population X across loci.
@@ -200,10 +200,10 @@ def nei_founder_identity(j_z: float, n_x: float, n_y: float) -> float:
     populations X and Y immediately after they are founded from a common
     parental population Z of homozygosity `j_z`:
 
-    .. math::
-
-        I_0 = \\frac{J_Z}{\\sqrt{\\left[J_Z + \\frac{1 - J_Z}{2 N_X}\\right]
-              \\left[J_Z + \\frac{1 - J_Z}{2 N_Y}\\right]}}
+    ```math
+    I_0 = \\frac{J_Z}{\\sqrt{\\left[J_Z + \\frac{1 - J_Z}{2 N_X}\\right]
+    \\left[J_Z + \\frac{1 - J_Z}{2 N_Y}\\right]}}
+    ```
 
     Args:
         j_z: Homozygosity (gene identity sum(z_i ** 2)) in the parental
@@ -395,7 +395,7 @@ def nei_standard_distance(
     loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
     loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
 ) -> float:
-    """Return Nei's standard genetic distance ``D = -ln(I)`` (Nei 1972 Eq. 3).
+    r"""Return Nei's standard genetic distance $D = -\ln(I)$ (Nei 1972 Eq. 3).
 
     Measures accumulated codon differences per locus under a steady-state
     infinite-alleles neutral mutation model.
@@ -652,7 +652,7 @@ def nei_all_demes_identity[AlleleKey: SupportsIndex](
     """Return the all-demes Nei identity ``J_between / mean(J_k)``.
 
     The arithmetic form is bounded in ``[0, 1]`` (``J_between`` never
-    exceeds ``J_within``) and equals ``1 - D`` for Jost's ``D``.
+    exceeds ``J_within``) and equals $1 - D$ for Jost's $D$.
 
     The geometric form is **not bounded by 1**. Example: one locus, demes
     1 and 2 fixed for allele A, deme 3 spread evenly over 1000 alleles

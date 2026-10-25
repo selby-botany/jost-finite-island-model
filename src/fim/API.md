@@ -2649,7 +2649,7 @@ Kind: policy.
 
 First check, in relaxation times after the burn-in ends.
 
-About one integrated autocorrelation time of `D`: an earlier check cannot
+About one integrated autocorrelation time of $D$: an earlier check cannot
 pass the effective-sample-size floor, so it would only waste work.
 
 Kind: policy.
@@ -2726,7 +2726,7 @@ Smallest derived cap.
 
 Two independent single-locus regimes (Golden Part VI, `tau = 85`; Dear-Nolan
 low, `tau = 19,693`, two orders of magnitude apart) both needed close to
-130,000 generations for their own `D` to become known to 0.01, despite that
+130,000 generations for their own $D$ to become known to 0.01, despite that
 spread in `tau`: this floor is a small multiple of that measured need, not
 derived from `tau` at all. A model that settles sooner is unaffected, since
 the run stops when its precision is reached; the floor only raises how long
@@ -2779,7 +2779,7 @@ Kind: policy.
 Factor on the burn-in when an allele-spectrum statistic is watched.
 
 The relaxation time `tau` is derived for the identity statistics. The
-allele-spectrum statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) depend on
+allele-spectrum statistics ($E_{ST}$, $K_{ST}$, `A_CGD`, `Delta`, `MI`) depend on
 allele counts and rare alleles, which can relax more slowly. The default of 1
 changes nothing until the difference is measured (design 6.12).
 
@@ -3518,9 +3518,9 @@ See `README.md` in this directory for the table of every constant.
 
 Denominator below which a generation counts as degenerate for `auto`.
 
-With `convergence_estimate: auto`, an identity statistic (`D`, `G_ST`) is
-estimated as the "value of means" when its denominator (`H_T` for `G_ST`,
-`1 - H_S` for `D`) is below this in more than `ESTIMATE_AUTO_FRACTION` of the
+With `convergence_estimate: auto`, an identity statistic ($D$, $G_{ST}$) is
+estimated as the "value of means" when its denominator ($H_T$ for $G_{ST}$,
+$1 - H_S$ for $D$) is below this in more than `ESTIMATE_AUTO_FRACTION` of the
 evidence-window generations: a ratio of tiny numbers is noisy and biases a mean
 of values (design 6.11).
 
@@ -4082,7 +4082,7 @@ Convergence settings derived from a model's relaxation time.
 
 - `burn_in` - Generations discarded before averaging starts.
 - `max_generations` - Hard generation cap.
-- `relaxation_time` - The estimated `tau`, in generations, for display.
+- `relaxation_time` - The estimated $\tau$, in generations, for display.
 
 <a id="fim.convergence.defaults.burn_in_multiple"></a>
 
@@ -4092,12 +4092,17 @@ Convergence settings derived from a model's relaxation time.
 def burn_in_multiple(precision: float, minimum: float) -> float
 ```
 
-Return `k`, the burn-in length in relaxation times, for a precision.
+Return $k$, the burn-in length in relaxation times, for a precision.
 
-`max(minimum, ln(2 / precision))`: the slowest mode's leftover from a
-worst-case unit offset is `e^-k`, so `k >= ln(2 / precision)` leaves at
-most `precision / 2` of bias, and a tighter precision lengthens the
+
+The slowest mode's leftover from a worst-case unit offset is $e^{-k}$,
+so $k \ge \ln(2 / \mathrm{precision})$ leaves at most
+$\mathrm{precision} / 2$ of bias, and a tighter precision lengthens the
 burn-in on its own. A precision of zero asks for an unbounded burn-in.
+
+```math
+k = \max\left(\mathrm{minimum}, \ln\frac{2}{\mathrm{precision}}\right)
+```
 
 **Arguments**:
 
@@ -4107,11 +4112,11 @@ burn-in on its own. A precision of zero asks for an unbounded burn-in.
 
 **Returns**:
 
-  The multiple of `tau`.
+  The multiple of $\tau$.
 
 <a id="fim.convergence.defaults.derive_burn_in"></a>
 
-#### [derive\_burn\_in](./convergence/defaults.py#L59)
+#### [derive\_burn\_in](./convergence/defaults.py#L63)
 
 ```python
 def derive_burn_in(relaxation_time: float,
@@ -4124,21 +4129,22 @@ Return the burn-in, in generations, for a relaxation time and precision.
 
 **Arguments**:
 
-- `relaxation_time` - `tau`, in generations.
+- `relaxation_time` - $\tau$, in generations.
 - `precision` - The requested precision.
 - `expert` - The run's Expert Settings (the multiple's floor).
-- `multiplier` - Factor on `k`, for a run that watches an allele-spectrum
+- `multiplier` - Factor on $k$, for a run that watches an allele-spectrum
   statistic (`spectrum_burn_in_multiplier`); 1 otherwise.
 
 
 **Returns**:
 
-  `ceil(multiplier * k * tau)`, at least 1 so generation 0 is never
+  $\lceil \mathrm{multiplier} \cdot k \tau \rceil$,
+  at least 1 so generation 0 is never
   averaged, and at most `expert.cap_maximum`.
 
 <a id="fim.convergence.defaults.derive_convergence_defaults"></a>
 
-#### [derive\_convergence\_defaults](./convergence/defaults.py#L86)
+#### [derive\_convergence\_defaults](./convergence/defaults.py#L91)
 
 ```python
 def derive_convergence_defaults(
@@ -4153,9 +4159,16 @@ def derive_convergence_defaults(
 
 Return the default burn-in and cap for one model.
 
-The cap is `max(cap_minimum, burn_in + ceil(15 tau))`, at most
-`cap_maximum`: the burn-in is added so a slow model is never capped inside
-its own burn-in.
+The cap is
+
+
+at most `cap_maximum`: the burn-in is added so a slow model is never
+capped inside its own burn-in.
+
+```math
+\max\left(\mathrm{cap\_minimum},
+    \mathrm{burn\_in} + \lceil 15 \tau \rceil\right),
+```
 
 **Arguments**:
 
@@ -4182,7 +4195,7 @@ its own burn-in.
 
 <a id="fim.convergence.defaults.describe_derived_convergence"></a>
 
-#### [describe\_derived\_convergence](./convergence/defaults.py#L136)
+#### [describe\_derived\_convergence](./convergence/defaults.py#L147)
 
 ```python
 def describe_derived_convergence(
@@ -4219,20 +4232,24 @@ thing.
 
 <a id="fim.convergence.defaults.island_relaxation_time"></a>
 
-#### [island\_relaxation\_time](./convergence/defaults.py#L182)
+#### [island\_relaxation\_time](./convergence/defaults.py#L193)
 
 ```python
 def island_relaxation_time(*, total_size: float, deme_count: int,
                            migration: float, mutation: float) -> float
 ```
 
-Return `tau` for the symmetric island model, in closed form.
+Return $\tau$ for the symmetric island model, in closed form.
 
-`T = N_total + (d - 1) / (2 m)` is the mean pairwise coalescence time
+$T = N_{\mathrm{total}} + (d - 1) / (2m)$ is the mean pairwise coalescence time
 (the time for two gene copies to reach one deme, plus the time for the
 whole population to coalesce). Mutation destroys identity at an
-independent rate `2 mu`, and independent rates add, so
-`tau = 1 / (2 mu + 1 / T)`.
+independent rate $2\mu$, and independent rates add, so
+
+
+```math
+\tau = \frac{1}{2\mu + 1/T}.
+```
 
 **Arguments**:
 
@@ -4253,7 +4270,7 @@ independent rate `2 mu`, and independent rates add, so
 
 <a id="fim.convergence.defaults.recursion_relaxation_time"></a>
 
-#### [recursion\_relaxation\_time](./convergence/defaults.py#L215)
+#### [recursion\_relaxation\_time](./convergence/defaults.py#L229)
 
 ```python
 def recursion_relaxation_time(*, deme_sizes: Sequence[int],
@@ -4261,13 +4278,14 @@ def recursion_relaxation_time(*, deme_sizes: Sequence[int],
                               mutation: float) -> float
 ```
 
-Return `tau` from the identity recursion's slowest mode.
+Return $\tau$ from the identity recursion's slowest mode.
 
-The pairwise identity matrix `J` updates as migrate (`M J Mᵀ`), drift
-(each diagonal entry `J[i][i]` keeps a fraction `1 - 1/N_i`), then
-mutate (scale by `(1 - mu)²`) — exactly the engine's own textbook
-step, `fim.model.operators.step`. Flattening `J` makes this a `d² by d²` matrix;
-its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
+The pairwise identity matrix $J$ updates as migrate, $MJM^{\mathsf{T}}$;
+drift (each diagonal entry $J_{ii}$ keeps a fraction $1 - 1/N_i$); then
+mutate (scale by $(1 - \mu)^2$) — exactly the engine's own textbook
+step, `fim.model.operators.step`. Flattening $J$ makes this a
+$d^2 \times d^2$ matrix; its spectral radius $\rho$ gives
+$\tau = 1 / (1 - \rho)$.
 
 **Arguments**:
 
@@ -4288,16 +4306,16 @@ its spectral radius `rho` gives `tau = 1 / (1 - rho)`.
 
 <a id="fim.convergence.defaults.relaxation_time"></a>
 
-#### [relaxation\_time](./convergence/defaults.py#L261)
+#### [relaxation\_time](./convergence/defaults.py#L276)
 
 ```python
 def relaxation_time(*, deme_sizes: Sequence[int], migration: MigrationInput,
                     mutation_rates: Sequence[float]) -> float
 ```
 
-Return the relaxation time `tau` for one model, choosing the route.
+Return the relaxation time $\tau$ for one model, choosing the route.
 
-The slowest locus (the smallest mutation rate) sets `tau`, as
+The slowest locus (the smallest mutation rate) sets $\tau$, as
 `panmictic_equilibration` already does for the ancestral phase.
 
 Equal deme sizes with a scalar `m` use the closed form. Everything else
@@ -4323,7 +4341,7 @@ size-weighted migrant pool) uses the recursion's eigenvalue.
 
 <a id="fim.convergence.defaults.PanmicticEquilibration"></a>
 
-## [PanmicticEquilibration Objects](./convergence/defaults.py#L311)
+## [PanmicticEquilibration Objects](./convergence/defaults.py#L326)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -4338,15 +4356,15 @@ How long one panmictic population takes to reach mutation-drift equilibrium.
   which the expected identity (so the expected heterozygosity)
   of every locus is within the requested tolerance of its
   equilibrium, whatever the starting frequencies were.
-- `relaxation_time` - `tau` of the slowest-relaxing locus, in
+- `relaxation_time` - $\tau$ of the slowest-relaxing locus, in
   generations.
 - `expected_heterozygosity` - The mean, across loci, of each locus's
-  equilibrium expected heterozygosity (`1 - F*`, close to
-  `theta / (1 + theta)` with `theta = 2 N mu`).
+  equilibrium expected heterozygosity, $1 - F^*$, close to
+  $\theta / (1 + \theta)$ with $\theta = 2N\mu$.
 
 <a id="fim.convergence.defaults.panmictic_equilibration"></a>
 
-#### [panmictic\_equilibration](./convergence/defaults.py#L331)
+#### [panmictic\_equilibration](./convergence/defaults.py#L346)
 
 ```python
 def panmictic_equilibration(*, total_size: int,
@@ -4361,27 +4379,41 @@ The single-deme case of the identity recursion behind
 run it: with `N` gene copies, `fim.model.operators.drift` (`N`
 copies drawn with replacement) and then `mutate` (each copy,
 independently, becomes a fresh allele with probability `mu`) — the
-textbook Wright-Fisher infinite-alleles model — the probability `F`
+textbook Wright-Fisher infinite-alleles model — the probability $F$
 that two gene copies drawn with replacement are identical obeys, in
-expectation, `F' = 1/N + (1 - 1/N)(1 - mu)² F` (for two distinct
-copies, the textbook `F' = (1 - mu)² [1/N + (1 - 1/N) F]`). Writing
-`rho = (1 - 1/N)(1 - mu)²`, it settles at `F* = (1/N) / (1 - rho)`
-and its departure from `F*` shrinks by exactly `rho` every
-generation. `F` lies in `[0, 1]`, so after `t` generations the
-expected departure is at most `rho^t` whatever the starting draw
-was; the burn-in is the first `t` with `rho^t <= tolerance`, about
-`tau ln(1 / tolerance)` with `tau = 1 / (1 - rho)` (about
-`1 / (2 mu + 1/N)`), the same `tau` as `recursion_relaxation_time`
-with one deme. `tau` is also the time scale on which the population's whole
+expectation,
+
+
+For two distinct copies, the textbook recursion is
+
+
+Writing $\rho = (1 - 1/N)(1 - \mu)^2$, it settles at
+$F^* = (1/N) / (1 - \rho)$ and its departure from $F^*$ shrinks by
+exactly $\rho$ every generation. $F$ lies in $[0,1]$, so after $t$
+generations the expected departure is at most $\rho^t$ whatever the
+starting draw was; the burn-in is the first $t$ with
+$\rho^t \le \mathrm{tolerance}$, about
+$\tau \ln(1 / \mathrm{tolerance})$ with $\tau = 1 / (1 - \rho)$,
+approximately $1 / (2\mu + 1/N)$. This is the same $\tau$ as
+`recursion_relaxation_time` with one deme. $\tau$ is also the time scale
+on which the population's whole
 genealogy forgets its starting state (two
-ancestral lineages merge or one mutates at rate about `1/N + 2 mu`),
+ancestral lineages merge or one mutates at rate about $1/N + 2\mu$),
 so the burn-in mixes more than the first moment.
 
 A run of one population cannot be told apart from equilibrium by
 watching its own heterozygosity: at equilibrium that still wanders
-around `1 - F*` by drift, with a spread comparable to its mean for a
+around $1 - F^*$ by drift, with a spread comparable to its mean for a
 single locus, so no trailing-window rule of a useful length settles.
 The burn-in needs no such rule.
+
+```math
+F^\prime = \frac{1}{N} + \left(1 - \frac{1}{N}\right)(1 - \mu)^2 F.
+```
+```math
+F^\prime = (1 - \mu)^2
+    \left[\frac{1}{N} + \left(1 - \frac{1}{N}\right)F\right].
+```
 
 **Arguments**:
 
@@ -4394,7 +4426,7 @@ The burn-in needs no such rule.
 
 **Returns**:
 
-  The burn-in, the slowest locus's `tau`, and the expected
+  The burn-in, the slowest locus's $\tau$, and the expected
   equilibrium heterozygosity.
 
 
@@ -4405,7 +4437,7 @@ The burn-in needs no such rule.
 
 <a id="fim.convergence.defaults.island_migration_matrix"></a>
 
-#### [island\_migration\_matrix](./convergence/defaults.py#L405)
+#### [island\_migration\_matrix](./convergence/defaults.py#L433)
 
 ```python
 def island_migration_matrix(sizes: Sequence[int],
@@ -4414,7 +4446,7 @@ def island_migration_matrix(sizes: Sequence[int],
 
 Return the scalar-`m` migration matrix for unequal deme sizes.
 
-Each deme keeps `1 - m` and receives `m` from the size-weighted average
+Each deme keeps $1 - m$ and receives $m$ from the size-weighted average
 of every other deme, as the configuration reference defines the scalar
 form.
 
@@ -4529,13 +4561,13 @@ window starts at `floor(fractional_burn_in * t)` at each check.
 `extra_statistics` are recorded for display and reporting but never decide
 the stop.
 
-A statistic named in `identity_statistics` is a function of `H_S` and
-`H_T`, so it has two expected-value forms (design 6.11): the mean of its
+A statistic named in `identity_statistics` is a function of $H_S$ and
+$H_T$, so it has two expected-value forms (design 6.11): the mean of its
 values and the value of the mean identities. `estimate` selects the form
 each check judges and the report headlines; `"auto"` applies its rule to
 the window as it stands at that check, so the form reported at the stop is
-the form the stop was judged on. Such a monitor must record `H_S` and
-`H_T` every generation (as extras or watched).
+the form the stop was judged on. Such a monitor must record $H_S$ and
+$H_T$ every generation (as extras or watched).
 
 <a id="fim.convergence.monitor.BurnInMonitor.__init__"></a>
 
@@ -4586,7 +4618,7 @@ Initialize an empty monitor.
 - `fractional_burn_in` - Share of the run discarded when `burn_in` is
   `None`.
 - `identity_statistics` - Recorded statistics that are functions of
-  `H_S` and `H_T`, by name; they get both expected-value forms.
+  $H_S$ and $H_T$, by name; they get both expected-value forms.
 - `estimate` - `"mean_of_values"`, `"value_of_means"` or `"auto"`.
 - `auto_denominator` - Under `"auto"`, the denominator below which a
   generation counts as degenerate.
@@ -4607,7 +4639,7 @@ Initialize an empty monitor.
 **Raises**:
 
 - `ValueError` - If a number is out of range, a name repeats, or an
-  identity statistic's `H_S`/`H_T` are not recorded.
+  identity statistic's $H_S$ / $H_T$ are not recorded.
 
 <a id="fim.convergence.monitor.BurnInMonitor.generations"></a>
 
@@ -5360,16 +5392,16 @@ The two ways to estimate an identity statistic's expected value.
 class IdentityStatistic()
 ```
 
-A statistic that is a function `X = f(H_S, H_T)` of the identities.
+A statistic that is a function $X = f(H_S, H_T)$ of the identities.
 
 **Attributes**:
 
-- `function` - `f(H_S, H_T)`, or `None` where `X` is undefined (`G_ST` at
-  `H_T = 0`).
+- `function` - $f(H_S, H_T)$, or `None` where `X` is undefined ($G_{ST}$ at
+  $H_T = 0$).
 - `gradient` - `(df/dH_S, df/dH_T)` at a point where `f` is defined: the
   sensitivities the delta method needs.
-- `denominator` - The quantity `f` divides by (`H_T` for `G_ST`,
-  `1 - H_S` for `D`); a tiny one makes a per-generation value
+- `denominator` - The quantity `f` divides by ($H_T$ for $G_{ST}$,
+  $1 - H_S$ for $D$); a tiny one makes a per-generation value
   noisy, which `convergence_estimate: auto` looks for.
 
 <a id="fim.convergence.window_statistics.EstimateForms"></a>
@@ -5388,7 +5420,7 @@ Both expected-value forms of one statistic over one evidence window.
 - `mean_of_values` - The window mean of the statistic's own values, with
   its standard error; `None` when fewer than
   `MINIMUM_WINDOW_VALUES` values are defined.
-- `value_of_means` - `f` of the window means of `H_S` and `H_T`, with a
+- `value_of_means` - `f` of the window means of $H_S$ and $H_T$, with a
   delta-method standard error; `None` for a statistic that is not a
   function of the identities, or when `f` is undefined at the
   means.
@@ -5421,8 +5453,8 @@ Return the share of window generations whose denominator is below `threshold`.
 
 **Arguments**:
 
-- `h_s` - The window's `H_S` values.
-- `h_t` - The window's `H_T` values, parallel to `h_s`.
+- `h_s` - The window's $H_S$ values.
+- `h_t` - The window's $H_T$ values, parallel to `h_s`.
 - `statistic` - Supplies the denominator.
 - `threshold` - A denominator below this marks a generation degenerate.
 
@@ -5466,20 +5498,20 @@ def value_of_means_statistics(
         statistic: IdentityStatistic) -> WindowStatistics | None
 ```
 
-Return `f(mean H_S, mean H_T)` with a delta-method standard error.
+Return $f(\bar H_S, \bar H_T)$ with a delta-method standard error.
 
 The estimate is `f` of the two window means. Its standard error comes from
 linearizing `f` at those means: the series
-`L_t = f_S * H_S,t + f_T * H_T,t` has the same autocorrelation structure
+$L_t = f_S H_{S,t} + f_T H_{T,t}$ has the same autocorrelation structure
 as the estimate's error, so the Geyer standard error of `L`'s mean is the
-standard error of `f(mean H_S, mean H_T)`, to first order, with the
+standard error of $f(\bar H_S, \bar H_T)$, to first order, with the
 covariance of the two heterozygosities and both autocorrelations
 accounted for.
 
 **Arguments**:
 
-- `h_s` - The window's `H_S` values, in order.
-- `h_t` - The window's `H_T` values, parallel to `h_s`.
+- `h_s` - The window's $H_S$ values, in order.
+- `h_t` - The window's $H_T$ values, parallel to `h_s`.
 - `statistic` - Supplies `f` and its gradient.
 
 
@@ -6298,10 +6330,10 @@ and frequency bit. Under infinite alleles the lane's `AlleleRegistry`
 counter is brought up to the identities the block handed out when the
 lane stops; under finite alleles the K-allele target draws are made in
 the kernel, interleaved with the next pair's mutation counts exactly as
-`operators.mutate` does. The convergence statistics `D`, `G_ST`, `H_S`,
-`H_T` and `H_ST` are computed inside the kernel and equal
-`statistics_report`'s bits; the opt-in expensive statistics (`E_ST`,
-`K_ST`, `A_CGD`, `Delta`, `MI`) stay in Python.
+`operators.mutate` does. The convergence statistics $D$, $G_{ST}$, $H_S$,
+$H_T$ and $H_{ST}$ are computed inside the kernel and equal
+`statistics_report`'s bits; the opt-in expensive statistics ($E_{ST}$,
+$K_{ST}$, `A_CGD`, `Delta`, `MI`) stay in Python.
 
 Both migrant sampling modes run in the kernel. Under
 `migrant_sampling="stochastic"` the kernel draws one binomial migrant
@@ -6839,7 +6871,7 @@ same "one observation per unit being watched" pattern, just applied
 to a whole finished replicate's own final report here instead of one
 generation's own current state.
 
-A statistic this replicate leaves undefined (only ``G_ST``, and only
+A statistic this replicate leaves undefined (only $G_{ST}$, and only
 when every one of this replicate's tracked loci was monomorphic — see
 `mean_g_st_across_loci`) is omitted rather than raised or
 substituted: this replicate simply contributes nothing to that
@@ -6916,20 +6948,20 @@ Fields:
         [differentiation-measures guide](../../doc/jost-differentiation-measures.md)
         for the full explanation), each averaged across every
         genetic locus the run tracked (see `report_for_state`).
-        `G_ST` alone can be `None`: it is undefined at a locus with
+        $G_{ST}$ alone can be `None`: it is undefined at a locus with
         no genetic variation left to measure (see
         `mean_g_st_across_loci`), and if *every* tracked locus is in
         that state, there is no defined value left to average at
         all. Every other field is always a real number.
     Gs, Gd: The within- and between-deme gene identities (Ryman &
-        Leimar's `J_0`/`J_1`) `H_S`/`H_T`/`G_ST`/`D` are themselves
+        Leimar's $J_0$ / $J_1$) $H_S$ / $H_T$ / $G_{ST}$ / $D$ are themselves
         derived from — `fim.statistics.differentiation.gs`/`gd`'s
         own docstrings have the exact formulas and `fim`'s own
         with-replacement identity convention. Added by this
         project's own Ryman & Leimar remediation, `R4`
         (`dev/doc/apps/selby/jost-finite-island-model/20260903-
         claude-opus-5-gene-identity-recursion-fim-implications.md`
-        §9). Both linear in `H_S`/`H_T`, so — unlike `G_ST`/`D` —
+        §9). Both linear in $H_S$ / $H_T$, so — unlike $G_{ST}$ / $D$ —
         averaging across loci or replicates never needs a ratio-of-
         means-versus-mean-of-ratios decision; there is only one
         answer.
@@ -6938,12 +6970,12 @@ Fields:
         Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
         mutual information.
     D_m, R_ST, G_ST_NEI_LOG, G_ST_HEDRICK, F_ST: Nei's (1973) mean
-        pairwise between-deme diversity and its ratio to `H_S`, Nei's
-        logarithmic and Hedrick's standardized `G'_ST`, and coancestry
-        `F_ST` (`fim.statistics.differentiation.
+        pairwise between-deme diversity and its ratio to $H_S$, Nei's
+        logarithmic and Hedrick's standardized $G^\prime_{ST}$, and coancestry
+        $F_{ST}$ (`fim.statistics.differentiation.
         derived_differentiation`), each one ratio of the pooled
-        `H_S`/`H_T` (whatever `locus_aggregation` says, which governs
-        `D` and `G_ST` only). ``None`` where undefined.
+        $H_S$ / $H_T$ (whatever `locus_aggregation` says, which governs
+        $D$ and $G_{ST}$ only). ``None`` where undefined.
     NEI_D_ALL_GEO, NEI_D_ALL_GEO_LOCUS_MEAN, NEI_D_ALL_ARITH,
         NEI_D_ALL_ARITH_LOCUS_MEAN: Nei's genetic distance across all
         demes, ``-ln(J_between / mean(J_k))``, with the geometric
@@ -6956,9 +6988,9 @@ Fields:
         be negative; see `nei_all_demes_identity`.
     NEI_I_ALL_GEO, NEI_I_ALL_GEO_LOCUS_MEAN, NEI_I_ALL_ARITH,
         NEI_I_ALL_ARITH_LOCUS_MEAN: The matching identities ``I``
-        (``D = -ln(I)``). Always finite, so they are the lossless
+        ($D = -\ln I$). Always finite, so they are the lossless
         record when a distance is ``None``. The arithmetic pooled
-        identity equals ``Gd / Gs``.
+        identity equals $G_d / G_s$.
     window_statistics: How precisely each recorded statistic's own
         trailing-window mean was actually known at the generation this
         run stopped at — `{name: {"mean", "standard_error",
@@ -6972,15 +7004,15 @@ Fields:
         statistic had no value, dropped by the first form), and
         `mean_of_values`/`value_of_means`, each `{"mean",
         "standard_error"}` — `value_of_means` only for `D` and `G_ST`,
-        the statistics that are functions of `H_S` and `H_T`. Every entry
+        the statistics that are functions of $H_S$ and $H_T$. Every entry
         describes the one evidence window all statistics share:
         `window_start`, `window_end`, `burn_in`, the `minimum_ess` floor
         and `target_standard_error` the window was judged against, and
         `geweke_z` (start of the window against its end; a large
         absolute value means the burn-in may have been too short).
         Empty for a state with no monitored run behind it at all (a GUI
-        preview, a re-analysis) — this is *not* the same thing as `D`/
-        `G_ST`/etc. above, which are always this state's own point
+        preview, a re-analysis) — this is *not* the same thing as $D$/
+        $G_{ST}$/etc. above, which are always this state's own point
         values, computed directly from its allele frequencies; this
         field is instead the *history leading up to* that state, the
         answer to "how much can this run's own last window of noise be
@@ -7041,11 +7073,11 @@ Fields:
         convergence_statistic`.
     convergence_histories: The same per-generation history as
         `convergence_history`, but keyed by statistic name — no
-        longer only the watched subset. `D`/`G_ST`/`H_S`/`H_T` are
+        longer only the watched subset. $D$ / $G_{ST}$ / $H_S$ / $H_T$ are
         always present (`fim.engine.ALWAYS_TRACKED_STATISTICS`),
         regardless of what `SimulationParams.convergence_statistic`
         actually watches, since all four cost nothing extra to
-        compute or aggregate either way; `E_ST`/`K_ST` are present
+        compute or aggregate either way; $E_{ST}$ / $K_{ST}$ are present
         when either is actually watched, or when
         `SimulationParams.track_expensive_statistics` opts into
         paying their own real, per-generation cost for a display
@@ -7254,8 +7286,8 @@ Read one statistic's value for a replicate of a batch.
 A replicate that averaged contributes its window mean, in the form it
 selected, not the last generation's value: the last generation is one
 noisy draw, the window mean is what the replicate measured (design 6.7).
-For a statistic that is recorded every generation (`D`, `G_ST`, `H_S`,
-`H_T`, `H_ST` and anything watched) a replicate with a window but no
+For a statistic that is recorded every generation ($D$, $G_{ST}$, $H_S$,
+$H_T$, $H_{ST}$ and anything watched) a replicate with a window but no
 defined window mean contributes nothing, as an undefined replicate always
 has. Any other statistic, and any report with no window at all (a live
 progress report), contributes its final-state value.
@@ -7309,7 +7341,7 @@ The public form of the engine's own lookup, for callers that iterate
 
 **Returns**:
 
-  The value; ``None`` where the statistic is undefined (`G_ST` at a
+  The value; ``None`` where the statistic is undefined ($G_{ST}$ at a
   monomorphic locus) or infinite (a Nei distance with no allele
   shared).
 
@@ -7367,7 +7399,7 @@ start below two and grow as the batch proceeds, not something to
 treat as invalid input. Zero or one report simply summarizes to
 nothing yet (an empty dict), the same "omitted, not blank" contract
 `replicate_summary`'s own per-statistic dropping already establishes
-for a monomorphic ``G_ST``, extended here to the "not enough reports
+for a monomorphic $G_{ST}$, extended here to the "not enough reports
 at all" case too.
 
 **Arguments**:
@@ -7375,10 +7407,10 @@ at all" case too.
 - `reports` - Zero or more independently seeded reports.
 - `confidence` - Two-tailed confidence level; see
   `fim.statistics.interval.confidence_interval`.
-- `deme_count` - The number of demes, which `D`'s value of means needs. When
-  given and any replicate selected the value of means for `D` or
-  `G_ST` (`convergence_estimate`), that statistic's interval pools the
-  replicates' window means of `H_S` and `H_T` first
+- `deme_count` - The number of demes, which $D$'s value of means needs. When
+  given and any replicate selected the value of means for $D$ or
+  $G_{ST}$ (`convergence_estimate`), that statistic's interval pools the
+  replicates' window means of $H_S$ and $H_T$ first
   (`_pooled_value_of_means`); `None` leaves every statistic as a
   plain mean of replicate values.
 
@@ -7386,14 +7418,14 @@ at all" case too.
 **Returns**:
 
   One `ConfidenceInterval` per statistic name in `FinalReport`
-  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
-  ``A_CGD``, ``Delta``, ``MI``, ``Gs``, ``Gd``) with at least two
+  ($D$, $G_{ST}$, $E_{ST}$, $K_{ST}$, $H_S$, $H_T$, $H_{ST}$,
+  ``A_CGD``, ``Delta``, ``MI``, $G_s$, $G_d$) with at least two
   defined values across
   `reports`; a statistic short of that (including every statistic,
   given fewer than two reports overall) is omitted entirely.
-  `Gs`/`Gd` are both linear in `H_S`/`H_T` (`fim.statistics.
+  $G_s$ / $G_d$ are both linear in $H_S$ / $H_T$ (`fim.statistics.
   differentiation.gs`/`gd`'s own docstrings), so — unlike `D`/
-  `G_ST`, whose own across-replicate treatment this project's own
+  $G_{ST}$, whose own across-replicate treatment this project's own
   Ryman & Leimar remediation, `R3` part 3, still owes a dedicated
   derivation — the ordinary Student's-t interval on the sample mean
   this function already computes for every other field is already
@@ -7418,7 +7450,7 @@ confidence interval is and why it matters here; this function is the
 version of that same idea meant for a *completed* batch's own final
 results, rather than a batch still in progress.
 
-Each replicate is an independent draw of its own final ``D``, ``G_ST``,
+Each replicate is an independent draw of its own final $D$, $G_{ST}$,
 and so on; this is a closed-form Student's-t interval on the sample
 mean of those draws (`fim.statistics.interval.confidence_interval`) —
 a standard, textbook statistical method for exactly this situation
@@ -7448,14 +7480,14 @@ docstring for why it does not raise this same case itself).
 **Returns**:
 
   One `ConfidenceInterval` per statistic name in `FinalReport`
-  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
-  ``Gs``, ``Gd`` — the same nine `reports_summary` itself lists,
+  ($D$, $G_{ST}$, $E_{ST}$, $K_{ST}$, $H_S$, $H_T$, $H_{ST}$,
+  $G_s$, $G_d$ — the same nine `reports_summary` itself lists,
   restated here rather than abbreviated, since this list had
-  silently kept naming only the first seven after ``Gs``/``Gd``
+  silently kept naming only the first seven after $G_s$ / $G_d$
   were added).
-  ``G_ST`` is undefined for a replicate whose locus is monomorphic
-  across every deme (``H_T == 0``); such replicates are dropped
-  from ``G_ST``'s own sample rather than papered over with a
+  $G_{ST}$ is undefined for a replicate whose locus is monomorphic
+  across every deme ($H_T = 0$); such replicates are dropped
+  from $G_{ST}$'s own sample rather than papered over with a
   substitute value, so its `ConfidenceInterval.sample_count` can be
   smaller than the other statistics' — and a statistic left with
   fewer than two defined replicates is omitted entirely rather
@@ -7516,7 +7548,7 @@ Each statistic's own returned sequence carries its own `generation`
 per point rather than sharing one external generation list the way
 `RunResult.convergence_generations` does for a single replicate:
 a statistic can go undefined for some *interior* stretch of a
-replicate's own history (`G_ST`, whenever every tracked locus is
+replicate's own history ($G_{ST}$, whenever every tracked locus is
 currently monomorphic — `convergence_values`'s own docstring), not
 only trail off at the end the way a stopped replicate does: without
 knowing *which* generations were skipped, this function cannot
@@ -7626,21 +7658,21 @@ def bootstrap_replicate_summary(
         bootstrap_samples: int = 2000) -> dict[str, ConfidenceInterval]
 ```
 
-Return a bootstrap confidence interval for the batch's own pooled `D`/`G_ST`.
+Return a bootstrap confidence interval for the batch's own pooled $D$ / $G_{ST}$.
 
-`replicate_summary` treats each replicate's own final `D`/`G_ST` as
+`replicate_summary` treats each replicate's own final $D$ / $G_{ST}$ as
 one independent draw and builds a closed-form Student's-t interval
 on their plain mean — correct for every *linear* statistic
-(`H_S`, `H_T`, `H_ST`, `E_ST`, `K_ST`, `Gs`, `Gd`), but `D`/`G_ST`
-are *ratios* of `Gs`/`Gd`, and the mean of a ratio is not, in
+($H_S$, $H_T$, $H_{ST}$, $E_{ST}$, $K_{ST}$, $G_s$, $G_d$), but $D$ / $G_{ST}$
+are *ratios* of $G_s$ / $G_d$, and the mean of a ratio is not, in
 general, the ratio of the means: averaging each replicate's own
-already-computed `D` carries a real, measured Jensen-gap bias
+already-computed $D$ carries a real, measured Jensen-gap bias
 relative to what the identity recursion itself predicts (this
 project's own Ryman & Leimar remediation, `R3` part 3, quantifies
-it directly: +4.84% of `D`, 3.4 standard errors from zero, on one
+it directly: +4.84% of $D$, 3.4 standard errors from zero, on one
 measured run).
 This function instead bootstraps the *grand* ratio-of-means estimate
-(`_grand_ratio_of_means`: pool `Gs`/`Gd` across every replicate
+(`_grand_ratio_of_means`: pool $G_s$ / $G_d$ across every replicate
 first, then take one ratio) — resampling replicates with
 replacement `bootstrap_samples` times, recomputing that same grand
 ratio each time, and reading off a percentile interval from the
@@ -7701,7 +7733,7 @@ def identity_statistics(
         params: SimulationParams) -> dict[str, IdentityStatistic]
 ```
 
-Describe `D` and `G_ST` as functions of `H_S` and `H_T` for `params`.
+Describe $D$ and $G_{ST}$ as functions of $H_S$ and $H_T$ for `params`.
 
 **Arguments**:
 
@@ -7720,17 +7752,17 @@ Describe `D` and `G_ST` as functions of `H_S` and `H_T` for `params`.
 def identity_statistics_for(deme_count: int) -> dict[str, IdentityStatistic]
 ```
 
-Describe `D` and `G_ST` as functions of `H_S` and `H_T` (design 6.11).
+Describe $D$ and $G_{ST}$ as functions of $H_S$ and $H_T$ (design 6.11).
 
 The values are the engine's own formulas (`jost_d_from_within_and_total`,
 `g_st_from_demes`), so "value of means" is exactly what a generation's own
-`D`/`G_ST` would be had the window's averaged identities been the state.
+$D$ / $G_{ST}$ would be had the window's averaged identities been the state.
 The gradients are those formulas' derivatives, for the delta-method
 standard error; a test checks them against finite differences.
 
 **Arguments**:
 
-- `deme_count` - The number of demes, which sets `D`'s scaling.
+- `deme_count` - The number of demes, which sets $D$'s scaling.
 
 
 **Returns**:
@@ -7773,24 +7805,24 @@ Statistics `_watched_statistic_values` always returns, regardless of
 
 `fim.statistics.differentiation.statistics_report`'s own `statistics`
 parameter already computes these five unconditionally, no matter what is
-passed in (each is either the shared `H_S`/`H_T` input every other field
+passed in (each is either the shared $H_S$ / $H_T$ input every other field
 derives from, or an O(1) step once those are known) — before this
 constant existed, `_watched_statistic_values`'s own final filtering step
 still discarded whichever of these were not actually watched, so a GUI
-trajectory panel/live statistics table watching only `D` (this project's
-own stated default) never had a real history to show for `G_ST`/`H_S`/
-`H_T` even though computing them cost nothing extra. Design doc §6.2
+trajectory panel/live statistics table watching only $D$ (this project's
+own stated default) never had a real history to show for $G_{ST}$ / $H_S$/
+$H_T$ even though computing them cost nothing extra. Design doc §6.2
 (`20260907-claude-sonnet-5-botanist-gui-redesign.md`) already describes
 the trajectory panel as plotting "all six report statistics" — this
 constant is what makes five of those six always real, for free, closing
-that gap. `H_ST` joined this tuple later than the other four (found
+that gap. $H_{ST}$ joined this tuple later than the other four (found
 live: a real, reported "most statistics stopped scrubbing" investigation
 that turned out to be `track_expensive_statistics` correctly gating
-`E_ST`/`K_ST`/`A_CGD`/`Delta`/`MI`, plus this one genuine, separate gap
-— `H_ST` fell into neither this tuple nor `_EXPENSIVE_OPT_IN_STATISTICS`,
+$E_{ST}$ / $K_{ST}$/`A_CGD`/`Delta`/`MI`, plus this one genuine, separate gap
+— $H_{ST}$ fell into neither this tuple nor `_EXPENSIVE_OPT_IN_STATISTICS`,
 so it had no per-generation history at all unless directly watched, the
 trajectory-history-side twin of the exact watchability gap `FIM-51`
-already closed for it once). `E_ST`/`K_ST` are deliberately excluded: each
+already closed for it once). $E_{ST}$ / $K_{ST}$ are deliberately excluded: each
 is a genuine, independent O(total allele entries) pass `statistics_
 report` only pays for statistics named in the collection passed to it
 (commit `b12679b`, `FIM-24`/`FIM-32`, measured a ~38% reduction skipping
@@ -7844,10 +7876,10 @@ the convergence monitor whatever it needs to judge "has this
 settled down yet" (see this module's own docstring, above, for what
 convergence means here) — and, since `ALWAYS_TRACKED_STATISTICS`
 below, also to give a GUI a real, continuously updated history for
-`D`/`G_ST`/`H_S`/`H_T`/`H_ST` regardless of what `params.
+$D$ / $G_{ST}$ / $H_S$ / $H_T$ / $H_{ST}$ regardless of what `params.
 convergence_statistics` actually watches (design doc §6.2). Only the
 watched subset (`params.convergence_statistics`) — usually just one
-(`D`, most commonly), but this project also supports watching several
+($D$, most commonly), but this project also supports watching several
 at once and requiring either all of them, or any one of them, to
 settle before calling the run converged (`SimulationParams.
 convergence_combinator`, design §9) — ever influences the stop
@@ -7861,7 +7893,7 @@ recomputing per-locus statistics once per tracked name — the several-
 statistic case costs one extra dictionary lookup per statistic per
 locus this way, not another whole pass over the state.
 
-A tracked statistic that is undefined this generation (only ``G_ST``
+A tracked statistic that is undefined this generation (only $G_{ST}$
 can be, and only when every tracked locus is currently
 "monomorphic" — has only a single allele left, with no genetic
 variation remaining to measure at all; see `mean_g_st_across_loci`)
@@ -7871,10 +7903,10 @@ simply not advancing its own trailing window this generation, which
 is honest about there being no observation to add, rather than
 fabricating one.
 
-``D``/``G_ST`` are aggregated across loci per `params.
+$D$ / $G_{ST}$ are aggregated across loci per `params.
 locus_aggregation` (`_watched_statistic_values`), the identical
-estimator `report_for_state` uses for its own ``D``/``G_ST`` fields —
-every other tracked statistic (``E_ST``, ``K_ST``, ``H_S``, ``H_T``)
+estimator `report_for_state` uses for its own `D`/``G_ST`` fields —
+every other tracked statistic ($E_{ST}$, $K_{ST}$, $H_S$, $H_T$)
 is unaffected by that choice and stays a plain per-locus mean either
 way (`pooled_g_st_and_d`'s own docstring).
 
@@ -7909,7 +7941,7 @@ would diverge the first time either changed.
 **Returns**:
 
   Every currently-defined tracked statistic's value, keyed by
-  name. A statistic that is undefined for this state (`G_ST` when
+  name. A statistic that is undefined for this state ($G_{ST}$ when
   every tracked locus is monomorphic, say) is absent rather than
   present as a placeholder, matching what the live monitor
   records for that same generation.
@@ -7929,12 +7961,12 @@ def convergence_values_vectorized(
 values`, so a whole generation's convergence check never has to
 rebuild a `ModelState`.
 
-`D`, `G_ST`, `H_S`, `H_T` and `H_ST`, the statistics every run tracks
+$D$, $G_{ST}$, $H_S$, $H_T$ and $H_{ST}$, the statistics every run tracks
 and the ones the convergence monitor usually watches, are computed for
 every locus by one compiled call (`VectorBlock.locus_statistics`),
 which reproduces `statistics_report` bit for bit; the cross-locus
 aggregation then follows `_watched_statistic_values` exactly. The
-expensive opt-in statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`)
+expensive opt-in statistics ($E_{ST}$, $K_{ST}$, `A_CGD`, `Delta`, `MI`)
 have no kernel form, so a run that watches or tracks any of them
 builds each locus's frequency maps and uses `statistics_report`. So
 does the one generation in which the kernel flags a value that
@@ -7967,7 +7999,7 @@ The statistics the GUI shows for the deme pair chosen for the scatter
 plot: the four identities `NEI_I_PAIR_*`, the four distances
 `NEI_D_PAIR_*` and pairwise `F_ST_PAIR` (`fim.statistics.catalog`).
 One O(alleles) pass per locus. A deme compared with itself gives
-identity 1, distance 0 and pairwise F_ST 0 (undefined, `None`, if
+identity 1, distance 0 and pairwise $F_{ST}$ 0 (undefined, `None`, if
 that deme is fixed).
 
 **Arguments**:
@@ -7998,13 +8030,13 @@ def history_free_statistic_values(
 
 Return the global statistics that have no per-generation history.
 
-`Gs`, `Gd`, the five pooled-heterozygosity measures (`D_m`, `R_ST`,
-both `G'_ST`, coancestry `F_ST`) and the eight all-demes Nei fields:
+$G_s$, $G_d$, the five pooled-heterozygosity measures ($D_m$, $R_{ST}$,
+both $G^\prime_{ST}$, coancestry $F_{ST}$) and the eight all-demes Nei fields:
 what a scrubbed frame
 of a completed run needs to show those rows at that frame's
 generation. Computed directly and cheaply (O(d * alleles) per locus),
 not through `report_for_state`, which would also pay for every
-expensive statistic. `Gs` and `Gd` equal `report_for_state`'s.
+expensive statistic. $G_s$ and $G_d$ equal `report_for_state`'s.
 
 **Arguments**:
 
@@ -8042,9 +8074,9 @@ def mean_g_st_across_loci(
         locus_reports: Sequence[DifferentiationReport]) -> float | None
 ```
 
-Return ``G_ST`` averaged across loci, dropping any locus where it is undefined.
+Return $G_{ST}$ averaged across loci, dropping any locus where it is undefined.
 
-``g_st`` is undefined at a locus whose total heterozygosity (``H_T``)
+``g_st`` is undefined at a locus whose total heterozygosity ($H_T$)
 is zero — a fully monomorphic locus has nothing to differentiate. Such
 a locus contributes nothing to the average, rather than a fabricated
 ``0.0`` (which would understate real differentiation at the other,
@@ -8068,10 +8100,10 @@ def pooled_g_st_and_d(
 
 Return ``(G_ST, D)``, aggregated across loci per `locus_aggregation`.
 
-With `"ratio_of_means"`, compute each statistic from pooled `H_S`
-and `H_T` values supplied by the caller. With `"mean_of_ratios"`,
-average the per-locus `G_ST` and `D` values. `E_ST`, `K_ST`, `H_S`,
-`H_T`, and `H_ST` are averaged per locus regardless of this option.
+With `"ratio_of_means"`, compute each statistic from pooled $H_S$
+and $H_T$ values supplied by the caller. With `"mean_of_ratios"`,
+average the per-locus $G_{ST}$ and $D$ values. $E_{ST}$, $K_{ST}$, $H_S$,
+$H_T$, and $H_{ST}$ are averaged per locus regardless of this option.
 
 <a id="fim.engine.tracking.statistics_for_locus"></a>
 
@@ -8091,9 +8123,9 @@ Compute the requested differentiation statistics for one locus.
 Builds a normalized allele-frequency table from ``state`` and passes
 it to ``fim.statistics.differentiation.statistics_report``. When
 ``params.deme_weighting`` is ``"size"``, population-size weights are
-supplied for ``E_ST``, ``Delta``, and ``MI`` only. Other statistics,
-including ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``,
-``A_CGD``, ``Gs``, and ``Gd``, use equal deme treatment.
+supplied for $E_{ST}$, ``Delta``, and ``MI`` only. Other statistics,
+including $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$, $K_{ST}$,
+``A_CGD``, $G_s$, and $G_d$, use equal deme treatment.
 
 **Arguments**:
 
@@ -8845,7 +8877,7 @@ Payload versions this build restores.
 
 #### [EQUILIBRATION\_HISTORY](./execution.py#L119)
 
-Array holding the ancestral phase's `H_S` history, when there was one.
+Array holding the ancestral phase's $H_S$ history, when there was one.
 
 <a id="fim.execution.VECTOR_PREFIX"></a>
 
@@ -10025,8 +10057,8 @@ driver thread, before this method was written; see
 
 **Returns**:
 
-- ``{"ok"` - True, "isBatch": ..., "equilibrium": ...,
-- `"identityRecovery"` - ..., "closedForm": ...}` once the run has
+  A dictionary with `ok` set to `True` and the keys `isBatch`,
+  `equilibrium`, `identityRecovery` and `closedForm`, once the run has
   *started* — not once it finishes; the real outcome arrives via the pushed
   calls above. `isBatch` is `params.n_replicates > 1`, the
   identical "batch or scalar" toggle `_start_batch_run`'s own
@@ -10037,12 +10069,12 @@ driver thread, before this method was written; see
   never submits it). `equilibrium` is
   `_equilibrium_reference_payload`'s own result (design doc
   §6.2's predicted-equilibrium trajectory overlay);
-  `identityRecovery` is `_identity_recovery_reference_
-  payload`'s own result (that same section's closed-form
-  recovery *curve*, a second and different reference overlay —
-  see that function's own docstring); `closedForm` is
+  `identityRecovery` is
+  `_identity_recovery_reference_payload`'s own result (that same
+  section's closed-form recovery *curve*, a second and different
+  reference overlay — see that function's own docstring); `closedForm` is
   `_closed_form_trajectory_payload`'s own result (the same
-  section's closed-form `D(t)`/`G_ST(t)` curves). All three are
+  section's closed-form $D(t)$ / $G_{ST}(t)$ curves). All three are
   `None` for a batch (never computed there — batch has no
   trajectory panel of its own to overlay onto) or for a scalar
   run whose `N`/`m`(/`mu`, for `equilibrium` and `closedForm`)
@@ -11154,7 +11186,7 @@ values, which are held fixed at whatever `get_equilibrium_
 predictions` was just called with.
 
 Every quantity `equilibrium_numeric_predictions` knows about is
-evaluated at every swept point, not the `D`/`G_ST`/`E_ST` subset
+evaluated at every swept point, not the $D$ / $G_{ST}$ / $E_{ST}$ subset
 that shares a `[0, 1]` domain. No statistic is privileged: each
 one is a closed-form function of `(N, m, mu, d)`, so each one has
 a real curve along each of the four axes, and the differing units
@@ -12018,8 +12050,8 @@ def set_shown_statistics(keys: list[str] | None) -> dict[str, Any]
 
 Remember which statistics are shown (Settings, "Statistics shown").
 
-Display only, except for the five expensive statistics (`E_ST`,
-`K_ST`, `A_CGD`, `Delta`, `MI`): showing any of them makes every
+Display only, except for the five expensive statistics ($E_{ST}$,
+$K_{ST}$, `A_CGD`, `Delta`, `MI`): showing any of them makes every
 later run track all five each generation, which lengthens runs,
 and hiding them all stops that (`_track_expensive_statistics_
 text`). A saved run's results never change.
@@ -12956,7 +12988,7 @@ Nothing is stored; the comparison is worked out on each call.
 
 - `study_ids` - Two or more sweep Studies.
 - `statistic` - A statistic's catalog key, or an empty string for a
-  default (`D`, else `G_ST`, else the first they have).
+  default ($D$, else $G_{ST}$, else the first they have).
 - `on` - The axes to join on, or `None` for every shared axis.
 - `labels` - A label for each Study, or `None` for the Study names.
 
@@ -13017,7 +13049,7 @@ overwritten once the researcher has chosen it.
 - `study_id` - A sweep Study.
 - `options` - `{"statistics": [names] | "all", "withTheory": bool,
 - `"wide"` - bool, "includeUnfinished": bool}`; every key is
-  optional (the defaults are `D` and `G_ST`, no theory, the
+  optional (the defaults are $D$ and $G_{ST}$, no theory, the
   long form, finished points only).
 
 
@@ -14258,7 +14290,7 @@ to the manifest.
 Every checkbox the Structure panel's "convergence statistic(s)" group
 offers: every convergence-eligible statistic in `fim.statistics.catalog`,
 which the page builds its checkboxes from too. Deriving it closed an old
-gap: `H_ST` was a legal `SimulationParams.convergence_statistic` with no
+gap: $H_{ST}$ was a legal `SimulationParams.convergence_statistic` with no
 checkbox.
 
 <a id="fim.gui.config_form.all_fields"></a>
@@ -18033,7 +18065,7 @@ Compare sweeps for the page: the join, each sweep's cells, the difference.
 
 - `study_ids` - Two or more sweep Studies.
 - `statistic` - A statistic's catalog key, or empty for the first of
-  `D`, `G_ST` that the sweeps have (else the first they have).
+  $D$, $G_{ST}$ that the sweeps have (else the first they have).
 - `on` - The axes to join on, or `None` for every shared axis.
 - `labels` - A label for each Study, or `None` for the Study names (with
   the Study id added where two names are alike).
@@ -18088,7 +18120,7 @@ One run's own sampled statistic-vs-generation history.
 - `histories` - One list per requested statistic name, each the same
   length as `generations` and in the same order — a `None`
   entry means that statistic was undefined at that specific
-  sampled generation (`G_ST` at a currently-monomorphic
+  sampled generation ($G_{ST}$ at a currently-monomorphic
   locus, the one named case `fim.engine.report_for_state`
   itself can produce), not a missing sample; the caller
   decides how to skip it, the same "leave a statistic's own
@@ -19154,7 +19186,7 @@ the one caller that needs this: it threads `generation_count` and
 `equilibrium_generation_count`/`equilibrium_final_heterozygosity`
 fields (`20260907-claude-sonnet-5-equilibrium-split-design.md` §5).
 The ancestral phase's full trajectory — every generation's own
-allele frequencies, not only this `H_S` summary — is not held here:
+allele frequencies, not only this $H_S$ summary — is not held here:
 `generate_with_outcome` streams it, one generation at a time, to its
 `on_generation` observer, which `fim.engine` writes as the run's
 `equilibrium_trajectory.tlog` artifact.
@@ -19163,10 +19195,10 @@ allele frequencies, not only this `H_S` summary — is not held here:
 
 - `generation_count` - The generation at which the ancestral phase
 - `stopped` - its burn-in (`EquilibriumSplitInitialCondition`).
-- `final_heterozygosity` - The ancestral population's own `H_S` at
+- `final_heterozygosity` - The ancestral population's own $H_S$ at
   that generation — the actual value split into `d` demes,
   not a value the caller chose.
-- `history` - `H_S` at every generation of the ancestral phase,
+- `history` - $H_S$ at every generation of the ancestral phase,
   oldest first, generation zero (the pre-drift Dirichlet draw)
   included.
 
@@ -19195,8 +19227,8 @@ into d demes." Two real simulation phases, not one:
    `mutate` (no `migrate` — there is nothing to migrate between with
    one deme) for a burn-in derived from the model itself
    (`fim.convergence.defaults.panmictic_equilibration`): the first
-   generation by which the expected identity, so the expected `H_S`
-   (identical to `H_T` at one deme), of every locus is within
+   generation by which the expected identity, so the expected $H_S$
+   (identical to $H_T$ at one deme), of every locus is within
    `convergence_tolerance` of its mutation-drift equilibrium
    whatever the starting draw, about `ln(1 / tolerance)` relaxation
    times `1 / (2 mu + 1/N)`; never fewer than `convergence_window`
@@ -19207,14 +19239,14 @@ into d demes." Two real simulation phases, not one:
    from a non-equilibrium ancestral population would defeat the one
    thing this mode exists to guarantee).
 
-   Watching the population's own `H_S` settle, as this phase first
-   did, cannot work: at equilibrium a single population's `H_S`
+   Watching the population's own $H_S$ settle, as this phase first
+   did, cannot work: at equilibrium a single population's $H_S$
    keeps wandering around its expectation by drift, so a trailing
    window never settles to a useful tolerance (with the noise gate
    of `fim.convergence.monitor` it never passed within 100,000
    generations for the bundled example; before that gate it
    "settled" on a chance lull, 20 generations in). Nor can the
-   realized `H_S` be checked against the expectation, for the same
+   realized $H_S$ be checked against the expectation, for the same
    reason. The burn-in is the model's own answer instead: how long
    the population takes to forget where it started.
 2. **Split.** By the time equilibration stops, the ancestral
@@ -19276,7 +19308,7 @@ Configure one ancestral-equilibration phase.
   independent of the real run's own `convergence_window`.
 - `convergence_tolerance` - The largest expected departure of the
   ancestral population's heterozygosity from its
-  equilibrium, in `H_S`'s units; sets the derived burn-in
+  equilibrium, in $H_S$'s units; sets the derived burn-in
   (`equilibrium_convergence_tolerance`). Greater than zero.
 - `max_generations` - Hard cap on the ancestral phase's own
   generation count. A burn-in longer than this is fatal
@@ -19420,7 +19452,7 @@ def founding_condition_for_heterozygosity(
 Build a `p_0` table where every deme is an identical ancestral copy.
 
 Ryman & Leimar (2008)'s own gene-identity recursion starts every
-trajectory from `Gs(0) = Gd(0) = 1 - H_S(0)` — every deme founded as
+trajectory from $G_s(0) = G_d(0) = 1 - H_S(0)$ — every deme founded as
 an identical copy of one ancestral population at a specified
 heterozygosity, before any migration/mutation/drift has had a chance
 to make the demes diverge from each other. `fim`'s own two existing
@@ -19461,7 +19493,7 @@ common alleles, by definition.
 **Arguments**:
 
 - `heterozygosity` - The ancestral population's own expected
-  heterozygosity, `H_S(0)`. Must be in `[0, 1)` — `1` itself
+  heterozygosity, $H_S(0)$. Must be in `[0, 1)` — `1` itself
   is the unreachable supremum every finite allele count only
   ever approaches (`heterozygosity.heterozygosity`'s own
   docstring).
@@ -19992,14 +20024,14 @@ functions that actually use each one.
 - `initial_allele_count` - Founding allele count per locus.
 - `initial_concentration` - Symmetric Dirichlet concentration.
 - `deme_weighting` - Weighting used by statistics that support it.
-- `locus_aggregation` - How `D` and `G_ST` combine across loci in
+- `locus_aggregation` - How $D$ and $G_{ST}$ combine across loci in
   `fim.engine.report_for_state`'s own final report —
-- ``"ratio_of_means"`` _the default_ - average `H_S`/`H_T` across
-  loci first, then compute one `D`/`G_ST` from those pooled
+- ``"ratio_of_means"`` _the default_ - average $H_S$ / $H_T$ across
+  loci first, then compute one $D$ / $G_{ST}$ from those pooled
   values, matching what the exact gene-identity recursion
   predicts and avoiding the small-denominator instability a
-  per-locus ratio can have. `"mean_of_ratios"`: compute `D`/
-  `G_ST` at each locus independently, then average those —
+  per-locus ratio can have. `"mean_of_ratios"`: compute $D$/
+  $G_{ST}$ at each locus independently, then average those —
   this project's own original behavior, kept available for
   comparability with literature or prior analyses that used
   it, not because it is the better estimator: measured against
@@ -20008,7 +20040,7 @@ functions that actually use each one.
   the recursion's own prediction where `"mean_of_ratios"` was
   off by 1.88% (CHANGELOG.md's own entry for this change has
   the full comparison). Every other
-  reported statistic (`H_S`, `H_T`, `H_ST`, `E_ST`, `K_ST`) is
+  reported statistic ($H_S$, $H_T$, $H_{ST}$, $E_{ST}$, $K_{ST}$) is
   unaffected — each is already a linear mean across loci, with
   no such ambiguity to resolve.
 - `convergence_statistic` - One statistic, or several, watched by the
@@ -20016,19 +20048,19 @@ functions that actually use each one.
 - `convergence_combinator` - How several watched statistics combine —
   "all" (every one stable) or "any" (at least one stable).
   A single statistic makes this a no-op special case.
-- `convergence_estimate` - Which expected value a run estimates for `D`
-  and `G_ST`, the two statistics that are functions of `H_S` and
-  `H_T`. `"mean_of_values"` (the default) averages the statistic
+- `convergence_estimate` - Which expected value a run estimates for $D$
+  and $G_{ST}$, the two statistics that are functions of $H_S$ and
+  $H_T$. `"mean_of_values"` (the default) averages the statistic
   itself over the evidence window; `"value_of_means"` computes it
-  from the window's averaged `H_S` and `H_T`, the quantity the
+  from the window's averaged $H_S$ and $H_T$, the quantity the
   closed form predicts; `"auto"` picks the second when the
   statistic is undefined in a window generation or its denominator
   is tiny in too many of them (Expert Settings
   `estimate_auto_denominator`/`estimate_auto_fraction`). The
   stopping decision, the headline number and the batch interval
   follow the choice; the report carries both forms either way.
-  Statistics that are not functions of the identities (`E_ST`,
-  `K_ST`, `H_ST`) have one form.
+  Statistics that are not functions of the identities ($E_{ST}$,
+  $K_{ST}$, $H_{ST}$) have one form.
 - `convergence_burn_in` - Generations discarded before averaging starts.
   `AUTO_CONVERGENCE` (`0`, the default) derives it from the
   model's relaxation time and `precision`
@@ -20042,7 +20074,7 @@ functions that actually use each one.
   interval across replicates is that narrow. Defaults to
   `DEFAULT_PRECISION` (`0.01`).
 - `track_expensive_statistics` - Whether the per-generation
-  convergence check also computes `E_ST`/`K_ST`/`A_CGD`/
+  convergence check also computes $E_{ST}$ / $K_{ST}$/`A_CGD`/
   `Delta`/`MI` even when none is actually watched — the
   display-only opt-in a GUI trajectory panel/live statistics
   table uses to show real, continuously updated values for
@@ -20050,28 +20082,28 @@ functions that actually use each one.
   real, recurring performance cost (never a correctness
 - `change` - a run's own convergence decision, and every other
   statistic, are completely unaffected by this flag either
-  way). `D`/`G_ST`/`H_S`/`H_T` need no such flag and are
+  way). $D$ / $G_{ST}$ / $H_S$ / $H_T$ need no such flag and are
   always computed and returned for free regardless — each is
-  either the shared `H_S`/`H_T` input every other field
+  either the shared $H_S$ / $H_T$ input every other field
   derives from, or an O(1) step once those are known
   (`fim.statistics.differentiation.statistics_report`'s own
-  `statistics` parameter). `E_ST` (an entropy pass over the
-  pooled table plus one per deme), `K_ST` (a set union across
+  `statistics` parameter). $E_{ST}$ (an entropy pass over the
+  pooled table plus one per deme), $K_{ST}$ (a set union across
   every deme's own alleles), `A_CGD` (Caballero-García-Dorado
   allelic distance, an O(deme pairs) pass), `Delta` (Gregorius
   δ, O(deme pairs*alleles) — the most expensive of the
   five), and `MI` (Sherwin mutual information, an entropy pass
   over the pooled table plus one per deme, the same shape as
-  `E_ST`) are each a real, independent, non-trivial pass over
+  $E_{ST}$) are each a real, independent, non-trivial pass over
   every locus's own frequency table, *every generation of the
   run* — commit `b12679b` (`FIM-24`/`FIM-32`) measured
-  skipping `E_ST`/`K_ST` alone, when neither is watched, at
+  skipping $E_{ST}$ / $K_{ST}$ alone, when neither is watched, at
   roughly a 38% reduction in per-generation convergence-check
   cost at a many-alleles reference configuration; turning this
   on pays that same cost back for all five, deliberately, in
   exchange for the display value. `A_CGD`/`Delta`/`MI` are
-  legal `convergence_statistic` choices exactly like `E_ST`/
-  `K_ST` (`_CONVERGENCE_STATISTICS`, below) — genuine "bonus"
+  legal `convergence_statistic` choices exactly like $E_{ST}$/
+  $K_{ST}$ (`_CONVERGENCE_STATISTICS`, below) — genuine "bonus"
   measurements from the differentiation literature, but a
   real, reported request confirmed watching one of them for
   convergence is a choice this project leaves to the caller,
@@ -20268,7 +20300,7 @@ functions that actually use each one.
   split).
 - `equilibrium_convergence_tolerance` - The largest expected departure
   of the ancestral population's heterozygosity from its
-  mutation-drift equilibrium, in `H_S`'s units; greater than
+  mutation-drift equilibrium, in $H_S$'s units; greater than
   zero. Sets the ancestral burn-in, about `ln(1 / tolerance)`
   relaxation times (`fim.convergence.defaults.
   panmictic_equilibration`).
@@ -21573,12 +21605,12 @@ Present alleles only, in ascending id order: the input
 def locus_statistics() -> tuple[np.ndarray, np.ndarray]
 ```
 
-Compute `H_S`, `H_T`, `H_ST`, `G_ST` and `D` for every locus.
+Compute $H_S$, $H_T$, $H_{ST}$, $G_{ST}$ and $D$ for every locus.
 
 **Returns**:
 
   `(table, status)`: `table` is `(loci, 5)` float64 in that
-  column order (`G_ST` is `nan` where undefined); `status` is
+  column order ($G_{ST}$ is `nan` where undefined); `status` is
   `(loci,)` int64, non-zero where `statistics_report` would have
   raised (the caller then uses it, to raise the real error).
 
@@ -21658,7 +21690,7 @@ them sorted too. Under finite alleles the column is the allele id and
 
 #### [STATISTIC\_COLUMNS](./model/vector_kernels.py#L76)
 
-Columns of the per-locus statistics table: H_S, H_T, H_ST, G_ST, D.
+Columns of the per-locus statistics table: $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$.
 
 <a id="fim.model.vector_kernels.STATISTICS_TOLERANCE"></a>
 
@@ -21895,7 +21927,7 @@ call `mint_columns`.
 def locus_statistics(freq, ncol, out, status)
 ```
 
-Compute `H_S`, `H_T`, `H_ST`, `G_ST` and `D` for every locus.
+Compute $H_S$, $H_T$, $H_{ST}$, $G_{ST}$ and $D$ for every locus.
 
 Equal deme weights, as `statistics_report` uses for these five
 fields. Each value reproduces `fim.statistics.differentiation`
@@ -21907,8 +21939,8 @@ clamp to `[0, 1]` within a tolerance, the same formulas.
 
 - `freq` - `(loci, demes, width)` frequencies.
 - `ncol` - Live columns per locus.
-- `out` - `(loci, 5)` output: `H_S`, `H_T`, `H_ST`, `G_ST`, `D`.
-  `G_ST` is `nan` where it is undefined (`H_T` is zero).
+- `out` - `(loci, 5)` output: $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$.
+  $G_{ST}$ is `nan` where it is undefined ($H_T$ is zero).
 - `status` - `(loci,)` int64 output, `0` when every value is in range.
   A non-zero entry means the Python implementation would have
   raised; the caller recomputes that generation with it.
@@ -22193,7 +22225,7 @@ def migrate_vectorized_symmetric(locus_state: VectorizedLocusState,
                                  sizes: np.ndarray) -> VectorizedLocusState
 ```
 
-Blend every deme with the migrant pool in `O(d*K)` time, no `(d,d)` matrix.
+Blend every deme with the migrant pool in $O(dK)$ time, no $(d,d)$ matrix.
 
 The array-native counterpart to `fim.model.operators._migrate_
 symmetric`'s own `O(d*A)` shortcut, for the identical common case:
@@ -22206,10 +22238,14 @@ vectorized`'s own `O(d^2)` memory wall": 0.8GB at `d=10^4`, 20GB at
 `d=5x10^4`, genuinely unrepresentable beyond that, not merely slow).
 This function never builds `W` at all — it restates `_migrate_
 symmetric`'s own two-pass formula (global size-weighted mass once,
-then a per-destination pool) directly in dense-array form:
+then a per-destination pool) directly in dense-array form. Let $N_i$
+be `sizes[i]`, $p_{ia}$ be `frequencies[i, a]`, and $m$ be `rate`.
+With $N_{\mathrm{total}} = \sum_i N_i$, the formulas are
 
 
-`O(d*K)` in both compute and memory — the identical order the
+Here $G_a$, $W_i$, $P_{ia}$ and $p^\prime_{ia}$ correspond to
+`global_mass[a]`, `other_weight[i]`, `pool[i, a]` and `blended[i, a]`.
+This is $O(dK)$ in both compute and memory — the identical order the
 dict-based backend's own shortcut already achieves, now available
 for the array-native path too. No separate normalization step:
 every row of `blended` sums to exactly 1 whenever every row of
@@ -22219,11 +22255,13 @@ property `symmetric_migration_weights`'s own docstring proves for
 own formula over `a` and simplifying), matching `migrate_
 vectorized`'s own no-normalization contract exactly, not a new one.
 
-```
-global_mass[a] = sum_i sizes[i] * frequencies[i, a]  # sizes @ frequencies
-other_weight[i] = total_size - sizes[i]
-pool[i, a] = (global_mass[a] - sizes[i] * frequencies[i, a]) / other_weight[i]
-blended[i, a] = (1 - rate) * frequencies[i, a] + rate * pool[i, a]
+```math
+\begin{array}{rl}
+G_a &= \sum_i N_i p_{ia}, \\
+W_i &= N_{\mathrm{total}} - N_i, \\
+P_{ia} &= \frac{G_a - N_i p_{ia}}{W_i}, \\
+p^\prime_{ia} &= (1 - m)p_{ia} + mP_{ia}.
+\end{array}
 ```
 
 **Arguments**:
@@ -22239,7 +22277,7 @@ blended[i, a] = (1 - rate) * frequencies[i, a] + rate * pool[i, a]
 
 <a id="fim.model.vectorized.symmetric_migration_weights"></a>
 
-#### [symmetric\_migration\_weights](./model/vectorized.py#L749)
+#### [symmetric\_migration\_weights](./model/vectorized.py#L755)
 
 ```python
 def symmetric_migration_weights(rate: float, sizes: np.ndarray) -> np.ndarray
@@ -22285,7 +22323,7 @@ correctly, only to have `1.0 - rate` win instead.
 
 <a id="fim.model.vectorized.mutate_vectorized"></a>
 
-#### [mutate\_vectorized](./model/vectorized.py#L796)
+#### [mutate\_vectorized](./model/vectorized.py#L802)
 
 ```python
 def mutate_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
@@ -22327,7 +22365,7 @@ division `drift_vectorized` uses), so no renormalization is needed.
 
 <a id="fim.model.vectorized.drift_vectorized"></a>
 
-#### [drift\_vectorized](./model/vectorized.py#L1045)
+#### [drift\_vectorized](./model/vectorized.py#L1051)
 
 ```python
 def drift_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
@@ -22359,7 +22397,7 @@ exactly what property that gives this function relative to
 
 <a id="fim.model.vectorized.step_vectorized"></a>
 
-#### [step\_vectorized](./model/vectorized.py#L1081)
+#### [step\_vectorized](./model/vectorized.py#L1087)
 
 ```python
 def step_vectorized(state: VectorizedState,
@@ -22991,7 +23029,7 @@ def convergence_history_rows(result: RunResult) -> list[dict[str, object]]
 Return one row per generation, for `convergence.jsonl`.
 
 Each row is ``{"generation": N, "D": ..., "H_S": ..., ...}``. A statistic
-whose history is shorter than the generation list (only `G_ST` can be, at
+whose history is shorter than the generation list (only $G_{ST}$ can be, at
 a currently monomorphic locus) is left out of every row, because which
 generations it is missing is not recoverable from the monitor's record.
 
@@ -25947,10 +25985,10 @@ Format (version 1)::
 
 Each list is the strict upper triangle of a symmetric ``d x d`` matrix,
 row by row (pair ``(0, 1)``, ``(0, 2)``, ..., ``(1, 2)``, ...); the
-diagonal is known (1 for an identity, 0 for F_ST). For the Nei family only
+diagonal is known (1 for an identity, 0 for $F_{ST}$). For the Nei family only
 identities are stored: they are always finite (a distance is infinite
 when nothing is shared, and strict JSON has no infinity), and each
-distance is exactly ``-ln(identity)``. A pairwise F_ST is ``null`` where it
+distance is exactly ``-ln(identity)``. A pairwise $F_{ST}$ is ``null`` where it
 is undefined (both demes fixed for the same allele).
 
 Above the deme-count limit (`fim.statistics.catalog.
@@ -26075,9 +26113,9 @@ Return one pair's saved value, or `None` if the file has none.
 
 **Returns**:
 
-  The value (a deme with itself: identity 1, F_ST 0); `None` when the
+  The value (a deme with itself: identity 1, $F_{ST}$ 0); `None` when the
   matrices were skipped for a large deme count, or the value is
-  undefined (a `null` pairwise F_ST).
+  undefined (a `null` pairwise $F_{ST}$).
 
 <a id="fim.persistence.recording"></a>
 
@@ -32250,8 +32288,8 @@ Average the requested differentiation order across loci.
 calls "q": a single number that a whole family of differentiation
 measures turns out to be special cases of, once written in a common
 mathematical form — `differentiation_q(table, order=0, ...)` is
-exactly `K_ST`, `order=1` is exactly `E_ST`, and `order=2` is exactly
-Jost's `D`, all from literally the same underlying formula, just
+exactly $K_{ST}$, `order=1` is exactly $E_{ST}$, and `order=2` is exactly
+Jost's $D$, all from literally the same underlying formula, just
 evaluated at a different value of `order`. Reporting several
 different `order` values side by side for the same run — a
 "differentiation-q sweep" — is one way of seeing how sensitive a
@@ -32263,9 +32301,9 @@ actually is.
 `deme_weighting` has a defined effect only at ``q = 1``
 (`fim.statistics.differentiation.differentiation_q` raises if
 weights are passed at any other order) — the same order that
-matches `E_ST`. Deriving the weights the same way
+matches $E_{ST}$. Deriving the weights the same way
 `fim.engine.tracking.statistics_for_locus` does keeps `Differentiation_1`
-here identical to the report's own `E_ST`, rather than the two
+here identical to the report's own $E_{ST}$, rather than the two
 silently disagreeing whenever `deme_weighting` is `"size"`.
 
 <a id="fim.reanalyze.group_rows_by_generation"></a>
@@ -32490,7 +32528,7 @@ One thing that differs between two runs of the same configuration.
 **Attributes**:
 
 - `label` - What differs: an artifact name (`trajectory`), or a reported
-  statistic (`D`).
+  statistic ($D$).
 - `old` - The earlier run's value, or its digest for an artifact.
 - `new` - The recomputed run's value, or its digest for an artifact.
 
@@ -32609,7 +32647,7 @@ The statistics of one replicate at its last generation.
 
 Behaves as a read-only mapping from statistic ID (as listed in the
 statistics catalog, for example ``"D"`` or ``"G_ST"``) to its value;
-``None`` means the statistic is undefined for this replicate (``G_ST``
+``None`` means the statistic is undefined for this replicate ($G_{ST}$
 when a locus is monomorphic everywhere). `to_dict` returns exactly the
 contents of the run's `report.json`.
 
@@ -32679,7 +32717,7 @@ Return a short summary of the headline statistics.
 def D() -> float | None
 ```
 
-Jost's differentiation `D`.
+Jost's differentiation $D$.
 
 <a id="fim.results.Report.G_ST"></a>
 
@@ -32690,7 +32728,7 @@ Jost's differentiation `D`.
 def G_ST() -> float | None
 ```
 
-Nei's `G_ST`; `None` where it is undefined.
+Nei's $G_{ST}$; `None` where it is undefined.
 
 <a id="fim.results.Report.H_S"></a>
 
@@ -34275,7 +34313,7 @@ When one replicate counts as converged.
   ``"D"``). A single name is accepted and becomes a one-item tuple.
 - `combinator` - ``"all"`` stops when every watched statistic is stable;
   ``"any"`` when at least one is.
-- `estimate` - Which expected value is reported for `D` and `G_ST`.
+- `estimate` - Which expected value is reported for $D$ and $G_{ST}$.
 - `burn_in` - Generations discarded before averaging, or ``"auto"``.
 - `max_generations` - Hard cap on generations, or ``"auto"``.
 - `precision` - Target half-width of the interval around each watched
@@ -34343,8 +34381,8 @@ How the reported statistics are computed.
 **Arguments**:
 
 - `deme_weighting` - ``"equal"`` or by deme ``"size"``.
-- `locus_aggregation` - ``"ratio_of_means"`` pools `H_S` and `H_T` across
-  loci before forming `D` and `G_ST`; ``"mean_of_ratios"`` forms
+- `locus_aggregation` - ``"ratio_of_means"`` pools $H_S$ and $H_T$ across
+  loci before forming $D$ and $G_{ST}$; ``"mean_of_ratios"`` forms
   them per locus and averages.
 - `track_expensive` - Also track the costly opt-in statistics every
   generation, for display.
@@ -34753,7 +34791,7 @@ Return whether showing `shown` asks a run to track the expensive statistics.
 
 The desktop app's rule for `SimulationParams.track_expensive_
 statistics`: true exactly when at least one ``"opt_in"`` statistic
-(`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) is shown, so a shown one
+($E_{ST}$, $K_{ST}$, `A_CGD`, `Delta`, `MI`) is shown, so a shown one
 has a real per-generation history on the trajectory and the
 scrubbed statistics panel, and hiding all five avoids their cost.
 The flag covers all five together: showing any one computes all
@@ -34789,8 +34827,8 @@ its rows, columns, checkboxes and tooltips from it.
 Compute diversity and differentiation statistics from allele frequencies.
 
 The module implements expected heterozygosity and measures including Jost's
-D, Nei's G_ST, E_ST, K_ST, H_S, H_T, and H_ST. Within-deme and pooled
-heterozygosity provide the basis for these measures, which use different
+$D$, Nei's $G_{ST}$, $E_{ST}$, $K_{ST}$, $H_S$, $H_T$, and $H_{ST}$. Within-deme
+and pooled heterozygosity provide the basis for these measures, which use different
 normalizations and are not interchangeable. Inputs are normalized frequency
 tables with integer-like allele identifiers and real-valued frequencies. See
 `doc/jost-differentiation-measures.md` for definitions and comparisons.
@@ -34807,18 +34845,18 @@ Scalar statistics computed from a frequency table.
 
 One locus's own complete set of results from `statistics_report`,
 below (`fim.engine.FinalReport` reports the identical set, each
-averaged across every locus a run tracks). `G_ST` alone can be
+averaged across every locus a run tracks). $G_{ST}$ alone can be
 `None`: see `g_st`'s own docstring for why. Every other field is
 always a real number **when `statistics_report` is called with its
 default `statistics=None`** — every existing caller, and the only
 form this report ever takes once it leaves `fim.engine`'s own
-convergence-checking hot path. `Gs`/`Gd` (`gs`/`gd`, below) added by
+convergence-checking hot path. $G_s$ / $G_d$ (`gs`/`gd`, below) added by
 this project's own Ryman & Leimar remediation, `R4`
 (`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
 5-gene-identity-recursion-fim-implications.md` §9) — the within-
-and between-deme gene identities `H_S`/`H_T`/`G_ST`/`D` are all
+and between-deme gene identities $H_S$ / $H_T$ / $G_{ST}$ / $D$ are all
 themselves derived from, exposed directly rather than leaving every
-consumer to re-derive them from `H_S`/`H_T` independently.
+consumer to re-derive them from $H_S$ / $H_T$ independently.
 
 `A_CGD` is Caballero-Garcia-Dorado allelic distance, `Delta` is
 Gregorius's distance-oriented differentiation, and `MI` is Sherwin's
@@ -34826,7 +34864,7 @@ mutual information. These are exposed in the same report because the
 GUI's literature-visualization panel and JSON consumers need one
 authoritative engine/API surface for literature-derived statistics.
 
-`E_ST`/`K_ST`/`A_CGD`/`Delta`/`MI`/`Gs`/`Gd` may instead hold
+$E_{ST}$ / $K_{ST}$/`A_CGD`/`Delta`/`MI` / $G_s$ / $G_d$ may instead hold
 `math.nan` — a deliberate
 placeholder, never a real measurement — whenever `statistics_report`
 was called with an explicit `statistics` argument that excludes that
@@ -34874,16 +34912,17 @@ Return Nei (1977) unbiased expected heterozygosity for a finite sample.
 
 Nei (1977, *Genetics* 89(3):583-590), Equation 2:
 
-.. math::
 
+where $n$ is the number of diploid individuals sampled (or $2n$
+gene copies). Sample frequencies $p_i$ computed from a finite sample
+of size $2n$ gene copies underestimate population heterozygosity
+because of sampling without replacement; multiplying by
+$2n / (2n - 1)$ corrects this small-sample bias exactly.
+
+```math
 \hat{H}_e = \frac{2n}{2n - 1} \left(1 - \sum_i p_i^2\right)
 = \frac{2n}{2n - 1} H_e
-
-where ``n`` is the number of diploid individuals sampled (or ``2n``
-gene copies). Sample frequencies ``p_i`` computed from a finite sample
-of size ``2n`` gene copies underestimate population heterozygosity
-because of sampling without replacement; multiplying by
-``2n / (2n - 1)`` corrects this small-sample bias exactly.
+```
 
 **Arguments**:
 
@@ -34961,7 +35000,7 @@ Return the order-2 Hill number's own closed form, ``1 / (1 - H)``.
 real, individual frequency table; this is the same "classic
 effective number of alleles" transform, but for the one case that
 table is not on hand — an already-*aggregated* heterozygosity
-(`FinalReport`'s own `H_S`/`H_T`, a weighted mean across demes and/or
+(`FinalReport`'s own $H_S$ / $H_T$, a weighted mean across demes and/or
 an arithmetic mean across loci) that no single deme's frequency
 mapping could reproduce exactly. Jost's own foundational argument
 (Jost 2006, *Oikos* 113:363-375; Jost 2009, *Ecological Economics*
@@ -34970,16 +35009,16 @@ mapping could reproduce exactly. Jost's own foundational argument
 a "diversity" in the sense a biologist's intuition expects (doubling
 the number of equally common alleles does not double `H`), and that
 reasoning about diversity by a ratio of raw heterozygosities — which
-is exactly how `G_ST` is built — can badly understate real
-differentiation whenever `H_S` is already high. Converting to this
+is exactly how $G_{ST}$ is built — can badly understate real
+differentiation whenever $H_S$ is already high. Converting to this
 effective number first is the corrected reading this function
 exists to make cheap and available everywhere an already-aggregated
-`H_S`/`H_T` is the only diversity value on hand.
+$H_S$ / $H_T$ is the only diversity value on hand.
 
 **Arguments**:
 
 - `heterozygosity_value` - An expected heterozygosity (`heterozygosity`,
-  `h_s`, `h_t`, or a `FinalReport`'s own `H_S`/`H_T`) — a real
+  `h_s`, `h_t`, or a `FinalReport`'s own $H_S$ / $H_T$) — a real
   number in `[0, 1)`. Never exactly `1.0`: `heterozygosity`'s
   own docstring already states why no finite allele count can
   reach it, so `1.0` here always means invalid input, not a
@@ -35009,7 +35048,7 @@ def h_s(table: FrequencyTable[AlleleKey],
         deme_weights: DemeWeights = None) -> float
 ```
 
-Return weighted mean within-deme expected heterozygosity ``H_S``.
+Return weighted mean within-deme expected heterozygosity $H_S$.
 
 "How much variation does a typical deme hold internally?" — compute
 `heterozygosity` separately for each deme, then take a weighted
@@ -35028,15 +35067,15 @@ def h_t(table: FrequencyTable[AlleleKey],
         deme_weights: DemeWeights = None) -> float
 ```
 
-Return expected heterozygosity ``H_T`` of the weighted pooled table.
+Return expected heterozygosity $H_T$ of the weighted pooled table.
 
 "How much variation is there altogether?" — pool every deme's own
 frequencies into one single, combined gene pool (`_pooled`, above),
 then compute `heterozygosity` once on that combined result. Since
 pooling different demes can only ever add variation (mixing
 different populations together cannot make the mixture *less*
-diverse than any one of them was alone), `H_T` is always at least as
-large as `H_S` — the gap between them, `H_T - H_S`, is the raw
+diverse than any one of them was alone), $H_T$ is always at least as
+large as $H_S$ — the gap between them, $H_T - H_S$, is the raw
 material every differentiation measure in this module works with.
 
 <a id="fim.statistics.differentiation.gd_from_within_and_total"></a>
@@ -35048,19 +35087,19 @@ def gd_from_within_and_total(within: float, total: float,
                              deme_count: int) -> float
 ```
 
-``Gd``'s own real math, given already-computed ``H_S``/``H_T``.
+$G_d$'s own real math, given already-computed $H_S$ / $H_T$.
 
-``Gd = (d * (1 - H_T) - (1 - H_S)) / (d - 1)`` — `dev/doc/apps/
+$G_d = (d(1 - H_T) - (1 - H_S)) / (d - 1)$ — `dev/doc/apps/
 selby/jost-finite-island-model/20260903-claude-opus-5-gene-identity-
-recursion-fim-implications.md` §4.4, inverted from ``H_S = 1 - Gs``
-and ``H_T``'s own pooled-identity relationship. Linear in ``H_S``/
-``H_T``, unlike `G_ST`/`D` — so averaging `Gd` across loci commutes
-exactly with averaging `H_S`/`H_T` first (`fim.engine.
+recursion-fim-implications.md` §4.4, inverted from $H_S = 1 - G_s$
+and $H_T$'s own pooled-identity relationship. Linear in $H_S$/
+$H_T$, unlike $G_{ST}$ / $D$ — so averaging $G_d$ across loci commutes
+exactly with averaging $H_S$ / $H_T$ first (`fim.engine.
 report_for_state` relies on this directly, computing `Gd` once from
-already-pooled means rather than averaging a per-locus `Gd`
+already-pooled means rather than averaging a per-locus $G_d$
 separately). Split out from `gd`, below, for the identical reason
 `_h_s_from_demes`'s own docstring gives: `statistics_report` needs
-this exact computation without repeating `H_S`/`H_T`, which it has
+this exact computation without repeating $H_S$ / $H_T$, which it has
 already computed. Requires ``deme_count >= 2``, unchecked here —
 `gd`/`statistics_report`, its own two call sites, both guarantee it
 first (`_require_multiple_demes`).
@@ -35074,9 +35113,9 @@ def gs(table: FrequencyTable[AlleleKey],
        deme_weights: DemeWeights = None) -> float
 ```
 
-Return the within-deme gene identity ``Gs`` (Ryman & Leimar's ``J_0``).
+Return the within-deme gene identity $G_s$ (Ryman & Leimar's $J_0$).
 
-``Gs = 1 - H_S`` — the exact complement of `h_s`, above, in `fim`'s
+$G_s = 1 - H_S$ — the exact complement of `h_s`, above, in `fim`'s
 own with-replacement identity convention (the same ``Σp²`` `identity`
 already uses for one deme), *not* Ryman & Leimar's own distinct-pair
 convention (`doc/migration-conventions.md` has the exact `O(1/N)`
@@ -35087,7 +35126,7 @@ claude-opus-5-gene-identity-recursion-fim-implications.md` §9, `R4`'s
 own "design note worth deciding explicitly"): the conversion is
 applied only at a comparison site that actually needs the paper's
 own convention, never baked into this function itself. Well-defined
-for a single deme, same as `h_s` — there is no "between" for `Gs` to
+for a single deme, same as `h_s` — there is no "between" for $G_s$ to
 need; see `gd`, below, for that.
 
 <a id="fim.statistics.differentiation.gd"></a>
@@ -35099,7 +35138,7 @@ def gd(table: FrequencyTable[AlleleKey],
        deme_weights: DemeWeights = None) -> float
 ```
 
-Return the between-deme gene identity ``Gd`` (Ryman & Leimar's ``J_1``).
+Return the between-deme gene identity $G_d$ (Ryman & Leimar's $J_1$).
 
 See `gd_from_within_and_total`'s own docstring for the formula.
 Needs at least two demes (the `d - 1` denominator is undefined for
@@ -35114,20 +35153,20 @@ def h_st(table: FrequencyTable[AlleleKey],
          deme_weights: DemeWeights = None) -> float
 ```
 
-Return correctly partitioned between-deme heterozygosity ``H_ST``.
+Return correctly partitioned between-deme heterozygosity $H_{ST}$.
 
-The naive way to split `H_T` into a within-deme part and a between-
-deme part would be simple subtraction (`H_T - H_S` as "the between-
+The naive way to split $H_T$ into a within-deme part and a between-
+deme part would be simple subtraction ($H_T - H_S$ as "the between-
 deme component"), the way it would work for many other statistics —
 but heterozygosity specifically does not partition that simply (it
 is "subadditive": the true relationship is
-``H_T = H_S + H_ST - H_S * H_ST``, not plain addition). Solving that
+$H_T = H_S + H_{ST} - H_S H_{ST}$, not plain addition). Solving that
 relationship for the actual between-deme component gives the
 formula below — the differentiation-measures guide's own "Part V"
 walks through why the naive version is wrong in more depth. This
 exact same expression, before the `d/(d-1)` rescaling `jost_d`
 (below) applies to stretch its maximum out to exactly 1, is also
-the very first term of Jost's `D` — `D` is, in a precise sense,
+the very first term of Jost's $D$ — $D$ is, in a precise sense,
 nothing more than this correctly-partitioned quantity, normalized.
 
 <a id="fim.statistics.differentiation.total_hill_number"></a>
@@ -35176,10 +35215,10 @@ that shows up in this module).
 def g_st_from_demes(total: float, within: float) -> float | None
 ```
 
-`g_st`'s own real math, given already-computed `H_T`/`H_S`.
+`g_st`'s own real math, given already-computed $H_T$ / $H_S$.
 
 Split out for the identical reason `_h_s_from_demes`'s own docstring
-gives — `statistics_report` computes `H_S`/`H_T` exactly once
+gives — `statistics_report` computes $H_S$ / $H_T$ exactly once
 (`_h_s_from_demes`/`_h_t_from_demes`, above) and passes the two
 resulting floats straight in here, rather than this function
 recomputing them a second time (which the previous version of `g_st`
@@ -35196,17 +35235,17 @@ def g_st(table: FrequencyTable[AlleleKey],
          deme_weights: DemeWeights = None) -> float | None
 ```
 
-Return ``G_ST`` or ``None`` when total heterozygosity is zero.
+Return $G_{ST}$ or ``None`` when total heterozygosity is zero.
 
-Nei's `G_ST` — "how close to complete fixation has the differentiation
+Nei's $G_{ST}$ — "how close to complete fixation has the differentiation
 process gone" (Wright's own original framing, quoted in the
-differentiation-measures guide) — is `(H_T - H_S) / H_T`: the gap
+differentiation-measures guide) — is $(H_T - H_S) / H_T$: the gap
 between total and within-deme heterozygosity, this time as a
-fraction *of the total heterozygosity itself* (unlike `H_ST`,
-above, which divides by `1 - H_S` instead — that single choice of
+fraction *of the total heterozygosity itself* (unlike $H_{ST}$,
+above, which divides by $1 - H_S$ instead — that single choice of
 denominator is the entire difference between the two families of
-measures the guide discusses). `G_ST` genuinely has no defined value
-when `H_T` is exactly zero — every deme is fixed for the identical
+measures the guide discusses). $G_{ST}$ genuinely has no defined value
+when $H_T$ is exactly zero — every deme is fixed for the identical
 single allele, so there is no variation anywhere to measure a
 *fraction* of at all, not even zero; `None` here is the honest
 answer, not a fabricated `0.0` or `1.0`.
@@ -35219,27 +35258,27 @@ answer, not a fabricated `0.0` or `1.0`.
 def d_m(table: FrequencyTable[AlleleKey]) -> float
 ```
 
-Return Nei's mean pairwise between-deme gene diversity ``D_m``.
+Return Nei's mean pairwise between-deme gene diversity $D_m$.
 
 "How much do a typical *pair* of demes actually differ, in absolute
 terms" (Nei 1973, Eq. 10) — unlike every other between-deme measure
-in this module, `D_m` is deliberately **not** rescaled to `[0, 1]`;
+in this module, $D_m$ is deliberately **not** rescaled to `[0, 1]`;
 it is expressed in the same units as heterozygosity itself, so it
 stays comparable across populations with very different within-deme
-diversity (`H_S`) — the exact comparison `g_st` cannot make, since
-`G_ST` can be "very large even if the absolute gene differentiation
-is small" whenever `H_S` happens to be small (Nei's own words). It is
-`H_T - H_S` — Nei's Eq. 7 `D_ST`, the *simple* difference, not the
+diversity ($H_S$) — the exact comparison `g_st` cannot make, since
+$G_{ST}$ can be "very large even if the absolute gene differentiation
+is small" whenever $H_S$ happens to be small (Nei's own words). It is
+$H_T - H_S$ — Nei's Eq. 7 `D_ST`, the *simple* difference, not the
 subadditivity-corrected `h_st` this module also exposes — rescaled
 by `d / (d - 1)` to average only over *distinct* pairs of demes,
 excluding the `d` "compare a deme to itself" terms Eq. 7's own
-average silently includes. `H_T <= 1` and `H_S >= 0` give a loose
+average silently includes. $H_T \le 1$ and $H_S \ge 0$ give a loose
 universal ceiling of `d/(d-1)`, but that ceiling is not reached in
-practice: at `H_S = 0` (every deme fixed for a single allele, the
-only way to reach zero within-deme diversity at all), `H_T` itself
+practice: at $H_S = 0$ (every deme fixed for a single allele, the
+only way to reach zero within-deme diversity at all), $H_T$ itself
 tops out at exactly `(d-1)/d` — pooling `d` equally weighted, all-
 distinct point masses is the most spread-out a `d`-outcome
-distribution can be — so `D_m` reaches exactly `1` there, for any
+distribution can be — so $D_m$ reaches exactly `1` there, for any
 `d`, not `d/(d-1)`. Like `jost_d`, this follows Nei's own derivation
 in assuming equal deme weights throughout (Eq. 4's `w_i = 1/s`);
 there is no `deme_weights` parameter here for the same reason
@@ -35253,15 +35292,15 @@ there is no `deme_weights` parameter here for the same reason
 def r_st(table: FrequencyTable[AlleleKey]) -> float | None
 ```
 
-Return ``D_m`` relative to within-deme diversity, or ``None``.
+Return $D_m$ relative to within-deme diversity, or ``None``.
 
-Nei's Eq. 11: `D_m / H_S` — the same absolute between-deme diversity
+Nei's Eq. 11: $D_m / H_S$ — the same absolute between-deme diversity
 `d_m` computes, this time expressed *relative to* how much diversity
 a typical deme holds internally, so it can answer "how big is the
 between-deme signal compared to the within-deme noise" without
-`G_ST`'s own denominator (`H_T`, which already includes the between-
+$G_{ST}$'s own denominator ($H_T$, which already includes the between-
 deme signal itself). Undefined, and returned as `None` rather than a
-fabricated `inf`, when `H_S` is exactly zero — every deme
+fabricated `inf`, when $H_S$ is exactly zero — every deme
 individually fixed for a single allele, with no within-deme
 diversity to express the between-deme diversity relative to at all;
 the same honest-`None` convention `g_st` already uses for its own,
@@ -35276,10 +35315,10 @@ def g_st_log(table: FrequencyTable[AlleleKey],
              deme_weights: DemeWeights = None) -> float | None
 ```
 
-Return Nei's log-based large-differentiation ``G_ST`` estimator.
+Return Nei's log-based large-differentiation $G_{ST}$ estimator.
 
 Nei (1973)'s closing discussion, verbatim: "a better estimate of
-`G_ST` may be obtained by `-log_e(J_T/J_S) / [-log_e(J_T)]`" — offered
+$G_{ST}$ may be obtained by `-log_e(J_T/J_S) / [-log_e(J_T)]`" — offered
 as a replacement for ordinary `g_st` specifically when
 differentiation is large (subspecies-level) and `J_T` (`= 1 - H_T`)
 is much smaller than `J_S` (`= 1 - H_S`), the regime in which linear
@@ -35289,25 +35328,25 @@ gives this estimator no name or equation number of its own.
 
 Rigorously bounded in `[0, 1]`, exactly like `g_st` — provably, not
 just empirically, from the same two facts `g_st` already relies on
-(`H_S <= H_T` always, since pooling can only add variation; both are
+($H_S \le H_T$ always, since pooling can only add variation; both are
 probabilities). Writing the formula as
 `1 + ln(J_S) / (-ln(J_T))`: `J_S <= 1` makes `ln(J_S) <= 0`, so the
 second term is never positive, giving the `<= 1` bound; `J_S >= J_T`
-(from `H_S <= H_T`) makes `ln(J_S) >= ln(J_T)`, so the second term is
+(from $H_S \le H_T$) makes `ln(J_S) >= ln(J_T)`, so the second term is
 never below `ln(J_T)/(-ln(J_T)) = -1`, giving the `>= 0` bound.
 
 Undefined, and returned as `None` rather than a fabricated value, in
-the same spirit as `g_st`'s own `None` case: when `H_T` is exactly
+the same spirit as `g_st`'s own `None` case: when $H_T$ is exactly
 zero (complete fixation on the identical allele everywhere — no
 variation anywhere to measure a fraction of, `g_st`'s own case
-exactly), or when `H_S` is exactly one (`J_S = 0`, `ln(J_S)`
+exactly), or when $H_S$ is exactly one (`J_S = 0`, `ln(J_S)`
 undefined — every deme individually has zero chance that two
 randomly drawn gene copies match).
 
 **Naming hazard:** `doc/jost-differentiation-measures.md` calls this
-estimator "`G'_ST`," Nei's own term for it — a *different* quantity
+estimator $G^\prime_{ST}$, Nei's own term for it — a *different* quantity
 from `g_st_prime`, below, which is Hedrick's own, differently
-defined `G'_ST`. Both names are genuinely used in the literature for
+defined $G^\prime_{ST}$. Both names are genuinely used in the literature for
 their own respective formula; this project's own multi-model engine
 review, 2026-09-04, flagged the collision (Ryman & Leimar
 remediation `R6`) rather than letting a future reader assume the two
@@ -35321,30 +35360,30 @@ are interchangeable because they share a name.
 def g_st_max(h_s: float, deme_count: int) -> float
 ```
 
-Return Hedrick (2005)'s own attainable ceiling for `G_ST`.
+Return Hedrick (2005)'s own attainable ceiling for $G_{ST}$.
 
 Ryman & Leimar (2008), Equation 7:
-``G_ST(max) = (s - 1)(1 - H_S) / (s - 1 + H_S)`` — the largest value
+$G_{ST(\max)} = (s - 1)(1 - H_S) / (s - 1 + H_S)$ — the largest value
 ordinary `g_st` can reach given a fixed within-deme heterozygosity
-`H_S` and deme count `s`, attained when every deme is fixed for its
+$H_S$ and deme count `s`, attained when every deme is fixed for its
 own distinct, private allele (`h_s`'s own docstring has the general
-argument for why `H_S` alone bounds how differentiated a set of
-demes can possibly look). Approaches `1` as `H_S -> 0` (little
+argument for why $H_S$ alone bounds how differentiated a set of
+demes can possibly look). Approaches `1` as $H_S \to 0$ (little
 within-deme diversity leaves little standing in the way of complete
-differentiation) and falls toward `0` as `H_S -> 1` (a population
+differentiation) and falls toward `0` as $H_S \to 1$ (a population
 already this diverse internally has correspondingly less room left
 to differentiate at all) — see `g_st_prime`, below, for what
 dividing by this ceiling is actually for.
 
 **Arguments**:
 
-- `h_s` - Within-deme heterozygosity, `H_S`, in `[0, 1)`.
+- `h_s` - Within-deme heterozygosity, $H_S$, in `[0, 1)`.
 - `deme_count` - Number of demes, `s`, at least `2`.
 
 
 **Returns**:
 
-  `G_ST(max)`, in `(0, 1]`.
+  $G_{ST(\max)}$, in `(0, 1]`.
 
 
 **Raises**:
@@ -35360,7 +35399,7 @@ def derived_differentiation(h_s: float, h_t: float,
                             deme_count: int) -> dict[str, float | None]
 ```
 
-Return five differentiation measures that depend only on ``H_S``, ``H_T``, ``d``.
+Return five differentiation measures that depend only on $H_S$, $H_T$, ``d``.
 
 The engine's per-report companion to the table-based functions in
 this module, for measures that are functions of the pooled
@@ -35369,21 +35408,21 @@ already computes. Equal deme weighting throughout. For one locus each
 equals its table-based counterpart:
 
 - ``"D_m"``: Nei (1973) mean pairwise between-deme diversity,
-``(H_T - H_S) * d / (d - 1)`` (`d_m`).
-- ``"R_ST"``: ``D_m / H_S`` (`r_st`); ``None`` when ``H_S = 0``.
-- ``"G_ST_NEI_LOG"``: Nei's logarithmic ``G'_ST``,
+$(H_T - H_S) d / (d - 1)$ (`d_m`).
+- ``"R_ST"``: $D_m / H_S$ (`r_st`); ``None`` when $H_S = 0$.
+- ``"G_ST_NEI_LOG"``: Nei's logarithmic $G^\prime_{ST}$,
 ``ln(J_S / J_T) / -ln(J_T)`` with ``J = 1 - H`` (`g_st_log`);
-``None`` when ``H_T = 0`` or ``H_S = 1``.
-- ``"G_ST_HEDRICK"``: Hedrick's standardized ``G'_ST``
-(`g_st_prime` of ``G_ST = (H_T - H_S) / H_T``); ``None`` when
-``H_T = 0``.
-- ``"F_ST"``: coancestry ``F_ST`` (Goudet & Weir 2023),
+``None`` when $H_T = 0$ or $H_S = 1$.
+- ``"G_ST_HEDRICK"``: Hedrick's standardized $G^\prime_{ST}$
+(`g_st_prime` of $G_{ST} = (H_T - H_S) / H_T$); ``None`` when
+$H_T = 0$.
+- ``"F_ST"``: coancestry $F_{ST}$ (Goudet & Weir 2023),
 ``(G_s - G_d) / (1 - G_d)`` (`overall_coancestry_f_st`); ``None``
 when ``G_d = 1`` (every deme fixed for the same allele).
 
-For several loci, pass the per-locus means of ``H_S`` and ``H_T``:
+For several loci, pass the per-locus means of $H_S$ and $H_T$:
 each measure is then one ratio of pooled quantities, the same rule
-the engine's default ``D`` and ``G_ST`` use.
+the engine's default $D$ and $G_{ST}$ use.
 
 **Arguments**:
 
@@ -35409,15 +35448,17 @@ the engine's default ``D`` and ``G_ST`` use.
 def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float
 ```
 
-Return Hedrick (2005)'s own standardized ``G'_ST = G_ST / G_ST(max)``.
+Return Hedrick's standardized $G^\prime_{ST} = G_{ST} / G_{ST(\max)}$.
 
-Ryman & Leimar (2008), Equation 8 — rescales ordinary `G_ST` by its
+The standardization is Hedrick (2005)'s own.
+
+Ryman & Leimar (2008), Equation 8 — rescales ordinary $G_{ST}$ by its
 own attainable ceiling (`g_st_max`, above) so that a fully
 differentiated set of demes (every deme fixed for its own distinct
-allele) always reads exactly `1`, regardless of `H_S`, rather than
-an `H_S`-dependent value less than `1` the way raw `G_ST` does.
+allele) always reads exactly `1`, regardless of $H_S$, rather than
+an $H_S$-dependent value less than `1` the way raw $G_{ST}$ does.
 
-**Naming hazard:** a *different* `G'_ST`, Nei's own logarithmic
+**Naming hazard:** a *different* $G^\prime_{ST}$, Nei's own logarithmic
 form, already exists in this project as `g_st_log`, above — see
 that function's own docstring for the identical warning from its
 own side. Name whichever one is actually meant explicitly; do not
@@ -35425,23 +35466,23 @@ call one by the other's name.
 
 Ryman & Leimar's own finding (their Figure 2, `N = 1000`, `s = 10`,
 `m = 0.0005`): standardizing this way can *manufacture* a large
-apparent difference between two scenarios whose ordinary `G_ST`
-barely differs, whenever `H_S` differs sharply between them (this
+apparent difference between two scenarios whose ordinary $G_{ST}$
+barely differs, whenever $H_S$ differs sharply between them (this
 project's own multi-model engine review, 2026-09-04, `R6`'s own
 Finding E documents the worked numbers) — a caution about
 interpreting this statistic, not a defect in computing it.
 
 **Arguments**:
 
-- `g_st_value` - Ordinary `G_ST` (`g_st`'s own return value, if not
+- `g_st_value` - Ordinary $G_{ST}$ (`g_st`'s own return value, if not
   `None`).
-- `h_s` - Within-deme heterozygosity, `H_S`, in `[0, 1)`.
+- `h_s` - Within-deme heterozygosity, $H_S$, in `[0, 1)`.
 - `deme_count` - Number of demes, `s`, at least `2`.
 
 
 **Returns**:
 
-  `G_ST / G_ST(max)`.
+  $G_{ST} / G_{ST(\max)}$.
 
 
 **Raises**:
@@ -35451,14 +35492,14 @@ interpreting this statistic, not a defect in computing it.
 
 <a id="fim.statistics.differentiation.jost_d_from_within_and_total"></a>
 
-#### [jost\_d\_from\_within\_and\_total](./statistics/differentiation.py#L1075)
+#### [jost\_d\_from\_within\_and\_total](./statistics/differentiation.py#L1077)
 
 ```python
 def jost_d_from_within_and_total(deme_count: int, within: float,
                                  total: float) -> float
 ```
 
-`jost_d`'s own real math, given already-computed `H_S`/`H_T`.
+`jost_d`'s own real math, given already-computed $H_S$ / $H_T$.
 
 Split out for the identical reason `g_st_from_demes`'s own
 docstring gives. Takes `deme_count` directly rather than the full
@@ -35467,66 +35508,66 @@ docstring gives. Takes `deme_count` directly rather than the full
 frequency content, so a caller that already has a deme count on
 hand but no reason to construct a `demes` tuple (`fim.engine.
 report_for_state`'s own `"ratio_of_means"` cross-locus aggregation,
-which pools `H_S`/`H_T` across loci rather than working from any one
+which pools $H_S$ / $H_T$ across loci rather than working from any one
 locus's own frequency table) does not have to build one just to
 satisfy this signature.
 
 <a id="fim.statistics.differentiation.jost_d"></a>
 
-#### [jost\_d](./statistics/differentiation.py#L1093)
+#### [jost\_d](./statistics/differentiation.py#L1095)
 
 ```python
 def jost_d(table: FrequencyTable[AlleleKey]) -> float
 ```
 
-Return Jost's ``D`` using the required equal weighting of demes.
+Return Jost's $D$ using the required equal weighting of demes.
 
-"Do these demes hold different alleles at all" — exactly `H_ST`
+"Do these demes hold different alleles at all" — exactly $H_{ST}$
 above (the correctly partitioned between-deme heterozygosity), with
 one further rescaling: multiplying by `d / (d - 1)` stretches its
-maximum possible value from `(d-1)/d` out to exactly 1, so `D = 1`
+maximum possible value from `(d-1)/d` out to exactly 1, so $D = 1$
 means precisely "these demes share no alleles in common" and
-`D = 0` means precisely "these demes are genetically identical" —
+$D = 0$ means precisely "these demes are genetically identical" —
 regardless of how many demes `d` there are. Equal deme weighting is
 not optional here (unlike `e_st`, below): the differentiation-
-measures guide explains why `D` gives every deme equal statistical
+measures guide explains why $D$ gives every deme equal statistical
 weight by construction, one of the few real trade-offs it has
-relative to `E_ST`.
+relative to $E_{ST}$.
 
 <a id="fim.statistics.differentiation.e_st"></a>
 
-#### [e\_st](./statistics/differentiation.py#L1133)
+#### [e\_st](./statistics/differentiation.py#L1135)
 
 ```python
 def e_st(table: FrequencyTable[AlleleKey],
          deme_weights: DemeWeights = None) -> float
 ```
 
-Return entropy differentiation ``E_ST`` with optional size weights.
+Return entropy differentiation $E_{ST}$ with optional size weights.
 
 The same "how differentiated are these demes" question `jost_d`
 answers, but built from Shannon entropy (`_entropy`, above) instead
 of heterozygosity — the `order = 1` member of the same one-formula
 family `differentiation_q`, below, generates (see this module's own
-docstring for the whole family). Its two real advantages over `D`,
+docstring for the whole family). Its two real advantages over $D$,
 per the differentiation-measures guide: it handles demes of
 genuinely unequal size natively (`deme_weights` here can carry each
-deme's own relative population size, unlike `D`, which always
+deme's own relative population size, unlike $D$, which always
 weights every deme equally), and discovering a brand-new, unique
-allele in one deme can never make `E_ST` go *down* — a property `D`
-does not always have, since `D` weights alleles by their squared
+allele in one deme can never make $E_{ST}$ go *down* — a property $D$
+does not always have, since $D$ weights alleles by their squared
 frequency and a new rare allele can slightly dilute the relative
 weight of other, already-differentiating alleles.
 
 <a id="fim.statistics.differentiation.k_st"></a>
 
-#### [k\_st](./statistics/differentiation.py#L1182)
+#### [k\_st](./statistics/differentiation.py#L1184)
 
 ```python
 def k_st(table: FrequencyTable[AlleleKey]) -> float
 ```
 
-Return allele-number differentiation ``K_ST`` with equal deme weights.
+Return allele-number differentiation $K_{ST}$ with equal deme weights.
 
 The simplest and most stringent member of the family: ignores
 *frequencies* entirely and only asks "does this allele exist
@@ -35534,14 +35575,14 @@ anywhere in this deme, yes or no" — the `order = 0` member of the
 same family `differentiation_q`, below, generates. Read it, roughly,
 as: the fraction of a typical deme's own alleles that turn out to
 be unique to that one deme, not found in any other. Because it
-ignores frequency entirely, `K_ST` responds to even the rarest,
+ignores frequency entirely, $K_{ST}$ responds to even the rarest,
 single-copy private allele exactly as strongly as it would to a
 common one — the strongest sensitivity to rare, private variation of
 any measure in this module.
 
 <a id="fim.statistics.differentiation.allelic_distance"></a>
 
-#### [allelic\_distance](./statistics/differentiation.py#L1201)
+#### [allelic\_distance](./statistics/differentiation.py#L1203)
 
 ```python
 def allelic_distance(table: FrequencyTable[AlleleKey]) -> float
@@ -35559,7 +35600,7 @@ unordered deme pairs.
 
 <a id="fim.statistics.differentiation.gregorius_delta"></a>
 
-#### [gregorius\_delta](./statistics/differentiation.py#L1270)
+#### [gregorius\_delta](./statistics/differentiation.py#L1272)
 
 ```python
 def gregorius_delta(table: FrequencyTable[AlleleKey],
@@ -35570,14 +35611,14 @@ Return Gregorius's distance-oriented differentiation ``delta``.
 
 Gregorius's measure compares each deme with the weighted mixture of all
 *other* demes using total variation distance, then averages those
-per-deme distances. Unlike diversity-ratio measures such as ``G_ST`` or
-Jost's ``D``, this is a direct distance between allele-frequency
+per-deme distances. Unlike diversity-ratio measures such as $G_{ST}$ or
+Jost's $D$, this is a direct distance between allele-frequency
 distributions. With two equally weighted demes it is exactly one half
 of the Manhattan distance between their frequency vectors.
 
 <a id="fim.statistics.differentiation.mutual_information"></a>
 
-#### [mutual\_information](./statistics/differentiation.py#L1307)
+#### [mutual\_information](./statistics/differentiation.py#L1309)
 
 ```python
 def mutual_information(table: FrequencyTable[AlleleKey],
@@ -35594,32 +35635,33 @@ allele identity and deme membership were independent.
 
 <a id="fim.statistics.differentiation.f_st_coancestry_matrix"></a>
 
-#### [f\_st\_coancestry\_matrix](./statistics/differentiation.py#L1325)
+#### [f\_st\_coancestry\_matrix](./statistics/differentiation.py#L1327)
 
 ```python
 def f_st_coancestry_matrix(
         table: FrequencyTable[AlleleKey]) -> tuple[tuple[float, ...], ...]
 ```
 
-Return Goudet & Weir (2023) F_ST matrix (Eq. 4 / Eq. 11).
+Return Goudet & Weir (2023) $F_{ST}$ matrix (Eq. 4 / Eq. 11).
 
 Computes the matrix of population-specific (diagonal) and
-population-pair (off-diagonal) F_ST values from the pairwise
-coancestry / cross-identity matrix ``Theta``:
+population-pair (off-diagonal) $F_{ST}$ values from the pairwise
+coancestry / cross-identity matrix $\Theta$:
 
-.. math::
 
-F_{ST} = \frac{\Theta - J \theta_B}{1 - \theta_B}
-
-where ``theta_B`` is the average of the off-diagonal elements of
-``Theta``, and ``J`` is an all-ones matrix.
+where $\theta_B$ is the average of the off-diagonal elements of
+$\Theta$, and $J$ is an all-ones matrix.
 
 By construction:
-- The diagonal element ``F_ST[i][i]`` is population-specific F_ST
+- The diagonal element ``F_ST[i][i]`` is population-specific $F_{ST}$
 for deme ``i`` (Eq. 7).
-- The off-diagonal element ``F_ST[i][j]`` is population-pair F_ST
+- The off-diagonal element ``F_ST[i][j]`` is population-pair $F_{ST}$
 for demes ``i`` and ``j`` (Eq. 9 / 11).
 - The off-diagonal elements have mean exactly zero (their sum is 0.0).
+
+```math
+F_{ST} = \frac{\Theta - J \theta_B}{1 - \theta_B}
+```
 
 **Arguments**:
 
@@ -35632,23 +35674,24 @@ for demes ``i`` and ``j`` (Eq. 9 / 11).
 
 <a id="fim.statistics.differentiation.population_specific_f_st"></a>
 
-#### [population\_specific\_f\_st](./statistics/differentiation.py#L1384)
+#### [population\_specific\_f\_st](./statistics/differentiation.py#L1386)
 
 ```python
 def population_specific_f_st(
         table: FrequencyTable[AlleleKey]) -> tuple[float, ...]
 ```
 
-Return Goudet & Weir (2023) population-specific F_ST (Eq. 4 / Eq. 7).
+Return Goudet & Weir (2023) population-specific $F_{ST}$ (Eq. 4 / Eq. 7).
 
-The diagonal elements of the coancestry-based F_ST matrix:
+The diagonal elements of the coancestry-based $F_{ST}$ matrix:
 
-.. math::
 
+where $\theta_{ii} = \sum_u p_{iu}^2$ is the homozygosity / within-deme
+identity of deme ``i``, and $\theta_B$ is the mean between-deme identity.
+
+```math
 F_{ST}^i = \frac{\theta_{ii} - \theta_B}{1 - \theta_B}
-
-where ``theta_{ii} = sum_u p_{iu}^2`` is the homozygosity / within-deme
-identity of deme ``i``, and ``theta_B`` is the mean between-deme identity.
+```
 
 **Arguments**:
 
@@ -35657,29 +35700,30 @@ identity of deme ``i``, and ``theta_B`` is the mean between-deme identity.
 
 **Returns**:
 
-  Tuple of population-specific F_ST values, one per deme.
+  Tuple of population-specific $F_{ST}$ values, one per deme.
 
 <a id="fim.statistics.differentiation.population_pair_f_st"></a>
 
-#### [population\_pair\_f\_st](./statistics/differentiation.py#L1408)
+#### [population\_pair\_f\_st](./statistics/differentiation.py#L1410)
 
 ```python
 def population_pair_f_st(table: FrequencyTable[AlleleKey], i: int,
                          j: int) -> float
 ```
 
-Return Goudet & Weir (2023) population-pair F_ST (Eq. 4 / Eq. 9 / Eq. 11).
+Return Goudet & Weir (2023) population-pair $F_{ST}$ (Eq. 4 / Eq. 9 / Eq. 11).
 
 Measures the coancestry between demes ``i`` and ``j`` relative to the
-global average between-population coancestry ``theta_B``:
+global average between-population coancestry $\theta_B$:
 
-.. math::
-
-F_{ST}^{ij} = \frac{\theta_{ij} - \theta_B}{1 - \theta_B}
 
 Negative values indicate that populations ``i`` and ``j`` share fewer
 alleles than an average pair of distinct populations in the dataset,
 meaning together they harbor greater diversity than the global background.
+
+```math
+F_{ST}^{ij} = \frac{\theta_{ij} - \theta_B}{1 - \theta_B}
+```
 
 **Arguments**:
 
@@ -35690,33 +35734,34 @@ meaning together they harbor greater diversity than the global background.
 
 **Returns**:
 
-  Population-pair F_ST as a float.
+  Population-pair $F_{ST}$ as a float.
 
 <a id="fim.statistics.differentiation.pairwise_f_st"></a>
 
-#### [pairwise\_f\_st](./statistics/differentiation.py#L1441)
+#### [pairwise\_f\_st](./statistics/differentiation.py#L1443)
 
 ```python
 def pairwise_f_st(frequencies_x: Mapping[Any, Any],
                   frequencies_y: Mapping[Any, Any]) -> float
 ```
 
-Return classical pairwise F_ST using only the pair's data (Eq. 10).
+Return classical pairwise $F_{ST}$ using only the pair's data (Eq. 10).
 
 Following Goudet & Weir (2023) Eq. 10 (also Rousset 2002):
 
-.. math::
 
-F_{STp}^{XY} = \frac{(\theta_{XX} + \theta_{YY})/2 - \theta_{XY}}
-{1 - \theta_{XY}}
-
-where ``theta_{XX}`` and ``theta_{YY}`` are the homozygosities within
-populations X and Y, and ``theta_{XY} = sum_u x_u y_u`` is the cross
+where $\theta_{XX}$ and $\theta_{YY}$ are the homozygosities within
+populations X and Y, and $\theta_{XY} = \sum_u x_u y_u$ is the cross
 identity.
 
-Unlike population-pair F_ST (which uses the whole dataset's ``theta_B``
-as reference), classical pairwise F_ST uses only the pair's own data
-and reference point ``theta_{XY}``.
+Unlike population-pair $F_{ST}$ (which uses the whole dataset's $\theta_B$
+as reference), classical pairwise $F_{ST}$ uses only the pair's own data
+and reference point $\theta_{XY}$.
+
+```math
+F_{STp}^{XY} = \frac{(\theta_{XX} + \theta_{YY})/2 - \theta_{XY}}
+{1 - \theta_{XY}}
+```
 
 **Arguments**:
 
@@ -35726,29 +35771,30 @@ and reference point ``theta_{XY}``.
 
 **Returns**:
 
-  Classical pairwise F_ST in [0, 1].
+  Classical pairwise $F_{ST}$ in [0, 1].
 
 <a id="fim.statistics.differentiation.overall_coancestry_f_st"></a>
 
-#### [overall\_coancestry\_f\_st](./statistics/differentiation.py#L1482)
+#### [overall\_coancestry\_f\_st](./statistics/differentiation.py#L1484)
 
 ```python
 def overall_coancestry_f_st(table: FrequencyTable[AlleleKey]) -> float
 ```
 
-Return overall F_ST from coancestry matrix (Goudet & Weir 2023 Eq. 4/8).
+Return overall $F_{ST}$ from coancestry matrix (Goudet & Weir 2023 Eq. 4/8).
 
-Defined as the unweighted mean of the population-specific F_ST values:
+Defined as the unweighted mean of the population-specific $F_{ST}$ values:
 
-.. math::
 
-F_{ST} = \frac{\bar{\theta}_W - \theta_B}{1 - \theta_B}
-
-where ``bar{theta}_W`` is the mean within-population coancestry (diagonal),
-and ``theta_B`` is the mean between-population coancestry (off-diagonal).
+where $\bar\theta_W$ is the mean within-population coancestry (diagonal),
+and $\theta_B$ is the mean between-population coancestry (off-diagonal).
 
 For equal deme weights, this is Rousset (2002) / Weir & Goudet (2017)
-unweighted F_ST.
+unweighted $F_{ST}$.
+
+```math
+F_{ST} = \frac{\bar{\theta}_W - \theta_B}{1 - \theta_B}
+```
 
 **Arguments**:
 
@@ -35757,11 +35803,11 @@ unweighted F_ST.
 
 **Returns**:
 
-  Overall coancestry-based F_ST as a float.
+  Overall coancestry-based $F_{ST}$ as a float.
 
 <a id="fim.statistics.differentiation.differentiation_q"></a>
 
-#### [differentiation\_q](./statistics/differentiation.py#L1509)
+#### [differentiation\_q](./statistics/differentiation.py#L1511)
 
 ```python
 def differentiation_q(table: FrequencyTable[AlleleKey],
@@ -35789,12 +35835,12 @@ very same population actually is.
 
 Equal weighting is required for every order except ``q = 1``. At
 ``q = 1`` optional weights represent relative deme sizes and produce
-``E_ST``. The endpoints ``q = 0`` and ``q = 2`` equal ``K_ST`` and
-Jost's ``D`` respectively.
+$E_{ST}$. The endpoints ``q = 0`` and ``q = 2`` equal $K_{ST}$ and
+Jost's $D$ respectively.
 
 <a id="fim.statistics.differentiation.equilibrium_d"></a>
 
-#### [equilibrium\_d](./statistics/differentiation.py#L1560)
+#### [equilibrium\_d](./statistics/differentiation.py#L1562)
 
 ```python
 def equilibrium_d(m: float, mu: float, d: int) -> float
@@ -35806,7 +35852,7 @@ Every other function in this module computes a statistic from one
 *actual* frequency table — a real snapshot, from a real (or
 simulated) population. This function is different in kind: it is a
 theoretical prediction, from a mathematical analysis of what value
-`D` should settle to, on average, after a finite island model (see
+$D$ should settle to, on average, after a finite island model (see
 `fim.engine`'s own docstring for what that is) has been running long
 enough for its statistics to reach a stable, "equilibrium" balance
 between migration pulling demes together and drift pushing them
@@ -35814,11 +35860,11 @@ apart — no actual simulated run is needed to compute it. Used to
 check the simulator itself against known theory (see the
 differentiation-measures guide's own "Part VI" for the full
 derivation and its assumptions) — a real simulation's own
-long-run average `D` should land close to what this formula
+long-run average $D$ should land close to what this formula
 predicts, for the same `m`/`mu`/`d`, if the simulator's own
 mechanics are correct. Notably, the population size `N` does not
 appear in this formula at all — only the *ratio* of migration to
-mutation controls where `D` settles, a genuinely counter-intuitive
+mutation controls where $D$ settles, a genuinely counter-intuitive
 result the guide discusses at length.
 
 **Arguments**:
@@ -35834,31 +35880,31 @@ result the guide discusses at length.
 
 <a id="fim.statistics.differentiation.equilibrium_g_st"></a>
 
-#### [equilibrium\_g\_st](./statistics/differentiation.py#L1596)
+#### [equilibrium\_g\_st](./statistics/differentiation.py#L1598)
 
 ```python
 def equilibrium_g_st(population_size: int, m: float, mu: float,
                      d: int) -> float
 ```
 
-Return the equilibrium G_ST approximation for gene-copy ``N``.
+Return the equilibrium $G_{ST}$ approximation for gene-copy ``N``.
 
-The `G_ST` counterpart to `equilibrium_d`, above — see that
+The $G_{ST}$ counterpart to `equilibrium_d`, above — see that
 function's own docstring for what "equilibrium" means here and why
 a theoretical prediction like this one is useful for checking the
 simulator against known theory. Unlike `equilibrium_d`, this
 formula genuinely does depend on population size — specifically on
 `Nm` (population size times migration rate, the absolute number of
 migrants arriving each generation), not `m` alone — which is
-exactly the property Wright originally designed `G_ST`/`F_ST` to
+exactly the property Wright originally designed $G_{ST}$ / $F_{ST}$ to
 have (see `g_st`'s own docstring): a statistic sensitive to
 demography (population size and migration), essentially independent
-of the mutation rate, unlike `D`.
+of the mutation rate, unlike $D$.
 
 The `(d/(d-1))**2` finite-deme correction multiplying the migration
 term below is not this project's own invention or specific to Jost
 et al. (2018) — confirmed directly against Crow & Aoki (1984)'s own
-Eq. 7/Eq. 8, `G_ST ~= 1/(4Nm*alpha+1)`, `alpha = [n/(n-1)]**2` (see
+Eq. 7/Eq. 8, $G_{ST} \approx 1/(4Nm\alpha + 1)$, `alpha = [n/(n-1)]**2` (see
 the differentiation-measures guide's own Part VI and Appendix D for
 the citation, added there because earlier revisions of this project
 stated the correction with no attribution at all). Crow & Aoki's own
@@ -35887,7 +35933,7 @@ terms use ``2 * N`` instead — the same quantity, `4 * N_individuals
 
 <a id="fim.statistics.differentiation.identity_recovery_rate"></a>
 
-#### [identity\_recovery\_rate](./statistics/differentiation.py#L1692)
+#### [identity\_recovery\_rate](./statistics/differentiation.py#L1694)
 
 ```python
 def identity_recovery_rate(population_size: int, m: float) -> float
@@ -35929,7 +35975,7 @@ comparison against that recursion across six representative
 
 <a id="fim.statistics.differentiation.identity_recovery_equilibrium"></a>
 
-#### [identity\_recovery\_equilibrium](./statistics/differentiation.py#L1728)
+#### [identity\_recovery\_equilibrium](./statistics/differentiation.py#L1730)
 
 ```python
 def identity_recovery_equilibrium(population_size: int, m: float) -> float
@@ -35955,7 +36001,7 @@ from.
 
 <a id="fim.statistics.differentiation.identity_recovery_trajectory"></a>
 
-#### [identity\_recovery\_trajectory](./statistics/differentiation.py#L1748)
+#### [identity\_recovery\_trajectory](./statistics/differentiation.py#L1750)
 
 ```python
 def identity_recovery_trajectory(f0_initial: float, population_size: int,
@@ -35996,7 +36042,7 @@ see that function's own docstring.
 
 <a id="fim.statistics.differentiation.identity_recovery_half_life"></a>
 
-#### [identity\_recovery\_half\_life](./statistics/differentiation.py#L1803)
+#### [identity\_recovery\_half\_life](./statistics/differentiation.py#L1805)
 
 ```python
 def identity_recovery_half_life(population_size: int, m: float) -> float
@@ -36032,7 +36078,7 @@ than evaluating ``log(0.5) / log(0.0)``, which is the correct limit
 
 <a id="fim.statistics.differentiation.mutation_negligible_transition"></a>
 
-#### [mutation\_negligible\_transition](./statistics/differentiation.py#L1836)
+#### [mutation\_negligible\_transition](./statistics/differentiation.py#L1838)
 
 ```python
 def mutation_negligible_transition(h_s_initial: float, mu: float) -> float
@@ -36041,12 +36087,12 @@ def mutation_negligible_transition(h_s_initial: float, mu: float) -> float
 Return the largest generation count `t` at which mutation is still negligible.
 
 Ryman & Leimar (2008), Equation 9's own condition,
-``t << H_S(0) / (2u)`` (during the transition phase, `G_ST` behaves
+$t \ll H_S(0) / (2u)$ (during the transition phase, $G_{ST}$ behaves
 as if there were no mutation at all — see this project's own
 Ryman & Leimar remediation, `R6`, Finding E, for the full context):
 calibrated here at the paper's own published factor of one-fifth,
 found by numerically iterating their Equations 2 and 3 to hold
-`G_ST` within 10% of its mutation-free value. A caller compares
+$G_{ST}$ within 10% of its mutation-free value. A caller compares
 their own elapsed generation count against this function's return
 value directly (`t <= mutation_negligible_transition(h_s_initial,
 mu)`); this function does not take `t` itself; there is nothing
@@ -36058,7 +36104,7 @@ limit rather than a division-by-zero to guard against.
 
 **Arguments**:
 
-- `h_s_initial` - The *ancestral* heterozygosity, `H_S(0)`, in
+- `h_s_initial` - The *ancestral* heterozygosity, $H_S(0)$, in
   `[0, 1)` — see `fim.model.initial.
   founding_condition_for_heterozygosity` for building a
   founding condition realizing a specific value of it.
@@ -36079,7 +36125,7 @@ limit rather than a division-by-zero to guard against.
 
 <a id="fim.statistics.differentiation.mutation_negligible_equilibrium"></a>
 
-#### [mutation\_negligible\_equilibrium](./statistics/differentiation.py#L1885)
+#### [mutation\_negligible\_equilibrium](./statistics/differentiation.py#L1887)
 
 ```python
 def mutation_negligible_equilibrium(m: float, mu: float,
@@ -36089,12 +36135,12 @@ def mutation_negligible_equilibrium(m: float, mu: float,
 Return whether mutation is negligible next to migration/drift at equilibrium.
 
 Ryman & Leimar (2008), Equation 10's own condition,
-``u << m + 1/(4N)`` (the long-run `G_ST` is set by migration and
+``u << m + 1/(4N)`` (the long-run $G_{ST}$ is set by migration and
 drift alone, and mutation is a detail — this project's own Ryman &
 Leimar remediation, `R6`, Finding E, has the full context):
 calibrated here at the paper's own published factor of one-tenth,
 found the same way `mutation_negligible_transition`'s own factor
-was, to hold `G_ST` within 10% of its mutation-free equilibrium
+was, to hold $G_{ST}$ within 10% of its mutation-free equilibrium
 value.
 
 **Arguments**:
@@ -36116,7 +36162,7 @@ value.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated"></a>
 
-#### [equilibrium\_shannon\_entropy\_isolated](./statistics/differentiation.py#L2009)
+#### [equilibrium\_shannon\_entropy\_isolated](./statistics/differentiation.py#L2011)
 
 ```python
 def equilibrium_shannon_entropy_isolated(population_size: int,
@@ -36192,7 +36238,7 @@ exactly, since `within_hill_number` itself already returns
 
 <a id="fim.statistics.differentiation.equilibrium_heterozygosity_isolated"></a>
 
-#### [equilibrium\_heterozygosity\_isolated](./statistics/differentiation.py#L2079)
+#### [equilibrium\_heterozygosity\_isolated](./statistics/differentiation.py#L2081)
 
 ```python
 def equilibrium_heterozygosity_isolated(population_size: int,
@@ -36223,7 +36269,7 @@ gene-copy convention. This is the heterozygosity counterpart to
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated_smm"></a>
 
-#### [equilibrium\_shannon\_entropy\_isolated\_smm](./statistics/differentiation.py#L2104)
+#### [equilibrium\_shannon\_entropy\_isolated\_smm](./statistics/differentiation.py#L2106)
 
 ```python
 def equilibrium_shannon_entropy_isolated_smm(population_size: int,
@@ -36277,7 +36323,7 @@ simulator cross-check.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_total"></a>
 
-#### [equilibrium\_shannon\_entropy\_total](./statistics/differentiation.py#L2153)
+#### [equilibrium\_shannon\_entropy\_total](./statistics/differentiation.py#L2155)
 
 ```python
 def equilibrium_shannon_entropy_total(population_size: int, m: float,
@@ -36289,7 +36335,7 @@ Return the equilibrium expected Shannon entropy of the pooled FIM population.
 Chao et al. (2015) Eq. 6 (IAM-FIM): the total-population counterpart
 to `equilibrium_shannon_entropy_isolated`, above, under Wright's
 finite island model — the same model `equilibrium_g_st`/
-`equilibrium_d` already predict `G_ST`/`D` for. The paper's own
+`equilibrium_d` already predict $G_{ST}$ / $D$ for. The paper's own
 closed form for the total population's own effective mutation
 parameter is `theta_T = 4*N*n*mu + (n-1)*mu / (m* + mu)`, where
 `m* = m*n/(n-1)` follows Latter (1973)'s own notation (already used
@@ -36330,7 +36376,7 @@ Unbounded above, the same as `equilibrium_shannon_entropy_isolated`
 
 <a id="fim.statistics.differentiation.equilibrium_heterozygosity_total"></a>
 
-#### [equilibrium\_heterozygosity\_total](./statistics/differentiation.py#L2205)
+#### [equilibrium\_heterozygosity\_total](./statistics/differentiation.py#L2207)
 
 ```python
 def equilibrium_heterozygosity_total(population_size: int, m: float, mu: float,
@@ -36363,7 +36409,7 @@ heterozygosity.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_subpopulation"></a>
 
-#### [equilibrium\_shannon\_entropy\_subpopulation](./statistics/differentiation.py#L2255)
+#### [equilibrium\_shannon\_entropy\_subpopulation](./statistics/differentiation.py#L2257)
 
 ```python
 def equilibrium_shannon_entropy_subpopulation(population_size: int, m: float,
@@ -36418,7 +36464,7 @@ population-dependent formula in this module already shares.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_differentiation"></a>
 
-#### [equilibrium\_shannon\_differentiation](./statistics/differentiation.py#L2317)
+#### [equilibrium\_shannon\_differentiation](./statistics/differentiation.py#L2319)
 
 ```python
 def equilibrium_shannon_differentiation(population_size: int, m: float,
@@ -36431,8 +36477,8 @@ Chao et al. (2015) Eq. 10: the mutual-information-based
 differentiation measure this project's own `differentiation_q` (at
 `order=1`, equivalent to `e_st`) computes from real, simulated data
 — this is that same statistic's *equilibrium prediction* instead,
-the `E_ST` counterpart to what `equilibrium_g_st`/`equilibrium_d`
-already are for `G_ST`/`D`. Defined as the mutual information
+the $E_{ST}$ counterpart to what `equilibrium_g_st`/`equilibrium_d`
+already are for $G_{ST}$ / $D$. Defined as the mutual information
 between total-population and subpopulation allele identity,
 normalized by `log(d)`:
 `(equilibrium_shannon_entropy_total - equilibrium_shannon_entropy_
@@ -36469,7 +36515,7 @@ not a bug to raise on.
 
 <a id="fim.statistics.differentiation.statistics_report"></a>
 
-#### [statistics\_report](./statistics/differentiation.py#L2365)
+#### [statistics\_report](./statistics/differentiation.py#L2367)
 
 ```python
 def statistics_report(
@@ -36482,9 +36528,9 @@ def statistics_report(
 
 Compute the statistics report for one normalized frequency table.
 
-``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``, ``A_CGD``,
-``Gs``, and ``Gd`` use equal deme treatment. ``deme_weights`` applies
-only to ``E_ST``, ``Delta``, and ``MI``; the engine supplies population
+$H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$, $K_{ST}$, ``A_CGD``,
+$G_s$, and $G_d$ use equal deme treatment. ``deme_weights`` applies
+only to $E_{ST}$, ``Delta``, and ``MI``; the engine supplies population
 sizes when ``deme_weighting`` is ``"size"``.
 
 **Arguments**:
@@ -36526,7 +36572,7 @@ Key measures implemented:
 - `nei_identity` — normalized genetic identity ``I`` across one or more
   loci (Nei 1972 Eq. 1 and Eq. 2). Bounded in ``[0, 1]``.
 - `nei_standard_distance` (alias `nei_d`) — Nei's standard genetic
-  distance ``D = -ln(I)`` (Nei 1972 Eq. 3). Bounded in ``[0, +inf)``;
+  distance $D = -\ln(I)$ (Nei 1972 Eq. 3). Bounded in ``[0, +inf)``;
   equals 0 iff allele frequencies are identical at every locus.
 - `nei_geometric_identity` — normalized genetic identity ``I'`` computed
   via geometric means across loci (Nei 1972 Eq. 4).
@@ -36545,7 +36591,7 @@ The Nei distance family (`nei_pair_identity`, `nei_pair_distance`,
 along two independent choices:
 
 - **Denominator.** ``"geometric"`` is Nei's own ``sqrt(J_X * J_Y)``, and
-  for ``d`` demes the geometric mean ``(J_1 * ... * J_d)^(1/d)``.
+  for ``d`` demes the geometric mean $(J_1 \cdots J_d)^{1/d}$.
   ``"arithmetic"`` is ``(J_X + J_Y) / 2``, and for ``d`` demes the mean
   within-deme identity ``J_within`` (Jost, L. (2026) private
   communication). The numerator is ``J_XY`` for a pair and, for all
@@ -36560,7 +36606,7 @@ along two independent choices:
 Two facts follow and are relied on by tests and documentation:
 
 - The arithmetic all-demes identity is ``J_between / J_within``, which is
-  ``1 - D`` for Jost's ``D``, so its distance is ``-ln(1 - D)``.
+  $1 - D$ for Jost's $D$, so its distance is $-\ln(1 - D)$.
 - The geometric all-demes identity is *not* bounded by 1. When demes
   differ greatly in diversity, the pair-averaged numerator can exceed the
   geometric mean of the within-deme identities, and the distance is
@@ -36614,7 +36660,7 @@ def nei_d(loci_x: Sequence[Mapping[Any, Any]] | Mapping[Any, Any],
           loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
 ```
 
-Return Nei's standard genetic distance ``D`` (alias for `nei_standard_distance`).
+Return Nei's standard genetic distance $D$ (alias for `nei_standard_distance`).
 
 **Arguments**:
 
@@ -36662,10 +36708,11 @@ Computes the expected normalized genetic identity between two isolated
 populations X and Y immediately after they are founded from a common
 parental population Z of homozygosity `j_z`:
 
-.. math::
 
+```math
 I_0 = \frac{J_Z}{\sqrt{\left[J_Z + \frac{1 - J_Z}{2 N_X}\right]
 \left[J_Z + \frac{1 - J_Z}{2 N_Y}\right]}}
+```
 
 **Arguments**:
 
@@ -36805,7 +36852,7 @@ def nei_standard_distance(
         loci_y: Sequence[Mapping[Any, Any]] | Mapping[Any, Any]) -> float
 ```
 
-Return Nei's standard genetic distance ``D = -ln(I)`` (Nei 1972 Eq. 3).
+Return Nei's standard genetic distance $D = -\ln(I)$ (Nei 1972 Eq. 3).
 
 Measures accumulated codon differences per locus under a steady-state
 infinite-alleles neutral mutation model.
@@ -36984,7 +37031,7 @@ def nei_all_demes_identity(tables: Sequence[FrequencyTable[AlleleKey]],
 Return the all-demes Nei identity ``J_between / mean(J_k)``.
 
 The arithmetic form is bounded in ``[0, 1]`` (``J_between`` never
-exceeds ``J_within``) and equals ``1 - D`` for Jost's ``D``.
+exceeds ``J_within``) and equals $1 - D$ for Jost's $D$.
 
 The geometric form is **not bounded by 1**. Example: one locus, demes
 1 and 2 fixed for allele A, deme 3 spread evenly over 1000 alleles
@@ -37127,9 +37174,10 @@ def identities_from_heterozygosities(h_s: float, h_t: float,
                                      deme_count: int) -> tuple[float, float]
 ```
 
-Return `(within, between)` identities implied by `H_S` and `H_T`.
+Return `(within, between)` identities implied by $H_S$ and $H_T$.
 
-Inverts `H_S = 1 - within` and `H_T = 1 - (within + (d - 1) between) / d`.
+Inverts $H_S = 1 - \mathrm{within}$ and
+$H_T = 1 - (\mathrm{within} + (d - 1) \mathrm{between}) / d$.
 For equal demes and symmetric migration, only these two averages
 matter: the recursion commutes with permuting demes, so an uneven
 starting state relaxes exactly as its symmetrized average does.
@@ -37147,7 +37195,7 @@ starting state relaxes exactly as its symmetrized average does.
 
 <a id="fim.statistics.identity_recursion.identities_to_statistics"></a>
 
-#### [identities\_to\_statistics](./statistics/identity_recursion.py#L127)
+#### [identities\_to\_statistics](./statistics/identity_recursion.py#L128)
 
 ```python
 def identities_to_statistics(within: float, between: float,
@@ -37158,7 +37206,7 @@ Return the identity-based statistics for one `(within, between)`.
 
 The pooled forms of `h_s`, `h_t`, `g_st` and `jost_d` written in terms
 of the two identities. A zero denominator (no diversity left) gives
-`0.0` for `G_ST` and `D` rather than `nan`.
+`0.0` for $G_{ST}$ and $D$ rather than `nan`.
 
 **Arguments**:
 
@@ -37173,7 +37221,7 @@ of the two identities. A zero denominator (no diversity left) gives
 
 <a id="fim.statistics.identity_recursion.identity_recursion"></a>
 
-#### [identity\_recursion](./statistics/identity_recursion.py#L153)
+#### [identity\_recursion](./statistics/identity_recursion.py#L154)
 
 ```python
 def identity_recursion(population_size: int, m: float, mu: float,
@@ -37184,19 +37232,31 @@ Solve the engine's identity recursion for one configuration.
 
 One generation is migrate, drift, mutate — the textbook Wright-Fisher
 island model. Migration maps the two identities by fixed coefficients
-of `m` and `d`; drift adds `1/N` to within-deme identity (the chance
+of $m$ and $d$; drift adds $1/N$ to within-deme identity (the chance
 two copies drawn with replacement are the same copy) and keeps
-`1 - 1/N` of the rest; mutation then keeps two distinct copies
-identical only if neither mutated, a factor `(1 - mu)^2` (one copy
-compared with itself stays identical, so the `1/N` term is not
+$1 - 1/N$ of the rest; mutation then keeps two distinct copies
+identical only if neither mutated, a factor $(1 - \mu)^2$ (one copy
+compared with itself stays identical, so the $1/N$ term is not
 scaled):
 
-within'  = 1/N + (1 - 1/N) (1 - mu)^2 within_migrated
-between' = (1 - mu)^2 between_migrated
 
 Without migration, and for two *distinct* copies
-(`F = (within - 1/N) / (1 - 1/N)`), this is the textbook
-`F' = (1 - mu)^2 [1/N + (1 - 1/N) F]`.
+with $F = (\mathrm{within} - 1/N) / (1 - 1/N)$, this is the textbook
+
+
+```math
+\begin{array}{rl}
+\mathrm{within}^\prime
+    &= \frac{1}{N} + \left(1 - \frac{1}{N}\right)(1 - \mu)^2
+        \mathrm{within}_{\mathrm{migrated}}, \\
+\mathrm{between}^\prime
+    &= (1 - \mu)^2 \mathrm{between}_{\mathrm{migrated}}.
+\end{array}
+```
+```math
+F^\prime = (1 - \mu)^2
+    \left[\frac{1}{N} + \left(1 - \frac{1}{N}\right)F\right].
+```
 
 **Arguments**:
 
@@ -37220,19 +37280,19 @@ Without migration, and for two *distinct* copies
 
 <a id="fim.statistics.identity_recursion.identity_matrix_from_frequencies"></a>
 
-#### [identity\_matrix\_from\_frequencies](./statistics/identity_recursion.py#L267)
+#### [identity\_matrix\_from\_frequencies](./statistics/identity_recursion.py#L279)
 
 ```python
 def identity_matrix_from_frequencies(
         frequencies: LocusFrequencies[AlleleKey]) -> NDArray[np.float64]
 ```
 
-Return the `d` by `d` identity matrix of a starting population.
+Return the $d$ by $d$ identity matrix of a starting population.
 
-Entry `[i][j]` is `sum_k x_ik x_jk` averaged over loci: the chance that
+Entry `[i][j]` is $\sum_k x_{ik} x_{jk}$ averaged over loci: the chance that
 one gene copy drawn from deme `i` and one from deme `j` are the same
 allele. The diagonal is the with-replacement within-deme identity,
-`1 - H_S`'s per-deme term.
+$1 - H_S$'s per-deme term.
 
 **Arguments**:
 
@@ -37246,7 +37306,7 @@ allele. The diagonal is the with-replacement within-deme identity,
 
 <a id="fim.statistics.identity_recursion.matrix_identity_trajectory"></a>
 
-#### [matrix\_identity\_trajectory](./statistics/identity_recursion.py#L298)
+#### [matrix\_identity\_trajectory](./statistics/identity_recursion.py#L310)
 
 ```python
 def matrix_identity_trajectory(
@@ -37258,15 +37318,33 @@ def matrix_identity_trajectory(
 
 Return the expected statistics at each of `generations`.
 
-One generation (migrate, drift, mutate) is `J -> (1 - mu)^2 M J M^T`
-off the diagonal and `J_ii -> 1/N_i + (1 - 1/N_i)(1 - mu)^2
-(M J M^T)_ii` on it, with `M` the row-stochastic migration matrix:
-drift's same-copy term `1/N_i` is a copy compared with itself, which
-mutation cannot make differ. That is
-affine in the flattened matrix, `x' = A x + c`, so
-`x_t = x* + V diag(lambda^t) V^-1 (x_0 - x*)` (eigenvalues may be
-complex; the result is real). `D`, `G_ST`, `H_S`, `H_T` and `H_ST` use
+One generation (migrate, drift, mutate) is
+
+
+off the diagonal and
+
+
+on it, with $M$ the row-stochastic migration matrix: drift's same-copy
+term $1/N_i$ is a copy compared with itself, which mutation cannot make
+differ. That is affine in the flattened matrix,
+$x^\prime = Ax + c$, so
+
+
+(eigenvalues may be
+complex; the result is real). $D$, $G_{ST}$, $H_S$, $H_T$ and $H_{ST}$ use
 equal deme weights, as the engine's reports do.
+
+```math
+J \mapsto (1 - \mu)^2 M J M^{\mathsf{T}}
+```
+```math
+J_{ii} \mapsto \frac{1}{N_i}
+    + \left(1 - \frac{1}{N_i}\right)(1 - \mu)^2
+        (M J M^{\mathsf{T}})_{ii}
+```
+```math
+x_t = x^* + V \operatorname{diag}(\lambda^t) V^{-1} (x_0 - x^*)
+```
 
 **Arguments**:
 
@@ -37490,13 +37568,13 @@ def pairwise_matrices(
            FloatMatrix]
 ```
 
-Return all four Nei identity matrices and the pairwise F_ST matrix.
+Return all four Nei identity matrices and the pairwise $F_{ST}$ matrix.
 
 One pass over the loci feeds both: the Nei identities (element
 ``[k, l]`` equals `nei_pair_identity` for demes ``k`` and ``l``,
-diagonal 1) and pairwise F_ST (Goudet & Weir 2023 Eq. 10, loci pooled
+diagonal 1) and pairwise $F_{ST}$ (Goudet & Weir 2023 Eq. 10, loci pooled
 as in Nei's rule: ``((J_k + J_l) / 2 - J_kl) / (1 - J_kl)``, diagonal
-0). An F_ST entry is NaN where it is undefined: both demes fixed for
+0). An $F_{ST}$ entry is NaN where it is undefined: both demes fixed for
 the same allele (``J_kl = 1``).
 
 **Arguments**:
@@ -37604,14 +37682,14 @@ here appears everywhere at once.
 
 Every one of these is a closed-form function of `(N, m, mu, d)`
 alone, so every one of them is defined along every one of the four
-sweep axes. Several do not depend on every parameter -- `D` has no
+sweep axes. Several do not depend on every parameter -- $D$ has no
 `N` term at all (`equilibrium_d`'s own docstring: only the
-migration-to-mutation ratio sets where it settles), `H_S` depends on
+migration-to-mutation ratio sets where it settles), $H_S$ depends on
 `N` and `mu` only, and the whole Whitlock identity-recovery family
 depends on `N` and `m` only. Swept against a parameter they do not
 contain, those produce a flat line. That flat line is the point, not
-a degenerate case to suppress: `D` level across two orders of
-magnitude of `N` while `G_ST` falls away beneath it is this
+a degenerate case to suppress: $D$ level across two orders of
+magnitude of `N` while $G_{ST}$ falls away beneath it is this
 project's central claim, drawn rather than asserted.
 
 **Arguments**:
@@ -38686,17 +38764,21 @@ One definition of "comparable" serves the command line, the app and the
 export: two sweeps compare on the axis keys both vary, at the values both
 have. Nothing is stored; a comparison is computed when it is asked for.
 
-**The interval of a difference.** For two sweeps with replicate means `m1`
-and `m2`, standard deviations `s1` and `s2`, and `n1` and `n2` replicates,
+**The interval of a difference.** For two sweeps with replicate means $m_1$
+and $m_2$, standard deviations $s_1$ and $s_2$, and $n_1$ and $n_2$ replicates,
 
-    difference = m1 - m2
-    standard error = sqrt(s1^2 / n1 + s2^2 / n2)
-    degrees of freedom = standard error^4 /
-        ((s1^2 / n1)^2 / (n1 - 1) + (s2^2 / n2)^2 / (n2 - 1))
+```math
+\begin{array}{rl}
+\mathrm{difference} &= m_1 - m_2, \\
+\mathrm{SE} &= \sqrt{\frac{s_1^2}{n_1} + \frac{s_2^2}{n_2}}, \\
+\nu &= \frac{\mathrm{SE}^4}{
+    \dfrac{(s_1^2/n_1)^2}{n_1 - 1} + \dfrac{(s_2^2/n_2)^2}{n_2 - 1}}.
+\end{array}
+```
 
 (Welch's unequal-variance method with the Welch-Satterthwaite degrees of
-freedom, rounded down to a whole number so the interval errs wide). The
-interval is `difference` plus or minus the Student's-t critical value for
+freedom $\nu$, rounded down to a whole number so the interval errs wide). The
+interval is the difference plus or minus the Student's $t$ critical value for
 those degrees of freedom times the standard error. It needs at least two
 replicates on each side; with fewer, the difference is reported without an
 interval.
@@ -38714,14 +38796,14 @@ with each sweep's seed policy, so a reader can judge the interval.
 
 <a id="fim.sweep_compare.Pairing"></a>
 
-#### [Pairing](./sweep_compare.py#L53)
+#### [Pairing](./sweep_compare.py#L57)
 
 Whether the compared runs used the same seeds: none shared, all shared at
 every shared coordinate, some shared, or too few shared coordinates to say.
 
 <a id="fim.sweep_compare.SweepRef"></a>
 
-## [SweepRef Objects](./sweep_compare.py#L65)
+## [SweepRef Objects](./sweep_compare.py#L69)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38737,7 +38819,7 @@ A sweep to compare.
 
 <a id="fim.sweep_compare.DifferenceCell"></a>
 
-## [DifferenceCell Objects](./sweep_compare.py#L78)
+## [DifferenceCell Objects](./sweep_compare.py#L82)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38758,7 +38840,7 @@ The difference of two sweeps' means at one coordinate.
 
 <a id="fim.sweep_compare.ComparedPoint"></a>
 
-## [ComparedPoint Objects](./sweep_compare.py#L100)
+## [ComparedPoint Objects](./sweep_compare.py#L104)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38782,7 +38864,7 @@ One shared coordinate and what each sweep has there.
 
 <a id="fim.sweep_compare.Comparison"></a>
 
-## [Comparison Objects](./sweep_compare.py#L124)
+## [Comparison Objects](./sweep_compare.py#L128)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38806,7 +38888,7 @@ Sweeps lined up on their shared coordinates.
 
 <a id="fim.sweep_compare.welch_difference"></a>
 
-#### [welch\_difference](./sweep_compare.py#L149)
+#### [welch\_difference](./sweep_compare.py#L153)
 
 ```python
 def welch_difference(first: StatisticCell,
@@ -38829,7 +38911,7 @@ Return the difference of two cells' means with a Welch interval.
 
 <a id="fim.sweep_compare.compare_sweeps"></a>
 
-#### [compare\_sweeps](./sweep_compare.py#L189)
+#### [compare\_sweeps](./sweep_compare.py#L193)
 
 ```python
 def compare_sweeps(refs: Sequence[SweepRef],
@@ -41047,7 +41129,7 @@ come from `summary.json`, for the statistics the monitor watched.
 #### [DEFAULT\_EXPORT\_STATISTICS](./sweep_table.py#L402)
 
 The statistics an export writes unless told otherwise (botanist question
-Q1: `D` and `G_ST` first, every statistic selectable).
+Q1: $D$ and $G_{ST}$ first, every statistic selectable).
 
 <a id="fim.sweep_table.ALL_STATISTICS"></a>
 

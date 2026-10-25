@@ -1,7 +1,7 @@
 """A finished run's statistics cells show the average, not the last value.
 
 The value in the last generation is one noisy draw (the Wright-Takahata
-example's `D` ends at 0.65 while its average over the evidence window is
+example's $D$ ends at 0.65 while its average over the evidence window is
 0.29). The statistics panel therefore shows each statistic's window mean and
 standard error, and keeps the last generation's value in the tooltip,
 labeled as such. A statistic without a per-generation history is unchanged.

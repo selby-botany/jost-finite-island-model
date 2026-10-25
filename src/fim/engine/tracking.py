@@ -29,7 +29,7 @@ from fim.statistics.genetic_distance import (
 
 
 def identity_statistics(params: SimulationParams) -> dict[str, IdentityStatistic]:
-    """Describe `D` and `G_ST` as functions of `H_S` and `H_T` for `params`.
+    """Describe $D$ and $G_{ST}$ as functions of $H_S$ and $H_T$ for `params`.
 
     Args:
         params: The run's configuration.
@@ -41,16 +41,16 @@ def identity_statistics(params: SimulationParams) -> dict[str, IdentityStatistic
 
 
 def identity_statistics_for(deme_count: int) -> dict[str, IdentityStatistic]:
-    """Describe `D` and `G_ST` as functions of `H_S` and `H_T` (design 6.11).
+    """Describe $D$ and $G_{ST}$ as functions of $H_S$ and $H_T$ (design 6.11).
 
     The values are the engine's own formulas (`jost_d_from_within_and_total`,
     `g_st_from_demes`), so "value of means" is exactly what a generation's own
-    `D`/`G_ST` would be had the window's averaged identities been the state.
+    $D$ / $G_{ST}$ would be had the window's averaged identities been the state.
     The gradients are those formulas' derivatives, for the delta-method
     standard error; a test checks them against finite differences.
 
     Args:
-        deme_count: The number of demes, which sets `D`'s scaling.
+        deme_count: The number of demes, which sets $D$'s scaling.
 
     Returns:
         `{"D": ..., "G_ST": ...}`.
@@ -173,24 +173,24 @@ Statistics `_watched_statistic_values` always returns, regardless of
 
 `fim.statistics.differentiation.statistics_report`'s own `statistics`
 parameter already computes these five unconditionally, no matter what is
-passed in (each is either the shared `H_S`/`H_T` input every other field
+passed in (each is either the shared $H_S$ / $H_T$ input every other field
 derives from, or an O(1) step once those are known) — before this
 constant existed, `_watched_statistic_values`'s own final filtering step
 still discarded whichever of these were not actually watched, so a GUI
-trajectory panel/live statistics table watching only `D` (this project's
-own stated default) never had a real history to show for `G_ST`/`H_S`/
-`H_T` even though computing them cost nothing extra. Design doc §6.2
+trajectory panel/live statistics table watching only $D$ (this project's
+own stated default) never had a real history to show for $G_{ST}$ / $H_S$/
+$H_T$ even though computing them cost nothing extra. Design doc §6.2
 (`20260907-claude-sonnet-5-botanist-gui-redesign.md`) already describes
 the trajectory panel as plotting "all six report statistics" — this
 constant is what makes five of those six always real, for free, closing
-that gap. `H_ST` joined this tuple later than the other four (found
+that gap. $H_{ST}$ joined this tuple later than the other four (found
 live: a real, reported "most statistics stopped scrubbing" investigation
 that turned out to be `track_expensive_statistics` correctly gating
-`E_ST`/`K_ST`/`A_CGD`/`Delta`/`MI`, plus this one genuine, separate gap
-— `H_ST` fell into neither this tuple nor `_EXPENSIVE_OPT_IN_STATISTICS`,
+$E_{ST}$ / $K_{ST}$/`A_CGD`/`Delta`/`MI`, plus this one genuine, separate gap
+— $H_{ST}$ fell into neither this tuple nor `_EXPENSIVE_OPT_IN_STATISTICS`,
 so it had no per-generation history at all unless directly watched, the
 trajectory-history-side twin of the exact watchability gap `FIM-51`
-already closed for it once). `E_ST`/`K_ST` are deliberately excluded: each
+already closed for it once). $E_{ST}$ / $K_{ST}$ are deliberately excluded: each
 is a genuine, independent O(total allele entries) pass `statistics_
 report` only pays for statistics named in the collection passed to it
 (commit `b12679b`, `FIM-24`/`FIM-32`, measured a ~38% reduction skipping
@@ -211,10 +211,10 @@ UNBOUNDED_STATISTICS: Final[frozenset[str]] = frozenset(unbounded_keys())
 _POOLED_STATISTICS: Final[frozenset[str]] = frozenset(
     {"Gs", "Gd", "D_m", "R_ST", "G_ST_NEI_LOG", "G_ST_HEDRICK", "F_ST"}
 )
-"""Watchable statistics computed from the pooled `H_S`, `H_T` and deme count.
+"""Watchable statistics computed from the pooled $H_S$, $H_T$ and deme count.
 
 Cheap: no pass over the allele frequencies, only `derived_fields` and the
-`Gs`/`Gd` identities of the two heterozygosities every generation already has.
+$G_s$ / $G_d$ identities of the two heterozygosities every generation already has.
 """
 
 
@@ -239,18 +239,18 @@ Statistics `params.track_expensive_statistics` opts into computing.
 
 All five are genuinely expensive per-generation and watchable —
 `_CONVERGENCE_STATISTICS` (`fim.model.params`) includes every one of
-them, so a run can also stop *on* one, not merely display it. `E_ST`/
-`K_ST` are each an O(total allele entries) pass. `A_CGD`/`Delta`/`MI`
+them, so a run can also stop *on* one, not merely display it. $E_{ST}$/
+$K_{ST}$ are each an O(total allele entries) pass. `A_CGD`/`Delta`/`MI`
 (Caballero-García-Dorado allelic distance, Gregorius's delta, Sherwin
 mutual information) are similarly real, generation-scale costs
 (`A_CGD`: O(deme pairs); `Delta`: O(deme pairs*alleles); `MI`: pools
-every deme's own frequencies, an extra full pass `D`/`G_ST` never
+every deme's own frequencies, an extra full pass $D$ / $G_{ST}$ never
 pay) — genuine "bonus" measurements from the differentiation
-literature, opt-in the same way `E_ST`/`K_ST` already are, and
+literature, opt-in the same way $E_{ST}$ / $K_{ST}$ already are, and
 watchable the same way too on a real, reported request (an earlier
 version of this set's own docstring said they were never legal
 `convergence_statistic` choices; that restriction did not survive
-contact with an actual user). `D`/`G_ST`/`H_S`/`H_T`/`H_ST` are never
+contact with an actual user). $D$ / $G_{ST}$ / $H_S$ / $H_T$ / $H_{ST}$ are never
 in this set — always computed regardless (`_ALWAYS_TRACKED_
 STATISTICS`'s own docstring), since none of them costs anything extra.
 """
@@ -262,14 +262,14 @@ def _statistics_to_compute(params: SimulationParams) -> frozenset[str]:
     Forwarded to `statistics_for_locus`/`_statistics_for_locus_
     vectorized`'s own `statistics` parameter, which controls only whether
     the genuinely expensive fields (`_EXPENSIVE_OPT_IN_STATISTICS`) are
-    computed at all this call, or left `math.nan` — `D`/`G_ST`/`H_S`/
-    `H_T`/`H_ST` are always computed by `statistics_report` regardless of
+    computed at all this call, or left `math.nan` — $D$ / $G_{ST}$ / $H_S$/
+    $H_T$ / $H_{ST}$ are always computed by `statistics_report` regardless of
     what this returns (`ALWAYS_TRACKED_STATISTICS`'s own docstring), so
     this function only ever needs to decide the expensive fields' own
     fate.
 
-    Always includes `params.convergence_statistics` (a watched `E_ST`/
-    `K_ST` must be computed for real regardless of the opt-in below, or
+    Always includes `params.convergence_statistics` (a watched $E_{ST}$/
+    $K_{ST}$ must be computed for real regardless of the opt-in below, or
     the run could never detect it converging); additionally includes
     every `_EXPENSIVE_OPT_IN_STATISTICS` name whenever `params.track_
     expensive_statistics` is set, even if none is actually watched — the
@@ -316,10 +316,10 @@ def convergence_values(
     settled down yet" (see this module's own docstring, above, for what
     convergence means here) — and, since `ALWAYS_TRACKED_STATISTICS`
     below, also to give a GUI a real, continuously updated history for
-    `D`/`G_ST`/`H_S`/`H_T`/`H_ST` regardless of what `params.
+    $D$ / $G_{ST}$ / $H_S$ / $H_T$ / $H_{ST}$ regardless of what `params.
     convergence_statistics` actually watches (design doc §6.2). Only the
     watched subset (`params.convergence_statistics`) — usually just one
-    (`D`, most commonly), but this project also supports watching several
+    ($D$, most commonly), but this project also supports watching several
     at once and requiring either all of them, or any one of them, to
     settle before calling the run converged (`SimulationParams.
     convergence_combinator`, design §9) — ever influences the stop
@@ -333,7 +333,7 @@ def convergence_values(
     statistic case costs one extra dictionary lookup per statistic per
     locus this way, not another whole pass over the state.
 
-    A tracked statistic that is undefined this generation (only ``G_ST``
+    A tracked statistic that is undefined this generation (only $G_{ST}$
     can be, and only when every tracked locus is currently
     "monomorphic" — has only a single allele left, with no genetic
     variation remaining to measure at all; see `mean_g_st_across_loci`)
@@ -343,10 +343,10 @@ def convergence_values(
     is honest about there being no observation to add, rather than
     fabricating one.
 
-    ``D``/``G_ST`` are aggregated across loci per `params.
+    $D$ / $G_{ST}$ are aggregated across loci per `params.
     locus_aggregation` (`_watched_statistic_values`), the identical
-    estimator `report_for_state` uses for its own ``D``/``G_ST`` fields —
-    every other tracked statistic (``E_ST``, ``K_ST``, ``H_S``, ``H_T``)
+    estimator `report_for_state` uses for its own `D`/``G_ST`` fields —
+    every other tracked statistic ($E_{ST}$, $K_{ST}$, $H_S$, $H_T$)
     is unaffected by that choice and stays a plain per-locus mean either
     way (`pooled_g_st_and_d`'s own docstring).
     """
@@ -385,7 +385,7 @@ def tracked_statistic_values(
 
     Returns:
         Every currently-defined tracked statistic's value, keyed by
-        name. A statistic that is undefined for this state (`G_ST` when
+        name. A statistic that is undefined for this state ($G_{ST}$ when
         every tracked locus is monomorphic, say) is absent rather than
         present as a placeholder, matching what the live monitor
         records for that same generation.
@@ -403,12 +403,12 @@ def convergence_values_vectorized(
     values`, so a whole generation's convergence check never has to
     rebuild a `ModelState`.
 
-    `D`, `G_ST`, `H_S`, `H_T` and `H_ST`, the statistics every run tracks
+    $D$, $G_{ST}$, $H_S$, $H_T$ and $H_{ST}$, the statistics every run tracks
     and the ones the convergence monitor usually watches, are computed for
     every locus by one compiled call (`VectorBlock.locus_statistics`),
     which reproduces `statistics_report` bit for bit; the cross-locus
     aggregation then follows `_watched_statistic_values` exactly. The
-    expensive opt-in statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`)
+    expensive opt-in statistics ($E_{ST}$, $K_{ST}$, `A_CGD`, `Delta`, `MI`)
     have no kernel form, so a run that watches or tracks any of them
     builds each locus's frequency maps and uses `statistics_report`. So
     does the one generation in which the kernel flags a value that
@@ -455,12 +455,12 @@ def _with_watched_extras(
 ) -> dict[str, float]:
     """Add the watched statistics that are not per-locus report fields.
 
-    `Gs`, `Gd`, `D_m`, `R_ST`, `G_ST_NEI_LOG`, `G_ST_HEDRICK` and `F_ST` come
-    from the pooled `H_S` and `H_T` already in `values`; the all-demes Nei
+    $G_s$, $G_d$, $D_m$, $R_{ST}$, `G_ST_NEI_LOG`, `G_ST_HEDRICK` and $F_{ST}$ come
+    from the pooled $H_S$ and $H_T$ already in `values`; the all-demes Nei
     identities and distances need the state, which `state` supplies only when
     one is watched. A value that is undefined (a Nei distance between demes
-    that share no allele, or an `R_ST` with no variation) is left out, as an
-    undefined `G_ST` always has been, and the monitor counts the generation.
+    that share no allele, or an $R_{ST}$ with no variation) is left out, as an
+    undefined $G_{ST}$ always has been, and the monitor counts the generation.
 
     Args:
         values: The mapping `_watched_statistic_values` (or its table form)
@@ -513,13 +513,13 @@ def _watched_values_from_table(
     `locus_aggregation` choices.
 
     Args:
-        table: `(loci, 5)` columns `H_S`, `H_T`, `H_ST`, `G_ST`, `D`;
-            `G_ST` is `nan` where undefined.
+        table: `(loci, 5)` columns $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$;
+            $G_{ST}$ is `nan` where undefined.
         params: Supplies `locus_aggregation`.
         deme_count: Number of demes.
 
     Returns:
-        `D`, `H_S`, `H_T`, `G_ST` (omitted when undefined) and `H_ST`.
+        $D$, $H_S$, $H_T$, $G_{ST}$ (omitted when undefined) and $H_{ST}$.
     """
     h_s = table[:, 0].tolist()
     h_t = table[:, 1].tolist()
@@ -549,7 +549,7 @@ def _watched_statistic_values(
     """`convergence_values`/`convergence_values_vectorized`'s own shared core.
 
     Before this function existed, both callers aggregated every watched
-    statistic — including `D`/`G_ST` — via `_mean_statistic_across_loci`
+    statistic — including $D$ / $G_{ST}$ — via `_mean_statistic_across_loci`
     alone, a plain per-locus mean (`"mean_of_ratios"`) regardless of
     `params.locus_aggregation`. `report_for_state`'s own final `D`/`G_ST`
     fields, by contrast, already respect `locus_aggregation` via
@@ -558,26 +558,26 @@ def _watched_statistic_values(
     docstring measures the two differing by 0.25% vs. 1.88% from the
     exact gene-identity recursion at reference scale). A multi-locus run
     at the default aggregation could therefore stop on a trailing-window
-    `D` the final report never actually shows — a real, reachable
+    $D$ the final report never actually shows — a real, reachable
     inconsistency between why a run stopped and what it reports (this
     project's own multi-model engine review, 2026-09-04, `FIM-10`/
     finding C-02/finding P1-2, independently found by three of four
     reviewers, one of them naming it the only finding among all four
     reviews that changes a scientific result).
 
-    `D`/`G_ST` now go through the identical `pooled_g_st_and_d` call
+    $D$ / $G_{ST}$ now go through the identical `pooled_g_st_and_d` call
     `report_for_state` itself makes, always (`ALWAYS_TRACKED_STATISTICS`
     — no longer gated on either being watched, since both cost nothing
-    extra to compute or aggregate regardless); `H_S`/`H_T` are likewise
+    extra to compute or aggregate regardless); $H_S$ / $H_T$ are likewise
     always returned, being `pooled_g_st_and_d`'s own two inputs, already
-    computed either way. `H_ST` is also always returned now (`_ALWAYS_
+    computed either way. $H_{ST}$ is also always returned now (`_ALWAYS_
     TRACKED_STATISTICS`'s own docstring has the "found live" account of
     when and why it joined the other four) but, unlike them, is not
     `locus_aggregation`-sensitive — a plain per-locus mean via `_mean_
     statistic_across_loci`, unconditionally now rather than only when
-    directly watched. `E_ST`/`K_ST` (and any other less common watched
+    directly watched. $E_{ST}$ / $K_{ST}$ (and any other less common watched
     statistic) are the same plain-per-locus-mean shape, included only
-    when actually watched or (`E_ST`/`K_ST` only) opted into via
+    when actually watched or ($E_{ST}$ / $K_{ST}$ only) opted into via
     `params.track_expensive_statistics` (`_statistics_to_compute`'s own
     docstring — every other name here is either always present or never
     computed at all this generation, so there is nothing to look up for
@@ -619,10 +619,10 @@ def _mean_statistic_across_loci(
 ) -> float | None:
     """Return one statistic's per-locus reports averaged into a single value.
 
-    Only ``G_ST`` can be undefined at a locus — a monomorphic locus's
+    Only $G_{ST}$ can be undefined at a locus — a monomorphic locus's
     total heterozygosity is zero, leaving nothing to differentiate; every
     other field in `DifferentiationReport` is always defined for valid
-    input. ``G_ST`` delegates to `mean_g_st_across_loci`, which drops any
+    input. $G_{ST}$ delegates to `mean_g_st_across_loci`, which drops any
     undefined locus from the average and returns ``None`` only when every
     locus is undefined — exactly the rule `report_for_state` uses for the
     final report, so the within-run convergence watcher's notion of
@@ -653,7 +653,7 @@ def pair_statistic_values(
     plot: the four identities `NEI_I_PAIR_*`, the four distances
     `NEI_D_PAIR_*` and pairwise `F_ST_PAIR` (`fim.statistics.catalog`).
     One O(alleles) pass per locus. A deme compared with itself gives
-    identity 1, distance 0 and pairwise F_ST 0 (undefined, `None`, if
+    identity 1, distance 0 and pairwise $F_{ST}$ 0 (undefined, `None`, if
     that deme is fixed).
 
     Args:
@@ -715,15 +715,15 @@ def pair_statistic_values(
 
 
 def history_free_statistic_values(state: ModelState) -> dict[str, float | None]:
-    """Return the global statistics that have no per-generation history.
+    r"""Return the global statistics that have no per-generation history.
 
-    `Gs`, `Gd`, the five pooled-heterozygosity measures (`D_m`, `R_ST`,
-    both `G'_ST`, coancestry `F_ST`) and the eight all-demes Nei fields:
+    $G_s$, $G_d$, the five pooled-heterozygosity measures ($D_m$, $R_{ST}$,
+    both $G^\prime_{ST}$, coancestry $F_{ST}$) and the eight all-demes Nei fields:
     what a scrubbed frame
     of a completed run needs to show those rows at that frame's
     generation. Computed directly and cheaply (O(d * alleles) per locus),
     not through `report_for_state`, which would also pay for every
-    expensive statistic. `Gs` and `Gd` equal `report_for_state`'s.
+    expensive statistic. $G_s$ and $G_d$ equal `report_for_state`'s.
 
     Args:
         state: The population state.
@@ -773,9 +773,9 @@ def mean(values: Sequence[float]) -> float:
 def mean_g_st_across_loci(
     locus_reports: Sequence[DifferentiationReport],
 ) -> float | None:
-    """Return ``G_ST`` averaged across loci, dropping any locus where it is undefined.
+    """Return $G_{ST}$ averaged across loci, dropping any locus where it is undefined.
 
-    ``g_st`` is undefined at a locus whose total heterozygosity (``H_T``)
+    ``g_st`` is undefined at a locus whose total heterozygosity ($H_T$)
     is zero — a fully monomorphic locus has nothing to differentiate. Such
     a locus contributes nothing to the average, rather than a fabricated
     ``0.0`` (which would understate real differentiation at the other,
@@ -802,10 +802,10 @@ def pooled_g_st_and_d(
 ) -> tuple[float | None, float]:
     """Return ``(G_ST, D)``, aggregated across loci per `locus_aggregation`.
 
-    With `"ratio_of_means"`, compute each statistic from pooled `H_S`
-    and `H_T` values supplied by the caller. With `"mean_of_ratios"`,
-    average the per-locus `G_ST` and `D` values. `E_ST`, `K_ST`, `H_S`,
-    `H_T`, and `H_ST` are averaged per locus regardless of this option.
+    With `"ratio_of_means"`, compute each statistic from pooled $H_S$
+    and $H_T$ values supplied by the caller. With `"mean_of_ratios"`,
+    average the per-locus $G_{ST}$ and $D$ values. $E_{ST}$, $K_{ST}$, $H_S$,
+    $H_T$, and $H_{ST}$ are averaged per locus regardless of this option.
     """
     if locus_aggregation == "mean_of_ratios":
         return (
@@ -830,9 +830,9 @@ def statistics_for_locus(
     Builds a normalized allele-frequency table from ``state`` and passes
     it to ``fim.statistics.differentiation.statistics_report``. When
     ``params.deme_weighting`` is ``"size"``, population-size weights are
-    supplied for ``E_ST``, ``Delta``, and ``MI`` only. Other statistics,
-    including ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``,
-    ``A_CGD``, ``Gs``, and ``Gd``, use equal deme treatment.
+    supplied for $E_{ST}$, ``Delta``, and ``MI`` only. Other statistics,
+    including $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$, $K_{ST}$,
+    ``A_CGD``, $G_s$, and $G_d$, use equal deme treatment.
 
     Args:
         state: Population state to summarize.
@@ -899,7 +899,7 @@ def _report_statistic(
     same "look up one named statistic safely" job, for the same reason:
     a plain `report[statistic]` would raise Python's own generic
     `KeyError` for an unrecognized name, rather than the specific,
-    named-statistic error this function raises instead. `H_ST` was
+    named-statistic error this function raises instead. $H_{ST}$ was
     missing from this lookup until this project's own multi-model engine
     review, 2026-09-04 (`FIM-51`) — `fim.model.params.
     _CONVERGENCE_STATISTICS` is this function's own config-time
@@ -909,7 +909,7 @@ def _report_statistic(
     keys. `A_CGD`/`Delta`/`MI` reach this function either way, watched
     or only opted into for display via `track_expensive_statistics`
     (`extra_tracked_statistics`'s own opt-in extras) — the same path
-    `E_ST`/`K_ST` already take when neither is actually watched.
+    $E_{ST}$ / $K_{ST}$ already take when neither is actually watched.
     """
     fields: Mapping[str, float | None] = {
         "D": report["D"],

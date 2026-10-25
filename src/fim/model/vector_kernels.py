@@ -74,7 +74,7 @@ from fim.model.vector_block import (
 #    own weight and is divided by the row's migrant weight.
 
 STATISTIC_COLUMNS = 5
-"""Columns of the per-locus statistics table: H_S, H_T, H_ST, G_ST, D."""
+"""Columns of the per-locus statistics table: $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$."""
 
 STATISTICS_TOLERANCE = 1e-12
 """Mirror of `fim.config.numerics.DIFFERENTIATION_TOLERANCE` (checked by a test)."""
@@ -947,7 +947,7 @@ def _bounded(value, status, locus):
 
 @numba.njit(cache=True, nogil=True)
 def locus_statistics(freq, ncol, out, status):
-    """Compute `H_S`, `H_T`, `H_ST`, `G_ST` and `D` for every locus.
+    """Compute $H_S$, $H_T$, $H_{ST}$, $G_{ST}$ and $D$ for every locus.
 
     Equal deme weights, as `statistics_report` uses for these five
     fields. Each value reproduces `fim.statistics.differentiation`
@@ -958,8 +958,8 @@ def locus_statistics(freq, ncol, out, status):
     Args:
         freq: `(loci, demes, width)` frequencies.
         ncol: Live columns per locus.
-        out: `(loci, 5)` output: `H_S`, `H_T`, `H_ST`, `G_ST`, `D`.
-            `G_ST` is `nan` where it is undefined (`H_T` is zero).
+        out: `(loci, 5)` output: $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$.
+            $G_{ST}$ is `nan` where it is undefined ($H_T$ is zero).
         status: `(loci,)` int64 output, `0` when every value is in range.
             A non-zero entry means the Python implementation would have
             raised; the caller recomputes that generation with it.

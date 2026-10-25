@@ -11,15 +11,15 @@ values no matter where the scrubber sat, a real, confirmed-live gap (not
 a hypothesis) design §6.3's own "a scrubber... letting a user drag back
 through already-computed history" already calls for. This module proves
 the fix: scrubbing away from the final frame (1) updates the watched
-convergence statistic's own row, and `D`/`G_ST`/`H_S`/`H_T`'s own rows
+convergence statistic's own row, and $D$ / $G_{ST}$ / $H_S$ / $H_T$'s own rows
 regardless of whether they are actually watched (`fim.engine._ALWAYS_
 TRACKED_STATISTICS` -- landed after this module was first written,
 folded in here rather than tracked as a second, separate change), to
-that generation's real recorded value, (2) marks `E_ST`/`K_ST` "not
+that generation's real recorded value, (2) marks $E_{ST}$ / $K_{ST}$ "not
 known at this generation" rather than a possibly-misleading final value
 whenever neither is watched nor `track_expensive_statistics` opted in
 (`ConvergenceMonitor.record` only ever records the always-tracked four
-plus whichever of `E_ST`/`K_ST` were actually requested -- with neither
+plus whichever of $E_{ST}$ / $K_{ST}$ were actually requested -- with neither
 requested here, those two alone have no per-generation history to
 show), (3) draws a moving vertical marker on the trajectory canvas at
 the scrubbed generation, and (4) restores the real, authoritative final

@@ -42,7 +42,7 @@ program is :mod:`dev/bin/calibrate-statistical-bands`, and its raw output,
 seeds, and environment fingerprint are retained in
 ``test/validation/statistical-calibration-evidence.json``, not merely
 summarized here in a comment. An analytic bound was considered and is not
-currently available -- the per-replicate ``G_ST``/``D`` estimate is a
+currently available -- the per-replicate $G_{ST}$ / $D$ estimate is a
 ratio-of-means statistic sampled from a multi-generation stochastic
 recursion, and a closed-form variance would need delta-method propagation
 through that recursion's higher moments, which has not been derived. Re-run
@@ -158,7 +158,7 @@ def _load_shannon_sigma_constants() -> tuple[float, float, float]:
     """Load the Chao et al. Shannon-equilibrium scenario's own three sigmas.
 
     That scenario's own evidence entry uses a different schema from the
-    four `G_ST`/`D` scenarios above (three named statistics, not two --
+    four $G_{ST}$ / $D$ scenarios above (three named statistics, not two --
     see `dev/bin/calibrate-statistical-bands`'s own
     `_characterize_chao_shannon_equilibrium` docstring for why), so it is
     not one of `_load_sigma_constants`'s own `required` scenarios and
@@ -429,7 +429,7 @@ def _identity_fixed_point(
 
     Iterates :func:`_iterate_identities` from the undifferentiated founding
     identities ``(jw, jb) = (1, 0)`` to convergence. These raw identities (not
-    the derived ``G_ST`` / ``D``) are what :func:`_dn2_equilibrium_start` needs
+    the derived $G_{ST}$ / $D$) are what :func:`_dn2_equilibrium_start` needs
     to build a near-equilibrium initial state.
 
     Args:
@@ -700,7 +700,7 @@ def _pooled_g_st_d(state: ModelState, d: int, n_loci: int) -> tuple[float, float
     """Return multi-locus pooled ``(G_ST, D)`` for one final state.
 
     Uses ratio-of-means pooling across loci, which stays defined whenever any
-    locus is polymorphic (the per-locus report's ``G_ST`` is ``None`` under
+    locus is polymorphic (the per-locus report's $G_{ST}$ is ``None`` under
     global fixation). The forms match ``fim.statistics``'s ``g_st`` and
     ``jost_d`` on the mean within- and total-heterozygosities.
 
@@ -755,7 +755,7 @@ def test_report_for_state_ratio_of_means_matches_the_pooled_oracle() -> None:
     value comparisons never depend on production's own cross-locus
     aggregation being correct. Before R3 (see
     `20260903-claude-opus-5-gene-identity-recursion-fim-implications.md`),
-    production instead averaged each locus's own `D`/`G_ST` ratio — a
+    production instead averaged each locus's own $D$ / $G_{ST}$ ratio — a
     different, measurably biased number (see CHANGELOG.md's own entry for
     this change) that this test would have failed against.
 
@@ -763,8 +763,8 @@ def test_report_for_state_ratio_of_means_matches_the_pooled_oracle() -> None:
     `report_for_state`'s own `"G_ST"`/`"D"` fields, under the
     `locus_aggregation="ratio_of_means"` default, equal `_pooled_g_st_d`'s
     own numbers for the identical final state — exactly, not approximately,
-    since both now do the identical arithmetic (mean `H_S`/`H_T` across
-    loci, then one `G_ST`/`D` from those pooled values). A regression in
+    since both now do the identical arithmetic (mean $H_S$ / $H_T$ across
+    loci, then one $G_{ST}$ / $D$ from those pooled values). A regression in
     either function's own pooling arithmetic would eventually show up as
     drift in some published-value scenario elsewhere in this file anyway,
     but only this test names the two functions and reports the failure as
@@ -802,15 +802,15 @@ def test_report_for_state_ratio_of_means_matches_the_pooled_oracle() -> None:
 def _pooled_shannon_statistics(
     state: ModelState, d: int, n_loci: int
 ) -> tuple[float, float, float]:
-    """Return multi-locus pooled ``(H_T, H_S, Shannon differentiation)``.
+    r"""Return multi-locus pooled ``(H_T, H_S, Shannon differentiation)``.
 
     The Shannon-entropy counterpart to `_pooled_g_st_d`, above — same
-    per-locus-then-averaged pooling, reading `H_T`/`H_S` off `within_
+    per-locus-then-averaged pooling, reading $H_T$ / $H_S$ off `within_
     hill_number`/`total_hill_number` at ``order=1`` (already exact:
     `within_hill_number` and `total_hill_number` return ``exp(entropy)``
     at that order by construction, so `log(...)` recovers Chao et al.
-    (2015)'s own `¹H_S`/`¹H_T` exactly, not an approximation of them) and
-    combining them via the same Eq. 10 `(H_T - H_S) / log(d)` `fim.
+    (2015)'s own ${}^1H_S$ / ${}^1H_T$ exactly, not an approximation of them) and
+    combining them via the same Eq. 10 $(H_T - H_S) / \log(d)$ `fim.
     statistics.differentiation.equilibrium_shannon_differentiation`
     predicts the equilibrium value of.
 
@@ -941,8 +941,8 @@ def _run_engine_replicates(
     recorded generation, one step too late to preempt the cap.
 
     The shared engine-running step behind both `_run_engine_pooled`
-    (heterozygosity-based `G_ST`/`D`) and `_run_engine_pooled_shannon`
-    (Shannon-entropy-based `H_T`/`H_S`/Shannon differentiation), below —
+    (heterozygosity-based $G_{ST}$ / $D$) and `_run_engine_pooled_shannon`
+    (Shannon-entropy-based $H_T$ / $H_S$/Shannon differentiation), below —
     factored out so a scenario's own simulated trajectory is never run
     twice just because two different statistic families both want to read
     it.
@@ -1012,7 +1012,7 @@ def _run_engine_pooled(
     meaning and the deterministic-horizon integration this builds on.
 
     Returns:
-        Two parallel lists, the pooled ``G_ST`` and ``D`` per replicate.
+        Two parallel lists, the pooled $G_{ST}$ and $D$ per replicate.
     """
     final_states = _run_engine_replicates(
         population_size=population_size,
@@ -1104,8 +1104,8 @@ def _run_engine_pooled_shannon(
 
     The Shannon-entropy counterpart to `_run_engine_pooled`, above — same
     deterministic-horizon integration, same arguments, but reading
-    `H_T`/`H_S`/Shannon differentiation off each replicate's own final
-    state (`_pooled_shannon_statistics`) instead of `G_ST`/`D`.
+    $H_T$ / $H_S$/Shannon differentiation off each replicate's own final
+    state (`_pooled_shannon_statistics`) instead of $G_{ST}$ / $D$.
 
     Returns:
         Three parallel lists, the pooled total-population entropy,
@@ -1339,7 +1339,7 @@ def test_wright_takahata_finite_deme_correction_is_explicit(
     mu: float,
     d: int,
 ) -> None:
-    """The finite-deme correction in equilibrium G_ST is tested directly.
+    """The finite-deme correction in equilibrium $G_{ST}$ is tested directly.
 
     Wright (1943) writes the model with a finite number of subgroups, and
     Takahata (1983) carries that finite-island correction into the multiallelic
@@ -1443,7 +1443,7 @@ def test_pairwise_identity_recursion_matches_the_island_model_oracle(
 
 
 def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
-    """The general recursion's own torus result, and an open discrepancy it found.
+    r"""The general recursion's own torus result, and an open discrepancy it found.
 
     Applies the same general, now cross-validated (see the test above)
     pairwise-identity recursion to the actual Crow & Aoki torus matrix
@@ -1455,7 +1455,7 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     `test_crow_aoki_torus_scenario_via_engine`, this cannot flake and
     needed no calibration).
 
-    This does **not** assert a match to the published `G_ST=0.172` --
+    This does **not** assert a match to the published $G_{ST} = 0.172$ --
     it does not match, and forcing an assertion that it does would be
     exactly the "pick parameters until the test passes" pattern this
     project's own testing rules forbid. What the recursion actually
@@ -1463,7 +1463,7 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     convention (`m = M/N = 1.0/20 = 0.05`, split evenly across each
     deme's four neighbors -- the same convention already used to build
     `_crow_aoki_torus_matrix` for the calibrated engine test), is
-    `G_ST ~= 0.324` -- notably *higher* than both the published value and
+    $G_{ST} \approx 0.324$ -- notably *higher* than both the published value and
     `test_crow_aoki_torus_scenario_via_engine`'s own characterized
     engine mean (`0.272`), not lower, which revises rather than confirms
     that test's own attribution of the gap to a small-`N`, `O(1/N)`
@@ -1474,7 +1474,7 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     A honest exploration (not committed as its own assertion, since it
     is not resolved) found that quadrupling the migration rate to
     `m = 0.2` (one full `M/N` fraction *per neighbor*, rather than split
-    across all four) undershoots to `G_ST ~= 0.115`, and an intermediate
+    across all four) undershoots to $G_{ST} \approx 0.115$, and an intermediate
     `m ~= 0.12` reproduces `0.172` almost exactly -- suggesting the real
     explanation is most likely an undocumented difference between this
     project's own migration-rate convention for the torus and whatever
@@ -1483,7 +1483,7 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     not a bug in this recursion (independently cross-validated against
     three already-published, already-engine-validated island scenarios,
     exactly, just above) or in `test_crow_aoki_torus_scenario_via_engine`
-    itself (which reproduces *this same* `G_ST ~= 0.32`-ish
+    itself (which reproduces *this same* $G_{ST} \approx 0.32$-ish
     neighborhood, not the published `0.172`, when run long enough that
     its own equilibration lag genuinely shrinks).
     """
@@ -1514,7 +1514,7 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
 
 
 def test_crow_aoki_torus_under_the_papers_own_migration_convention() -> None:
-    """R9: does the published `G_ST=0.172` discrepancy trace to a migration-
+    r"""R9: does the published $G_{ST} = 0.172$ discrepancy trace to a migration-
     convention mismatch, the same failure mode already found and fixed for
     Ryman & Leimar (2008)?
 
@@ -1522,7 +1522,7 @@ def test_crow_aoki_torus_under_the_papers_own_migration_convention() -> None:
     §8/§9's own proposed check: the test above computes `fim`'s own exact
     recursion under `fim`'s own migration convention (`rate` redrawn only
     from a deme's four neighbors, `_crow_aoki_torus_matrix`'s own default)
-    and finds `G_ST ~= 0.324`, not the published `0.172` -- a long-standing,
+    and finds $G_{ST} \approx 0.324$, not the published `0.172` -- a long-standing,
     documented, unresolved gap (`doc/fim-simulator-test-plan.md`, Appendix
     A). Part 3.3 of the implications document found and numerically
     verified the *identical* failure mode for Ryman & Leimar's own island-
@@ -1548,7 +1548,7 @@ def test_crow_aoki_torus_under_the_papers_own_migration_convention() -> None:
     future change to either function is caught, not silently absorbed.
 
     **The finding is negative, and informative for exactly that reason.**
-    `G_ST ~= 0.374` under this convention -- *further* from `0.172` than
+    $G_{ST} \approx 0.374$ under this convention -- *further* from `0.172` than
     `fim`'s own convention's `0.324`, not closer. The "pool includes the
     home deme" mapping that resolved Ryman & Leimar's own island-model gap
     to about 0.1% (Part 3.3) does not resolve this one; it makes it worse.
@@ -1760,7 +1760,7 @@ def test_ryman_leimar_equations_2_and_3_match_fims_own_recursion(
     noise accumulated over up to 5000 generations. Before `fim` adopted
     the textbook mutation step, its own factor
     ``(1 - u)^2 + u (1 - u) / N`` left a structural residual of up to
-    0.11% on `G_ST` and 0.45% on `D` here.
+    0.11% on $G_{ST}$ and 0.45% on $D$ here.
     """
     m_paper = m * d / (d - 1)
 
@@ -1846,7 +1846,7 @@ def test_ryman_leimar_equation_4_reproduces_figure_1(
 def test_ryman_leimar_equation_5_reproduces_the_published_g_st_trajectory(
     t: int, expected_g_st: float
 ) -> None:
-    """R2: the paper's own published mutation-free `G_ST` trajectory, their Eq. 5.
+    """R2: the paper's own published mutation-free $G_{ST}$ trajectory, their Eq. 5.
 
     Complete isolation (``m=0``) and no mutation (``u=0``), starting
     from ``(J0, J1) = (0, 0)`` -- an ancestral population with no
@@ -1860,7 +1860,7 @@ def test_ryman_leimar_equation_5_reproduces_the_published_g_st_trajectory(
     exactly `_iterate_paper_identities` at those parameter values, not
     a separate closed form Part 6.5 states one for. At ``s=10``,
     ``2N=2000``, it reproduces the paper's own published landmark
-    table (Part 6.5), including "at `t=100`, `G_ST` is close to 0.04
+    table (Part 6.5), including "at `t=100`, $G_{ST}$ is close to 0.04
     for all mutation rates" -- the ``0.0441`` row.
     """
     two_n = 2000
@@ -1894,7 +1894,7 @@ def test_ryman_leimar_equation_5_reproduces_the_published_g_st_trajectory(
 def test_stepping_stone_differentiation_is_at_least_the_island_models(
     population_size: int, m: float, mu: float, d: int
 ) -> None:
-    """Kimura & Weiss (1964): stepping-stone G_ST/D >= the island model's.
+    """Kimura & Weiss (1964): stepping-stone $G_{ST}$ / $D$ >= the island model's.
 
     Cited by Whitlock & McCauley (1999, *Heredity* 82:117-125, read in
     full for the Crow & Aoki torus work): "the genetic differentiation
@@ -1919,7 +1919,7 @@ def test_stepping_stone_differentiation_is_at_least_the_island_models(
 
     At `d=3` a ring and the island model are the *same* graph -- each
     deme's two neighbors are already the only two other demes there
-    are -- so this scenario's own `G_ST`/`D` come out exactly equal, not
+    are -- so this scenario's own $G_{ST}$ / $D$ come out exactly equal, not
     strictly greater; `>=`, not `>`, is the correct assertion, and this
     is why `d=3` stays in the parametrization rather than being dropped
     as a redundant case. Every scenario here was computed and checked
@@ -2084,7 +2084,7 @@ def test_shannon_entropy_isolated_and_total_are_computed_and_finite() -> None:
 
 
 def test_identity_recursion_d_and_g_st_are_non_increasing_in_migration() -> None:
-    """The exact finite-N oracle's D and G_ST never rise as migration rises.
+    """The exact finite-N oracle's $D$ and $G_{ST}$ never rise as migration rises.
 
     Same underlying claim as `test-manifest.yaml`'s own `M1`-`M5`
     migration panel (same `N`, `mu`, `d`, and even the same five `m`
@@ -2123,15 +2123,15 @@ def test_identity_recursion_d_and_g_st_are_non_increasing_in_migration() -> None
 
 
 def test_identity_recursion_d_and_g_st_move_opposite_ways_in_mutation() -> None:
-    """The exact finite-N oracle's D rises and G_ST falls as mutation rises.
+    """The exact finite-N oracle's $D$ rises and $G_{ST}$ falls as mutation rises.
 
     The deterministic-oracle counterpart to the migration test above,
     for `test-manifest.yaml`'s own `MU1`-`MU5` mutation panel (same
     `N`, `m`, `d`, and the same five `mu` values) — which itself never
     asserted a direction at all, only "is finite" at each step. The
     direction actually implied by the model (Part VI's own headline
-    point, "Why this kills the standard inference") is that `D` and
-    `G_ST` move opposite ways as mutation rate rises, checked here
+    point, "Why this kills the standard inference") is that $D$ and
+    $G_{ST}$ move opposite ways as mutation rate rises, checked here
     exactly, with the same non-flaking, no-seed, no-calibration
     oracle as the migration test above.
     """
@@ -2157,7 +2157,7 @@ def test_identity_recursion_d_and_g_st_move_opposite_ways_in_mutation() -> None:
 @pytest.mark.slow
 @pytest.mark.statistical
 def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
-    """The engine's `Gs`/`Gd` trajectory tracks the recursion, not just its fixed point.
+    """Engine $G_s$ / $G_d$ trajectories track the recursion, not just its fixed point.
 
     `R5` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
     claude-opus-5-gene-identity-recursion-fim-implications.md` — the
@@ -2171,7 +2171,7 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
     for speed) and reconstructs `ModelState` at several sampled
     generations directly from its own rows (`ModelState.from_rows`,
     `fim.reanalyze.reanalyze_trajectory`'s own file-backed counterpart's
-    in-memory analog), computing `Gs`/`Gd` at each via `report_for_state`
+    in-memory analog), computing $G_s$ / $G_d$ at each via `report_for_state`
     — the same public API a real re-analysis would use, not an internal
     shortcut.
 
@@ -2183,7 +2183,7 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
     almost every point in the flat equilibrium region, reproducing
     `test_engine_reproduces_part_vi_equilibrium` at greater cost.
     `founding_condition_for_heterozygosity` (`R7`) starts every deme as
-    an identical ancestral copy, so `Gs(0) = Gd(0)` exactly and the
+    an identical ancestral copy, so $G_s(0) = G_d(0)$ exactly and the
     recursion's own starting point needs no separate argument about
     founding-condition mismatch — the whole reason `R7` exists.
 
@@ -2203,7 +2203,7 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
 
     Configuration: `N=100, m=0.01, mu=0.005, d=4`, matching Part 4.2's
     own worked scenario; 8 loci, 30 replicates, horizon 300, ancestral
-    `H_S(0)=0.4`, seed 20260905. Runtime is roughly 40 seconds. Verified
+    $H_S(0) = 0.4$, seed 20260905. Runtime is roughly 40 seconds. Verified
     directly, not merely reasoned about, before being written here: all
     five sampled generations pass at this configuration.
     """
@@ -2289,43 +2289,43 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
 @pytest.mark.slow
 @pytest.mark.statistical
 def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect() -> None:
-    """A different `H_S(0)` shifts the same demography's own mid-transition `G_ST`.
+    """A different $H_S(0)$ shifts the same demography's own mid-transition $G_{ST}$.
 
     `R8` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
     claude-opus-5-gene-identity-recursion-fim-implications.md` — Ryman
     & Leimar's own genuinely novel finding (Finding F, their Figure 3):
-    during the transition phase, `G_ST` depends on the *ancestral*
-    heterozygosity `H_S(0)` a set of demes split from, not only on `N`
+    during the transition phase, $G_{ST}$ depends on the *ancestral*
+    heterozygosity $H_S(0)$ a set of demes split from, not only on `N`
     and `m` — a claim with no equilibrium counterpart at all (an
     equilibrium run washes the starting point out entirely, which is
     exactly why `test_engine_reproduces_part_vi_equilibrium`, directly
     below, could never detect it either way). Identical demography
     (`N`, `m`, `mu`, `d`, horizon), several ancestral heterozygosities
     via `founding_condition_for_heterozygosity` (`R7`) — every other
-    variable held fixed, only `H_S(0)` itself changes between runs.
+    variable held fixed, only $H_S(0)$ itself changes between runs.
 
     A **directional (metamorphic) check**, per this document's own
     guidance, deliberately not a point-value calibration band: the same
     tactic `test_stepping_stone_differentiation_is_at_least_the_island_
     models` already uses for a different claim. Two statistics, both
     already known (from this same recursion, verified numerically
-    before this test was written) to move the same direction as `H_S(0)`
+    before this test was written) to move the same direction as $H_S(0)$
     increases here, at different sensitivities:
 
-    - `G_ST` — the paper's own statistic — checked as an ordering of its
+    - $G_{ST}$ — the paper's own statistic — checked as an ordering of its
       own point estimate (`bootstrap_replicate_summary`'s own `"mean"`)
-      across increasing `H_S(0)`, since the effect on `G_ST` itself is real
+      across increasing $H_S(0)$, since the effect on $G_{ST}$ itself is real
       but modest at a scale this test can afford to run. Modest means the
-      step from `H_S(0) = 0.5` to `0.9` is about the size of the bootstrap
+      step from $H_S(0) = 0.5$ to `0.9` is about the size of the bootstrap
       interval's own half-width, so a strict point-estimate ordering holds
       or fails with the particular random draws (it held for the
       `seed + i` replicate seeds and failed by 0.003 for the `SeedSequence`
       ones). The claim is therefore checked as it can honestly be made: the
       two extremes are ordered, and no step down exceeds the interval's own
       half-width.
-    - `D` — far more sensitive to this same effect at this configuration
-      (a difference of `Gs`/`Gd` alone move `D`'s own bare ratio far
-      more than they move `G_ST`'s blended one — the identical Jensen-
+    - $D$ — far more sensitive to this same effect at this configuration
+      (a difference of $G_s$ / $G_d$ alone move $D$'s own bare ratio far
+      more than they move $G_{ST}$'s blended one — the identical Jensen-
       style amplification `R3` part 3's own docstring describes, here
       working in this test's favor rather than as a bias to correct)
       — checked as non-overlapping confidence intervals, a stronger
@@ -2605,7 +2605,7 @@ def test_dear_nolan_high_stationarity_via_engine() -> None:
 @pytest.mark.slow
 @pytest.mark.statistical
 def test_crow_aoki_torus_scenario_via_engine() -> None:
-    """The simulator reproduces Crow & Aoki (1984)'s own torus G_ST (Table 1).
+    """The simulator reproduces Crow & Aoki (1984)'s own torus $G_{ST}$ (Table 1).
 
     **Functional (public-API-only):** this test's own assertion compares
     the engine directly against the literal published number, with no
@@ -2617,7 +2617,7 @@ def test_crow_aoki_torus_scenario_via_engine() -> None:
     Scenario: a 3-by-3 toroidal stepping-stone lattice (`_crow_aoki_torus_
     matrix`), ``N=20`` gene copies, ``mu=1e-5``, migration rate ``m=0.05``
     (``Nm=1.0``, matching Crow & Aoki's own ``M``) -- Crow & Aoki (1984)
-    Table 1's ``n=9, N=20, M=1.0, u=10⁻⁵`` row, published ``G_ST=0.172``.
+    Table 1's ``n=9, N=20, M=1.0, u=10⁻⁵`` row, published $G_{ST} = 0.172$.
     Source and citation confirmed directly against the paper's own full
     text (`pnas00620-0169.pdf`); see this project's own commits
     `d3adcf0`/`2dd1ea3` for the fuller citation history.
@@ -2643,10 +2643,10 @@ def test_crow_aoki_torus_scenario_via_engine() -> None:
     (multiple single-replicate trials in the 0.20-0.36 range, none below
     0.20, against a published 0.172) -- not noise around the right
     answer, an actual convergence lag: re-running the same seed at
-    horizon 4000 and then 8000 showed `G_ST` trending steadily down
+    horizon 4000 and then 8000 showed $G_{ST}$ trending steadily down
     (0.361 -> 0.255 -> 0.213), confirming the scenario itself was sound
     and the horizon was simply too short. 60 loci, separately, proved too
-    thin to reliably avoid all-loci global fixation (`G_ST` undefined)
+    thin to reliably avoid all-loci global fixation ($G_{ST}$ undefined)
     over these horizons. 150 loci / horizon 6000 is the configuration
     that came out of this search: four independent trial seeds landed at
     0.198, 0.088, 0.318, and 0.218 (mean 0.206, straddling 0.172 from
@@ -2666,9 +2666,9 @@ def test_crow_aoki_torus_scenario_via_engine() -> None:
     10-replicate characterization pass -- smaller than the other three
     scenarios' own 20-100-replicate passes, a direct, acknowledged
     consequence of this scenario's per-replicate cost; see the evidence
-    file's own `elapsed_seconds` for the specific trade-off made. No `D`
-    assertion: Crow & Aoki's Table 1 reports only `G_ST` for the
-    stepping-stone model, never `D`.
+    file's own `elapsed_seconds` for the specific trade-off made. No $D$
+    assertion: Crow & Aoki's Table 1 reports only $G_{ST}$ for the
+    stepping-stone model, never $D$.
     """
     replicates = 6
     side_length = 3
@@ -2712,20 +2712,20 @@ def test_chao_shannon_equilibrium_scenario_via_engine() -> None:
     FIM converges very quickly ... whereas the normalized mutual
     information based on Shannon entropy converges relatively slowly,"
     and a quick single-seed check across horizons 1000-8000 confirmed it
-    for this exact scenario before committing to a horizon: `G_ST`-style
+    for this exact scenario before committing to a horizon: $G_{ST}$-style
     convergence was already essentially flat by 1000, but the
     Shannon-based statistics were still measurably settling.
 
-    Compares the engine's own simulated `H_T`/`H_S`/Shannon
+    Compares the engine's own simulated $H_T$ / $H_S$/Shannon
     differentiation (`_pooled_shannon_statistics`, reading `log(within_
     hill_number(table, 1))`/`log(total_hill_number(table, 1))` off each
     replicate's final state -- already-exact quantities, not an
-    approximation of Chao et al.'s own `¹H_S`/`¹H_T`) against
+    approximation of Chao et al.'s own ${}^1H_S$ / ${}^1H_T$) against
     `equilibrium_shannon_entropy_total`/`_subpopulation`/
     `equilibrium_shannon_differentiation`'s own closed-form (Eq. 6/7D/10)
     predictions -- the same "real engine against closed-form theory"
     structure `test_engine_reproduces_part_vi_equilibrium` already uses
-    for `G_ST`/`D`, applied here to a genuinely independent statistic
+    for $G_{ST}$ / $D$, applied here to a genuinely independent statistic
     family (Shannon entropy, not heterozygosity) for the first time in
     this file.
 
@@ -2734,8 +2734,8 @@ def test_chao_shannon_equilibrium_scenario_via_engine() -> None:
     already-validated Part VI scenario, only the horizon differs) and no
     fixation risk (8 loci at `mu=0.005` is comfortably far from the
     torus's own `mu=1e-5` regime) -- a 10-replicate characterization pass
-    landed tight and stable (`H_S`'s own empirical mean within `0.008` of
-    its theoretical prediction; `H_T` and Shannon differentiation both
+    landed tight and stable ($H_S$'s own empirical mean within `0.008` of
+    its theoretical prediction; $H_T$ and Shannon differentiation both
     within about `1.5` characterized standard deviations, comfortably
     inside the wider band this test's own fewer assertion replicates
     produce). 6 replicates, base seed 715000 (distinct from every other

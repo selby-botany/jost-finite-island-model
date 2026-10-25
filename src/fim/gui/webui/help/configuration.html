@@ -774,12 +774,12 @@ stop_batch_early).</li>
 <li><strong>Type:</strong> boolean</li>
 <li><strong>Default:</strong> <code>false</code></li>
 </ul>
-<p>Controls whether <var>E</var><sub>ST</sub>/<var>K</var><sub>ST</sub>/<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>/Delta/MI are
+<p>Controls whether <var>E</var><sub>ST</sub> / <var>K</var><sub>ST</sub> / <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>/Delta/MI are
 computed every generation for display, even when none of them is being
 watched for convergence. D, <var>G</var><sub>ST</sub>, <var>H</var><sub>S</sub>, and <var>H</var><sub>T</sub>
 are always tracked and available for display regardless of this setting
 and regardless of convergence_statistic — each is either the shared
-<var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> input every other statistic derives from, or an
+<var>H</var><sub>S</sub> / <var>H</var><sub>T</sub> input every other statistic derives from, or an
 O(1) step once those are known, so computing them costs nothing extra.
 <var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>A</mi><mrow><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">G</mi><mi mathvariant="normal">D</mi></mrow></mrow></msub></mrow></math>, Delta, and MI each require
 an additional pass over frequency tables. Enabling this setting computes
@@ -1098,18 +1098,18 @@ when more than one locus is tracked. Every other reported statistic
 (<var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, <var>H</var><sub>ST</sub>, <var>E</var><sub>ST</sub>, <var>K</var><sub>ST</sub>) is unaffected — each is already a
 linear mean across loci, with no such ambiguity to resolve.</p>
 <ul>
-<li><code>ratio_of_means</code> (the default): average <var>H</var><sub>S</sub>/<var>H</var><sub>T</sub> across loci
-first, then compute one <code>D</code>/<var>G</var><sub>ST</sub> from those pooled values. This
+<li><code>ratio_of_means</code> (the default): average <var>H</var><sub>S</sub> / <var>H</var><sub>T</sub> across loci
+first, then compute one <var>D</var> / <var>G</var><sub>ST</sub> from those pooled values. This
 matches what the exact gene-identity recursion predicts and avoids a
 small-denominator instability a per-locus ratio can have.</li>
-<li><code>mean_of_ratios</code>: compute <code>D</code>/<var>G</var><sub>ST</sub> at each locus independently,
+<li><code>mean_of_ratios</code>: compute <var>D</var> / <var>G</var><sub>ST</sub> at each locus independently,
 then average the ratios. Use this when matching an analysis or publication
 that applies this estimator. The mean of ratios generally differs from
 the ratio of means; see
 <a href="#" data-fim-help="jost-differentiation-measures" data-fim-anchor="">differentiation measures</a> for formulas.</li>
 </ul>
 <p>The convergence monitor uses the same locus-aggregation setting for watched
-<code>D</code>/<var>G</var><sub>ST</sub> as the final report.</p>
+<var>D</var> / <var>G</var><sub>ST</sub> as the final report.</p>
 <pre><code class="language-yaml">n_loci: 2
 locus_lengths: [50, 500]
 locus_aggregation: mean_of_ratios   # average per-locus ratios

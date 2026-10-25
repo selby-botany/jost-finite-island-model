@@ -370,7 +370,7 @@ def comparison_payload(
     Args:
         study_ids: Two or more sweep Studies.
         statistic: A statistic's catalog key, or empty for the first of
-            `D`, `G_ST` that the sweeps have (else the first they have).
+            $D$, $G_{ST}$ that the sweeps have (else the first they have).
         on: The axes to join on, or `None` for every shared axis.
         labels: A label for each Study, or `None` for the Study names (with
             the Study id added where two names are alike).

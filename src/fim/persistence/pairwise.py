@@ -24,10 +24,10 @@ Format (version 1)::
 
 Each list is the strict upper triangle of a symmetric ``d x d`` matrix,
 row by row (pair ``(0, 1)``, ``(0, 2)``, ..., ``(1, 2)``, ...); the
-diagonal is known (1 for an identity, 0 for F_ST). For the Nei family only
+diagonal is known (1 for an identity, 0 for $F_{ST}$). For the Nei family only
 identities are stored: they are always finite (a distance is infinite
 when nothing is shared, and strict JSON has no infinity), and each
-distance is exactly ``-ln(identity)``. A pairwise F_ST is ``null`` where it
+distance is exactly ``-ln(identity)``. A pairwise $F_{ST}$ is ``null`` where it
 is undefined (both demes fixed for the same allele).
 
 Above the deme-count limit (`fim.statistics.catalog.
@@ -189,9 +189,9 @@ def pair_value(
         second: Zero-based deme index.
 
     Returns:
-        The value (a deme with itself: identity 1, F_ST 0); `None` when the
+        The value (a deme with itself: identity 1, $F_{ST}$ 0); `None` when the
         matrices were skipped for a large deme count, or the value is
-        undefined (a `null` pairwise F_ST).
+        undefined (a `null` pairwise $F_{ST}$).
     """
     if payload.get("mode") != "full":
         return None

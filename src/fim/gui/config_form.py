@@ -299,7 +299,7 @@ CONVERGENCE_STATISTIC_NAMES: Final[tuple[str, ...]] = convergence_statistic_keys
 """Every checkbox the Structure panel's "convergence statistic(s)" group
 offers: every convergence-eligible statistic in `fim.statistics.catalog`,
 which the page builds its checkboxes from too. Deriving it closed an old
-gap: `H_ST` was a legal `SimulationParams.convergence_statistic` with no
+gap: $H_{ST}$ was a legal `SimulationParams.convergence_statistic` with no
 checkbox."""
 
 TABS: Final[tuple[TabSpec, ...]] = (

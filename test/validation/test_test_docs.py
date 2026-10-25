@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
+from latex2mathml.converter import convert
+from markdown_it import MarkdownIt
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = PROJECT_ROOT / "dev" / "bin" / "generate-test-docs"
@@ -105,6 +108,39 @@ def test_every_test_directory_is_a_documented_group() -> None:
     }
     documented = {group for group in _GROUPS if group}
     assert actual == documented
+
+
+def test_generator_preserves_tex_equations(tmp_path: Path) -> None:
+    """Mutation and convergence equations survive generation as renderable TeX."""
+    output = tmp_path / "TESTS.md"
+    result = subprocess.run(
+        [str(GENERATOR), str(output)],
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    tokens = MarkdownIt().parse(output.read_text(encoding="utf-8"))
+    equations = [
+        token.content
+        for token in tokens
+        if token.type == "fence" and token.info == "math"
+    ]
+    for expected in (
+        r"\tau = \frac{1}{1 - (1 - 1/N)(1 - \mu)^2}",
+        r"\mathrm{within}^\prime",
+        r"J^\prime = \frac{1}{N}",
+    ):
+        assert any(expected in equation for equation in equations), expected
+    for equation in equations:
+        root = ElementTree.fromstring(convert(equation, display="block"))
+        assert root.tag == "{http://www.w3.org/1998/Math/MathML}math"
+        assert not any("\\" in text for text in root.itertext()), equation
+    for token in tokens:
+        if token.type == "code_block":
+            assert "within'  =" not in token.content
 
 
 def test_generator_runs_without_an_activated_virtualenv(tmp_path: Path) -> None:

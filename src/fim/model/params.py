@@ -241,12 +241,12 @@ _CONVERGENCE_STATISTICS: Final = frozenset(convergence_statistic_keys())
 
 Derived from `fim.statistics.catalog` (`convergence_eligible`). Only
 statistics the convergence monitor was designed for are eligible: the
-Nei distance family, `Gs` and `Gd` are captured and shown but never
+Nei distance family, $G_s$ and $G_d$ are captured and shown but never
 stop a run.
 
-`H_ST` was missing here until this project's own multi-model engine
+$H_{ST}$ was missing here until this project's own multi-model engine
 review, 2026-09-04 (`FIM-51`/finding Gemini M-03/finding Grok P3-1):
-`fim.engine.FinalReport`/`replicate_summary` already report `H_ST`
+`fim.engine.FinalReport`/`replicate_summary` already report $H_{ST}$
 alongside every other differentiation measure, but a caller could not
 actually *watch* it for convergence — the one statistic reportable but
 not watchable, an inconsistency with no principled reason behind it.
@@ -259,7 +259,7 @@ convergence claim attached. They still cost the same real, generation-
 scale compute either way (`fim.engine.tracking._EXPENSIVE_OPT_IN_STATISTICS`'s
 own docstring) — watching one for convergence, not merely opting into
 its display, forces that cost on every generation of the run, exactly
-as watching `E_ST`/`K_ST` already does.
+as watching $E_{ST}$ / $K_{ST}$ already does.
 
 `fim.engine.tracking._report_statistic` is this set's own convergence-time
 counterpart; keep both in sync.
@@ -315,14 +315,14 @@ class SimulationParams:
         initial_allele_count: Founding allele count per locus.
         initial_concentration: Symmetric Dirichlet concentration.
         deme_weighting: Weighting used by statistics that support it.
-        locus_aggregation: How `D` and `G_ST` combine across loci in
+        locus_aggregation: How $D$ and $G_{ST}$ combine across loci in
             `fim.engine.report_for_state`'s own final report —
-            `"ratio_of_means"` (the default): average `H_S`/`H_T` across
-            loci first, then compute one `D`/`G_ST` from those pooled
+            `"ratio_of_means"` (the default): average $H_S$ / $H_T$ across
+            loci first, then compute one $D$ / $G_{ST}$ from those pooled
             values, matching what the exact gene-identity recursion
             predicts and avoiding the small-denominator instability a
-            per-locus ratio can have. `"mean_of_ratios"`: compute `D`/
-            `G_ST` at each locus independently, then average those —
+            per-locus ratio can have. `"mean_of_ratios"`: compute $D$/
+            $G_{ST}$ at each locus independently, then average those —
             this project's own original behavior, kept available for
             comparability with literature or prior analyses that used
             it, not because it is the better estimator: measured against
@@ -331,7 +331,7 @@ class SimulationParams:
             the recursion's own prediction where `"mean_of_ratios"` was
             off by 1.88% (CHANGELOG.md's own entry for this change has
             the full comparison). Every other
-            reported statistic (`H_S`, `H_T`, `H_ST`, `E_ST`, `K_ST`) is
+            reported statistic ($H_S$, $H_T$, $H_{ST}$, $E_{ST}$, $K_{ST}$) is
             unaffected — each is already a linear mean across loci, with
             no such ambiguity to resolve.
         convergence_statistic: One statistic, or several, watched by the
@@ -339,19 +339,19 @@ class SimulationParams:
         convergence_combinator: How several watched statistics combine —
             "all" (every one stable) or "any" (at least one stable).
             A single statistic makes this a no-op special case.
-        convergence_estimate: Which expected value a run estimates for `D`
-            and `G_ST`, the two statistics that are functions of `H_S` and
-            `H_T`. `"mean_of_values"` (the default) averages the statistic
+        convergence_estimate: Which expected value a run estimates for $D$
+            and $G_{ST}$, the two statistics that are functions of $H_S$ and
+            $H_T$. `"mean_of_values"` (the default) averages the statistic
             itself over the evidence window; `"value_of_means"` computes it
-            from the window's averaged `H_S` and `H_T`, the quantity the
+            from the window's averaged $H_S$ and $H_T$, the quantity the
             closed form predicts; `"auto"` picks the second when the
             statistic is undefined in a window generation or its denominator
             is tiny in too many of them (Expert Settings
             `estimate_auto_denominator`/`estimate_auto_fraction`). The
             stopping decision, the headline number and the batch interval
             follow the choice; the report carries both forms either way.
-            Statistics that are not functions of the identities (`E_ST`,
-            `K_ST`, `H_ST`) have one form.
+            Statistics that are not functions of the identities ($E_{ST}$,
+            $K_{ST}$, $H_{ST}$) have one form.
         convergence_burn_in: Generations discarded before averaging starts.
             `AUTO_CONVERGENCE` (`0`, the default) derives it from the
             model's relaxation time and `precision`
@@ -365,7 +365,7 @@ class SimulationParams:
             interval across replicates is that narrow. Defaults to
             `DEFAULT_PRECISION` (`0.01`).
         track_expensive_statistics: Whether the per-generation
-            convergence check also computes `E_ST`/`K_ST`/`A_CGD`/
+            convergence check also computes $E_{ST}$ / $K_{ST}$/`A_CGD`/
             `Delta`/`MI` even when none is actually watched — the
             display-only opt-in a GUI trajectory panel/live statistics
             table uses to show real, continuously updated values for
@@ -373,28 +373,28 @@ class SimulationParams:
             real, recurring performance cost (never a correctness
             change: a run's own convergence decision, and every other
             statistic, are completely unaffected by this flag either
-            way). `D`/`G_ST`/`H_S`/`H_T` need no such flag and are
+            way). $D$ / $G_{ST}$ / $H_S$ / $H_T$ need no such flag and are
             always computed and returned for free regardless — each is
-            either the shared `H_S`/`H_T` input every other field
+            either the shared $H_S$ / $H_T$ input every other field
             derives from, or an O(1) step once those are known
             (`fim.statistics.differentiation.statistics_report`'s own
-            `statistics` parameter). `E_ST` (an entropy pass over the
-            pooled table plus one per deme), `K_ST` (a set union across
+            `statistics` parameter). $E_{ST}$ (an entropy pass over the
+            pooled table plus one per deme), $K_{ST}$ (a set union across
             every deme's own alleles), `A_CGD` (Caballero-García-Dorado
             allelic distance, an O(deme pairs) pass), `Delta` (Gregorius
             δ, O(deme pairs*alleles) — the most expensive of the
             five), and `MI` (Sherwin mutual information, an entropy pass
             over the pooled table plus one per deme, the same shape as
-            `E_ST`) are each a real, independent, non-trivial pass over
+            $E_{ST}$) are each a real, independent, non-trivial pass over
             every locus's own frequency table, *every generation of the
             run* — commit `b12679b` (`FIM-24`/`FIM-32`) measured
-            skipping `E_ST`/`K_ST` alone, when neither is watched, at
+            skipping $E_{ST}$ / $K_{ST}$ alone, when neither is watched, at
             roughly a 38% reduction in per-generation convergence-check
             cost at a many-alleles reference configuration; turning this
             on pays that same cost back for all five, deliberately, in
             exchange for the display value. `A_CGD`/`Delta`/`MI` are
-            legal `convergence_statistic` choices exactly like `E_ST`/
-            `K_ST` (`_CONVERGENCE_STATISTICS`, below) — genuine "bonus"
+            legal `convergence_statistic` choices exactly like $E_{ST}$/
+            $K_{ST}$ (`_CONVERGENCE_STATISTICS`, below) — genuine "bonus"
             measurements from the differentiation literature, but a
             real, reported request confirmed watching one of them for
             convergence is a choice this project leaves to the caller,
@@ -591,7 +591,7 @@ class SimulationParams:
             split).
         equilibrium_convergence_tolerance: The largest expected departure
             of the ancestral population's heterozygosity from its
-            mutation-drift equilibrium, in `H_S`'s units; greater than
+            mutation-drift equilibrium, in $H_S$'s units; greater than
             zero. Sets the ancestral burn-in, about `ln(1 / tolerance)`
             relaxation times (`fim.convergence.defaults.
             panmictic_equilibration`).

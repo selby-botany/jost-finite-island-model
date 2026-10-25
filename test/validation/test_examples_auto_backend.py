@@ -19,7 +19,7 @@ is a digest of the configuration (`fim.model.params`), and the two
 configurations legitimately differ in `engine_backend`. A batch `summary.json`
 holds no run ID and is compared whole.
 
-Archived evidence-window and Shannon-entropy (`E_ST`, `MI`) floats allow
+Archived evidence-window and Shannon-entropy ($E_{ST}$, `MI`) floats allow
 numerical rounding (relative `1e-12`, absolute `1e-14`): FFT/BLAS reductions
 and the system logarithm need not round identically across platforms, even
 for identical histories. Structure, discrete values, and every other report
@@ -284,7 +284,7 @@ def test_lineal_reproduces_the_committed_output(example: str, tmp_path: Path) ->
     The same configuration with only `engine_backend` changed to `lineal`
     (the reference implementation) must give the same reports, summary, and
     kept replicates, allowing only archive-platform rounding in
-    `window_statistics`, `E_ST`, and `MI`.
+    `window_statistics`, $E_{ST}$, and `MI`.
     """
     if example in _LINEAL_RERUN_EXCLUDED:
         pytest.skip(_LINEAL_RERUN_EXCLUDED[example])

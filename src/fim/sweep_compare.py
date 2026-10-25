@@ -1,4 +1,4 @@
-"""Compare sweeps: the same statistic across sweeps, joined by coordinates.
+r"""Compare sweeps: the same statistic across sweeps, joined by coordinates.
 
 The botanist's questions are comparative: ring against island topology,
 `N` = 100 against `N` = 1,000, a sweep against its recomputed twin. A
@@ -10,17 +10,21 @@ One definition of "comparable" serves the command line, the app and the
 export: two sweeps compare on the axis keys both vary, at the values both
 have. Nothing is stored; a comparison is computed when it is asked for.
 
-**The interval of a difference.** For two sweeps with replicate means `m1`
-and `m2`, standard deviations `s1` and `s2`, and `n1` and `n2` replicates,
+**The interval of a difference.** For two sweeps with replicate means $m_1$
+and $m_2$, standard deviations $s_1$ and $s_2$, and $n_1$ and $n_2$ replicates,
 
-    difference = m1 - m2
-    standard error = sqrt(s1^2 / n1 + s2^2 / n2)
-    degrees of freedom = standard error^4 /
-        ((s1^2 / n1)^2 / (n1 - 1) + (s2^2 / n2)^2 / (n2 - 1))
+```math
+\begin{array}{rl}
+\mathrm{difference} &= m_1 - m_2, \\
+\mathrm{SE} &= \sqrt{\frac{s_1^2}{n_1} + \frac{s_2^2}{n_2}}, \\
+\nu &= \frac{\mathrm{SE}^4}{
+    \dfrac{(s_1^2/n_1)^2}{n_1 - 1} + \dfrac{(s_2^2/n_2)^2}{n_2 - 1}}.
+\end{array}
+```
 
 (Welch's unequal-variance method with the Welch-Satterthwaite degrees of
-freedom, rounded down to a whole number so the interval errs wide). The
-interval is `difference` plus or minus the Student's-t critical value for
+freedom $\nu$, rounded down to a whole number so the interval errs wide). The
+interval is the difference plus or minus the Student's $t$ critical value for
 those degrees of freedom times the standard error. It needs at least two
 replicates on each side; with fewer, the difference is reported without an
 interval.

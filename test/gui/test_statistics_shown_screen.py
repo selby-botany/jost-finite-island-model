@@ -37,7 +37,7 @@ _ROW_STATE = (
 def test_the_nei_family_starts_hidden_and_the_long_standing_statistics_shown(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """A fresh install: `D` shown, every Nei row and the pair heading hidden."""
+    """A fresh install: $D$ shown, every Nei row and the pair heading hidden."""
     settled = drive(window, ready=_INPUT_SCREEN_READY, trigger="null", read=_ROW_STATE)
 
     assert settled["d"] is False
@@ -83,7 +83,9 @@ def test_the_chooser_lists_every_catalog_statistic_grouped(
 def test_the_chooser_marks_the_expensive_statistics_as_lengthening_runs(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """E_ST, K_ST, A_CGD, δG and I carry a run-time warning; they start hidden.
+    r"""Expensive statistics carry a run-time warning and start hidden.
+
+    They are $E_{ST}$, $K_{ST}$, $A_{\mathrm{CGD}}$, $\delta_G$ and $I$.
 
     Showing one makes every new run compute them each generation
     (`Api._merge_default_run_settings`), so the chooser says so on each of

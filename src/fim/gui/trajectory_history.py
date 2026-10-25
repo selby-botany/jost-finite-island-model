@@ -48,7 +48,7 @@ class TrajectoryHistory:
         histories: One list per requested statistic name, each the same
             length as `generations` and in the same order — a `None`
             entry means that statistic was undefined at that specific
-            sampled generation (`G_ST` at a currently-monomorphic
+            sampled generation ($G_{ST}$ at a currently-monomorphic
             locus, the one named case `fim.engine.report_for_state`
             itself can produce), not a missing sample; the caller
             decides how to skip it, the same "leave a statistic's own

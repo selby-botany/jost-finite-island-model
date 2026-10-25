@@ -252,7 +252,7 @@ def test_completed_run_consolidates_its_messages_into_one_area(
 ) -> None:
     """A completed run's own info/warning lines show in one bulleted list.
 
-    Reported live: the derived-convergence-settings note and the G_ST
+    Reported live: the derived-convergence-settings note and the $G_{ST}$
     caution note used to live in two different places on the page --
     the caution note specifically beside the statistics table, breaking
     that table's own layout. `enterCompletedState` now builds one
@@ -264,7 +264,7 @@ def test_completed_run_consolidates_its_messages_into_one_area(
 
     `fast_scalar_run_settings`'s own convergence settings are given
     explicitly (not auto-derived), so its real "done" payload carries
-    `convergenceNote: ""` -- both the note and the G_ST caution are
+    `convergenceNote: ""` -- both the note and the $G_{ST}$ caution are
     exercised here by mutating a captured real payload before
     re-entering `enterCompletedState` with it directly, the same
     "capture a real payload and re-drive it" pattern `test_open_run_
@@ -361,8 +361,8 @@ def test_differently_scaled_statistics_start_off_the_trajectory_panel(
     The trajectory panel draws every statistic against one shared
     y-axis, so a statistic that is not a `[0, 1]` differentiation
     measure decides the axis for all of them: `A_CGD` is an effective-
-    allele *count* and routinely reads above 1, which flattens `D`,
-    `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, and `H_ST` into an unreadable
+    allele *count* and routinely reads above 1, which flattens $D$,
+    $G_{ST}$, $E_{ST}$, $K_{ST}$, $H_S$, $H_T$, and $H_{ST}$ into an unreadable
     band along the bottom of the panel. They are hidden by default, not
     removed -- this test also clicks `A_CGD`'s own row back on to prove
     the legend toggle still reaches it.
@@ -643,7 +643,7 @@ def test_table_headers_toggle_and_highlight_their_statistic(
 ) -> None:
     """A results-table header is the same toggle as its stats-panel row.
 
-    Clicking `D`'s header hides it everywhere (header, whole column,
+    Clicking $D$'s header hides it everywhere (header, whole column,
     stats-panel row) with `aria-pressed` following; hovering highlights
     the header, the column and the stats-panel row; leaving clears it.
     """
@@ -2145,7 +2145,7 @@ def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
     The named-statistic rows have moved with the scrubber since the
     completed-state scrubber first existed (`updateScrubbedTrajectory`);
     the two derived effective-allele rows (`Ne_S`/`Ne_T`, each a
-    closed-form `1 / (1 - H)` transform of the same run's own H_S/H_T
+    closed-form `1 / (1 - H)` transform of the same run's own $H_S$ / $H_T$
     history value at that generation) did not -- the panel again showed
     two different generations at once, the same staleness class the
     batch panel's own version of this fix was reported for. This pins

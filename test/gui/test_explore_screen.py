@@ -110,7 +110,7 @@ def test_changing_a_field_recomputes_predictions(
 
     `equilibrium_d`'s own formula (`fim.statistics.differentiation`)
     means a much larger migration rate, everything else held fixed,
-    strictly increases `D` — a large enough gap between the two `m`
+    strictly increases $D$ — a large enough gap between the two `m`
     values below is not a hand-picked coincidence, it is guaranteed by
     the formula's own monotonicity in `m`, so a real recomputation is
     distinguishable from a stale, unchanged reading by simple inequality,

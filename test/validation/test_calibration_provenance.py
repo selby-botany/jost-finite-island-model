@@ -90,7 +90,7 @@ def test_chao_shannon_equilibrium_evidence_is_retained_and_versioned() -> None:
 
     The `chao_shannon_equilibrium` counterpart to the test above: three
     named statistics (`total_entropy`/`subpopulation_entropy`/
-    `shannon_differentiation`), not the two (`G_ST`/`D`) every other
+    `shannon_differentiation`), not the two ($G_{ST}$ / $D$) every other
     scenario shares -- see `dev/bin/calibrate-statistical-bands`'s own
     `_characterize_chao_shannon_equilibrium` docstring for why this one
     scenario's evidence uses its own schema instead of being folded into

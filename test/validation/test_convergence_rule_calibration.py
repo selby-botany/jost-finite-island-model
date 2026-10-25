@@ -18,7 +18,7 @@ with the observed count: `convergence-rule-calibration-evidence.json`
 (`dev/bin/calibrate-convergence-defaults`).
 
 The same evidence file records how fast the allele-spectrum statistics settle
-next to `D`, which keeps `spectrum_burn_in_multiplier` at 1, and the
+next to $D$, which keeps `spectrum_burn_in_multiplier` at 1, and the
 Dear-Nolan low scenario, whose seeded run is the committed example report.
 """
 
@@ -138,10 +138,10 @@ def test_evidence_records_the_bound_and_stays_within_it() -> None:
 
 
 def test_spectrum_statistics_settle_with_the_identity_statistics() -> None:
-    """The allele-spectrum statistics need no longer burn-in than `D`.
+    """The allele-spectrum statistics need no longer burn-in than $D$.
 
     The default `spectrum_burn_in_multiplier` is 1 because, in each measured
-    regime, every allele-spectrum statistic settles within the burn-in `D`
+    regime, every allele-spectrum statistic settles within the burn-in $D$
     needs (and far inside the five relaxation times the burn-in never drops
     below).
     """

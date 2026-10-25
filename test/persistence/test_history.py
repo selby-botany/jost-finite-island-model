@@ -28,7 +28,7 @@ from fim.persistence.history import (
 
 
 def _walk(count: int, *, seed: int) -> dict[str, list[float]]:
-    """Three random-walk statistics in [0, 1], like a run's D, H_S and H_T."""
+    """Three random-walk statistics in [0, 1], like a run's $D$, $H_S$ and $H_T$."""
     rng = np.random.default_rng(seed)
     out = {}
     for name in ("D", "H_S", "H_T"):

@@ -27,7 +27,7 @@ Kind: policy.
 FIRST_CHECK_RELAXATION_TIMES: Final = 2.0
 """First check, in relaxation times after the burn-in ends.
 
-About one integrated autocorrelation time of `D`: an earlier check cannot
+About one integrated autocorrelation time of $D$: an earlier check cannot
 pass the effective-sample-size floor, so it would only waste work.
 
 Kind: policy.
@@ -92,7 +92,7 @@ MINIMUM_MAX_GENERATIONS: Final = 200_000
 
 Two independent single-locus regimes (Golden Part VI, `tau = 85`; Dear-Nolan
 low, `tau = 19,693`, two orders of magnitude apart) both needed close to
-130,000 generations for their own `D` to become known to 0.01, despite that
+130,000 generations for their own $D$ to become known to 0.01, despite that
 spread in `tau`: this floor is a small multiple of that measured need, not
 derived from `tau` at all. A model that settles sooner is unaffected, since
 the run stops when its precision is reached; the floor only raises how long
@@ -135,7 +135,7 @@ SPECTRUM_BURN_IN_MULTIPLIER: Final = 1.0
 """Factor on the burn-in when an allele-spectrum statistic is watched.
 
 The relaxation time `tau` is derived for the identity statistics. The
-allele-spectrum statistics (`E_ST`, `K_ST`, `A_CGD`, `Delta`, `MI`) depend on
+allele-spectrum statistics ($E_{ST}$, $K_{ST}$, `A_CGD`, `Delta`, `MI`) depend on
 allele counts and rare alleles, which can relax more slowly. The default of 1
 changes nothing until the difference is measured (design 6.12).
 

@@ -1,8 +1,8 @@
 """Compute diversity and differentiation statistics from allele frequencies.
 
 The module implements expected heterozygosity and measures including Jost's
-D, Nei's G_ST, E_ST, K_ST, H_S, H_T, and H_ST. Within-deme and pooled
-heterozygosity provide the basis for these measures, which use different
+$D$, Nei's $G_{ST}$, $E_{ST}$, $K_{ST}$, $H_S$, $H_T$, and $H_{ST}$. Within-deme
+and pooled heterozygosity provide the basis for these measures, which use different
 normalizations and are not interchangeable. Inputs are normalized frequency
 tables with integer-like allele identifiers and real-valued frequencies. See
 `doc/jost-differentiation-measures.md` for definitions and comparisons.
@@ -49,18 +49,18 @@ class DifferentiationReport(TypedDict):
 
     One locus's own complete set of results from `statistics_report`,
     below (`fim.engine.FinalReport` reports the identical set, each
-    averaged across every locus a run tracks). `G_ST` alone can be
+    averaged across every locus a run tracks). $G_{ST}$ alone can be
     `None`: see `g_st`'s own docstring for why. Every other field is
     always a real number **when `statistics_report` is called with its
     default `statistics=None`** — every existing caller, and the only
     form this report ever takes once it leaves `fim.engine`'s own
-    convergence-checking hot path. `Gs`/`Gd` (`gs`/`gd`, below) added by
+    convergence-checking hot path. $G_s$ / $G_d$ (`gs`/`gd`, below) added by
     this project's own Ryman & Leimar remediation, `R4`
     (`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
     5-gene-identity-recursion-fim-implications.md` §9) — the within-
-    and between-deme gene identities `H_S`/`H_T`/`G_ST`/`D` are all
+    and between-deme gene identities $H_S$ / $H_T$ / $G_{ST}$ / $D$ are all
     themselves derived from, exposed directly rather than leaving every
-    consumer to re-derive them from `H_S`/`H_T` independently.
+    consumer to re-derive them from $H_S$ / $H_T$ independently.
 
     `A_CGD` is Caballero-Garcia-Dorado allelic distance, `Delta` is
     Gregorius's distance-oriented differentiation, and `MI` is Sherwin's
@@ -68,7 +68,7 @@ class DifferentiationReport(TypedDict):
     GUI's literature-visualization panel and JSON consumers need one
     authoritative engine/API surface for literature-derived statistics.
 
-    `E_ST`/`K_ST`/`A_CGD`/`Delta`/`MI`/`Gs`/`Gd` may instead hold
+    $E_{ST}$ / $K_{ST}$/`A_CGD`/`Delta`/`MI` / $G_s$ / $G_d$ may instead hold
     `math.nan` — a deliberate
     placeholder, never a real measurement — whenever `statistics_report`
     was called with an explicit `statistics` argument that excludes that
@@ -209,7 +209,7 @@ def _validate_weights(count: int, deme_weights: DemeWeights) -> tuple[float, ...
     used throughout this module) means "give every deme equal weight" —
     each deme contributes the same amount to a weighted statistic
     regardless of its own actual population size; see the
-    differentiation-measures guide's own explanation of why `E_ST`
+    differentiation-measures guide's own explanation of why $E_{ST}$
     specifically also supports weighting by relative deme size instead.
     """
     if deme_weights is None:
@@ -239,7 +239,7 @@ def _entropy(frequencies: Mapping[int, float]) -> float:
     at random from this deme. It is 0 when the deme is fixed for one
     allele (drawing a copy is never surprising — you already know the
     answer) and grows the more alleles there are and the more evenly
-    their frequencies are spread. This is the building block `E_ST`
+    their frequencies are spread. This is the building block $E_{ST}$
     (`e_st`, below) is named after — "entropy differentiation." A
     zero-frequency allele contributes nothing to a real deme's own
     entropy (an allele that is not actually present cannot affect how
@@ -261,11 +261,11 @@ def _pooled(
 
     "Pooling" means combining every deme's own frequencies into one
     single, combined frequency table, as if every deme's gene pool had
-    been mixed together into one — this is exactly how `H_T` (total
+    been mixed together into one — this is exactly how $H_T$ (total
     heterozygosity, see this module's own docstring, above) is computed:
     pool everything first, then measure diversity once on the combined
     result, rather than averaging each deme's own separately measured
-    diversity (which is instead what `H_S` does).
+    diversity (which is instead what $H_S$ does).
     """
     pooled: dict[int, float] = {}
     for deme, weight in zip(demes, weights, strict=True):
@@ -374,16 +374,16 @@ def unbiased_heterozygosity(
 
     Nei (1977, *Genetics* 89(3):583-590), Equation 2:
 
-    .. math::
+    ```math
+    \\hat{H}_e = \\frac{2n}{2n - 1} \\left(1 - \\sum_i p_i^2\\right)
+    = \\frac{2n}{2n - 1} H_e
+    ```
 
-        \\hat{H}_e = \\frac{2n}{2n - 1} \\left(1 - \\sum_i p_i^2\\right)
-                   = \\frac{2n}{2n - 1} H_e
-
-    where ``n`` is the number of diploid individuals sampled (or ``2n``
-    gene copies). Sample frequencies ``p_i`` computed from a finite sample
-    of size ``2n`` gene copies underestimate population heterozygosity
+    where $n$ is the number of diploid individuals sampled (or $2n$
+    gene copies). Sample frequencies $p_i$ computed from a finite sample
+    of size $2n$ gene copies underestimate population heterozygosity
     because of sampling without replacement; multiplying by
-    ``2n / (2n - 1)`` corrects this small-sample bias exactly.
+    $2n / (2n - 1)$ corrects this small-sample bias exactly.
 
     Args:
         frequencies: Normalized sample allele frequencies in one deme.
@@ -461,7 +461,7 @@ def effective_allele_count(heterozygosity_value: float) -> float:
     real, individual frequency table; this is the same "classic
     effective number of alleles" transform, but for the one case that
     table is not on hand — an already-*aggregated* heterozygosity
-    (`FinalReport`'s own `H_S`/`H_T`, a weighted mean across demes and/or
+    (`FinalReport`'s own $H_S$ / $H_T$, a weighted mean across demes and/or
     an arithmetic mean across loci) that no single deme's frequency
     mapping could reproduce exactly. Jost's own foundational argument
     (Jost 2006, *Oikos* 113:363-375; Jost 2009, *Ecological Economics*
@@ -470,15 +470,15 @@ def effective_allele_count(heterozygosity_value: float) -> float:
     a "diversity" in the sense a biologist's intuition expects (doubling
     the number of equally common alleles does not double `H`), and that
     reasoning about diversity by a ratio of raw heterozygosities — which
-    is exactly how `G_ST` is built — can badly understate real
-    differentiation whenever `H_S` is already high. Converting to this
+    is exactly how $G_{ST}$ is built — can badly understate real
+    differentiation whenever $H_S$ is already high. Converting to this
     effective number first is the corrected reading this function
     exists to make cheap and available everywhere an already-aggregated
-    `H_S`/`H_T` is the only diversity value on hand.
+    $H_S$ / $H_T$ is the only diversity value on hand.
 
     Args:
         heterozygosity_value: An expected heterozygosity (`heterozygosity`,
-            `h_s`, `h_t`, or a `FinalReport`'s own `H_S`/`H_T`) — a real
+            `h_s`, `h_t`, or a `FinalReport`'s own $H_S$ / $H_T$) — a real
             number in `[0, 1)`. Never exactly `1.0`: `heterozygosity`'s
             own docstring already states why no finite allele count can
             reach it, so `1.0` here always means invalid input, not a
@@ -511,7 +511,7 @@ def _h_s_from_demes(
     """`h_s`'s own real math, given already-validated `demes`/`weights`.
 
     Split out so `statistics_report` and every other function in this
-    module that itself needs `H_S` (`g_st`, `jost_d`) can compute it
+    module that itself needs $H_S$ (`g_st`, `jost_d`) can compute it
     without paying `_validate_table`/`_validate_weights` a second (or
     third) time on data that was already validated moments earlier by
     the very same call chain — a real, measured cost this module's own
@@ -532,7 +532,7 @@ def _h_s_from_demes(
 def h_s[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
 ) -> float:
-    """Return weighted mean within-deme expected heterozygosity ``H_S``.
+    """Return weighted mean within-deme expected heterozygosity $H_S$.
 
     "How much variation does a typical deme hold internally?" — compute
     `heterozygosity` separately for each deme, then take a weighted
@@ -563,15 +563,15 @@ def _h_t_from_demes(
 def h_t[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
 ) -> float:
-    """Return expected heterozygosity ``H_T`` of the weighted pooled table.
+    """Return expected heterozygosity $H_T$ of the weighted pooled table.
 
     "How much variation is there altogether?" — pool every deme's own
     frequencies into one single, combined gene pool (`_pooled`, above),
     then compute `heterozygosity` once on that combined result. Since
     pooling different demes can only ever add variation (mixing
     different populations together cannot make the mixture *less*
-    diverse than any one of them was alone), `H_T` is always at least as
-    large as `H_S` — the gap between them, `H_T - H_S`, is the raw
+    diverse than any one of them was alone), $H_T$ is always at least as
+    large as $H_S$ — the gap between them, $H_T - H_S$, is the raw
     material every differentiation measure in this module works with.
     """
     demes = _validate_table(table)
@@ -580,19 +580,19 @@ def h_t[AlleleKey: SupportsIndex](
 
 
 def gd_from_within_and_total(within: float, total: float, deme_count: int) -> float:
-    """``Gd``'s own real math, given already-computed ``H_S``/``H_T``.
+    """$G_d$'s own real math, given already-computed $H_S$ / $H_T$.
 
-    ``Gd = (d * (1 - H_T) - (1 - H_S)) / (d - 1)`` — `dev/doc/apps/
+    $G_d = (d(1 - H_T) - (1 - H_S)) / (d - 1)$ — `dev/doc/apps/
     selby/jost-finite-island-model/20260903-claude-opus-5-gene-identity-
-    recursion-fim-implications.md` §4.4, inverted from ``H_S = 1 - Gs``
-    and ``H_T``'s own pooled-identity relationship. Linear in ``H_S``/
-    ``H_T``, unlike `G_ST`/`D` — so averaging `Gd` across loci commutes
-    exactly with averaging `H_S`/`H_T` first (`fim.engine.
+    recursion-fim-implications.md` §4.4, inverted from $H_S = 1 - G_s$
+    and $H_T$'s own pooled-identity relationship. Linear in $H_S$/
+    $H_T$, unlike $G_{ST}$ / $D$ — so averaging $G_d$ across loci commutes
+    exactly with averaging $H_S$ / $H_T$ first (`fim.engine.
     report_for_state` relies on this directly, computing `Gd` once from
-    already-pooled means rather than averaging a per-locus `Gd`
+    already-pooled means rather than averaging a per-locus $G_d$
     separately). Split out from `gd`, below, for the identical reason
     `_h_s_from_demes`'s own docstring gives: `statistics_report` needs
-    this exact computation without repeating `H_S`/`H_T`, which it has
+    this exact computation without repeating $H_S$ / $H_T$, which it has
     already computed. Requires ``deme_count >= 2``, unchecked here —
     `gd`/`statistics_report`, its own two call sites, both guarantee it
     first (`_require_multiple_demes`).
@@ -603,9 +603,9 @@ def gd_from_within_and_total(within: float, total: float, deme_count: int) -> fl
 def gs[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
 ) -> float:
-    """Return the within-deme gene identity ``Gs`` (Ryman & Leimar's ``J_0``).
+    """Return the within-deme gene identity $G_s$ (Ryman & Leimar's $J_0$).
 
-    ``Gs = 1 - H_S`` — the exact complement of `h_s`, above, in `fim`'s
+    $G_s = 1 - H_S$ — the exact complement of `h_s`, above, in `fim`'s
     own with-replacement identity convention (the same ``Σp²`` `identity`
     already uses for one deme), *not* Ryman & Leimar's own distinct-pair
     convention (`doc/migration-conventions.md` has the exact `O(1/N)`
@@ -616,7 +616,7 @@ def gs[AlleleKey: SupportsIndex](
     own "design note worth deciding explicitly"): the conversion is
     applied only at a comparison site that actually needs the paper's
     own convention, never baked into this function itself. Well-defined
-    for a single deme, same as `h_s` — there is no "between" for `Gs` to
+    for a single deme, same as `h_s` — there is no "between" for $G_s$ to
     need; see `gd`, below, for that.
     """
     return 1.0 - h_s(table, deme_weights)
@@ -625,7 +625,7 @@ def gs[AlleleKey: SupportsIndex](
 def gd[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
 ) -> float:
-    """Return the between-deme gene identity ``Gd`` (Ryman & Leimar's ``J_1``).
+    """Return the between-deme gene identity $G_d$ (Ryman & Leimar's $J_1$).
 
     See `gd_from_within_and_total`'s own docstring for the formula.
     Needs at least two demes (the `d - 1` denominator is undefined for
@@ -640,10 +640,10 @@ def gd[AlleleKey: SupportsIndex](
 
 
 def _h_st_from_within_and_total(total: float, within: float) -> float:
-    """`h_st`'s own real math, given already-computed `H_T`/`H_S`.
+    """`h_st`'s own real math, given already-computed $H_T$ / $H_S$.
 
     Split out for the identical reason `g_st_from_demes`'s own
-    docstring gives — `statistics_report`, below, computes `H_S`/`H_T`
+    docstring gives — `statistics_report`, below, computes $H_S$ / $H_T$
     once and passes the two resulting floats straight in here, rather
     than calling the public `h_st`, which would revalidate and
     recompute both from scratch.
@@ -681,20 +681,20 @@ def _h_st_from_within_and_total(total: float, within: float) -> float:
 def h_st[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
 ) -> float:
-    """Return correctly partitioned between-deme heterozygosity ``H_ST``.
+    """Return correctly partitioned between-deme heterozygosity $H_{ST}$.
 
-    The naive way to split `H_T` into a within-deme part and a between-
-    deme part would be simple subtraction (`H_T - H_S` as "the between-
+    The naive way to split $H_T$ into a within-deme part and a between-
+    deme part would be simple subtraction ($H_T - H_S$ as "the between-
     deme component"), the way it would work for many other statistics —
     but heterozygosity specifically does not partition that simply (it
     is "subadditive": the true relationship is
-    ``H_T = H_S + H_ST - H_S * H_ST``, not plain addition). Solving that
+    $H_T = H_S + H_{ST} - H_S H_{ST}$, not plain addition). Solving that
     relationship for the actual between-deme component gives the
     formula below — the differentiation-measures guide's own "Part V"
     walks through why the naive version is wrong in more depth. This
     exact same expression, before the `d/(d-1)` rescaling `jost_d`
     (below) applies to stretch its maximum out to exactly 1, is also
-    the very first term of Jost's `D` — `D` is, in a precise sense,
+    the very first term of Jost's $D$ — $D$ is, in a precise sense,
     nothing more than this correctly-partitioned quantity, normalized.
     """
     within = h_s(table, deme_weights)
@@ -759,10 +759,10 @@ def within_hill_number[AlleleKey: SupportsIndex](
 
 
 def g_st_from_demes(total: float, within: float) -> float | None:
-    """`g_st`'s own real math, given already-computed `H_T`/`H_S`.
+    """`g_st`'s own real math, given already-computed $H_T$ / $H_S$.
 
     Split out for the identical reason `_h_s_from_demes`'s own docstring
-    gives — `statistics_report` computes `H_S`/`H_T` exactly once
+    gives — `statistics_report` computes $H_S$ / $H_T$ exactly once
     (`_h_s_from_demes`/`_h_t_from_demes`, above) and passes the two
     resulting floats straight in here, rather than this function
     recomputing them a second time (which the previous version of `g_st`
@@ -778,17 +778,17 @@ def g_st_from_demes(total: float, within: float) -> float | None:
 def g_st[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
 ) -> float | None:
-    """Return ``G_ST`` or ``None`` when total heterozygosity is zero.
+    """Return $G_{ST}$ or ``None`` when total heterozygosity is zero.
 
-    Nei's `G_ST` — "how close to complete fixation has the differentiation
+    Nei's $G_{ST}$ — "how close to complete fixation has the differentiation
     process gone" (Wright's own original framing, quoted in the
-    differentiation-measures guide) — is `(H_T - H_S) / H_T`: the gap
+    differentiation-measures guide) — is $(H_T - H_S) / H_T$: the gap
     between total and within-deme heterozygosity, this time as a
-    fraction *of the total heterozygosity itself* (unlike `H_ST`,
-    above, which divides by `1 - H_S` instead — that single choice of
+    fraction *of the total heterozygosity itself* (unlike $H_{ST}$,
+    above, which divides by $1 - H_S$ instead — that single choice of
     denominator is the entire difference between the two families of
-    measures the guide discusses). `G_ST` genuinely has no defined value
-    when `H_T` is exactly zero — every deme is fixed for the identical
+    measures the guide discusses). $G_{ST}$ genuinely has no defined value
+    when $H_T$ is exactly zero — every deme is fixed for the identical
     single allele, so there is no variation anywhere to measure a
     *fraction* of at all, not even zero; `None` here is the honest
     answer, not a fabricated `0.0` or `1.0`.
@@ -802,27 +802,27 @@ def g_st[AlleleKey: SupportsIndex](
 
 
 def d_m[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:
-    """Return Nei's mean pairwise between-deme gene diversity ``D_m``.
+    r"""Return Nei's mean pairwise between-deme gene diversity $D_m$.
 
     "How much do a typical *pair* of demes actually differ, in absolute
     terms" (Nei 1973, Eq. 10) — unlike every other between-deme measure
-    in this module, `D_m` is deliberately **not** rescaled to `[0, 1]`;
+    in this module, $D_m$ is deliberately **not** rescaled to `[0, 1]`;
     it is expressed in the same units as heterozygosity itself, so it
     stays comparable across populations with very different within-deme
-    diversity (`H_S`) — the exact comparison `g_st` cannot make, since
-    `G_ST` can be "very large even if the absolute gene differentiation
-    is small" whenever `H_S` happens to be small (Nei's own words). It is
-    `H_T - H_S` — Nei's Eq. 7 `D_ST`, the *simple* difference, not the
+    diversity ($H_S$) — the exact comparison `g_st` cannot make, since
+    $G_{ST}$ can be "very large even if the absolute gene differentiation
+    is small" whenever $H_S$ happens to be small (Nei's own words). It is
+    $H_T - H_S$ — Nei's Eq. 7 `D_ST`, the *simple* difference, not the
     subadditivity-corrected `h_st` this module also exposes — rescaled
     by `d / (d - 1)` to average only over *distinct* pairs of demes,
     excluding the `d` "compare a deme to itself" terms Eq. 7's own
-    average silently includes. `H_T <= 1` and `H_S >= 0` give a loose
+    average silently includes. $H_T \le 1$ and $H_S \ge 0$ give a loose
     universal ceiling of `d/(d-1)`, but that ceiling is not reached in
-    practice: at `H_S = 0` (every deme fixed for a single allele, the
-    only way to reach zero within-deme diversity at all), `H_T` itself
+    practice: at $H_S = 0$ (every deme fixed for a single allele, the
+    only way to reach zero within-deme diversity at all), $H_T$ itself
     tops out at exactly `(d-1)/d` — pooling `d` equally weighted, all-
     distinct point masses is the most spread-out a `d`-outcome
-    distribution can be — so `D_m` reaches exactly `1` there, for any
+    distribution can be — so $D_m$ reaches exactly `1` there, for any
     `d`, not `d/(d-1)`. Like `jost_d`, this follows Nei's own derivation
     in assuming equal deme weights throughout (Eq. 4's `w_i = 1/s`);
     there is no `deme_weights` parameter here for the same reason
@@ -843,15 +843,15 @@ def d_m[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:
 
 
 def r_st[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float | None:
-    """Return ``D_m`` relative to within-deme diversity, or ``None``.
+    """Return $D_m$ relative to within-deme diversity, or ``None``.
 
-    Nei's Eq. 11: `D_m / H_S` — the same absolute between-deme diversity
+    Nei's Eq. 11: $D_m / H_S$ — the same absolute between-deme diversity
     `d_m` computes, this time expressed *relative to* how much diversity
     a typical deme holds internally, so it can answer "how big is the
     between-deme signal compared to the within-deme noise" without
-    `G_ST`'s own denominator (`H_T`, which already includes the between-
+    $G_{ST}$'s own denominator ($H_T$, which already includes the between-
     deme signal itself). Undefined, and returned as `None` rather than a
-    fabricated `inf`, when `H_S` is exactly zero — every deme
+    fabricated `inf`, when $H_S$ is exactly zero — every deme
     individually fixed for a single allele, with no within-deme
     diversity to express the between-deme diversity relative to at all;
     the same honest-`None` convention `g_st` already uses for its own,
@@ -868,10 +868,10 @@ def r_st[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float | 
 def g_st_log[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
 ) -> float | None:
-    """Return Nei's log-based large-differentiation ``G_ST`` estimator.
+    r"""Return Nei's log-based large-differentiation $G_{ST}$ estimator.
 
     Nei (1973)'s closing discussion, verbatim: "a better estimate of
-    `G_ST` may be obtained by `-log_e(J_T/J_S) / [-log_e(J_T)]`" — offered
+    $G_{ST}$ may be obtained by `-log_e(J_T/J_S) / [-log_e(J_T)]`" — offered
     as a replacement for ordinary `g_st` specifically when
     differentiation is large (subspecies-level) and `J_T` (`= 1 - H_T`)
     is much smaller than `J_S` (`= 1 - H_S`), the regime in which linear
@@ -881,25 +881,25 @@ def g_st_log[AlleleKey: SupportsIndex](
 
     Rigorously bounded in `[0, 1]`, exactly like `g_st` — provably, not
     just empirically, from the same two facts `g_st` already relies on
-    (`H_S <= H_T` always, since pooling can only add variation; both are
+    ($H_S \le H_T$ always, since pooling can only add variation; both are
     probabilities). Writing the formula as
     `1 + ln(J_S) / (-ln(J_T))`: `J_S <= 1` makes `ln(J_S) <= 0`, so the
     second term is never positive, giving the `<= 1` bound; `J_S >= J_T`
-    (from `H_S <= H_T`) makes `ln(J_S) >= ln(J_T)`, so the second term is
+    (from $H_S \le H_T$) makes `ln(J_S) >= ln(J_T)`, so the second term is
     never below `ln(J_T)/(-ln(J_T)) = -1`, giving the `>= 0` bound.
 
     Undefined, and returned as `None` rather than a fabricated value, in
-    the same spirit as `g_st`'s own `None` case: when `H_T` is exactly
+    the same spirit as `g_st`'s own `None` case: when $H_T$ is exactly
     zero (complete fixation on the identical allele everywhere — no
     variation anywhere to measure a fraction of, `g_st`'s own case
-    exactly), or when `H_S` is exactly one (`J_S = 0`, `ln(J_S)`
+    exactly), or when $H_S$ is exactly one (`J_S = 0`, `ln(J_S)`
     undefined — every deme individually has zero chance that two
     randomly drawn gene copies match).
 
     **Naming hazard:** `doc/jost-differentiation-measures.md` calls this
-    estimator "`G'_ST`," Nei's own term for it — a *different* quantity
+    estimator $G^\prime_{ST}$, Nei's own term for it — a *different* quantity
     from `g_st_prime`, below, which is Hedrick's own, differently
-    defined `G'_ST`. Both names are genuinely used in the literature for
+    defined $G^\prime_{ST}$. Both names are genuinely used in the literature for
     their own respective formula; this project's own multi-model engine
     review, 2026-09-04, flagged the collision (Ryman & Leimar
     remediation `R6`) rather than letting a future reader assume the two
@@ -918,27 +918,27 @@ def g_st_log[AlleleKey: SupportsIndex](
 
 
 def g_st_max(h_s: float, deme_count: int) -> float:
-    """Return Hedrick (2005)'s own attainable ceiling for `G_ST`.
+    r"""Return Hedrick (2005)'s own attainable ceiling for $G_{ST}$.
 
     Ryman & Leimar (2008), Equation 7:
-    ``G_ST(max) = (s - 1)(1 - H_S) / (s - 1 + H_S)`` — the largest value
+    $G_{ST(\max)} = (s - 1)(1 - H_S) / (s - 1 + H_S)$ — the largest value
     ordinary `g_st` can reach given a fixed within-deme heterozygosity
-    `H_S` and deme count `s`, attained when every deme is fixed for its
+    $H_S$ and deme count `s`, attained when every deme is fixed for its
     own distinct, private allele (`h_s`'s own docstring has the general
-    argument for why `H_S` alone bounds how differentiated a set of
-    demes can possibly look). Approaches `1` as `H_S -> 0` (little
+    argument for why $H_S$ alone bounds how differentiated a set of
+    demes can possibly look). Approaches `1` as $H_S \to 0$ (little
     within-deme diversity leaves little standing in the way of complete
-    differentiation) and falls toward `0` as `H_S -> 1` (a population
+    differentiation) and falls toward `0` as $H_S \to 1$ (a population
     already this diverse internally has correspondingly less room left
     to differentiate at all) — see `g_st_prime`, below, for what
     dividing by this ceiling is actually for.
 
     Args:
-        h_s: Within-deme heterozygosity, `H_S`, in `[0, 1)`.
+        h_s: Within-deme heterozygosity, $H_S$, in `[0, 1)`.
         deme_count: Number of demes, `s`, at least `2`.
 
     Returns:
-        `G_ST(max)`, in `(0, 1]`.
+        $G_{ST(\max)}$, in `(0, 1]`.
 
     Raises:
         ValueError: If `h_s` is not in `[0, 1)`, or `deme_count < 2`.
@@ -957,7 +957,7 @@ def g_st_max(h_s: float, deme_count: int) -> float:
 def derived_differentiation(
     h_s: float, h_t: float, deme_count: int
 ) -> dict[str, float | None]:
-    """Return five differentiation measures that depend only on ``H_S``, ``H_T``, ``d``.
+    r"""Return five differentiation measures that depend only on $H_S$, $H_T$, ``d``.
 
     The engine's per-report companion to the table-based functions in
     this module, for measures that are functions of the pooled
@@ -966,21 +966,21 @@ def derived_differentiation(
     equals its table-based counterpart:
 
     - ``"D_m"``: Nei (1973) mean pairwise between-deme diversity,
-      ``(H_T - H_S) * d / (d - 1)`` (`d_m`).
-    - ``"R_ST"``: ``D_m / H_S`` (`r_st`); ``None`` when ``H_S = 0``.
-    - ``"G_ST_NEI_LOG"``: Nei's logarithmic ``G'_ST``,
+      $(H_T - H_S) d / (d - 1)$ (`d_m`).
+    - ``"R_ST"``: $D_m / H_S$ (`r_st`); ``None`` when $H_S = 0$.
+    - ``"G_ST_NEI_LOG"``: Nei's logarithmic $G^\prime_{ST}$,
       ``ln(J_S / J_T) / -ln(J_T)`` with ``J = 1 - H`` (`g_st_log`);
-      ``None`` when ``H_T = 0`` or ``H_S = 1``.
-    - ``"G_ST_HEDRICK"``: Hedrick's standardized ``G'_ST``
-      (`g_st_prime` of ``G_ST = (H_T - H_S) / H_T``); ``None`` when
-      ``H_T = 0``.
-    - ``"F_ST"``: coancestry ``F_ST`` (Goudet & Weir 2023),
+      ``None`` when $H_T = 0$ or $H_S = 1$.
+    - ``"G_ST_HEDRICK"``: Hedrick's standardized $G^\prime_{ST}$
+      (`g_st_prime` of $G_{ST} = (H_T - H_S) / H_T$); ``None`` when
+      $H_T = 0$.
+    - ``"F_ST"``: coancestry $F_{ST}$ (Goudet & Weir 2023),
       ``(G_s - G_d) / (1 - G_d)`` (`overall_coancestry_f_st`); ``None``
       when ``G_d = 1`` (every deme fixed for the same allele).
 
-    For several loci, pass the per-locus means of ``H_S`` and ``H_T``:
+    For several loci, pass the per-locus means of $H_S$ and $H_T$:
     each measure is then one ratio of pooled quantities, the same rule
-    the engine's default ``D`` and ``G_ST`` use.
+    the engine's default $D$ and $G_{ST}$ use.
 
     Args:
         h_s: Mean within-deme heterozygosity, in ``[0, 1]``.
@@ -1030,15 +1030,17 @@ def derived_differentiation(
 
 
 def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float:
-    """Return Hedrick (2005)'s own standardized ``G'_ST = G_ST / G_ST(max)``.
+    r"""Return Hedrick's standardized $G^\prime_{ST} = G_{ST} / G_{ST(\max)}$.
 
-    Ryman & Leimar (2008), Equation 8 — rescales ordinary `G_ST` by its
+    The standardization is Hedrick (2005)'s own.
+
+    Ryman & Leimar (2008), Equation 8 — rescales ordinary $G_{ST}$ by its
     own attainable ceiling (`g_st_max`, above) so that a fully
     differentiated set of demes (every deme fixed for its own distinct
-    allele) always reads exactly `1`, regardless of `H_S`, rather than
-    an `H_S`-dependent value less than `1` the way raw `G_ST` does.
+    allele) always reads exactly `1`, regardless of $H_S$, rather than
+    an $H_S$-dependent value less than `1` the way raw $G_{ST}$ does.
 
-    **Naming hazard:** a *different* `G'_ST`, Nei's own logarithmic
+    **Naming hazard:** a *different* $G^\prime_{ST}$, Nei's own logarithmic
     form, already exists in this project as `g_st_log`, above — see
     that function's own docstring for the identical warning from its
     own side. Name whichever one is actually meant explicitly; do not
@@ -1046,20 +1048,20 @@ def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float:
 
     Ryman & Leimar's own finding (their Figure 2, `N = 1000`, `s = 10`,
     `m = 0.0005`): standardizing this way can *manufacture* a large
-    apparent difference between two scenarios whose ordinary `G_ST`
-    barely differs, whenever `H_S` differs sharply between them (this
+    apparent difference between two scenarios whose ordinary $G_{ST}$
+    barely differs, whenever $H_S$ differs sharply between them (this
     project's own multi-model engine review, 2026-09-04, `R6`'s own
     Finding E documents the worked numbers) — a caution about
     interpreting this statistic, not a defect in computing it.
 
     Args:
-        g_st_value: Ordinary `G_ST` (`g_st`'s own return value, if not
+        g_st_value: Ordinary $G_{ST}$ (`g_st`'s own return value, if not
             `None`).
-        h_s: Within-deme heterozygosity, `H_S`, in `[0, 1)`.
+        h_s: Within-deme heterozygosity, $H_S$, in `[0, 1)`.
         deme_count: Number of demes, `s`, at least `2`.
 
     Returns:
-        `G_ST / G_ST(max)`.
+        $G_{ST} / G_{ST(\max)}$.
 
     Raises:
         ValueError: If `g_st_value` is not finite, or `h_s`/`deme_count`
@@ -1073,7 +1075,7 @@ def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float:
 
 
 def jost_d_from_within_and_total(deme_count: int, within: float, total: float) -> float:
-    """`jost_d`'s own real math, given already-computed `H_S`/`H_T`.
+    """`jost_d`'s own real math, given already-computed $H_S$ / $H_T$.
 
     Split out for the identical reason `g_st_from_demes`'s own
     docstring gives. Takes `deme_count` directly rather than the full
@@ -1082,7 +1084,7 @@ def jost_d_from_within_and_total(deme_count: int, within: float, total: float) -
     frequency content, so a caller that already has a deme count on
     hand but no reason to construct a `demes` tuple (`fim.engine.
     report_for_state`'s own `"ratio_of_means"` cross-locus aggregation,
-    which pools `H_S`/`H_T` across loci rather than working from any one
+    which pools $H_S$ / $H_T$ across loci rather than working from any one
     locus's own frequency table) does not have to build one just to
     satisfy this signature.
     """
@@ -1091,19 +1093,19 @@ def jost_d_from_within_and_total(deme_count: int, within: float, total: float) -
 
 
 def jost_d[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:
-    """Return Jost's ``D`` using the required equal weighting of demes.
+    """Return Jost's $D$ using the required equal weighting of demes.
 
-    "Do these demes hold different alleles at all" — exactly `H_ST`
+    "Do these demes hold different alleles at all" — exactly $H_{ST}$
     above (the correctly partitioned between-deme heterozygosity), with
     one further rescaling: multiplying by `d / (d - 1)` stretches its
-    maximum possible value from `(d-1)/d` out to exactly 1, so `D = 1`
+    maximum possible value from `(d-1)/d` out to exactly 1, so $D = 1$
     means precisely "these demes share no alleles in common" and
-    `D = 0` means precisely "these demes are genetically identical" —
+    $D = 0$ means precisely "these demes are genetically identical" —
     regardless of how many demes `d` there are. Equal deme weighting is
     not optional here (unlike `e_st`, below): the differentiation-
-    measures guide explains why `D` gives every deme equal statistical
+    measures guide explains why $D$ gives every deme equal statistical
     weight by construction, one of the few real trade-offs it has
-    relative to `E_ST`.
+    relative to $E_{ST}$.
     """
     demes = _validate_table(table)
     _require_multiple_demes(demes)
@@ -1133,19 +1135,19 @@ def _e_st_from_demes(
 def e_st[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey], deme_weights: DemeWeights = None
 ) -> float:
-    """Return entropy differentiation ``E_ST`` with optional size weights.
+    """Return entropy differentiation $E_{ST}$ with optional size weights.
 
     The same "how differentiated are these demes" question `jost_d`
     answers, but built from Shannon entropy (`_entropy`, above) instead
     of heterozygosity — the `order = 1` member of the same one-formula
     family `differentiation_q`, below, generates (see this module's own
-    docstring for the whole family). Its two real advantages over `D`,
+    docstring for the whole family). Its two real advantages over $D$,
     per the differentiation-measures guide: it handles demes of
     genuinely unequal size natively (`deme_weights` here can carry each
-    deme's own relative population size, unlike `D`, which always
+    deme's own relative population size, unlike $D$, which always
     weights every deme equally), and discovering a brand-new, unique
-    allele in one deme can never make `E_ST` go *down* — a property `D`
-    does not always have, since `D` weights alleles by their squared
+    allele in one deme can never make $E_{ST}$ go *down* — a property $D$
+    does not always have, since $D$ weights alleles by their squared
     frequency and a new rare allele can slightly dilute the relative
     weight of other, already-differentiating alleles.
     """
@@ -1180,7 +1182,7 @@ def _k_st_from_demes(demes: tuple[dict[int, float], ...]) -> float:
 
 
 def k_st[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:
-    """Return allele-number differentiation ``K_ST`` with equal deme weights.
+    """Return allele-number differentiation $K_{ST}$ with equal deme weights.
 
     The simplest and most stringent member of the family: ignores
     *frequencies* entirely and only asks "does this allele exist
@@ -1188,7 +1190,7 @@ def k_st[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:
     same family `differentiation_q`, below, generates. Read it, roughly,
     as: the fraction of a typical deme's own alleles that turn out to
     be unique to that one deme, not found in any other. Because it
-    ignores frequency entirely, `K_ST` responds to even the rarest,
+    ignores frequency entirely, $K_{ST}$ responds to even the rarest,
     single-copy private allele exactly as strongly as it would to a
     common one — the strongest sensitivity to rare, private variation of
     any measure in this module.
@@ -1275,8 +1277,8 @@ def gregorius_delta[AlleleKey: SupportsIndex](
 
     Gregorius's measure compares each deme with the weighted mixture of all
     *other* demes using total variation distance, then averages those
-    per-deme distances. Unlike diversity-ratio measures such as ``G_ST`` or
-    Jost's ``D``, this is a direct distance between allele-frequency
+    per-deme distances. Unlike diversity-ratio measures such as $G_{ST}$ or
+    Jost's $D$, this is a direct distance between allele-frequency
     distributions. With two equally weighted demes it is exactly one half
     of the Manhattan distance between their frequency vectors.
     """
@@ -1325,23 +1327,23 @@ def mutual_information[AlleleKey: SupportsIndex](
 def f_st_coancestry_matrix[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey],
 ) -> tuple[tuple[float, ...], ...]:
-    """Return Goudet & Weir (2023) F_ST matrix (Eq. 4 / Eq. 11).
+    """Return Goudet & Weir (2023) $F_{ST}$ matrix (Eq. 4 / Eq. 11).
 
     Computes the matrix of population-specific (diagonal) and
-    population-pair (off-diagonal) F_ST values from the pairwise
-    coancestry / cross-identity matrix ``Theta``:
+    population-pair (off-diagonal) $F_{ST}$ values from the pairwise
+    coancestry / cross-identity matrix $\\Theta$:
 
-    .. math::
+    ```math
+    F_{ST} = \\frac{\\Theta - J \\theta_B}{1 - \\theta_B}
+    ```
 
-        F_{ST} = \\frac{\\Theta - J \\theta_B}{1 - \\theta_B}
-
-    where ``theta_B`` is the average of the off-diagonal elements of
-    ``Theta``, and ``J`` is an all-ones matrix.
+    where $\\theta_B$ is the average of the off-diagonal elements of
+    $\\Theta$, and $J$ is an all-ones matrix.
 
     By construction:
-    - The diagonal element ``F_ST[i][i]`` is population-specific F_ST
+    - The diagonal element ``F_ST[i][i]`` is population-specific $F_{ST}$
       for deme ``i`` (Eq. 7).
-    - The off-diagonal element ``F_ST[i][j]`` is population-pair F_ST
+    - The off-diagonal element ``F_ST[i][j]`` is population-pair $F_{ST}$
       for demes ``i`` and ``j`` (Eq. 9 / 11).
     - The off-diagonal elements have mean exactly zero (their sum is 0.0).
 
@@ -1384,22 +1386,22 @@ def f_st_coancestry_matrix[AlleleKey: SupportsIndex](
 def population_specific_f_st[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey],
 ) -> tuple[float, ...]:
-    """Return Goudet & Weir (2023) population-specific F_ST (Eq. 4 / Eq. 7).
+    """Return Goudet & Weir (2023) population-specific $F_{ST}$ (Eq. 4 / Eq. 7).
 
-    The diagonal elements of the coancestry-based F_ST matrix:
+    The diagonal elements of the coancestry-based $F_{ST}$ matrix:
 
-    .. math::
+    ```math
+    F_{ST}^i = \\frac{\\theta_{ii} - \\theta_B}{1 - \\theta_B}
+    ```
 
-        F_{ST}^i = \\frac{\\theta_{ii} - \\theta_B}{1 - \\theta_B}
-
-    where ``theta_{ii} = sum_u p_{iu}^2`` is the homozygosity / within-deme
-    identity of deme ``i``, and ``theta_B`` is the mean between-deme identity.
+    where $\\theta_{ii} = \\sum_u p_{iu}^2$ is the homozygosity / within-deme
+    identity of deme ``i``, and $\\theta_B$ is the mean between-deme identity.
 
     Args:
         table: Frequency table across demes and alleles.
 
     Returns:
-        Tuple of population-specific F_ST values, one per deme.
+        Tuple of population-specific $F_{ST}$ values, one per deme.
     """
     matrix = f_st_coancestry_matrix(table)
     return tuple(matrix[i][i] for i in range(len(matrix)))
@@ -1410,14 +1412,14 @@ def population_pair_f_st[AlleleKey: SupportsIndex](
     i: int,
     j: int,
 ) -> float:
-    """Return Goudet & Weir (2023) population-pair F_ST (Eq. 4 / Eq. 9 / Eq. 11).
+    """Return Goudet & Weir (2023) population-pair $F_{ST}$ (Eq. 4 / Eq. 9 / Eq. 11).
 
     Measures the coancestry between demes ``i`` and ``j`` relative to the
-    global average between-population coancestry ``theta_B``:
+    global average between-population coancestry $\\theta_B$:
 
-    .. math::
-
-        F_{ST}^{ij} = \\frac{\\theta_{ij} - \\theta_B}{1 - \\theta_B}
+    ```math
+    F_{ST}^{ij} = \\frac{\\theta_{ij} - \\theta_B}{1 - \\theta_B}
+    ```
 
     Negative values indicate that populations ``i`` and ``j`` share fewer
     alleles than an average pair of distinct populations in the dataset,
@@ -1429,7 +1431,7 @@ def population_pair_f_st[AlleleKey: SupportsIndex](
         j: 0-based index of the second deme.
 
     Returns:
-        Population-pair F_ST as a float.
+        Population-pair $F_{ST}$ as a float.
     """
     matrix = f_st_coancestry_matrix(table)
     d = len(matrix)
@@ -1442,29 +1444,29 @@ def pairwise_f_st(
     frequencies_x: Mapping[Any, Any],
     frequencies_y: Mapping[Any, Any],
 ) -> float:
-    """Return classical pairwise F_ST using only the pair's data (Eq. 10).
+    """Return classical pairwise $F_{ST}$ using only the pair's data (Eq. 10).
 
     Following Goudet & Weir (2023) Eq. 10 (also Rousset 2002):
 
-    .. math::
+    ```math
+    F_{STp}^{XY} = \\frac{(\\theta_{XX} + \\theta_{YY})/2 - \\theta_{XY}}
+    {1 - \\theta_{XY}}
+    ```
 
-        F_{STp}^{XY} = \\frac{(\\theta_{XX} + \\theta_{YY})/2 - \\theta_{XY}}
-                       {1 - \\theta_{XY}}
-
-    where ``theta_{XX}`` and ``theta_{YY}`` are the homozygosities within
-    populations X and Y, and ``theta_{XY} = sum_u x_u y_u`` is the cross
+    where $\\theta_{XX}$ and $\\theta_{YY}$ are the homozygosities within
+    populations X and Y, and $\\theta_{XY} = \\sum_u x_u y_u$ is the cross
     identity.
 
-    Unlike population-pair F_ST (which uses the whole dataset's ``theta_B``
-    as reference), classical pairwise F_ST uses only the pair's own data
-    and reference point ``theta_{XY}``.
+    Unlike population-pair $F_{ST}$ (which uses the whole dataset's $\\theta_B$
+    as reference), classical pairwise $F_{ST}$ uses only the pair's own data
+    and reference point $\\theta_{XY}$.
 
     Args:
         frequencies_x: Normalized allele frequencies in population X at one locus.
         frequencies_y: Normalized allele frequencies in population Y at one locus.
 
     Returns:
-        Classical pairwise F_ST in [0, 1].
+        Classical pairwise $F_{ST}$ in [0, 1].
     """
     deme_x = _validate_deme(frequencies_x, 0)
     deme_y = _validate_deme(frequencies_y, 1)
@@ -1482,25 +1484,25 @@ def pairwise_f_st(
 def overall_coancestry_f_st[AlleleKey: SupportsIndex](
     table: FrequencyTable[AlleleKey],
 ) -> float:
-    """Return overall F_ST from coancestry matrix (Goudet & Weir 2023 Eq. 4/8).
+    """Return overall $F_{ST}$ from coancestry matrix (Goudet & Weir 2023 Eq. 4/8).
 
-    Defined as the unweighted mean of the population-specific F_ST values:
+    Defined as the unweighted mean of the population-specific $F_{ST}$ values:
 
-    .. math::
+    ```math
+    F_{ST} = \\frac{\\bar{\\theta}_W - \\theta_B}{1 - \\theta_B}
+    ```
 
-        F_{ST} = \\frac{\\bar{\\theta}_W - \\theta_B}{1 - \\theta_B}
-
-    where ``bar{theta}_W`` is the mean within-population coancestry (diagonal),
-    and ``theta_B`` is the mean between-population coancestry (off-diagonal).
+    where $\\bar\\theta_W$ is the mean within-population coancestry (diagonal),
+    and $\\theta_B$ is the mean between-population coancestry (off-diagonal).
 
     For equal deme weights, this is Rousset (2002) / Weir & Goudet (2017)
-    unweighted F_ST.
+    unweighted $F_{ST}$.
 
     Args:
         table: Frequency table across demes and alleles.
 
     Returns:
-        Overall coancestry-based F_ST as a float.
+        Overall coancestry-based $F_{ST}$ as a float.
     """
     pop_f_st = population_specific_f_st(table)
     return fsum(pop_f_st) / len(pop_f_st)
@@ -1531,8 +1533,8 @@ def differentiation_q[AlleleKey: SupportsIndex](
 
     Equal weighting is required for every order except ``q = 1``. At
     ``q = 1`` optional weights represent relative deme sizes and produce
-    ``E_ST``. The endpoints ``q = 0`` and ``q = 2`` equal ``K_ST`` and
-    Jost's ``D`` respectively.
+    $E_{ST}$. The endpoints ``q = 0`` and ``q = 2`` equal $K_{ST}$ and
+    Jost's $D$ respectively.
     """
     validated_order = _validate_order(order)
     if validated_order == 1.0:
@@ -1564,7 +1566,7 @@ def equilibrium_d(m: float, mu: float, d: int) -> float:
     *actual* frequency table — a real snapshot, from a real (or
     simulated) population. This function is different in kind: it is a
     theoretical prediction, from a mathematical analysis of what value
-    `D` should settle to, on average, after a finite island model (see
+    $D$ should settle to, on average, after a finite island model (see
     `fim.engine`'s own docstring for what that is) has been running long
     enough for its statistics to reach a stable, "equilibrium" balance
     between migration pulling demes together and drift pushing them
@@ -1572,11 +1574,11 @@ def equilibrium_d(m: float, mu: float, d: int) -> float:
     check the simulator itself against known theory (see the
     differentiation-measures guide's own "Part VI" for the full
     derivation and its assumptions) — a real simulation's own
-    long-run average `D` should land close to what this formula
+    long-run average $D$ should land close to what this formula
     predicts, for the same `m`/`mu`/`d`, if the simulator's own
     mechanics are correct. Notably, the population size `N` does not
     appear in this formula at all — only the *ratio* of migration to
-    mutation controls where `D` settles, a genuinely counter-intuitive
+    mutation controls where $D$ settles, a genuinely counter-intuitive
     result the guide discusses at length.
 
     Args:
@@ -1599,24 +1601,24 @@ def equilibrium_g_st(
     mu: float,
     d: int,
 ) -> float:
-    """Return the equilibrium G_ST approximation for gene-copy ``N``.
+    r"""Return the equilibrium $G_{ST}$ approximation for gene-copy ``N``.
 
-    The `G_ST` counterpart to `equilibrium_d`, above — see that
+    The $G_{ST}$ counterpart to `equilibrium_d`, above — see that
     function's own docstring for what "equilibrium" means here and why
     a theoretical prediction like this one is useful for checking the
     simulator against known theory. Unlike `equilibrium_d`, this
     formula genuinely does depend on population size — specifically on
     `Nm` (population size times migration rate, the absolute number of
     migrants arriving each generation), not `m` alone — which is
-    exactly the property Wright originally designed `G_ST`/`F_ST` to
+    exactly the property Wright originally designed $G_{ST}$ / $F_{ST}$ to
     have (see `g_st`'s own docstring): a statistic sensitive to
     demography (population size and migration), essentially independent
-    of the mutation rate, unlike `D`.
+    of the mutation rate, unlike $D$.
 
     The `(d/(d-1))**2` finite-deme correction multiplying the migration
     term below is not this project's own invention or specific to Jost
     et al. (2018) — confirmed directly against Crow & Aoki (1984)'s own
-    Eq. 7/Eq. 8, `G_ST ~= 1/(4Nm*alpha+1)`, `alpha = [n/(n-1)]**2` (see
+    Eq. 7/Eq. 8, $G_{ST} \approx 1/(4Nm\alpha + 1)$, `alpha = [n/(n-1)]**2` (see
     the differentiation-measures guide's own Part VI and Appendix D for
     the citation, added there because earlier revisions of this project
     stated the correction with no attribution at all). Crow & Aoki's own
@@ -1834,15 +1836,15 @@ def identity_recovery_half_life(population_size: int, m: float) -> float:
 
 
 def mutation_negligible_transition(h_s_initial: float, mu: float) -> float:
-    """Return the largest generation count `t` at which mutation is still negligible.
+    r"""Return the largest generation count `t` at which mutation is still negligible.
 
     Ryman & Leimar (2008), Equation 9's own condition,
-    ``t << H_S(0) / (2u)`` (during the transition phase, `G_ST` behaves
+    $t \ll H_S(0) / (2u)$ (during the transition phase, $G_{ST}$ behaves
     as if there were no mutation at all — see this project's own
     Ryman & Leimar remediation, `R6`, Finding E, for the full context):
     calibrated here at the paper's own published factor of one-fifth,
     found by numerically iterating their Equations 2 and 3 to hold
-    `G_ST` within 10% of its mutation-free value. A caller compares
+    $G_{ST}$ within 10% of its mutation-free value. A caller compares
     their own elapsed generation count against this function's return
     value directly (`t <= mutation_negligible_transition(h_s_initial,
     mu)`); this function does not take `t` itself; there is nothing
@@ -1853,7 +1855,7 @@ def mutation_negligible_transition(h_s_initial: float, mu: float) -> float:
     limit rather than a division-by-zero to guard against.
 
     Args:
-        h_s_initial: The *ancestral* heterozygosity, `H_S(0)`, in
+        h_s_initial: The *ancestral* heterozygosity, $H_S(0)$, in
             `[0, 1)` — see `fim.model.initial.
             founding_condition_for_heterozygosity` for building a
             founding condition realizing a specific value of it.
@@ -1886,12 +1888,12 @@ def mutation_negligible_equilibrium(m: float, mu: float, population_size: int) -
     """Return whether mutation is negligible next to migration/drift at equilibrium.
 
     Ryman & Leimar (2008), Equation 10's own condition,
-    ``u << m + 1/(4N)`` (the long-run `G_ST` is set by migration and
+    ``u << m + 1/(4N)`` (the long-run $G_{ST}$ is set by migration and
     drift alone, and mutation is a detail — this project's own Ryman &
     Leimar remediation, `R6`, Finding E, has the full context):
     calibrated here at the paper's own published factor of one-tenth,
     found the same way `mutation_negligible_transition`'s own factor
-    was, to hold `G_ST` within 10% of its mutation-free equilibrium
+    was, to hold $G_{ST}$ within 10% of its mutation-free equilibrium
     value.
 
     Args:
@@ -2161,7 +2163,7 @@ def equilibrium_shannon_entropy_total(
     Chao et al. (2015) Eq. 6 (IAM-FIM): the total-population counterpart
     to `equilibrium_shannon_entropy_isolated`, above, under Wright's
     finite island model — the same model `equilibrium_g_st`/
-    `equilibrium_d` already predict `G_ST`/`D` for. The paper's own
+    `equilibrium_d` already predict $G_{ST}$ / $D$ for. The paper's own
     closed form for the total population's own effective mutation
     parameter is `theta_T = 4*N*n*mu + (n-1)*mu / (m* + mu)`, where
     `m* = m*n/(n-1)` follows Latter (1973)'s own notation (already used
@@ -2326,8 +2328,8 @@ def equilibrium_shannon_differentiation(
     differentiation measure this project's own `differentiation_q` (at
     `order=1`, equivalent to `e_st`) computes from real, simulated data
     — this is that same statistic's *equilibrium prediction* instead,
-    the `E_ST` counterpart to what `equilibrium_g_st`/`equilibrium_d`
-    already are for `G_ST`/`D`. Defined as the mutual information
+    the $E_{ST}$ counterpart to what `equilibrium_g_st`/`equilibrium_d`
+    already are for $G_{ST}$ / $D$. Defined as the mutual information
     between total-population and subpopulation allele identity,
     normalized by `log(d)`:
     `(equilibrium_shannon_entropy_total - equilibrium_shannon_entropy_
@@ -2371,9 +2373,9 @@ def statistics_report[AlleleKey: SupportsIndex](
 ) -> DifferentiationReport:
     """Compute the statistics report for one normalized frequency table.
 
-    ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, ``K_ST``, ``A_CGD``,
-    ``Gs``, and ``Gd`` use equal deme treatment. ``deme_weights`` applies
-    only to ``E_ST``, ``Delta``, and ``MI``; the engine supplies population
+    $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$, $K_{ST}$, ``A_CGD``,
+    $G_s$, and $G_d$ use equal deme treatment. ``deme_weights`` applies
+    only to $E_{ST}$, ``Delta``, and ``MI``; the engine supplies population
     sizes when ``deme_weighting`` is ``"size"``.
 
     Args:

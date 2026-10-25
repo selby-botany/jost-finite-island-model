@@ -18,7 +18,7 @@ Clock: TypeAlias = Callable[[], datetime]
 
 
 class FinalReport(TypedDict):
-    """Final run-level scalar report.
+    r"""Final run-level scalar report.
 
     The one-paragraph summary of a finished run: how differentiated the
     simulated population had become when the run stopped, plus the
@@ -69,20 +69,20 @@ class FinalReport(TypedDict):
             [differentiation-measures guide](../../doc/jost-differentiation-measures.md)
             for the full explanation), each averaged across every
             genetic locus the run tracked (see `report_for_state`).
-            `G_ST` alone can be `None`: it is undefined at a locus with
+            $G_{ST}$ alone can be `None`: it is undefined at a locus with
             no genetic variation left to measure (see
             `mean_g_st_across_loci`), and if *every* tracked locus is in
             that state, there is no defined value left to average at
             all. Every other field is always a real number.
         Gs, Gd: The within- and between-deme gene identities (Ryman &
-            Leimar's `J_0`/`J_1`) `H_S`/`H_T`/`G_ST`/`D` are themselves
+            Leimar's $J_0$ / $J_1$) $H_S$ / $H_T$ / $G_{ST}$ / $D$ are themselves
             derived from — `fim.statistics.differentiation.gs`/`gd`'s
             own docstrings have the exact formulas and `fim`'s own
             with-replacement identity convention. Added by this
             project's own Ryman & Leimar remediation, `R4`
             (`dev/doc/apps/selby/jost-finite-island-model/20260903-
             claude-opus-5-gene-identity-recursion-fim-implications.md`
-            §9). Both linear in `H_S`/`H_T`, so — unlike `G_ST`/`D` —
+            §9). Both linear in $H_S$ / $H_T$, so — unlike $G_{ST}$ / $D$ —
             averaging across loci or replicates never needs a ratio-of-
             means-versus-mean-of-ratios decision; there is only one
             answer.
@@ -91,12 +91,12 @@ class FinalReport(TypedDict):
             Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
             mutual information.
         D_m, R_ST, G_ST_NEI_LOG, G_ST_HEDRICK, F_ST: Nei's (1973) mean
-            pairwise between-deme diversity and its ratio to `H_S`, Nei's
-            logarithmic and Hedrick's standardized `G'_ST`, and coancestry
-            `F_ST` (`fim.statistics.differentiation.
+            pairwise between-deme diversity and its ratio to $H_S$, Nei's
+            logarithmic and Hedrick's standardized $G^\prime_{ST}$, and coancestry
+            $F_{ST}$ (`fim.statistics.differentiation.
             derived_differentiation`), each one ratio of the pooled
-            `H_S`/`H_T` (whatever `locus_aggregation` says, which governs
-            `D` and `G_ST` only). ``None`` where undefined.
+            $H_S$ / $H_T$ (whatever `locus_aggregation` says, which governs
+            $D$ and $G_{ST}$ only). ``None`` where undefined.
         NEI_D_ALL_GEO, NEI_D_ALL_GEO_LOCUS_MEAN, NEI_D_ALL_ARITH,
             NEI_D_ALL_ARITH_LOCUS_MEAN: Nei's genetic distance across all
             demes, ``-ln(J_between / mean(J_k))``, with the geometric
@@ -109,9 +109,9 @@ class FinalReport(TypedDict):
             be negative; see `nei_all_demes_identity`.
         NEI_I_ALL_GEO, NEI_I_ALL_GEO_LOCUS_MEAN, NEI_I_ALL_ARITH,
             NEI_I_ALL_ARITH_LOCUS_MEAN: The matching identities ``I``
-            (``D = -ln(I)``). Always finite, so they are the lossless
+            ($D = -\ln I$). Always finite, so they are the lossless
             record when a distance is ``None``. The arithmetic pooled
-            identity equals ``Gd / Gs``.
+            identity equals $G_d / G_s$.
         window_statistics: How precisely each recorded statistic's own
             trailing-window mean was actually known at the generation this
             run stopped at — `{name: {"mean", "standard_error",
@@ -125,15 +125,15 @@ class FinalReport(TypedDict):
             statistic had no value, dropped by the first form), and
             `mean_of_values`/`value_of_means`, each `{"mean",
             "standard_error"}` — `value_of_means` only for `D` and `G_ST`,
-            the statistics that are functions of `H_S` and `H_T`. Every entry
+            the statistics that are functions of $H_S$ and $H_T$. Every entry
             describes the one evidence window all statistics share:
             `window_start`, `window_end`, `burn_in`, the `minimum_ess` floor
             and `target_standard_error` the window was judged against, and
             `geweke_z` (start of the window against its end; a large
             absolute value means the burn-in may have been too short).
             Empty for a state with no monitored run behind it at all (a GUI
-            preview, a re-analysis) — this is *not* the same thing as `D`/
-            `G_ST`/etc. above, which are always this state's own point
+            preview, a re-analysis) — this is *not* the same thing as $D$/
+            $G_{ST}$/etc. above, which are always this state's own point
             values, computed directly from its allele frequencies; this
             field is instead the *history leading up to* that state, the
             answer to "how much can this run's own last window of noise be
@@ -221,11 +221,11 @@ class RunResult:
             convergence_statistic`.
         convergence_histories: The same per-generation history as
             `convergence_history`, but keyed by statistic name — no
-            longer only the watched subset. `D`/`G_ST`/`H_S`/`H_T` are
+            longer only the watched subset. $D$ / $G_{ST}$ / $H_S$ / $H_T$ are
             always present (`fim.engine.ALWAYS_TRACKED_STATISTICS`),
             regardless of what `SimulationParams.convergence_statistic`
             actually watches, since all four cost nothing extra to
-            compute or aggregate either way; `E_ST`/`K_ST` are present
+            compute or aggregate either way; $E_{ST}$ / $K_{ST}$ are present
             when either is actually watched, or when
             `SimulationParams.track_expensive_statistics` opts into
             paying their own real, per-generation cost for a display

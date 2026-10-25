@@ -35,7 +35,7 @@ class Difference:
 
     Attributes:
         label: What differs: an artifact name (`trajectory`), or a reported
-            statistic (`D`).
+            statistic ($D$).
         old: The earlier run's value, or its digest for an artifact.
         new: The recomputed run's value, or its digest for an artifact.
     """
