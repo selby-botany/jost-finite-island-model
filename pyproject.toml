@@ -68,7 +68,7 @@ dev = [
     "pyinstaller==6.*",
     "pytest>=8,<10",
     "pytest-cov>=5,<8",
-    "ruff>=0.6,<0.17",
+    "ruff>=0.6,<0.18",
     "types-PyYAML==6.0.*",
 ]
 
