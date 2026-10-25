@@ -784,8 +784,12 @@ window.fim.onRunCancelled = function onRunCancelled(generation) {
     }
     // Interruption is not a state transition (design §3.2.1): the
     // scatter/progress indicator simply stop updating and stay exactly
-    // as they last rendered, with a banner overlaid on top.
-    window.fim.showRunBanner(
+    // as they last rendered, with a banner overlaid on top. Stored
+    // through the one tab here too (not just read), so a document
+    // opened *after* this fires still restores the right text if the
+    // window later switches away from this tab and back.
+    window.fim.showRunBannerFor(
+        window.fim.workspace.selectedId(),
         `Run cancelled at generation ${generation}; no artifacts were written.`
     );
     cancelButton.disabled = true;
@@ -795,7 +799,7 @@ window.fim.onRunError = function onRunError(message) {
     if (window.fim.workspace.ids().length > 1) {
         return;
     }
-    window.fim.showRunBanner(message);
+    window.fim.showRunBannerFor(window.fim.workspace.selectedId(), message);
     cancelButton.disabled = true;
 };
 
@@ -868,11 +872,73 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
     renderBatchProgress(activeLiveRunState, payload);
 };
 
+/**
+ * The plain (not saved-run-backed) banner text for one terminal job
+ * event's own payload (`fim.gui.app._push_job_event`'s `{kind, value}`
+ * shape, the identical payload the legacy single-document pushes just
+ * above already turn into these same sentences), or `null` when this
+ * `kind` has no banner of its own: `"done"` already gets a full
+ * re-render through `onRunDone`/`onBatchDone`'s own addressed
+ * companion rather than a banner, and `"paused"` only ever happens to
+ * a saved Run (the legacy `"paused"` push's own comment,
+ * `fim.gui.app`) -- `saved-runs.js`'s own terminal handling supplies
+ * that wording instead.
+ *
+ * @param {{kind: string, value: *}|undefined} payload
+ * @returns {string|null}
+ */
+function plainTerminalBannerMessage(payload) {
+    if (!payload) {
+        return null;
+    }
+    if (payload.kind === "error") {
+        return typeof payload.value === "string" ? payload.value : null;
+    }
+    if (payload.kind === "cancelled") {
+        if (typeof payload.value === "number") {
+            return (
+                `Run cancelled at generation ${payload.value}; ` +
+                "no artifacts were written."
+            );
+        }
+        if (payload.value && typeof payload.value === "object") {
+            return (
+                `Batch cancelled (replicate ${payload.value.replicateIndex}, ` +
+                `generation ${payload.value.generation}); no artifacts were written.`
+            );
+        }
+    }
+    return null;
+}
+
 const applyAddressedJobEvent = window.fim.onJobEvent;
 window.fim.onJobEvent = function onJobEvent(event) {
     const accepted = applyAddressedJobEvent(event);
     if (!accepted) {
         return false;
+    }
+    // Addressed terminal banner: the per-tab-correct replacement for the
+    // legacy single-document `onRunCancelled`/`onRunError`/`onBatch
+    // Cancelled`/`onBatchError` pushes above, which stay ambiguous (and
+    // bail) once a second document is open. `saved-runs.js` wraps this
+    // same `onJobEvent` again to show its own wording instead, for a
+    // document whose job backs a saved run.
+    if (
+        event.type === "terminal" &&
+        window.fim.workspace.ids().length > 1 &&
+        !window.fim.jobs.isDocumentClosed(event.jobId)
+    ) {
+        const terminalTabId = window.fim.workspace.documentForJob(event.jobId);
+        const message =
+            terminalTabId === null
+                ? null
+                : plainTerminalBannerMessage(event.payload);
+        if (terminalTabId !== null && message !== null) {
+            window.fim.showRunBannerFor(terminalTabId, message);
+            if (terminalTabId === window.fim.workspace.selectedId()) {
+                cancelButton.disabled = true;
+            }
+        }
     }
     if (
         event.type !== "progress" ||
@@ -921,7 +987,8 @@ window.fim.onBatchCancelled = function onBatchCancelled(payload) {
     if (window.fim.workspace.ids().length > 1) {
         return;
     }
-    window.fim.showRunBanner(
+    window.fim.showRunBannerFor(
+        window.fim.workspace.selectedId(),
         `Batch cancelled (replicate ${payload.replicateIndex}, ` +
             `generation ${payload.generation}); no artifacts were written.`
     );
@@ -932,6 +999,6 @@ window.fim.onBatchError = function onBatchError(message) {
     if (window.fim.workspace.ids().length > 1) {
         return;
     }
-    window.fim.showRunBanner(message);
+    window.fim.showRunBannerFor(window.fim.workspace.selectedId(), message);
     cancelButton.disabled = true;
 };

@@ -90,24 +90,39 @@ function showSavedRunsBanner(message) {
     savedRunsBanner.textContent = message || "";
 }
 
-/** Hide Pause and forget the active saved run once it stops for any reason. */
-function endActiveSavedRun() {
-    for (const tabId of window.fim.workspace.ids()) {
-        const state = savedRunStateFor(tabId);
-        if (state) {
-            if (state.activeSavedRunId !== null) {
-                const documentState = window.fim.workspace.get(tabId);
-                if (documentState) {
-                    documentState.runObjectId = state.activeSavedRunId;
-                    documentState.runObjectState = "finished";
-                }
-            }
-            state.activeSavedRunId = null;
-            state.pausePending = false;
-        }
+/**
+ * The saved-run-specific banner text for one terminal job event's own
+ * payload (`fim.gui.app._push_job_event`'s `{kind, value}` shape), or
+ * `null` for a `kind` this document's own saved-run bookkeeping still
+ * needs to update (every kind does -- see the `onJobEvent` wrap below)
+ * but that gets no banner of its own: `"done"` already gets a full
+ * re-render through `onRunDone`/`onBatchDone`'s own addressed
+ * companion, not a banner.
+ *
+ * @param {{kind: string, value: *}} payload
+ * @returns {string|null}
+ */
+function savedRunTerminalMessage(payload) {
+    if (payload.kind === "cancelled") {
+        const generation =
+            typeof payload.value === "number"
+                ? payload.value
+                : payload.value?.generation;
+        return (
+            `Run cancelled at generation ${generation}. ` +
+            "Its saved run keeps the data written so far."
+        );
     }
-    renderPauseRunButton();
-    window.fim.refreshRunButton?.();
+    if (payload.kind === "paused") {
+        return (
+            `Paused at generation ${payload.value}. ` +
+            "Resume it with the Run button."
+        );
+    }
+    if (payload.kind === "error") {
+        return typeof payload.value === "string" ? payload.value : null;
+    }
+    return null;
 }
 
 function clearEditingObject(objectId) {
@@ -925,77 +940,135 @@ function wrapFimFunction(name, after) {
     };
 }
 
-window.fim.onRunPaused = function onRunPaused(generation) {
-    for (const tabId of window.fim.workspace.ids()) {
-        const state = savedRunStateFor(tabId);
-        const documentState = window.fim.workspace.get(tabId);
-        if (state?.activeSavedRunId && documentState) {
-            documentState.runObjectId = state.activeSavedRunId;
-            documentState.runObjectState = "paused";
-            state.activeSavedRunId = null;
-            state.pausePending = false;
-            break;
-        }
+/**
+ * Update one tab's own saved-run bookkeeping once its job reaches a
+ * terminal outcome, and return the banner text for it (`null` if this
+ * tab's run was never a saved run, or the `kind` has none of its own).
+ *
+ * Shared by the legacy single-document wraps below -- unambiguous, and
+ * delivered in the same guaranteed order as the legacy push itself
+ * (`fim.gui.app._drain_run_messages`'s own blocking `_publish_and_
+ * wait`), so they call this directly rather than ever waiting on the
+ * addressed channel -- and by the addressed `onJobEvent` wrap, which is
+ * correct for any tab count but, unlike the legacy pushes, only ever
+ * queued, never waited for (`_push_job_event`'s own docstring).
+ *
+ * @param {string} tabId
+ * @param {{kind: string, value: *}} payload
+ * @returns {string|null}
+ */
+function endActiveSavedRunFor(tabId, payload) {
+    const state = savedRunStateFor(tabId);
+    const documentState = window.fim.workspace.get(tabId);
+    if (!state || state.activeSavedRunId === null || !documentState) {
+        return null;
     }
-    endActiveSavedRun();
-    cancelButton.disabled = true;
-    window.fim.showRunBanner(
-        `Paused at generation ${generation}. Resume it with the Run button.`
-    );
+    documentState.runObjectId = state.activeSavedRunId;
+    documentState.runObjectState =
+        payload.kind === "paused" ? "paused" : "finished";
+    state.activeSavedRunId = null;
+    state.pausePending = false;
+    if (tabId === window.fim.workspace.selectedId()) {
+        cancelButton.disabled = true;
+    }
+    renderPauseRunButton();
     window.fim.refreshRunButton?.();
+    return savedRunTerminalMessage(payload);
+}
+
+window.fim.onRunPaused = function onRunPaused(generation) {
+    // Legacy single-document channel, same ambiguity as `onRunCancelled`
+    // (`run-view-running.js`): a saved Run is the only job kind that
+    // ever pauses (`fim.gui.app`'s own legacy-push comment), so this is
+    // the one place a "plain" base definition is not needed alongside
+    // it -- but once a second document is open, the addressed `onJob
+    // Event` wrap below already reaches the right tab, the same way it
+    // already does for cancelled/error.
+    if (window.fim.workspace.ids().length > 1) {
+        return;
+    }
+    const tabId = window.fim.workspace.selectedId();
+    const message = endActiveSavedRunFor(tabId, {
+        kind: "paused",
+        value: generation,
+    });
+    if (message !== null) {
+        window.fim.showRunBannerFor(tabId, message);
+    }
 };
 
 window.fim.getEditingObjectId = function getEditingObjectId() {
     return savedRunStateFor()?.editingObjectId ?? null;
 };
 
+/**
+ * Build a legacy single-document wrap for one terminal `kind`: runs
+ * `endActiveSavedRunFor` for the one tab a legacy push can possibly
+ * mean, but only while that is actually unambiguous (`ids().length <=
+ * 1`) -- once a second document is open, this bails the same way the
+ * base `onRun*`/`onBatch*` handlers already do for the identical
+ * reason, and the addressed `onJobEvent` wrap below (which fires for
+ * any tab count) covers it correctly instead.
+ *
+ * @param {string} kind `savedRunTerminalMessage`'s own `payload.kind`.
+ * @returns {(value: *) => void}
+ */
+function legacyTerminalHandler(kind) {
+    return function handleLegacyTerminal(value) {
+        if (window.fim.workspace.ids().length > 1) {
+            return;
+        }
+        const tabId = window.fim.workspace.selectedId();
+        const message = endActiveSavedRunFor(tabId, { kind, value });
+        if (message !== null) {
+            window.fim.showRunBannerFor(tabId, message);
+        }
+    };
+}
+
 // After every screen script has loaded, so the wrapped functions exist.
 document.addEventListener("DOMContentLoaded", () => {
-    wrapFimFunction("onRunDone", endActiveSavedRun);
-    wrapFimFunction("onRunError", endActiveSavedRun);
-    wrapFimFunction("onBatchDone", endActiveSavedRun);
-    wrapFimFunction("onBatchError", endActiveSavedRun);
-    const plainCancelled = window.fim.onRunCancelled;
-    window.fim.onRunCancelled = function onRunCancelled(generation) {
-        const activeSavedRunId = window.fim.workspace
-            .ids()
-            .some((tabId) => {
-                const state = savedRunStateFor(tabId);
-                return state !== null && state.activeSavedRunId !== null;
-            });
-        if (!activeSavedRunId) {
-            plainCancelled(generation);
-            return;
+    wrapFimFunction("onRunDone", legacyTerminalHandler("done"));
+    wrapFimFunction("onRunError", legacyTerminalHandler("error"));
+    wrapFimFunction("onRunCancelled", legacyTerminalHandler("cancelled"));
+    wrapFimFunction("onBatchDone", legacyTerminalHandler("done"));
+    wrapFimFunction("onBatchError", legacyTerminalHandler("error"));
+    wrapFimFunction("onBatchCancelled", legacyTerminalHandler("cancelled"));
+    // Addressed terminal banner for a saved run: the per-tab-correct
+    // counterpart to the legacy wraps just above, for once a second
+    // document is open -- those bail, ambiguous, the instant that is
+    // true, and this takes over instead. Wrong before this fix in two
+    // different ways: `endActiveSavedRun` acted on *every* tab that
+    // happened to have an active saved run, and `onRunPaused` (above)
+    // acted on whichever one happened to iterate first -- both wrong
+    // once two tabs can each run their own saved run concurrently
+    // (`fim.gui.jobs.JobAdmission` admits concurrent jobs within a
+    // shared worker budget), and the real, reported shape of the
+    // defect this closes: a saved run cancelled in the background
+    // painted its own banner onto whatever *different* tab the window
+    // happened to have open at that moment. `event.jobId`'s own
+    // addressed `documentForJob` mapping (`jobs.js`) is correct
+    // regardless of how many tabs are open or running.
+    const applySavedRunJobEvent = window.fim.onJobEvent;
+    window.fim.onJobEvent = function onJobEvent(event) {
+        const accepted = applySavedRunJobEvent(event);
+        if (
+            !accepted ||
+            event.type !== "terminal" ||
+            !event.payload ||
+            window.fim.workspace.ids().length <= 1
+        ) {
+            return accepted;
         }
-        endActiveSavedRun();
-        cancelButton.disabled = true;
-        window.fim.showRunBanner(
-            `Run cancelled at generation ${generation}. ` +
-                "Its saved run keeps the data written so far."
-        );
-    };
-    const plainBatchCancelled = window.fim.onBatchCancelled;
-    window.fim.onBatchCancelled = function onBatchCancelled(payload) {
-        const activeSavedRunId = window.fim.workspace
-            .ids()
-            .some((tabId) => {
-                const state = savedRunStateFor(tabId);
-                return state !== null && state.activeSavedRunId !== null;
-            });
-        if (!activeSavedRunId) {
-            if (plainBatchCancelled) {
-                plainBatchCancelled(payload);
-            }
-            return;
+        const tabId = window.fim.workspace.documentForJob(event.jobId);
+        if (tabId === null) {
+            return true;
         }
-        endActiveSavedRun();
-        cancelButton.disabled = true;
-        const gen =
-            payload && payload.generation != null ? payload.generation : 0;
-        window.fim.showRunBanner(
-            `Run cancelled at generation ${gen}. ` +
-                "Its saved run keeps the data written so far."
-        );
+        const message = endActiveSavedRunFor(tabId, event.payload);
+        if (message !== null) {
+            window.fim.showRunBannerFor(tabId, message);
+        }
+        return true;
     };
     // Loading or resetting a configuration is no longer editing the saved run.
     const clearEditing = () => {

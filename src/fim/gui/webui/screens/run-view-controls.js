@@ -67,6 +67,15 @@ function restoreRunControls() {
     window.fim.refreshRunButton();
     syncRunStudySelectTooltip();
     syncRunStudyNewRowVisibility();
+    // Re-show (or clear) *this* document's own banner -- `showRunBanner`
+    // below writes into the one shared `#run-banner` element regardless
+    // of which document is selected, so switching away from a document
+    // with a stale message and back to one with none left it showing
+    // through `showRunBannerFor`'s stored text never being re-applied.
+    showRunBanner(
+        window.fim.workspace.get(window.fim.workspace.selectedId())
+            ?.runBannerMessage || ""
+    );
 }
 
 /** Reflect the selected document's validation and worker admission state. */
@@ -103,6 +112,37 @@ function showRunBanner(message) {
     runBanner.hidden = false;
     runBanner.textContent = message;
 }
+
+/**
+ * Show the run-card banner for one specific document, not necessarily
+ * the selected one.
+ *
+ * `showRunBanner` above only ever writes the one shared `#run-banner`
+ * element -- correct for a direct, synchronous response to whatever the
+ * user just did on the document they are already looking at, but wrong
+ * for an event that names a *different* document (a background tab's
+ * own run finishing, cancelling, or erroring): writing straight into
+ * the shared element regardless of which tab is selected painted that
+ * event's own message onto whichever unrelated document happened to be
+ * showing when it arrived, and left it there -- a real, reported defect.
+ * This instead records the message on `tabId`'s own document state, so
+ * `restoreRunControls` re-shows (or clears) the *right* document's own
+ * banner on every later tab switch, and renders immediately only when
+ * `tabId` is already the one selected.
+ *
+ * @param {string} tabId
+ * @param {string} message empty clears the stored banner
+ */
+function showRunBannerFor(tabId, message) {
+    const documentState = window.fim.workspace.get(tabId);
+    if (documentState) {
+        documentState.runBannerMessage = message || "";
+    }
+    if (tabId === window.fim.workspace.selectedId()) {
+        showRunBanner(message);
+    }
+}
+window.fim.showRunBannerFor = showRunBannerFor;
 
 /**
  * Start a run after checking that its worker slot is available.

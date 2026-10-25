@@ -26722,26 +26722,27 @@ neither, and a key drawn inside the canvas then sat on top of the data.
 The saved `scatter.png` carries a matplotlib legend; the GUI carries
 the equivalent as a row of HTML beneath the plot.
 
-<a id="gui.test_results_screen.test_the_default_scatter_style_explains_its_count_colors"></a>
+<a id="gui.test_results_screen.test_the_color_badge_scatter_style_explains_its_count_colors"></a>
 
-#### [test\_the\_default\_scatter\_style\_explains\_its\_count\_colors](./gui/test_results_screen.py#L870)
+#### [test\_the\_color\_badge\_scatter\_style\_explains\_its\_count\_colors](./gui/test_results_screen.py#L870)
 
 ```python
-def test_the_default_scatter_style_explains_its_count_colors(
+def test_the_color_badge_scatter_style_explains_its_count_colors(
         fast_scalar_run_settings: Path, window: webview.Window,
         drive: Callable[..., Any]) -> None
 ```
 
-The default style (colour for count, origin badge) carries its own key.
+`color-badge` (colour for count, origin badge) carries its own key.
 
 Fixed-size marks coloured by how many alleles share the spot are only
 readable with a key, so the plot draws one: a swatch per step, from a
 single allele up to sixteen or more, replacing the "Other alleles"
-line of the original circles.
+line of the original circles. No longer the default style (`top-
+allele` is), so this sets it explicitly before running.
 
 <a id="gui.test_results_screen.test_deme_pair_selector_switches_to_a_chosen_pair_and_back"></a>
 
-#### [test\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back](./gui/test_results_screen.py#L903)
+#### [test\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back](./gui/test_results_screen.py#L908)
 
 ```python
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
@@ -26771,7 +26772,7 @@ live window.
 
 <a id="gui.test_results_screen.test_running_simulation_again_with_changed_config_starts_a_new_run_object"></a>
 
-#### [test\_running\_simulation\_again\_with\_changed\_config\_starts\_a\_new\_run\_object](./gui/test_results_screen.py#L1004)
+#### [test\_running\_simulation\_again\_with\_changed\_config\_starts\_a\_new\_run\_object](./gui/test_results_screen.py#L1009)
 
 ```python
 def test_running_simulation_again_with_changed_config_starts_a_new_run_object(
@@ -26799,7 +26800,7 @@ live window (finish a run, only then click "Run simulation" again)
 
 <a id="gui.test_results_screen.test_open_folder_button_reaches_the_injected_opener_and_settles"></a>
 
-#### [test\_open\_folder\_button\_reaches\_the\_injected\_opener\_and\_settles](./gui/test_results_screen.py#L1099)
+#### [test\_open\_folder\_button\_reaches\_the\_injected\_opener\_and\_settles](./gui/test_results_screen.py#L1104)
 
 ```python
 def test_open_folder_button_reaches_the_injected_opener_and_settles(
@@ -26829,7 +26830,7 @@ recorded path is the icing.
 
 <a id="gui.test_results_screen.test_run_view_fits_the_default_window_without_excess_scrolling"></a>
 
-#### [test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling](./gui/test_results_screen.py#L1165)
+#### [test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling](./gui/test_results_screen.py#L1170)
 
 ```python
 def test_run_view_fits_the_default_window_without_excess_scrolling(
@@ -26862,7 +26863,7 @@ scrolling."
 
 <a id="gui.test_results_screen.test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix"></a>
 
-#### [test\_run\_view\_initial\_state\_canvas\_is\_unaffected\_by\_the\_trajectory\_fix](./gui/test_results_screen.py#L1257)
+#### [test\_run\_view\_initial\_state\_canvas\_is\_unaffected\_by\_the\_trajectory\_fix](./gui/test_results_screen.py#L1262)
 
 ```python
 def test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix(
@@ -26883,7 +26884,7 @@ overflowed the window in the first place.
 
 <a id="gui.test_results_screen.test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks"></a>
 
-#### [test\_completed\_scrubber\_updates\_supplemental\_panels\_on\_scrub\_ticks](./gui/test_results_screen.py#L1314)
+#### [test\_completed\_scrubber\_updates\_supplemental\_panels\_on\_scrub\_ticks](./gui/test_results_screen.py#L1319)
 
 ```python
 def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
@@ -26895,7 +26896,7 @@ Stepping the completed scrubber updates allele composition & spectrum.
 
 <a id="gui.test_results_screen.test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them"></a>
 
-#### [test\_graph\_stage\_shows\_the\_chosen\_graphs\_together\_and\_the\_menu\_changes\_them](./gui/test_results_screen.py#L1363)
+#### [test\_graph\_stage\_shows\_the\_chosen\_graphs\_together\_and\_the\_menu\_changes\_them](./gui/test_results_screen.py#L1368)
 
 ```python
 def test_graph_stage_shows_the_chosen_graphs_together_and_the_menu_changes_them(
@@ -26919,7 +26920,7 @@ split let a graph un-hide itself behind the stage's back.
 
 <a id="gui.test_results_screen.test_graph_zoom_frame_takes_the_pane_and_gives_it_back"></a>
 
-#### [test\_graph\_zoom\_frame\_takes\_the\_pane\_and\_gives\_it\_back](./gui/test_results_screen.py#L1455)
+#### [test\_graph\_zoom\_frame\_takes\_the\_pane\_and\_gives\_it\_back](./gui/test_results_screen.py#L1460)
 
 ```python
 def test_graph_zoom_frame_takes_the_pane_and_gives_it_back(
@@ -26943,7 +26944,7 @@ too, not only the pane's.
 
 <a id="gui.test_results_screen.test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom"></a>
 
-#### [test\_graph\_zoom\_sizes\_are\_a\_function\_of\_the\_frame\_not\_of\_the\_last\_zoom](./gui/test_results_screen.py#L1567)
+#### [test\_graph\_zoom\_sizes\_are\_a\_function\_of\_the\_frame\_not\_of\_the\_last\_zoom](./gui/test_results_screen.py#L1572)
 
 ```python
 def test_graph_zoom_sizes_are_a_function_of_the_frame_not_of_the_last_zoom(
@@ -26964,7 +26965,7 @@ instead of spreading its rows across a stretched box.
 
 <a id="gui.test_results_screen.test_dragging_the_zoomed_scatter_pane_narrows_the_view"></a>
 
-#### [test\_dragging\_the\_zoomed\_scatter\_pane\_narrows\_the\_view](./gui/test_results_screen.py#L1641)
+#### [test\_dragging\_the\_zoomed\_scatter\_pane\_narrows\_the\_view](./gui/test_results_screen.py#L1646)
 
 ```python
 def test_dragging_the_zoomed_scatter_pane_narrows_the_view(
@@ -26986,7 +26987,7 @@ pane, `run-graph-stage.js`'s own `openGraphZoom`).
 
 <a id="gui.test_results_screen.test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane"></a>
 
-#### [test\_reset\_view\_is\_hidden\_for\_a\_non\_scatter\_zoomed\_pane](./gui/test_results_screen.py#L1702)
+#### [test\_reset\_view\_is\_hidden\_for\_a\_non\_scatter\_zoomed\_pane](./gui/test_results_screen.py#L1707)
 
 ```python
 def test_reset_view_is_hidden_for_a_non_scatter_zoomed_pane(
@@ -26998,7 +26999,7 @@ Drag-to-zoom is scatter-only; the trajectory pane offers no reset button.
 
 <a id="gui.test_results_screen.test_deme_pair_selectors_stay_glued_to_the_scatter_axes"></a>
 
-#### [test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes](./gui/test_results_screen.py#L1731)
+#### [test\_deme\_pair\_selectors\_stay\_glued\_to\_the\_scatter\_axes](./gui/test_results_screen.py#L1736)
 
 ```python
 def test_deme_pair_selectors_stay_glued_to_the_scatter_axes(
@@ -27023,7 +27024,7 @@ rather than on the markup: the selectors must straddle the canvas.
 
 <a id="gui.test_results_screen.test_the_graph_you_are_watching_survives_the_run_finishing"></a>
 
-#### [test\_the\_graph\_you\_are\_watching\_survives\_the\_run\_finishing](./gui/test_results_screen.py#L1814)
+#### [test\_the\_graph\_you\_are\_watching\_survives\_the\_run\_finishing](./gui/test_results_screen.py#L1819)
 
 ```python
 def test_the_graph_you_are_watching_survives_the_run_finishing(
@@ -27054,7 +27055,7 @@ point is that the menu and the stage still agree afterwards.
 
 <a id="gui.test_results_screen.test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics"></a>
 
-#### [test\_the\_default\_pair\_sits\_side\_by\_side\_above\_the\_fold\_with\_statistics](./gui/test_results_screen.py#L1898)
+#### [test\_the\_default\_pair\_sits\_side\_by\_side\_above\_the\_fold\_with\_statistics](./gui/test_results_screen.py#L1903)
 
 ```python
 def test_the_default_pair_sits_side_by_side_above_the_fold_with_statistics(
@@ -27073,7 +27074,7 @@ One column stacks them instead, and the table still stays put.
 
 <a id="gui.test_results_screen.test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows"></a>
 
-#### [test\_double\_click\_zooms\_the\_graph\_under\_the\_pointer\_and\_the\_caption\_follows](./gui/test_results_screen.py#L1956)
+#### [test\_double\_click\_zooms\_the\_graph\_under\_the\_pointer\_and\_the\_caption\_follows](./gui/test_results_screen.py#L1961)
 
 ```python
 def test_double_click_zooms_the_graph_under_the_pointer_and_the_caption_follows(
@@ -27090,7 +27091,7 @@ generation the trajectory's dashed line marks.
 
 <a id="gui.test_results_screen.test_nice_axis_ticks_round_to_human_steps_at_every_scale"></a>
 
-#### [test\_nice\_axis\_ticks\_round\_to\_human\_steps\_at\_every\_scale](./gui/test_results_screen.py#L2003)
+#### [test\_nice\_axis\_ticks\_round\_to\_human\_steps\_at\_every\_scale](./gui/test_results_screen.py#L2008)
 
 ```python
 def test_nice_axis_ticks_round_to_human_steps_at_every_scale(
@@ -27108,7 +27109,7 @@ reimplementation that could drift from it.
 
 <a id="gui.test_results_screen.test_every_run_card_graph_draws_tick_marks_on_its_axes"></a>
 
-#### [test\_every\_run\_card\_graph\_draws\_tick\_marks\_on\_its\_axes](./gui/test_results_screen.py#L2048)
+#### [test\_every\_run\_card\_graph\_draws\_tick\_marks\_on\_its\_axes](./gui/test_results_screen.py#L2053)
 
 ```python
 def test_every_run_card_graph_draws_tick_marks_on_its_axes(
@@ -27133,7 +27134,7 @@ pixels there is the behavior a reader sees, not a markup detail.
 
 <a id="gui.test_results_screen.test_scrubbing_a_completed_scalar_run_moves_every_stats_row"></a>
 
-#### [test\_scrubbing\_a\_completed\_scalar\_run\_moves\_every\_stats\_row](./gui/test_results_screen.py#L2140)
+#### [test\_scrubbing\_a\_completed\_scalar\_run\_moves\_every\_stats\_row](./gui/test_results_screen.py#L2145)
 
 ```python
 def test_scrubbing_a_completed_scalar_run_moves_every_stats_row(
@@ -27155,7 +27156,7 @@ connection cannot quietly drop again on either one.
 
 <a id="gui.test_results_screen.test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square"></a>
 
-#### [test\_the\_scatter\_and\_trajectory\_panes\_share\_a\_height\_and\_the\_scatter\_stays\_square](./gui/test_results_screen.py#L2197)
+#### [test\_the\_scatter\_and\_trajectory\_panes\_share\_a\_height\_and\_the\_scatter\_stays\_square](./gui/test_results_screen.py#L2202)
 
 ```python
 def test_the_scatter_and_trajectory_panes_share_a_height_and_the_scatter_stays_square(
@@ -28410,6 +28411,35 @@ def test_cancelled_saved_run_resurrect_action_uses_the_start_backend(
 
 A checkpoint enables Resurrect, preserving Clone and Delete.
 
+<a id="gui.test_saved_runs_screen.test_a_cancelled_saved_run_banner_stays_on_its_own_tab"></a>
+
+#### [test\_a\_cancelled\_saved\_run\_banner\_stays\_on\_its\_own\_tab](./gui/test_saved_runs_screen.py#L1131)
+
+```python
+def test_a_cancelled_saved_run_banner_stays_on_its_own_tab(
+        unreachable_convergence_run_settings: Path) -> None
+```
+
+A background tab's own cancellation never paints another tab's banner.
+
+Reproduces a real, reported defect: `screens/saved-runs.js`'s own
+`onRunCancelled`/`onBatchCancelled` wraps used to ask "is *any* open
+tab running a saved run" and write straight into the one shared
+``run`-banner` element whenever the answer was yes, regardless of
+which tab was actually selected when the cancellation push arrived
+-- a saved run cancelled in the background showed its own banner on
+whichever *different* tab the window happened to have open at that
+moment, and the stale text stayed there even after switching away
+and back, since nothing restored or cleared it per tab.
+
+Starts a saved run that structurally cannot converge before its
+generation cap (`unreachable_convergence_run_settings`), opens a
+second, unrelated tab once it is confirmed running, cancels the
+first tab's own job directly through the bridge (bypassing the
+shared Cancel button, which only ever targets the *selected* tab --
+exactly why that bridge call alone cannot prove this fix), and
+checks the banner on each tab separately.
+
 <a id="gui.test_scatter_styles"></a>
 
 # [gui.test\_scatter\_styles](./gui/test_scatter_styles.py#L1)
@@ -28418,14 +28448,14 @@ Every scatter point style draws, and each looks different.
 
 The original encoding made a marker's radius grow with how many alleles
 share its coordinates, so in a pooled batch the pile of alleles absent
-from both demes at (0, 0) became the largest mark on the plot. Seven
+from both demes at (0, 0) became the largest mark on the plot. Eight
 styles are offered (Settings, "Scatter plot points") so a botanist can
 choose by looking; this pins that each one draws something and that they
-are genuinely different encodings, not seven names for one drawing.
+are genuinely different encodings, not eight names for one drawing.
 
 <a id="gui.test_scatter_styles.test_every_scatter_style_draws_and_they_are_all_distinct"></a>
 
-#### [test\_every\_scatter\_style\_draws\_and\_they\_are\_all\_distinct](./gui/test_scatter_styles.py#L38)
+#### [test\_every\_scatter\_style\_draws\_and\_they\_are\_all\_distinct](./gui/test_scatter_styles.py#L47)
 
 ```python
 def test_every_scatter_style_draws_and_they_are_all_distinct(
@@ -28436,7 +28466,7 @@ Seven styles, seven different non-blank drawings, no errors.
 
 <a id="gui.test_scatter_styles.test_an_unknown_scatter_style_is_ignored"></a>
 
-#### [test\_an\_unknown\_scatter\_style\_is\_ignored](./gui/test_scatter_styles.py#L75)
+#### [test\_an\_unknown\_scatter\_style\_is\_ignored](./gui/test_scatter_styles.py#L84)
 
 ```python
 def test_an_unknown_scatter_style_is_ignored(
@@ -28447,7 +28477,7 @@ A style the page does not know leaves the current one alone.
 
 <a id="gui.test_scatter_styles.test_the_badge_styles_replace_the_origin_circle_with_a_smaller_mark"></a>
 
-#### [test\_the\_badge\_styles\_replace\_the\_origin\_circle\_with\_a\_smaller\_mark](./gui/test_scatter_styles.py#L94)
+#### [test\_the\_badge\_styles\_replace\_the\_origin\_circle\_with\_a\_smaller\_mark](./gui/test_scatter_styles.py#L103)
 
 ```python
 def test_the_badge_styles_replace_the_origin_circle_with_a_smaller_mark(
@@ -28460,6 +28490,36 @@ Measured as ink: with the original circles the 48-allele pile covers
 a large disc at the corner; the badge styles draw a small dot and a
 label there instead, so a patch of the canvas just above and right of
 the origin holds far less ink.
+
+<a id="gui.test_scatter_styles.test_the_top_allele_style_mutes_ordinary_points_and_sizes_its_own_by_coincidence"></a>
+
+#### [test\_the\_top\_allele\_style\_mutes\_ordinary\_points\_and\_sizes\_its\_own\_by\_coincidence](./gui/test_scatter_styles.py#L139)
+
+```python
+def test_the_top_allele_style_mutes_ordinary_points_and_sizes_its_own_by_coincidence(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A coordinate several replicates' own top allele agree on draws bigger.
+
+Reproduces the fix for a real, reported defect: a pooled batch's
+scatter marked one row chosen from the whole pool as "most
+frequent," which a botanist comparing two solid, unrelated-looking
+dots near probability 1 in the same deme reads as "these cannot both
+be real" -- they sum past 1. `panel.highlighted_points` (`fim.viz.
+scatter._panel`) is each source's own top allele instead, merged the
+identical way `panel.points` already merges any other coincident
+point: two sources landing at the same coordinate draw as one
+marker, sized by how many agree, not two overlapping same-size ones.
+Every ordinary point (`panel.points`), including one that is also
+`common`, draws small and muted -- the real "most frequent" marks
+are `highlighted_points`' own, drawn on top.
+
+Measured as ink at each of the plot's own two diagonal corners (0, 0)
+and (1, 1), the same "ink in a known pixel box" technique the badge
+styles' own test above uses: a `highlighted_points` entry with
+`count: 9` at one corner must cover visibly more ink than one with
+`count: 1` at the other.
 
 <a id="gui.test_scientific_notation_screen"></a>
 

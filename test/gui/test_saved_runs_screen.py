@@ -1126,3 +1126,126 @@ def test_cancelled_saved_run_resurrect_action_uses_the_start_backend(
     )
     assert result["label"] == ("Resurrect" if checkpoint else None)
     assert api.started == ([api.row["objectId"]] if checkpoint else [])
+
+
+def test_a_cancelled_saved_run_banner_stays_on_its_own_tab(
+    unreachable_convergence_run_settings: Path,
+) -> None:
+    """A background tab's own cancellation never paints another tab's banner.
+
+    Reproduces a real, reported defect: `screens/saved-runs.js`'s own
+    `onRunCancelled`/`onBatchCancelled` wraps used to ask "is *any* open
+    tab running a saved run" and write straight into the one shared
+    `#run-banner` element whenever the answer was yes, regardless of
+    which tab was actually selected when the cancellation push arrived
+    -- a saved run cancelled in the background showed its own banner on
+    whichever *different* tab the window happened to have open at that
+    moment, and the stale text stayed there even after switching away
+    and back, since nothing restored or cleared it per tab.
+
+    Starts a saved run that structurally cannot converge before its
+    generation cap (`unreachable_convergence_run_settings`), opens a
+    second, unrelated tab once it is confirmed running, cancels the
+    first tab's own job directly through the bridge (bypassing the
+    shared Cancel button, which only ever targets the *selected* tab --
+    exactly why that bridge call alone cannot prove this fix), and
+    checks the banner on each tab separately.
+    """
+    started_event = threading.Event()
+    cancelled_event = threading.Event()
+
+    def on_run_started() -> None:
+        started_event.set()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] == "cancelled":
+            cancelled_event.set()
+
+    window = create_window(
+        api=Api(on_run_started=on_run_started, on_message=on_message), hidden=True
+    )
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            # Save the pristine (unreachable-convergence) starter form,
+            # then start it from Home's own "start" action -- the saved-
+            # run path `activeSavedRunId` actually tracks, not plain
+            # "Run simulation".
+            window.evaluate_js(
+                "document.getElementById('save-run-object-button').click();"
+            )
+            poll_page(
+                window,
+                _RUN_BANNER,
+                lambda text: str(text).startswith("Saved."),
+                what="saved-run confirmation",
+            )
+            _show_home_and_wait(window)
+            poll_page(window, _SAVED_ROWS, bool, what="Saved runs row")
+            first_tab = window.evaluate_js("window.fim.workspace.selectedId()")
+            window.evaluate_js(
+                "document.querySelector("
+                "'#saved-runs-body button[data-action=\"start\"]').click();"
+            )
+            wait_or_fail(started_event, "saved run start (on_run_started)")
+            poll_page(
+                window,
+                "document.getElementById('cancel-run-button').disabled === false",
+                what="Cancel button enabled",
+            )
+            job_id = window.evaluate_js(
+                f"window.fim.workspace.get({first_tab!r}).attachedJobId"
+            )
+            second_tab = window.evaluate_js("window.fim.workspace.createDocument()")
+            assert window.evaluate_js("window.fim.workspace.selectedId()") == second_tab
+            on_second_tab_before = window.evaluate_js(_RUN_BANNER)
+            # Cancel the *first* tab's own job while the *second* stays
+            # selected -- the shared Cancel button only ever targets
+            # whichever tab is selected, so it cannot reach a background
+            # tab's own job at all; this reaches it the same way the
+            # real `cancel_run()` bridge call does either way.
+            window.evaluate_js(
+                "window.__fimDirectCancelSettled = false;"
+                f"window.pywebview.api.cancel_run({job_id!r}).then(() => "
+                "window.__fimDirectCancelSettled = true);"
+            )
+            wait_or_fail(cancelled_event, "saved run cancellation (cancelled message)")
+            poll_page(
+                window,
+                "window.__fimDirectCancelSettled === true",
+                what="cancel_run() bridge call settled",
+            )
+            # The addressed terminal push that updates the *first* tab's
+            # own bookkeeping lands on a background thread, queued, not
+            # awaited (`fim.gui.app._push_job_event`'s own docstring):
+            # poll rather than read once, the same backstop every other
+            # push-driven assertion in this file already uses.
+            poll_page(
+                window,
+                f"window.fim.workspace.get({first_tab!r})?.runObjectState",
+                lambda state: state == "finished",
+                what="first tab's own saved-run bookkeeping",
+            )
+            on_second_tab_after = window.evaluate_js(_RUN_BANNER)
+            window.evaluate_js(f"window.fim.workspace.select({first_tab!r});")
+            on_first_tab = window.evaluate_js(_RUN_BANNER)
+            outcome.put(
+                {
+                    "secondBefore": on_second_tab_before,
+                    "secondAfter": on_second_tab_after,
+                    "first": on_first_tab,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["secondBefore"] == ""
+    assert settled["secondAfter"] == ""
+    assert "Run cancelled at generation" in settled["first"]
+    assert "Its saved run keeps the data written so far" in settled["first"]
