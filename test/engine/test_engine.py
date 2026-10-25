@@ -2100,8 +2100,10 @@ def _vector_block_for(state: ModelState, params: SimulationParams) -> VectorBloc
     """Return a `VectorBlock` holding `state`, for the statistics-only tests.
 
     The state need not be on the `1 / N` grid: these tests only read the
-    block's statistics, they never step it.
+    block's statistics, they never step it. Skips the calling test
+    without numba, which `fim.model.vector_kernels` imports unconditionally.
     """
+    pytest.importorskip("numba")
     return VectorBlock.from_model_state(
         state,
         sizes=params.population_sizes,
@@ -3178,6 +3180,7 @@ def test_vector_adaptive_batch_keeps_the_replicate_order_prefix() -> None:
     reference is itself run with a window of one, which advances one
     replicate at a time and so admits them strictly in replicate order.
     """
+    pytest.importorskip("numba")
     params = SimulationParams(
         gene_copies=40,
         m=0.1,
@@ -3426,6 +3429,19 @@ def test_build_engine_backend_auto_falls_back_to_generational_without_numba(
     assert isinstance(backend._advancer, ThreadedAdvancer)
 
 
+@pytest.fixture
+def numba_reported_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make `build_engine_backend` see numba as installed, without importing it.
+
+    Backend selection (the capacity ceilings and `"auto"`'s choice) does
+    not depend on numba; only running Backend V does, and constructing a
+    `VectorizedAdvancer` compiles nothing. Without this, every selection
+    test that expects Backend V fails on an install without numba, where
+    the availability check raises or falls back first.
+    """
+    monkeypatch.setattr(engine_backends, "numba_is_available", lambda: True)
+
+
 def test_build_engine_backend_generational_vector_accepts_numba_present() -> None:
     """The positive case, alongside the two negative ones above.
 
@@ -3439,6 +3455,7 @@ def test_build_engine_backend_generational_vector_accepts_numba_present() -> Non
     always passes `params`, so this only matters for this function's own
     lower-level, params-less construction form.
     """
+    pytest.importorskip("numba")
     backend = build_engine_backend("generational-vector")
     assert isinstance(backend, GenerationalBackend)
 
@@ -3456,6 +3473,7 @@ def test_build_engine_backend_generational_vector_accepts_numba_present() -> Non
 # allocation anyway.
 
 
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_vector_rejects_oversized_capacity() -> None:
     """Explicit finite-alleles selection gets the same capacity ceiling `"auto"` has."""
     params = _finite_alleles_vector_params(
@@ -3467,6 +3485,7 @@ def test_build_engine_backend_vector_rejects_oversized_capacity() -> None:
         )
 
 
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_vector_respects_custom_capacity_ceiling() -> None:
     """The explicit-path ceiling is a real, configurable parameter, not a hidden one."""
     params = _finite_alleles_vector_params(
@@ -3479,6 +3498,7 @@ def test_build_engine_backend_vector_respects_custom_capacity_ceiling() -> None:
     assert isinstance(backend._advancer, VectorizedAdvancer)
 
 
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_vector_needs_every_locus_within_capacity() -> None:
     """One oversized locus disqualifies explicit selection too, not just `"auto"`."""
     params = _finite_alleles_vector_params(
@@ -3511,6 +3531,7 @@ def test_build_engine_backend_auto_requires_params() -> None:
         build_engine_backend("auto")
 
 
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_auto_picks_vector_above_threshold() -> None:
     """Above the cutover, on an eligible config, `"auto"` picks Backend V."""
     params = _finite_alleles_vector_params(d=40)
@@ -3557,6 +3578,7 @@ def test_build_engine_backend_auto_picks_generational_when_vector_ineligible() -
     assert isinstance(backend._advancer, ThreadedAdvancer)
 
 
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_auto_picks_vector_for_infinite_alleles() -> None:
     """Infinite alleles with continuous migration is V's home ground now.
 
@@ -3575,6 +3597,7 @@ def test_build_engine_backend_auto_picks_vector_for_infinite_alleles() -> None:
     assert isinstance(backend._advancer, VectorizedAdvancer)
 
 
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_auto_respects_custom_threshold() -> None:
     """The cutover is a real, configurable parameter, not a hidden constant."""
     params = _finite_alleles_vector_params(d=10)
@@ -3625,6 +3648,7 @@ def test_build_engine_backend_auto_picks_generational_above_capacity_ceiling() -
     assert isinstance(backend._advancer, ThreadedAdvancer)
 
 
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_auto_respects_custom_capacity_ceiling() -> None:
     """The capacity ceiling is a real, configurable parameter, not a hidden constant."""
     # capacity 4096

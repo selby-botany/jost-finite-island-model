@@ -10,6 +10,7 @@ log holds that generation's row.
 
 from __future__ import annotations
 
+import importlib.util
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -26,6 +27,11 @@ from fim.engine import (
 )
 from fim.model.params import SimulationParams
 from fim.persistence.store import InMemoryTrajectoryStore
+
+NEEDS_NUMBA = pytest.mark.skipif(
+    importlib.util.find_spec("numba") is None,
+    reason="Backend V (generational-vector) needs the optional numba dependency",
+)
 
 
 def _clock() -> datetime:
@@ -58,7 +64,9 @@ def _run(backend: LinealBackend | GenerationalBackend) -> tuple[RunResult, ...]:
     [
         LinealBackend,
         lambda: GenerationalBackend(SequentialAdvancer()),
-        lambda: GenerationalBackend(VectorizedAdvancer()),
+        pytest.param(
+            lambda: GenerationalBackend(VectorizedAdvancer()), marks=NEEDS_NUMBA
+        ),
     ],
     ids=["lineal", "generational", "generational-vector"],
 )
@@ -76,6 +84,7 @@ def test_every_replicate_reports_the_generation_it_stopped_at(
         assert result.convergence_generations[-1] == generation, result.run_id
 
 
+@NEEDS_NUMBA
 def test_vectorized_batch_is_identical_to_the_lineal_batch() -> None:
     """Final states and reports match the lineal batch replicate for replicate."""
     lineal = _run(LinealBackend())
@@ -85,17 +94,25 @@ def test_vectorized_batch_is_identical_to_the_lineal_batch() -> None:
     assert [r.report for r in vector] == [r.report for r in lineal]
 
 
-def test_vectorized_trajectory_ends_at_the_stopping_generation() -> None:
+@pytest.mark.parametrize(
+    "backend_factory",
+    [
+        LinealBackend,
+        lambda: GenerationalBackend(SequentialAdvancer()),
+        pytest.param(
+            lambda: GenerationalBackend(VectorizedAdvancer()), marks=NEEDS_NUMBA
+        ),
+    ],
+    ids=["lineal", "generational", "generational-vector"],
+)
+def test_vectorized_trajectory_ends_at_the_stopping_generation(
+    backend_factory: Callable[[], LinealBackend | GenerationalBackend],
+) -> None:
     """The log of every replicate holds the row of its final generation."""
-    for backend in (
-        LinealBackend(),
-        GenerationalBackend(SequentialAdvancer()),
-        GenerationalBackend(VectorizedAdvancer()),
-    ):
-        store = InMemoryTrajectoryStore()
-        output = backend.run(_params(), store, None, _clock)
-        assert isinstance(output, tuple)
-        for result in output:
-            rows = list(store.read(result.run_id))
-            last = max(int(row["generation"]) for row in rows)
-            assert last == result.final_state.generation, result.run_id
+    store = InMemoryTrajectoryStore()
+    output = backend_factory().run(_params(), store, None, _clock)
+    assert isinstance(output, tuple)
+    for result in output:
+        rows = list(store.read(result.run_id))
+        last = max(int(row["generation"]) for row in rows)
+        assert last == result.final_state.generation, result.run_id

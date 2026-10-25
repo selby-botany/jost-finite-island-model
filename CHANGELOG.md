@@ -1868,6 +1868,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   now returns the same built-in types as the compiled one. New tests compare
   result types, not only values, and write a real checkpoint with `numba`
   hidden, so the suite catches this even where `numba` is installed.
+- **Test suite fails without `numba`.** Seventeen Backend V
+  (`generational-vector`) tests failed instead of skipping on an install
+  without the optional `numba` dependency. Tests that run Backend V now
+  skip without it. Backend-selection tests (capacity ceilings and the
+  `auto` choice) no longer need `numba` at all: they mark it as available
+  and still run, because selection never compiles anything.
 - Desktop statistic tooltips, result messages, comparison summaries, and
   sweep/Explore readouts and chart labels use scientific subscripts and
   superscripts from the statistic catalog. Native statistic menus spell out

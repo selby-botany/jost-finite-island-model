@@ -306,8 +306,9 @@ def test_mutate_vectorized_zero_rate_returns_the_same_object(
     every generation of every zero-mutation run. See `test_migrate_
     vectorized_symmetric_zero_rate_returns_the_same_object`'s own
     docstring for why an object-identity check, not a value-equality
-    one, is what actually proves this.
+    one, is what actually proves this. The nonzero rate needs numba.
     """
+    pytest.importorskip("numba")
     state = _finite_alleles_state(deme_count=4)
     # 24 copies of 4 equally frequent alleles: whole gene copies (6 each),
     # which `mutate_vectorized` requires.

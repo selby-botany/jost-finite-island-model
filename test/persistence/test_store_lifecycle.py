@@ -11,6 +11,7 @@ Everything is deterministic: no test waits on a timing budget.
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
@@ -186,7 +187,20 @@ def test_engine_closes_the_store_it_was_given_and_the_result_still_reads(
     assert len(list(result.store.read(result.run_id))) > 0
 
 
-@pytest.mark.parametrize("backend", ["lineal", "generational", "generational-vector"])
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "lineal",
+        "generational",
+        pytest.param(
+            "generational-vector",
+            marks=pytest.mark.skipif(
+                importlib.util.find_spec("numba") is None,
+                reason="generational-vector needs the optional numba dependency",
+            ),
+        ),
+    ],
+)
 def test_engine_closes_the_store_when_the_run_raises(
     tmp_path: Path, backend: str
 ) -> None:
