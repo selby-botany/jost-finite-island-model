@@ -31176,21 +31176,33 @@ when `float(c) / float(size)` equals the frequency bit for bit, and
 otherwise (or when the deme size is unknown, `0`) stores every frequency of
 that pair as the raw float64. No frequency is ever rounded.
 
+Compiled and plain kernels return the same Python types. Numba boxes a
+scalar result as `int`, `float` or `bool`; plain Python would return the
+NumPy scalar the arithmetic produced (for example `numpy.int32`), which
+then reaches `LogPosition` and the JSON checkpoint document and is refused
+there. `kernel` therefore converts NumPy scalar results, including tuple
+members, when Numba is absent.
+
 <a id="fim.persistence.tlog_codec.PAD4"></a>
 
-#### [PAD4](./persistence/tlog_codec.py#L56)
+#### [PAD4](./persistence/tlog_codec.py#L64)
 
 Bytes of a padded varint: a length written before it is known.
 
 <a id="fim.persistence.tlog_codec.kernel"></a>
 
-#### [kernel](./persistence/tlog_codec.py#L66)
+#### [kernel](./persistence/tlog_codec.py#L91)
 
 ```python
 def kernel(function: Callable[..., Any]) -> Callable[..., Any]
 ```
 
 Compile `function` with Numba (`nogil`, cached) when it is available.
+
+Without Numba the plain function is wrapped so its results have the
+types the compiled function would return (see the module docstring).
+The wrapper exposes the unwrapped function as `py_func`, as a Numba
+dispatcher does.
 
 **Arguments**:
 
@@ -31199,11 +31211,11 @@ Compile `function` with Numba (`nogil`, cached) when it is available.
 
 **Returns**:
 
-  The compiled function, or `function` itself without Numba.
+  The compiled function, or the result-boxing wrapper without Numba.
 
 <a id="fim.persistence.tlog_codec.put_varint"></a>
 
-#### [put\_varint](./persistence/tlog_codec.py#L81)
+#### [put\_varint](./persistence/tlog_codec.py#L117)
 
 ```python
 @kernel
@@ -31214,7 +31226,7 @@ Write `v` as a little-endian base-128 varint; return the new position.
 
 <a id="fim.persistence.tlog_codec.put_padded4"></a>
 
-#### [put\_padded4](./persistence/tlog_codec.py#L92)
+#### [put\_padded4](./persistence/tlog_codec.py#L128)
 
 ```python
 @kernel
@@ -31225,7 +31237,7 @@ Write `v` (below 2**28) as a four-byte padded varint; return the end.
 
 <a id="fim.persistence.tlog_codec.get_varint"></a>
 
-#### [get\_varint](./persistence/tlog_codec.py#L102)
+#### [get\_varint](./persistence/tlog_codec.py#L138)
 
 ```python
 @kernel
@@ -31236,7 +31248,7 @@ Read a varint at `pos`; return `(value, position after it)`.
 
 <a id="fim.persistence.tlog_codec.put_pair"></a>
 
-#### [put\_pair](./persistence/tlog_codec.py#L117)
+#### [put\_pair](./persistence/tlog_codec.py#L153)
 
 ```python
 @kernel
@@ -31263,7 +31275,7 @@ Write one pair body from the entries `ids/fr[base:base + n]`.
 
 <a id="fim.persistence.tlog_codec.enc_full"></a>
 
-#### [enc\_full](./persistence/tlog_codec.py#L162)
+#### [enc\_full](./persistence/tlog_codec.py#L198)
 
 ```python
 @kernel
@@ -31293,7 +31305,7 @@ Append one full-frame record built from a CSR frame.
 
 <a id="fim.persistence.tlog_codec.enc_delta"></a>
 
-#### [enc\_delta](./persistence/tlog_codec.py#L203)
+#### [enc\_delta](./persistence/tlog_codec.py#L239)
 
 ```python
 @kernel
@@ -31330,7 +31342,7 @@ frame are written. Every `nal[p]` must be at most `pid.shape[1]`
 
 <a id="fim.persistence.tlog_codec.load_state_from_csr"></a>
 
-#### [load\_state\_from\_csr](./persistence/tlog_codec.py#L271)
+#### [load\_state\_from\_csr](./persistence/tlog_codec.py#L307)
 
 ```python
 @kernel
@@ -31341,7 +31353,7 @@ Set an encoder's previous-frame state from a CSR frame.
 
 <a id="fim.persistence.tlog_codec.get_pair"></a>
 
-#### [get\_pair](./persistence/tlog_codec.py#L284)
+#### [get\_pair](./persistence/tlog_codec.py#L320)
 
 ```python
 @kernel
@@ -31357,7 +31369,7 @@ Decode one pair body into the state arrays.
 
 <a id="fim.persistence.tlog_codec.apply_record"></a>
 
-#### [apply\_record](./persistence/tlog_codec.py#L324)
+#### [apply\_record](./persistence/tlog_codec.py#L360)
 
 ```python
 @kernel
@@ -31373,7 +31385,7 @@ Apply the record at `pos` to the decoded state.
 
 <a id="fim.persistence.tlog_codec.state_to_csr"></a>
 
-#### [state\_to\_csr](./persistence/tlog_codec.py#L359)
+#### [state\_to\_csr](./persistence/tlog_codec.py#L395)
 
 ```python
 @kernel
@@ -31388,7 +31400,7 @@ Flatten the decoded per-pair state into a CSR frame.
 
 <a id="fim.persistence.tlog_codec.record_deltas"></a>
 
-#### [record\_deltas](./persistence/tlog_codec.py#L377)
+#### [record\_deltas](./persistence/tlog_codec.py#L413)
 
 ```python
 @kernel
@@ -31414,7 +31426,7 @@ operations per record however large a record is.
 
 <a id="fim.persistence.tlog_codec.DecodedState"></a>
 
-## [DecodedState Objects](./persistence/tlog_codec.py#L402)
+## [DecodedState Objects](./persistence/tlog_codec.py#L438)
 
 ```python
 class DecodedState()
@@ -31430,7 +31442,7 @@ The per-pair state a decoder keeps, and what a delta applies to.
 
 <a id="fim.persistence.tlog_codec.DecodedState.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/tlog_codec.py#L411)
+#### [\_\_init\_\_](./persistence/tlog_codec.py#L447)
 
 ```python
 def __init__(pairs: int, width: int = 16) -> None
@@ -31440,7 +31452,7 @@ Allocate the arrays.
 
 <a id="fim.persistence.tlog_codec.DecodedState.grow"></a>
 
-#### [grow](./persistence/tlog_codec.py#L420)
+#### [grow](./persistence/tlog_codec.py#L456)
 
 ```python
 def grow() -> None
@@ -31450,7 +31462,7 @@ Double the width, keeping every value.
 
 <a id="fim.persistence.tlog_codec.DecodedState.frame_arrays"></a>
 
-#### [frame\_arrays](./persistence/tlog_codec.py#L430)
+#### [frame\_arrays](./persistence/tlog_codec.py#L466)
 
 ```python
 def frame_arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]
@@ -31460,7 +31472,7 @@ Return the state as CSR arrays `(counts, allele_ids, frequencies)`.
 
 <a id="fim.persistence.tlog_codec.decode_record"></a>
 
-#### [decode\_record](./persistence/tlog_codec.py#L440)
+#### [decode\_record](./persistence/tlog_codec.py#L476)
 
 ```python
 def decode_record(buffer: np.ndarray, position: int, demes: int, loci: int,

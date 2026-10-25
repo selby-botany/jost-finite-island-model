@@ -516,17 +516,30 @@ os._exit(0)
 """
 
 
+HIDE_NUMBA = "import sys\nsys.modules['numba'] = None\n"
+"""Prefix that makes `import numba` fail in a child interpreter."""
+
+
+@pytest.mark.parametrize("hide_numba", [False, True], ids=["default", "no-numba"])
 def test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_run(
-    tmp_path: Path,
+    tmp_path: Path, hide_numba: bool
 ) -> None:
-    """A real abrupt exit past a checkpoint, then restore: the whole run."""
+    """A real abrupt exit past a checkpoint, then restore: the whole run.
+
+    The `no-numba` case writes the checkpoint as an install without the
+    optional numba dependency does (the Windows ARM64 and Intel macOS
+    builds); its log codec runs as plain Python. A NumPy scalar from that
+    path once made the checkpoint document unwritable there, while every
+    test passed where numba was installed.
+    """
     params = _params()
     whole = _whole(params, tmp_path / "whole.tlog")
     directory = tmp_path / "killed"
     directory.mkdir()
+    program = (HIDE_NUMBA if hide_numba else "") + KILL_PROGRAM
 
     completed = subprocess.run(
-        [sys.executable, "-c", KILL_PROGRAM, json.dumps(_CONFIG), str(directory)],
+        [sys.executable, "-c", program, json.dumps(_CONFIG), str(directory)],
         capture_output=True,
         text=True,
         check=False,

@@ -36,10 +36,18 @@ Count coding is lossless because the encoder checks it: it stores `c` only
 when `float(c) / float(size)` equals the frequency bit for bit, and
 otherwise (or when the deme size is unknown, `0`) stores every frequency of
 that pair as the raw float64. No frequency is ever rounded.
+
+Compiled and plain kernels return the same Python types. Numba boxes a
+scalar result as `int`, `float` or `bool`; plain Python would return the
+NumPy scalar the arithmetic produced (for example `numpy.int32`), which
+then reaches `LogPosition` and the JSON checkpoint document and is refused
+there. `kernel` therefore converts NumPy scalar results, including tuple
+members, when Numba is absent.
 """
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 from typing import Any
 
@@ -63,18 +71,46 @@ _COUNT_PAD = 3
 """Bytes of the padded `n_changed` varint of a delta record."""
 
 
+def _boxed(value: Any) -> Any:
+    """Return `value` with NumPy scalars converted as Numba boxes them.
+
+    Args:
+        value: A kernel result: a scalar, a tuple of scalars, or other.
+
+    Returns:
+        The built-in scalar (`int`, `float`, `bool`) for a NumPy scalar,
+        a tuple converted member by member, or `value` unchanged.
+    """
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, tuple):
+        return tuple(_boxed(member) for member in value)
+    return value
+
+
 def kernel(function: Callable[..., Any]) -> Callable[..., Any]:
     """Compile `function` with Numba (`nogil`, cached) when it is available.
+
+    Without Numba the plain function is wrapped so its results have the
+    types the compiled function would return (see the module docstring).
+    The wrapper exposes the unwrapped function as `py_func`, as a Numba
+    dispatcher does.
 
     Args:
         function: A function written in the Numba-compatible subset.
 
     Returns:
-        The compiled function, or `function` itself without Numba.
+        The compiled function, or the result-boxing wrapper without Numba.
     """
     if HAVE_NUMBA:
         return numba.njit(cache=True, nogil=True)(function)  # type: ignore[no-any-return, unused-ignore]
-    return function
+
+    @functools.wraps(function)
+    def plain(*args: Any) -> Any:
+        return _boxed(function(*args))
+
+    plain.py_func = function  # type: ignore[attr-defined]
+    return plain
 
 
 @kernel

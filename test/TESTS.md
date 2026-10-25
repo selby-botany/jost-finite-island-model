@@ -12105,20 +12105,34 @@ def test_a_stale_lease_cannot_checkpoint(tmp_path: Path) -> None
 
 After ownership is lost, a session's checkpoint is refused and removed.
 
+<a id="engine.test_execution_checkpoint.HIDE_NUMBA"></a>
+
+#### [HIDE\_NUMBA](./engine/test_execution_checkpoint.py#L519)
+
+Prefix that makes `import numba` fail in a child interpreter.
+
 <a id="engine.test_execution_checkpoint.test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_run"></a>
 
-#### [test\_a\_process\_killed\_after\_a\_checkpoint\_resumes\_to\_the\_uninterrupted\_run](./engine/test_execution_checkpoint.py#L519)
+#### [test\_a\_process\_killed\_after\_a\_checkpoint\_resumes\_to\_the\_uninterrupted\_run](./engine/test_execution_checkpoint.py#L524)
 
 ```python
+@pytest.mark.parametrize("hide_numba", [False, True],
+                         ids=["default", "no-numba"])
 def test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_run(
-        tmp_path: Path) -> None
+        tmp_path: Path, hide_numba: bool) -> None
 ```
 
 A real abrupt exit past a checkpoint, then restore: the whole run.
 
+The `no-numba` case writes the checkpoint as an install without the
+optional numba dependency does (the Windows ARM64 and Intel macOS
+builds); its log codec runs as plain Python. A NumPy scalar from that
+path once made the checkpoint document unwritable there, while every
+test passed where numba was installed.
+
 <a id="engine.test_execution_checkpoint.test_a_restored_vector_session_finishes_as_the_uninterrupted_run"></a>
 
-#### [test\_a\_restored\_vector\_session\_finishes\_as\_the\_uninterrupted\_run](./engine/test_execution_checkpoint.py#L580)
+#### [test\_a\_restored\_vector\_session\_finishes\_as\_the\_uninterrupted\_run](./engine/test_execution_checkpoint.py#L593)
 
 ```python
 @pytest.mark.parametrize("case", list(_VECTOR_CASES))
@@ -12131,7 +12145,7 @@ The dense block is checkpointed exactly: the same run after a restore.
 
 <a id="engine.test_execution_checkpoint.test_a_vector_checkpoint_holds_the_block_not_the_population"></a>
 
-#### [test\_a\_vector\_checkpoint\_holds\_the\_block\_not\_the\_population](./engine/test_execution_checkpoint.py#L598)
+#### [test\_a\_vector\_checkpoint\_holds\_the\_block\_not\_the\_population](./engine/test_execution_checkpoint.py#L611)
 
 ```python
 def test_a_vector_checkpoint_holds_the_block_not_the_population(
@@ -12142,7 +12156,7 @@ Past the first generation the payload carries only the block.
 
 <a id="engine.test_execution_checkpoint.test_a_vector_checkpoint_taken_after_the_stop_finalizes"></a>
 
-#### [test\_a\_vector\_checkpoint\_taken\_after\_the\_stop\_finalizes](./engine/test_execution_checkpoint.py#L614)
+#### [test\_a\_vector\_checkpoint\_taken\_after\_the\_stop\_finalizes](./engine/test_execution_checkpoint.py#L627)
 
 ```python
 def test_a_vector_checkpoint_taken_after_the_stop_finalizes(
@@ -12153,7 +12167,7 @@ A vector run interrupted while finalizing restores stopped and finalizes.
 
 <a id="engine.test_execution_checkpoint.test_a_vector_block_under_another_backend_is_refused"></a>
 
-#### [test\_a\_vector\_block\_under\_another\_backend\_is\_refused](./engine/test_execution_checkpoint.py#L635)
+#### [test\_a\_vector\_block\_under\_another\_backend\_is\_refused](./engine/test_execution_checkpoint.py#L648)
 
 ```python
 def test_a_vector_block_under_another_backend_is_refused(
@@ -12164,7 +12178,7 @@ A payload naming a scalar backend cannot carry a dense block.
 
 <a id="engine.test_execution_checkpoint.test_a_version_1_scalar_payload_still_restores"></a>
 
-#### [test\_a\_version\_1\_scalar\_payload\_still\_restores](./engine/test_execution_checkpoint.py#L647)
+#### [test\_a\_version\_1\_scalar\_payload\_still\_restores](./engine/test_execution_checkpoint.py#L660)
 
 ```python
 def test_a_version_1_scalar_payload_still_restores(tmp_path: Path) -> None
@@ -40743,9 +40757,28 @@ def test_the_pure_python_kernels_produce_the_compiled_bytes() -> None
 
 Without numba the same code runs; its output must be identical.
 
+<a id="persistence.test_tlog_codec.test_the_plain_kernels_return_the_compiled_result_types"></a>
+
+#### [test\_the\_plain\_kernels\_return\_the\_compiled\_result\_types](./persistence/test_tlog_codec.py#L353)
+
+```python
+@pytest.mark.skipif(not codec.HAVE_NUMBA,
+                    reason="needs numba to compare against")
+def test_the_plain_kernels_return_the_compiled_result_types(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Without numba each kernel returns the built-in types numba returns.
+
+Numba boxes scalar results as `int`; plain Python returned the NumPy
+scalar the arithmetic produced (`numpy.int32` from `enc_delta`), which
+reached `LogPosition.rows` and made every checkpoint's JSON document
+unwritable on an install without numba. Value comparisons cannot see
+this; only the result types can.
+
 <a id="persistence.test_tlog_codec.test_the_codec_runs_without_numba"></a>
 
-#### [test\_the\_codec\_runs\_without\_numba](./persistence/test_tlog_codec.py#L352)
+#### [test\_the\_codec\_runs\_without\_numba](./persistence/test_tlog_codec.py#L418)
 
 ```python
 def test_the_codec_runs_without_numba() -> None
@@ -40755,7 +40788,9 @@ With numba absent the same code runs as plain Python and round-trips.
 
 A fresh interpreter hides numba (`sys.modules["numba"] = None` makes
 its import fail), so this proves the optional dependency really is
-optional for the module every default store uses.
+optional for the module every default store uses. Results must be
+built-in `int`s and a log position JSON-serializable: a NumPy scalar
+there once made every checkpoint fail without numba.
 
 <a id="persistence.test_tlog_export"></a>
 

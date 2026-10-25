@@ -349,12 +349,80 @@ def test_the_pure_python_kernels_produce_the_compiled_bytes() -> None:
     _same(state, nal, ids, fr)
 
 
+@pytest.mark.skipif(not codec.HAVE_NUMBA, reason="needs numba to compare against")
+def test_the_plain_kernels_return_the_compiled_result_types(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without numba each kernel returns the built-in types numba returns.
+
+    Numba boxes scalar results as `int`; plain Python returned the NumPy
+    scalar the arithmetic produced (`numpy.int32` from `enc_delta`), which
+    reached `LogPosition.rows` and made every checkpoint's JSON document
+    unwritable on an install without numba. Value comparisons cannot see
+    this; only the result types can.
+    """
+    monkeypatch.setattr(codec, "HAVE_NUMBA", False)
+
+    def plain(function: Any) -> Any:
+        """Return `function`'s pure-Python form exactly as `kernel` builds it."""
+        return codec.kernel(cast(Any, function).py_func)
+
+    rng = np.random.default_rng(34)
+    nal, ids, fr = _random_frame(rng, max_alleles=4)
+    pairs = len(nal)
+    size = len(ids) * 40 + 12 * pairs + 200
+
+    def delta_arguments() -> tuple[Any, ...]:
+        """Return fresh `enc_delta` arguments against an empty previous state."""
+        return (
+            np.zeros(size, np.uint8),
+            0,
+            1,
+            nal,
+            ids,
+            fr,
+            PAIRS_DEMES,
+            PAIRS_LOCI,
+            SIZES,
+            np.zeros(pairs, np.int32),
+            np.zeros((pairs, 16), np.int64),
+            np.zeros((pairs, 16), np.float64),
+            np.zeros(1),
+        )
+
+    encoded = np.zeros(size, np.uint8)
+    full_arguments = (encoded, 0, 1, nal, ids, fr, 3, 4, SIZES, np.zeros(1))
+    compiled_full = codec.enc_full(*full_arguments)
+    plain_full = plain(codec.enc_full)(np.zeros(size, np.uint8), *full_arguments[1:])
+    compiled_delta = codec.enc_delta(*delta_arguments())
+    plain_delta = plain(codec.enc_delta)(*delta_arguments())
+    decoded = []
+    for apply in (codec.apply_record, plain(codec.apply_record)):
+        state = codec.DecodedState(pairs)
+        decoded.append(
+            apply(encoded, 0, 3, 4, SIZES, state.pn, state.pid, state.pc, state.pf)
+        )
+
+    for compiled, plain_result in (
+        (compiled_full, plain_full),
+        (compiled_delta, plain_delta),
+        (decoded[0], decoded[1]),
+    ):
+        assert plain_result == compiled
+        assert [type(value) for value in plain_result] == [
+            type(value) for value in compiled
+        ]
+        assert all(type(value) is int for value in plain_result)
+
+
 def test_the_codec_runs_without_numba() -> None:
     """With numba absent the same code runs as plain Python and round-trips.
 
     A fresh interpreter hides numba (`sys.modules["numba"] = None` makes
     its import fail), so this proves the optional dependency really is
-    optional for the module every default store uses.
+    optional for the module every default store uses. Results must be
+    built-in `int`s and a log position JSON-serializable: a NumPy scalar
+    there once made every checkpoint fail without numba.
     """
     program = (
         "import sys\n"
@@ -373,10 +441,26 @@ def test_the_codec_runs_without_numba() -> None:
         "end, rows, kind, gen = c.apply_record(\n"
         "    out, 0, 2, 2, sizes, state.pn, state.pid, state.pc, state.pf)\n"
         "assert end == pos and rows == 7 and kind == 0 and gen == 5\n"
+        "assert all(type(v) is int for v in (pos, rows, end, kind, gen))\n"
         "counts, got_ids, got_fr = state.frame_arrays()\n"
         "assert counts.tolist() == nal.tolist()\n"
         "assert got_ids.tolist() == ids.tolist()\n"
         "assert got_fr.tobytes() == fr.tobytes()\n"
+        "import dataclasses, json, tempfile\n"
+        "from pathlib import Path\n"
+        "from fim.persistence.frame import FrameLayout, TrajectoryFrame\n"
+        "from fim.persistence.tlog import LogWriter\n"
+        "layout = FrameLayout(locus_ids=(1, 2), deme_sizes=(100, 50))\n"
+        "path = Path(tempfile.mkdtemp()) / 'x.tlog'\n"
+        "writer = LogWriter(path, 'run', layout, mode='sparse', key_every=4,\n"
+        "                   block_generations=2, background=False, sync='none')\n"
+        "for g in range(5):\n"
+        "    writer.submit(TrajectoryFrame(g, nal, ids, fr))\n"
+        "position = writer.checkpoint()\n"
+        "writer.close()\n"
+        "fields = dataclasses.asdict(position)\n"
+        "fields['header'] = fields['header'].hex()\n"
+        "json.dumps(fields, allow_nan=False)\n"
         "print('ok')\n"
     )
     result = subprocess.run(

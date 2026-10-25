@@ -1859,6 +1859,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Saved runs fail at their first checkpoint without `numba`.** On an
+  install without the optional `numba` dependency (including the Windows
+  ARM64 and Intel macOS builds), the trajectory log's plain-Python codec
+  returned a NumPy `int32` row count. It reached the checkpoint document,
+  which refused it ("checkpoint payload is not JSON-safe"), so a saved run
+  stopped with a run error and could not pause or resume. The plain codec
+  now returns the same built-in types as the compiled one. New tests compare
+  result types, not only values, and write a real checkpoint with `numba`
+  hidden, so the suite catches this even where `numba` is installed.
 - Desktop statistic tooltips, result messages, comparison summaries, and
   sweep/Explore readouts and chart labels use scientific subscripts and
   superscripts from the statistic catalog. Native statistic menus spell out
