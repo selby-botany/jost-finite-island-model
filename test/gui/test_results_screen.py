@@ -867,20 +867,25 @@ def test_completed_scatter_shows_the_marker_color_key_beneath_the_plot(
     assert "Other alleles" in settled["key"]
 
 
-def test_the_default_scatter_style_explains_its_count_colors(
+def test_the_color_badge_scatter_style_explains_its_count_colors(
     fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The default style (colour for count, origin badge) carries its own key.
+    """`color-badge` (colour for count, origin badge) carries its own key.
 
     Fixed-size marks coloured by how many alleles share the spot are only
     readable with a key, so the plot draws one: a swatch per step, from a
     single allele up to sixteen or more, replacing the "Other alleles"
-    line of the original circles.
+    line of the original circles. No longer the default style (`top-
+    allele` is), so this sets it explicitly before running.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
-        trigger=(_SET_TINY_FIELDS + "document.getElementById('run-button').click();"),
+        trigger=(
+            "window.fim.setScatterStyle('color-badge');"
+            + _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click();"
+        ),
         read=(
             "({"
             "runViewState: window.fim.getRunViewState(), "

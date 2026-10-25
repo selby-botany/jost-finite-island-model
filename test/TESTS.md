@@ -10262,7 +10262,7 @@ signal over one unrelated monomorphic locus).
 
 <a id="engine.test_engine.test_convergence_watches_the_same_d_and_g_st_report_for_state_uses"></a>
 
-#### [test\_convergence\_watches\_the\_same\_d\_and\_g\_st\_report\_for\_state\_uses](./engine/test_engine.py#L2115)
+#### [test\_convergence\_watches\_the\_same\_d\_and\_g\_st\_report\_for\_state\_uses](./engine/test_engine.py#L2117)
 
 ```python
 def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses(
@@ -10289,7 +10289,7 @@ either branch of `_watched_statistic_values` is caught.
 
 <a id="engine.test_engine.test_convergence_values_vectorized_watches_the_same_d_and_g_st"></a>
 
-#### [test\_convergence\_values\_vectorized\_watches\_the\_same\_d\_and\_g\_st](./engine/test_engine.py#L2155)
+#### [test\_convergence\_values\_vectorized\_watches\_the\_same\_d\_and\_g\_st](./engine/test_engine.py#L2157)
 
 ```python
 def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None
@@ -10305,7 +10305,7 @@ itself.
 
 <a id="engine.test_engine.test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched"></a>
 
-#### [test\_convergence\_values\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched](./engine/test_engine.py#L2184)
+#### [test\_convergence\_values\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched](./engine/test_engine.py#L2186)
 
 ```python
 def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
@@ -10326,7 +10326,7 @@ own stated default) matching this project's own established
 
 <a id="engine.test_engine.test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watched"></a>
 
-#### [test\_convergence\_values\_vectorized\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched](./engine/test_engine.py#L2234)
+#### [test\_convergence\_values\_vectorized\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched](./engine/test_engine.py#L2236)
 
 ```python
 def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watched(
@@ -10342,7 +10342,7 @@ work, not just the dict-based path.
 
 <a id="engine.test_engine.test_convergence_values_always_includes_the_always_tracked_four"></a>
 
-#### [test\_convergence\_values\_always\_includes\_the\_always\_tracked\_four](./engine/test_engine.py#L2280)
+#### [test\_convergence\_values\_always\_includes\_the\_always\_tracked\_four](./engine/test_engine.py#L2282)
 
 ```python
 def test_convergence_values_always_includes_the_always_tracked_four() -> None
@@ -10362,7 +10362,7 @@ statistic_values` directly.
 
 <a id="engine.test_engine.test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t"></a>
 
-#### [test\_convergence\_values\_vectorized\_always\_includes\_d\_g\_st\_h\_s\_h\_t](./engine/test_engine.py#L2309)
+#### [test\_convergence\_values\_vectorized\_always\_includes\_d\_g\_st\_h\_s\_h\_t](./engine/test_engine.py#L2311)
 
 ```python
 def test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t(
@@ -10373,7 +10373,7 @@ The array-native path returns the identical always-tracked superset.
 
 <a id="engine.test_engine.test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched"></a>
 
-#### [test\_track\_expensive\_statistics\_computes\_e\_st\_and\_k\_st\_even\_when\_unwatched](./engine/test_engine.py#L2328)
+#### [test\_track\_expensive\_statistics\_computes\_e\_st\_and\_k\_st\_even\_when\_unwatched](./engine/test_engine.py#L2330)
 
 ```python
 def test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched(
@@ -10391,7 +10391,7 @@ values`.
 
 <a id="engine.test_engine.test_track_expensive_statistics_vectorized_computes_e_st_and_k_st"></a>
 
-#### [test\_track\_expensive\_statistics\_vectorized\_computes\_e\_st\_and\_k\_st](./engine/test_engine.py#L2387)
+#### [test\_track\_expensive\_statistics\_vectorized\_computes\_e\_st\_and\_k\_st](./engine/test_engine.py#L2389)
 
 ```python
 def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
@@ -10402,7 +10402,7 @@ The array-native path gets the identical opt-in fix.
 
 <a id="engine.test_engine.test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched"></a>
 
-#### [test\_track\_expensive\_statistics\_computes\_a\_cgd\_delta\_mi\_even\_when\_unwatched](./engine/test_engine.py#L2439)
+#### [test\_track\_expensive\_statistics\_computes\_a\_cgd\_delta\_mi\_even\_when\_unwatched](./engine/test_engine.py#L2441)
 
 ```python
 def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
@@ -10424,7 +10424,7 @@ path from the watched one.
 
 <a id="engine.test_engine.test_run_result_convergence_histories_include_always_tracked_statistics"></a>
 
-#### [test\_run\_result\_convergence\_histories\_include\_always\_tracked\_statistics](./engine/test_engine.py#L2511)
+#### [test\_run\_result\_convergence\_histories\_include\_always\_tracked\_statistics](./engine/test_engine.py#L2513)
 
 ```python
 def test_run_result_convergence_histories_include_always_tracked_statistics(
@@ -10445,7 +10445,7 @@ account of a real, reported second instance of this same symptom).
 
 <a id="engine.test_engine.test_run_result_convergence_histories_include_e_st_k_st_when_opted_in"></a>
 
-#### [test\_run\_result\_convergence\_histories\_include\_e\_st\_k\_st\_when\_opted\_in](./engine/test_engine.py#L2547)
+#### [test\_run\_result\_convergence\_histories\_include\_e\_st\_k\_st\_when\_opted\_in](./engine/test_engine.py#L2549)
 
 ```python
 def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in(
@@ -10461,7 +10461,7 @@ same length as every other tracked statistic's own.
 
 <a id="engine.test_engine.test_locus_length_does_not_affect_the_report"></a>
 
-#### [test\_locus\_length\_does\_not\_affect\_the\_report](./engine/test_engine.py#L2590)
+#### [test\_locus\_length\_does\_not\_affect\_the\_report](./engine/test_engine.py#L2592)
 
 ```python
 def test_locus_length_does_not_affect_the_report() -> None
@@ -10477,7 +10477,7 @@ leave the report bit-for-bit unchanged.
 
 <a id="engine.test_engine.test_multi_locus_run_with_unequal_lengths_is_reproducible"></a>
 
-#### [test\_multi\_locus\_run\_with\_unequal\_lengths\_is\_reproducible](./engine/test_engine.py#L2628)
+#### [test\_multi\_locus\_run\_with\_unequal\_lengths\_is\_reproducible](./engine/test_engine.py#L2630)
 
 ```python
 def test_multi_locus_run_with_unequal_lengths_is_reproducible() -> None
@@ -10487,7 +10487,7 @@ A full run over loci with genuinely different lengths stays reproducible.
 
 <a id="engine.test_engine.test_stepping_stone_topology_run_is_reproducible"></a>
 
-#### [test\_stepping\_stone\_topology\_run\_is\_reproducible](./engine/test_engine.py#L2653)
+#### [test\_stepping\_stone\_topology\_run\_is\_reproducible](./engine/test_engine.py#L2655)
 
 ```python
 def test_stepping_stone_topology_run_is_reproducible() -> None
@@ -10502,7 +10502,7 @@ rather than the ``SimulationParams`` constructor directly.
 
 <a id="engine.test_engine.test_stochastic_migrant_sampling_run_is_reproducible"></a>
 
-#### [test\_stochastic\_migrant\_sampling\_run\_is\_reproducible](./engine/test_engine.py#L2686)
+#### [test\_stochastic\_migrant\_sampling\_run\_is\_reproducible](./engine/test_engine.py#L2688)
 
 ```python
 def test_stochastic_migrant_sampling_run_is_reproducible() -> None
@@ -10517,7 +10517,7 @@ drive the new binomial draws identically on every run.
 
 <a id="engine.test_engine.test_default_migrant_sampling_is_unaffected_by_the_stochastic_option"></a>
 
-#### [test\_default\_migrant\_sampling\_is\_unaffected\_by\_the\_stochastic\_option](./engine/test_engine.py#L2719)
+#### [test\_default\_migrant\_sampling\_is\_unaffected\_by\_the\_stochastic\_option](./engine/test_engine.py#L2721)
 
 ```python
 def test_default_migrant_sampling_is_unaffected_by_the_stochastic_option(
@@ -10533,7 +10533,7 @@ never handed an `rng` unless a config explicitly asks for it.
 
 <a id="engine.test_engine.test_finite_alleles_run_is_reproducible_and_bounds_capacity"></a>
 
-#### [test\_finite\_alleles\_run\_is\_reproducible\_and\_bounds\_capacity](./engine/test_engine.py#L2753)
+#### [test\_finite\_alleles\_run\_is\_reproducible\_and\_bounds\_capacity](./engine/test_engine.py#L2755)
 
 ```python
 def test_finite_alleles_run_is_reproducible_and_bounds_capacity() -> None
@@ -10548,7 +10548,7 @@ within `FiniteAlleleSpace`'s own unit tests.
 
 <a id="engine.test_engine.test_default_mutation_model_is_unaffected_by_the_finite_alleles_option"></a>
 
-#### [test\_default\_mutation\_model\_is\_unaffected\_by\_the\_finite\_alleles\_option](./engine/test_engine.py#L2787)
+#### [test\_default\_mutation\_model\_is\_unaffected\_by\_the\_finite\_alleles\_option](./engine/test_engine.py#L2789)
 
 ```python
 def test_default_mutation_model_is_unaffected_by_the_finite_alleles_option(
@@ -10565,7 +10565,7 @@ asks for it.
 
 <a id="engine.test_engine.test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu"></a>
 
-#### [test\_mu\_b\_run\_matches\_the\_equivalent\_explicit\_per\_locus\_mu](./engine/test_engine.py#L2822)
+#### [test\_mu\_b\_run\_matches\_the\_equivalent\_explicit\_per\_locus\_mu](./engine/test_engine.py#L2824)
 
 ```python
 def test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu() -> None
@@ -10581,7 +10581,7 @@ inspected, it is run.
 
 <a id="engine.test_engine.test_mu_b_combines_with_finite_alleles"></a>
 
-#### [test\_mu\_b\_combines\_with\_finite\_alleles](./engine/test_engine.py#L2859)
+#### [test\_mu\_b\_combines\_with\_finite\_alleles](./engine/test_engine.py#L2861)
 
 ```python
 def test_mu_b_combines_with_finite_alleles() -> None
@@ -10596,7 +10596,7 @@ that actually exercises them together end to end.
 
 <a id="engine.test_engine.test_generational_backend_matches_lineal_for_scalar_run"></a>
 
-#### [test\_generational\_backend\_matches\_lineal\_for\_scalar\_run](./engine/test_engine.py#L2906)
+#### [test\_generational\_backend\_matches\_lineal\_for\_scalar\_run](./engine/test_engine.py#L2908)
 
 ```python
 def test_generational_backend_matches_lineal_for_scalar_run(
@@ -10607,7 +10607,7 @@ def test_generational_backend_matches_lineal_for_scalar_run(
 
 <a id="engine.test_engine.test_generational_backend_matches_lineal_for_batch"></a>
 
-#### [test\_generational\_backend\_matches\_lineal\_for\_batch](./engine/test_engine.py#L2934)
+#### [test\_generational\_backend\_matches\_lineal\_for\_batch](./engine/test_engine.py#L2936)
 
 ```python
 def test_generational_backend_matches_lineal_for_batch(
@@ -10619,7 +10619,7 @@ in the same order, for a multi-replicate batch with no adaptive stop.
 
 <a id="engine.test_engine.test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal"></a>
 
-#### [test\_run\_batch\_cross\_replica\_stop\_fires\_at\_deterministic\_ordinal](./engine/test_engine.py#L2965)
+#### [test\_run\_batch\_cross\_replica\_stop\_fires\_at\_deterministic\_ordinal](./engine/test_engine.py#L2967)
 
 ```python
 def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None
@@ -10640,7 +10640,7 @@ never even reached.
 
 <a id="engine.test_engine._ReversedFinishAdvancer"></a>
 
-## [\_ReversedFinishAdvancer Objects](./engine/test_engine.py#L3013)
+## [\_ReversedFinishAdvancer Objects](./engine/test_engine.py#L3015)
 
 ```python
 class _ReversedFinishAdvancer()
@@ -10660,7 +10660,7 @@ found by searching seeds.
 
 <a id="engine.test_engine._ReversedFinishAdvancer.__init__"></a>
 
-#### [\_\_init\_\_](./engine/test_engine.py#L3027)
+#### [\_\_init\_\_](./engine/test_engine.py#L3029)
 
 ```python
 def __init__(inner: engine.Advancer, lane_count: int) -> None
@@ -10675,7 +10675,7 @@ Wrap `inner` for a batch of `lane_count` replicates.
 
 <a id="engine.test_engine._ReversedFinishAdvancer.advance"></a>
 
-#### [advance](./engine/test_engine.py#L3040)
+#### [advance](./engine/test_engine.py#L3042)
 
 ```python
 def advance(active_lanes: Sequence[ReplicaLane],
@@ -10686,7 +10686,7 @@ Step every lane through `inner`; report only released stops.
 
 <a id="engine.test_engine.test_generational_adaptive_batch_keeps_the_replicate_order_prefix"></a>
 
-#### [test\_generational\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix](./engine/test_engine.py#L3094)
+#### [test\_generational\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix](./engine/test_engine.py#L3096)
 
 ```python
 @pytest.mark.parametrize("window", [None, 8])
@@ -10707,7 +10707,7 @@ still keep exactly the replicates `LinealBackend` keeps, replicates
 
 <a id="engine.test_engine.test_generational_adaptive_batch_matches_lineal_under_real_timing"></a>
 
-#### [test\_generational\_adaptive\_batch\_matches\_lineal\_under\_real\_timing](./engine/test_engine.py#L3133)
+#### [test\_generational\_adaptive\_batch\_matches\_lineal\_under\_real\_timing](./engine/test_engine.py#L3135)
 
 ```python
 def test_generational_adaptive_batch_matches_lineal_under_real_timing(
@@ -10724,7 +10724,7 @@ through the public `simulate_params()` entry point.
 
 <a id="engine.test_engine.test_vector_adaptive_batch_keeps_the_replicate_order_prefix"></a>
 
-#### [test\_vector\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix](./engine/test_engine.py#L3174)
+#### [test\_vector\_adaptive\_batch\_keeps\_the\_replicate\_order\_prefix](./engine/test_engine.py#L3176)
 
 ```python
 def test_vector_adaptive_batch_keeps_the_replicate_order_prefix() -> None
@@ -10738,7 +10738,7 @@ replicate at a time and so admits them strictly in replicate order.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_matches_default"></a>
 
-#### [test\_fim\_engine\_backend\_generational\_matches\_default](./engine/test_engine.py#L3218)
+#### [test\_fim\_engine\_backend\_generational\_matches\_default](./engine/test_engine.py#L3221)
 
 ```python
 def test_fim_engine_backend_generational_matches_default(
@@ -10749,7 +10749,7 @@ def test_fim_engine_backend_generational_matches_default(
 
 <a id="engine.test_engine.test_fim_rejects_jit_on_lineal"></a>
 
-#### [test\_fim\_rejects\_jit\_on\_lineal](./engine/test_engine.py#L3259)
+#### [test\_fim\_rejects\_jit\_on\_lineal](./engine/test_engine.py#L3262)
 
 ```python
 def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None
@@ -10759,7 +10759,7 @@ def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None
 
 <a id="engine.test_engine.test_fim_rejects_max_workers_on_other_backends"></a>
 
-#### [test\_fim\_rejects\_max\_workers\_on\_other\_backends](./engine/test_engine.py#L3266)
+#### [test\_fim\_rejects\_max\_workers\_on\_other\_backends](./engine/test_engine.py#L3269)
 
 ```python
 def test_fim_rejects_max_workers_on_other_backends(
@@ -10777,7 +10777,7 @@ only `LinealBackend` ever builds
 
 <a id="engine.test_engine.test_fim_generational_vector_runs_infinite_alleles"></a>
 
-#### [test\_fim\_generational\_vector\_runs\_infinite\_alleles](./engine/test_engine.py#L3285)
+#### [test\_fim\_generational\_vector\_runs\_infinite\_alleles](./engine/test_engine.py#L3288)
 
 ```python
 def test_fim_generational_vector_runs_infinite_alleles(
@@ -10794,7 +10794,7 @@ enough here.
 
 <a id="engine.test_engine.test_params_and_engine_accept_stochastic_migrants_on_the_vector_backend"></a>
 
-#### [test\_params\_and\_engine\_accept\_stochastic\_migrants\_on\_the\_vector\_backend](./engine/test_engine.py#L3313)
+#### [test\_params\_and\_engine\_accept\_stochastic\_migrants\_on\_the\_vector\_backend](./engine/test_engine.py#L3316)
 
 ```python
 def test_params_and_engine_accept_stochastic_migrants_on_the_vector_backend(
@@ -10809,7 +10809,7 @@ is `test_vector_parity`'s job.)
 
 <a id="engine.test_engine.test_params_and_engine_reject_the_same_vector_jit_configuration"></a>
 
-#### [test\_params\_and\_engine\_reject\_the\_same\_vector\_jit\_configuration](./engine/test_engine.py#L3339)
+#### [test\_params\_and\_engine\_reject\_the\_same\_vector\_jit\_configuration](./engine/test_engine.py#L3342)
 
 ```python
 def test_params_and_engine_reject_the_same_vector_jit_configuration(
@@ -10822,7 +10822,7 @@ Config-time validation and `build_engine_backend` agree on `jit`.
 
 <a id="engine.test_engine.test_fim_generational_vector_runs_stochastic_migrant_sampling"></a>
 
-#### [test\_fim\_generational\_vector\_runs\_stochastic\_migrant\_sampling](./engine/test_engine.py#L3353)
+#### [test\_fim\_generational\_vector\_runs\_stochastic\_migrant\_sampling](./engine/test_engine.py#L3356)
 
 ```python
 def test_fim_generational_vector_runs_stochastic_migrant_sampling(
@@ -10833,7 +10833,7 @@ def test_fim_generational_vector_runs_stochastic_migrant_sampling(
 
 <a id="engine.test_engine.test_fim_generational_vector_rejects_jit"></a>
 
-#### [test\_fim\_generational\_vector\_rejects\_jit](./engine/test_engine.py#L3375)
+#### [test\_fim\_generational\_vector\_rejects\_jit](./engine/test_engine.py#L3378)
 
 ```python
 def test_fim_generational_vector_rejects_jit(
@@ -10848,7 +10848,7 @@ asks for `jit="numba"` explicitly gets an error, not a silent no-op.
 
 <a id="engine.test_engine.test_build_engine_backend_generational_vector_requires_numba"></a>
 
-#### [test\_build\_engine\_backend\_generational\_vector\_requires\_numba](./engine/test_engine.py#L3389)
+#### [test\_build\_engine\_backend\_generational\_vector\_requires\_numba](./engine/test_engine.py#L3392)
 
 ```python
 def test_build_engine_backend_generational_vector_requires_numba(
@@ -10869,7 +10869,7 @@ project's own multi-model engine review, 2026-09-04, `FIM-01`).
 
 <a id="engine.test_engine.test_build_engine_backend_auto_falls_back_to_generational_without_numba"></a>
 
-#### [test\_build\_engine\_backend\_auto\_falls\_back\_to\_generational\_without\_numba](./engine/test_engine.py#L3410)
+#### [test\_build\_engine\_backend\_auto\_falls\_back\_to\_generational\_without\_numba](./engine/test_engine.py#L3413)
 
 ```python
 @pytest.mark.parametrize("model", ["infinite_alleles", "finite_alleles"])
@@ -10885,9 +10885,26 @@ machine without numba is speed. An *explicit* `"generational-vector"`
 still raises (the test above), because the caller named a backend that
 cannot run.
 
+<a id="engine.test_engine.numba_reported_available"></a>
+
+#### [numba\_reported\_available](./engine/test_engine.py#L3433)
+
+```python
+@pytest.fixture
+def numba_reported_available(monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Make `build_engine_backend` see numba as installed, without importing it.
+
+Backend selection (the capacity ceilings and `"auto"`'s choice) does
+not depend on numba; only running Backend V does, and constructing a
+`VectorizedAdvancer` compiles nothing. Without this, every selection
+test that expects Backend V fails on an install without numba, where
+the availability check raises or falls back first.
+
 <a id="engine.test_engine.test_build_engine_backend_generational_vector_accepts_numba_present"></a>
 
-#### [test\_build\_engine\_backend\_generational\_vector\_accepts\_numba\_present](./engine/test_engine.py#L3429)
+#### [test\_build\_engine\_backend\_generational\_vector\_accepts\_numba\_present](./engine/test_engine.py#L3445)
 
 ```python
 def test_build_engine_backend_generational_vector_accepts_numba_present(
@@ -10908,9 +10925,10 @@ lower-level, params-less construction form.
 
 <a id="engine.test_engine.test_build_engine_backend_vector_rejects_oversized_capacity"></a>
 
-#### [test\_build\_engine\_backend\_vector\_rejects\_oversized\_capacity](./engine/test_engine.py#L3459)
+#### [test\_build\_engine\_backend\_vector\_rejects\_oversized\_capacity](./engine/test_engine.py#L3477)
 
 ```python
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_vector_rejects_oversized_capacity() -> None
 ```
 
@@ -10918,9 +10936,10 @@ Explicit finite-alleles selection gets the same capacity ceiling `"auto"` has.
 
 <a id="engine.test_engine.test_build_engine_backend_vector_respects_custom_capacity_ceiling"></a>
 
-#### [test\_build\_engine\_backend\_vector\_respects\_custom\_capacity\_ceiling](./engine/test_engine.py#L3470)
+#### [test\_build\_engine\_backend\_vector\_respects\_custom\_capacity\_ceiling](./engine/test_engine.py#L3489)
 
 ```python
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_vector_respects_custom_capacity_ceiling(
 ) -> None
 ```
@@ -10929,9 +10948,10 @@ The explicit-path ceiling is a real, configurable parameter, not a hidden one.
 
 <a id="engine.test_engine.test_build_engine_backend_vector_needs_every_locus_within_capacity"></a>
 
-#### [test\_build\_engine\_backend\_vector\_needs\_every\_locus\_within\_capacity](./engine/test_engine.py#L3482)
+#### [test\_build\_engine\_backend\_vector\_needs\_every\_locus\_within\_capacity](./engine/test_engine.py#L3502)
 
 ```python
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_vector_needs_every_locus_within_capacity(
 ) -> None
 ```
@@ -10940,7 +10960,7 @@ One oversized locus disqualifies explicit selection too, not just `"auto"`.
 
 <a id="engine.test_engine.test_build_engine_backend_rejects_unknown_choice"></a>
 
-#### [test\_build\_engine\_backend\_rejects\_unknown\_choice](./engine/test_engine.py#L3493)
+#### [test\_build\_engine\_backend\_rejects\_unknown\_choice](./engine/test_engine.py#L3513)
 
 ```python
 def test_build_engine_backend_rejects_unknown_choice() -> None
@@ -10950,7 +10970,7 @@ An unrecognized `engine_backend` is a `ValueError`, not silently ignored.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_requires_params"></a>
 
-#### [test\_build\_engine\_backend\_auto\_requires\_params](./engine/test_engine.py#L3508)
+#### [test\_build\_engine\_backend\_auto\_requires\_params](./engine/test_engine.py#L3528)
 
 ```python
 def test_build_engine_backend_auto_requires_params() -> None
@@ -10960,9 +10980,10 @@ def test_build_engine_backend_auto_requires_params() -> None
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_above_threshold"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_vector\_above\_threshold](./engine/test_engine.py#L3514)
+#### [test\_build\_engine\_backend\_auto\_picks\_vector\_above\_threshold](./engine/test_engine.py#L3535)
 
 ```python
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_auto_picks_vector_above_threshold() -> None
 ```
 
@@ -10970,7 +10991,7 @@ Above the cutover, on an eligible config, `"auto"` picks Backend V.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_below_threshold"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_generational\_below\_threshold](./engine/test_engine.py#L3522)
+#### [test\_build\_engine\_backend\_auto\_picks\_generational\_below\_threshold](./engine/test_engine.py#L3543)
 
 ```python
 def test_build_engine_backend_auto_picks_generational_below_threshold(
@@ -10981,7 +11002,7 @@ Below the cutover, `"auto"` picks Backend G, not Backend V.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_for_stochastic_migration"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_vector\_for\_stochastic\_migration](./engine/test_engine.py#L3530)
+#### [test\_build\_engine\_backend\_auto\_picks\_vector\_for\_stochastic\_migration](./engine/test_engine.py#L3551)
 
 ```python
 def test_build_engine_backend_auto_picks_vector_for_stochastic_migration(
@@ -10996,7 +11017,7 @@ migration.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_when_vector_ineligible"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_generational\_when\_vector\_ineligible](./engine/test_engine.py#L3544)
+#### [test\_build\_engine\_backend\_auto\_picks\_generational\_when\_vector\_ineligible](./engine/test_engine.py#L3565)
 
 ```python
 def test_build_engine_backend_auto_picks_generational_when_vector_ineligible(
@@ -11010,9 +11031,10 @@ so a caller who asked for it gets it rather than a `ValueError`.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_for_infinite_alleles"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_vector\_for\_infinite\_alleles](./engine/test_engine.py#L3560)
+#### [test\_build\_engine\_backend\_auto\_picks\_vector\_for\_infinite\_alleles](./engine/test_engine.py#L3582)
 
 ```python
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_auto_picks_vector_for_infinite_alleles() -> None
 ```
 
@@ -11024,9 +11046,10 @@ capacity ceiling does not apply, however small it is set.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_respects_custom_threshold"></a>
 
-#### [test\_build\_engine\_backend\_auto\_respects\_custom\_threshold](./engine/test_engine.py#L3578)
+#### [test\_build\_engine\_backend\_auto\_respects\_custom\_threshold](./engine/test_engine.py#L3601)
 
 ```python
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_auto_respects_custom_threshold() -> None
 ```
 
@@ -11034,7 +11057,7 @@ The cutover is a real, configurable parameter, not a hidden constant.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_honors_a_jit_request_with_generational"></a>
 
-#### [test\_build\_engine\_backend\_auto\_honors\_a\_jit\_request\_with\_generational](./engine/test_engine.py#L3586)
+#### [test\_build\_engine\_backend\_auto\_honors\_a\_jit\_request\_with\_generational](./engine/test_engine.py#L3609)
 
 ```python
 def test_build_engine_backend_auto_honors_a_jit_request_with_generational(
@@ -11050,7 +11073,7 @@ the same either way, so the request wins.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_above_capacity_ceiling"></a>
 
-#### [test\_build\_engine\_backend\_auto\_picks\_generational\_above\_capacity\_ceiling](./engine/test_engine.py#L3611)
+#### [test\_build\_engine\_backend\_auto\_picks\_generational\_above\_capacity\_ceiling](./engine/test_engine.py#L3634)
 
 ```python
 def test_build_engine_backend_auto_picks_generational_above_capacity_ceiling(
@@ -11067,9 +11090,10 @@ losing at.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_respects_custom_capacity_ceiling"></a>
 
-#### [test\_build\_engine\_backend\_auto\_respects\_custom\_capacity\_ceiling](./engine/test_engine.py#L3628)
+#### [test\_build\_engine\_backend\_auto\_respects\_custom\_capacity\_ceiling](./engine/test_engine.py#L3652)
 
 ```python
+@pytest.mark.usefixtures("numba_reported_available")
 def test_build_engine_backend_auto_respects_custom_capacity_ceiling() -> None
 ```
 
@@ -11077,7 +11101,7 @@ The capacity ceiling is a real, configurable parameter, not a hidden constant.
 
 <a id="engine.test_engine.test_build_engine_backend_auto_needs_every_locus_within_capacity"></a>
 
-#### [test\_build\_engine\_backend\_auto\_needs\_every\_locus\_within\_capacity](./engine/test_engine.py#L3639)
+#### [test\_build\_engine\_backend\_auto\_needs\_every\_locus\_within\_capacity](./engine/test_engine.py#L3663)
 
 ```python
 def test_build_engine_backend_auto_needs_every_locus_within_capacity() -> None
@@ -11094,7 +11118,7 @@ ceiling.
 
 <a id="engine.test_engine.test_fim_engine_backend_auto_runs_end_to_end"></a>
 
-#### [test\_fim\_engine\_backend\_auto\_runs\_end\_to\_end](./engine/test_engine.py#L3659)
+#### [test\_fim\_engine\_backend\_auto\_runs\_end\_to\_end](./engine/test_engine.py#L3683)
 
 ```python
 def test_fim_engine_backend_auto_runs_end_to_end(
@@ -11109,7 +11133,7 @@ the manifest says so.
 
 <a id="engine.test_engine.test_fim_engine_backend_auto_records_generational_without_numba"></a>
 
-#### [test\_fim\_engine\_backend\_auto\_records\_generational\_without\_numba](./engine/test_engine.py#L3678)
+#### [test\_fim\_engine\_backend\_auto\_records\_generational\_without\_numba](./engine/test_engine.py#L3702)
 
 ```python
 def test_fim_engine_backend_auto_records_generational_without_numba(
@@ -11124,7 +11148,7 @@ above, because Backend V and Backend G produce identical output.
 
 <a id="engine.test_engine.test_fim_engine_backend_auto_reaches_vector_end_to_end"></a>
 
-#### [test\_fim\_engine\_backend\_auto\_reaches\_vector\_end\_to\_end](./engine/test_engine.py#L3695)
+#### [test\_fim\_engine\_backend\_auto\_reaches\_vector\_end\_to\_end](./engine/test_engine.py#L3719)
 
 ```python
 def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None
@@ -11134,7 +11158,7 @@ def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None
 
 <a id="engine.test_engine.test_fim_records_the_explicit_engine_backend_in_the_manifest"></a>
 
-#### [test\_fim\_records\_the\_explicit\_engine\_backend\_in\_the\_manifest](./engine/test_engine.py#L3718)
+#### [test\_fim\_records\_the\_explicit\_engine\_backend\_in\_the\_manifest](./engine/test_engine.py#L3742)
 
 ```python
 def test_fim_records_the_explicit_engine_backend_in_the_manifest(
@@ -11145,7 +11169,7 @@ def test_fim_records_the_explicit_engine_backend_in_the_manifest(
 
 <a id="engine.test_engine.test_fim_default_lineal_records_engine_backend_in_the_manifest"></a>
 
-#### [test\_fim\_default\_lineal\_records\_engine\_backend\_in\_the\_manifest](./engine/test_engine.py#L3731)
+#### [test\_fim\_default\_lineal\_records\_engine\_backend\_in\_the\_manifest](./engine/test_engine.py#L3755)
 
 ```python
 def test_fim_default_lineal_records_engine_backend_in_the_manifest(
@@ -11156,7 +11180,7 @@ Even the untouched default (`"lineal"`) gets recorded, not left `None`.
 
 <a id="engine.test_engine.test_fim_records_equilibrium_split_provenance_in_the_manifest"></a>
 
-#### [test\_fim\_records\_equilibrium\_split\_provenance\_in\_the\_manifest](./engine/test_engine.py#L3743)
+#### [test\_fim\_records\_equilibrium\_split\_provenance\_in\_the\_manifest](./engine/test_engine.py#L3767)
 
 ```python
 def test_fim_records_equilibrium_split_provenance_in_the_manifest(
@@ -11174,7 +11198,7 @@ ancestral phase without a slow test.
 
 <a id="engine.test_engine.test_fim_records_equilibrium_split_provenance_under_the_generational_backend"></a>
 
-#### [test\_fim\_records\_equilibrium\_split\_provenance\_under\_the\_generational\_backend](./engine/test_engine.py#L3776)
+#### [test\_fim\_records\_equilibrium\_split\_provenance\_under\_the\_generational\_backend](./engine/test_engine.py#L3800)
 
 ```python
 def test_fim_records_equilibrium_split_provenance_under_the_generational_backend(
@@ -11188,7 +11212,7 @@ outcome` independently, so both need their own coverage.
 
 <a id="engine.test_engine.test_fim_streams_the_ancestral_phase_beside_the_trajectory"></a>
 
-#### [test\_fim\_streams\_the\_ancestral\_phase\_beside\_the\_trajectory](./engine/test_engine.py#L3814)
+#### [test\_fim\_streams\_the\_ancestral\_phase\_beside\_the\_trajectory](./engine/test_engine.py#L3838)
 
 ```python
 @pytest.mark.parametrize("backend", ["lineal", "generational"])
@@ -11207,7 +11231,7 @@ exactly the heterozygosity the manifest records for the split.
 
 <a id="engine.test_engine.test_fim_equilibrium_trajectory_is_identical_across_backends"></a>
 
-#### [test\_fim\_equilibrium\_trajectory\_is\_identical\_across\_backends](./engine/test_engine.py#L3854)
+#### [test\_fim\_equilibrium\_trajectory\_is\_identical\_across\_backends](./engine/test_engine.py#L3878)
 
 ```python
 def test_fim_equilibrium_trajectory_is_identical_across_backends(
@@ -11218,7 +11242,7 @@ The ancestral phase draws only from its own stream: same bytes either way.
 
 <a id="engine.test_engine.test_fim_keeps_an_in_memory_ancestral_trajectory_for_a_library_call"></a>
 
-#### [test\_fim\_keeps\_an\_in\_memory\_ancestral\_trajectory\_for\_a\_library\_call](./engine/test_engine.py#L3872)
+#### [test\_fim\_keeps\_an\_in\_memory\_ancestral\_trajectory\_for\_a\_library\_call](./engine/test_engine.py#L3896)
 
 ```python
 def test_fim_keeps_an_in_memory_ancestral_trajectory_for_a_library_call(
@@ -11229,7 +11253,7 @@ With no store given, the ancestral rows stay readable on the result.
 
 <a id="engine.test_engine.test_fim_dirichlet_run_writes_no_ancestral_trajectory"></a>
 
-#### [test\_fim\_dirichlet\_run\_writes\_no\_ancestral\_trajectory](./engine/test_engine.py#L3894)
+#### [test\_fim\_dirichlet\_run\_writes\_no\_ancestral\_trajectory](./engine/test_engine.py#L3918)
 
 ```python
 def test_fim_dirichlet_run_writes_no_ancestral_trajectory(
@@ -11240,7 +11264,7 @@ Every other initial condition has no ancestral phase and no file.
 
 <a id="engine.test_engine.test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none"></a>
 
-#### [test\_fim\_dirichlet\_run\_leaves\_equilibrium\_manifest\_fields\_none](./engine/test_engine.py#L3909)
+#### [test\_fim\_dirichlet\_run\_leaves\_equilibrium\_manifest\_fields\_none](./engine/test_engine.py#L3933)
 
 ```python
 def test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none(
@@ -11251,7 +11275,7 @@ An ordinary Dirichlet-prior run never populates the equilibrium-only fields.
 
 <a id="engine.test_engine.test_fim_auto_records_the_resolved_choice_not_the_literal_auto"></a>
 
-#### [test\_fim\_auto\_records\_the\_resolved\_choice\_not\_the\_literal\_auto](./engine/test_engine.py#L3924)
+#### [test\_fim\_auto\_records\_the\_resolved\_choice\_not\_the\_literal\_auto](./engine/test_engine.py#L3948)
 
 ```python
 def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None
@@ -11265,7 +11289,7 @@ both ends of the threshold, on one config.
 
 <a id="engine.test_engine.test_fim_records_jit_in_the_manifest"></a>
 
-#### [test\_fim\_records\_jit\_in\_the\_manifest](./engine/test_engine.py#L3949)
+#### [test\_fim\_records\_jit\_in\_the\_manifest](./engine/test_engine.py#L3973)
 
 ```python
 def test_fim_records_jit_in_the_manifest(
@@ -11276,7 +11300,7 @@ def test_fim_records_jit_in_the_manifest(
 
 <a id="engine.test_engine.test_fim_records_engine_backend_for_every_replicate_in_a_batch"></a>
 
-#### [test\_fim\_records\_engine\_backend\_for\_every\_replicate\_in\_a\_batch](./engine/test_engine.py#L3960)
+#### [test\_fim\_records\_engine\_backend\_for\_every\_replicate\_in\_a\_batch](./engine/test_engine.py#L3984)
 
 ```python
 def test_fim_records_engine_backend_for_every_replicate_in_a_batch(
@@ -11287,7 +11311,7 @@ A multi-replicate batch stamps every replicate's own manifest, not just one.
 
 <a id="engine.test_engine.test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_run"></a>
 
-#### [test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_scalar\_run](./engine/test_engine.py#L3981)
+#### [test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_scalar\_run](./engine/test_engine.py#L4005)
 
 ```python
 def test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_run(
@@ -11298,7 +11322,7 @@ def test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_r
 
 <a id="engine.test_engine.test_generational_backend_with_threaded_advancer_matches_lineal_for_batch"></a>
 
-#### [test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_batch](./engine/test_engine.py#L4002)
+#### [test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_batch](./engine/test_engine.py#L4026)
 
 ```python
 def test_generational_backend_with_threaded_advancer_matches_lineal_for_batch(
@@ -11314,7 +11338,7 @@ sequential case a smaller batch could pass by accident.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_uses_threaded_advancer"></a>
 
-#### [test\_fim\_engine\_backend\_generational\_uses\_threaded\_advancer](./engine/test_engine.py#L4036)
+#### [test\_fim\_engine\_backend\_generational\_uses\_threaded\_advancer](./engine/test_engine.py#L4060)
 
 ```python
 def test_fim_engine_backend_generational_uses_threaded_advancer(
@@ -11327,7 +11351,7 @@ entry point, not just `GenerationalBackend` constructed directly.
 
 <a id="engine.test_engine.test_threaded_advancer_rejects_non_positive_max_workers"></a>
 
-#### [test\_threaded\_advancer\_rejects\_non\_positive\_max\_workers](./engine/test_engine.py#L4051)
+#### [test\_threaded\_advancer\_rejects\_non\_positive\_max\_workers](./engine/test_engine.py#L4075)
 
 ```python
 def test_threaded_advancer_rejects_non_positive_max_workers() -> None
@@ -11337,7 +11361,7 @@ def test_threaded_advancer_rejects_non_positive_max_workers() -> None
 
 <a id="engine.test_engine.test_threaded_advancer_reuses_its_own_executor_across_ticks"></a>
 
-#### [test\_threaded\_advancer\_reuses\_its\_own\_executor\_across\_ticks](./engine/test_engine.py#L4057)
+#### [test\_threaded\_advancer\_reuses\_its\_own\_executor\_across\_ticks](./engine/test_engine.py#L4081)
 
 ```python
 def test_threaded_advancer_reuses_its_own_executor_across_ticks(
@@ -11359,7 +11383,7 @@ tick, by identity.
 
 <a id="engine.test_engine.test_generational_backend_with_jit_matches_lineal_bit_for_bit"></a>
 
-#### [test\_generational\_backend\_with\_jit\_matches\_lineal\_bit\_for\_bit](./engine/test_engine.py#L4111)
+#### [test\_generational\_backend\_with\_jit\_matches\_lineal\_bit\_for\_bit](./engine/test_engine.py#L4135)
 
 ```python
 def test_generational_backend_with_jit_matches_lineal_bit_for_bit(
@@ -11370,7 +11394,7 @@ def test_generational_backend_with_jit_matches_lineal_bit_for_bit(
 
 <a id="engine.test_engine.test_generational_backend_with_sequential_advancer_jit_matches_lineal_for_batch"></a>
 
-#### [test\_generational\_backend\_with\_sequential\_advancer\_jit\_matches\_lineal\_for\_batch](./engine/test_engine.py#L4149)
+#### [test\_generational\_backend\_with\_sequential\_advancer\_jit\_matches\_lineal\_for\_batch](./engine/test_engine.py#L4173)
 
 ```python
 def test_generational_backend_with_sequential_advancer_jit_matches_lineal_for_batch(
@@ -11388,7 +11412,7 @@ just `SequentialAdvancer.advance`'s own single-lane path.
 
 <a id="engine.test_engine.test_sequential_advancer_jit_matches_lineal_under_finite_alleles"></a>
 
-#### [test\_sequential\_advancer\_jit\_matches\_lineal\_under\_finite\_alleles](./engine/test_engine.py#L4185)
+#### [test\_sequential\_advancer\_jit\_matches\_lineal\_under\_finite\_alleles](./engine/test_engine.py#L4209)
 
 ```python
 def test_sequential_advancer_jit_matches_lineal_under_finite_alleles(
@@ -11412,7 +11436,7 @@ tests.
 
 <a id="engine.test_engine.test_sequential_advancer_jit_matches_lineal_under_stochastic_migration"></a>
 
-#### [test\_sequential\_advancer\_jit\_matches\_lineal\_under\_stochastic\_migration](./engine/test_engine.py#L4233)
+#### [test\_sequential\_advancer\_jit\_matches\_lineal\_under\_stochastic\_migration](./engine/test_engine.py#L4257)
 
 ```python
 def test_sequential_advancer_jit_matches_lineal_under_stochastic_migration(
@@ -11430,7 +11454,7 @@ together, only ever one operator's own ineligibility at a time.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_with_jit_matches_default"></a>
 
-#### [test\_fim\_engine\_backend\_generational\_with\_jit\_matches\_default](./engine/test_engine.py#L4276)
+#### [test\_fim\_engine\_backend\_generational\_with\_jit\_matches\_default](./engine/test_engine.py#L4300)
 
 ```python
 def test_fim_engine_backend_generational_with_jit_matches_default(
@@ -11441,7 +11465,7 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
 
 <a id="engine.test_engine.test_generational_vector_backend_matches_scope_of_lineal_reproducibility"></a>
 
-#### [test\_generational\_vector\_backend\_matches\_scope\_of\_lineal\_reproducibility](./engine/test_engine.py#L4331)
+#### [test\_generational\_vector\_backend\_matches\_scope\_of\_lineal\_reproducibility](./engine/test_engine.py#L4355)
 
 ```python
 def test_generational_vector_backend_matches_scope_of_lineal_reproducibility(
@@ -11456,7 +11480,7 @@ trajectory both times — determinism, not bit-identity to
 
 <a id="engine.test_engine.test_generational_vector_backend_bounds_capacity_and_stays_valid"></a>
 
-#### [test\_generational\_vector\_backend\_bounds\_capacity\_and\_stays\_valid](./engine/test_engine.py#L4360)
+#### [test\_generational\_vector\_backend\_bounds\_capacity\_and\_stays\_valid](./engine/test_engine.py#L4384)
 
 ```python
 def test_generational_vector_backend_bounds_capacity_and_stays_valid() -> None
@@ -11473,7 +11497,7 @@ lineal tests above already run).
 
 <a id="engine.test_engine.test_generational_vector_backend_batch_is_independently_reproducible"></a>
 
-#### [test\_generational\_vector\_backend\_batch\_is\_independently\_reproducible](./engine/test_engine.py#L4386)
+#### [test\_generational\_vector\_backend\_batch\_is\_independently\_reproducible](./engine/test_engine.py#L4410)
 
 ```python
 def test_generational_vector_backend_batch_is_independently_reproducible(
@@ -11495,7 +11519,7 @@ full multi-generation run *is* checked bit-for-bit.
 
 <a id="engine.test_engine.test_finalize_replica_lane_releases_vectorized_state"></a>
 
-#### [test\_finalize\_replica\_lane\_releases\_vectorized\_state](./engine/test_engine.py#L4422)
+#### [test\_finalize\_replica\_lane\_releases\_vectorized\_state](./engine/test_engine.py#L4446)
 
 ```python
 def test_finalize_replica_lane_releases_vectorized_state(
@@ -11515,7 +11539,7 @@ pass on a lane that never populated it in the first place.
 
 <a id="engine.test_engine.test_generational_vector_backend_windowed_batch_matches_unbounded"></a>
 
-#### [test\_generational\_vector\_backend\_windowed\_batch\_matches\_unbounded](./engine/test_engine.py#L4459)
+#### [test\_generational\_vector\_backend\_windowed\_batch\_matches\_unbounded](./engine/test_engine.py#L4483)
 
 ```python
 def test_generational_vector_backend_windowed_batch_matches_unbounded(
@@ -11536,7 +11560,7 @@ differing `max_concurrent_replicates` changing it is expected.
 
 <a id="engine.test_engine.test_generational_vector_backend_matches_lineal_exactly_without_migration"></a>
 
-#### [test\_generational\_vector\_backend\_matches\_lineal\_exactly\_without\_migration](./engine/test_engine.py#L4494)
+#### [test\_generational\_vector\_backend\_matches\_lineal\_exactly\_without\_migration](./engine/test_engine.py#L4518)
 
 ```python
 def test_generational_vector_backend_matches_lineal_exactly_without_migration(
@@ -11557,7 +11581,7 @@ carries the bookkeeping forward instead.
 
 <a id="engine.test_engine.test_vectorized_advancer_builds_a_lanes_state_only_once_each_way"></a>
 
-#### [test\_vectorized\_advancer\_builds\_a\_lanes\_state\_only\_once\_each\_way](./engine/test_engine.py#L4527)
+#### [test\_vectorized\_advancer\_builds\_a\_lanes\_state\_only\_once\_each\_way](./engine/test_engine.py#L4551)
 
 ```python
 def test_vectorized_advancer_builds_a_lanes_state_only_once_each_way(
@@ -11587,7 +11611,7 @@ counted call above.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_vector_runs_end_to_end"></a>
 
-#### [test\_fim\_engine\_backend\_generational\_vector\_runs\_end\_to\_end](./engine/test_engine.py#L4598)
+#### [test\_fim\_engine\_backend\_generational\_vector\_runs\_end\_to\_end](./engine/test_engine.py#L4622)
 
 ```python
 def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None
@@ -11597,7 +11621,7 @@ def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None
 
 <a id="engine.test_engine.test_vectorized_advancer_builds_a_migration_plan_once_per_lane"></a>
 
-#### [test\_vectorized\_advancer\_builds\_a\_migration\_plan\_once\_per\_lane](./engine/test_engine.py#L4611)
+#### [test\_vectorized\_advancer\_builds\_a\_migration\_plan\_once\_per\_lane](./engine/test_engine.py#L4635)
 
 ```python
 def test_vectorized_advancer_builds_a_migration_plan_once_per_lane() -> None
@@ -11615,7 +11639,7 @@ calls.
 
 <a id="engine.test_engine.test_vectorized_advancer_builds_no_matrix_for_a_scalar_rate"></a>
 
-#### [test\_vectorized\_advancer\_builds\_no\_matrix\_for\_a\_scalar\_rate](./engine/test_engine.py#L4641)
+#### [test\_vectorized\_advancer\_builds\_no\_matrix\_for\_a\_scalar\_rate](./engine/test_engine.py#L4665)
 
 ```python
 def test_vectorized_advancer_builds_no_matrix_for_a_scalar_rate() -> None
@@ -11630,7 +11654,7 @@ the first tick.
 
 <a id="engine.test_engine.test_every_engine_backend_visits_the_same_generations_and_output_shape"></a>
 
-#### [test\_every\_engine\_backend\_visits\_the\_same\_generations\_and\_output\_shape](./engine/test_engine.py#L4702)
+#### [test\_every\_engine\_backend\_visits\_the\_same\_generations\_and\_output\_shape](./engine/test_engine.py#L4726)
 
 ```python
 def test_every_engine_backend_visits_the_same_generations_and_output_shape(
@@ -11679,7 +11703,7 @@ run.
 
 <a id="engine.test_engine.test_the_report_carries_both_expected_value_forms_for_d_and_g_st"></a>
 
-#### [test\_the\_report\_carries\_both\_expected\_value\_forms\_for\_d\_and\_g\_st](./engine/test_engine.py#L4822)
+#### [test\_the\_report\_carries\_both\_expected\_value\_forms\_for\_d\_and\_g\_st](./engine/test_engine.py#L4846)
 
 ```python
 def test_the_report_carries_both_expected_value_forms_for_d_and_g_st(
@@ -11690,7 +11714,7 @@ $D$ and $G_{ST}$ report both forms; a non-identity statistic reports one.
 
 <a id="engine.test_engine.test_value_of_means_selection_changes_the_headline_not_the_other_form"></a>
 
-#### [test\_value\_of\_means\_selection\_changes\_the\_headline\_not\_the\_other\_form](./engine/test_engine.py#L4839)
+#### [test\_value\_of\_means\_selection\_changes\_the\_headline\_not\_the\_other\_form](./engine/test_engine.py#L4863)
 
 ```python
 def test_value_of_means_selection_changes_the_headline_not_the_other_form(
@@ -11701,7 +11725,7 @@ The setting picks the headline; both forms stay in the report.
 
 <a id="engine.test_engine.test_every_statistic_reports_the_one_shared_evidence_window"></a>
 
-#### [test\_every\_statistic\_reports\_the\_one\_shared\_evidence\_window](./engine/test_engine.py#L4853)
+#### [test\_every\_statistic\_reports\_the\_one\_shared\_evidence\_window](./engine/test_engine.py#L4877)
 
 ```python
 def test_every_statistic_reports_the_one_shared_evidence_window(
@@ -11712,7 +11736,7 @@ All entries share a window, the burn-in, the targets, and a finite `z`.
 
 <a id="engine.test_engine.test_a_short_run_reports_no_geweke_z"></a>
 
-#### [test\_a\_short\_run\_reports\_no\_geweke\_z](./engine/test_engine.py#L4881)
+#### [test\_a\_short\_run\_reports\_no\_geweke\_z](./engine/test_engine.py#L4905)
 
 ```python
 def test_a_short_run_reports_no_geweke_z(
@@ -11723,7 +11747,7 @@ A window too short for two segments has no start-against-end diagnostic.
 
 <a id="engine.test_engine.test_a_batch_matches_each_replicates_window_to_the_first_wave"></a>
 
-#### [test\_a\_batch\_matches\_each\_replicates\_window\_to\_the\_first\_wave](./engine/test_engine.py#L4901)
+#### [test\_a\_batch\_matches\_each\_replicates\_window\_to\_the\_first\_wave](./engine/test_engine.py#L4925)
 
 ```python
 def test_a_batch_matches_each_replicates_window_to_the_first_wave() -> None
@@ -11733,7 +11757,7 @@ The first wave averages for the guess; the rest for the matched window.
 
 <a id="engine.test_engine.test_every_backend_gives_the_same_matched_batch"></a>
 
-#### [test\_every\_backend\_gives\_the\_same\_matched\_batch](./engine/test_engine.py#L4923)
+#### [test\_every\_backend\_gives\_the\_same\_matched\_batch](./engine/test_engine.py#L4947)
 
 ```python
 def test_every_backend_gives_the_same_matched_batch() -> None
@@ -11743,7 +11767,7 @@ Windows come from the configuration, so no backend can change them.
 
 <a id="engine.test_engine.test_a_limit_on_concurrent_replicates_is_the_first_wave_too"></a>
 
-#### [test\_a\_limit\_on\_concurrent\_replicates\_is\_the\_first\_wave\_too](./engine/test_engine.py#L4947)
+#### [test\_a\_limit\_on\_concurrent\_replicates\_is\_the\_first\_wave\_too](./engine/test_engine.py#L4971)
 
 ```python
 def test_a_limit_on_concurrent_replicates_is_the_first_wave_too() -> None
@@ -11753,7 +11777,7 @@ def test_a_limit_on_concurrent_replicates_is_the_first_wave_too() -> None
 
 <a id="engine.test_engine.test_the_parallel_worker_path_matches_the_sequential_batch"></a>
 
-#### [test\_the\_parallel\_worker\_path\_matches\_the\_sequential\_batch](./engine/test_engine.py#L4961)
+#### [test\_the\_parallel\_worker\_path\_matches\_the\_sequential\_batch](./engine/test_engine.py#L4985)
 
 ```python
 def test_the_parallel_worker_path_matches_the_sequential_batch() -> None
@@ -11763,7 +11787,7 @@ Worker processes get the same windows, in waves, as the sequential loop.
 
 <a id="engine.test_engine.test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run"></a>
 
-#### [test\_a\_fixed\_window\_is\_the\_same\_for\_every\_replicate\_and\_for\_a\_single\_run](./engine/test_engine.py#L4973)
+#### [test\_a\_fixed\_window\_is\_the\_same\_for\_every\_replicate\_and\_for\_a\_single\_run](./engine/test_engine.py#L4997)
 
 ```python
 def test_a_fixed_window_is_the_same_for_every_replicate_and_for_a_single_run(
@@ -11774,7 +11798,7 @@ An explicit window is a fixed-window run, alone or in a batch.
 
 <a id="engine.test_engine.test_a_batch_summary_is_the_mean_of_the_replicates_window_means"></a>
 
-#### [test\_a\_batch\_summary\_is\_the\_mean\_of\_the\_replicates\_window\_means](./engine/test_engine.py#L4990)
+#### [test\_a\_batch\_summary\_is\_the\_mean\_of\_the\_replicates\_window\_means](./engine/test_engine.py#L5014)
 
 ```python
 def test_a_batch_summary_is_the_mean_of_the_replicates_window_means() -> None
@@ -11784,7 +11808,7 @@ Each replicate contributes what it measured over its window.
 
 <a id="engine.test_engine.test_a_value_of_means_batch_pools_the_identities_before_the_statistic"></a>
 
-#### [test\_a\_value\_of\_means\_batch\_pools\_the\_identities\_before\_the\_statistic](./engine/test_engine.py#L5004)
+#### [test\_a\_value\_of\_means\_batch\_pools\_the\_identities\_before\_the\_statistic](./engine/test_engine.py#L5028)
 
 ```python
 def test_a_value_of_means_batch_pools_the_identities_before_the_statistic(
@@ -11795,7 +11819,7 @@ Form two for a batch: `f` of the pooled $H_S$ / $H_T$, delta-method interval.
 
 <a id="engine.test_engine.test_planned_replicates_runs_every_replicate_without_an_early_stop"></a>
 
-#### [test\_planned\_replicates\_runs\_every\_replicate\_without\_an\_early\_stop](./engine/test_engine.py#L5023)
+#### [test\_planned\_replicates\_runs\_every\_replicate\_without\_an\_early\_stop](./engine/test_engine.py#L5047)
 
 ```python
 def test_planned_replicates_runs_every_replicate_without_an_early_stop(
@@ -11806,7 +11830,7 @@ def test_planned_replicates_runs_every_replicate_without_an_early_stop(
 
 <a id="engine.test_engine.test_a_replicate_with_no_burn_in_keeps_the_within_run_rule"></a>
 
-#### [test\_a\_replicate\_with\_no\_burn\_in\_keeps\_the\_within\_run\_rule](./engine/test_engine.py#L5035)
+#### [test\_a\_replicate\_with\_no\_burn\_in\_keeps\_the\_within\_run\_rule](./engine/test_engine.py#L5059)
 
 ```python
 def test_a_replicate_with_no_burn_in_keeps_the_within_run_rule() -> None
@@ -11816,7 +11840,7 @@ With no relaxation time the fractional burn-in leaves no window to match.
 
 <a id="engine.test_engine.test_a_capped_run_reports_how_long_it_would_have_needed"></a>
 
-#### [test\_a\_capped\_run\_reports\_how\_long\_it\_would\_have\_needed](./engine/test_engine.py#L5057)
+#### [test\_a\_capped\_run\_reports\_how\_long\_it\_would\_have\_needed](./engine/test_engine.py#L5081)
 
 ```python
 def test_a_capped_run_reports_how_long_it_would_have_needed(
@@ -11827,7 +11851,7 @@ A run that hits the cap records `projected_generations` per statistic.
 
 <a id="engine.test_engine.test_a_run_that_converged_reports_no_projection"></a>
 
-#### [test\_a\_run\_that\_converged\_reports\_no\_projection](./engine/test_engine.py#L5072)
+#### [test\_a\_run\_that\_converged\_reports\_no\_projection](./engine/test_engine.py#L5096)
 
 ```python
 def test_a_run_that_converged_reports_no_projection(
@@ -11838,7 +11862,7 @@ Only a capped run has a projection.
 
 <a id="engine.test_engine.test_a_run_can_watch_any_global_statistic_and_records_its_history"></a>
 
-#### [test\_a\_run\_can\_watch\_any\_global\_statistic\_and\_records\_its\_history](./engine/test_engine.py#L5097)
+#### [test\_a\_run\_can\_watch\_any\_global\_statistic\_and\_records\_its\_history](./engine/test_engine.py#L5121)
 
 ```python
 @pytest.mark.parametrize("statistic", [*_POOLED_WATCHED, *_NEI_WATCHED])
@@ -11850,7 +11874,7 @@ The watched statistic's per-generation history ends at its report value.
 
 <a id="engine.test_engine.test_watched_extra_statistics_agree_across_backends"></a>
 
-#### [test\_watched\_extra\_statistics\_agree\_across\_backends](./engine/test_engine.py#L5120)
+#### [test\_watched\_extra\_statistics\_agree\_across\_backends](./engine/test_engine.py#L5144)
 
 ```python
 @pytest.mark.parametrize("backend", ["generational", "generational-vector"])
@@ -11862,7 +11886,7 @@ $G_s$, $D_m$ and a Nei identity have the same history under every kernel.
 
 <a id="engine.test_engine.test_a_statistic_precision_override_reaches_the_monitor"></a>
 
-#### [test\_a\_statistic\_precision\_override\_reaches\_the\_monitor](./engine/test_engine.py#L5145)
+#### [test\_a\_statistic\_precision\_override\_reaches\_the\_monitor](./engine/test_engine.py#L5169)
 
 ```python
 def test_a_statistic_precision_override_reaches_the_monitor(
@@ -11873,7 +11897,7 @@ A loose override lets a run stop where the run precision never would.
 
 <a id="engine.test_engine.test_the_unbounded_statistic_uses_a_relative_target"></a>
 
-#### [test\_the\_unbounded\_statistic\_uses\_a\_relative\_target](./engine/test_engine.py#L5164)
+#### [test\_the\_unbounded\_statistic\_uses\_a\_relative\_target](./engine/test_engine.py#L5188)
 
 ```python
 def test_the_unbounded_statistic_uses_a_relative_target(
@@ -11884,7 +11908,7 @@ def test_the_unbounded_statistic_uses_a_relative_target(
 
 <a id="engine.test_engine.test_a_thinned_run_writes_the_kept_generations_only"></a>
 
-#### [test\_a\_thinned\_run\_writes\_the\_kept\_generations\_only](./engine/test_engine.py#L5201)
+#### [test\_a\_thinned\_run\_writes\_the\_kept\_generations\_only](./engine/test_engine.py#L5225)
 
 ```python
 def test_a_thinned_run_writes_the_kept_generations_only() -> None
@@ -11894,7 +11918,7 @@ Generation 0, the head, every 5th from 8, the burn-in, and the final one.
 
 <a id="engine.test_engine.test_thinning_changes_no_statistic_and_no_final_state"></a>
 
-#### [test\_thinning\_changes\_no\_statistic\_and\_no\_final\_state](./engine/test_engine.py#L5210)
+#### [test\_thinning\_changes\_no\_statistic\_and\_no\_final\_state](./engine/test_engine.py#L5234)
 
 ```python
 def test_thinning_changes_no_statistic_and_no_final_state() -> None
@@ -11904,7 +11928,7 @@ Same seed, same report and final state, whether or not frames are skipped.
 
 <a id="engine.test_engine.test_every_backend_thins_to_the_same_generations"></a>
 
-#### [test\_every\_backend\_thins\_to\_the\_same\_generations](./engine/test_engine.py#L5223)
+#### [test\_every\_backend\_thins\_to\_the\_same\_generations](./engine/test_engine.py#L5247)
 
 ```python
 @pytest.mark.parametrize("backend", ["generational", "generational-vector"])
@@ -11916,7 +11940,7 @@ Lanes of the generation-first drivers keep the same frames as a lineal run.
 
 <a id="engine.test_engine.test_a_batch_replicate_stops_on_a_generation_thinning_would_skip"></a>
 
-#### [test\_a\_batch\_replicate\_stops\_on\_a\_generation\_thinning\_would\_skip](./engine/test_engine.py#L5237)
+#### [test\_a\_batch\_replicate\_stops\_on\_a\_generation\_thinning\_would\_skip](./engine/test_engine.py#L5261)
 
 ```python
 def test_a_batch_replicate_stops_on_a_generation_thinning_would_skip() -> None
@@ -12621,7 +12645,7 @@ log holds that generation's row.
 
 <a id="engine.test_replicate_final_state_report.test_every_replicate_reports_the_generation_it_stopped_at"></a>
 
-#### [test\_every\_replicate\_reports\_the\_generation\_it\_stopped\_at](./engine/test_replicate_final_state_report.py#L65)
+#### [test\_every\_replicate\_reports\_the\_generation\_it\_stopped\_at](./engine/test_replicate_final_state_report.py#L73)
 
 ```python
 @pytest.mark.parametrize(
@@ -12629,7 +12653,8 @@ log holds that generation's row.
     [
         LinealBackend,
         lambda: GenerationalBackend(SequentialAdvancer()),
-        lambda: GenerationalBackend(VectorizedAdvancer()),
+        pytest.param(lambda: GenerationalBackend(VectorizedAdvancer()),
+                     marks=NEEDS_NUMBA),
     ],
     ids=["lineal", "generational", "generational-vector"],
 )
@@ -12642,9 +12667,10 @@ Report, state and manifest agree on the stopping generation.
 
 <a id="engine.test_replicate_final_state_report.test_vectorized_batch_is_identical_to_the_lineal_batch"></a>
 
-#### [test\_vectorized\_batch\_is\_identical\_to\_the\_lineal\_batch](./engine/test_replicate_final_state_report.py#L79)
+#### [test\_vectorized\_batch\_is\_identical\_to\_the\_lineal\_batch](./engine/test_replicate_final_state_report.py#L88)
 
 ```python
+@NEEDS_NUMBA
 def test_vectorized_batch_is_identical_to_the_lineal_batch() -> None
 ```
 
@@ -12652,10 +12678,22 @@ Final states and reports match the lineal batch replicate for replicate.
 
 <a id="engine.test_replicate_final_state_report.test_vectorized_trajectory_ends_at_the_stopping_generation"></a>
 
-#### [test\_vectorized\_trajectory\_ends\_at\_the\_stopping\_generation](./engine/test_replicate_final_state_report.py#L88)
+#### [test\_vectorized\_trajectory\_ends\_at\_the\_stopping\_generation](./engine/test_replicate_final_state_report.py#L108)
 
 ```python
-def test_vectorized_trajectory_ends_at_the_stopping_generation() -> None
+@pytest.mark.parametrize(
+    "backend_factory",
+    [
+        LinealBackend,
+        lambda: GenerationalBackend(SequentialAdvancer()),
+        pytest.param(lambda: GenerationalBackend(VectorizedAdvancer()),
+                     marks=NEEDS_NUMBA),
+    ],
+    ids=["lineal", "generational", "generational-vector"],
+)
+def test_vectorized_trajectory_ends_at_the_stopping_generation(
+    backend_factory: Callable[[],
+                              LinealBackend | GenerationalBackend]) -> None
 ```
 
 The log of every replicate holds the row of its final generation.
@@ -35866,11 +35904,11 @@ mask`, `minted_list`) had already been paid for unconditionally,
 every generation of every zero-mutation run. See `test_migrate_
 vectorized_symmetric_zero_rate_returns_the_same_object`'s own
 docstring for why an object-identity check, not a value-equality
-one, is what actually proves this.
+one, is what actually proves this. The nonzero rate needs numba.
 
 <a id="model.test_vectorized.test_mutate_vectorized_rejects_a_state_that_is_not_whole_gene_copies"></a>
 
-#### [test\_mutate\_vectorized\_rejects\_a\_state\_that\_is\_not\_whole\_gene\_copies](./model/test_vectorized.py#L325)
+#### [test\_mutate\_vectorized\_rejects\_a\_state\_that\_is\_not\_whole\_gene\_copies](./model/test_vectorized.py#L326)
 
 ```python
 def test_mutate_vectorized_rejects_a_state_that_is_not_whole_gene_copies(
@@ -35885,7 +35923,7 @@ just drawn, never on pre-drift frequencies.
 
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly"></a>
 
-#### [test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly](./model/test_vectorized.py#L342)
+#### [test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly](./model/test_vectorized.py#L343)
 
 ```python
 def test_drift_vectorized_matches_dict_based_drift_exactly(
@@ -35911,7 +35949,7 @@ before this test.
 
 <a id="model.test_vectorized.test_drift_vectorized_rejects_a_zero_size_deme"></a>
 
-#### [test\_drift\_vectorized\_rejects\_a\_zero\_size\_deme](./model/test_vectorized.py#L385)
+#### [test\_drift\_vectorized\_rejects\_a\_zero\_size\_deme](./model/test_vectorized.py#L386)
 
 ```python
 def test_drift_vectorized_rejects_a_zero_size_deme() -> None
@@ -35931,7 +35969,7 @@ ever called.
 
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity"></a>
 
-#### [test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly\_with\_partial\_capacity](./model/test_vectorized.py#L406)
+#### [test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly\_with\_partial\_capacity](./model/test_vectorized.py#L407)
 
 ```python
 def test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity(
@@ -35956,7 +35994,7 @@ via a direct scratch probe, not assumed).
 
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly_at_eight_or_more_present"></a>
 
-#### [test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly\_at\_eight\_or\_more\_present](./model/test_vectorized.py#L450)
+#### [test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly\_at\_eight\_or\_more\_present](./model/test_vectorized.py#L451)
 
 ```python
 def test_drift_vectorized_matches_dict_based_drift_exactly_at_eight_or_more_present(
@@ -35980,7 +36018,7 @@ and 16 below, none at 6 or 7 — the exact boundary the finding names.
 
 <a id="model.test_vectorized.test_mutate_vectorized_matches_dict_based_mutate_exactly"></a>
 
-#### [test\_mutate\_vectorized\_matches\_dict\_based\_mutate\_exactly](./model/test_vectorized.py#L503)
+#### [test\_mutate\_vectorized\_matches\_dict\_based\_mutate\_exactly](./model/test_vectorized.py#L504)
 
 ```python
 def test_mutate_vectorized_matches_dict_based_mutate_exactly(
@@ -36003,7 +36041,7 @@ present ones.
 
 <a id="model.test_vectorized.test_symmetric_migration_weights_rows_are_stochastic"></a>
 
-#### [test\_symmetric\_migration\_weights\_rows\_are\_stochastic](./model/test_vectorized.py#L566)
+#### [test\_symmetric\_migration\_weights\_rows\_are\_stochastic](./model/test_vectorized.py#L567)
 
 ```python
 def test_symmetric_migration_weights_rows_are_stochastic() -> None
@@ -36013,7 +36051,7 @@ Every row of the derived weight matrix sums to exactly 1.
 
 <a id="model.test_vectorized.test_symmetric_migration_weights_matches_naive_loop_bit_for_bit"></a>
 
-#### [test\_symmetric\_migration\_weights\_matches\_naive\_loop\_bit\_for\_bit](./model/test_vectorized.py#L574)
+#### [test\_symmetric\_migration\_weights\_matches\_naive\_loop\_bit\_for\_bit](./model/test_vectorized.py#L575)
 
 ```python
 def test_symmetric_migration_weights_matches_naive_loop_bit_for_bit() -> None
@@ -36030,7 +36068,7 @@ left-to-right evaluation order.
 
 <a id="model.test_vectorized.test_drift_vectorized_variance_matches_binomial_theory"></a>
 
-#### [test\_drift\_vectorized\_variance\_matches\_binomial\_theory](./model/test_vectorized.py#L602)
+#### [test\_drift\_vectorized\_variance\_matches\_binomial\_theory](./model/test_vectorized.py#L603)
 
 ```python
 def test_drift_vectorized_variance_matches_binomial_theory(
@@ -36045,7 +36083,7 @@ bar, applied to the array-native path instead.
 
 <a id="model.test_vectorized.test_mutate_targets_batched_never_selects_its_own_source"></a>
 
-#### [test\_mutate\_targets\_batched\_never\_selects\_its\_own\_source](./model/test_vectorized.py#L638)
+#### [test\_mutate\_targets\_batched\_never\_selects\_its\_own\_source](./model/test_vectorized.py#L639)
 
 ```python
 def test_mutate_targets_batched_never_selects_its_own_source(
@@ -36061,7 +36099,7 @@ of this test claimed in its own name but never inspected.
 
 <a id="model.test_vectorized.test_mutate_targets_batched_raises_when_capacity_is_exhausted"></a>
 
-#### [test\_mutate\_targets\_batched\_raises\_when\_capacity\_is\_exhausted](./model/test_vectorized.py#L686)
+#### [test\_mutate\_targets\_batched\_raises\_when\_capacity\_is\_exhausted](./model/test_vectorized.py#L687)
 
 ```python
 def test_mutate_targets_batched_raises_when_capacity_is_exhausted() -> None
@@ -36078,7 +36116,7 @@ for why a real `Generator` cannot exercise this line directly.
 
 <a id="model.test_vectorized.test_mutate_vectorized_preserves_frequency_invariants"></a>
 
-#### [test\_mutate\_vectorized\_preserves\_frequency\_invariants](./model/test_vectorized.py#L712)
+#### [test\_mutate\_vectorized\_preserves\_frequency\_invariants](./model/test_vectorized.py#L713)
 
 ```python
 def test_mutate_vectorized_preserves_frequency_invariants(
@@ -36089,7 +36127,7 @@ Repeated mutation keeps every deme's own frequencies a valid distribution.
 
 <a id="model.test_vectorized.test_mutate_vectorized_recurrence_rate_matches_finite_allele_space"></a>
 
-#### [test\_mutate\_vectorized\_recurrence\_rate\_matches\_finite\_allele\_space](./model/test_vectorized.py#L731)
+#### [test\_mutate\_vectorized\_recurrence\_rate\_matches\_finite\_allele\_space](./model/test_vectorized.py#L732)
 
 ```python
 def test_mutate_vectorized_recurrence_rate_matches_finite_allele_space(
@@ -36120,7 +36158,7 @@ too.
 
 <a id="model.test_vectorized.test_step_vectorized_preserves_frequency_invariants"></a>
 
-#### [test\_step\_vectorized\_preserves\_frequency\_invariants](./model/test_vectorized.py#L781)
+#### [test\_step\_vectorized\_preserves\_frequency\_invariants](./model/test_vectorized.py#L782)
 
 ```python
 def test_step_vectorized_preserves_frequency_invariants(
@@ -40274,7 +40312,7 @@ Everything is deterministic: no test waits on a timing budget.
 
 <a id="persistence.test_store_lifecycle.test_atomic_directory_publishes_a_closed_store_intact"></a>
 
-#### [test\_atomic\_directory\_publishes\_a\_closed\_store\_intact](./persistence/test_store_lifecycle.py#L64)
+#### [test\_atomic\_directory\_publishes\_a\_closed\_store\_intact](./persistence/test_store_lifecycle.py#L65)
 
 ```python
 def test_atomic_directory_publishes_a_closed_store_intact(
@@ -40285,7 +40323,7 @@ Closing before the rename (the owners' rule) publishes every byte.
 
 <a id="persistence.test_store_lifecycle.test_a_rename_under_an_open_log_loses_nothing_on_posix"></a>
 
-#### [test\_a\_rename\_under\_an\_open\_log\_loses\_nothing\_on\_posix](./persistence/test_store_lifecycle.py#L81)
+#### [test\_a\_rename\_under\_an\_open\_log\_loses\_nothing\_on\_posix](./persistence/test_store_lifecycle.py#L82)
 
 ```python
 @pytest.mark.skipif(
@@ -40303,7 +40341,7 @@ platform allows the rename at all, and it leaves `store.path` stale.
 
 <a id="persistence.test_store_lifecycle.test_fanout_close_run_closes_only_that_child"></a>
 
-#### [test\_fanout\_close\_run\_closes\_only\_that\_child](./persistence/test_store_lifecycle.py#L101)
+#### [test\_fanout\_close\_run\_closes\_only\_that\_child](./persistence/test_store_lifecycle.py#L102)
 
 ```python
 def test_fanout_close_run_closes_only_that_child(tmp_path: Path) -> None
@@ -40313,7 +40351,7 @@ def test_fanout_close_run_closes_only_that_child(tmp_path: Path) -> None
 
 <a id="persistence.test_store_lifecycle.test_close_helpers_ignore_stores_without_a_close_method"></a>
 
-#### [test\_close\_helpers\_ignore\_stores\_without\_a\_close\_method](./persistence/test_store_lifecycle.py#L124)
+#### [test\_close\_helpers\_ignore\_stores\_without\_a\_close\_method](./persistence/test_store_lifecycle.py#L125)
 
 ```python
 def test_close_helpers_ignore_stores_without_a_close_method() -> None
@@ -40323,7 +40361,7 @@ def test_close_helpers_ignore_stores_without_a_close_method() -> None
 
 <a id="persistence.test_store_lifecycle.test_engine_closes_the_store_it_was_given_and_the_result_still_reads"></a>
 
-#### [test\_engine\_closes\_the\_store\_it\_was\_given\_and\_the\_result\_still\_reads](./persistence/test_store_lifecycle.py#L172)
+#### [test\_engine\_closes\_the\_store\_it\_was\_given\_and\_the\_result\_still\_reads](./persistence/test_store_lifecycle.py#L173)
 
 ```python
 def test_engine_closes_the_store_it_was_given_and_the_result_still_reads(
@@ -40334,11 +40372,24 @@ def test_engine_closes_the_store_it_was_given_and_the_result_still_reads(
 
 <a id="persistence.test_store_lifecycle.test_engine_closes_the_store_when_the_run_raises"></a>
 
-#### [test\_engine\_closes\_the\_store\_when\_the\_run\_raises](./persistence/test_store_lifecycle.py#L190)
+#### [test\_engine\_closes\_the\_store\_when\_the\_run\_raises](./persistence/test_store_lifecycle.py#L204)
 
 ```python
-@pytest.mark.parametrize("backend",
-                         ["lineal", "generational", "generational-vector"])
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "lineal",
+        "generational",
+        pytest.param(
+            "generational-vector",
+            marks=pytest.mark.skipif(
+                importlib.util.find_spec("numba") is None,
+                reason=
+                "generational-vector needs the optional numba dependency",
+            ),
+        ),
+    ],
+)
 def test_engine_closes_the_store_when_the_run_raises(tmp_path: Path,
                                                      backend: str) -> None
 ```
@@ -40349,7 +40400,7 @@ Every generation before the failure stays committed.
 
 <a id="persistence.test_store_lifecycle.test_generational_batch_holds_open_only_the_running_lanes"></a>
 
-#### [test\_generational\_batch\_holds\_open\_only\_the\_running\_lanes](./persistence/test_store_lifecycle.py#L239)
+#### [test\_generational\_batch\_holds\_open\_only\_the\_running\_lanes](./persistence/test_store_lifecycle.py#L253)
 
 ```python
 def test_generational_batch_holds_open_only_the_running_lanes(
@@ -40363,7 +40414,7 @@ Without per-lane closing a batch of N replicates would hold N writers
 
 <a id="persistence.test_store_lifecycle.test_log_options_carry_the_expert_log_settings_to_the_store"></a>
 
-#### [test\_log\_options\_carry\_the\_expert\_log\_settings\_to\_the\_store](./persistence/test_store_lifecycle.py#L270)
+#### [test\_log\_options\_carry\_the\_expert\_log\_settings\_to\_the\_store](./persistence/test_store_lifecycle.py#L284)
 
 ```python
 def test_log_options_carry_the_expert_log_settings_to_the_store() -> None

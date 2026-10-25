@@ -387,7 +387,8 @@ function wireScatterZoomInteraction(canvas) {
  *
  * @param {HTMLCanvasElement} canvas
  * @param {{x_label?: string, y_label?: string, kind?: string,
- *     points: Array<{x: number, y: number, count: number, common: boolean}>}} panel
+ *     points: Array<{x: number, y: number, count: number, common: boolean}>,
+ *     highlighted_points?: Array<{x: number, y: number, count: number, common: boolean}>}} panel
  */
 function drawScatter(canvas, panel) {
     const state = activeScatterState;
@@ -467,7 +468,8 @@ function computeDomain(points, bounded) {
  * @param {CanvasRenderingContext2D} context
  * @param {{x: number, y: number, width: number, height: number}} rect
  * @param {{x_label?: string, y_label?: string, kind?: string,
- *     points: Array<{x: number, y: number, count: number, common: boolean}>}} panel
+ *     points: Array<{x: number, y: number, count: number, common: boolean}>,
+ *     highlighted_points?: Array<{x: number, y: number, count: number, common: boolean}>}} panel
  * @param {{padding: number, tickFontSize: number, markerScale: number,
  *     domainOverride?: {xMin: number, xMax: number, yMin: number, yMax: number}}} opts
  *     `domainOverride`, when given, replaces `computeDomain`'s own
@@ -559,6 +561,31 @@ function drawScatterCell(context, rect, panel, opts) {
     if (originPile !== null) {
         drawOriginBadge(geometry, originPile);
     }
+    if (style === "top-allele" && bounded) {
+        // `panel.highlighted_points` (`fim.viz.scatter._panel`): each
+        // source's own most-frequent allele per displayed deme, grouped
+        // the identical way `panel.points` groups every row -- two
+        // sources' own top alleles landing at the same coordinate merge
+        // into one marker with `count: 2`. Drawn last, on top of the
+        // small, fixed-size, muted markers the main loop above already
+        // drew for every point (`markPointsFor`'s own `fixed: true` for
+        // this style), with plain (non-fixed) marks so `drawPoint`'s
+        // own `point.common` branch sizes each one by its own `count`
+        // the same way `circles`/`badge`/`dots`/`trail` already size an
+        // ordinary point -- every entry here is `common: true` by
+        // construction, so this never falls through to an "ordinary
+        // point" fill.
+        const topAlleleMarks = {
+            ramp: false,
+            originBadge: false,
+            fixed: false,
+            dots: false,
+            muted: false,
+        };
+        for (const point of panel.highlighted_points ?? []) {
+            drawPoint(geometry, point, style, topAlleleMarks);
+        }
+    }
     // Handed back so a caller driving interactive zoom/pan (below) can
     // invert a canvas pixel back to a data coordinate without
     // duplicating this function's own padding/domain math a second
@@ -573,17 +600,38 @@ function drawScatterCell(context, rect, panel, opts) {
  * @param {string} style
  * @param {boolean} bounded a `"frequency"` panel (the only kind with a
  *     meaningful origin pile); a `"pca"` panel always draws original circles.
- * @returns {{ramp: boolean, originBadge: boolean, fixed: boolean, dots: boolean}}
+ * @returns {{ramp: boolean, originBadge: boolean, fixed: boolean, dots: boolean,
+ *     muted: boolean}}
  */
 function markPointsFor(style, bounded) {
     if (!bounded) {
-        return { ramp: false, originBadge: false, fixed: false, dots: false };
+        return {
+            ramp: false,
+            originBadge: false,
+            fixed: false,
+            dots: false,
+            muted: false,
+        };
     }
     return {
         ramp: style === "color" || style === "color-badge" || style === "density",
-        originBadge: style === "badge" || style === "color-badge",
-        fixed: style === "color" || style === "color-badge" || style === "density",
+        originBadge:
+            style === "badge" || style === "color-badge" || style === "top-allele",
+        // `top-allele` draws every ordinary point small and fixed-size,
+        // whether or not it is also `common` -- its own `highlighted_
+        // points` pass (`drawScatterCell`, below) draws the real,
+        // count-scaled "most frequent" markers afterward, on top.
+        fixed:
+            style === "color" || style === "color-badge" || style === "density" ||
+            style === "top-allele",
         dots: style === "dots",
+        // One plain, muted fill for every ordinary point, instead of
+        // `fixed`'s own default sequential count ramp -- `top-allele`'s
+        // own small, de-emphasized points carry no count information of
+        // their own to show (unlike `color`/`color-badge`/`density`,
+        // which use the ramp precisely to show it), so a ramp color
+        // here would only suggest one that is not there.
+        muted: style === "top-allele",
     };
 }
 
@@ -593,7 +641,7 @@ function markPointsFor(style, bounded) {
  * @param {object} geometry the plot's mapping and context (see caller)
  * @param {{x: number, y: number, count: number, common: boolean}} point
  * @param {string} style
- * @param {{ramp: boolean, fixed: boolean, dots: boolean}} marks
+ * @param {{ramp: boolean, fixed: boolean, dots: boolean, muted: boolean}} marks
  */
 function drawPoint(geometry, point, style, marks) {
     const { context, toCanvasX, toCanvasY, compact, opts } = geometry;
@@ -616,6 +664,9 @@ function drawPoint(geometry, point, style, marks) {
         } else if (marks.dots) {
             context.fillStyle = COLOR_RARE;
             context.globalAlpha = 1 - Math.pow(1 - DOTS_BASE_ALPHA, point.count);
+        } else if (marks.muted) {
+            context.fillStyle = COLOR_RARE;
+            context.globalAlpha = 1;
         } else {
             context.fillStyle = COUNT_RAMP[countStep(point.count)];
             context.globalAlpha = 1;

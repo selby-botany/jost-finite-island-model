@@ -174,9 +174,41 @@ def pooled_frequency_points(states: Sequence[ModelState]) -> FloatArray:
         every state, in the given order. Empty (zero rows, but still
         correctly shaped) if `states` is empty.
     """
+    points, _ = pooled_frequency_points_and_source_lengths(states)
+    return points
+
+
+def pooled_frequency_points_and_source_lengths(
+    states: Sequence[ModelState],
+) -> tuple[FloatArray, list[int]]:
+    """`pooled_frequency_points`, plus each state's own row count.
+
+    The row count per state is how `deme_pair_panel`/`_panel` locate
+    each replicate's own contiguous block within the pooled array
+    afterward, to mark the most-frequent allele *per replicate* rather
+    than once across the whole pool (`_per_source_highlighted_indices`)
+    — a pooled batch's own scatter otherwise has no single "most
+    frequent allele" to mark at all: each replicate's own frequencies
+    already sum to 1 on their own, and the pool overlays many
+    replicates' own frequencies, not one population's (botanist-
+    reported: two solid dots near probability 1 in the same deme read
+    as "these don't sum to one", when they are each one replicate's own
+    top allele, pooled onto the same axes).
+
+    Args:
+        states: One or more states sharing the same deme count.
+
+    Returns:
+        `pooled_frequency_points(states)`'s own array, and a same-order
+        list of each state's own row count (`frequency_points(state)`'s
+        own `len`) — summing to the array's own row count, empty for an
+        empty `states`.
+    """
     if not states:
-        return np.empty((0, 0), dtype=np.float64)
-    return np.concatenate([frequency_points(state) for state in states], axis=0)
+        return np.empty((0, 0), dtype=np.float64), []
+    per_state = [frequency_points(state) for state in states]
+    lengths = [len(state_points) for state_points in per_state]
+    return np.concatenate(per_state, axis=0), lengths
 
 
 def grouped_points(
@@ -255,8 +287,10 @@ def scatter_panels(
 
     Returns:
         A one-element list holding `{"x_label", "y_label", "points",
-        "kind"}`, `points` being `grouped_points`' own list of `{x, y,
-        count, common}` entries. `kind` is always `"frequency"`.
+        "highlighted_points", "kind"}`, each of the first two being
+        `grouped_points`' own list of `{x, y, count, common}` entries
+        (the second filtered to the most-frequent-allele rows only,
+        every entry `common: True`). `kind` is always `"frequency"`.
     """
     return panels_from_points(
         frequency_points(state), state.deme_count, pairwise_max_demes
@@ -299,12 +333,15 @@ def pooled_scatter_panels(
     Returns:
         `[]` if `states` is empty (nothing to pool yet); otherwise the
         same `scatter_panels`-shaped single-panel list, built from the
-        pooled points.
+        pooled points, each replicate's own most-frequent allele marked
+        separately rather than one row chosen from the pool as a whole
+        (`pooled_frequency_points_and_source_lengths`).
     """
     if not states:
         return []
+    points, source_lengths = pooled_frequency_points_and_source_lengths(states)
     return panels_from_points(
-        pooled_frequency_points(states), deme_count, pairwise_max_demes
+        points, deme_count, pairwise_max_demes, source_lengths=source_lengths
     )
 
 
@@ -312,6 +349,8 @@ def panels_from_points(
     points: FloatArray,
     deme_count: int,
     pairwise_max_demes: int = PAIRWISE_MAX_DEMES,
+    *,
+    source_lengths: Sequence[int] | None = None,
 ) -> list[dict[str, object]]:
     """Share `scatter_panels`/`pooled_scatter_panels`' own single-panel dispatch.
 
@@ -341,12 +380,22 @@ def panels_from_points(
     no longer the automatic dispatch target. `pairwise_max_demes` is
     accepted and ignored, so `scatter_panels`/`pooled_scatter_panels`
     need not change their own signatures.
+    source_lengths: `deme_pair_panel`'s own parameter of the same
+        name, passed straight through — `None` unless `points` is
+        pooled (`pooled_scatter_panels`, or a direct caller of its own
+        pooled live-batch equivalent).
     """
     del pairwise_max_demes, deme_count
-    return [deme_pair_panel(points, 0, 1)]
+    return [deme_pair_panel(points, 0, 1, source_lengths=source_lengths)]
 
 
-def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, object]:
+def deme_pair_panel(
+    points: FloatArray,
+    first: int,
+    second: int,
+    *,
+    source_lengths: Sequence[int] | None = None,
+) -> dict[str, object]:
     """Return one explicit deme-pair 2-D panel, chosen by index rather than by layout.
 
     The on-demand counterpart to `panels_from_points`'s own automatic
@@ -376,10 +425,16 @@ def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, ob
             deme name in both, which already labels the comparison
             unambiguously — nothing about this function's own output
             shape needs to change to represent it.
+        source_lengths: `_panel`'s own parameter of the same name —
+            `None` unless `points` is pooled across several states
+            (`pooled_frequency_points_and_source_lengths`'s own second
+            return value), in which case passing it through makes the
+            "most frequent allele" marker per-replicate rather than
+            pooled.
 
     Returns:
-        The same `{"x_label", "y_label", "points", "kind"}` shape every other
-        panel in this module returns.
+        The same `{"x_label", "y_label", "points", "highlighted_points",
+        "kind"}` shape every other panel in this module returns.
 
     Raises:
         ValueError: If `first`/`second` are out of range for `points`'
@@ -392,7 +447,11 @@ def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, ob
                 f"{which} deme index {index} is out of range for {deme_count} deme(s)"
             )
     return _panel(
-        points[:, first], points[:, second], f"Deme {first + 1}", f"Deme {second + 1}"
+        points[:, first],
+        points[:, second],
+        f"Deme {first + 1}",
+        f"Deme {second + 1}",
+        source_lengths=source_lengths,
     )
 
 
@@ -403,6 +462,7 @@ def _panel(
     y_label: str,
     *,
     kind: str = "frequency",
+    source_lengths: Sequence[int] | None = None,
 ) -> dict[str, object]:
     """Build one `scatter_panels` entry from a pair of coordinate columns.
 
@@ -419,16 +479,36 @@ def _panel(
             a frequency panel gets, which is simply wrong for PCA's own
             unbounded coordinates — real points render as if they carried
             "negative probability").
+        source_lengths: `_per_source_highlighted_indices`'s own
+            parameter of the same name — `None` (a single state's own
+            points) for every caller but the pooled, multi-replicate
+            ones, which pass `pooled_frequency_points_and_source_
+            lengths`'s own second return value through unchanged.
     """
     coordinates = tuple(
         (float(x), float(y)) for x, y in zip(horizontal, vertical, strict=True)
     )
+    highlighted_indices = _per_source_highlighted_indices(
+        horizontal, vertical, source_lengths=source_lengths
+    )
+    highlighted_coordinates = [
+        coordinates[index] for index in sorted(highlighted_indices)
+    ]
     return {
         "x_label": x_label,
         "y_label": y_label,
-        "points": grouped_points(
-            coordinates,
-            highlighted_indices=_highlighted_indices(horizontal, vertical),
+        "points": grouped_points(coordinates, highlighted_indices=highlighted_indices),
+        # The `"top-allele"` scatter style's own dedicated dataset
+        # (`webui/scatter.js`): each source's own most-frequent allele,
+        # grouped the identical way `points` already groups every row —
+        # two sources' own top alleles landing at the same coordinate
+        # merge into one marker with `count: 2`, not two overlapping
+        # ones. Every entry here is also `common: True` in `points`
+        # itself (grouping the full `coordinates`, not just these), so
+        # no style needs both lists to read one point's own status.
+        "highlighted_points": grouped_points(
+            highlighted_coordinates,
+            highlighted_indices=frozenset(range(len(highlighted_coordinates))),
         ),
         "kind": kind,
     }
@@ -752,14 +832,65 @@ def _marker_legend_handles() -> list[Artist]:
 
 
 def _highlighted_indices(*frequencies: FloatArray) -> frozenset[int]:
-    """Return each displayed deme's first most-frequent allele row.
+    """Return each displayed deme's most-frequent allele row, within one source.
 
     The row index remains attached to an allele through this selection and
     is applied only after coincident coordinates are grouped. `np.argmax`
     deliberately breaks equal-frequency ties by the stable row order from
-    `frequency_points`.
+    `frequency_points`. "Within one source" matters once the caller is
+    `_per_source_highlighted_indices`, below: each `frequencies` array it
+    passes is already sliced to one replicate's own rows, so this one
+    `argmax` per call is already correct for either a single state or one
+    replicate's own block of a pooled array.
     """
     return frozenset(int(np.argmax(frequency)) for frequency in frequencies)
+
+
+def _per_source_highlighted_indices(
+    *frequencies: FloatArray,
+    source_lengths: Sequence[int] | None,
+) -> frozenset[int]:
+    """`_highlighted_indices`, computed within each source's own rows.
+
+    A pooled, multi-replicate array (`pooled_frequency_points`) has no
+    single "most frequent allele" to mark: each replicate's own
+    frequencies already sum to 1 on their own, and the pool overlays many
+    replicates' own frequencies on one set of axes, not one population's.
+    Marking one row chosen from the whole pool reads as an allele near
+    probability 1 that nothing else in the same deme "balances" — the
+    botanist-reported shape of the defect this exists to close. Splitting
+    `frequencies` back into each source's own contiguous block
+    (`source_lengths`, in the same order `pooled_frequency_points_and_
+    source_lengths` returned them) and running `_highlighted_indices`
+    within each one instead marks every replicate's own top allele
+    separately; `grouped_points` already merges exactly-coincident rows
+    (`common` among them) into one larger marker the same way it already
+    merges any other coincident point, so two replicates' own top
+    alleles landing at the same frequency draw as one bigger mark, not
+    two overlapping ones.
+
+    Args:
+        *frequencies: One or more same-length arrays (one per displayed
+            deme), as `_highlighted_indices` itself takes.
+        source_lengths: Each source's own row count, in the array's own
+            row order, summing to `len(frequencies[0])`. `None`
+            degenerates to `_highlighted_indices`'s own plain,
+            whole-array behavior — a single state's own points, where
+            there is only ever one source to begin with.
+
+    Returns:
+        The union of each source's own `_highlighted_indices`, as row
+        indices into the original, unsliced `frequencies` arrays.
+    """
+    if source_lengths is None:
+        return _highlighted_indices(*frequencies)
+    highlighted: set[int] = set()
+    offset = 0
+    for length in source_lengths:
+        sliced = tuple(frequency[offset : offset + length] for frequency in frequencies)
+        highlighted.update(offset + index for index in _highlighted_indices(*sliced))
+        offset += length
+    return frozenset(highlighted)
 
 
 def _title(params: SimulationParams) -> str:

@@ -597,7 +597,7 @@ def test_run_card_layout_defaults_write_nothing() -> None:
 
     assert preferences.run_graphs is None
     assert preferences.run_graph_columns == 2
-    assert preferences.scatter_style == "color-badge"
+    assert preferences.scatter_style == "top-allele"
     assert preferences.trajectory_display == "every_generation"
     gui = preferences.to_dict()["gui"]
     assert "run_graphs" not in gui

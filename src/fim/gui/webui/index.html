@@ -2447,7 +2447,8 @@
     <div class="field">
       <label for="settings-scatter-style">Scatter plot points</label>
       <select id="settings-scatter-style">
-        <option value="color-badge">Color for count, origin as a badge (recommended)</option>
+        <option value="top-allele">Most frequent allele per replicate (recommended)</option>
+        <option value="color-badge">Color for count, origin as a badge</option>
         <option value="color">Color for count</option>
         <option value="badge">Circles, origin as a badge</option>
         <option value="density">Density map</option>
@@ -2457,7 +2458,12 @@
       </select>
       <p class="hint">
         Alleles at the same coordinates are counted together. The selected
-        style encodes that count using color, size, or density.
+        style encodes that count using color, size, or density. "Most
+        frequent allele per replicate" mutes every other point and marks
+        each replicate's own top allele in each deme separately, sized by
+        how many replicates agree &mdash; in a pooled batch, these are not
+        one allele chosen from the whole pool, so they need not sum to 1
+        with each other the way one replicate's own allele frequencies do.
       </p>
     </div>
 

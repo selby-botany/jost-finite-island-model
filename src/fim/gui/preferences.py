@@ -72,6 +72,7 @@ MAX_RUN_GRAPH_COLUMNS = 4
 DEFAULT_RUN_GRAPH_COLUMNS = 2
 
 SCATTER_STYLES: tuple[str, ...] = (
+    "top-allele",
     "circles",
     "color",
     "badge",
@@ -81,9 +82,15 @@ SCATTER_STYLES: tuple[str, ...] = (
     "trail",
 )
 """How the scatter plot draws its points (`scatter.js`'s own `SCATTER_STYLES`).
-`circles` is the original encoding (radius grows with count)."""
+`circles` is the original encoding (radius grows with count). `top-allele`
+(the default) draws every point small and muted, and each displayed deme's
+own most-frequent allele separately, as a prominent marker sized by how many
+sources' own top allele coincide (`fim.viz.scatter._panel`'s own
+`highlighted_points`) -- Lou Jost's own fix for a pooled batch's "most
+frequent" marker otherwise reading as one row chosen from the whole pool,
+not each replicate's own top allele."""
 
-DEFAULT_SCATTER_STYLE = "color-badge"
+DEFAULT_SCATTER_STYLE = "top-allele"
 
 TRAJECTORY_DISPLAYS: tuple[str, ...] = (
     "every_generation",

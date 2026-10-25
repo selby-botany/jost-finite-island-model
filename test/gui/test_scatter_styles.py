@@ -2,10 +2,10 @@
 
 The original encoding made a marker's radius grow with how many alleles
 share its coordinates, so in a pooled batch the pile of alleles absent
-from both demes at (0, 0) became the largest mark on the plot. Seven
+from both demes at (0, 0) became the largest mark on the plot. Eight
 styles are offered (Settings, "Scatter plot points") so a botanist can
 choose by looking; this pins that each one draws something and that they
-are genuinely different encodings, not seven names for one drawing.
+are genuinely different encodings, not eight names for one drawing.
 """
 
 from __future__ import annotations
@@ -20,7 +20,16 @@ pytestmark = pytest.mark.gui
 
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
-_STYLES = ["circles", "color", "badge", "color-badge", "density", "dots", "trail"]
+_STYLES = [
+    "top-allele",
+    "circles",
+    "color",
+    "badge",
+    "color-badge",
+    "density",
+    "dots",
+    "trail",
+]
 
 # A pooled-batch-shaped panel: a huge pile at the origin, a few piles of
 # different sizes elsewhere, and singletons, with one "most frequent" ring.
@@ -125,3 +134,64 @@ def test_the_badge_styles_replace_the_origin_circle_with_a_smaller_mark(
     assert settled["circles"] > 0
     assert settled["badge"] < settled["circles"]
     assert settled["colorBadge"] < settled["circles"]
+
+
+def test_the_top_allele_style_mutes_ordinary_points_and_sizes_its_own_by_coincidence(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A coordinate several replicates' own top allele agree on draws bigger.
+
+    Reproduces the fix for a real, reported defect: a pooled batch's
+    scatter marked one row chosen from the whole pool as "most
+    frequent," which a botanist comparing two solid, unrelated-looking
+    dots near probability 1 in the same deme reads as "these cannot both
+    be real" -- they sum past 1. `panel.highlighted_points` (`fim.viz.
+    scatter._panel`) is each source's own top allele instead, merged the
+    identical way `panel.points` already merges any other coincident
+    point: two sources landing at the same coordinate draw as one
+    marker, sized by how many agree, not two overlapping same-size ones.
+    Every ordinary point (`panel.points`), including one that is also
+    `common`, draws small and muted -- the real "most frequent" marks
+    are `highlighted_points`' own, drawn on top.
+
+    Measured as ink at each of the plot's own two diagonal corners (0, 0)
+    and (1, 1), the same "ink in a known pixel box" technique the badge
+    styles' own test above uses: a `highlighted_points` entry with
+    `count: 9` at one corner must cover visibly more ink than one with
+    `count: 1` at the other.
+    """
+    panel = (
+        "{kind: 'frequency', x_label: 'Deme 1', y_label: 'Deme 2', points: ["
+        "{x: 0, y: 0, count: 1, common: true}, "
+        "{x: 1, y: 1, count: 9, common: true}, "
+        "{x: 0.5, y: 0.5, count: 2, common: false}], "
+        "highlighted_points: ["
+        "{x: 0, y: 0, count: 1, common: true}, "
+        "{x: 1, y: 1, count: 9, common: true}]}"
+    )
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            f"const panel = {panel}; "
+            "window.fim.setScatterStyle('top-allele'); "
+            "drawScatter(runCanvas, panel); "
+            "const side = Math.min(runCanvas.width, runCanvas.height); "
+            "const pad = side < 520 ? Math.max(28, Math.floor(side * 0.09)) : 44; "
+            "const plotSize = side - 2 * pad; "
+            "const ox = pad, oy = runCanvas.height - pad; "
+            "const ink = (cx, cy) => { "
+            "const data = runCanvas.getContext('2d').getImageData("
+            "cx - 10, cy - 10, 20, 20).data; "
+            "let n = 0; for (let i = 3; i < data.length; i += 4) "
+            "{ if (data[i] !== 0) { n += 1; } } return n; }; "
+            "window.__fimInk = {"
+            "countOne: ink(ox, oy), "
+            "countNine: ink(ox + plotSize, oy - plotSize)};"
+        ),
+        read="window.__fimInk || null",
+        is_ready=lambda value: value is not None,
+    )
+
+    assert settled["countOne"] > 0
+    assert settled["countNine"] > settled["countOne"]

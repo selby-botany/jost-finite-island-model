@@ -187,10 +187,11 @@ from fim.sweep_run import (
 from fim.sweep_status import describe_remaining, read_sweep_status
 from fim.sweep_table import ALL_STATISTICS, ResultTable
 from fim.viz.scatter import (
+    FloatArray,
     deme_pair_panel,
     frequency_points,
     panels_from_points,
-    pooled_frequency_points,
+    pooled_frequency_points_and_source_lengths,
     pooled_scatter_panels,
     scatter_panels,
 )
@@ -8339,8 +8340,12 @@ class Api:
             return {"ok": False, "message": f"no replicates found under {directory}"}
         try:
             states = [reanalyze_trajectory(path).state for path in trajectory_paths]
+            points, source_lengths = pooled_frequency_points_and_source_lengths(states)
             panel = deme_pair_panel(
-                pooled_frequency_points(states), first_deme - 1, second_deme - 1
+                points,
+                first_deme - 1,
+                second_deme - 1,
+                source_lengths=source_lengths,
             )
         except (OSError, ValueError) as error:
             return {"ok": False, "message": str(error)}
@@ -9536,9 +9541,20 @@ def _push_batch_progress(
             )
             if initial_state is not None:
                 initial_states[replicate_run_id] = initial_state
-    pooled_points = pooled_frequency_points(states) if states else None
+    pooled_points: FloatArray | None
+    pooled_source_lengths: list[int] | None
+    if states:
+        pooled_points, pooled_source_lengths = (
+            pooled_frequency_points_and_source_lengths(states)
+        )
+    else:
+        pooled_points, pooled_source_lengths = None, None
     panels = (
-        panels_from_points(pooled_points, params.d) if pooled_points is not None else []
+        panels_from_points(
+            pooled_points, params.d, source_lengths=pooled_source_lengths
+        )
+        if pooled_points is not None
+        else []
     )
     raw_summary = reports_summary(
         [
@@ -9606,7 +9622,10 @@ def _push_batch_progress(
         # reaches this `suppress` — a self-comparison is not an error.
         with contextlib.suppress(ValueError):
             progress_payload["pairPanel"] = deme_pair_panel(
-                pooled_points, first_deme - 1, second_deme - 1
+                pooled_points,
+                first_deme - 1,
+                second_deme - 1,
+                source_lengths=pooled_source_lengths,
             )
     publisher.publish(
         window,

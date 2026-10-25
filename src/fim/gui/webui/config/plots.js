@@ -22,9 +22,31 @@ const COMPACT_PROBABILITY_TICK_VALUES = [0.0, 0.5, 1.0];
 /* How the points are drawn, as offered in Settings ("Scatter plot
  * points"). Mirrors `fim.gui.preferences.SCATTER_STYLES`; the Python
  * side validates a saved choice against its own copy.
+ *
+ * `top-allele` (the default): every point draws small and muted; each
+ * displayed deme's own most-frequent allele draws separately, as a
+ * prominent red circle sized by how many sources' own top allele landed
+ * on that exact coordinate (`panel.highlighted_points`,
+ * `fim.viz.scatter._panel`) -- a pooled batch's own "most frequent"
+ * markers are then each replicate's own top allele, not one row chosen
+ * from the whole pool, which otherwise reads as an allele near
+ * probability 1 that nothing else in the same deme "balances"
+ * (botanist-reported: two solid, unrelated-looking dots near
+ * probability 1 in one deme, from two different replicates, look like
+ * they cannot both be real). Lou Jost's own suggested fix, in reply to
+ * that report.
  */
-const SCATTER_STYLES = ["circles", "color", "badge", "color-badge", "density", "dots", "trail"];
-const DEFAULT_SCATTER_STYLE = "color-badge";
+const SCATTER_STYLES = [
+    "top-allele",
+    "circles",
+    "color",
+    "badge",
+    "color-badge",
+    "density",
+    "dots",
+    "trail",
+];
+const DEFAULT_SCATTER_STYLE = "top-allele";
 
 /* Marker radius is `BASE + SCALE * sqrt(count)`, so the marker's area
  * grows roughly in step with the number of alleles it stands for.

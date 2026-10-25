@@ -147,7 +147,7 @@ def test_run_card_layout_defaults_and_persists(tmp_path: Path) -> None:
     assert api.get_run_card_layout() == {
         "graphs": ["scatter", "trajectory"],
         "columns": 2,
-        "scatterStyle": "color-badge",
+        "scatterStyle": "top-allele",
         "trajectoryDisplay": "every_generation",
         "bandWidth": 2,
         "showIdentityRecoveryTrajectory": False,
