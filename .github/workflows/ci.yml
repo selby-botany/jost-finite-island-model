@@ -171,6 +171,20 @@ jobs:
           full test suite incl. statistical/gui scenarios, excl. slow)
         run: xvfb-run --auto-servernum ./build --ci --no-package
         timeout-minutes: 40
+      # TEMPORARY -- diagnostic only, for the process-leak investigation
+      # `test/gui/conftest.py`'s own `_RESOURCE_LOG_PATH` comment
+      # explains in full (same removal list as that comment names).
+      # `if: always()` is what actually matters here: the step above
+      # can be killed mid-run by its own 40-minute timeout, and GitHub
+      # still runs every later step with this condition regardless --
+      # the same mechanism that already prints "Terminate orphan
+      # process" lines from the runner's own job-cleanup step on a
+      # killed job. Without it, a `cat` gated on the normal (implicit
+      # "previous steps succeeded") condition would never run on
+      # exactly the runs this exists to capture.
+      - name: Print the GUI process/thread diagnostic log
+        if: always()
+        run: cat /tmp/fim-gui-resource-log.jsonl 2>/dev/null || true
       - name: Build distributions and smoke-test the installed wheel
         run: ./build --no-lint --no-type --no-test --no-docs
         timeout-minutes: 15

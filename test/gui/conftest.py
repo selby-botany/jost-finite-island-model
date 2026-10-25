@@ -151,10 +151,13 @@ from __future__ import annotations
 
 import contextlib
 import json
+import multiprocessing
 import os
 import queue
 import signal
 import sys
+import threading
+import time
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any, ClassVar
@@ -816,6 +819,167 @@ def _reap_leaked_webkit_helpers() -> Iterator[None]:
     _reap_leaked_webkit_processes(_last_known_webkit_pids)
     _last_known_webkit_pids.clear()
     _last_known_webkit_pids.update(_webkit_process_pids())
+
+
+# TEMPORARY -- diagnostic only, for the process-leak investigation this
+# suite's own 2026-10-25 CI run opened (a real batch run's own
+# `ProcessPoolExecutor` cascading into every later test erroring at
+# setup once some leaked resource ran out, and the GitHub runner's own
+# "Terminate orphan process" cleanup log naming plain `python`/`python3`
+# PIDs still alive at job end on *every* run checked, cascading or not).
+# `_reap_leaked_webkit_processes` already solved the identically-shaped
+# `WebKit*`-helper leak (reparented to init by `bwrap`'s double fork);
+# this is the same before/after `/proc` census technique, generalized
+# from one fixed process-name set to every `python`-ish `cmdline`, kept
+# as a diff (new/gone PIDs) rather than a reap -- the goal here is
+# naming the leak, not yet closing it. Remove this block (the log path,
+# the two module-level globals below it, `_python_process_census`,
+# `_append_resource_log_line`, `_log_gui_process_and_thread_counts`, and
+# the `pytest_sessionfinish` hook at the bottom of this file) once that
+# investigation closes.
+_RESOURCE_LOG_PATH = Path(
+    os.environ.get("FIM_GUI_RESOURCE_LOG", "/tmp/fim-gui-resource-log.jsonl")
+)
+
+_last_known_python_pids: dict[int, str] = {}
+
+
+def _python_process_census() -> dict[int, str]:
+    """Return every live PID whose `cmdline` mentions `python`, Linux only.
+
+    Mirrors `_webkit_process_pids`'s own `/proc` scan, generalized from
+    one fixed process-name set to any `python`-ish process and keyed by
+    full `cmdline` (not the 15-character-truncated `comm`) -- the
+    pytest-worker PID, a `multiprocessing.resource_tracker` helper, and
+    a leaked real batch replicate worker (which imports and runs
+    `fim.engine.lineal`) all show `python3` as `comm`, but only
+    `cmdline` tells them apart.
+    """
+    pids: dict[int, str] = {}
+    proc = Path("/proc")
+    try:
+        entries = proc.iterdir()
+    except OSError:
+        return pids
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            cmdline = (
+                (entry / "cmdline")
+                .read_bytes()
+                .replace(b"\0", b" ")
+                .decode("utf-8", errors="replace")
+                .strip()
+            )
+        except OSError:
+            continue
+        if "python" in cmdline.lower():
+            pids[int(entry.name)] = cmdline
+    return pids
+
+
+def _append_resource_log_line(record: dict[str, Any]) -> None:
+    """Append one JSON line to `_RESOURCE_LOG_PATH`, flushed immediately.
+
+    Args:
+        record: Must be JSON-serializable as-is.
+
+    A build whose own 40-minute step timeout kills the whole job mid-run
+    (the failure mode this exists to catch) never reaches any step that
+    could read captured stdout back out -- only a file already flushed
+    to disk survives that. A follow-up CI step with `if: always()` reads
+    this file back, after the main step either finishes or is killed.
+    """
+    with _RESOURCE_LOG_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record) + "\n")
+
+
+@pytest.fixture(autouse=True)
+def _log_gui_process_and_thread_counts(
+    request: pytest.FixtureRequest,
+) -> Iterator[None]:
+    """TEMPORARY: log new/gone `python`-ish PIDs and thread counts per test.
+
+    See the module comment just above `_RESOURCE_LOG_PATH` for why this
+    exists and when to remove it. Logs only on a change (a new or gone
+    PID, per `_python_process_census`'s own diff) or a nonzero
+    `multiprocessing.active_children()` count -- most before/after
+    checks have neither, and a silent majority keeps the log small
+    enough to read in full rather than needing to grep it.
+    """
+    if not _IS_LINUX:
+        yield
+        return
+    _log_resource_snapshot(request.node.nodeid, "before")
+    yield
+    _log_resource_snapshot(request.node.nodeid, "after")
+
+
+def _log_resource_snapshot(nodeid: str, phase: str) -> None:
+    """Diff `_python_process_census()` against `_last_known_python_pids`.
+
+    Args:
+        nodeid: The test this snapshot runs beside (`request.node.nodeid`).
+        phase: `"before"` or `"after"` that test's own body.
+
+    Updates `_last_known_python_pids` to the new census either way, so
+    the next call's diff is always against what this call actually saw,
+    never a stale baseline.
+    """
+    current = _python_process_census()
+    new_pids = {
+        pid: current[pid] for pid in current.keys() - _last_known_python_pids.keys()
+    }
+    gone_pids = sorted(_last_known_python_pids.keys() - current.keys())
+    mp_children = [
+        {"pid": child.pid, "name": child.name}
+        for child in multiprocessing.active_children()
+    ]
+    _last_known_python_pids.clear()
+    _last_known_python_pids.update(current)
+    if not new_pids and not gone_pids and not mp_children:
+        return
+    _append_resource_log_line(
+        {
+            "time": time.time(),
+            "nodeid": nodeid,
+            "phase": phase,
+            "python_process_count": len(current),
+            "thread_count": threading.active_count(),
+            "new_pids": new_pids,
+            "gone_pids": gone_pids,
+            "mp_children": mp_children,
+        }
+    )
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """TEMPORARY: log a full final `python`-ish process census.
+
+    Pytest calls every `conftest.py`-level `pytest_sessionfinish` it
+    finds, unconditionally, by name (no decorator) -- this fires once,
+    after the whole `-m gui` session's last test, correlating this
+    file's own per-test diff log with the GitHub runner's own "Terminate
+    orphan process" cleanup line for the same job.
+    """
+    if not _IS_LINUX:
+        return
+    _append_resource_log_line(
+        {
+            "time": time.time(),
+            "nodeid": "<session finish>",
+            "phase": "final",
+            "exitstatus": exitstatus,
+            "python_process_count": len(_last_known_python_pids),
+            "thread_count": threading.active_count(),
+            "final_pids": _python_process_census(),
+            "mp_children": [
+                {"pid": child.pid, "name": child.name}
+                for child in multiprocessing.active_children()
+            ],
+        }
+    )
 
 
 @pytest.fixture(autouse=True)

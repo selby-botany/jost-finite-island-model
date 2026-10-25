@@ -13197,13 +13197,13 @@ decide which of the two investigations above it continues.
 
 <a id="gui.conftest.RUN_VIEW_READY"></a>
 
-#### [RUN\_VIEW\_READY](./gui/conftest.py#L176)
+#### [RUN\_VIEW\_READY](./gui/conftest.py#L179)
 
 True once the run view's async start-up has wired every listener.
 
 <a id="gui.conftest.AWAIT_SETTINGS_SAVES"></a>
 
-#### [AWAIT\_SETTINGS\_SAVES](./gui/conftest.py#L179)
+#### [AWAIT\_SETTINGS\_SAVES](./gui/conftest.py#L182)
 
 JS, for inside an `async` trigger: wait until no Settings save is in flight.
 
@@ -13216,7 +13216,7 @@ completion-signal backstop bounds.
 
 <a id="gui.conftest.poll_page"></a>
 
-#### [poll\_page](./gui/conftest.py#L201)
+#### [poll\_page](./gui/conftest.py#L204)
 
 ```python
 def poll_page(target_window: Any,
@@ -13263,7 +13263,7 @@ waits inside JavaScript (see `drive_and_read`).
 
 <a id="gui.conftest.poll_document_signal"></a>
 
-#### [poll\_document\_signal](./gui/conftest.py#L246)
+#### [poll\_document\_signal](./gui/conftest.py#L249)
 
 ```python
 def poll_document_signal(target_window: Any,
@@ -13298,7 +13298,7 @@ Wait for one document's workspace settle signal.
 
 <a id="gui.conftest.wait_for_run_view_ready"></a>
 
-#### [wait\_for\_run\_view\_ready](./gui/conftest.py#L281)
+#### [wait\_for\_run\_view\_ready](./gui/conftest.py#L284)
 
 ```python
 def wait_for_run_view_ready(target_window: Any) -> None
@@ -13317,7 +13317,7 @@ Wait until the run view's start-up has finished (`RUN_VIEW_READY`).
 
 <a id="gui.conftest.expand_every_group"></a>
 
-#### [expand\_every\_group](./gui/conftest.py#L297)
+#### [expand\_every\_group](./gui/conftest.py#L300)
 
 ```python
 def expand_every_group(target_window: Any) -> None
@@ -13347,7 +13347,7 @@ re-render wiped rows a test had already expanded.
 
 <a id="gui.conftest.wait_for_canvas_settled"></a>
 
-#### [wait\_for\_canvas\_settled](./gui/conftest.py#L338)
+#### [wait\_for\_canvas\_settled](./gui/conftest.py#L341)
 
 ```python
 def wait_for_canvas_settled(target_window: Any, canvas_id: str) -> None
@@ -13381,7 +13381,7 @@ previous one.
 
 <a id="gui.conftest.window"></a>
 
-#### [window](./gui/conftest.py#L536)
+#### [window](./gui/conftest.py#L539)
 
 ```python
 @pytest.fixture
@@ -13400,7 +13400,7 @@ than reusing one across the whole session.
 
 <a id="gui.conftest.drive_and_read"></a>
 
-#### [drive\_and\_read](./gui/conftest.py#L570)
+#### [drive\_and\_read](./gui/conftest.py#L573)
 
 ```python
 def drive_and_read(target_window: webview.Window,
@@ -13498,7 +13498,7 @@ own JS.
 
 <a id="gui.conftest.drive"></a>
 
-#### [drive](./gui/conftest.py#L697)
+#### [drive](./gui/conftest.py#L700)
 
 ```python
 @pytest.fixture
@@ -13509,7 +13509,7 @@ Bind `drive_and_read` as a fixture, for tests that prefer the fixture style.
 
 <a id="gui.conftest.FastEngineProbe"></a>
 
-## [FastEngineProbe Objects](./gui/conftest.py#L720)
+## [FastEngineProbe Objects](./gui/conftest.py#L723)
 
 ```python
 class FastEngineProbe()
@@ -13521,9 +13521,25 @@ The Sweep dialog asks for a cost estimate after every plan. A real
 measurement takes seconds and depends on the machine, so no GUI test
 makes one; a test of the estimate itself reads `asked`.
 
+<a id="gui.conftest.pytest_sessionfinish"></a>
+
+#### [pytest\_sessionfinish](./gui/conftest.py#L957)
+
+```python
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None
+```
+
+TEMPORARY: log a full final `python`-ish process census.
+
+Pytest calls every `conftest.py`-level `pytest_sessionfinish` it
+finds, unconditionally, by name (no decorator) -- this fires once,
+after the whole `-m gui` session's last test, correlating this
+file's own per-test diff log with the GitHub runner's own "Terminate
+orphan process" cleanup line for the same job.
+
 <a id="gui.conftest.examples_seeding"></a>
 
-#### [examples\_seeding](./gui/conftest.py#L1092)
+#### [examples\_seeding](./gui/conftest.py#L1256)
 
 ```python
 @pytest.fixture
@@ -13539,7 +13555,7 @@ test usually also installs a fixture bundle by patching
 
 <a id="gui.conftest.fast_scalar_run_settings"></a>
 
-#### [fast\_scalar\_run\_settings](./gui/conftest.py#L1106)
+#### [fast\_scalar\_run\_settings](./gui/conftest.py#L1270)
 
 ```python
 @pytest.fixture
@@ -13576,7 +13592,7 @@ before `Api()`/`create_window()` ever reads it.
 
 <a id="gui.conftest.short_scalar_run_settings"></a>
 
-#### [short\_scalar\_run\_settings](./gui/conftest.py#L1152)
+#### [short\_scalar\_run\_settings](./gui/conftest.py#L1316)
 
 ```python
 @pytest.fixture
@@ -13591,7 +13607,7 @@ a few thousand generations): the cap is a few hundred generations.
 
 <a id="gui.conftest.unreachable_convergence_run_settings"></a>
 
-#### [unreachable\_convergence\_run\_settings](./gui/conftest.py#L1176)
+#### [unreachable\_convergence\_run\_settings](./gui/conftest.py#L1340)
 
 ```python
 @pytest.fixture
@@ -13632,7 +13648,7 @@ fixture that builds one) in a test's own parameter list.
 
 <a id="gui.conftest.fast_batch_run_settings"></a>
 
-#### [fast\_batch\_run\_settings](./gui/conftest.py#L1222)
+#### [fast\_batch\_run\_settings](./gui/conftest.py#L1386)
 
 ```python
 @pytest.fixture
@@ -13649,7 +13665,7 @@ batch (`n_replicates > 1` is the GUI's own scalar-vs-batch toggle,
 
 <a id="gui.conftest.unreachable_batch_run_settings"></a>
 
-#### [unreachable\_batch\_run\_settings](./gui/conftest.py#L1249)
+#### [unreachable\_batch\_run\_settings](./gui/conftest.py#L1413)
 
 ```python
 @pytest.fixture
@@ -13676,7 +13692,7 @@ reporting.)
 
 <a id="gui.conftest.staggered_batch_run_settings"></a>
 
-#### [staggered\_batch\_run\_settings](./gui/conftest.py#L1285)
+#### [staggered\_batch\_run\_settings](./gui/conftest.py#L1449)
 
 ```python
 @pytest.fixture
