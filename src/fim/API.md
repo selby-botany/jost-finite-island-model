@@ -103,6 +103,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [RECONSTRUCTION\_TOLERANCE](#fim.config.numerics.RECONSTRUCTION_TOLERANCE)
   * [MINIMUM\_SAMPLE\_GENE\_COPIES](#fim.config.numerics.MINIMUM_SAMPLE_GENE_COPIES)
   * [DIFFERENTIATION\_TOLERANCE](#fim.config.numerics.DIFFERENTIATION_TOLERANCE)
+  * [CONDITIONING\_ROUNDOFF](#fim.config.numerics.CONDITIONING_ROUNDOFF)
   * [EULER\_GAMMA](#fim.config.numerics.EULER_GAMMA)
   * [DIGAMMA\_ASYMPTOTIC\_THRESHOLD](#fim.config.numerics.DIGAMMA_ASYMPTOTIC_THRESHOLD)
 * [fim.config.statistics](#fim.config.statistics)
@@ -889,6 +890,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.vector\_kernels](#fim.model.vector_kernels)
   * [STATISTIC\_COLUMNS](#fim.model.vector_kernels.STATISTIC_COLUMNS)
   * [STATISTICS\_TOLERANCE](#fim.model.vector_kernels.STATISTICS_TOLERANCE)
+  * [STATISTICS\_CONDITIONING\_ROUNDOFF](#fim.model.vector_kernels.STATISTICS_CONDITIONING_ROUNDOFF)
   * [inversion\_binomial](#fim.model.vector_kernels.inversion_binomial)
   * [cached\_binomial](#fim.model.vector_kernels.cached_binomial)
   * [pairwise\_sum](#fim.model.vector_kernels.pairwise_sum)
@@ -3490,9 +3492,38 @@ Kind: derivable.
 
 Kind: numerical guard.
 
+<a id="fim.config.numerics.CONDITIONING_ROUNDOFF"></a>
+
+#### [CONDITIONING\_ROUNDOFF](./config/numerics.py#L100)
+
+Four IEEE double epsilons (`4 * 2.220446049250313e-16`).
+
+`_bounded` (`fim.statistics.differentiation`) clamps a statistic computed
+as a ratio -- $G_{ST} = (H_T - H_S) / H_T$, $H_{ST}$ and $D$ both
+divided by $1 - H_S$ -- to `[0, 1]` within `DIFFERENTIATION_TOLERANCE`.
+That absolute margin is wide enough whenever the denominator is not
+small, but $H_T$ and $1 - H_S$ can each legitimately shrink toward zero
+(near-fixation, or near-complete differentiation at a large allele
+count): the numerator's own rounding error is a fixed few `epsilon`,
+independent of the denominator, so the quotient's error grows as the
+denominator shrinks and eventually exceeds `DIFFERENTIATION_TOLERANCE`
+even though nothing is actually wrong (this project's own 2026-10-25
+project review, `doc/20261025-claude-fable-5-1-fim-project-review.md`,
+finding S-1). `CONDITIONING_ROUNDOFF / abs(denominator)` is the
+conditioning-aware floor `_bounded` adds on top of
+`DIFFERENTIATION_TOLERANCE`: `4 * epsilon` is a small, fixed multiple of
+the one rounding error `fsum`'s own correctly-rounded result can still
+carry after a subtraction from a value near `1`, with headroom
+(confirmed against three reproductions from the review: two Dirichlet-
+sampled frequency tables and a 15,000-allele-per-deme table, all of
+which this floor admits with a comfortable margin while the unscaled
+`DIFFERENTIATION_TOLERANCE` alone rejects them).
+
+Kind: numerical guard.
+
 <a id="fim.config.numerics.EULER_GAMMA"></a>
 
-#### [EULER\_GAMMA](./config/numerics.py#L100)
+#### [EULER\_GAMMA](./config/numerics.py#L127)
 
 Euler-Mascheroni constant gamma = -psi(1), to full double precision
 (Abramowitz & Stegun 1972, table 1.1) -- the additive constant every
@@ -3504,7 +3535,7 @@ Kind: derivable (a mathematical constant).
 
 <a id="fim.config.numerics.DIGAMMA_ASYMPTOTIC_THRESHOLD"></a>
 
-#### [DIGAMMA\_ASYMPTOTIC\_THRESHOLD](./config/numerics.py#L110)
+#### [DIGAMMA\_ASYMPTOTIC\_THRESHOLD](./config/numerics.py#L137)
 
 Threshold above which `_digamma`'s asymptotic series (Abramowitz &
 Stegun 1972, formula 6.3.18 -- the same one Chao et al.'s own S2
@@ -21727,9 +21758,15 @@ Columns of the per-locus statistics table: $H_S$, $H_T$, $H_{ST}$, $G_{ST}$, $D$
 
 Mirror of `fim.config.numerics.DIFFERENTIATION_TOLERANCE` (checked by a test).
 
+<a id="fim.model.vector_kernels.STATISTICS_CONDITIONING_ROUNDOFF"></a>
+
+#### [STATISTICS\_CONDITIONING\_ROUNDOFF](./model/vector_kernels.py#L82)
+
+Mirror of `fim.config.numerics.CONDITIONING_ROUNDOFF` (checked by a test).
+
 <a id="fim.model.vector_kernels.inversion_binomial"></a>
 
-#### [inversion\_binomial](./model/vector_kernels.py#L148)
+#### [inversion\_binomial](./model/vector_kernels.py#L151)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21760,7 +21797,7 @@ short-circuits).
 
 <a id="fim.model.vector_kernels.cached_binomial"></a>
 
-#### [cached\_binomial](./model/vector_kernels.py#L179)
+#### [cached\_binomial](./model/vector_kernels.py#L182)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21790,7 +21827,7 @@ bit `inversion_binomial`'s.
 
 <a id="fim.model.vector_kernels.pairwise_sum"></a>
 
-#### [pairwise\_sum](./model/vector_kernels.py#L253)
+#### [pairwise\_sum](./model/vector_kernels.py#L256)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21818,7 +21855,7 @@ mishandles).
 
 <a id="fim.model.vector_kernels.exact_sum"></a>
 
-#### [exact\_sum](./model/vector_kernels.py#L312)
+#### [exact\_sum](./model/vector_kernels.py#L315)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21843,7 +21880,7 @@ half-even correction) for finite inputs.
 
 <a id="fim.model.vector_kernels.compact_columns"></a>
 
-#### [compact\_columns](./model/vector_kernels.py#L736)
+#### [compact\_columns](./model/vector_kernels.py#L739)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21871,7 +21908,7 @@ locus's columns in ascending allele-id order.
 
 <a id="fim.model.vector_kernels.mint_columns"></a>
 
-#### [mint\_columns](./model/vector_kernels.py#L781)
+#### [mint\_columns](./model/vector_kernels.py#L784)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21899,7 +21936,7 @@ appended columns keep the locus in ascending id order.
 
 <a id="fim.model.vector_kernels.run_generation"></a>
 
-#### [run\_generation](./model/vector_kernels.py#L826)
+#### [run\_generation](./model/vector_kernels.py#L829)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21949,7 +21986,7 @@ call `mint_columns`.
 
 <a id="fim.model.vector_kernels.locus_statistics"></a>
 
-#### [locus\_statistics](./model/vector_kernels.py#L949)
+#### [locus\_statistics](./model/vector_kernels.py#L962)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -21976,7 +22013,7 @@ clamp to `[0, 1]` within a tolerance, the same formulas.
 
 <a id="fim.model.vector_kernels.present_entries"></a>
 
-#### [present\_entries](./model/vector_kernels.py#L1003)
+#### [present\_entries](./model/vector_kernels.py#L1018)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -22003,7 +22040,7 @@ order `ModelState.to_rows` writes.
 
 <a id="fim.model.vector_kernels.extract_csr"></a>
 
-#### [extract\_csr](./model/vector_kernels.py#L1045)
+#### [extract\_csr](./model/vector_kernels.py#L1060)
 
 ```python
 @numba.njit(cache=True, nogil=True)
@@ -34911,7 +34948,7 @@ tables with integer-like allele identifiers and real-valued frequencies. See
 
 <a id="fim.statistics.differentiation.DifferentiationReport"></a>
 
-## [DifferentiationReport Objects](./statistics/differentiation.py#L47)
+## [DifferentiationReport Objects](./statistics/differentiation.py#L48)
 
 ```python
 class DifferentiationReport(TypedDict)
@@ -34953,7 +34990,7 @@ excluded.
 
 <a id="fim.statistics.differentiation.heterozygosity"></a>
 
-#### [heterozygosity](./statistics/differentiation.py#L348)
+#### [heterozygosity](./statistics/differentiation.py#L367)
 
 ```python
 def heterozygosity(frequencies: Mapping[Any, Any]) -> float
@@ -34975,7 +35012,7 @@ of alleles).
 
 <a id="fim.statistics.differentiation.unbiased_heterozygosity"></a>
 
-#### [unbiased\_heterozygosity](./statistics/differentiation.py#L367)
+#### [unbiased\_heterozygosity](./statistics/differentiation.py#L386)
 
 ```python
 def unbiased_heterozygosity(frequencies: Mapping[Any, Any],
@@ -35024,7 +35061,7 @@ $2n / (2n - 1)$ corrects this small-sample bias exactly.
 
 <a id="fim.statistics.differentiation.identity"></a>
 
-#### [identity](./statistics/differentiation.py#L423)
+#### [identity](./statistics/differentiation.py#L442)
 
 ```python
 def identity(frequencies: Mapping[Any, Any]) -> float
@@ -35040,7 +35077,7 @@ simpler to read.
 
 <a id="fim.statistics.differentiation.hill_number"></a>
 
-#### [hill\_number](./statistics/differentiation.py#L436)
+#### [hill\_number](./statistics/differentiation.py#L455)
 
 ```python
 def hill_number(frequencies: Mapping[Any, Any], order: float | int) -> float
@@ -35064,7 +35101,7 @@ each allele by its own actual frequency.
 
 <a id="fim.statistics.differentiation.effective_allele_count"></a>
 
-#### [effective\_allele\_count](./statistics/differentiation.py#L457)
+#### [effective\_allele\_count](./statistics/differentiation.py#L476)
 
 ```python
 def effective_allele_count(heterozygosity_value: float) -> float
@@ -35117,7 +35154,7 @@ $H_S$ / $H_T$ is the only diversity value on hand.
 
 <a id="fim.statistics.differentiation.h_s"></a>
 
-#### [h\_s](./statistics/differentiation.py#L532)
+#### [h\_s](./statistics/differentiation.py#L551)
 
 ```python
 def h_s(table: FrequencyTable[AlleleKey],
@@ -35136,7 +35173,7 @@ from.
 
 <a id="fim.statistics.differentiation.h_t"></a>
 
-#### [h\_t](./statistics/differentiation.py#L563)
+#### [h\_t](./statistics/differentiation.py#L582)
 
 ```python
 def h_t(table: FrequencyTable[AlleleKey],
@@ -35156,7 +35193,7 @@ material every differentiation measure in this module works with.
 
 <a id="fim.statistics.differentiation.gd_from_within_and_total"></a>
 
-#### [gd\_from\_within\_and\_total](./statistics/differentiation.py#L582)
+#### [gd\_from\_within\_and\_total](./statistics/differentiation.py#L601)
 
 ```python
 def gd_from_within_and_total(within: float, total: float,
@@ -35182,7 +35219,7 @@ first (`_require_multiple_demes`).
 
 <a id="fim.statistics.differentiation.gs"></a>
 
-#### [gs](./statistics/differentiation.py#L603)
+#### [gs](./statistics/differentiation.py#L622)
 
 ```python
 def gs(table: FrequencyTable[AlleleKey],
@@ -35207,7 +35244,7 @@ need; see `gd`, below, for that.
 
 <a id="fim.statistics.differentiation.gd"></a>
 
-#### [gd](./statistics/differentiation.py#L625)
+#### [gd](./statistics/differentiation.py#L644)
 
 ```python
 def gd(table: FrequencyTable[AlleleKey],
@@ -35222,7 +35259,7 @@ one), the same requirement `g_st`/`h_st` already carry.
 
 <a id="fim.statistics.differentiation.h_st"></a>
 
-#### [h\_st](./statistics/differentiation.py#L681)
+#### [h\_st](./statistics/differentiation.py#L700)
 
 ```python
 def h_st(table: FrequencyTable[AlleleKey],
@@ -35247,7 +35284,7 @@ nothing more than this correctly-partitioned quantity, normalized.
 
 <a id="fim.statistics.differentiation.total_hill_number"></a>
 
-#### [total\_hill\_number](./statistics/differentiation.py#L705)
+#### [total\_hill\_number](./statistics/differentiation.py#L724)
 
 ```python
 def total_hill_number(table: FrequencyTable[AlleleKey],
@@ -35264,7 +35301,7 @@ combined result, at whichever `order` is requested.
 
 <a id="fim.statistics.differentiation.within_hill_number"></a>
 
-#### [within\_hill\_number](./statistics/differentiation.py#L722)
+#### [within\_hill\_number](./statistics/differentiation.py#L741)
 
 ```python
 def within_hill_number(table: FrequencyTable[AlleleKey],
@@ -35285,7 +35322,7 @@ that shows up in this module).
 
 <a id="fim.statistics.differentiation.g_st_from_demes"></a>
 
-#### [g\_st\_from\_demes](./statistics/differentiation.py#L761)
+#### [g\_st\_from\_demes](./statistics/differentiation.py#L780)
 
 ```python
 def g_st_from_demes(total: float, within: float) -> float | None
@@ -35304,7 +35341,7 @@ had already validated once).
 
 <a id="fim.statistics.differentiation.g_st"></a>
 
-#### [g\_st](./statistics/differentiation.py#L778)
+#### [g\_st](./statistics/differentiation.py#L797)
 
 ```python
 def g_st(table: FrequencyTable[AlleleKey],
@@ -35328,7 +35365,7 @@ answer, not a fabricated `0.0` or `1.0`.
 
 <a id="fim.statistics.differentiation.d_m"></a>
 
-#### [d\_m](./statistics/differentiation.py#L804)
+#### [d\_m](./statistics/differentiation.py#L823)
 
 ```python
 def d_m(table: FrequencyTable[AlleleKey]) -> float
@@ -35362,7 +35399,7 @@ there is no `deme_weights` parameter here for the same reason
 
 <a id="fim.statistics.differentiation.r_st"></a>
 
-#### [r\_st](./statistics/differentiation.py#L845)
+#### [r\_st](./statistics/differentiation.py#L864)
 
 ```python
 def r_st(table: FrequencyTable[AlleleKey]) -> float | None
@@ -35384,7 +35421,7 @@ structurally identical zero-denominator case.
 
 <a id="fim.statistics.differentiation.g_st_log"></a>
 
-#### [g\_st\_log](./statistics/differentiation.py#L868)
+#### [g\_st\_log](./statistics/differentiation.py#L887)
 
 ```python
 def g_st_log(table: FrequencyTable[AlleleKey],
@@ -35430,7 +35467,7 @@ are interchangeable because they share a name.
 
 <a id="fim.statistics.differentiation.g_st_max"></a>
 
-#### [g\_st\_max](./statistics/differentiation.py#L920)
+#### [g\_st\_max](./statistics/differentiation.py#L939)
 
 ```python
 def g_st_max(h_s: float, deme_count: int) -> float
@@ -35468,7 +35505,7 @@ dividing by this ceiling is actually for.
 
 <a id="fim.statistics.differentiation.derived_differentiation"></a>
 
-#### [derived\_differentiation](./statistics/differentiation.py#L957)
+#### [derived\_differentiation](./statistics/differentiation.py#L976)
 
 ```python
 def derived_differentiation(h_s: float, h_t: float,
@@ -35518,7 +35555,7 @@ the engine's default $D$ and $G_{ST}$ use.
 
 <a id="fim.statistics.differentiation.g_st_prime"></a>
 
-#### [g\_st\_prime](./statistics/differentiation.py#L1032)
+#### [g\_st\_prime](./statistics/differentiation.py#L1051)
 
 ```python
 def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float
@@ -35568,7 +35605,7 @@ interpreting this statistic, not a defect in computing it.
 
 <a id="fim.statistics.differentiation.jost_d_from_within_and_total"></a>
 
-#### [jost\_d\_from\_within\_and\_total](./statistics/differentiation.py#L1077)
+#### [jost\_d\_from\_within\_and\_total](./statistics/differentiation.py#L1096)
 
 ```python
 def jost_d_from_within_and_total(deme_count: int, within: float,
@@ -35590,7 +35627,7 @@ satisfy this signature.
 
 <a id="fim.statistics.differentiation.jost_d"></a>
 
-#### [jost\_d](./statistics/differentiation.py#L1095)
+#### [jost\_d](./statistics/differentiation.py#L1115)
 
 ```python
 def jost_d(table: FrequencyTable[AlleleKey]) -> float
@@ -35612,7 +35649,7 @@ relative to $E_{ST}$.
 
 <a id="fim.statistics.differentiation.e_st"></a>
 
-#### [e\_st](./statistics/differentiation.py#L1135)
+#### [e\_st](./statistics/differentiation.py#L1155)
 
 ```python
 def e_st(table: FrequencyTable[AlleleKey],
@@ -35637,7 +35674,7 @@ weight of other, already-differentiating alleles.
 
 <a id="fim.statistics.differentiation.k_st"></a>
 
-#### [k\_st](./statistics/differentiation.py#L1184)
+#### [k\_st](./statistics/differentiation.py#L1204)
 
 ```python
 def k_st(table: FrequencyTable[AlleleKey]) -> float
@@ -35658,7 +35695,7 @@ any measure in this module.
 
 <a id="fim.statistics.differentiation.allelic_distance"></a>
 
-#### [allelic\_distance](./statistics/differentiation.py#L1203)
+#### [allelic\_distance](./statistics/differentiation.py#L1223)
 
 ```python
 def allelic_distance(table: FrequencyTable[AlleleKey]) -> float
@@ -35676,7 +35713,7 @@ unordered deme pairs.
 
 <a id="fim.statistics.differentiation.gregorius_delta"></a>
 
-#### [gregorius\_delta](./statistics/differentiation.py#L1272)
+#### [gregorius\_delta](./statistics/differentiation.py#L1292)
 
 ```python
 def gregorius_delta(table: FrequencyTable[AlleleKey],
@@ -35694,7 +35731,7 @@ of the Manhattan distance between their frequency vectors.
 
 <a id="fim.statistics.differentiation.mutual_information"></a>
 
-#### [mutual\_information](./statistics/differentiation.py#L1309)
+#### [mutual\_information](./statistics/differentiation.py#L1329)
 
 ```python
 def mutual_information(table: FrequencyTable[AlleleKey],
@@ -35711,7 +35748,7 @@ allele identity and deme membership were independent.
 
 <a id="fim.statistics.differentiation.f_st_coancestry_matrix"></a>
 
-#### [f\_st\_coancestry\_matrix](./statistics/differentiation.py#L1327)
+#### [f\_st\_coancestry\_matrix](./statistics/differentiation.py#L1347)
 
 ```python
 def f_st_coancestry_matrix(
@@ -35750,7 +35787,7 @@ F_{ST} = \frac{\Theta - J \theta_B}{1 - \theta_B}
 
 <a id="fim.statistics.differentiation.population_specific_f_st"></a>
 
-#### [population\_specific\_f\_st](./statistics/differentiation.py#L1386)
+#### [population\_specific\_f\_st](./statistics/differentiation.py#L1406)
 
 ```python
 def population_specific_f_st(
@@ -35780,7 +35817,7 @@ F_{ST}^i = \frac{\theta_{ii} - \theta_B}{1 - \theta_B}
 
 <a id="fim.statistics.differentiation.population_pair_f_st"></a>
 
-#### [population\_pair\_f\_st](./statistics/differentiation.py#L1410)
+#### [population\_pair\_f\_st](./statistics/differentiation.py#L1430)
 
 ```python
 def population_pair_f_st(table: FrequencyTable[AlleleKey], i: int,
@@ -35814,7 +35851,7 @@ F_{ST}^{ij} = \frac{\theta_{ij} - \theta_B}{1 - \theta_B}
 
 <a id="fim.statistics.differentiation.pairwise_f_st"></a>
 
-#### [pairwise\_f\_st](./statistics/differentiation.py#L1443)
+#### [pairwise\_f\_st](./statistics/differentiation.py#L1463)
 
 ```python
 def pairwise_f_st(frequencies_x: Mapping[Any, Any],
@@ -35851,7 +35888,7 @@ F_{STp}^{XY} = \frac{(\theta_{XX} + \theta_{YY})/2 - \theta_{XY}}
 
 <a id="fim.statistics.differentiation.overall_coancestry_f_st"></a>
 
-#### [overall\_coancestry\_f\_st](./statistics/differentiation.py#L1484)
+#### [overall\_coancestry\_f\_st](./statistics/differentiation.py#L1504)
 
 ```python
 def overall_coancestry_f_st(table: FrequencyTable[AlleleKey]) -> float
@@ -35883,7 +35920,7 @@ F_{ST} = \frac{\bar{\theta}_W - \theta_B}{1 - \theta_B}
 
 <a id="fim.statistics.differentiation.differentiation_q"></a>
 
-#### [differentiation\_q](./statistics/differentiation.py#L1511)
+#### [differentiation\_q](./statistics/differentiation.py#L1531)
 
 ```python
 def differentiation_q(table: FrequencyTable[AlleleKey],
@@ -35916,7 +35953,7 @@ Jost's $D$ respectively.
 
 <a id="fim.statistics.differentiation.equilibrium_d"></a>
 
-#### [equilibrium\_d](./statistics/differentiation.py#L1562)
+#### [equilibrium\_d](./statistics/differentiation.py#L1582)
 
 ```python
 def equilibrium_d(m: float, mu: float, d: int) -> float
@@ -35956,7 +35993,7 @@ result the guide discusses at length.
 
 <a id="fim.statistics.differentiation.equilibrium_g_st"></a>
 
-#### [equilibrium\_g\_st](./statistics/differentiation.py#L1598)
+#### [equilibrium\_g\_st](./statistics/differentiation.py#L1618)
 
 ```python
 def equilibrium_g_st(population_size: int, m: float, mu: float,
@@ -36009,7 +36046,7 @@ terms use ``2 * N`` instead — the same quantity, `4 * N_individuals
 
 <a id="fim.statistics.differentiation.identity_recovery_rate"></a>
 
-#### [identity\_recovery\_rate](./statistics/differentiation.py#L1694)
+#### [identity\_recovery\_rate](./statistics/differentiation.py#L1714)
 
 ```python
 def identity_recovery_rate(population_size: int, m: float) -> float
@@ -36051,7 +36088,7 @@ comparison against that recursion across six representative
 
 <a id="fim.statistics.differentiation.identity_recovery_equilibrium"></a>
 
-#### [identity\_recovery\_equilibrium](./statistics/differentiation.py#L1730)
+#### [identity\_recovery\_equilibrium](./statistics/differentiation.py#L1750)
 
 ```python
 def identity_recovery_equilibrium(population_size: int, m: float) -> float
@@ -36077,7 +36114,7 @@ from.
 
 <a id="fim.statistics.differentiation.identity_recovery_trajectory"></a>
 
-#### [identity\_recovery\_trajectory](./statistics/differentiation.py#L1750)
+#### [identity\_recovery\_trajectory](./statistics/differentiation.py#L1770)
 
 ```python
 def identity_recovery_trajectory(f0_initial: float, population_size: int,
@@ -36118,7 +36155,7 @@ see that function's own docstring.
 
 <a id="fim.statistics.differentiation.identity_recovery_half_life"></a>
 
-#### [identity\_recovery\_half\_life](./statistics/differentiation.py#L1805)
+#### [identity\_recovery\_half\_life](./statistics/differentiation.py#L1825)
 
 ```python
 def identity_recovery_half_life(population_size: int, m: float) -> float
@@ -36154,7 +36191,7 @@ than evaluating ``log(0.5) / log(0.0)``, which is the correct limit
 
 <a id="fim.statistics.differentiation.mutation_negligible_transition"></a>
 
-#### [mutation\_negligible\_transition](./statistics/differentiation.py#L1838)
+#### [mutation\_negligible\_transition](./statistics/differentiation.py#L1858)
 
 ```python
 def mutation_negligible_transition(h_s_initial: float, mu: float) -> float
@@ -36201,7 +36238,7 @@ limit rather than a division-by-zero to guard against.
 
 <a id="fim.statistics.differentiation.mutation_negligible_equilibrium"></a>
 
-#### [mutation\_negligible\_equilibrium](./statistics/differentiation.py#L1887)
+#### [mutation\_negligible\_equilibrium](./statistics/differentiation.py#L1907)
 
 ```python
 def mutation_negligible_equilibrium(m: float, mu: float,
@@ -36238,7 +36275,7 @@ value.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated"></a>
 
-#### [equilibrium\_shannon\_entropy\_isolated](./statistics/differentiation.py#L2011)
+#### [equilibrium\_shannon\_entropy\_isolated](./statistics/differentiation.py#L2031)
 
 ```python
 def equilibrium_shannon_entropy_isolated(population_size: int,
@@ -36314,7 +36351,7 @@ exactly, since `within_hill_number` itself already returns
 
 <a id="fim.statistics.differentiation.equilibrium_heterozygosity_isolated"></a>
 
-#### [equilibrium\_heterozygosity\_isolated](./statistics/differentiation.py#L2081)
+#### [equilibrium\_heterozygosity\_isolated](./statistics/differentiation.py#L2101)
 
 ```python
 def equilibrium_heterozygosity_isolated(population_size: int,
@@ -36345,7 +36382,7 @@ gene-copy convention. This is the heterozygosity counterpart to
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated_smm"></a>
 
-#### [equilibrium\_shannon\_entropy\_isolated\_smm](./statistics/differentiation.py#L2106)
+#### [equilibrium\_shannon\_entropy\_isolated\_smm](./statistics/differentiation.py#L2126)
 
 ```python
 def equilibrium_shannon_entropy_isolated_smm(population_size: int,
@@ -36399,7 +36436,7 @@ simulator cross-check.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_total"></a>
 
-#### [equilibrium\_shannon\_entropy\_total](./statistics/differentiation.py#L2155)
+#### [equilibrium\_shannon\_entropy\_total](./statistics/differentiation.py#L2175)
 
 ```python
 def equilibrium_shannon_entropy_total(population_size: int, m: float,
@@ -36452,7 +36489,7 @@ Unbounded above, the same as `equilibrium_shannon_entropy_isolated`
 
 <a id="fim.statistics.differentiation.equilibrium_heterozygosity_total"></a>
 
-#### [equilibrium\_heterozygosity\_total](./statistics/differentiation.py#L2207)
+#### [equilibrium\_heterozygosity\_total](./statistics/differentiation.py#L2227)
 
 ```python
 def equilibrium_heterozygosity_total(population_size: int, m: float, mu: float,
@@ -36485,7 +36522,7 @@ heterozygosity.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_subpopulation"></a>
 
-#### [equilibrium\_shannon\_entropy\_subpopulation](./statistics/differentiation.py#L2257)
+#### [equilibrium\_shannon\_entropy\_subpopulation](./statistics/differentiation.py#L2277)
 
 ```python
 def equilibrium_shannon_entropy_subpopulation(population_size: int, m: float,
@@ -36540,7 +36577,7 @@ population-dependent formula in this module already shares.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_differentiation"></a>
 
-#### [equilibrium\_shannon\_differentiation](./statistics/differentiation.py#L2319)
+#### [equilibrium\_shannon\_differentiation](./statistics/differentiation.py#L2339)
 
 ```python
 def equilibrium_shannon_differentiation(population_size: int, m: float,
@@ -36591,7 +36628,7 @@ not a bug to raise on.
 
 <a id="fim.statistics.differentiation.statistics_report"></a>
 
-#### [statistics\_report](./statistics/differentiation.py#L2367)
+#### [statistics\_report](./statistics/differentiation.py#L2387)
 
 ```python
 def statistics_report(

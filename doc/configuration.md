@@ -434,7 +434,10 @@ Founding IDs are locus-relative `0` through initial_allele_count - 1.
 - **Default:** `1.0`
 
 The random default draws each deme/locus frequency vector independently from a
-symmetric Dirichlet distribution. Smaller values are more uneven.
+symmetric Dirichlet distribution. Smaller values are more uneven, down to a
+value small enough that generation 0 itself lands arbitrarily close to
+fixation; differentiation statistics computed from a frequency table that
+close to fixation remain within `[0, 1]` rather than raising.
 
 ### p_0
 

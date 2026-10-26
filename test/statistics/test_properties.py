@@ -1,7 +1,9 @@
 """Property-based tests for differentiation identities and bounds."""
 
+import random
+
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from fim.statistics import (
@@ -17,6 +19,7 @@ from fim.statistics import (
     total_hill_number,
     within_hill_number,
 )
+from fim.statistics.differentiation import statistics_report
 
 
 @st.composite
@@ -46,6 +49,111 @@ def frequency_tables(
             }
         )
     return table
+
+
+@st.composite
+def extreme_concentration_frequency_tables(
+    draw: st.DrawFn,
+) -> list[dict[int, float]]:
+    """Generate near-fixation frequency tables from a tiny-concentration draw.
+
+    `frequency_tables`, above, only ever draws integer counts up to `20`
+    (frequencies no closer than `0.01` to `0`/`1`): the 2026-10-25 project
+    review's finding S-1 traces `_bounded`'s absolute-tolerance bug to
+    exactly the gap this strategy fills, frequencies from `1e-12` up to
+    `1`, via the same `Gamma(concentration, 1)` construction
+    `DirichletInitialCondition.generate` uses for
+    `initial_concentration` (`doc/configuration.md`'s own "smaller values
+    are more uneven", down to values the fixture above never reaches).
+    `random.Random` rather than a Hypothesis float/integer strategy: a
+    Dirichlet draw has no natural shrinkable encoding of its own, so a
+    Hypothesis-drawn seed runs an ordinary gamma sampler deterministically
+    instead.
+    """
+    deme_count = draw(st.integers(min_value=2, max_value=4))
+    allele_count = draw(st.integers(min_value=2, max_value=4))
+    concentration = draw(st.floats(min_value=1e-6, max_value=0.2, allow_nan=False))
+    seed = draw(st.integers(min_value=0, max_value=2**32 - 1))
+    rng = random.Random(seed)
+    table: list[dict[int, float]] = []
+    for _deme in range(deme_count):
+        shares = [
+            max(rng.gammavariate(concentration, 1.0), 1e-300)
+            for _ in range(allele_count)
+        ]
+        total = sum(shares)
+        table.append(
+            {allele_id: share / total for allele_id, share in enumerate(shares)}
+        )
+    return table
+
+
+@st.composite
+def many_allele_frequency_tables(draw: st.DrawFn) -> list[dict[int, float]]:
+    """Generate two disjoint demes with at least `10**4` alleles each.
+
+    The 2026-10-25 project review's finding S-1 also reproduces through
+    $D$'s `/ (1 - H_S)` denominator at a large allele count with no
+    near-fixation frequency anywhere (`H_S` itself approaches `1` simply
+    because there are many alleles, each individually rare) — a second,
+    independent route to the same tiny-denominator regime, worth its own
+    case alongside `extreme_concentration_frequency_tables`.
+    """
+    allele_count = draw(st.integers(min_value=10_000, max_value=15_000))
+    seed = draw(st.integers(min_value=0, max_value=2**32 - 1))
+    rng = random.Random(seed)
+    table: list[dict[int, float]] = []
+    for deme_index in range(2):
+        counts = [rng.randint(1, 100) for _ in range(allele_count)]
+        total = sum(counts)
+        offset = deme_index * allele_count
+        table.append(
+            {
+                allele_id + offset: count / total
+                for allele_id, count in enumerate(counts)
+            }
+        )
+    return table
+
+
+@given(extreme_concentration_frequency_tables())
+def test_statistics_report_tolerates_near_fixation_roundoff(
+    table: list[dict[int, float]],
+) -> None:
+    """A tiny-concentration frequency table never raises `ArithmeticError`.
+
+    Regression test for the 2026-10-25 project review's finding S-1:
+    before `_bounded`'s conditioning-aware tolerance, a `G_ST`, `H_ST`,
+    or `D` computed from a table this close to fixation could raise
+    instead of returning a bounded statistic.
+    """
+    report = statistics_report(table)
+    assert 0.0 <= report["H_S"] <= 1.0
+    assert 0.0 <= report["H_T"] <= 1.0
+    assert 0.0 <= report["H_ST"] <= 1.0
+    assert 0.0 <= report["D"] <= 1.0
+    if report["G_ST"] is not None:
+        assert 0.0 <= report["G_ST"] <= 1.0
+
+
+@settings(max_examples=15, deadline=None)
+@given(many_allele_frequency_tables())
+def test_statistics_report_tolerates_many_alleles_near_full_divergence(
+    table: list[dict[int, float]],
+) -> None:
+    """Thousands of per-deme-private alleles never raise `ArithmeticError`.
+
+    Regression test for the 2026-10-25 project review's finding S-1's $D$
+    reproduction: two demes sharing no allele push `H_S` to within a few
+    `ULP`s of `1`, so $D$'s `/ (1 - H_S)` denominator shrinks toward zero
+    even though every frequency involved is an ordinary, non-extreme
+    value. `max_examples` lowered and `deadline` disabled because each
+    example samples and normalizes 20,000-30,000 per-allele counts, not
+    because the property itself is expensive to check.
+    """
+    report = statistics_report(table)
+    assert 0.0 <= report["H_ST"] <= 1.0
+    assert 0.0 <= report["D"] <= 1.0
 
 
 @given(frequency_tables())

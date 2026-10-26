@@ -97,6 +97,33 @@ DIFFERENTIATION_TOLERANCE: Final = 1e-12
 Kind: numerical guard.
 """
 
+CONDITIONING_ROUNDOFF: Final = 8.881784197001252e-16
+"""Four IEEE double epsilons (`4 * 2.220446049250313e-16`).
+
+`_bounded` (`fim.statistics.differentiation`) clamps a statistic computed
+as a ratio -- $G_{ST} = (H_T - H_S) / H_T$, $H_{ST}$ and $D$ both
+divided by $1 - H_S$ -- to `[0, 1]` within `DIFFERENTIATION_TOLERANCE`.
+That absolute margin is wide enough whenever the denominator is not
+small, but $H_T$ and $1 - H_S$ can each legitimately shrink toward zero
+(near-fixation, or near-complete differentiation at a large allele
+count): the numerator's own rounding error is a fixed few `epsilon`,
+independent of the denominator, so the quotient's error grows as the
+denominator shrinks and eventually exceeds `DIFFERENTIATION_TOLERANCE`
+even though nothing is actually wrong (this project's own 2026-10-25
+project review, `doc/20261025-claude-fable-5-1-fim-project-review.md`,
+finding S-1). `CONDITIONING_ROUNDOFF / abs(denominator)` is the
+conditioning-aware floor `_bounded` adds on top of
+`DIFFERENTIATION_TOLERANCE`: `4 * epsilon` is a small, fixed multiple of
+the one rounding error `fsum`'s own correctly-rounded result can still
+carry after a subtraction from a value near `1`, with headroom
+(confirmed against three reproductions from the review: two Dirichlet-
+sampled frequency tables and a 15,000-allele-per-deme table, all of
+which this floor admits with a comfortable margin while the unscaled
+`DIFFERENTIATION_TOLERANCE` alone rejects them).
+
+Kind: numerical guard.
+"""
+
 EULER_GAMMA: Final = 0.5772156649015328606
 """Euler-Mascheroni constant gamma = -psi(1), to full double precision
 (Abramowitz & Stegun 1972, table 1.1) -- the additive constant every

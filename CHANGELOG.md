@@ -1859,6 +1859,22 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A legitimately configured run could abort at generation 0.** `G_ST`,
+  `H_ST`, and `D` clamped their result to `[0, 1]` only within a flat
+  `1e-12` margin, then raised `ArithmeticError` beyond it. $G_{ST}$'s
+  `/ H_T` and $D$'s/$H_{ST}$'s shared `/ (1 - H_S)` amplify an ordinary,
+  fixed rounding error as their own denominator shrinks toward zero, so a
+  run approaching fixation (a small `initial_concentration`, or many
+  per-deme-private alleles pushing `H_S` toward `1`) could raise instead
+  of reporting a bounded statistic — reproduced through `fim.simulate`
+  with `initial_concentration: 0.05` and at the statistics layer with
+  Dirichlet-sampled and 15,000-allele-per-deme tables. The clamp's
+  tolerance is now conditioning-aware: it widens by the formula's own
+  denominator, keeping the hard error only for a value actually beyond
+  that widened margin. Mirrored in Backend V's compiled kernel so its
+  status flag does not force every such generation back onto the slower
+  Python path. New regression and property tests cover both the
+  near-fixation and many-allele routes to a tiny denominator.
 - **Saved runs fail at their first checkpoint without `numba`.** On an
   install without the optional `numba` dependency (including the Windows
   ARM64 and Intel macOS builds), the trajectory log's plain-Python codec

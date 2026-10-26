@@ -76,6 +76,7 @@ equations, and [API reference](../API.md) for module definitions.
 | `RECONSTRUCTION_TOLERANCE` | `numerics.py` | numerical guard | `RECONSTRUCTION_TOLERANCE`. |
 | `MINIMUM_SAMPLE_GENE_COPIES` | `numerics.py` | derivable | `MINIMUM_SAMPLE_GENE_COPIES`. |
 | `DIFFERENTIATION_TOLERANCE` | `numerics.py` | numerical guard | `DIFFERENTIATION_TOLERANCE`. |
+| `CONDITIONING_ROUNDOFF` | `numerics.py` | numerical guard | Conditioning-aware floor on top of `DIFFERENTIATION_TOLERANCE` for a statistic whose denominator ($H_T$ or `1 - H_S`) has shrunk toward zero. |
 | `EULER_GAMMA` | `numerics.py` | derivable (a mathematical constant) | Euler–Mascheroni constant, `gamma = -psi(1)`, used by equilibrium Shannon-entropy formulas (Abramowitz & Stegun 1972, table 1.1). |
 | `DIGAMMA_ASYMPTOTIC_THRESHOLD` | `numerics.py` | numerical guard, derivable | Argument threshold for the digamma asymptotic series; smaller arguments are shifted by recurrence (Abramowitz & Stegun 1972, formula 6.3.18). |
 | `DEFAULT_LOCUS_LENGTH` | `defaults.py` | policy; a regular setting | `DEFAULT_LOCUS_LENGTH`. |

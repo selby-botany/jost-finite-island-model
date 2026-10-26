@@ -35820,7 +35820,7 @@ The kernel clamps with the same tolerance `statistics_report` does.
 
 <a id="model.test_vector_kernels.test_exact_sum_matches_math_fsum_on_seeded_fuzz"></a>
 
-#### [test\_exact\_sum\_matches\_math\_fsum\_on\_seeded\_fuzz](./model/test_vector_kernels.py#L39)
+#### [test\_exact\_sum\_matches\_math\_fsum\_on\_seeded\_fuzz](./model/test_vector_kernels.py#L40)
 
 ```python
 def test_exact_sum_matches_math_fsum_on_seeded_fuzz() -> None
@@ -35830,7 +35830,7 @@ The `fsum` port returns the same bits as CPython for any finite input.
 
 <a id="model.test_vector_kernels.test_exact_sum_of_nothing_is_zero"></a>
 
-#### [test\_exact\_sum\_of\_nothing\_is\_zero](./model/test_vector_kernels.py#L56)
+#### [test\_exact\_sum\_of\_nothing\_is\_zero](./model/test_vector_kernels.py#L57)
 
 ```python
 def test_exact_sum_of_nothing_is_zero() -> None
@@ -35840,7 +35840,7 @@ An empty sum is exactly zero, as in `math.fsum`.
 
 <a id="model.test_vector_kernels.test_pairwise_sum_matches_numpy_for_every_length_to_four_hundred"></a>
 
-#### [test\_pairwise\_sum\_matches\_numpy\_for\_every\_length\_to\_four\_hundred](./model/test_vector_kernels.py#L61)
+#### [test\_pairwise\_sum\_matches\_numpy\_for\_every\_length\_to\_four\_hundred](./model/test_vector_kernels.py#L62)
 
 ```python
 def test_pairwise_sum_matches_numpy_for_every_length_to_four_hundred() -> None
@@ -35854,7 +35854,7 @@ cover all three, including each boundary.
 
 <a id="model.test_vector_kernels.test_pairwise_sum_matches_numpy_on_seeded_fuzz"></a>
 
-#### [test\_pairwise\_sum\_matches\_numpy\_on\_seeded\_fuzz](./model/test_vector_kernels.py#L75)
+#### [test\_pairwise\_sum\_matches\_numpy\_on\_seeded\_fuzz](./model/test_vector_kernels.py#L76)
 
 ```python
 def test_pairwise_sum_matches_numpy_on_seeded_fuzz() -> None
@@ -35864,7 +35864,7 @@ Random lengths and magnitudes up to several thousand values agree.
 
 <a id="model.test_vector_kernels.test_pairwise_sum_uses_only_the_leading_values"></a>
 
-#### [test\_pairwise\_sum\_uses\_only\_the\_leading\_values](./model/test_vector_kernels.py#L85)
+#### [test\_pairwise\_sum\_uses\_only\_the\_leading\_values](./model/test_vector_kernels.py#L86)
 
 ```python
 def test_pairwise_sum_uses_only_the_leading_values() -> None
@@ -35874,7 +35874,7 @@ Values past `count` are ignored, as the kernel's scratch arrays need.
 
 <a id="model.test_vector_kernels.test_inversion_binomial_matches_the_original_stream_and_values"></a>
 
-#### [test\_inversion\_binomial\_matches\_the\_original\_stream\_and\_values](./model/test_vector_kernels.py#L109)
+#### [test\_inversion\_binomial\_matches\_the\_original\_stream\_and\_values](./model/test_vector_kernels.py#L110)
 
 ```python
 @pytest.mark.parametrize(
@@ -35906,7 +35906,7 @@ real draw, none for the short-circuits) is the same too.
 
 <a id="model.test_vector_kernels.test_inversion_binomial_matches_on_seeded_fuzz"></a>
 
-#### [test\_inversion\_binomial\_matches\_on\_seeded\_fuzz](./model/test_vector_kernels.py#L128)
+#### [test\_inversion\_binomial\_matches\_on\_seeded\_fuzz](./model/test_vector_kernels.py#L129)
 
 ```python
 def test_inversion_binomial_matches_on_seeded_fuzz() -> None
@@ -35916,7 +35916,7 @@ Random `(n, p)` pairs, one stream, stay in step to the last bit.
 
 <a id="model.test_vector_kernels.test_locus_statistics_match_statistics_report_bit_for_bit"></a>
 
-#### [test\_locus\_statistics\_match\_statistics\_report\_bit\_for\_bit](./model/test_vector_kernels.py#L181)
+#### [test\_locus\_statistics\_match\_statistics\_report\_bit\_for\_bit](./model/test_vector_kernels.py#L182)
 
 ```python
 @pytest.mark.parametrize("demes", [2, 3, 5, 20])
@@ -35931,7 +35931,7 @@ Seeded states with 1 to 200 alleles, shared and private across demes.
 
 <a id="model.test_vector_kernels.test_locus_statistics_report_g_st_undefined_when_every_deme_is_fixed_alike"></a>
 
-#### [test\_locus\_statistics\_report\_g\_st\_undefined\_when\_every\_deme\_is\_fixed\_alike](./model/test_vector_kernels.py#L209)
+#### [test\_locus\_statistics\_report\_g\_st\_undefined\_when\_every\_deme\_is\_fixed\_alike](./model/test_vector_kernels.py#L210)
 
 ```python
 def test_locus_statistics_report_g_st_undefined_when_every_deme_is_fixed_alike(
@@ -35940,9 +35940,25 @@ def test_locus_statistics_report_g_st_undefined_when_every_deme_is_fixed_alike(
 
 A monomorphic locus has no $G_{ST}$: the kernel returns `nan`, not an error.
 
+<a id="model.test_vector_kernels.test_locus_statistics_tolerates_near_fixation_roundoff_s1"></a>
+
+#### [test\_locus\_statistics\_tolerates\_near\_fixation\_roundoff\_s1](./model/test_vector_kernels.py#L226)
+
+```python
+def test_locus_statistics_tolerates_near_fixation_roundoff_s1() -> None
+```
+
+A near-fixation locus clamps, bit for bit with Python, instead of flagging.
+
+Regression test for the 2026-10-25 project review's finding S-1,
+mirrored at the kernel level: the review's own seed-10 reproduction
+table (`H_T` within `1e-13` of zero) used to set `status[locus] = 1`,
+forcing every generation back onto the slow Python path, which then
+raised `ArithmeticError` in turn.
+
 <a id="model.test_vector_kernels.test_locus_statistics_flag_a_frequency_row_that_is_not_normalized"></a>
 
-#### [test\_locus\_statistics\_flag\_a\_frequency\_row\_that\_is\_not\_normalized](./model/test_vector_kernels.py#L225)
+#### [test\_locus\_statistics\_flag\_a\_frequency\_row\_that\_is\_not\_normalized](./model/test_vector_kernels.py#L250)
 
 ```python
 def test_locus_statistics_flag_a_frequency_row_that_is_not_normalized(
@@ -35956,7 +35972,7 @@ sets the locus's status and lets the caller recompute with Python.
 
 <a id="model.test_vector_kernels.test_continuous_migration_fills_every_fraction_and_draws_nothing"></a>
 
-#### [test\_continuous\_migration\_fills\_every\_fraction\_and\_draws\_nothing](./model/test_vector_kernels.py#L265)
+#### [test\_continuous\_migration\_fills\_every\_fraction\_and\_draws\_nothing](./model/test_vector_kernels.py#L290)
 
 ```python
 def test_continuous_migration_fills_every_fraction_and_draws_nothing() -> None
@@ -35969,7 +35985,7 @@ leave, so a continuous run is unaffected by the stochastic option.
 
 <a id="model.test_vector_kernels.test_stochastic_scalar_fractions_equal_the_operators_draws"></a>
 
-#### [test\_stochastic\_scalar\_fractions\_equal\_the\_operators\_draws](./model/test_vector_kernels.py#L282)
+#### [test\_stochastic\_scalar\_fractions\_equal\_the\_operators\_draws](./model/test_vector_kernels.py#L307)
 
 ```python
 @pytest.mark.parametrize("rate", [0.0001, 0.05, 0.3, 0.75, 1.0])
@@ -35985,7 +36001,7 @@ uniform per real draw, none when `rate >= 1`).
 
 <a id="model.test_vector_kernels.test_stochastic_matrix_fractions_use_each_rows_migrant_weight"></a>
 
-#### [test\_stochastic\_matrix\_fractions\_use\_each\_rows\_migrant\_weight](./model/test_vector_kernels.py#L299)
+#### [test\_stochastic\_matrix\_fractions\_use\_each\_rows\_migrant\_weight](./model/test_vector_kernels.py#L324)
 
 ```python
 def test_stochastic_matrix_fractions_use_each_rows_migrant_weight() -> None
@@ -35998,7 +36014,7 @@ Row 2 has no self-weight (migrant weight 1): no uniform, fraction 1.
 
 <a id="model.test_vector_kernels.test_cached_binomial_equals_the_uncached_draw_bit_for_bit"></a>
 
-#### [test\_cached\_binomial\_equals\_the\_uncached\_draw\_bit\_for\_bit](./model/test_vector_kernels.py#L326)
+#### [test\_cached\_binomial\_equals\_the\_uncached\_draw\_bit\_for\_bit](./model/test_vector_kernels.py#L351)
 
 ```python
 @pytest.mark.parametrize("p", [1e-6, 0.002, 0.3, 0.5, 0.75, 0.999])
@@ -43293,9 +43309,50 @@ def test_g_st_has_explicit_undefined_value_for_shared_fixation() -> None
 
 $G_{ST}$ is `None`, rather than NaN, for total heterozygosity of zero.
 
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_near_fixation_roundoff_clamps_instead_of_raising"></a>
+
+#### [test\_near\_fixation\_roundoff\_clamps\_instead\_of\_raising](./statistics/test_differentiation.py#L205)
+
+```python
+def test_near_fixation_roundoff_clamps_instead_of_raising() -> None
+```
+
+A legitimately tiny $H_T$/`1 - H_S` no longer raises `ArithmeticError`.
+
+Regression test for this project's own 2026-10-25 project review,
+finding S-1: `_bounded`'s flat `DIFFERENTIATION_TOLERANCE` treated
+any value outside `[0, 1]` by more than `1e-12` as a bug, but
+$G_{ST} = (H_T - H_S) / H_T$ and $D$'s shared `/ (1 - H_S)` both
+amplify the numerator's fixed, denominator-independent rounding
+error as their own denominator shrinks toward zero — a real,
+reachable state (near-complete fixation), not a defect. This
+exact two-deme table is the review's own seed-10 reproduction
+(`fim.simulate`, `FoundingAlleles(count=2, concentration=0.05)`,
+generation 0): $H_T \approx 5.6\times 10^{-14}$, so the raw
+$G_{ST}$ before clamping is `-0.00198...`, comfortably inside the
+new conditioning-aware tolerance and far outside the old flat
+one.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_bounded_still_raises_beyond_its_conditioning_aware_tolerance"></a>
+
+#### [test\_bounded\_still\_raises\_beyond\_its\_conditioning\_aware\_tolerance](./statistics/test_differentiation.py#L231)
+
+```python
+def test_bounded_still_raises_beyond_its_conditioning_aware_tolerance(
+) -> None
+```
+
+A genuinely wrong value is still rejected, even with a tiny denominator.
+
+The conditioning-aware floor widens the tolerance by
+`CONDITIONING_ROUNDOFF / abs(denominator)`, not without limit: a
+value far outside that widened margin still raises, so `_bounded`
+keeps catching a real upstream bug instead of only ever widening
+away from it.
+
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_e_st_accepts_size_weights_but_d_is_always_equal_weighted"></a>
 
-#### [test\_e\_st\_accepts\_size\_weights\_but\_d\_is\_always\_equal\_weighted](./statistics/test_differentiation.py#L205)
+#### [test\_e\_st\_accepts\_size\_weights\_but\_d\_is\_always\_equal\_weighted](./statistics/test_differentiation.py#L243)
 
 ```python
 def test_e_st_accepts_size_weights_but_d_is_always_equal_weighted() -> None
@@ -43305,7 +43362,7 @@ Only $E_{ST}$ accepts optional relative deme-size weights.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_malformed_frequency_tables_and_weights_are_rejected"></a>
 
-#### [test\_malformed\_frequency\_tables\_and\_weights\_are\_rejected](./statistics/test_differentiation.py#L213)
+#### [test\_malformed\_frequency\_tables\_and\_weights\_are\_rejected](./statistics/test_differentiation.py#L251)
 
 ```python
 def test_malformed_frequency_tables_and_weights_are_rejected() -> None
@@ -43315,7 +43372,7 @@ Malformed frequency tables and weights produce specific errors.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_matches_every_independently_validated_function"></a>
 
-#### [test\_statistics\_report\_matches\_every\_independently\_validated\_function](./statistics/test_differentiation.py#L232)
+#### [test\_statistics\_report\_matches\_every\_independently\_validated\_function](./statistics/test_differentiation.py#L270)
 
 ```python
 def test_statistics_report_matches_every_independently_validated_function(
@@ -43338,7 +43395,7 @@ exercise ragged widths and private alleles the fixtures may not.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_validates_the_table_exactly_once"></a>
 
-#### [test\_statistics\_report\_validates\_the\_table\_exactly\_once](./statistics/test_differentiation.py#L273)
+#### [test\_statistics\_report\_validates\_the\_table\_exactly\_once](./statistics/test_differentiation.py#L311)
 
 ```python
 def test_statistics_report_validates_the_table_exactly_once() -> None
@@ -43358,7 +43415,7 @@ several demes, not just that the final numbers happen to match.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_statistics_parameter_skips_unrequested_fields"></a>
 
-#### [test\_statistics\_report\_statistics\_parameter\_skips\_unrequested\_fields](./statistics/test_differentiation.py#L302)
+#### [test\_statistics\_report\_statistics\_parameter\_skips\_unrequested\_fields](./statistics/test_differentiation.py#L340)
 
 ```python
 def test_statistics_report_statistics_parameter_skips_unrequested_fields(
@@ -43378,7 +43435,7 @@ this exact kind of claim.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_statistics_parameter_never_changes_computed_fields"></a>
 
-#### [test\_statistics\_report\_statistics\_parameter\_never\_changes\_computed\_fields](./statistics/test_differentiation.py#L347)
+#### [test\_statistics\_report\_statistics\_parameter\_never\_changes\_computed\_fields](./statistics/test_differentiation.py#L385)
 
 ```python
 def test_statistics_report_statistics_parameter_never_changes_computed_fields(
@@ -43394,7 +43451,7 @@ nothing about them.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_differentiation_statistics_are_bounded"></a>
 
-#### [test\_differentiation\_statistics\_are\_bounded](./statistics/test_differentiation.py#L378)
+#### [test\_differentiation\_statistics\_are\_bounded](./statistics/test_differentiation.py#L416)
 
 ```python
 def test_differentiation_statistics_are_bounded() -> None
@@ -43404,7 +43461,7 @@ All defined scalar differentiation measures stay inside [0, 1].
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_weighted_heterozygosity_and_hill_numbers_use_weights"></a>
 
-#### [test\_weighted\_heterozygosity\_and\_hill\_numbers\_use\_weights](./statistics/test_differentiation.py#L397)
+#### [test\_weighted\_heterozygosity\_and\_hill\_numbers\_use\_weights](./statistics/test_differentiation.py#L435)
 
 ```python
 def test_weighted_heterozygosity_and_hill_numbers_use_weights() -> None
@@ -43414,7 +43471,7 @@ Optional weights change pooled and within-deme diversity as documented.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_hill_orders_and_input_types_are_validated"></a>
 
-#### [test\_hill\_orders\_and\_input\_types\_are\_validated](./statistics/test_differentiation.py#L408)
+#### [test\_hill\_orders\_and\_input\_types\_are\_validated](./statistics/test_differentiation.py#L446)
 
 ```python
 def test_hill_orders_and_input_types_are_validated() -> None
@@ -43424,7 +43481,7 @@ Hill APIs reject negative, nonnumeric, and nonfinite orders.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_hill_number_does_not_underflow_at_a_high_order"></a>
 
-#### [test\_hill\_number\_does\_not\_underflow\_at\_a\_high\_order](./statistics/test_differentiation.py#L419)
+#### [test\_hill\_number\_does\_not\_underflow\_at\_a\_high\_order](./statistics/test_differentiation.py#L457)
 
 ```python
 def test_hill_number_does_not_underflow_at_a_high_order() -> None
@@ -43446,7 +43503,7 @@ result actually approaches it, not merely that nothing raised.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_matches_the_order_2_hill_number"></a>
 
-#### [test\_effective\_allele\_count\_matches\_the\_order\_2\_hill\_number](./statistics/test_differentiation.py#L437)
+#### [test\_effective\_allele\_count\_matches\_the\_order\_2\_hill\_number](./statistics/test_differentiation.py#L475)
 
 ```python
 def test_effective_allele_count_matches_the_order_2_hill_number() -> None
@@ -43456,7 +43513,7 @@ The closed form and the general Hill-number formula agree exactly.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_at_zero_is_one_effective_allele"></a>
 
-#### [test\_effective\_allele\_count\_at\_zero\_is\_one\_effective\_allele](./statistics/test_differentiation.py#L444)
+#### [test\_effective\_allele\_count\_at\_zero\_is\_one\_effective\_allele](./statistics/test_differentiation.py#L482)
 
 ```python
 def test_effective_allele_count_at_zero_is_one_effective_allele() -> None
@@ -43466,7 +43523,7 @@ A fixed deme (`H = 0`) is exactly one effective allele.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_grows_without_bound_as_h_approaches_one"></a>
 
-#### [test\_effective\_allele\_count\_grows\_without\_bound\_as\_h\_approaches\_one](./statistics/test_differentiation.py#L448)
+#### [test\_effective\_allele\_count\_grows\_without\_bound\_as\_h\_approaches\_one](./statistics/test_differentiation.py#L486)
 
 ```python
 def test_effective_allele_count_grows_without_bound_as_h_approaches_one(
@@ -43477,7 +43534,7 @@ Effective allele count increases monotonically as H rises toward 1.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_rejects_out_of_range_input"></a>
 
-#### [test\_effective\_allele\_count\_rejects\_out\_of\_range\_input](./statistics/test_differentiation.py#L458)
+#### [test\_effective\_allele\_count\_rejects\_out\_of\_range\_input](./statistics/test_differentiation.py#L496)
 
 ```python
 def test_effective_allele_count_rejects_out_of_range_input() -> None
@@ -43487,7 +43544,7 @@ def test_effective_allele_count_rejects_out_of_range_input() -> None
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_rejects_non_numeric_input"></a>
 
-#### [test\_effective\_allele\_count\_rejects\_non\_numeric\_input](./statistics/test_differentiation.py#L464)
+#### [test\_effective\_allele\_count\_rejects\_non\_numeric\_input](./statistics/test_differentiation.py#L502)
 
 ```python
 def test_effective_allele_count_rejects_non_numeric_input() -> None
@@ -43497,7 +43554,7 @@ A non-numeric `H` (including `bool`, an `int` subtype) is rejected.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_digamma_accuracy_at_its_own_asymptotic_threshold"></a>
 
-#### [test\_digamma\_accuracy\_at\_its\_own\_asymptotic\_threshold](./statistics/test_differentiation.py#L470)
+#### [test\_digamma\_accuracy\_at\_its\_own\_asymptotic\_threshold](./statistics/test_differentiation.py#L508)
 
 ```python
 def test_digamma_accuracy_at_its_own_asymptotic_threshold() -> None
@@ -43516,7 +43573,7 @@ not the false one.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_h_st_raises_a_named_error_instead_of_zero_division"></a>
 
-#### [test\_h\_st\_raises\_a\_named\_error\_instead\_of\_zero\_division](./statistics/test_differentiation.py#L487)
+#### [test\_h\_st\_raises\_a\_named\_error\_instead\_of\_zero\_division](./statistics/test_differentiation.py#L525)
 
 ```python
 def test_h_st_raises_a_named_error_instead_of_zero_division() -> None
@@ -43535,7 +43592,7 @@ as `statistics_report`'s own internal call site does.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_max_matches_ryman_leimar_equation_7"></a>
 
-#### [test\_g\_st\_max\_matches\_ryman\_leimar\_equation\_7](./statistics/test_differentiation.py#L502)
+#### [test\_g\_st\_max\_matches\_ryman\_leimar\_equation\_7](./statistics/test_differentiation.py#L540)
 
 ```python
 def test_g_st_max_matches_ryman_leimar_equation_7() -> None
@@ -43551,7 +43608,7 @@ diversity at all) is the sharpest boundary case available.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_prime_matches_ryman_leimar_equation_8"></a>
 
-#### [test\_g\_st\_prime\_matches\_ryman\_leimar\_equation\_8](./statistics/test_differentiation.py#L516)
+#### [test\_g\_st\_prime\_matches\_ryman\_leimar\_equation\_8](./statistics/test_differentiation.py#L554)
 
 ```python
 def test_g_st_prime_matches_ryman_leimar_equation_8() -> None
@@ -43566,7 +43623,7 @@ standardized against in the first place.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_prime_manufactures_a_larger_apparent_difference_than_g_st"></a>
 
-#### [test\_g\_st\_prime\_manufactures\_a\_larger\_apparent\_difference\_than\_g\_st](./statistics/test_differentiation.py#L529)
+#### [test\_g\_st\_prime\_manufactures\_a\_larger\_apparent\_difference\_than\_g\_st](./statistics/test_differentiation.py#L567)
 
 ```python
 def test_g_st_prime_manufactures_a_larger_apparent_difference_than_g_st(
@@ -43589,7 +43646,7 @@ paper's own text provides.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_max_rejects_invalid_inputs"></a>
 
-#### [test\_g\_st\_max\_rejects\_invalid\_inputs](./statistics/test_differentiation.py#L556)
+#### [test\_g\_st\_max\_rejects\_invalid\_inputs](./statistics/test_differentiation.py#L594)
 
 ```python
 def test_g_st_max_rejects_invalid_inputs() -> None
@@ -43599,7 +43656,7 @@ Every argument is validated before the arithmetic runs.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_prime_rejects_a_non_finite_g_st_value"></a>
 
-#### [test\_g\_st\_prime\_rejects\_a\_non\_finite\_g\_st\_value](./statistics/test_differentiation.py#L572)
+#### [test\_g\_st\_prime\_rejects\_a\_non\_finite\_g\_st\_value](./statistics/test_differentiation.py#L610)
 
 ```python
 def test_g_st_prime_rejects_a_non_finite_g_st_value() -> None
@@ -43609,7 +43666,7 @@ def test_g_st_prime_rejects_a_non_finite_g_st_value() -> None
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutation_negligible_transition_matches_its_own_formula"></a>
 
-#### [test\_mutation\_negligible\_transition\_matches\_its\_own\_formula](./statistics/test_differentiation.py#L577)
+#### [test\_mutation\_negligible\_transition\_matches\_its\_own\_formula](./statistics/test_differentiation.py#L615)
 
 ```python
 def test_mutation_negligible_transition_matches_its_own_formula() -> None
@@ -43624,7 +43681,7 @@ failure.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutation_negligible_transition_rejects_invalid_inputs"></a>
 
-#### [test\_mutation\_negligible\_transition\_rejects\_invalid\_inputs](./statistics/test_differentiation.py#L595)
+#### [test\_mutation\_negligible\_transition\_rejects\_invalid\_inputs](./statistics/test_differentiation.py#L633)
 
 ```python
 def test_mutation_negligible_transition_rejects_invalid_inputs() -> None
@@ -43634,7 +43691,7 @@ Every argument is validated before the arithmetic runs.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutation_negligible_equilibrium_matches_its_own_formula"></a>
 
-#### [test\_mutation\_negligible\_equilibrium\_matches\_its\_own\_formula](./statistics/test_differentiation.py#L610)
+#### [test\_mutation\_negligible\_equilibrium\_matches\_its\_own\_formula](./statistics/test_differentiation.py#L648)
 
 ```python
 def test_mutation_negligible_equilibrium_matches_its_own_formula() -> None
@@ -43647,7 +43704,7 @@ calibration.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutation_negligible_equilibrium_rejects_invalid_inputs"></a>
 
-#### [test\_mutation\_negligible\_equilibrium\_rejects\_invalid\_inputs](./statistics/test_differentiation.py#L622)
+#### [test\_mutation\_negligible\_equilibrium\_rejects\_invalid\_inputs](./statistics/test_differentiation.py#L660)
 
 ```python
 def test_mutation_negligible_equilibrium_rejects_invalid_inputs() -> None
@@ -43657,7 +43714,7 @@ Every argument is validated before the arithmetic runs.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_table_and_deme_validation_reports_bad_inputs"></a>
 
-#### [test\_table\_and\_deme\_validation\_reports\_bad\_inputs](./statistics/test_differentiation.py#L637)
+#### [test\_table\_and\_deme\_validation\_reports\_bad\_inputs](./statistics/test_differentiation.py#L675)
 
 ```python
 def test_table_and_deme_validation_reports_bad_inputs() -> None
@@ -43667,7 +43724,7 @@ Public statistics reject malformed mappings and frequencies.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_weight_validation_reports_all_contract_failures"></a>
 
-#### [test\_weight\_validation\_reports\_all\_contract\_failures](./statistics/test_differentiation.py#L654)
+#### [test\_weight\_validation\_reports\_all\_contract\_failures](./statistics/test_differentiation.py#L692)
 
 ```python
 def test_weight_validation_reports_all_contract_failures() -> None
@@ -43677,7 +43734,7 @@ Deme weights must match, be numeric, positive, and summable.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_differentiation_requires_multiple_demes_and_rejects_weighted_non_q1"></a>
 
-#### [test\_differentiation\_requires\_multiple\_demes\_and\_rejects\_weighted\_non\_q1](./statistics/test_differentiation.py#L671)
+#### [test\_differentiation\_requires\_multiple\_demes\_and\_rejects\_weighted\_non\_q1](./statistics/test_differentiation.py#L709)
 
 ```python
 def test_differentiation_requires_multiple_demes_and_rejects_weighted_non_q1(
@@ -43688,7 +43745,7 @@ Between-deme measures require two demes and equal weighting rules.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_two_deme_two_allele_special_case_matches_the_guide"></a>
 
-#### [test\_two\_deme\_two\_allele\_special\_case\_matches\_the\_guide](./statistics/test_differentiation.py#L685)
+#### [test\_two\_deme\_two\_allele\_special\_case\_matches\_the\_guide](./statistics/test_differentiation.py#L723)
 
 ```python
 def test_two_deme_two_allele_special_case_matches_the_guide() -> None
@@ -43706,7 +43763,7 @@ are cheap to also pin down exactly at this small a table.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_d_m_matches_its_defining_algebra_and_is_never_negative"></a>
 
-#### [test\_d\_m\_matches\_its\_defining\_algebra\_and\_is\_never\_negative](./statistics/test_differentiation.py#L723)
+#### [test\_d\_m\_matches\_its\_defining\_algebra\_and\_is\_never\_negative](./statistics/test_differentiation.py#L761)
 
 ```python
 def test_d_m_matches_its_defining_algebra_and_is_never_negative() -> None
@@ -43724,7 +43781,7 @@ ceiling $H_T \le 1$ alone would suggest.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_r_st_is_d_m_over_h_s_and_none_at_zero_within_deme_diversity"></a>
 
-#### [test\_r\_st\_is\_d\_m\_over\_h\_s\_and\_none\_at\_zero\_within\_deme\_diversity](./statistics/test_differentiation.py#L747)
+#### [test\_r\_st\_is\_d\_m\_over\_h\_s\_and\_none\_at\_zero\_within\_deme\_diversity](./statistics/test_differentiation.py#L785)
 
 ```python
 def test_r_st_is_d_m_over_h_s_and_none_at_zero_within_deme_diversity() -> None
@@ -43734,7 +43791,7 @@ Nei's $R_{ST}$ (Eq. 11) is $D_m / H_S$, undefined when $H_S$ is zero.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_allelic_distance_counts_alleles_present_in_exactly_one_deme"></a>
 
-#### [test\_allelic\_distance\_counts\_alleles\_present\_in\_exactly\_one\_deme](./statistics/test_differentiation.py#L755)
+#### [test\_allelic\_distance\_counts\_alleles\_present\_in\_exactly\_one\_deme](./statistics/test_differentiation.py#L793)
 
 ```python
 def test_allelic_distance_counts_alleles_present_in_exactly_one_deme() -> None
@@ -43744,7 +43801,7 @@ Caballero-Garcia-Dorado distance ignores frequency once present.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_gregorius_delta_is_mean_total_variation_from_the_rest"></a>
 
-#### [test\_gregorius\_delta\_is\_mean\_total\_variation\_from\_the\_rest](./statistics/test_differentiation.py#L769)
+#### [test\_gregorius\_delta\_is\_mean\_total\_variation\_from\_the\_rest](./statistics/test_differentiation.py#L807)
 
 ```python
 def test_gregorius_delta_is_mean_total_variation_from_the_rest() -> None
@@ -43754,7 +43811,7 @@ Gregorius delta matches hand-computed two- and three-deme cases.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_gregorius_delta_matches_a_direct_per_deme_rest_sum_at_scale"></a>
 
-#### [test\_gregorius\_delta\_matches\_a\_direct\_per\_deme\_rest\_sum\_at\_scale](./statistics/test_differentiation.py#L777)
+#### [test\_gregorius\_delta\_matches\_a\_direct\_per\_deme\_rest\_sum\_at\_scale](./statistics/test_differentiation.py#L815)
 
 ```python
 def test_gregorius_delta_matches_a_direct_per_deme_rest_sum_at_scale() -> None
@@ -43782,7 +43839,7 @@ cost in the first place.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutual_information_is_entropy_gain_from_deme_membership"></a>
 
-#### [test\_mutual\_information\_is\_entropy\_gain\_from\_deme\_membership](./statistics/test_differentiation.py#L849)
+#### [test\_mutual\_information\_is\_entropy\_gain\_from\_deme\_membership](./statistics/test_differentiation.py#L887)
 
 ```python
 def test_mutual_information_is_entropy_gain_from_deme_membership() -> None
@@ -43792,7 +43849,7 @@ Sherwin's MI equals $H_T$ minus the weighted mean within entropy.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_log_matches_a_hand_worked_value"></a>
 
-#### [test\_g\_st\_log\_matches\_a\_hand\_worked\_value](./statistics/test_differentiation.py#L867)
+#### [test\_g\_st\_log\_matches\_a\_hand\_worked\_value](./statistics/test_differentiation.py#L905)
 
 ```python
 def test_g_st_log_matches_a_hand_worked_value() -> None
@@ -43809,7 +43866,7 @@ endpoint.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_log_agrees_with_g_st_at_the_complete_fixation_endpoint"></a>
 
-#### [test\_g\_st\_log\_agrees\_with\_g\_st\_at\_the\_complete\_fixation\_endpoint](./statistics/test_differentiation.py#L888)
+#### [test\_g\_st\_log\_agrees\_with\_g\_st\_at\_the\_complete\_fixation\_endpoint](./statistics/test_differentiation.py#L926)
 
 ```python
 def test_g_st_log_agrees_with_g_st_at_the_complete_fixation_endpoint() -> None
@@ -43824,7 +43881,7 @@ both forms reduce to closed integers here.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_duplicate_canonical_allele_id_is_rejected"></a>
 
-#### [test\_duplicate\_canonical\_allele\_id\_is\_rejected](./statistics/test_differentiation.py#L900)
+#### [test\_duplicate\_canonical\_allele\_id\_is\_rejected](./statistics/test_differentiation.py#L938)
 
 ```python
 def test_duplicate_canonical_allele_id_is_rejected() -> None
@@ -43843,7 +43900,7 @@ no other test.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_within_hill_number_order_one_is_the_alpha_entropy_exponential"></a>
 
-#### [test\_within\_hill\_number\_order\_one\_is\_the\_alpha\_entropy\_exponential](./statistics/test_differentiation.py#L920)
+#### [test\_within\_hill\_number\_order\_one\_is\_the\_alpha\_entropy\_exponential](./statistics/test_differentiation.py#L958)
 
 ```python
 def test_within_hill_number_order_one_is_the_alpha_entropy_exponential(
@@ -43865,7 +43922,7 @@ two-allele split (entropy ln 2), the weighted mean entropy is
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_equilibrium_formulas_validate_inputs_and_zero_mutation"></a>
 
-#### [test\_equilibrium\_formulas\_validate\_inputs\_and\_zero\_mutation](./statistics/test_differentiation.py#L939)
+#### [test\_equilibrium\_formulas\_validate\_inputs\_and\_zero\_mutation](./statistics/test_differentiation.py#L977)
 
 ```python
 def test_equilibrium_formulas_validate_inputs_and_zero_mutation() -> None
@@ -43875,7 +43932,7 @@ Equilibrium helpers expose exact parameter and zero-mutation contracts.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_identity_recovery_trajectory_at_zero_generations_is_the_start"></a>
 
-#### [test\_identity\_recovery\_trajectory\_at\_zero\_generations\_is\_the\_start](./statistics/test_differentiation.py#L958)
+#### [test\_identity\_recovery\_trajectory\_at\_zero\_generations\_is\_the\_start](./statistics/test_differentiation.py#L996)
 
 ```python
 def test_identity_recovery_trajectory_at_zero_generations_is_the_start(
@@ -43886,7 +43943,7 @@ No elapsed time means no change: f_0[t=0] == f0_initial exactly.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_identity_recovery_half_life_lands_on_the_exact_midpoint"></a>
 
-#### [test\_identity\_recovery\_half\_life\_lands\_on\_the\_exact\_midpoint](./statistics/test_differentiation.py#L967)
+#### [test\_identity\_recovery\_half\_life\_lands\_on\_the\_exact\_midpoint](./statistics/test_differentiation.py#L1005)
 
 ```python
 def test_identity_recovery_half_life_lands_on_the_exact_midpoint() -> None
@@ -43902,7 +43959,7 @@ assumption.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_identity_recovery_rate_is_bounded_in_the_unit_interval"></a>
 
-#### [test\_identity\_recovery\_rate\_is\_bounded\_in\_the\_unit\_interval](./statistics/test_differentiation.py#L990)
+#### [test\_identity\_recovery\_rate\_is\_bounded\_in\_the\_unit\_interval](./statistics/test_differentiation.py#L1028)
 
 ```python
 def test_identity_recovery_rate_is_bounded_in_the_unit_interval() -> None
@@ -43912,7 +43969,7 @@ L = (1-m)^2 * (1 - 1/N) stays in [0, 1) for every valid input.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_identity_recovery_half_life_is_zero_at_full_replacement"></a>
 
-#### [test\_identity\_recovery\_half\_life\_is\_zero\_at\_full\_replacement](./statistics/test_differentiation.py#L998)
+#### [test\_identity\_recovery\_half\_life\_is\_zero\_at\_full\_replacement](./statistics/test_differentiation.py#L1036)
 
 ```python
 def test_identity_recovery_half_life_is_zero_at_full_replacement() -> None
@@ -43922,7 +43979,7 @@ At m=1, L=0 and half-life is the correct limit, 0, not a crash.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_identity_recovery_functions_validate_their_inputs"></a>
 
-#### [test\_identity\_recovery\_functions\_validate\_their\_inputs](./statistics/test_differentiation.py#L1002)
+#### [test\_identity\_recovery\_functions\_validate\_their\_inputs](./statistics/test_differentiation.py#L1040)
 
 ```python
 def test_identity_recovery_functions_validate_their_inputs() -> None
@@ -43933,7 +43990,7 @@ as the rest of this module's equilibrium-formula family.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_frequency_table_value_annotation_stays_a_number"></a>
 
-#### [test\_frequency\_table\_value\_annotation\_stays\_a\_number](./statistics/test_differentiation.py#L1020)
+#### [test\_frequency\_table\_value\_annotation\_stays\_a\_number](./statistics/test_differentiation.py#L1058)
 
 ```python
 def test_frequency_table_value_annotation_stays_a_number() -> None
@@ -43956,7 +44013,7 @@ attributes a harmless reformat cannot break.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_1_overall_f_st_vs_g_st"></a>
 
-#### [test\_goudet\_weir\_claim\_1\_overall\_f\_st\_vs\_g\_st](./statistics/test_differentiation.py#L1048)
+#### [test\_goudet\_weir\_claim\_1\_overall\_f\_st\_vs\_g\_st](./statistics/test_differentiation.py#L1086)
 
 ```python
 def test_goudet_weir_claim_1_overall_f_st_vs_g_st() -> None
@@ -43970,7 +44027,7 @@ to floating-point tolerance (diff < 1e-15).
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_5_thought_experiment_limits"></a>
 
-#### [test\_goudet\_weir\_claim\_5\_thought\_experiment\_limits](./statistics/test_differentiation.py#L1084)
+#### [test\_goudet\_weir\_claim\_5\_thought\_experiment\_limits](./statistics/test_differentiation.py#L1122)
 
 ```python
 def test_goudet_weir_claim_5_thought_experiment_limits() -> None
@@ -43991,7 +44048,7 @@ As d -> inf:
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_6_pairwise_vs_population_pair_disagreement"></a>
 
-#### [test\_goudet\_weir\_claim\_6\_pairwise\_vs\_population\_pair\_disagreement](./statistics/test_differentiation.py#L1134)
+#### [test\_goudet\_weir\_claim\_6\_pairwise\_vs\_population\_pair\_disagreement](./statistics/test_differentiation.py#L1172)
 
 ```python
 def test_goudet_weir_claim_6_pairwise_vs_population_pair_disagreement(
@@ -44006,7 +44063,7 @@ $F_{ST}$ (Eq. 9) is negative (approaching -1.0 as d grows).
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_goudet_weir_claim_7_zero_sum_invariant"></a>
 
-#### [test\_goudet\_weir\_claim\_7\_zero\_sum\_invariant](./statistics/test_differentiation.py#L1162)
+#### [test\_goudet\_weir\_claim\_7\_zero\_sum\_invariant](./statistics/test_differentiation.py#L1200)
 
 ```python
 def test_goudet_weir_claim_7_zero_sum_invariant() -> None
@@ -44021,7 +44078,7 @@ precision.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_aoki_2023_claim_1_unbiased_heterozygosity"></a>
 
-#### [test\_aoki\_2023\_claim\_1\_unbiased\_heterozygosity](./statistics/test_differentiation.py#L1199)
+#### [test\_aoki\_2023\_claim\_1\_unbiased\_heterozygosity](./statistics/test_differentiation.py#L1237)
 
 ```python
 def test_aoki_2023_claim_1_unbiased_heterozygosity() -> None
@@ -44033,7 +44090,7 @@ Claim 1: Nei (1977) finite-sample bias correction Eq. 2.
 
 <a id="statistics.test_differentiation.DerivedDifferentiationTests"></a>
 
-## [DerivedDifferentiationTests Objects](./statistics/test_differentiation.py#L1238)
+## [DerivedDifferentiationTests Objects](./statistics/test_differentiation.py#L1276)
 
 ```python
 class DerivedDifferentiationTests(unittest.TestCase)
@@ -44043,7 +44100,7 @@ class DerivedDifferentiationTests(unittest.TestCase)
 
 <a id="statistics.test_differentiation.DerivedDifferentiationTests.test_matches_each_table_based_function"></a>
 
-#### [test\_matches\_each\_table\_based\_function](./statistics/test_differentiation.py#L1241)
+#### [test\_matches\_each\_table\_based\_function](./statistics/test_differentiation.py#L1279)
 
 ```python
 def test_matches_each_table_based_function() -> None
@@ -44056,7 +44113,7 @@ $F_{ST}$.
 
 <a id="statistics.test_differentiation.DerivedDifferentiationTests.test_undefined_cases_are_none"></a>
 
-#### [test\_undefined\_cases\_are\_none](./statistics/test_differentiation.py#L1264)
+#### [test\_undefined\_cases\_are\_none](./statistics/test_differentiation.py#L1302)
 
 ```python
 def test_undefined_cases_are_none() -> None
@@ -44843,7 +44900,7 @@ Property-based tests for differentiation identities and bounds.
 
 <a id="statistics.test_properties.frequency_tables"></a>
 
-#### [frequency\_tables](./statistics/test_properties.py#L23)
+#### [frequency\_tables](./statistics/test_properties.py#L26)
 
 ```python
 @st.composite
@@ -44852,9 +44909,90 @@ def frequency_tables(draw: st.DrawFn) -> list[dict[int, float]]
 
 Generate valid, bounded per-deme frequency maps.
 
+<a id="statistics.test_properties.extreme_concentration_frequency_tables"></a>
+
+#### [extreme\_concentration\_frequency\_tables](./statistics/test_properties.py#L55)
+
+```python
+@st.composite
+def extreme_concentration_frequency_tables(
+        draw: st.DrawFn) -> list[dict[int, float]]
+```
+
+Generate near-fixation frequency tables from a tiny-concentration draw.
+
+`frequency_tables`, above, only ever draws integer counts up to `20`
+(frequencies no closer than `0.01` to `0`/`1`): the 2026-10-25 project
+review's finding S-1 traces `_bounded`'s absolute-tolerance bug to
+exactly the gap this strategy fills, frequencies from `1e-12` up to
+`1`, via the same `Gamma(concentration, 1)` construction
+`DirichletInitialCondition.generate` uses for
+`initial_concentration` (`doc/configuration.md`'s own "smaller values
+are more uneven", down to values the fixture above never reaches).
+`random.Random` rather than a Hypothesis float/integer strategy: a
+Dirichlet draw has no natural shrinkable encoding of its own, so a
+Hypothesis-drawn seed runs an ordinary gamma sampler deterministically
+instead.
+
+<a id="statistics.test_properties.many_allele_frequency_tables"></a>
+
+#### [many\_allele\_frequency\_tables](./statistics/test_properties.py#L92)
+
+```python
+@st.composite
+def many_allele_frequency_tables(draw: st.DrawFn) -> list[dict[int, float]]
+```
+
+Generate two disjoint demes with at least `10**4` alleles each.
+
+The 2026-10-25 project review's finding S-1 also reproduces through
+$D$'s `/ (1 - H_S)` denominator at a large allele count with no
+near-fixation frequency anywhere (`H_S` itself approaches `1` simply
+because there are many alleles, each individually rare) — a second,
+independent route to the same tiny-denominator regime, worth its own
+case alongside `extreme_concentration_frequency_tables`.
+
+<a id="statistics.test_properties.test_statistics_report_tolerates_near_fixation_roundoff"></a>
+
+#### [test\_statistics\_report\_tolerates\_near\_fixation\_roundoff](./statistics/test_properties.py#L120)
+
+```python
+@given(extreme_concentration_frequency_tables())
+def test_statistics_report_tolerates_near_fixation_roundoff(
+        table: list[dict[int, float]]) -> None
+```
+
+A tiny-concentration frequency table never raises `ArithmeticError`.
+
+Regression test for the 2026-10-25 project review's finding S-1:
+before `_bounded`'s conditioning-aware tolerance, a `G_ST`, `H_ST`,
+or `D` computed from a table this close to fixation could raise
+instead of returning a bounded statistic.
+
+<a id="statistics.test_properties.test_statistics_report_tolerates_many_alleles_near_full_divergence"></a>
+
+#### [test\_statistics\_report\_tolerates\_many\_alleles\_near\_full\_divergence](./statistics/test_properties.py#L141)
+
+```python
+@settings(max_examples=15, deadline=None)
+@given(many_allele_frequency_tables())
+def test_statistics_report_tolerates_many_alleles_near_full_divergence(
+        table: list[dict[int, float]]) -> None
+```
+
+Thousands of per-deme-private alleles never raise `ArithmeticError`.
+
+Regression test for the 2026-10-25 project review's finding S-1's $D$
+reproduction: two demes sharing no allele push `H_S` to within a few
+`ULP`s of `1`, so $D$'s `/ (1 - H_S)` denominator shrinks toward zero
+even though every frequency involved is an ordinary, non-extreme
+value. `max_examples` lowered and `deadline` disabled because each
+example samples and normalizes 20,000-30,000 per-allele counts, not
+because the property itself is expensive to check.
+
 <a id="statistics.test_properties.test_heterozygosity_partition_and_ceiling"></a>
 
-#### [test\_heterozygosity\_partition\_and\_ceiling](./statistics/test_properties.py#L52)
+#### [test\_heterozygosity\_partition\_and\_ceiling](./statistics/test_properties.py#L160)
 
 ```python
 @given(frequency_tables())
@@ -44866,7 +45004,7 @@ $H_T$, $H_S$, $H_{ST}$, and $G_{ST}$ obey the Part V identities.
 
 <a id="statistics.test_properties.test_all_differentiation_measures_are_bounded"></a>
 
-#### [test\_all\_differentiation\_measures\_are\_bounded](./statistics/test_properties.py#L68)
+#### [test\_all\_differentiation\_measures\_are\_bounded](./statistics/test_properties.py#L176)
 
 ```python
 @given(frequency_tables())
@@ -44878,7 +45016,7 @@ Every defined differentiation measure remains in the unit interval.
 
 <a id="statistics.test_properties.test_replication_principle_doubles_q2_beta_diversity"></a>
 
-#### [test\_replication\_principle\_doubles\_q2\_beta\_diversity](./statistics/test_properties.py#L81)
+#### [test\_replication\_principle\_doubles\_q2\_beta\_diversity](./statistics/test_properties.py#L189)
 
 ```python
 @given(frequency_tables())
@@ -44890,7 +45028,7 @@ An equally diverse disjoint copy doubles total/within Hill diversity.
 
 <a id="statistics.test_properties.test_jost_d_endpoints_are_exact"></a>
 
-#### [test\_jost\_d\_endpoints\_are\_exact](./statistics/test_properties.py#L102)
+#### [test\_jost\_d\_endpoints\_are\_exact](./statistics/test_properties.py#L210)
 
 ```python
 def test_jost_d_endpoints_are_exact() -> None
@@ -44900,7 +45038,7 @@ D is zero for identical demes and one for disjoint demes.
 
 <a id="statistics.test_properties.test_differentiation_statistics_are_invariant_to_deme_order"></a>
 
-#### [test\_differentiation\_statistics\_are\_invariant\_to\_deme\_order](./statistics/test_properties.py#L109)
+#### [test\_differentiation\_statistics\_are\_invariant\_to\_deme\_order](./statistics/test_properties.py#L217)
 
 ```python
 @given(frequency_tables(), st.data())
@@ -44926,7 +45064,7 @@ reordering a hand-written test thought to try.
 
 <a id="statistics.test_properties.test_differentiation_statistics_are_invariant_to_allele_relabeling"></a>
 
-#### [test\_differentiation\_statistics\_are\_invariant\_to\_allele\_relabeling](./statistics/test_properties.py#L139)
+#### [test\_differentiation\_statistics\_are\_invariant\_to\_allele\_relabeling](./statistics/test_properties.py#L247)
 
 ```python
 @given(frequency_tables(), st.data())
@@ -44946,7 +45084,7 @@ come out identical.
 
 <a id="statistics.test_properties.test_equilibrium_d_and_g_st_are_non_increasing_in_migration"></a>
 
-#### [test\_equilibrium\_d\_and\_g\_st\_are\_non\_increasing\_in\_migration](./statistics/test_properties.py#L174)
+#### [test\_equilibrium\_d\_and\_g\_st\_are\_non\_increasing\_in\_migration](./statistics/test_properties.py#L282)
 
 ```python
 @given(
@@ -44981,7 +45119,7 @@ independent convergence horizon rather than a shared one).
 
 <a id="statistics.test_properties.test_equilibrium_d_and_g_st_move_opposite_ways_in_mutation"></a>
 
-#### [test\_equilibrium\_d\_and\_g\_st\_move\_opposite\_ways\_in\_mutation](./statistics/test_properties.py#L214)
+#### [test\_equilibrium\_d\_and\_g\_st\_move\_opposite\_ways\_in\_mutation](./statistics/test_properties.py#L322)
 
 ```python
 @given(
@@ -45009,7 +45147,7 @@ section's own prose, not a restatement of it.
 
 <a id="statistics.test_properties.test_aoki_2023_claim_4_g_st_monotonicity_in_migration"></a>
 
-#### [test\_aoki\_2023\_claim\_4\_g\_st\_monotonicity\_in\_migration](./statistics/test_properties.py#L248)
+#### [test\_aoki\_2023\_claim\_4\_g\_st\_monotonicity\_in\_migration](./statistics/test_properties.py#L356)
 
 ```python
 @given(

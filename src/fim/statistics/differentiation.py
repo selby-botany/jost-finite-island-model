@@ -17,6 +17,7 @@ from operator import index as integer_index
 from typing import Any, SupportsIndex, TypeAlias, TypedDict, cast
 
 from fim.config.numerics import (
+    CONDITIONING_ROUNDOFF,
     DIFFERENTIATION_TOLERANCE,
     DIGAMMA_ASYMPTOTIC_THRESHOLD,
     EULER_GAMMA,
@@ -111,7 +112,7 @@ def _allelic_distance_from_demes(demes: Sequence[Mapping[int, float]]) -> float:
     return total / pair_count
 
 
-def _bounded(value: float, name: str) -> float:
+def _bounded(value: float, name: str, *, denominator: float = 1.0) -> float:
     """Return a unit-interval value, tolerating floating-point roundoff.
 
     Every statistic this module computes is mathematically guaranteed
@@ -122,12 +123,30 @@ def _bounded(value: float, name: str) -> float:
     billionth outside that range (`1.0000000000003` instead of exactly
     `1.0`, for instance). This function is the one place that gets
     quietly clamped back to the true mathematical range — but only
-    within `DIFFERENTIATION_TOLERANCE`, an extremely small margin; a value meaningfully
-    outside `[0, 1]` is a real bug somewhere upstream, not rounding
-    error, and is deliberately raised as an error here rather than
-    silently clamped away, so that bug gets noticed instead of hidden.
+    within a tolerance; a value meaningfully outside `[0, 1]` is a real
+    bug somewhere upstream, not rounding error, and is deliberately
+    raised as an error here rather than silently clamped away, so that
+    bug gets noticed instead of hidden.
+
+    `denominator` names the divisor the caller's own formula used to
+    produce `value` (left at its default of `1.0`, which leaves the
+    tolerance exactly `DIFFERENTIATION_TOLERANCE`, for every statistic
+    not computed as a ratio). For a ratio such as $G_{ST} = (H_T - H_S)
+    / H_T$ or $D$/$H_{ST}$'s shared `/ (1 - H_S)`, the numerator's own
+    rounding error is a handful of `epsilon`, independent of how small
+    the denominator is, so the quotient's error grows as the
+    denominator shrinks toward zero — a real, reachable state (near
+    fixation, or a large allele count near complete differentiation),
+    not a bug. Passing the actual denominator here adds
+    `CONDITIONING_ROUNDOFF / abs(denominator)` on top of the flat
+    margin so a legitimately tiny denominator does not turn ordinary
+    roundoff into a raised `ArithmeticError` (this project's own
+    2026-10-25 project review, finding S-1).
     """
-    if -DIFFERENTIATION_TOLERANCE <= value <= 1.0 + DIFFERENTIATION_TOLERANCE:
+    tolerance = DIFFERENTIATION_TOLERANCE
+    if denominator and abs(denominator) < 1.0:
+        tolerance = max(tolerance, CONDITIONING_ROUNDOFF / abs(denominator))
+    if -tolerance <= value <= 1.0 + tolerance:
         return min(1.0, max(0.0, value))
     message = f"{name} is outside its mathematical range [0, 1]: {value!r}"
     raise ArithmeticError(message)
@@ -675,7 +694,7 @@ def _h_st_from_within_and_total(total: float, within: float) -> float:
             "exactly 1.0, a state no finite allele configuration should "
             "ever be able to produce"
         )
-    return _bounded((total - within) / denominator, "H_ST")
+    return _bounded((total - within) / denominator, "H_ST", denominator=denominator)
 
 
 def h_st[AlleleKey: SupportsIndex](
@@ -772,7 +791,7 @@ def g_st_from_demes(total: float, within: float) -> float | None:
     """
     if total == 0.0:
         return None
-    return _bounded((total - within) / total, "G_ST")
+    return _bounded((total - within) / total, "G_ST", denominator=total)
 
 
 def g_st[AlleleKey: SupportsIndex](
@@ -1088,8 +1107,9 @@ def jost_d_from_within_and_total(deme_count: int, within: float, total: float) -
     locus's own frequency table) does not have to build one just to
     satisfy this signature.
     """
-    value = ((total - within) / (1.0 - within)) * deme_count / (deme_count - 1)
-    return _bounded(value, "D")
+    denominator = 1.0 - within
+    value = (total - within) / denominator * deme_count / (deme_count - 1)
+    return _bounded(value, "D", denominator=denominator)
 
 
 def jost_d[AlleleKey: SupportsIndex](table: FrequencyTable[AlleleKey]) -> float:

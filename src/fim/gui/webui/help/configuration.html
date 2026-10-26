@@ -523,7 +523,10 @@ and <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <li><strong>Default:</strong> <code>1.0</code></li>
 </ul>
 <p>The random default draws each deme/locus frequency vector independently from a
-symmetric Dirichlet distribution. Smaller values are more uneven.</p>
+symmetric Dirichlet distribution. Smaller values are more uneven, down to a
+value small enough that generation 0 itself lands arbitrarily close to
+fixation; differentiation statistics computed from a frequency table that
+close to fixation remain within <code>[0, 1]</code> rather than raising.</p>
 <h3 id="p_0">p_0</h3>
 <ul>
 <li><strong>Type:</strong> optional nested list: <code>d</code> demes, each containing one mapping per

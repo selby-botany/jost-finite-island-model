@@ -16,7 +16,7 @@ import pytest
 
 pytest.importorskip("numba")
 
-from fim.config.numerics import DIFFERENTIATION_TOLERANCE
+from fim.config.numerics import CONDITIONING_ROUNDOFF, DIFFERENTIATION_TOLERANCE
 from fim.model import vector_kernels as kernels
 from fim.model.operators import _inversion_binomial, _migrant_fraction
 from fim.model.vector_block import (
@@ -34,6 +34,7 @@ FUZZ_CASES = 10_000
 def test_statistics_tolerance_mirrors_the_python_implementation() -> None:
     """The kernel clamps with the same tolerance `statistics_report` does."""
     assert kernels.STATISTICS_TOLERANCE == DIFFERENTIATION_TOLERANCE
+    assert kernels.STATISTICS_CONDITIONING_ROUNDOFF == CONDITIONING_ROUNDOFF
 
 
 def test_exact_sum_matches_math_fsum_on_seeded_fuzz() -> None:
@@ -220,6 +221,30 @@ def test_locus_statistics_report_g_st_undefined_when_every_deme_is_fixed_alike()
     assert (
         differentiation.statistics_report(table, None, validate=False)["G_ST"] is None
     )
+
+
+def test_locus_statistics_tolerates_near_fixation_roundoff_s1() -> None:
+    """A near-fixation locus clamps, bit for bit with Python, instead of flagging.
+
+    Regression test for the 2026-10-25 project review's finding S-1,
+    mirrored at the kernel level: the review's own seed-10 reproduction
+    table (`H_T` within `1e-13` of zero) used to set `status[locus] = 1`,
+    forcing every generation back onto the slow Python path, which then
+    raised `ArithmeticError` in turn.
+    """
+    table = [
+        {0: 0.9999999999999453, 1: 5.47e-14},
+        {0: 0.9999999999999987, 1: 1.33e-15},
+    ]
+    freq, ncol, _ids = _dense(table)
+    out = np.zeros((1, kernels.STATISTIC_COLUMNS), dtype=np.float64)
+    status = np.zeros(1, dtype=np.int64)
+    kernels.locus_statistics(freq, ncol, out, status)
+    report = differentiation.statistics_report(table, None, validate=False)
+    assert status[0] == 0
+    assert out[0, 2] == report["H_ST"]
+    assert out[0, 3] == report["G_ST"]
+    assert out[0, 4] == report["D"]
 
 
 def test_locus_statistics_flag_a_frequency_row_that_is_not_normalized() -> None:

@@ -79,6 +79,9 @@ STATISTIC_COLUMNS = 5
 STATISTICS_TOLERANCE = 1e-12
 """Mirror of `fim.config.numerics.DIFFERENTIATION_TOLERANCE` (checked by a test)."""
 
+STATISTICS_CONDITIONING_ROUNDOFF = 8.881784197001252e-16
+"""Mirror of `fim.config.numerics.CONDITIONING_ROUNDOFF` (checked by a test)."""
+
 _REFLECT_THRESHOLD = 0.5
 _UNROLL = 8
 _LEAF_LIMIT = 128
@@ -937,9 +940,19 @@ def run_generation(
 
 
 @numba.njit(cache=True, nogil=True)
-def _bounded(value, status, locus):
-    """Clamp a unit-interval statistic, flagging a value outside tolerance."""
-    if -STATISTICS_TOLERANCE <= value <= 1.0 + STATISTICS_TOLERANCE:
+def _bounded(value, status, locus, denominator=1.0):
+    """Clamp a unit-interval statistic, flagging a value outside tolerance.
+
+    `denominator` mirrors `fim.statistics.differentiation._bounded`'s own
+    keyword of the same name: left at its default `1.0` for a value that
+    is not a ratio, or passed the formula's actual divisor for $H_{ST}$,
+    $G_{ST}$, and $D$ so a legitimately tiny divisor widens the tolerance
+    instead of flagging ordinary roundoff as a status-1 defect.
+    """
+    tolerance = STATISTICS_TOLERANCE
+    if denominator != 0.0 and abs(denominator) < 1.0:
+        tolerance = max(tolerance, STATISTICS_CONDITIONING_ROUNDOFF / abs(denominator))
+    if -tolerance <= value <= 1.0 + tolerance:
         return min(1.0, max(0.0, value))
     status[locus] = 1
     return value
@@ -990,13 +1003,15 @@ def locus_statistics(freq, ncol, out, status):
             continue
         out[locus, 0] = within
         out[locus, 1] = total
-        out[locus, 2] = _bounded((total - within) / denominator, status, locus)
+        out[locus, 2] = _bounded(
+            (total - within) / denominator, status, locus, denominator
+        )
         if total == 0.0:
             out[locus, 3] = np.nan
         else:
-            out[locus, 3] = _bounded((total - within) / total, status, locus)
+            out[locus, 3] = _bounded((total - within) / total, status, locus, total)
         scaled = ((total - within) / denominator) * float(demes) / float(demes - 1)
-        out[locus, 4] = _bounded(scaled, status, locus)
+        out[locus, 4] = _bounded(scaled, status, locus, denominator)
 
 
 @numba.njit(cache=True, nogil=True)

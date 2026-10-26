@@ -202,6 +202,44 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         self.assertIsNone(statistics_report(table)["G_ST"])
         self.assertIsNone(g_st_log(table))
 
+    def test_near_fixation_roundoff_clamps_instead_of_raising(self) -> None:
+        """A legitimately tiny $H_T$/`1 - H_S` no longer raises `ArithmeticError`.
+
+        Regression test for this project's own 2026-10-25 project review,
+        finding S-1: `_bounded`'s flat `DIFFERENTIATION_TOLERANCE` treated
+        any value outside `[0, 1]` by more than `1e-12` as a bug, but
+        $G_{ST} = (H_T - H_S) / H_T$ and $D$'s shared `/ (1 - H_S)` both
+        amplify the numerator's fixed, denominator-independent rounding
+        error as their own denominator shrinks toward zero — a real,
+        reachable state (near-complete fixation), not a defect. This
+        exact two-deme table is the review's own seed-10 reproduction
+        (`fim.simulate`, `FoundingAlleles(count=2, concentration=0.05)`,
+        generation 0): $H_T \\approx 5.6\\times 10^{-14}$, so the raw
+        $G_{ST}$ before clamping is `-0.00198...`, comfortably inside the
+        new conditioning-aware tolerance and far outside the old flat
+        one.
+        """
+        table = [
+            {0: 0.9999999999999453, 1: 5.47e-14},
+            {0: 0.9999999999999987, 1: 1.33e-15},
+        ]
+        report = statistics_report(table)
+        self.assertEqual(report["G_ST"], 0.0)
+        self.assertEqual(report["D"], 0.0)
+        self.assertEqual(report["H_ST"], 0.0)
+
+    def test_bounded_still_raises_beyond_its_conditioning_aware_tolerance(self) -> None:
+        """A genuinely wrong value is still rejected, even with a tiny denominator.
+
+        The conditioning-aware floor widens the tolerance by
+        `CONDITIONING_ROUNDOFF / abs(denominator)`, not without limit: a
+        value far outside that widened margin still raises, so `_bounded`
+        keeps catching a real upstream bug instead of only ever widening
+        away from it.
+        """
+        with self.assertRaisesRegex(ArithmeticError, "G_ST is outside"):
+            differentiation._bounded(1.5, "G_ST", denominator=5.6e-14)
+
     def test_e_st_accepts_size_weights_but_d_is_always_equal_weighted(self) -> None:
         """Only $E_{ST}$ accepts optional relative deme-size weights."""
         table = [{0: 1.0}, {1: 1.0}, {1: 1.0}]
