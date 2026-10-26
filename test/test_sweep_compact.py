@@ -30,6 +30,7 @@ from fim.sweep_run import (
     LocalPointRunner,
     SweepLockedError,
     create_sweep_study,
+    pending_sweep_point_count,
     run_sweep,
     sweep_lock_path,
     sweep_point_results,
@@ -201,6 +202,46 @@ def test_compacting_twice_changes_nothing_the_second_time(results: Path) -> None
     # A lighter target still reduces what is already tapered.
     lighter = compact_sweep(study_id)
     assert len(lighter.changed) == 4
+
+
+def test_compact_then_resume_finds_nothing_pending(results: Path) -> None:
+    """Regression test for the 2026-10-25 project review's finding P-2.
+
+    `run_satisfies` asks a compacted point's run to hold what the
+    sweep's own stored `recording:` block asks for, and that block
+    used to stay `full` forever: a compacted point always looked
+    `short`, so a routine `fim sweep resume` (no flag needed; `short`
+    is folded into `rerun_ids` unconditionally) recomputed every
+    compacted point in full, reverting the compaction it had just
+    done. `compact_sweep` now lowers the stored block to the target
+    level once it actually changes a point, so the sweep's own
+    definition of "enough" tracks what compaction left behind.
+    """
+    study_id = _sweep()
+    assert pending_sweep_point_count(study_id) == 0
+
+    report = compact_sweep(study_id, target=CompactTarget(level="tapered", keep_last=6))
+    assert len(report.changed) == 4
+    before = {
+        r.run_id: (r.directory / "trajectory.tlog").read_bytes()
+        for r in _rows(study_id)
+    }
+
+    assert pending_sweep_point_count(study_id) == 0
+
+    # The real resume path, not just its own prediction: nothing recomputed.
+    run_sweep(
+        study_id,
+        LocalPointRunner(),
+        lambda _event: None,
+        threading.Event(),
+        points_at_once=1,
+    )
+    after = {
+        r.run_id: (r.directory / "trajectory.tlog").read_bytes()
+        for r in _rows(study_id)
+    }
+    assert before == after
 
 
 def test_keep_corners_leaves_those_points_as_they_were(results: Path) -> None:

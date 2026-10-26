@@ -1859,6 +1859,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`fim sweep resume` recomputed every point `fim sweep compact` had just
+  reduced.** A compacted point's run holds less than the sweep's own
+  `recording:` block still asked for (compaction never touched it), so
+  `run_satisfies` saw every compacted point as `short`, and a routine
+  `fim sweep resume` recomputed each one in full, silently reverting the
+  compaction and re-spending the sweep's CPU and disk. `compact_sweep`
+  now lowers the Study's own stored `recording:` block to the target
+  level once it actually reduces a point, so a later resume (or `fim
+  sweep status`) asks the same question compaction already answered. A
+  point left alone by `--keep`, a read-only run, or one shared with
+  another Study is unaffected: its own recording already satisfies a
+  request this can only ever lower, never raise. New regression test:
+  compact, then confirm nothing is pending and a real resume changes
+  nothing.
 - **Study/Experiment deletion and the GUI's bulk Run delete trusted any
   path they were handed.** `fim study delete`, `fim experiment delete`,
   the GUI's `delete_runs`/`delete_selected`, `supersede_run`, and

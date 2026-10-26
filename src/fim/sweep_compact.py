@@ -55,6 +55,7 @@ from fim.sweep_run import (
     sweep_lock_path,
     sweep_point_results,
     sweep_spec_of,
+    update_sweep_recording,
 )
 
 KeepRule = Literal["corners", "none"] | str
@@ -83,6 +84,24 @@ class CompactTarget:
             raise ValueError("compaction targets are 'tapered' and 'statistics'")
         if self.keep_last < 1:
             raise ValueError("keep_last must be at least 1")
+
+    def recording_block(self, previous: Mapping[str, Any]) -> dict[str, Any]:
+        """Return a sweep's `recording:` block for this target.
+
+        `previous` is the sweep's own stored block before compaction:
+        any key this target has no opinion about (`history`) carries
+        over unchanged. `keep_last`/`keep_burn_in` are dropped for
+        `statistics`, which keeps no trajectory at all and so has
+        nothing for either to mean.
+        """
+        block = {**previous, "retention": self.level}
+        if self.level == "tapered":
+            block["keep_last"] = self.keep_last
+            block["keep_burn_in"] = self.keep_burn_in
+        else:
+            block.pop("keep_last", None)
+            block.pop("keep_burn_in", None)
+        return block
 
     def recording(self) -> Recording:
         """Return the recording a run at this target holds."""
@@ -172,6 +191,18 @@ def compact_sweep(
 ) -> CompactReport:
     """Reduce the finished points of a sweep Study to a target level.
 
+    Also lowers the Study's own stored `recording:` block to `target`
+    once at least one point actually changed, so a later `fim sweep
+    resume`/`status` asks compacted points to hold what compaction
+    left them holding, rather than the original, now-superseded
+    `full` default (this project's own 2026-10-25 project review,
+    finding P-2: before this, `fim sweep resume --retry-failed` after
+    a compaction recomputed every compacted point, in full, reverting
+    the compaction). A point this run left alone (`keep`, read-only,
+    already small, or refused as shared) is untouched either way: its
+    own recording, read from its own manifest, already satisfies a
+    `wanted` this step can only ever lower, never raise.
+
     Args:
         study_id: A sweep Study that is not running.
         keep: Which points to leave alone (see `kept_points`).
@@ -197,9 +228,14 @@ def compact_sweep(
     leave = kept_points({row.run_id: row.coordinates for row in rows}, axes, keep)
     try:
         with exclusive_lock(sweep_lock_path(study_id, results=results), blocking=False):
-            return _compact(
+            report = _compact(
                 study_id, rows, leave, wanted, all_studies, dry_run, results
             )
+            if report.changed and not dry_run:
+                update_sweep_recording(
+                    study, wanted.recording_block(spec.recording), results=results
+                )
+            return report
     except LockUnavailableError:
         raise SweepLockedError(
             f"another process is running sweep {study_id}; stop it before compacting"

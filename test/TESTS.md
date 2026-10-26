@@ -4992,7 +4992,7 @@ Tests for `fim.sweep_compact`: making a finished sweep smaller afterwards.
 
 <a id="test.test_sweep_compact.results"></a>
 
-#### [results](./test_sweep_compact.py#L53)
+#### [results](./test_sweep_compact.py#L54)
 
 ```python
 @pytest.fixture
@@ -5000,6 +5000,26 @@ def results(tmp_path: Path) -> Iterator[Path]
 ```
 
 Point the results directory at a temporary one for the test.
+
+<a id="test.test_sweep_compact.test_compact_then_resume_finds_nothing_pending"></a>
+
+#### [test\_compact\_then\_resume\_finds\_nothing\_pending](./test_sweep_compact.py#L207)
+
+```python
+def test_compact_then_resume_finds_nothing_pending(results: Path) -> None
+```
+
+Regression test for the 2026-10-25 project review's finding P-2.
+
+`run_satisfies` asks a compacted point's run to hold what the
+sweep's own stored `recording:` block asks for, and that block
+used to stay `full` forever: a compacted point always looked
+`short`, so a routine `fim sweep resume` (no flag needed; `short`
+is folded into `rerun_ids` unconditionally) recomputed every
+compacted point in full, reverting the compaction it had just
+done. `compact_sweep` now lowers the stored block to the target
+level once it actually changes a point, so the sweep's own
+definition of "enough" tracks what compaction left behind.
 
 <a id="test.test_sweep_compare"></a>
 

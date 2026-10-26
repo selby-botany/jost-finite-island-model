@@ -921,6 +921,59 @@ def sweep_spec_of(study: StudyManifest) -> SweepSpec:
     return SweepSpec.from_dict(study.sweep_spec)
 
 
+def update_sweep_recording(
+    study: StudyManifest, recording: Mapping[str, Any], *, results: Path | None = None
+) -> StudyManifest:
+    """Rewrite a sweep Study's own `recording:` block, keeping its plan valid.
+
+    The Study's own going-forward default for what a point keeps.
+    `compact_sweep` calls this after reducing points to a target level,
+    so a later `fim sweep resume`/`fim sweep status`/`pending_sweep_
+    point_count` asks the same question compaction already answered
+    for those points, instead of every one of them coming back
+    "short" and being recomputed in full (this project's own
+    2026-10-25 project review, finding P-2). `recording` replaces the
+    stored block outright, not merged with it -- the caller already
+    knows what it wants there.
+
+    The plan's own points and their run ids never change: recording
+    settings are explicitly excluded from a run's identity
+    (`fim.engine.identity.deterministic_run_id`'s own docstring says
+    so directly). The stored `digest` does change, though, since it
+    hashes the whole spec including `recording`
+    (`SweepSpec.digest`/`to_dict`) -- both are rewritten together here
+    so a large sweep's `_matching_plan` digest check never sees the
+    two drift apart.
+
+    Args:
+        study: The sweep Study (must already hold a sweep spec).
+        recording: The new `recording:` block, in `SweepSpec.recording`'s
+            own shape (`retention`/`keep_last`/`keep_burn_in`/`history`).
+        results: Optional results-directory override.
+
+    Returns:
+        The Study as written.
+
+    Raises:
+        ValueError: The Study is not a sweep, or `recording` is invalid.
+    """
+    updated_spec = replace(sweep_spec_of(study), recording=dict(recording))
+    plan = enumerate_points(updated_spec)
+    assert study.sweep_spec is not None  # `sweep_spec_of` already checked
+    # `points`/`point_count` are untouched: only the spec and its digest
+    # change, never the plan itself (this function's own docstring).
+    stored = {
+        **study.sweep_spec,
+        **updated_spec.to_dict(),
+        "digest": updated_spec.digest(plan),
+    }
+    updated = replace(study, sweep_spec=stored)
+    groups.write_study_manifest(
+        groups.study_manifest_path(study.study_id, results=results), updated
+    )
+    return updated
+
+
 def stored_points(study: StudyManifest) -> list[Mapping[str, Any]]:
     """Return the planned points stored in a sweep Study.
 

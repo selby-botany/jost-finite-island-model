@@ -1758,6 +1758,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [TAPERING\_KEYS](#fim.sweep_compact.TAPERING_KEYS)
   * [CompactTarget](#fim.sweep_compact.CompactTarget)
     * [\_\_post\_init\_\_](#fim.sweep_compact.CompactTarget.__post_init__)
+    * [recording\_block](#fim.sweep_compact.CompactTarget.recording_block)
     * [recording](#fim.sweep_compact.CompactTarget.recording)
   * [CompactReport](#fim.sweep_compact.CompactReport)
   * [parse\_keep](#fim.sweep_compact.parse_keep)
@@ -1848,6 +1849,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [create\_sweep\_study](#fim.sweep_run.create_sweep_study)
   * [attach\_sweep\_to\_study](#fim.sweep_run.attach_sweep_to_study)
   * [sweep\_spec\_of](#fim.sweep_run.sweep_spec_of)
+  * [update\_sweep\_recording](#fim.sweep_run.update_sweep_recording)
   * [stored\_points](#fim.sweep_run.stored_points)
   * [sweep\_point\_statuses](#fim.sweep_run.sweep_point_statuses)
   * [completed\_run\_ids](#fim.sweep_run.completed_run_ids)
@@ -38835,13 +38837,13 @@ The sweep must not be running.
 
 <a id="fim.sweep_compact.TAPERING_KEYS"></a>
 
-#### [TAPERING\_KEYS](./sweep_compact.py#L62)
+#### [TAPERING\_KEYS](./sweep_compact.py#L63)
 
 Configuration keys that mean something only for a tapered run.
 
 <a id="fim.sweep_compact.CompactTarget"></a>
 
-## [CompactTarget Objects](./sweep_compact.py#L67)
+## [CompactTarget Objects](./sweep_compact.py#L68)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38858,7 +38860,7 @@ What compaction reduces a point to.
 
 <a id="fim.sweep_compact.CompactTarget.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./sweep_compact.py#L80)
+#### [\_\_post\_init\_\_](./sweep_compact.py#L81)
 
 ```python
 def __post_init__() -> None
@@ -38866,9 +38868,25 @@ def __post_init__() -> None
 
 Refuse a level compaction cannot produce, or a bad `keep_last`.
 
+<a id="fim.sweep_compact.CompactTarget.recording_block"></a>
+
+#### [recording\_block](./sweep_compact.py#L88)
+
+```python
+def recording_block(previous: Mapping[str, Any]) -> dict[str, Any]
+```
+
+Return a sweep's `recording:` block for this target.
+
+`previous` is the sweep's own stored block before compaction:
+any key this target has no opinion about (`history`) carries
+over unchanged. `keep_last`/`keep_burn_in` are dropped for
+`statistics`, which keeps no trajectory at all and so has
+nothing for either to mean.
+
 <a id="fim.sweep_compact.CompactTarget.recording"></a>
 
-#### [recording](./sweep_compact.py#L87)
+#### [recording](./sweep_compact.py#L106)
 
 ```python
 def recording() -> Recording
@@ -38878,7 +38896,7 @@ Return the recording a run at this target holds.
 
 <a id="fim.sweep_compact.CompactReport"></a>
 
-## [CompactReport Objects](./sweep_compact.py#L97)
+## [CompactReport Objects](./sweep_compact.py#L116)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38900,7 +38918,7 @@ What a compaction did, or would do.
 
 <a id="fim.sweep_compact.parse_keep"></a>
 
-#### [parse\_keep](./sweep_compact.py#L121)
+#### [parse\_keep](./sweep_compact.py#L140)
 
 ```python
 def parse_keep(text: str) -> KeepRule
@@ -38914,7 +38932,7 @@ Check a `--keep` rule: `corners`, `none` or `every=K`.
 
 <a id="fim.sweep_compact.kept_points"></a>
 
-#### [kept\_points](./sweep_compact.py#L136)
+#### [kept\_points](./sweep_compact.py#L155)
 
 ```python
 def kept_points(coordinates: Mapping[str, Mapping[str, Any]],
@@ -38933,7 +38951,7 @@ Return the run ids a `--keep` rule leaves alone.
 
 <a id="fim.sweep_compact.compact_sweep"></a>
 
-#### [compact\_sweep](./sweep_compact.py#L164)
+#### [compact\_sweep](./sweep_compact.py#L183)
 
 ```python
 def compact_sweep(study_id: str,
@@ -38946,6 +38964,18 @@ def compact_sweep(study_id: str,
 ```
 
 Reduce the finished points of a sweep Study to a target level.
+
+Also lowers the Study's own stored `recording:` block to `target`
+once at least one point actually changed, so a later `fim sweep
+resume`/`status` asks compacted points to hold what compaction
+left them holding, rather than the original, now-superseded
+`full` default (this project's own 2026-10-25 project review,
+finding P-2: before this, `fim sweep resume --retry-failed` after
+a compaction recomputed every compacted point, in full, reverting
+the compaction). A point this run left alone (`keep`, read-only,
+already small, or refused as shared) is untouched either way: its
+own recording, read from its own manifest, already satisfies a
+`wanted` this step can only ever lower, never raise.
 
 **Arguments**:
 
@@ -38970,7 +39000,7 @@ Reduce the finished points of a sweep Study to a target level.
 
 <a id="fim.sweep_compact.compact_run"></a>
 
-#### [compact\_run](./sweep_compact.py#L260)
+#### [compact\_run](./sweep_compact.py#L296)
 
 ```python
 def compact_run(directory: Path, target: CompactTarget) -> None
@@ -40461,9 +40491,58 @@ Rebuild the `SweepSpec` a sweep Study stored.
 
 - `ValueError` - The Study is not a sweep, or its spec is malformed.
 
+<a id="fim.sweep_run.update_sweep_recording"></a>
+
+#### [update\_sweep\_recording](./sweep_run.py#L924)
+
+```python
+def update_sweep_recording(study: StudyManifest,
+                           recording: Mapping[str, Any],
+                           *,
+                           results: Path | None = None) -> StudyManifest
+```
+
+Rewrite a sweep Study's own `recording:` block, keeping its plan valid.
+
+The Study's own going-forward default for what a point keeps.
+`compact_sweep` calls this after reducing points to a target level,
+so a later `fim sweep resume`/`fim sweep status`/`pending_sweep_
+point_count` asks the same question compaction already answered
+for those points, instead of every one of them coming back
+"short" and being recomputed in full (this project's own
+2026-10-25 project review, finding P-2). `recording` replaces the
+stored block outright, not merged with it -- the caller already
+knows what it wants there.
+
+The plan's own points and their run ids never change: recording
+settings are explicitly excluded from a run's identity
+(`fim.engine.identity.deterministic_run_id`'s own docstring says
+so directly). The stored `digest` does change, though, since it
+hashes the whole spec including `recording`
+(`SweepSpec.digest`/`to_dict`) -- both are rewritten together here
+so a large sweep's `_matching_plan` digest check never sees the
+two drift apart.
+
+**Arguments**:
+
+- `study` - The sweep Study (must already hold a sweep spec).
+- `recording` - The new `recording:` block, in `SweepSpec.recording`'s
+  own shape (`retention`/`keep_last`/`keep_burn_in`/`history`).
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  The Study as written.
+
+
+**Raises**:
+
+- `ValueError` - The Study is not a sweep, or `recording` is invalid.
+
 <a id="fim.sweep_run.stored_points"></a>
 
-#### [stored\_points](./sweep_run.py#L924)
+#### [stored\_points](./sweep_run.py#L977)
 
 ```python
 def stored_points(study: StudyManifest) -> list[Mapping[str, Any]]
@@ -40477,7 +40556,7 @@ Return the planned points stored in a sweep Study.
 
 <a id="fim.sweep_run.sweep_point_statuses"></a>
 
-#### [sweep\_point\_statuses](./sweep_run.py#L944)
+#### [sweep\_point\_statuses](./sweep_run.py#L997)
 
 ```python
 def sweep_point_statuses(study: StudyManifest,
@@ -40500,7 +40579,7 @@ reported as done.
 
 <a id="fim.sweep_run.completed_run_ids"></a>
 
-#### [completed\_run\_ids](./sweep_run.py#L1046)
+#### [completed\_run\_ids](./sweep_run.py#L1099)
 
 ```python
 def completed_run_ids(*,
@@ -40514,7 +40593,7 @@ See `completed_runs`; this is only the ids.
 
 <a id="fim.sweep_run.completed_runs"></a>
 
-#### [completed\_runs](./sweep_run.py#L1056)
+#### [completed\_runs](./sweep_run.py#L1109)
 
 ```python
 def completed_runs(*,
@@ -40535,7 +40614,7 @@ so a plan can say beforehand which points are already computed.
 
 <a id="fim.sweep_run.SweepBudget"></a>
 
-## [SweepBudget Objects](./sweep_run.py#L1098)
+## [SweepBudget Objects](./sweep_run.py#L1151)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40558,7 +40637,7 @@ did not start stay waiting for `fim sweep resume`.
 
 <a id="fim.sweep_run.SweepBudget.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./sweep_run.py#L1117)
+#### [\_\_post\_init\_\_](./sweep_run.py#L1170)
 
 ```python
 def __post_init__() -> None
@@ -40568,7 +40647,7 @@ Refuse a limit that is not positive.
 
 <a id="fim.sweep_run._LinkedEvent"></a>
 
-## [\_LinkedEvent Objects](./sweep_run.py#L1125)
+## [\_LinkedEvent Objects](./sweep_run.py#L1178)
 
 ```python
 class _LinkedEvent(threading.Event)
@@ -40581,7 +40660,7 @@ mistaken for the user cancelling.
 
 <a id="fim.sweep_run._LinkedEvent.is_set"></a>
 
-#### [is\_set](./sweep_run.py#L1136)
+#### [is\_set](./sweep_run.py#L1189)
 
 ```python
 def is_set() -> bool
@@ -40591,7 +40670,7 @@ Return whether the caller cancelled or the budget stopped the sweep.
 
 <a id="fim.sweep_run._BudgetTracker"></a>
 
-## [\_BudgetTracker Objects](./sweep_run.py#L1141)
+## [\_BudgetTracker Objects](./sweep_run.py#L1194)
 
 ```python
 class _BudgetTracker()
@@ -40601,7 +40680,7 @@ Counts what a call has spent and decides when a budget is reached.
 
 <a id="fim.sweep_run._BudgetTracker.reserve"></a>
 
-#### [reserve](./sweep_run.py#L1156)
+#### [reserve](./sweep_run.py#L1209)
 
 ```python
 def reserve() -> bool
@@ -40611,7 +40690,7 @@ Claim one new point to compute; `False` once a budget is reached.
 
 <a id="fim.sweep_run._BudgetTracker.add_bytes"></a>
 
-#### [add\_bytes](./sweep_run.py#L1169)
+#### [add\_bytes](./sweep_run.py#L1222)
 
 ```python
 def add_bytes(size: int) -> None
@@ -40621,7 +40700,7 @@ Count the bytes of a finished point, then check the budget.
 
 <a id="fim.sweep_run._BudgetTracker.check"></a>
 
-#### [check](./sweep_run.py#L1175)
+#### [check](./sweep_run.py#L1228)
 
 ```python
 def check() -> None
@@ -40631,7 +40710,7 @@ Stop the sweep if the time or disk limit has been reached.
 
 <a id="fim.sweep_run._Context"></a>
 
-## [\_Context Objects](./sweep_run.py#L1215)
+## [\_Context Objects](./sweep_run.py#L1268)
 
 ```python
 @dataclass(slots=True)
@@ -40642,7 +40721,7 @@ What every point of one `run_sweep` call shares.
 
 <a id="fim.sweep_run._Context.emit"></a>
 
-#### [emit](./sweep_run.py#L1249)
+#### [emit](./sweep_run.py#L1302)
 
 ```python
 def emit(kind: EventKind,
@@ -40656,7 +40735,7 @@ Send one event; a finishing event advances the finished count.
 
 <a id="fim.sweep_run.run_sweep"></a>
 
-#### [run\_sweep](./sweep_run.py#L1262)
+#### [run\_sweep](./sweep_run.py#L1315)
 
 ```python
 def run_sweep(study_id: str,
@@ -40767,7 +40846,7 @@ falls back to the runner's `run_point`.
 
 <a id="fim.sweep_run.sweep_lock_held"></a>
 
-#### [sweep\_lock\_held](./sweep_run.py#L1395)
+#### [sweep\_lock\_held](./sweep_run.py#L1448)
 
 ```python
 def sweep_lock_held(study_id: str, *, results: Path | None = None) -> bool
@@ -40788,7 +40867,7 @@ Return whether a process is running the sweep `study_id` right now.
 
 <a id="fim.sweep_run.sweep_lock_path"></a>
 
-#### [sweep\_lock\_path](./sweep_run.py#L1409)
+#### [sweep\_lock\_path](./sweep_run.py#L1462)
 
 ```python
 def sweep_lock_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40801,7 +40880,7 @@ sees it.
 
 <a id="fim.sweep_run.pending_sweep_point_count"></a>
 
-#### [pending\_sweep\_point\_count](./sweep_run.py#L1663)
+#### [pending\_sweep\_point\_count](./sweep_run.py#L1716)
 
 ```python
 def pending_sweep_point_count(study_id: str,
@@ -40816,7 +40895,7 @@ Return the exact number of points a sweep resume would execute.
 
 <a id="fim.sweep_run.verification_path"></a>
 
-#### [verification\_path](./sweep_run.py#L1685)
+#### [verification\_path](./sweep_run.py#L1738)
 
 ```python
 def verification_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40829,7 +40908,7 @@ see it.
 
 <a id="fim.sweep_run.read_verification"></a>
 
-#### [read\_verification](./sweep_run.py#L1696)
+#### [read\_verification](./sweep_run.py#L1749)
 
 ```python
 def read_verification(study_id: str,
@@ -40846,7 +40925,7 @@ Keys: `verified_at` (UTC text), `software_version`, `plan_digest`,
 
 <a id="fim.sweep_run.failures_path"></a>
 
-#### [failures\_path](./sweep_run.py#L1753)
+#### [failures\_path](./sweep_run.py#L1806)
 
 ```python
 def failures_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40859,7 +40938,7 @@ Kept in a subdirectory of the Study index so the index's own
 
 <a id="fim.sweep_run.read_failures"></a>
 
-#### [read\_failures](./sweep_run.py#L1762)
+#### [read\_failures](./sweep_run.py#L1815)
 
 ```python
 def read_failures(study_id: str,
@@ -40871,7 +40950,7 @@ Return recorded failures by point `run_id`; empty if none or unreadable.
 
 <a id="fim.sweep_run.read_point_objects"></a>
 
-#### [read\_point\_objects](./sweep_run.py#L1770)
+#### [read\_point\_objects](./sweep_run.py#L1823)
 
 ```python
 def read_point_objects(study_id: str,
@@ -40883,7 +40962,7 @@ Return each point's linked Run object ID by point `run_id`.
 
 <a id="fim.sweep_run.Replan"></a>
 
-## [Replan Objects](./sweep_run.py#L1853)
+## [Replan Objects](./sweep_run.py#L1906)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -40909,7 +40988,7 @@ What `replan_sweep` changed, or would change.
 
 <a id="fim.sweep_run.replan_sweep"></a>
 
-#### [replan\_sweep](./sweep_run.py#L1886)
+#### [replan\_sweep](./sweep_run.py#L1939)
 
 ```python
 def replan_sweep(study_id: str,
@@ -40953,7 +41032,7 @@ an ordinary run, listed in the result, and its point runs again.
 
 <a id="fim.sweep_run.write_reproducibility_note"></a>
 
-#### [write\_reproducibility\_note](./sweep_run.py#L2304)
+#### [write\_reproducibility\_note](./sweep_run.py#L2357)
 
 ```python
 def write_reproducibility_note(directory: Path,
@@ -40967,7 +41046,7 @@ the run's own record of itself is untouched.
 
 <a id="fim.sweep_run.sweep_point_results"></a>
 
-#### [sweep\_point\_results](./sweep_run.py#L2315)
+#### [sweep\_point\_results](./sweep_run.py#L2368)
 
 ```python
 def sweep_point_results(study: StudyManifest,
@@ -40988,7 +41067,7 @@ nothing.
 
 <a id="fim.sweep_run.health_cache_path"></a>
 
-#### [health\_cache\_path](./sweep_run.py#L2346)
+#### [health\_cache\_path](./sweep_run.py#L2399)
 
 ```python
 def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40998,7 +41077,7 @@ Return the disposable cache of a sweep's point health counts.
 
 <a id="fim.sweep_run.trajectory_cache_path"></a>
 
-#### [trajectory\_cache\_path](./sweep_run.py#L2351)
+#### [trajectory\_cache\_path](./sweep_run.py#L2404)
 
 ```python
 def trajectory_cache_path(study_id: str,
