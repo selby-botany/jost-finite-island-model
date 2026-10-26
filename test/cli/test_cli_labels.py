@@ -147,6 +147,12 @@ def _arguments(**overrides: object) -> argparse.Namespace:
 def _existing_sidecar(directory: Path) -> bytes:
     """Give `directory` a `metadata.json` of its own and return its bytes."""
     directory.mkdir()
+    # `_record_run_organization`'s own precondition: reached only once a
+    # run has actually published (its own docstring) -- so it always has
+    # a `manifest.json` by the time this is reached, which
+    # `add_run_to_study` now requires to accept the directory at all
+    # (2026-10-25 project review, finding G-2).
+    (directory / "manifest.json").write_text("{}", encoding="utf-8")
     path = run_metadata_path(directory)
     path.write_text(
         json.dumps(

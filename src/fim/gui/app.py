@@ -7444,11 +7444,16 @@ class Api:
             directory already gone (deleted out of band, or a stale
             selection from before a refresh) is not an error.
             `{"ok": False, "message": ...}` if any directory is a
-            read-only run; the message names every one.
+            read-only run, or is not confined under the results
+            directory and an actual Run (`groups.delete_runs`'s own
+            `UnsafeRunReferenceError`, this project's own 2026-10-25
+            project review, finding G-1 -- an empty string used to
+            resolve to, and delete, the process's own working
+            directory); the message names every offending entry.
         """
         try:
             deleted_count = groups.delete_runs(directories)
-        except groups.ReadOnlyError as error:
+        except (groups.ReadOnlyError, groups.UnsafeRunReferenceError) as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "deletedCount": deleted_count}
 
@@ -8676,6 +8681,13 @@ def _check_reproducibility(
             # A read-only example is never deleted or relinked; the
             # matching recomputed run simply lives beside it.
             logger.info("kept read-only run %s: %s", previous, error)
+        except groups.UnsafeRunReferenceError as error:
+            # Should never happen -- `previous` always names a run this
+            # function itself just discovered under the results
+            # directory -- but every Study's own link was already
+            # replaced before this could raise, so there is nothing
+            # left to unwind; only the stale directory survives.
+            logger.warning("could not remove superseded run %s: %s", previous, error)
     else:
         logger.warning(
             "recomputed run %s differs from %s (version %s vs %s): %s",

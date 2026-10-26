@@ -4394,6 +4394,27 @@ def test_add_run_to_study_reports_an_unknown_study(
     assert "no such study" in result["message"]
 
 
+def test_add_run_to_study_refuses_a_path_with_no_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A path with no `manifest.json` is refused, never recorded as a Run.
+
+    Regression test for the 2026-10-25 project review's finding G-2:
+    the bridge's `add_run_to_study(<any path>)` used to record any
+    path at all, which `delete_study` would then trust outright (P-1).
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    not_a_run = results / "not-a-run"
+    not_a_run.mkdir(parents=True)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+
+    result = api.add_run_to_study(study_id, str(not_a_run))
+
+    assert result["ok"] is False
+    assert api.list_studies()[0]["runCount"] == 0
+
+
 def test_get_study_run_summary_reports_an_unknown_study(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -4518,6 +4539,49 @@ def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
     assert result == {"ok": True, "deletedCount": 2}
     assert not first.exists()
     assert not second.exists()
+
+
+def test_delete_runs_refuses_an_empty_string_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty-string entry is refused, not resolved to the working directory.
+
+    Regression test for the 2026-10-25 project review's finding G-1:
+    `Path("").is_dir()` is `True` (the current directory), so
+    `Api.delete_runs([""])` used to delete it outright.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    run = _write_run_under(results, "run-a")
+
+    result = Api().delete_runs(["", str(run)])
+
+    assert result["ok"] is False
+    assert cwd.is_dir()
+    assert run.is_dir()
+
+
+def test_delete_runs_refuses_a_directory_with_no_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A directory with no `manifest.json`/`run.json` is never deleted.
+
+    Regression test for the 2026-10-25 project review's finding G-1. A
+    real Run outside the results root is deliberately still deletable
+    this way (`fim run -o SOME/OTHER/PATH` published it on purpose);
+    this is the actual defect: nothing confirmed `not_a_run` was a Run
+    at all.
+    """
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    not_a_run = tmp_path / "outside" / "not-a-run"
+    not_a_run.mkdir(parents=True)
+
+    result = Api().delete_runs([str(not_a_run)])
+
+    assert result["ok"] is False
+    assert not_a_run.is_dir()
 
 
 def test_delete_selected_deletes_a_mixed_selection(

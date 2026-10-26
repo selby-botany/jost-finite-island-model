@@ -1839,6 +1839,74 @@ def test_study_create_add_run_list_delete(
     assert not output.exists()
 
 
+def test_study_delete_dry_run_reports_without_deleting_anything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`fim study delete --dry-run` prints the run; nothing is removed.
+
+    This project's own 2026-10-25 project review, finding P-1's "print
+    the directories to be removed" before any real delete.
+    """
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+    assert (
+        cli.main(
+            [
+                "run",
+                str(config),
+                "--output",
+                str(output),
+                "--quiet",
+                "--study",
+                study_id,
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert cli.main(["study", "delete", study_id, "--dry-run"]) == 0
+
+    assert str(output) in capsys.readouterr().out
+    assert output.exists()
+    assert (tmp_path / "results" / ".fim" / "studies" / f"{study_id}.json").exists()
+
+
+def test_study_delete_keep_runs_removes_only_the_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fim study delete --keep-runs` removes the study but keeps its run."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+    assert (
+        cli.main(
+            [
+                "run",
+                str(config),
+                "--output",
+                str(output),
+                "--quiet",
+                "--study",
+                study_id,
+            ]
+        )
+        == 0
+    )
+
+    assert cli.main(["study", "delete", study_id, "--keep-runs"]) == 0
+
+    assert output.exists()
+    assert not (tmp_path / "results" / ".fim" / "studies" / f"{study_id}.json").exists()
+
+
 def test_study_close_and_reopen_show_in_the_study_list(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2016,6 +2084,83 @@ def test_experiment_create_add_study_list_delete_cascades_to_runs(
 
     assert not output.exists()
     assert not (tmp_path / "results" / ".fim" / "studies" / f"{study_id}.json").exists()
+
+
+def test_experiment_delete_dry_run_reports_without_deleting_anything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`fim experiment delete --dry-run` prints the run; nothing is removed."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+    assert (
+        cli.main(
+            [
+                "run",
+                str(config),
+                "--output",
+                str(output),
+                "--quiet",
+                "--study",
+                study_id,
+            ]
+        )
+        == 0
+    )
+    assert cli.main(["experiment", "create", "--name", "Topology"]) == 0
+    experiment_id = next(
+        (tmp_path / "results" / ".fim" / "experiments").glob("*.json")
+    ).stem
+    assert cli.main(["experiment", "add-study", experiment_id, study_id]) == 0
+    capsys.readouterr()
+
+    assert cli.main(["experiment", "delete", experiment_id, "--dry-run"]) == 0
+
+    assert str(output) in capsys.readouterr().out
+    assert output.exists()
+    assert (tmp_path / "results" / ".fim" / "studies" / f"{study_id}.json").exists()
+
+
+def test_experiment_delete_keep_runs_keeps_every_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fim experiment delete --keep-runs` removes the studies but keeps runs."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+    assert (
+        cli.main(
+            [
+                "run",
+                str(config),
+                "--output",
+                str(output),
+                "--quiet",
+                "--study",
+                study_id,
+            ]
+        )
+        == 0
+    )
+    assert cli.main(["experiment", "create", "--name", "Topology"]) == 0
+    experiment_id = next(
+        (tmp_path / "results" / ".fim" / "experiments").glob("*.json")
+    ).stem
+    assert cli.main(["experiment", "add-study", experiment_id, study_id]) == 0
+
+    assert cli.main(["experiment", "delete", experiment_id, "--keep-runs"]) == 0
+
+    assert output.exists()
+    assert not (tmp_path / "results" / ".fim" / "studies" / f"{study_id}.json").exists()
+    assert not (
+        tmp_path / "results" / ".fim" / "experiments" / f"{experiment_id}.json"
+    ).exists()
 
 
 def test_format_optional_helper_is_stable() -> None:

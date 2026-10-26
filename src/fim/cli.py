@@ -57,6 +57,8 @@ from fim.persistence.groups import (
     ensure_default_study,
     list_experiments,
     list_studies,
+    preview_experiment_deletion,
+    preview_study_deletion,
     resolve_run_directory,
 )
 
@@ -674,9 +676,7 @@ def _command_study(
         _print_studies(list_studies())
         return 0
     if arguments.study_command == "delete":
-        deleted = delete_study(arguments.study_id)
-        print(f"Deleted study {deleted.study_id} and {deleted.run_count} run(s)")
-        return 0
+        return _study_delete(arguments)
     if arguments.study_command == "copy":
         copied = copy_study(arguments.study_id, name=arguments.name)
         print(
@@ -693,6 +693,27 @@ def _command_study(
     parser.error("a study subcommand is required")
 
 
+def _study_delete(arguments: argparse.Namespace) -> int:
+    """Run `fim study delete`'s plain, `--dry-run`, and `--keep-runs` forms.
+
+    Split out of `_command_study` only to keep that function's own
+    return count under this project's own configured `PLR0911` limit
+    (`_dispatch_command`'s own docstring gives the identical precedent)
+    -- `--dry-run` and `--keep-runs` are this project's own 2026-10-25
+    project review, finding P-1's "print the directories to be
+    removed" and a non-destructive alternative to a full delete.
+    """
+    if arguments.dry_run:
+        _print_deletion_preview(preview_study_deletion(arguments.study_id))
+        return 0
+    deleted = delete_study(arguments.study_id, delete_runs=not arguments.keep_runs)
+    if arguments.keep_runs:
+        print(f"Deleted study {deleted.study_id}; kept its {deleted.run_count} run(s)")
+    else:
+        print(f"Deleted study {deleted.study_id} and {deleted.run_count} run(s)")
+    return 0
+
+
 def _format_summary(summary: GroupSummary) -> str:
     """Render a group's derived lifecycle summary as one short phrase.
 
@@ -703,6 +724,21 @@ def _format_summary(summary: GroupSummary) -> str:
     if summary.unmaterialized:
         parts.append(f"{summary.unmaterialized} not started")
     return ", ".join(parts) if parts else "empty"
+
+
+def _print_deletion_preview(directories: Sequence[Path]) -> None:
+    """Print `study`/`experiment delete --dry-run`'s own preview, one line each.
+
+    `preview_study_deletion`/`preview_experiment_deletion`'s shared
+    report: every directory a real delete would remove, with nothing
+    actually removed (this project's own 2026-10-25 project review,
+    finding P-1's "print the directories to be removed").
+    """
+    if not directories:
+        print("Would delete no run directories.")
+        return
+    for directory in directories:
+        print(f"Would delete {directory}")
 
 
 def _print_studies(studies: Sequence[StudyManifest]) -> None:
@@ -754,12 +790,7 @@ def _command_experiment(
         _print_experiments(list_experiments())
         return 0
     if arguments.experiment_command == "delete":
-        deleted = delete_experiment(arguments.experiment_id)
-        print(
-            f"Deleted experiment {deleted.experiment_id} and "
-            f"{deleted.study_count} study(ies)"
-        )
-        return 0
+        return _experiment_delete(arguments)
     if arguments.experiment_command == "copy":
         copied = copy_experiment(arguments.experiment_id, name=arguments.name)
         print(
@@ -776,6 +807,26 @@ def _command_experiment(
         print(f"{verb} experiment {experiment.experiment_id}: {experiment.name}")
         return 0
     parser.error("an experiment subcommand is required")
+
+
+def _experiment_delete(arguments: argparse.Namespace) -> int:
+    """Run `fim experiment delete`'s plain, `--dry-run`, and `--keep-runs` forms.
+
+    `_study_delete`'s own counterpart one level up, split out for the
+    identical `PLR0911` reason.
+    """
+    if arguments.dry_run:
+        _print_deletion_preview(preview_experiment_deletion(arguments.experiment_id))
+        return 0
+    deleted = delete_experiment(
+        arguments.experiment_id, delete_runs=not arguments.keep_runs
+    )
+    kept = " (kept every run)" if arguments.keep_runs else ""
+    print(
+        f"Deleted experiment {deleted.experiment_id} and "
+        f"{deleted.study_count} study(ies){kept}"
+    )
+    return 0
 
 
 def _print_experiments(experiments: Sequence[ExperimentManifest]) -> None:
@@ -1361,6 +1412,16 @@ def _add_study_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None
         help="delete a study and every run it references",
     )
     study_delete_parser.add_argument("study_id", metavar="STUDY_ID")
+    study_delete_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print which run directories would be deleted; delete nothing",
+    )
+    study_delete_parser.add_argument(
+        "--keep-runs",
+        action="store_true",
+        help="delete only the study itself; keep every run it referenced",
+    )
     study_copy_parser = study_subcommands.add_parser(
         "copy",
         help="copy a study's run list into a new, independent study",
@@ -1419,6 +1480,16 @@ def _add_experiment_subcommands(subcommands: argparse._SubParsersAction[Any]) ->
         help="delete an experiment and every study (and run) it references",
     )
     experiment_delete_parser.add_argument("experiment_id", metavar="EXPERIMENT_ID")
+    experiment_delete_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print which run directories would be deleted; delete nothing",
+    )
+    experiment_delete_parser.add_argument(
+        "--keep-runs",
+        action="store_true",
+        help="delete only the experiment and its studies; keep every run",
+    )
     experiment_copy_parser = experiment_subcommands.add_parser(
         "copy",
         help="copy an experiment's study list into a new, independent experiment",

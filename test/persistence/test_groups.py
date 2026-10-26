@@ -17,6 +17,7 @@ from fim.persistence.groups import (
     DEFAULT_STUDY_NAME,
     ExperimentManifest,
     StudyManifest,
+    UnsafeRunReferenceError,
     add_run_to_study,
     add_study_to_experiment,
     clear_study_runs,
@@ -25,6 +26,7 @@ from fim.persistence.groups import (
     create_experiment,
     create_study,
     delete_experiment,
+    delete_runs,
     delete_study,
     ensure_default_experiment,
     ensure_default_study,
@@ -34,6 +36,8 @@ from fim.persistence.groups import (
     get_study,
     list_experiments,
     list_studies,
+    preview_experiment_deletion,
+    preview_study_deletion,
     prune_missing_studies,
     read_experiment_manifest,
     read_study_manifest,
@@ -42,6 +46,7 @@ from fim.persistence.groups import (
     shared_run_directories,
     studies_containing_run,
     study_manifest_path,
+    supersede_run,
     update_experiment_details,
     update_study_details,
     write_experiment_manifest,
@@ -255,6 +260,23 @@ def test_add_run_to_study_stores_an_absolute_path_outside_results(
     assert updated.run_directories == (str(elsewhere.resolve()),)
 
 
+def test_add_run_to_study_refuses_a_path_with_no_manifest(tmp_path: Path) -> None:
+    """A path with no `manifest.json` is never recorded as a Run reference.
+
+    Regression test for the 2026-10-25 project review's finding G-2:
+    `add_run_to_study(<any path>)` used to record any path at all,
+    which a later `delete_study` would then trust outright (P-1).
+    """
+    study = create_study("Ring sweep", results=tmp_path)
+    not_a_run = tmp_path / "not-a-run"
+    not_a_run.mkdir()
+
+    with pytest.raises(UnsafeRunReferenceError, match="no manifest"):
+        add_run_to_study(study.study_id, not_a_run, results=tmp_path)
+
+    assert get_study(study.study_id, results=tmp_path).run_directories == ()
+
+
 def test_add_run_to_study_raises_for_an_unknown_study(tmp_path: Path) -> None:
     """Adding a run to a nonexistent Study is a clear error."""
     run_directory = _run_directory(tmp_path, "run-a")
@@ -287,6 +309,23 @@ def test_delete_study_can_keep_its_runs(tmp_path: Path) -> None:
     assert run_directory.is_dir()
 
 
+def test_preview_study_deletion_lists_without_deleting_anything(tmp_path: Path) -> None:
+    """`preview_study_deletion` reports exactly what a real delete would remove.
+
+    `fim study delete --dry-run`'s own entry point (2026-10-25 project
+    review, finding P-1).
+    """
+    study = create_study("Ring sweep", results=tmp_path)
+    run_directory = _run_directory(tmp_path, "run-a")
+    add_run_to_study(study.study_id, run_directory, results=tmp_path)
+
+    preview = preview_study_deletion(study.study_id, results=tmp_path)
+
+    assert preview == (run_directory.resolve(),)
+    assert run_directory.is_dir()
+    assert get_study(study.study_id, results=tmp_path).run_directories == ("run-a",)
+
+
 def test_delete_study_tolerates_an_already_missing_run_directory(
     tmp_path: Path,
 ) -> None:
@@ -297,6 +336,93 @@ def test_delete_study_tolerates_an_already_missing_run_directory(
     shutil.rmtree(run_directory)
 
     delete_study(study.study_id, results=tmp_path)  # must not raise
+
+
+def test_delete_study_still_deletes_a_run_published_outside_results(
+    tmp_path: Path,
+) -> None:
+    """A Study's own external-run reference is deleted along with it.
+
+    Control for the 2026-10-25 project review's finding P-1: `fim run
+    -o SOME/OTHER/PATH --study X` publishing a Run outside `results` on
+    purpose (`test_add_run_to_study_stores_an_absolute_path_outside_
+    results`, above) is existing, deliberate, tested product behavior
+    (`test_study_create_add_run_list_delete`, `test/cli/test_cli.py`);
+    P-1's fix must not regress it — only a reference with no
+    corroborating `manifest.json`/`run.json` is ever refused (see the
+    next two tests).
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    study = create_study("Ring sweep", results=results)
+    elsewhere = _run_directory(tmp_path / "elsewhere", "run-x")
+    add_run_to_study(study.study_id, elsewhere, results=results)
+
+    delete_study(study.study_id, results=results)
+
+    assert not elsewhere.exists()
+    with pytest.raises(ValueError, match="no such study"):
+        get_study(study.study_id, results=results)
+
+
+def test_delete_study_never_deletes_a_reference_with_no_manifest(
+    tmp_path: Path,
+) -> None:
+    """A manifest entry naming a non-Run directory is refused, not deleted.
+
+    Regression test for the 2026-10-25 project review's finding P-1:
+    the manifest entry is the only thing `_delete_unshared_runs` used
+    to trust, with no corroborating evidence the directory it names is
+    actually a Run — exercised here via a hand-edited manifest, since
+    no normal code path (`add_run_to_study`'s own G-2 check) ever
+    writes such an entry itself.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    not_a_run = tmp_path / "not-a-run"
+    not_a_run.mkdir()
+    study = create_study("Ring sweep", results=results)
+    payload = get_study(study.study_id, results=results).to_dict()
+    payload["run_directories"] = [str(not_a_run)]
+    write_study_manifest(
+        study_manifest_path(study.study_id, results=results),
+        StudyManifest.from_dict(payload),
+    )
+
+    delete_study(study.study_id, results=results)  # must not raise
+
+    assert not_a_run.is_dir()
+    with pytest.raises(ValueError, match="no such study"):
+        get_study(study.study_id, results=results)
+
+
+def test_delete_study_never_deletes_a_dotdot_escaping_reference_with_no_manifest(
+    tmp_path: Path,
+) -> None:
+    """A `..`-escaping entry is refused for the same reason: no `manifest.json`.
+
+    Regression test for the 2026-10-25 project review's finding P-1's
+    own "a relative entry with `..` resolves outside the root too" —
+    the escape itself is not the problem (a `..`-relative entry that
+    happens to resolve to a real Run is deleted, same as any other
+    reference); the problem is a reference with nothing confirming it
+    names a Run at all, regardless of how it is spelled.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    not_a_run = tmp_path / "not-a-run"
+    not_a_run.mkdir()
+    study = create_study("Ring sweep", results=results)
+    payload = get_study(study.study_id, results=results).to_dict()
+    payload["run_directories"] = ["../not-a-run"]
+    write_study_manifest(
+        study_manifest_path(study.study_id, results=results),
+        StudyManifest.from_dict(payload),
+    )
+
+    delete_study(study.study_id, results=results)  # must not raise
+
+    assert not_a_run.is_dir()
 
 
 def test_copy_study_creates_an_independent_study_with_the_same_runs(
@@ -317,6 +443,64 @@ def test_copy_study_creates_an_independent_study_with_the_same_runs(
     other_run = _run_directory(tmp_path, "run-b")
     add_run_to_study(copied.study_id, other_run, results=tmp_path)
     assert get_study(study.study_id, results=tmp_path).run_directories == ("run-a",)
+
+
+# -- Unsafe deletion refusal (2026-10-25 project review, P-1 / G-1) ----------
+
+
+def test_delete_runs_refuses_an_empty_string_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty-string entry is refused, never resolved to the working directory.
+
+    Regression test for the 2026-10-25 project review's finding G-1:
+    `Path("").is_dir()` is `True` (the current directory), so
+    `delete_runs([""])` used to delete it outright.
+    """
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(UnsafeRunReferenceError, match="nothing was deleted"):
+        delete_runs([""], results=tmp_path)
+
+    assert tmp_path.is_dir()
+
+
+def test_delete_runs_refuses_a_directory_with_no_manifest(tmp_path: Path) -> None:
+    """A directory with no `manifest.json`/`run.json` is never deleted this way.
+
+    Regression test for the 2026-10-25 project review's finding G-1.
+    A real Run outside `results` is deliberately still deletable (the
+    external-run feature `test_delete_study_still_deletes_a_run_
+    published_outside_results`, above, exercises for Study deletion);
+    this is the actual defect: nothing confirmed `not_a_run` was a Run
+    at all.
+    """
+    not_a_run = tmp_path / "not-a-run"
+    not_a_run.mkdir()
+
+    with pytest.raises(UnsafeRunReferenceError, match="not-a-run"):
+        delete_runs([not_a_run], results=tmp_path)
+
+    assert not_a_run.is_dir()
+
+
+def test_supersede_run_refuses_an_old_path_with_no_manifest(tmp_path: Path) -> None:
+    """A backstop: `supersede_run` refuses an `old` that is not a real Run.
+
+    Every real caller only ever passes an `old` already found under
+    `results` as an existing Run, so this should never fire in
+    practice; it exercises the same safety gate `delete_study`/
+    `delete_runs` share, directly, as this module's own defense in
+    depth (2026-10-25 project review, finding P-1).
+    """
+    not_a_run = tmp_path / "not-a-run"
+    not_a_run.mkdir()
+    new = _run_directory(tmp_path, "new")
+
+    with pytest.raises(UnsafeRunReferenceError):
+        supersede_run(not_a_run, new, results=tmp_path)
+
+    assert not_a_run.is_dir()
 
 
 # -- Experiment CRUD ------------------------------------------------------
@@ -461,6 +645,48 @@ def test_delete_experiment_can_keep_its_studies(tmp_path: Path) -> None:
     delete_experiment(experiment.experiment_id, results=tmp_path, delete_studies=False)
 
     assert get_study(study.study_id, results=tmp_path) == study
+
+
+def test_delete_experiment_can_keep_its_runs(tmp_path: Path) -> None:
+    """`delete_runs=False` removes the Experiment and its Studies, keeps Runs.
+
+    `fim experiment delete --keep-runs` (2026-10-25 project review,
+    finding P-1): unlike `delete_studies=False`, the Studies themselves
+    are still removed -- only the Run data they held survives.
+    """
+    experiment = create_experiment("Topology", results=tmp_path)
+    study = create_study("Ring sweep", results=tmp_path)
+    run_directory = _run_directory(tmp_path, "run-a")
+    add_run_to_study(study.study_id, run_directory, results=tmp_path)
+    add_study_to_experiment(experiment.experiment_id, study.study_id, results=tmp_path)
+
+    delete_experiment(experiment.experiment_id, results=tmp_path, delete_runs=False)
+
+    assert run_directory.is_dir()
+    with pytest.raises(ValueError, match="no such study"):
+        get_study(study.study_id, results=tmp_path)
+    with pytest.raises(ValueError, match="no such experiment"):
+        get_experiment(experiment.experiment_id, results=tmp_path)
+
+
+def test_preview_experiment_deletion_lists_without_deleting_anything(
+    tmp_path: Path,
+) -> None:
+    """`preview_experiment_deletion` reports what a real delete would remove."""
+    experiment = create_experiment("Topology", results=tmp_path)
+    study = create_study("Ring sweep", results=tmp_path)
+    run_directory = _run_directory(tmp_path, "run-a")
+    add_run_to_study(study.study_id, run_directory, results=tmp_path)
+    add_study_to_experiment(experiment.experiment_id, study.study_id, results=tmp_path)
+
+    preview = preview_experiment_deletion(experiment.experiment_id, results=tmp_path)
+
+    assert preview == (run_directory.resolve(),)
+    assert run_directory.is_dir()
+    assert get_study(study.study_id, results=tmp_path).run_directories == ("run-a",)
+    assert get_experiment(experiment.experiment_id, results=tmp_path).study_ids == (
+        study.study_id,
+    )
 
 
 def test_copy_experiment_creates_an_independent_experiment_with_the_same_studies(

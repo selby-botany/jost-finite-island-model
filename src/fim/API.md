@@ -998,6 +998,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.persistence.groups](#fim.persistence.groups)
   * [ClosedGroupError](#fim.persistence.groups.ClosedGroupError)
   * [ReadOnlyError](#fim.persistence.groups.ReadOnlyError)
+  * [UnsafeRunReferenceError](#fim.persistence.groups.UnsafeRunReferenceError)
   * [is\_run\_read\_only](#fim.persistence.groups.is_run_read_only)
   * [refuse\_read\_only\_run](#fim.persistence.groups.refuse_read_only_run)
   * [generate\_study\_id](#fim.persistence.groups.generate_study_id)
@@ -1027,6 +1028,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [list\_studies](#fim.persistence.groups.list_studies)
   * [add\_run\_to\_study](#fim.persistence.groups.add_run_to_study)
   * [delete\_study](#fim.persistence.groups.delete_study)
+  * [preview\_study\_deletion](#fim.persistence.groups.preview_study_deletion)
   * [clear\_study\_runs](#fim.persistence.groups.clear_study_runs)
   * [shared\_run\_directories](#fim.persistence.groups.shared_run_directories)
   * [remove\_run\_from\_study](#fim.persistence.groups.remove_run_from_study)
@@ -1044,6 +1046,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_read\_only\_study](#fim.persistence.groups.write_read_only_study)
   * [write\_read\_only\_experiment](#fim.persistence.groups.write_read_only_experiment)
   * [delete\_experiment](#fim.persistence.groups.delete_experiment)
+  * [preview\_experiment\_deletion](#fim.persistence.groups.preview_experiment_deletion)
   * [update\_experiment\_details](#fim.persistence.groups.update_experiment_details)
   * [experiments\_containing\_study](#fim.persistence.groups.experiments_containing_study)
   * [studies\_containing\_run](#fim.persistence.groups.studies_containing_run)
@@ -2476,7 +2479,7 @@ interface includes `init`, `run`, `stats`, `study`, `experiment`, `object`,
 
 <a id="fim.cli.load_config"></a>
 
-#### [load\_config](./cli.py#L109)
+#### [load\_config](./cli.py#L111)
 
 ```python
 def load_config(path: Path | str) -> SimulationParams
@@ -2506,7 +2509,7 @@ re-check any of that.
 
 <a id="fim.cli.main"></a>
 
-#### [main](./cli.py#L156)
+#### [main](./cli.py#L158)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -13160,11 +13163,16 @@ nothing at all is deleted and the refusal is reported.
   directory already gone (deleted out of band, or a stale
   selection from before a refresh) is not an error.
 - ``{"ok"` - False, "message": ...}` if any directory is a
-  read-only run; the message names every one.
+  read-only run, or is not confined under the results
+  directory and an actual Run (`groups.delete_runs`'s own
+  `UnsafeRunReferenceError`, this project's own 2026-10-25
+  project review, finding G-1 -- an empty string used to
+  resolve to, and delete, the process's own working
+  directory); the message names every offending entry.
 
 <a id="fim.gui.app.Api.delete_selected"></a>
 
-#### [delete\_selected](./gui/app.py#L7456)
+#### [delete\_selected](./gui/app.py#L7461)
 
 ```python
 @_log_bridge_call
@@ -13224,7 +13232,7 @@ policy) rather than double-counted or treated as a failure.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 
-#### [get\_batch\_replicate\_summary](./gui/app.py#L7557)
+#### [get\_batch\_replicate\_summary](./gui/app.py#L7562)
 
 ```python
 @_log_bridge_call
@@ -13266,7 +13274,7 @@ already uses — no second naming scheme.
 
 <a id="fim.gui.app.Api.get_batch_pair_statistics"></a>
 
-#### [get\_batch\_pair\_statistics](./gui/app.py#L7620)
+#### [get\_batch\_pair\_statistics](./gui/app.py#L7625)
 
 ```python
 @_log_bridge_call
@@ -13300,7 +13308,7 @@ existed, or above its deme-count limit).
 
 <a id="fim.gui.app.Api.open_run"></a>
 
-#### [open\_run](./gui/app.py#L7670)
+#### [open\_run](./gui/app.py#L7675)
 
 ```python
 @_log_bridge_call
@@ -13373,7 +13381,7 @@ reuse, not a second rendering path.
 
 <a id="fim.gui.app.Api.open_batch"></a>
 
-#### [open\_batch](./gui/app.py#L7861)
+#### [open\_batch](./gui/app.py#L7866)
 
 ```python
 @_log_bridge_call
@@ -13433,7 +13441,7 @@ Home screen's own reopen spinner (`open-run.js`'s own
 
 <a id="fim.gui.app.Api.open_study"></a>
 
-#### [open\_study](./gui/app.py#L7989)
+#### [open\_study](./gui/app.py#L7994)
 
 ```python
 @_log_bridge_call
@@ -13500,7 +13508,7 @@ refuse," not a bug).
 
 <a id="fim.gui.app.Api.compare_runs"></a>
 
-#### [compare\_runs](./gui/app.py#L8132)
+#### [compare\_runs](./gui/app.py#L8137)
 
 ```python
 @_log_bridge_call
@@ -13553,7 +13561,7 @@ animation screen's own frame sampler already computes.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 
-#### [get\_animation\_frames](./gui/app.py#L8218)
+#### [get\_animation\_frames](./gui/app.py#L8223)
 
 ```python
 @_log_bridge_call
@@ -13593,7 +13601,7 @@ any kind during playback.
 
 <a id="fim.gui.app.Api.get_animation_deme_pair_frames"></a>
 
-#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L8285)
+#### [get\_animation\_deme\_pair\_frames](./gui/app.py#L8290)
 
 ```python
 @_log_bridge_call
@@ -13637,7 +13645,7 @@ shape the default view's own frames already arrived in.
 
 <a id="fim.gui.app.Api.get_deme_pair_panel"></a>
 
-#### [get\_deme\_pair\_panel](./gui/app.py#L8350)
+#### [get\_deme\_pair\_panel](./gui/app.py#L8355)
 
 ```python
 @_log_bridge_call
@@ -13679,7 +13687,7 @@ small `d`).
 
 <a id="fim.gui.app.Api.get_batch_deme_pair_panel"></a>
 
-#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L8396)
+#### [get\_batch\_deme\_pair\_panel](./gui/app.py#L8401)
 
 ```python
 @_log_bridge_call
@@ -13718,7 +13726,7 @@ itself.
 
 <a id="fim.gui.app.Api.get_batch_animation_frames"></a>
 
-#### [get\_batch\_animation\_frames](./gui/app.py#L8443)
+#### [get\_batch\_animation\_frames](./gui/app.py#L8448)
 
 ```python
 @_log_bridge_call
@@ -13765,7 +13773,7 @@ recent_runs`/`open_run` already use.
 
 <a id="fim.gui.app.Api.ping"></a>
 
-#### [ping](./gui/app.py#L8515)
+#### [ping](./gui/app.py#L8520)
 
 ```python
 @_log_bridge_call
@@ -13780,7 +13788,7 @@ context, before any real screen is built on top of it.
 
 <a id="fim.gui.app.Api.ping_from_worker"></a>
 
-#### [ping\_from\_worker](./gui/app.py#L8525)
+#### [ping\_from\_worker](./gui/app.py#L8530)
 
 ```python
 @_log_bridge_call
@@ -13800,7 +13808,7 @@ inside a real batch run.
 
 <a id="fim.gui.app.Api.open_external_link"></a>
 
-#### [open\_external\_link](./gui/app.py#L8544)
+#### [open\_external\_link](./gui/app.py#L8549)
 
 ```python
 @_log_bridge_call
@@ -13819,7 +13827,7 @@ module already follows for another OS-dispatched action.
 
 <a id="fim.gui.app.Api.check_for_updates"></a>
 
-#### [check\_for\_updates](./gui/app.py#L8558)
+#### [check\_for\_updates](./gui/app.py#L8563)
 
 ```python
 @_log_bridge_call
@@ -13849,7 +13857,7 @@ own equivalent action called the same module the same way.
 
 <a id="fim.gui.app.Api.get_about_info"></a>
 
-#### [get\_about\_info](./gui/app.py#L8594)
+#### [get\_about\_info](./gui/app.py#L8599)
 
 ```python
 @_log_bridge_call
@@ -13896,7 +13904,7 @@ three-part parsing).
 
 <a id="fim.gui.app.RunDetails"></a>
 
-## [RunDetails Objects](./gui/app.py#L8842)
+## [RunDetails Objects](./gui/app.py#L8854)
 
 ```python
 class RunDetails(NamedTuple)
@@ -13906,7 +13914,7 @@ The optional name and description Configure gives a run before it starts.
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 
-#### [in\_flight\_bridge\_threads](./gui/app.py#L10486)
+#### [in\_flight\_bridge\_threads](./gui/app.py#L10498)
 
 ```python
 def in_flight_bridge_threads(
@@ -13934,7 +13942,7 @@ flakiness.
 
 <a id="fim.gui.app.await_bridge_threads"></a>
 
-#### [await\_bridge\_threads](./gui/app.py#L10521)
+#### [await\_bridge\_threads](./gui/app.py#L10533)
 
 ```python
 def await_bridge_threads(
@@ -13987,7 +13995,7 @@ seconds later.
 
 <a id="fim.gui.app.initial_window_size"></a>
 
-#### [initial\_window\_size](./gui/app.py#L10755)
+#### [initial\_window\_size](./gui/app.py#L10767)
 
 ```python
 def initial_window_size(screen_width: int,
@@ -14014,7 +14022,7 @@ edges), between `_MIN_WINDOW_SIZE` and `_MAX_WINDOW_SIZE`.
 
 <a id="fim.gui.app.create_window"></a>
 
-#### [create\_window](./gui/app.py#L10796)
+#### [create\_window](./gui/app.py#L10808)
 
 ```python
 def create_window(*,
@@ -14065,7 +14073,7 @@ pywebview's own API instead of Tk's.
 
 <a id="fim.gui.app.shutdown_timeout"></a>
 
-#### [shutdown\_timeout](./gui/app.py#L11019)
+#### [shutdown\_timeout](./gui/app.py#L11031)
 
 ```python
 def shutdown_timeout() -> float
@@ -14090,7 +14098,7 @@ outcome than the hang it guards against.
 
 <a id="fim.gui.app.main"></a>
 
-#### [main](./gui/app.py#L11329)
+#### [main](./gui/app.py#L11341)
 
 ```python
 def main(argv: Sequence[str] | None = None) -> int
@@ -24126,7 +24134,7 @@ default; callers can disable that behavior explicitly.
 
 <a id="fim.persistence.groups.ClosedGroupError"></a>
 
-## [ClosedGroupError Objects](./persistence/groups.py#L56)
+## [ClosedGroupError Objects](./persistence/groups.py#L57)
 
 ```python
 class ClosedGroupError(StoreError, ValueError)
@@ -24138,7 +24146,7 @@ A `ValueError` subclass for the same reason as `ReadOnlyError`.
 
 <a id="fim.persistence.groups.ReadOnlyError"></a>
 
-## [ReadOnlyError Objects](./persistence/groups.py#L63)
+## [ReadOnlyError Objects](./persistence/groups.py#L64)
 
 ```python
 class ReadOnlyError(StoreError, ValueError)
@@ -24152,9 +24160,41 @@ A `ValueError` subclass, so the GUI bridge's and the CLI's existing
 wants to tell it apart (to show a lock rather than an error, say)
 can catch it first.
 
+<a id="fim.persistence.groups.UnsafeRunReferenceError"></a>
+
+## [UnsafeRunReferenceError Objects](./persistence/groups.py#L75)
+
+```python
+class UnsafeRunReferenceError(StoreError, ValueError)
+```
+
+Refuse to delete, or to record, a path that is not a real Run.
+
+A `ValueError` subclass for the same reason as `ReadOnlyError`.
+Raised instead of ever handing `shutil.rmtree` a path this module
+has not confirmed is actually a Run or Run object
+(`_is_run_directory`) — not a bare name, a `..`-escaping or
+nonexistent entry a Study/Experiment manifest happens to hold, or
+an empty string a bridge call happens to pass (`Path("").is_dir()`
+is `True`: it is the current directory). This project's own
+2026-10-25 project review, findings P-1/G-1/G-2: every `rmtree`
+call site here used to trust a stored manifest entry or a bridge-
+supplied string outright, and `add_run_to_study` could be made to
+record a reference that later deletion would then trust.
+
+Deliberately **not** a containment check against the results root:
+`fim run -o SOME/OTHER/PATH --study X` publishes a Run entirely
+outside `results` on purpose (`_run_reference_string`'s own
+docstring), and `fim study delete X` deleting it is existing,
+tested product behavior (`test_study_create_add_run_list_delete`,
+`test/cli/test_cli.py`), not the defect the review describes. The
+defect was trusting a reference with no corroborating evidence it
+names a Run at all; confirming `manifest.json` or `run.json` is
+present closes that regardless of where the directory lives.
+
 <a id="fim.persistence.groups.is_run_read_only"></a>
 
-#### [is\_run\_read\_only](./persistence/groups.py#L74)
+#### [is\_run\_read\_only](./persistence/groups.py#L102)
 
 ```python
 def is_run_read_only(run_directory: Path | str) -> bool
@@ -24178,7 +24218,7 @@ readable manifest is not read-only: nothing here is protecting it.
 
 <a id="fim.persistence.groups.refuse_read_only_run"></a>
 
-#### [refuse\_read\_only\_run](./persistence/groups.py#L97)
+#### [refuse\_read\_only\_run](./persistence/groups.py#L125)
 
 ```python
 def refuse_read_only_run(run_directory: Path | str, action: str) -> None
@@ -24202,7 +24242,7 @@ Shared by every function that edits a Run, here and in
 
 <a id="fim.persistence.groups.generate_study_id"></a>
 
-#### [generate\_study\_id](./persistence/groups.py#L133)
+#### [generate\_study\_id](./persistence/groups.py#L221)
 
 ```python
 def generate_study_id() -> str
@@ -24217,7 +24257,7 @@ membership list expected to grow over its own lifetime
 
 <a id="fim.persistence.groups.generate_experiment_id"></a>
 
-#### [generate\_experiment\_id](./persistence/groups.py#L144)
+#### [generate\_experiment\_id](./persistence/groups.py#L232)
 
 ```python
 def generate_experiment_id() -> str
@@ -24227,7 +24267,7 @@ Return a short, opaque, randomly generated Experiment id.
 
 <a id="fim.persistence.groups.StudyManifest"></a>
 
-## [StudyManifest Objects](./persistence/groups.py#L168)
+## [StudyManifest Objects](./persistence/groups.py#L256)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -24265,7 +24305,7 @@ written the same way.
 
 <a id="fim.persistence.groups.StudyManifest.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/groups.py#L211)
+#### [\_\_post\_init\_\_](./persistence/groups.py#L299)
 
 ```python
 def __post_init__() -> None
@@ -24275,7 +24315,7 @@ Validate schema version, identity, name, and timestamps.
 
 <a id="fim.persistence.groups.StudyManifest.run_count"></a>
 
-#### [run\_count](./persistence/groups.py#L227)
+#### [run\_count](./persistence/groups.py#L315)
 
 ```python
 @property
@@ -24286,7 +24326,7 @@ Return how many run directories this Study currently references.
 
 <a id="fim.persistence.groups.StudyManifest.to_dict"></a>
 
-#### [to\_dict](./persistence/groups.py#L231)
+#### [to\_dict](./persistence/groups.py#L319)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -24298,7 +24338,7 @@ Return a JSON-serializable study manifest mapping.
 
 <a id="fim.persistence.groups.StudyManifest.from_dict"></a>
 
-#### [from\_dict](./persistence/groups.py#L257)
+#### [from\_dict](./persistence/groups.py#L345)
 
 ```python
 @classmethod
@@ -24309,7 +24349,7 @@ Validate and reconstruct a study manifest from a parsed JSON mapping.
 
 <a id="fim.persistence.groups.ExperimentManifest"></a>
 
-## [ExperimentManifest Objects](./persistence/groups.py#L298)
+## [ExperimentManifest Objects](./persistence/groups.py#L386)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -24327,7 +24367,7 @@ mean on a Study.
 
 <a id="fim.persistence.groups.ExperimentManifest.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/groups.py#L320)
+#### [\_\_post\_init\_\_](./persistence/groups.py#L408)
 
 ```python
 def __post_init__() -> None
@@ -24337,7 +24377,7 @@ Validate schema version, identity, name, and timestamps.
 
 <a id="fim.persistence.groups.ExperimentManifest.study_count"></a>
 
-#### [study\_count](./persistence/groups.py#L336)
+#### [study\_count](./persistence/groups.py#L424)
 
 ```python
 @property
@@ -24348,7 +24388,7 @@ Return how many studies this Experiment currently references.
 
 <a id="fim.persistence.groups.ExperimentManifest.to_dict"></a>
 
-#### [to\_dict](./persistence/groups.py#L340)
+#### [to\_dict](./persistence/groups.py#L428)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -24360,7 +24400,7 @@ Return a JSON-serializable experiment manifest mapping.
 
 <a id="fim.persistence.groups.ExperimentManifest.from_dict"></a>
 
-#### [from\_dict](./persistence/groups.py#L363)
+#### [from\_dict](./persistence/groups.py#L451)
 
 ```python
 @classmethod
@@ -24371,7 +24411,7 @@ Validate and reconstruct an experiment manifest from a parsed mapping.
 
 <a id="fim.persistence.groups.refuse_closed"></a>
 
-#### [refuse\_closed](./persistence/groups.py#L427)
+#### [refuse\_closed](./persistence/groups.py#L515)
 
 ```python
 def refuse_closed(manifest: StudyManifest | ExperimentManifest,
@@ -24392,7 +24432,7 @@ Raise `ClosedGroupError` when `manifest` is a closed Study or Experiment.
 
 <a id="fim.persistence.groups.set_experiment_closed"></a>
 
-#### [set\_experiment\_closed](./persistence/groups.py#L449)
+#### [set\_experiment\_closed](./persistence/groups.py#L537)
 
 ```python
 def set_experiment_closed(experiment_id: str,
@@ -24415,7 +24455,7 @@ validates active work first and is what callers should use.
 
 <a id="fim.persistence.groups.set_study_closed"></a>
 
-#### [set\_study\_closed](./persistence/groups.py#L483)
+#### [set\_study\_closed](./persistence/groups.py#L571)
 
 ```python
 def set_study_closed(study_id: str,
@@ -24438,7 +24478,7 @@ validates active work first and is what callers should use.
 
 <a id="fim.persistence.groups.study_manifest_path"></a>
 
-#### [study\_manifest\_path](./persistence/groups.py#L514)
+#### [study\_manifest\_path](./persistence/groups.py#L602)
 
 ```python
 def study_manifest_path(study_id: str, *, results: Path | None = None) -> Path
@@ -24459,7 +24499,7 @@ Return where one Study's own manifest file lives.
 
 <a id="fim.persistence.groups.experiment_manifest_path"></a>
 
-#### [experiment\_manifest\_path](./persistence/groups.py#L529)
+#### [experiment\_manifest\_path](./persistence/groups.py#L617)
 
 ```python
 def experiment_manifest_path(experiment_id: str,
@@ -24471,7 +24511,7 @@ Return where one Experiment's own manifest file lives.
 
 <a id="fim.persistence.groups.read_study_manifest"></a>
 
-#### [read\_study\_manifest](./persistence/groups.py#L537)
+#### [read\_study\_manifest](./persistence/groups.py#L625)
 
 ```python
 def read_study_manifest(path: Path | str) -> StudyManifest
@@ -24481,7 +24521,7 @@ Read and validate one Study manifest JSON file.
 
 <a id="fim.persistence.groups.write_study_manifest"></a>
 
-#### [write\_study\_manifest](./persistence/groups.py#L547)
+#### [write\_study\_manifest](./persistence/groups.py#L635)
 
 ```python
 def write_study_manifest(path: Path | str, manifest: StudyManifest) -> None
@@ -24498,7 +24538,7 @@ needs its own atomicity here.
 
 <a id="fim.persistence.groups.read_experiment_manifest"></a>
 
-#### [read\_experiment\_manifest](./persistence/groups.py#L561)
+#### [read\_experiment\_manifest](./persistence/groups.py#L649)
 
 ```python
 def read_experiment_manifest(path: Path | str) -> ExperimentManifest
@@ -24508,7 +24548,7 @@ Read and validate one Experiment manifest JSON file.
 
 <a id="fim.persistence.groups.write_experiment_manifest"></a>
 
-#### [write\_experiment\_manifest](./persistence/groups.py#L571)
+#### [write\_experiment\_manifest](./persistence/groups.py#L659)
 
 ```python
 def write_experiment_manifest(path: Path | str,
@@ -24519,7 +24559,7 @@ Atomically write `manifest` to `path`, creating parent directories as needed.
 
 <a id="fim.persistence.groups.create_study"></a>
 
-#### [create\_study](./persistence/groups.py#L584)
+#### [create\_study](./persistence/groups.py#L672)
 
 ```python
 def create_study(name: str,
@@ -24551,7 +24591,7 @@ Create a new, empty Study and write its manifest.
 
 <a id="fim.persistence.groups.get_study"></a>
 
-#### [get\_study](./persistence/groups.py#L632)
+#### [get\_study](./persistence/groups.py#L720)
 
 ```python
 def get_study(study_id: str, *, results: Path | None = None) -> StudyManifest
@@ -24565,7 +24605,7 @@ Read one existing Study by id.
 
 <a id="fim.persistence.groups.study_run_directories"></a>
 
-#### [study\_run\_directories](./persistence/groups.py#L645)
+#### [study\_run\_directories](./persistence/groups.py#L733)
 
 ```python
 def study_run_directories(study: StudyManifest,
@@ -24584,7 +24624,7 @@ are this function's own two callers.
 
 <a id="fim.persistence.groups.list_studies"></a>
 
-#### [list\_studies](./persistence/groups.py#L665)
+#### [list\_studies](./persistence/groups.py#L753)
 
 ```python
 def list_studies(*, results: Path | None = None) -> list[StudyManifest]
@@ -24602,7 +24642,7 @@ to the rest of the listing.
 
 <a id="fim.persistence.groups.add_run_to_study"></a>
 
-#### [add\_run\_to\_study](./persistence/groups.py#L692)
+#### [add\_run\_to\_study](./persistence/groups.py#L780)
 
 ```python
 def add_run_to_study(study_id: str,
@@ -24626,10 +24666,16 @@ Run, it does not change it.
 - `ValueError` - No Study with this id exists.
 - `ReadOnlyError` - The Study is read-only.
 - `ClosedGroupError` - The Study is closed.
+- `UnsafeRunReferenceError` - `run_directory` has no `manifest.json`
+  or `run.json`, so it is not a Run or Run object at all
+  (this project's own 2026-10-25 project review, finding
+- `G-2)` - checked here, at the only point a reference is
+  ever recorded, rather than trusted later by every function
+  that deletes through a Study.
 
 <a id="fim.persistence.groups.delete_study"></a>
 
-#### [delete\_study](./persistence/groups.py#L729)
+#### [delete\_study](./persistence/groups.py#L829)
 
 ```python
 def delete_study(study_id: str,
@@ -24665,9 +24711,36 @@ Delete a Study's own manifest and, by default, every Run it references.
 - `ReadOnlyError` - The Study is read-only.
 - `ClosedGroupError` - The Study is closed.
 
+<a id="fim.persistence.groups.preview_study_deletion"></a>
+
+#### [preview\_study\_deletion](./persistence/groups.py#L871)
+
+```python
+def preview_study_deletion(study_id: str,
+                           *,
+                           results: Path | None = None) -> tuple[Path, ...]
+```
+
+Return the Run directories `delete_study(study_id)` would delete.
+
+Read-only, changes nothing on disk: `fim study delete --dry-run`'s
+own entry point (this project's own 2026-10-25 project review,
+finding P-1's "print the directories to be removed"). Shares
+`_delete_unshared_runs`'s exact selection (not read-only, not
+shared with another Study, confirmed a Run directory) so a preview
+can never drift from what a real deletion actually does.
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+- `ReadOnlyError` - The Study is read-only (a real delete would
+  refuse too, so the preview reports that refusal instead of
+  an empty, misleadingly reassuring list).
+- `ClosedGroupError` - The Study is closed.
+
 <a id="fim.persistence.groups.clear_study_runs"></a>
 
-#### [clear\_study\_runs](./persistence/groups.py#L771)
+#### [clear\_study\_runs](./persistence/groups.py#L897)
 
 ```python
 def clear_study_runs(study_id: str,
@@ -24701,7 +24774,7 @@ docstring).
 
 <a id="fim.persistence.groups.shared_run_directories"></a>
 
-#### [shared\_run\_directories](./persistence/groups.py#L814)
+#### [shared\_run\_directories](./persistence/groups.py#L940)
 
 ```python
 def shared_run_directories(study_id: str,
@@ -24718,7 +24791,7 @@ links to, so it can never delete a Run out from under another Study.
 
 <a id="fim.persistence.groups.remove_run_from_study"></a>
 
-#### [remove\_run\_from\_study](./persistence/groups.py#L833)
+#### [remove\_run\_from\_study](./persistence/groups.py#L959)
 
 ```python
 def remove_run_from_study(study_id: str,
@@ -24746,7 +24819,7 @@ Studies remain protected. An already-absent link is an idempotent no-op.
 
 <a id="fim.persistence.groups.remove_run_references"></a>
 
-#### [remove\_run\_references](./persistence/groups.py#L872)
+#### [remove\_run\_references](./persistence/groups.py#L998)
 
 ```python
 def remove_run_references(directories: Sequence[Path | str],
@@ -24764,7 +24837,7 @@ it (readers already skip a missing directory).
 
 <a id="fim.persistence.groups.delete_runs"></a>
 
-#### [delete\_runs](./persistence/groups.py#L900)
+#### [delete\_runs](./persistence/groups.py#L1026)
 
 ```python
 def delete_runs(directories: Sequence[Path | str],
@@ -24781,7 +24854,10 @@ stops listing the deleted Runs (`remove_run_references`).
 All-or-nothing with respect to read-only Runs: every directory is
 checked first, and if any is read-only nothing at all is deleted.
 A selection that mixes an example into ordinary Runs is reported,
-rather than half carried out.
+rather than half carried out. The same all-or-nothing rule applies
+to a directory that is not actually a Run (this project's own
+2026-10-25 project review, finding G-1): `delete_runs([""])` used
+to resolve to, and delete, the current working directory.
 
 **Arguments**:
 
@@ -24798,10 +24874,15 @@ rather than half carried out.
 
 - `ReadOnlyError` - At least one directory is a read-only Run; the
   message names every one of them.
+- `UnsafeRunReferenceError` - At least one existing directory has no
+  `manifest.json`/`run.json`; the message names every one of
+  them. A directory that does not exist at all is never a
+  problem, matching the "already gone is not an error" rule
+- `above` - nothing would be deleted through it either way.
 
 <a id="fim.persistence.groups.prune_missing_studies"></a>
 
-#### [prune\_missing\_studies](./persistence/groups.py#L971)
+#### [prune\_missing\_studies](./persistence/groups.py#L1132)
 
 ```python
 def prune_missing_studies(*, results: Path | None = None) -> int
@@ -24821,7 +24902,7 @@ A read-only Experiment is left as it is; re-seeding repairs it.
 
 <a id="fim.persistence.groups.update_study_details"></a>
 
-#### [update\_study\_details](./persistence/groups.py#L1024)
+#### [update\_study\_details](./persistence/groups.py#L1185)
 
 ```python
 def update_study_details(study_id: str,
@@ -24861,7 +24942,7 @@ sweep specification are untouched.
 
 <a id="fim.persistence.groups.copy_study"></a>
 
-#### [copy\_study](./persistence/groups.py#L1071)
+#### [copy\_study](./persistence/groups.py#L1232)
 
 ```python
 def copy_study(study_id: str,
@@ -24887,7 +24968,7 @@ either affecting the other or the underlying Run data at all.
 
 <a id="fim.persistence.groups.create_experiment"></a>
 
-#### [create\_experiment](./persistence/groups.py#L1116)
+#### [create\_experiment](./persistence/groups.py#L1277)
 
 ```python
 def create_experiment(name: str,
@@ -24902,7 +24983,7 @@ Create a new, empty Experiment and write its manifest.
 
 <a id="fim.persistence.groups.get_experiment"></a>
 
-#### [get\_experiment](./persistence/groups.py#L1150)
+#### [get\_experiment](./persistence/groups.py#L1311)
 
 ```python
 def get_experiment(experiment_id: str,
@@ -24918,7 +24999,7 @@ Read one existing Experiment by id.
 
 <a id="fim.persistence.groups.list_experiments"></a>
 
-#### [list\_experiments](./persistence/groups.py#L1165)
+#### [list\_experiments](./persistence/groups.py#L1326)
 
 ```python
 def list_experiments(*,
@@ -24929,7 +25010,7 @@ Return every Experiment under `results`, oldest first (see `list_studies`).
 
 <a id="fim.persistence.groups.add_study_to_experiment"></a>
 
-#### [add\_study\_to\_experiment](./persistence/groups.py#L1183)
+#### [add\_study\_to\_experiment](./persistence/groups.py#L1344)
 
 ```python
 def add_study_to_experiment(experiment_id: str,
@@ -24952,7 +25033,7 @@ links the Study, it does not change it.
 
 <a id="fim.persistence.groups.ensure_default_experiment"></a>
 
-#### [ensure\_default\_experiment](./persistence/groups.py#L1218)
+#### [ensure\_default\_experiment](./persistence/groups.py#L1379)
 
 ```python
 def ensure_default_experiment(*,
@@ -24977,7 +25058,7 @@ file it did not ask for.
 
 <a id="fim.persistence.groups.ensure_default_study"></a>
 
-#### [ensure\_default\_study](./persistence/groups.py#L1256)
+#### [ensure\_default\_study](./persistence/groups.py#L1417)
 
 ```python
 def ensure_default_study(*,
@@ -25007,7 +25088,7 @@ anything asks for it, rather than staying silently orphaned.
 
 <a id="fim.persistence.groups.write_read_only_study"></a>
 
-#### [write\_read\_only\_study](./persistence/groups.py#L1303)
+#### [write\_read\_only\_study](./persistence/groups.py#L1464)
 
 ```python
 def write_read_only_study(study_id: str,
@@ -25060,7 +25141,7 @@ an app-owned item.
 
 <a id="fim.persistence.groups.write_read_only_experiment"></a>
 
-#### [write\_read\_only\_experiment](./persistence/groups.py#L1381)
+#### [write\_read\_only\_experiment](./persistence/groups.py#L1542)
 
 ```python
 def write_read_only_experiment(experiment_id: str,
@@ -25103,30 +25184,37 @@ since it bypasses the read-only checks. Idempotent in the same way.
 
 <a id="fim.persistence.groups.delete_experiment"></a>
 
-#### [delete\_experiment](./persistence/groups.py#L1464)
+#### [delete\_experiment](./persistence/groups.py#L1625)
 
 ```python
 def delete_experiment(experiment_id: str,
                       *,
                       results: Path | None = None,
-                      delete_studies: bool = True) -> ExperimentManifest
+                      delete_studies: bool = True,
+                      delete_runs: bool = True) -> ExperimentManifest
 ```
 
 Delete an Experiment's own manifest and, by default, every Study it references.
 
 Cascades transitively: deleting a member Study (`delete_study`,
-`delete_runs=True`) also deletes every Run that Study references —
-the same explicit product decision `delete_study`'s own docstring
-describes, one level up.
+`delete_runs=True` by default) also deletes every Run that Study
+references — the same explicit product decision `delete_study`'s
+own docstring describes, one level up.
 
 **Arguments**:
 
 - `experiment_id` - The Experiment to delete.
 - `results` - Optional results-directory override.
 - `delete_studies` - When true (the default), every referenced Study
-  (and, transitively, every Run it references) is removed
-  too. When false, only the `ExperimentManifest` itself is
-  removed and its Studies become unattached again.
+  is removed too. When false, only the `ExperimentManifest`
+  itself is removed and its Studies become unattached again;
+  `delete_runs` is then moot, since no Study is touched.
+- `delete_runs` - When true (the default) and `delete_studies` is
+  also true, every removed Study's own Runs are removed with
+  it, exactly as a direct `delete_study` would. When false,
+  every member Study's manifest is still removed, but every
+  Run it referenced survives, unattached ("Unsorted") --
+  `fim experiment delete --keep-runs`.
 
   A read-only Study the Experiment holds is skipped, never deleted
   (module docstring).
@@ -25143,9 +25231,37 @@ describes, one level up.
 - `ReadOnlyError` - The Experiment is read-only.
 - `ClosedGroupError` - The Experiment is closed.
 
+<a id="fim.persistence.groups.preview_experiment_deletion"></a>
+
+#### [preview\_experiment\_deletion](./persistence/groups.py#L1687)
+
+```python
+def preview_experiment_deletion(
+        experiment_id: str,
+        *,
+        results: Path | None = None) -> tuple[Path, ...]
+```
+
+Return the Run directories `delete_experiment(experiment_id)` would delete.
+
+`preview_study_deletion`'s own counterpart one level up
+(`fim experiment delete --dry-run`). Computed against every member
+Study's own *current*, on-disk manifest, independently -- unlike a
+real cascading delete, this never accounts for an earlier member
+Study in the same preview having freed up a Run two Studies shared,
+so a Run shared only within this Experiment's own member Studies
+may be listed once per Study that references it. An approximation
+worth this caveat, not a reason to withhold the preview.
+
+**Raises**:
+
+- `ValueError` - No Experiment with this id exists.
+- `ReadOnlyError` - The Experiment is read-only.
+- `ClosedGroupError` - The Experiment is closed.
+
 <a id="fim.persistence.groups.update_experiment_details"></a>
 
-#### [update\_experiment\_details](./persistence/groups.py#L1519)
+#### [update\_experiment\_details](./persistence/groups.py#L1722)
 
 ```python
 def update_experiment_details(experiment_id: str,
@@ -25168,7 +25284,7 @@ The Experiment-level counterpart to `update_study_details`.
 
 <a id="fim.persistence.groups.experiments_containing_study"></a>
 
-#### [experiments\_containing\_study](./persistence/groups.py#L1555)
+#### [experiments\_containing\_study](./persistence/groups.py#L1758)
 
 ```python
 def experiments_containing_study(
@@ -25184,7 +25300,7 @@ a Study normally belongs to one Experiment, but nothing forbids more.
 
 <a id="fim.persistence.groups.studies_containing_run"></a>
 
-#### [studies\_containing\_run](./persistence/groups.py#L1570)
+#### [studies\_containing\_run](./persistence/groups.py#L1773)
 
 ```python
 def studies_containing_run(run_directory: Path | str,
@@ -25201,7 +25317,7 @@ relative entry: a Study can hold thousands of runs.
 
 <a id="fim.persistence.groups.copy_experiment"></a>
 
-#### [copy\_experiment](./persistence/groups.py#L1596)
+#### [copy\_experiment](./persistence/groups.py#L1799)
 
 ```python
 def copy_experiment(experiment_id: str,
@@ -25222,7 +25338,7 @@ only the `study_ids` reference list, never the Studies themselves.
 
 <a id="fim.persistence.groups.resolve_run_directory"></a>
 
-#### [resolve\_run\_directory](./persistence/groups.py#L1635)
+#### [resolve\_run\_directory](./persistence/groups.py#L1838)
 
 ```python
 def resolve_run_directory(reference: str,
@@ -25262,7 +25378,7 @@ always unambiguous when it resolves at all.
 
 <a id="fim.persistence.groups.find_run_directories"></a>
 
-#### [find\_run\_directories](./persistence/groups.py#L1686)
+#### [find\_run\_directories](./persistence/groups.py#L1889)
 
 ```python
 def find_run_directories(run_id: str,
@@ -25283,7 +25399,7 @@ manifests, so it is linear in the number of runs.
 
 <a id="fim.persistence.groups.find_stale_run_directories"></a>
 
-#### [find\_stale\_run\_directories](./persistence/groups.py#L1711)
+#### [find\_stale\_run\_directories](./persistence/groups.py#L1914)
 
 ```python
 def find_stale_run_directories(run_id: str,
@@ -25296,7 +25412,7 @@ Return runs with this `run_id` that another software version made.
 
 <a id="fim.persistence.groups.run_id_of"></a>
 
-#### [run\_id\_of](./persistence/groups.py#L1723)
+#### [run\_id\_of](./persistence/groups.py#L1926)
 
 ```python
 def run_id_of(run_directory: Path) -> str | None
@@ -25306,7 +25422,7 @@ Return the `run_id` recorded in `run_directory`'s manifest, if readable.
 
 <a id="fim.persistence.groups.run_identity_of"></a>
 
-#### [run\_identity\_of](./persistence/groups.py#L1729)
+#### [run\_identity\_of](./persistence/groups.py#L1932)
 
 ```python
 def run_identity_of(run_directory: Path) -> tuple[str, str] | None
@@ -25316,7 +25432,7 @@ Return `(run_id, software_version)` from a run's manifest, if readable.
 
 <a id="fim.persistence.groups.supersede_run"></a>
 
-#### [supersede\_run](./persistence/groups.py#L1734)
+#### [supersede\_run](./persistence/groups.py#L1937)
 
 ```python
 def supersede_run(old: Path | str,
@@ -25335,6 +25451,16 @@ every Study that held it now holds the new one.
 
 - `ReadOnlyError` - `old` is a read-only Run, which is never deleted;
   nothing is changed.
+- `UnsafeRunReferenceError` - `old` has no `manifest.json`/`run.json`
+  (this project's own 2026-10-25 project review, finding
+  P-1's own grouping of this function with the other
+  `rmtree` call sites it flags). Every real caller resolves
+  `old` from a Run already found under `results`, so this
+  should never fire in practice; it is a backstop, not a
+  path meant to be exercised. Every Study's own link is
+  still replaced before this is checked, so a caller never
+  sees a half-replaced link merely because the stale
+  directory could not be removed.
 
 <a id="fim.persistence.history"></a>
 
@@ -40827,7 +40953,7 @@ an ordinary run, listed in the result, and its point runs again.
 
 <a id="fim.sweep_run.write_reproducibility_note"></a>
 
-#### [write\_reproducibility\_note](./sweep_run.py#L2297)
+#### [write\_reproducibility\_note](./sweep_run.py#L2304)
 
 ```python
 def write_reproducibility_note(directory: Path,
@@ -40841,7 +40967,7 @@ the run's own record of itself is untouched.
 
 <a id="fim.sweep_run.sweep_point_results"></a>
 
-#### [sweep\_point\_results](./sweep_run.py#L2308)
+#### [sweep\_point\_results](./sweep_run.py#L2315)
 
 ```python
 def sweep_point_results(study: StudyManifest,
@@ -40862,7 +40988,7 @@ nothing.
 
 <a id="fim.sweep_run.health_cache_path"></a>
 
-#### [health\_cache\_path](./sweep_run.py#L2339)
+#### [health\_cache\_path](./sweep_run.py#L2346)
 
 ```python
 def health_cache_path(study_id: str, *, results: Path | None = None) -> Path
@@ -40872,7 +40998,7 @@ Return the disposable cache of a sweep's point health counts.
 
 <a id="fim.sweep_run.trajectory_cache_path"></a>
 
-#### [trajectory\_cache\_path](./sweep_run.py#L2344)
+#### [trajectory\_cache\_path](./sweep_run.py#L2351)
 
 ```python
 def trajectory_cache_path(study_id: str,

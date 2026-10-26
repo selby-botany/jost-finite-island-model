@@ -22,6 +22,7 @@ from typing import Any, Final
 from fim import paths
 from fim.errors import StoreError
 from fim.persistence.manifest import read_batch_manifest, read_manifest
+from fim.persistence.run_lifecycle import RUN_LIFECYCLE_FILE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,33 @@ class ReadOnlyError(StoreError, ValueError):
     """
 
 
+class UnsafeRunReferenceError(StoreError, ValueError):
+    """Refuse to delete, or to record, a path that is not a real Run.
+
+    A `ValueError` subclass for the same reason as `ReadOnlyError`.
+    Raised instead of ever handing `shutil.rmtree` a path this module
+    has not confirmed is actually a Run or Run object
+    (`_is_run_directory`) — not a bare name, a `..`-escaping or
+    nonexistent entry a Study/Experiment manifest happens to hold, or
+    an empty string a bridge call happens to pass (`Path("").is_dir()`
+    is `True`: it is the current directory). This project's own
+    2026-10-25 project review, findings P-1/G-1/G-2: every `rmtree`
+    call site here used to trust a stored manifest entry or a bridge-
+    supplied string outright, and `add_run_to_study` could be made to
+    record a reference that later deletion would then trust.
+
+    Deliberately **not** a containment check against the results root:
+    `fim run -o SOME/OTHER/PATH --study X` publishes a Run entirely
+    outside `results` on purpose (`_run_reference_string`'s own
+    docstring), and `fim study delete X` deleting it is existing,
+    tested product behavior (`test_study_create_add_run_list_delete`,
+    `test/cli/test_cli.py`), not the defect the review describes. The
+    defect was trusting a reference with no corroborating evidence it
+    names a Run at all; confirming `manifest.json` or `run.json` is
+    present closes that regardless of where the directory lives.
+    """
+
+
 def is_run_read_only(run_directory: Path | str) -> bool:
     """Return whether a Run is read-only: its manifest has `_read_only: true`.
 
@@ -113,6 +141,66 @@ def refuse_read_only_run(run_directory: Path | str, action: str) -> None:
             f"run {Path(run_directory).name} is a read-only example and cannot "
             f"be {action}; make an editable copy of it instead"
         )
+
+
+def _is_run_directory(directory: Path) -> bool:
+    """Whether `directory` holds its own `manifest.json` or `run.json`.
+
+    File presence only, deliberately not whether either parses: a Run
+    this module should still be allowed to delete may have a truncated
+    or otherwise unreadable manifest (`is_run_read_only` already treats
+    an unreadable manifest as "not read-only," not as "not a Run"). The
+    check this function makes is narrower and different in purpose --
+    "is this plausibly a Run or Run object at all," not "is its own
+    record valid" -- so an empty string, `.`, `..`, or any other
+    directory a corrupted or adversarial reference happens to name is
+    rejected before it ever reaches `shutil.rmtree`.
+
+    Both file names, not only `manifest.json`: a Run object
+    (`fim.persistence.run_objects`'s own module docstring) holds
+    `run.json` from the moment it is created as a `draft`, before it
+    has ever executed and so before any `manifest.json` exists, and a
+    Study may hold one as a member directly
+    (`test_group_lifecycle.py`'s own `_study_with`).
+    """
+    return (directory / "manifest.json").is_file() or (
+        directory / RUN_LIFECYCLE_FILE_NAME
+    ).is_file()
+
+
+def _require_run_directories(
+    entries: Sequence[Path | str], *, action: str
+) -> list[Path]:
+    """Return every `entries` resolved, or raise naming every non-Run one.
+
+    All-or-nothing, the same way this module already refuses a whole
+    read-only selection rather than deleting around it (`delete_runs`'s
+    own docstring): a bulk delete that names one path with no
+    corroborating `manifest.json`/`run.json` must refuse loudly, not
+    quietly delete every other entry and leave that one unexplained.
+
+    Deliberately not a containment check against any results root --
+    see `UnsafeRunReferenceError`'s own docstring for why.
+
+    Raises:
+        UnsafeRunReferenceError: At least one entry is not an actual
+            Run directory; the message names every one.
+    """
+    resolved: list[Path] = []
+    unsafe: list[str] = []
+    for entry in entries:
+        directory = Path(entry).resolve()
+        if _is_run_directory(directory):
+            resolved.append(directory)
+        else:
+            unsafe.append(str(entry))
+    if unsafe:
+        names = ", ".join(unsafe)
+        raise UnsafeRunReferenceError(
+            f"refusing to {action}: not a Run directory (no manifest.json "
+            f"or run.json): {names}; nothing was deleted"
+        )
+    return resolved
 
 
 def _utc_now() -> datetime:
@@ -709,13 +797,25 @@ def add_run_to_study(
         ValueError: No Study with this id exists.
         ReadOnlyError: The Study is read-only.
         ClosedGroupError: The Study is closed.
+        UnsafeRunReferenceError: `run_directory` has no `manifest.json`
+            or `run.json`, so it is not a Run or Run object at all
+            (this project's own 2026-10-25 project review, finding
+            G-2) -- checked here, at the only point a reference is
+            ever recorded, rather than trusted later by every function
+            that deletes through a Study.
     """
     root = results if results is not None else paths.results_directory()
     manifest = get_study(study_id, results=root)
     _refuse_read_only(manifest, "given more runs")
-    reference = _run_reference_string(Path(run_directory), results=root)
+    resolved_run_directory = Path(run_directory).resolve()
+    reference = _run_reference_string(resolved_run_directory, results=root)
     if reference in manifest.run_directories:
         return manifest
+    if not _is_run_directory(resolved_run_directory):
+        raise UnsafeRunReferenceError(
+            f"refusing to add {run_directory} to study {study_id}: it has no "
+            "manifest.json or run.json, so it is not a Run directory"
+        )
     refuse_closed(manifest, "given more runs")
     updated = replace(
         manifest,
@@ -766,6 +866,32 @@ def delete_study(
     # is not there.
     _detach_study_from_experiments(study_id, results=root)
     return manifest
+
+
+def preview_study_deletion(
+    study_id: str, *, results: Path | None = None
+) -> tuple[Path, ...]:
+    """Return the Run directories `delete_study(study_id)` would delete.
+
+    Read-only, changes nothing on disk: `fim study delete --dry-run`'s
+    own entry point (this project's own 2026-10-25 project review,
+    finding P-1's "print the directories to be removed"). Shares
+    `_delete_unshared_runs`'s exact selection (not read-only, not
+    shared with another Study, confirmed a Run directory) so a preview
+    can never drift from what a real deletion actually does.
+
+    Raises:
+        ValueError: No Study with this id exists.
+        ReadOnlyError: The Study is read-only (a real delete would
+            refuse too, so the preview reports that refusal instead of
+            an empty, misleadingly reassuring list).
+        ClosedGroupError: The Study is closed.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_study(study_id, results=root)
+    _refuse_read_only(manifest, "deleted")
+    refuse_closed(manifest, "deleted")
+    return tuple(_delete_unshared_runs(manifest, results=root, dry_run=True))
 
 
 def clear_study_runs(
@@ -909,7 +1035,10 @@ def delete_runs(
     All-or-nothing with respect to read-only Runs: every directory is
     checked first, and if any is read-only nothing at all is deleted.
     A selection that mixes an example into ordinary Runs is reported,
-    rather than half carried out.
+    rather than half carried out. The same all-or-nothing rule applies
+    to a directory that is not actually a Run (this project's own
+    2026-10-25 project review, finding G-1): `delete_runs([""])` used
+    to resolve to, and delete, the current working directory.
 
     Args:
         directories: The Run directories to delete.
@@ -921,6 +1050,11 @@ def delete_runs(
     Raises:
         ReadOnlyError: At least one directory is a read-only Run; the
             message names every one of them.
+        UnsafeRunReferenceError: At least one existing directory has no
+            `manifest.json`/`run.json`; the message names every one of
+            them. A directory that does not exist at all is never a
+            problem, matching the "already gone is not an error" rule
+            above: nothing would be deleted through it either way.
     """
     root = results if results is not None else paths.results_directory()
 
@@ -931,16 +1065,14 @@ def delete_runs(
         raise ReadOnlyError(
             f"read-only example run(s) cannot be deleted: {names}; nothing was deleted"
         )
+    existing = [Path(entry) for entry in directories if Path(entry).is_dir()]
+    safe = _require_run_directories(existing, action="delete")
 
     # Delete, then unlink everywhere.
-    deleted_count = 0
-    for entry in directories:
-        path = Path(entry)
-        if path.is_dir():
-            shutil.rmtree(path)
-            deleted_count += 1
+    for directory in safe:
+        shutil.rmtree(directory)
     remove_run_references(directories, results=root)
-    return deleted_count
+    return len(safe)
 
 
 def _directories_referenced_by_others(study_id: str, *, results: Path) -> set[Path]:
@@ -953,19 +1085,48 @@ def _directories_referenced_by_others(study_id: str, *, results: Path) -> set[Pa
     }
 
 
-def _delete_unshared_runs(manifest: StudyManifest, *, results: Path) -> None:
+def _delete_unshared_runs(
+    manifest: StudyManifest, *, results: Path, dry_run: bool = False
+) -> list[Path]:
     """Delete the Study's Run directories that no other Study links.
 
-    A read-only Run is skipped, never deleted (module docstring).
+    A read-only Run is skipped, never deleted (module docstring). So is
+    a reference with no `manifest.json`/`run.json` (this project's own
+    2026-10-25 project review, finding P-1) -- loudly, at warning
+    level, rather than the silent `shutil.rmtree(..., ignore_errors=
+    True)` that used to delete through it outright, trusting whatever
+    the manifest happened to name. A Run published outside `results`
+    (`_run_reference_string`'s own docstring: `fim run -o SOME/OTHER/
+    PATH --study X`) is still deleted along with its Study, exactly as
+    before -- that is existing, deliberate, tested product behavior
+    (`test_study_create_add_run_list_delete`), not what this fix
+    changes.
+
+    Args:
+        dry_run: Report which directories would be deleted; delete
+            nothing (`preview_study_deletion`, below, is the public
+            entry point for this).
+
+    Returns:
+        Every directory actually deleted, or that would have been
+        under `dry_run`, in `manifest.run_directories` order.
     """
     others = _directories_referenced_by_others(manifest.study_id, results=results)
+    deleted: list[Path] = []
     for entry in manifest.run_directories:
-        directory = _resolve_stored_run_reference(entry, results=results)
+        directory = _resolve_stored_run_reference(entry, results=results).resolve()
         if is_run_read_only(directory):
             logger.debug("keeping read-only run %s", directory)
             continue
-        if directory.resolve() not in others:
+        if directory in others:
+            continue
+        if not _is_run_directory(directory):
+            logger.warning("not deleting %s: not a Run directory", directory)
+            continue
+        if not dry_run:
             shutil.rmtree(directory, ignore_errors=True)
+        deleted.append(directory)
+    return deleted
 
 
 def prune_missing_studies(*, results: Path | None = None) -> int:
@@ -1466,21 +1627,28 @@ def delete_experiment(
     *,
     results: Path | None = None,
     delete_studies: bool = True,
+    delete_runs: bool = True,
 ) -> ExperimentManifest:
     """Delete an Experiment's own manifest and, by default, every Study it references.
 
     Cascades transitively: deleting a member Study (`delete_study`,
-    `delete_runs=True`) also deletes every Run that Study references —
-    the same explicit product decision `delete_study`'s own docstring
-    describes, one level up.
+    `delete_runs=True` by default) also deletes every Run that Study
+    references — the same explicit product decision `delete_study`'s
+    own docstring describes, one level up.
 
     Args:
         experiment_id: The Experiment to delete.
         results: Optional results-directory override.
         delete_studies: When true (the default), every referenced Study
-            (and, transitively, every Run it references) is removed
-            too. When false, only the `ExperimentManifest` itself is
-            removed and its Studies become unattached again.
+            is removed too. When false, only the `ExperimentManifest`
+            itself is removed and its Studies become unattached again;
+            `delete_runs` is then moot, since no Study is touched.
+        delete_runs: When true (the default) and `delete_studies` is
+            also true, every removed Study's own Runs are removed with
+            it, exactly as a direct `delete_study` would. When false,
+            every member Study's manifest is still removed, but every
+            Run it referenced survives, unattached ("Unsorted") --
+            `fim experiment delete --keep-runs`.
 
     A read-only Study the Experiment holds is skipped, never deleted
     (module docstring).
@@ -1504,7 +1672,7 @@ def delete_experiment(
                 if member.read_only or member.closed:
                     logger.debug("keeping read-only or closed study %s", study_id)
                     continue
-                delete_study(study_id, results=root, delete_runs=True)
+                delete_study(study_id, results=root, delete_runs=delete_runs)
             except ValueError as error:
                 logger.debug(
                     "study %s already gone while deleting experiment %s: %s",
@@ -1514,6 +1682,41 @@ def delete_experiment(
                 )
     experiment_manifest_path(experiment_id, results=root).unlink(missing_ok=True)
     return manifest
+
+
+def preview_experiment_deletion(
+    experiment_id: str, *, results: Path | None = None
+) -> tuple[Path, ...]:
+    """Return the Run directories `delete_experiment(experiment_id)` would delete.
+
+    `preview_study_deletion`'s own counterpart one level up
+    (`fim experiment delete --dry-run`). Computed against every member
+    Study's own *current*, on-disk manifest, independently -- unlike a
+    real cascading delete, this never accounts for an earlier member
+    Study in the same preview having freed up a Run two Studies shared,
+    so a Run shared only within this Experiment's own member Studies
+    may be listed once per Study that references it. An approximation
+    worth this caveat, not a reason to withhold the preview.
+
+    Raises:
+        ValueError: No Experiment with this id exists.
+        ReadOnlyError: The Experiment is read-only.
+        ClosedGroupError: The Experiment is closed.
+    """
+    root = results if results is not None else paths.results_directory()
+    manifest = get_experiment(experiment_id, results=root)
+    _refuse_read_only(manifest, "deleted")
+    refuse_closed(manifest, "deleted")
+    found: list[Path] = []
+    for study_id in manifest.study_ids:
+        try:
+            member = get_study(study_id, results=root)
+        except ValueError:
+            continue
+        if member.read_only or member.closed:
+            continue
+        found.extend(_delete_unshared_runs(member, results=root, dry_run=True))
+    return tuple(found)
 
 
 def update_experiment_details(
@@ -1743,6 +1946,16 @@ def supersede_run(
     Raises:
         ReadOnlyError: `old` is a read-only Run, which is never deleted;
             nothing is changed.
+        UnsafeRunReferenceError: `old` has no `manifest.json`/`run.json`
+            (this project's own 2026-10-25 project review, finding
+            P-1's own grouping of this function with the other
+            `rmtree` call sites it flags). Every real caller resolves
+            `old` from a Run already found under `results`, so this
+            should never fire in practice; it is a backstop, not a
+            path meant to be exercised. Every Study's own link is
+            still replaced before this is checked, so a caller never
+            sees a half-replaced link merely because the stale
+            directory could not be removed.
     """
     root = results if results is not None else paths.results_directory()
     refuse_read_only_run(old, "replaced by a recomputed run")
@@ -1763,7 +1976,8 @@ def supersede_run(
                 study_manifest_path(study.study_id, results=root),
                 replace(study, run_directories=deduped),
             )
-    shutil.rmtree(old_path, ignore_errors=True)
+    safe = _require_run_directories([old_path], action="replace")
+    shutil.rmtree(safe[0], ignore_errors=True)
 
 
 def _run_directories_with_id(run_id: str, results: Path) -> list[Path]:

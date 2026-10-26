@@ -6687,9 +6687,35 @@ def test_study_create_add_run_list_delete(
 
 A full `fim study create`/`add-run`/`list`/`delete` life cycle via `cli.main`.
 
+<a id="cli.test_cli.test_study_delete_dry_run_reports_without_deleting_anything"></a>
+
+#### [test\_study\_delete\_dry\_run\_reports\_without\_deleting\_anything](./cli/test_cli.py#L1842)
+
+```python
+def test_study_delete_dry_run_reports_without_deleting_anything(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`fim study delete --dry-run` prints the run; nothing is removed.
+
+This project's own 2026-10-25 project review, finding P-1's "print
+the directories to be removed" before any real delete.
+
+<a id="cli.test_cli.test_study_delete_keep_runs_removes_only_the_study"></a>
+
+#### [test\_study\_delete\_keep\_runs\_removes\_only\_the\_study](./cli/test_cli.py#L1879)
+
+```python
+def test_study_delete_keep_runs_removes_only_the_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`fim study delete --keep-runs` removes the study but keeps its run.
+
 <a id="cli.test_cli.test_study_close_and_reopen_show_in_the_study_list"></a>
 
-#### [test\_study\_close\_and\_reopen\_show\_in\_the\_study\_list](./cli/test_cli.py#L1842)
+#### [test\_study\_close\_and\_reopen\_show\_in\_the\_study\_list](./cli/test_cli.py#L1910)
 
 ```python
 def test_study_close_and_reopen_show_in_the_study_list(
@@ -6701,7 +6727,7 @@ def test_study_close_and_reopen_show_in_the_study_list(
 
 <a id="cli.test_cli.test_experiment_close_and_reopen_show_in_the_experiment_list"></a>
 
-#### [test\_experiment\_close\_and\_reopen\_show\_in\_the\_experiment\_list](./cli/test_cli.py#L1875)
+#### [test\_experiment\_close\_and\_reopen\_show\_in\_the\_experiment\_list](./cli/test_cli.py#L1943)
 
 ```python
 def test_experiment_close_and_reopen_show_in_the_experiment_list(
@@ -6713,7 +6739,7 @@ def test_experiment_close_and_reopen_show_in_the_experiment_list(
 
 <a id="cli.test_cli.test_closing_the_default_study_is_an_error"></a>
 
-#### [test\_closing\_the\_default\_study\_is\_an\_error](./cli/test_cli.py#L1901)
+#### [test\_closing\_the\_default\_study\_is\_an\_error](./cli/test_cli.py#L1969)
 
 ```python
 def test_closing_the_default_study_is_an_error(
@@ -6725,7 +6751,7 @@ The default Study always stays open.
 
 <a id="cli.test_cli.test_deleting_a_study_keeps_a_run_the_default_study_also_holds"></a>
 
-#### [test\_deleting\_a\_study\_keeps\_a\_run\_the\_default\_study\_also\_holds](./cli/test_cli.py#L1918)
+#### [test\_deleting\_a\_study\_keeps\_a\_run\_the\_default\_study\_also\_holds](./cli/test_cli.py#L1986)
 
 ```python
 def test_deleting_a_study_keeps_a_run_the_default_study_also_holds(
@@ -6736,7 +6762,7 @@ A plain `fim run` joins the default study, so a named study's delete keeps it.
 
 <a id="cli.test_cli.test_study_add_run_resolves_a_bare_run_id"></a>
 
-#### [test\_study\_add\_run\_resolves\_a\_bare\_run\_id](./cli/test_cli.py#L1940)
+#### [test\_study\_add\_run\_resolves\_a\_bare\_run\_id](./cli/test_cli.py#L2008)
 
 ```python
 def test_study_add_run_resolves_a_bare_run_id(
@@ -6747,7 +6773,7 @@ def test_study_add_run_resolves_a_bare_run_id(
 
 <a id="cli.test_cli.test_study_copy_creates_an_independent_study"></a>
 
-#### [test\_study\_copy\_creates\_an\_independent\_study](./cli/test_cli.py#L1965)
+#### [test\_study\_copy\_creates\_an\_independent\_study](./cli/test_cli.py#L2033)
 
 ```python
 def test_study_copy_creates_an_independent_study(
@@ -6759,7 +6785,7 @@ def test_study_copy_creates_an_independent_study(
 
 <a id="cli.test_cli.test_experiment_create_add_study_list_delete_cascades_to_runs"></a>
 
-#### [test\_experiment\_create\_add\_study\_list\_delete\_cascades\_to\_runs](./cli/test_cli.py#L1982)
+#### [test\_experiment\_create\_add\_study\_list\_delete\_cascades\_to\_runs](./cli/test_cli.py#L2050)
 
 ```python
 def test_experiment_create_add_study_list_delete_cascades_to_runs(
@@ -6769,9 +6795,32 @@ def test_experiment_create_add_study_list_delete_cascades_to_runs(
 
 `fim experiment delete` removes its studies and, transitively, their runs.
 
+<a id="cli.test_cli.test_experiment_delete_dry_run_reports_without_deleting_anything"></a>
+
+#### [test\_experiment\_delete\_dry\_run\_reports\_without\_deleting\_anything](./cli/test_cli.py#L2089)
+
+```python
+def test_experiment_delete_dry_run_reports_without_deleting_anything(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`fim experiment delete --dry-run` prints the run; nothing is removed.
+
+<a id="cli.test_cli.test_experiment_delete_keep_runs_keeps_every_run"></a>
+
+#### [test\_experiment\_delete\_keep\_runs\_keeps\_every\_run](./cli/test_cli.py#L2127)
+
+```python
+def test_experiment_delete_keep_runs_keeps_every_run(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`fim experiment delete --keep-runs` removes the studies but keeps runs.
+
 <a id="cli.test_cli.test_format_optional_helper_is_stable"></a>
 
-#### [test\_format\_optional\_helper\_is\_stable](./cli/test_cli.py#L2021)
+#### [test\_format\_optional\_helper\_is\_stable](./cli/test_cli.py#L2166)
 
 ```python
 def test_format_optional_helper_is_stable() -> None
@@ -6790,7 +6839,7 @@ terminal-formatting helper, untouched by the extraction.
 
 <a id="cli.test_cli.test_update_requires_explicit_opt_in"></a>
 
-#### [test\_update\_requires\_explicit\_opt\_in](./cli/test_cli.py#L2037)
+#### [test\_update\_requires\_explicit\_opt\_in](./cli/test_cli.py#L2182)
 
 ```python
 def test_update_requires_explicit_opt_in() -> None
@@ -6800,7 +6849,7 @@ The update command never accesses the network without --check.
 
 <a id="cli.test_cli.test_init_writes_derived_convergence_settings"></a>
 
-#### [test\_init\_writes\_derived\_convergence\_settings](./cli/test_cli.py#L2044)
+#### [test\_init\_writes\_derived\_convergence\_settings](./cli/test_cli.py#L2189)
 
 ```python
 def test_init_writes_derived_convergence_settings(tmp_path: Path) -> None
@@ -6810,7 +6859,7 @@ The starter config asks for derived values rather than fixed ones.
 
 <a id="cli.test_cli.test_a_run_with_derived_settings_announces_them"></a>
 
-#### [test\_a\_run\_with\_derived\_settings\_announces\_them](./cli/test_cli.py#L2058)
+#### [test\_a\_run\_with\_derived\_settings\_announces\_them](./cli/test_cli.py#L2203)
 
 ```python
 def test_a_run_with_derived_settings_announces_them(
@@ -6821,7 +6870,7 @@ A derived cap (and burn-in) are printed before the run starts.
 
 <a id="cli.test_cli.test_a_run_with_explicit_settings_prints_no_derivation_line"></a>
 
-#### [test\_a\_run\_with\_explicit\_settings\_prints\_no\_derivation\_line](./cli/test_cli.py#L2072)
+#### [test\_a\_run\_with\_explicit\_settings\_prints\_no\_derivation\_line](./cli/test_cli.py#L2217)
 
 ```python
 def test_a_run_with_explicit_settings_prints_no_derivation_line(
@@ -6832,7 +6881,7 @@ Explicit values are the user's own, so nothing is announced.
 
 <a id="cli.test_cli.test_a_derived_run_that_hits_its_cap_names_the_relaxation_time"></a>
 
-#### [test\_a\_derived\_run\_that\_hits\_its\_cap\_names\_the\_relaxation\_time](./cli/test_cli.py#L2084)
+#### [test\_a\_derived\_run\_that\_hits\_its\_cap\_names\_the\_relaxation\_time](./cli/test_cli.py#L2229)
 
 ```python
 def test_a_derived_run_that_hits_its_cap_names_the_relaxation_time(
@@ -6843,7 +6892,7 @@ Reaching the cap explains how long the model needs.
 
 <a id="cli.test_cli.test_a_run_banner_states_individuals_and_ploidy_not_gene_copies"></a>
 
-#### [test\_a\_run\_banner\_states\_individuals\_and\_ploidy\_not\_gene\_copies](./cli/test_cli.py#L2101)
+#### [test\_a\_run\_banner\_states\_individuals\_and\_ploidy\_not\_gene\_copies](./cli/test_cli.py#L2246)
 
 ```python
 def test_a_run_banner_states_individuals_and_ploidy_not_gene_copies(
@@ -6854,7 +6903,7 @@ A botanist who wrote 225 diploid individuals sees exactly that.
 
 <a id="cli.test_cli.test_study_and_experiment_create_record_documentation"></a>
 
-#### [test\_study\_and\_experiment\_create\_record\_documentation](./cli/test_cli.py#L2115)
+#### [test\_study\_and\_experiment\_create\_record\_documentation](./cli/test_cli.py#L2260)
 
 ```python
 def test_study_and_experiment_create_record_documentation(
@@ -6865,7 +6914,7 @@ def test_study_and_experiment_create_record_documentation(
 
 <a id="cli.test_cli.test_a_capped_run_says_how_many_generations_the_precision_needs"></a>
 
-#### [test\_a\_capped\_run\_says\_how\_many\_generations\_the\_precision\_needs](./cli/test_cli.py#L2153)
+#### [test\_a\_capped\_run\_says\_how\_many\_generations\_the\_precision\_needs](./cli/test_cli.py#L2298)
 
 ```python
 def test_a_capped_run_says_how_many_generations_the_precision_needs(
@@ -6876,7 +6925,7 @@ A tight, unreachable-in-time precision prints the projected length.
 
 <a id="cli.test_cli.test_the_starter_config_lists_every_expert_setting_commented_out"></a>
 
-#### [test\_the\_starter\_config\_lists\_every\_expert\_setting\_commented\_out](./cli/test_cli.py#L2167)
+#### [test\_the\_starter\_config\_lists\_every\_expert\_setting\_commented\_out](./cli/test_cli.py#L2312)
 
 ```python
 def test_the_starter_config_lists_every_expert_setting_commented_out() -> None
@@ -6886,7 +6935,7 @@ def test_the_starter_config_lists_every_expert_setting_commented_out() -> None
 
 <a id="cli.test_cli.test_a_run_with_changed_expert_settings_says_so"></a>
 
-#### [test\_a\_run\_with\_changed\_expert\_settings\_says\_so](./cli/test_cli.py#L2183)
+#### [test\_a\_run\_with\_changed\_expert\_settings\_says\_so](./cli/test_cli.py#L2328)
 
 ```python
 def test_a_run_with_changed_expert_settings_says_so(
@@ -6897,7 +6946,7 @@ The changes are listed on the console, and recorded in the manifest.
 
 <a id="cli.test_cli.test_a_run_with_default_expert_settings_prints_no_expert_line"></a>
 
-#### [test\_a\_run\_with\_default\_expert\_settings\_prints\_no\_expert\_line](./cli/test_cli.py#L2202)
+#### [test\_a\_run\_with\_default\_expert\_settings\_prints\_no\_expert\_line](./cli/test_cli.py#L2347)
 
 ```python
 def test_a_run_with_default_expert_settings_prints_no_expert_line(
@@ -6908,7 +6957,7 @@ Nothing is announced when every Expert Setting is at its default.
 
 <a id="cli.test_cli.test_the_log_expert_settings_reach_the_trajectory_log_header"></a>
 
-#### [test\_the\_log\_expert\_settings\_reach\_the\_trajectory\_log\_header](./cli/test_cli.py#L2214)
+#### [test\_the\_log\_expert\_settings\_reach\_the\_trajectory\_log\_header](./cli/test_cli.py#L2359)
 
 ```python
 def test_the_log_expert_settings_reach_the_trajectory_log_header(
@@ -6974,7 +7023,7 @@ Writing a new sidecar is creation, so a read-only run gets its labels.
 
 <a id="cli.test_cli_labels.test_configuration_labels_never_overwrite_an_existing_sidecar"></a>
 
-#### [test\_configuration\_labels\_never\_overwrite\_an\_existing\_sidecar](./cli/test_cli_labels.py#L166)
+#### [test\_configuration\_labels\_never\_overwrite\_an\_existing\_sidecar](./cli/test_cli_labels.py#L172)
 
 ```python
 def test_configuration_labels_never_overwrite_an_existing_sidecar(
@@ -6985,7 +7034,7 @@ An existing `metadata.json` wins over the configuration's labels.
 
 <a id="cli.test_cli_labels.test_explicit_flags_still_edit_an_existing_sidecar"></a>
 
-#### [test\_explicit\_flags\_still\_edit\_an\_existing\_sidecar](./cli/test_cli_labels.py#L179)
+#### [test\_explicit\_flags\_still\_edit\_an\_existing\_sidecar](./cli/test_cli_labels.py#L185)
 
 ```python
 def test_explicit_flags_still_edit_an_existing_sidecar(tmp_path: Path) -> None
@@ -6995,7 +7044,7 @@ With a sidecar present, `--name` is an edit, as it always was.
 
 <a id="cli.test_cli_labels.test_cli_reports_a_read_only_refusal_as_a_one_line_error"></a>
 
-#### [test\_cli\_reports\_a\_read\_only\_refusal\_as\_a\_one\_line\_error](./cli/test_cli_labels.py#L224)
+#### [test\_cli\_reports\_a\_read\_only\_refusal\_as\_a\_one\_line\_error](./cli/test_cli_labels.py#L230)
 
 ```python
 @pytest.mark.parametrize(
@@ -7020,7 +7069,7 @@ Every editing command refuses a read-only item cleanly, changing nothing.
 
 <a id="cli.test_cli_labels.test_cli_copies_a_read_only_study_into_an_editable_one"></a>
 
-#### [test\_cli\_copies\_a\_read\_only\_study\_into\_an\_editable\_one](./cli/test_cli_labels.py#L262)
+#### [test\_cli\_copies\_a\_read\_only\_study\_into\_an\_editable\_one](./cli/test_cli_labels.py#L268)
 
 ```python
 def test_cli_copies_a_read_only_study_into_an_editable_one(
@@ -16900,9 +16949,24 @@ def test_add_run_to_study_reports_an_unknown_study(
 
 Adding a run to a nonexistent Study is a clean `{"ok": False}`, not a crash.
 
+<a id="gui.test_app_api.test_add_run_to_study_refuses_a_path_with_no_manifest"></a>
+
+#### [test\_add\_run\_to\_study\_refuses\_a\_path\_with\_no\_manifest](./gui/test_app_api.py#L4397)
+
+```python
+def test_add_run_to_study_refuses_a_path_with_no_manifest(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A path with no `manifest.json` is refused, never recorded as a Run.
+
+Regression test for the 2026-10-25 project review's finding G-2:
+the bridge's `add_run_to_study(<any path>)` used to record any
+path at all, which `delete_study` would then trust outright (P-1).
+
 <a id="gui.test_app_api.test_get_study_run_summary_reports_an_unknown_study"></a>
 
-#### [test\_get\_study\_run\_summary\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4397)
+#### [test\_get\_study\_run\_summary\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4418)
 
 ```python
 def test_get_study_run_summary_reports_an_unknown_study(
@@ -16913,7 +16977,7 @@ Expanding a Study row for an id that no longer exists fails cleanly.
 
 <a id="gui.test_app_api.test_create_experiment_and_add_study_round_trips"></a>
 
-#### [test\_create\_experiment\_and\_add\_study\_round\_trips](./gui/test_app_api.py#L4408)
+#### [test\_create\_experiment\_and\_add\_study\_round\_trips](./gui/test_app_api.py#L4429)
 
 ```python
 def test_create_experiment_and_add_study_round_trips(
@@ -16924,7 +16988,7 @@ def test_create_experiment_and_add_study_round_trips(
 
 <a id="gui.test_app_api.test_add_study_to_experiment_reports_an_unknown_study"></a>
 
-#### [test\_add\_study\_to\_experiment\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4425)
+#### [test\_add\_study\_to\_experiment\_reports\_an\_unknown\_study](./gui/test_app_api.py#L4446)
 
 ```python
 def test_add_study_to_experiment_reports_an_unknown_study(
@@ -16935,7 +16999,7 @@ An Experiment cannot reference a Study that does not exist.
 
 <a id="gui.test_app_api.test_delete_study_removes_it_and_its_runs"></a>
 
-#### [test\_delete\_study\_removes\_it\_and\_its\_runs](./gui/test_app_api.py#L4437)
+#### [test\_delete\_study\_removes\_it\_and\_its\_runs](./gui/test_app_api.py#L4458)
 
 ```python
 def test_delete_study_removes_it_and_its_runs(
@@ -16946,7 +17010,7 @@ Deleting a Study from the GUI cascades to its member Runs (confirmed).
 
 <a id="gui.test_app_api.test_delete_experiment_cascades_to_studies_and_runs"></a>
 
-#### [test\_delete\_experiment\_cascades\_to\_studies\_and\_runs](./gui/test_app_api.py#L4458)
+#### [test\_delete\_experiment\_cascades\_to\_studies\_and\_runs](./gui/test_app_api.py#L4479)
 
 ```python
 def test_delete_experiment_cascades_to_studies_and_runs(
@@ -16957,7 +17021,7 @@ Deleting an Experiment cascades through its Studies to their Runs.
 
 <a id="gui.test_app_api.test_copy_study_creates_an_independent_study"></a>
 
-#### [test\_copy\_study\_creates\_an\_independent\_study](./gui/test_app_api.py#L4477)
+#### [test\_copy\_study\_creates\_an\_independent\_study](./gui/test_app_api.py#L4498)
 
 ```python
 def test_copy_study_creates_an_independent_study(
@@ -16968,7 +17032,7 @@ def test_copy_study_creates_an_independent_study(
 
 <a id="gui.test_app_api.test_copy_experiment_creates_an_independent_experiment"></a>
 
-#### [test\_copy\_experiment\_creates\_an\_independent\_experiment](./gui/test_app_api.py#L4493)
+#### [test\_copy\_experiment\_creates\_an\_independent\_experiment](./gui/test_app_api.py#L4514)
 
 ```python
 def test_copy_experiment_creates_an_independent_experiment(
@@ -16979,7 +17043,7 @@ def test_copy_experiment_creates_an_independent_experiment(
 
 <a id="gui.test_app_api.test_delete_runs_removes_every_directory_and_tolerates_a_missing_one"></a>
 
-#### [test\_delete\_runs\_removes\_every\_directory\_and\_tolerates\_a\_missing\_one](./gui/test_app_api.py#L4507)
+#### [test\_delete\_runs\_removes\_every\_directory\_and\_tolerates\_a\_missing\_one](./gui/test_app_api.py#L4528)
 
 ```python
 def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
@@ -16988,9 +17052,41 @@ def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
 
 The bulk "Select/Delete/Delete all" idiom: one round trip, many directories.
 
+<a id="gui.test_app_api.test_delete_runs_refuses_an_empty_string_entry"></a>
+
+#### [test\_delete\_runs\_refuses\_an\_empty\_string\_entry](./gui/test_app_api.py#L4544)
+
+```python
+def test_delete_runs_refuses_an_empty_string_entry(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An empty-string entry is refused, not resolved to the working directory.
+
+Regression test for the 2026-10-25 project review's finding G-1:
+`Path("").is_dir()` is `True` (the current directory), so
+`Api.delete_runs([""])` used to delete it outright.
+
+<a id="gui.test_app_api.test_delete_runs_refuses_a_directory_with_no_manifest"></a>
+
+#### [test\_delete\_runs\_refuses\_a\_directory\_with\_no\_manifest](./gui/test_app_api.py#L4566)
+
+```python
+def test_delete_runs_refuses_a_directory_with_no_manifest(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A directory with no `manifest.json`/`run.json` is never deleted.
+
+Regression test for the 2026-10-25 project review's finding G-1. A
+real Run outside the results root is deliberately still deletable
+this way (`fim run -o SOME/OTHER/PATH` published it on purpose);
+this is the actual defect: nothing confirmed `not_a_run` was a Run
+at all.
+
 <a id="gui.test_app_api.test_delete_selected_deletes_a_mixed_selection"></a>
 
-#### [test\_delete\_selected\_deletes\_a\_mixed\_selection](./gui/test_app_api.py#L4523)
+#### [test\_delete\_selected\_deletes\_a\_mixed\_selection](./gui/test_app_api.py#L4587)
 
 ```python
 def test_delete_selected_deletes_a_mixed_selection(
@@ -17005,7 +17101,7 @@ generalized from `delete_runs`'s own existing one.
 
 <a id="gui.test_app_api.test_delete_selected_tolerates_an_already_deleted_parent"></a>
 
-#### [test\_delete\_selected\_tolerates\_an\_already\_deleted\_parent](./gui/test_app_api.py#L4582)
+#### [test\_delete\_selected\_tolerates\_an\_already\_deleted\_parent](./gui/test_app_api.py#L4646)
 
 ```python
 def test_delete_selected_tolerates_an_already_deleted_parent(
@@ -17021,7 +17117,7 @@ existing "already gone is not an error" tolerance covers it.
 
 <a id="gui.test_app_api.test_delete_selected_with_nothing_selected_deletes_nothing"></a>
 
-#### [test\_delete\_selected\_with\_nothing\_selected\_deletes\_nothing](./gui/test_app_api.py#L4616)
+#### [test\_delete\_selected\_with\_nothing\_selected\_deletes\_nothing](./gui/test_app_api.py#L4680)
 
 ```python
 def test_delete_selected_with_nothing_selected_deletes_nothing(
@@ -17032,7 +17128,7 @@ An empty selection is a clean no-op, not an error.
 
 <a id="gui.test_app_api.test_start_run_rejects_an_unknown_study_id"></a>
 
-#### [test\_start\_run\_rejects\_an\_unknown\_study\_id](./gui/test_app_api.py#L4633)
+#### [test\_start\_run\_rejects\_an\_unknown\_study\_id](./gui/test_app_api.py#L4697)
 
 ```python
 def test_start_run_rejects_an_unknown_study_id(
@@ -17050,7 +17146,7 @@ unknown `study_id` is exactly as invalid whether or not one exists.
 
 <a id="gui.test_app_api.test_attach_finished_run_to_study_with_none_uses_the_default_study"></a>
 
-#### [test\_attach\_finished\_run\_to\_study\_with\_none\_uses\_the\_default\_study](./gui/test_app_api.py#L4652)
+#### [test\_attach\_finished\_run\_to\_study\_with\_none\_uses\_the\_default\_study](./gui/test_app_api.py#L4716)
 
 ```python
 def test_attach_finished_run_to_study_with_none_uses_the_default_study(
@@ -17068,7 +17164,7 @@ resolution rule.
 
 <a id="gui.test_app_api.test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected"></a>
 
-#### [test\_attach\_finished\_run\_to\_study\_with\_an\_explicit\_id\_is\_unaffected](./gui/test_app_api.py#L4673)
+#### [test\_attach\_finished\_run\_to\_study\_with\_an\_explicit\_id\_is\_unaffected](./gui/test_app_api.py#L4737)
 
 ```python
 def test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected(
@@ -17089,7 +17185,7 @@ unrelated to whatever the CLI already did at write time.
 
 <a id="gui.test_app_api.test_open_run_reanalyzes_the_final_generation_by_default"></a>
 
-#### [test\_open\_run\_reanalyzes\_the\_final\_generation\_by\_default](./gui/test_app_api.py#L4698)
+#### [test\_open\_run\_reanalyzes\_the\_final\_generation\_by\_default](./gui/test_app_api.py#L4762)
 
 ```python
 def test_open_run_reanalyzes_the_final_generation_by_default(
@@ -17100,7 +17196,7 @@ A bare "final" open reproduces the run's own terminal report.
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_equilibrium_prediction"></a>
 
-#### [test\_open\_run\_carries\_the\_real\_equilibrium\_prediction](./gui/test_app_api.py#L4723)
+#### [test\_open\_run\_carries\_the\_real\_equilibrium\_prediction](./gui/test_app_api.py#L4787)
 
 ```python
 def test_open_run_carries_the_real_equilibrium_prediction(
@@ -17117,7 +17213,7 @@ a real prediction is expected here, not `None`.
 
 <a id="gui.test_app_api.test_open_run_echoes_the_trajectory_path_it_was_given"></a>
 
-#### [test\_open\_run\_echoes\_the\_trajectory\_path\_it\_was\_given](./gui/test_app_api.py#L4751)
+#### [test\_open\_run\_echoes\_the\_trajectory\_path\_it\_was\_given](./gui/test_app_api.py#L4815)
 
 ```python
 def test_open_run_echoes_the_trajectory_path_it_was_given(
@@ -17135,7 +17231,7 @@ the identical key for a live-just-finished run
 
 <a id="gui.test_app_api.test_open_run_carries_the_derived_convergence_note"></a>
 
-#### [test\_open\_run\_carries\_the\_derived\_convergence\_note](./gui/test_app_api.py#L4770)
+#### [test\_open\_run\_carries\_the\_derived\_convergence\_note](./gui/test_app_api.py#L4834)
 
 ```python
 def test_open_run_carries_the_derived_convergence_note(tmp_path: Path) -> None
@@ -17162,7 +17258,7 @@ below.
 
 <a id="gui.test_app_api.test_open_run_carries_a_real_convergence_note_and_trajectory_curve"></a>
 
-#### [test\_open\_run\_carries\_a\_real\_convergence\_note\_and\_trajectory\_curve](./gui/test_app_api.py#L4800)
+#### [test\_open\_run\_carries\_a\_real\_convergence\_note\_and\_trajectory\_curve](./gui/test_app_api.py#L4864)
 
 ```python
 @pytest.mark.slow
@@ -17192,7 +17288,7 @@ population size alone.
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_identity_recovery_reference"></a>
 
-#### [test\_open\_run\_carries\_the\_real\_identity\_recovery\_reference](./gui/test_app_api.py#L4850)
+#### [test\_open\_run\_carries\_the\_real\_identity\_recovery\_reference](./gui/test_app_api.py#L4914)
 
 ```python
 def test_open_run_carries_the_real_identity_recovery_reference(
@@ -17207,7 +17303,7 @@ manifest params.
 
 <a id="gui.test_app_api.test_open_run_carries_the_real_closed_form_trajectory"></a>
 
-#### [test\_open\_run\_carries\_the\_real\_closed\_form\_trajectory](./gui/test_app_api.py#L4868)
+#### [test\_open\_run\_carries\_the\_real\_closed\_form\_trajectory](./gui/test_app_api.py#L4932)
 
 ```python
 def test_open_run_carries_the_real_closed_form_trajectory(
@@ -17218,7 +17314,7 @@ A reopened run's own `closedForm` is the solved recursion for its params.
 
 <a id="gui.test_app_api.test_open_run_carries_the_convergence_window_and_tolerance"></a>
 
-#### [test\_open\_run\_carries\_the\_convergence\_window\_and\_tolerance](./gui/test_app_api.py#L4881)
+#### [test\_open\_run\_carries\_the\_convergence\_window\_and\_tolerance](./gui/test_app_api.py#L4945)
 
 ```python
 def test_open_run_carries_the_convergence_window_and_tolerance(
@@ -17229,7 +17325,7 @@ The trailing mean averages over the evidence window, judged by the tolerance.
 
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 
-#### [test\_open\_run\_choose\_reanalyzes\_an\_earlier\_generation\_as\_re\_analysis](./gui/test_app_api.py#L4899)
+#### [test\_open\_run\_choose\_reanalyzes\_an\_earlier\_generation\_as\_re\_analysis](./gui/test_app_api.py#L4963)
 
 ```python
 def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(
@@ -17240,7 +17336,7 @@ A non-final generation reports "re-analysis", not the run's own reason.
 
 <a id="gui.test_app_api.test_open_run_reports_a_missing_trajectory_without_raising"></a>
 
-#### [test\_open\_run\_reports\_a\_missing\_trajectory\_without\_raising](./gui/test_app_api.py#L4955)
+#### [test\_open\_run\_reports\_a\_missing\_trajectory\_without\_raising](./gui/test_app_api.py#L5019)
 
 ```python
 def test_open_run_reports_a_missing_trajectory_without_raising(
@@ -17253,7 +17349,7 @@ method's exception handling originally caught alone.
 
 <a id="gui.test_app_api.test_compare_runs_summarizes_a_genuinely_per_locus_mu"></a>
 
-#### [test\_compare\_runs\_summarizes\_a\_genuinely\_per\_locus\_mu](./gui/test_app_api.py#L4967)
+#### [test\_compare\_runs\_summarizes\_a\_genuinely\_per\_locus\_mu](./gui/test_app_api.py#L5031)
 
 ```python
 def test_compare_runs_summarizes_a_genuinely_per_locus_mu(
@@ -17267,7 +17363,7 @@ it), but a run summary only needs to name it.
 
 <a id="gui.test_app_api.test_compare_runs_rejects_fewer_than_two_paths"></a>
 
-#### [test\_compare\_runs\_rejects\_fewer\_than\_two\_paths](./gui/test_app_api.py#L4988)
+#### [test\_compare\_runs\_rejects\_fewer\_than\_two\_paths](./gui/test_app_api.py#L5052)
 
 ```python
 def test_compare_runs_rejects_fewer_than_two_paths() -> None
@@ -17277,7 +17373,7 @@ A single run has nothing to overlay against.
 
 <a id="gui.test_app_api.test_compare_runs_overlays_two_runs_and_names_the_differing_field"></a>
 
-#### [test\_compare\_runs\_overlays\_two\_runs\_and\_names\_the\_differing\_field](./gui/test_app_api.py#L4996)
+#### [test\_compare\_runs\_overlays\_two\_runs\_and\_names\_the\_differing\_field](./gui/test_app_api.py#L5060)
 
 ```python
 def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
@@ -17288,7 +17384,7 @@ Two runs differing only in `seed` are overlaid, with `seed` the sole diff.
 
 <a id="gui.test_app_api.test_compare_runs_names_no_differing_field_for_identical_configs"></a>
 
-#### [test\_compare\_runs\_names\_no\_differing\_field\_for\_identical\_configs](./gui/test_app_api.py#L5033)
+#### [test\_compare\_runs\_names\_no\_differing\_field\_for\_identical\_configs](./gui/test_app_api.py#L5097)
 
 ```python
 def test_compare_runs_names_no_differing_field_for_identical_configs(
@@ -17299,7 +17395,7 @@ Two runs with the same configuration (different output dirs) report no diff.
 
 <a id="gui.test_app_api.test_compare_runs_reports_a_missing_trajectory_without_raising"></a>
 
-#### [test\_compare\_runs\_reports\_a\_missing\_trajectory\_without\_raising](./gui/test_app_api.py#L5053)
+#### [test\_compare\_runs\_reports\_a\_missing\_trajectory\_without\_raising](./gui/test_app_api.py#L5117)
 
 ```python
 def test_compare_runs_reports_a_missing_trajectory_without_raising(
@@ -17310,7 +17406,7 @@ One unreadable path fails the whole comparison, matching `open_run`'s shape.
 
 <a id="gui.test_app_api.test_get_animation_frames_ships_client_ready_panels"></a>
 
-#### [test\_get\_animation\_frames\_ships\_client\_ready\_panels](./gui/test_app_api.py#L5071)
+#### [test\_get\_animation\_frames\_ships\_client\_ready\_panels](./gui/test_app_api.py#L5135)
 
 ```python
 def test_get_animation_frames_ships_client_ready_panels(
@@ -17321,7 +17417,7 @@ Every sampled frame's points already arrive as `scatter_panels`-shaped panels.
 
 <a id="gui.test_app_api.test_get_animation_deme_pair_frames_names_the_pair_in_every_frame"></a>
 
-#### [test\_get\_animation\_deme\_pair\_frames\_names\_the\_pair\_in\_every\_frame](./gui/test_app_api.py#L5102)
+#### [test\_get\_animation\_deme\_pair\_frames\_names\_the\_pair\_in\_every\_frame](./gui/test_app_api.py#L5166)
 
 ```python
 def test_get_animation_deme_pair_frames_names_the_pair_in_every_frame(
@@ -17338,7 +17434,7 @@ easy comparison between the two.
 
 <a id="gui.test_app_api.test_get_deme_pair_panel_names_the_requested_pair"></a>
 
-#### [test\_get\_deme\_pair\_panel\_names\_the\_requested\_pair](./gui/test_app_api.py#L5162)
+#### [test\_get\_deme\_pair\_panel\_names\_the\_requested\_pair](./gui/test_app_api.py#L5226)
 
 ```python
 def test_get_deme_pair_panel_names_the_requested_pair(tmp_path: Path) -> None
@@ -17348,7 +17444,7 @@ The Screen 3 on-demand pair view names its axes by 1-based deme number.
 
 <a id="gui.test_app_api.test_get_deme_pair_panel_carries_that_pairs_nei_statistics"></a>
 
-#### [test\_get\_deme\_pair\_panel\_carries\_that\_pairs\_nei\_statistics](./gui/test_app_api.py#L5175)
+#### [test\_get\_deme\_pair\_panel\_carries\_that\_pairs\_nei\_statistics](./gui/test_app_api.py#L5239)
 
 ```python
 def test_get_deme_pair_panel_carries_that_pairs_nei_statistics(
@@ -17359,7 +17455,7 @@ The pair rows follow the requested pair: values match the saved matrix.
 
 <a id="gui.test_app_api.test_a_self_comparison_has_identity_one_and_distance_zero"></a>
 
-#### [test\_a\_self\_comparison\_has\_identity\_one\_and\_distance\_zero](./gui/test_app_api.py#L5194)
+#### [test\_a\_self\_comparison\_has\_identity\_one\_and\_distance\_zero](./gui/test_app_api.py#L5258)
 
 ```python
 def test_a_self_comparison_has_identity_one_and_distance_zero(
@@ -17370,7 +17466,7 @@ A deme compared with itself: every identity 1, every distance 0.
 
 <a id="gui.test_app_api.test_animation_frames_carry_history_free_and_default_pair_statistics"></a>
 
-#### [test\_animation\_frames\_carry\_history\_free\_and\_default\_pair\_statistics](./gui/test_app_api.py#L5204)
+#### [test\_animation\_frames\_carry\_history\_free\_and\_default\_pair\_statistics](./gui/test_app_api.py#L5268)
 
 ```python
 def test_animation_frames_carry_history_free_and_default_pair_statistics(
@@ -17381,7 +17477,7 @@ Each frame has Gs/Gd/all-demes Nei and demes 1 and 2's pair values.
 
 <a id="gui.test_app_api.test_animation_pair_frames_carry_the_chosen_pairs_statistics"></a>
 
-#### [test\_animation\_pair\_frames\_carry\_the\_chosen\_pairs\_statistics](./gui/test_app_api.py#L5228)
+#### [test\_animation\_pair\_frames\_carry\_the\_chosen\_pairs\_statistics](./gui/test_app_api.py#L5292)
 
 ```python
 def test_animation_pair_frames_carry_the_chosen_pairs_statistics(
@@ -17392,7 +17488,7 @@ Choosing a pair gives its statistics for every scrubber frame.
 
 <a id="gui.test_app_api.test_reopening_a_run_saved_before_a_statistic_existed_fills_it_in"></a>
 
-#### [test\_reopening\_a\_run\_saved\_before\_a\_statistic\_existed\_fills\_it\_in](./gui/test_app_api.py#L5239)
+#### [test\_reopening\_a\_run\_saved\_before\_a\_statistic\_existed\_fills\_it\_in](./gui/test_app_api.py#L5303)
 
 ```python
 def test_reopening_a_run_saved_before_a_statistic_existed_fills_it_in(
@@ -17407,7 +17503,7 @@ as it would have been at the time. The saved file is not rewritten.
 
 <a id="gui.test_app_api.test_format_report_statistic_tells_infinite_from_missing"></a>
 
-#### [test\_format\_report\_statistic\_tells\_infinite\_from\_missing](./gui/test_app_api.py#L5269)
+#### [test\_format\_report\_statistic\_tells\_infinite\_from\_missing](./gui/test_app_api.py#L5333)
 
 ```python
 def test_format_report_statistic_tells_infinite_from_missing() -> None
@@ -17417,7 +17513,7 @@ A present `None` Nei distance is infinite; an absent key is undefined.
 
 <a id="gui.test_app_api.test_get_deme_pair_panel_permits_a_self_comparison"></a>
 
-#### [test\_get\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5278)
+#### [test\_get\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5342)
 
 ```python
 def test_get_deme_pair_panel_permits_a_self_comparison(tmp_path: Path) -> None
@@ -17429,7 +17525,7 @@ P1 item 6 of the 2026-09-06 open-issues doc.
 
 <a id="gui.test_app_api.test_get_batch_deme_pair_panel_pools_every_replicate"></a>
 
-#### [test\_get\_batch\_deme\_pair\_panel\_pools\_every\_replicate](./gui/test_app_api.py#L5312)
+#### [test\_get\_batch\_deme\_pair\_panel\_pools\_every\_replicate](./gui/test_app_api.py#L5376)
 
 ```python
 def test_get_batch_deme_pair_panel_pools_every_replicate(
@@ -17447,7 +17543,7 @@ size.
 
 <a id="gui.test_app_api.test_get_batch_deme_pair_panel_permits_a_self_comparison"></a>
 
-#### [test\_get\_batch\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5333)
+#### [test\_get\_batch\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5397)
 
 ```python
 def test_get_batch_deme_pair_panel_permits_a_self_comparison(
@@ -17458,7 +17554,7 @@ def test_get_batch_deme_pair_panel_permits_a_self_comparison(
 
 <a id="gui.test_app_api.test_get_batch_pair_statistics_summarizes_across_replicates"></a>
 
-#### [test\_get\_batch\_pair\_statistics\_summarizes\_across\_replicates](./gui/test_app_api.py#L5355)
+#### [test\_get\_batch\_pair\_statistics\_summarizes\_across\_replicates](./gui/test_app_api.py#L5419)
 
 ```python
 def test_get_batch_pair_statistics_summarizes_across_replicates(
@@ -17469,7 +17565,7 @@ Mean and interval of a pair's statistics over the replicates.
 
 <a id="gui.test_app_api.test_get_batch_pair_statistics_reports_an_unreadable_batch"></a>
 
-#### [test\_get\_batch\_pair\_statistics\_reports\_an\_unreadable\_batch](./gui/test_app_api.py#L5370)
+#### [test\_get\_batch\_pair\_statistics\_reports\_an\_unreadable\_batch](./gui/test_app_api.py#L5434)
 
 ```python
 def test_get_batch_pair_statistics_reports_an_unreadable_batch() -> None
@@ -17479,7 +17575,7 @@ A directory with no batch manifest is an error message, not a raise.
 
 <a id="gui.test_app_api.test_get_batch_replicate_summary_lists_every_replicate"></a>
 
-#### [test\_get\_batch\_replicate\_summary\_lists\_every\_replicate](./gui/test_app_api.py#L5376)
+#### [test\_get\_batch\_replicate\_summary\_lists\_every\_replicate](./gui/test_app_api.py#L5440)
 
 ```python
 def test_get_batch_replicate_summary_lists_every_replicate(
@@ -17493,7 +17589,7 @@ enrichment-design.md` (`selby/restricted`), approach B1.
 
 <a id="gui.test_app_api.test_get_batch_replicate_summary_omits_statistics_for_a_missing_report"></a>
 
-#### [test\_get\_batch\_replicate\_summary\_omits\_statistics\_for\_a\_missing\_report](./gui/test_app_api.py#L5396)
+#### [test\_get\_batch\_replicate\_summary\_omits\_statistics\_for\_a\_missing\_report](./gui/test_app_api.py#L5460)
 
 ```python
 def test_get_batch_replicate_summary_omits_statistics_for_a_missing_report(
@@ -17504,7 +17600,7 @@ A replicate whose own `report.json` was removed still appears, blank.
 
 <a id="gui.test_app_api.test_get_batch_replicate_summary_rejects_an_unreadable_directory"></a>
 
-#### [test\_get\_batch\_replicate\_summary\_rejects\_an\_unreadable\_directory](./gui/test_app_api.py#L5423)
+#### [test\_get\_batch\_replicate\_summary\_rejects\_an\_unreadable\_directory](./gui/test_app_api.py#L5487)
 
 ```python
 def test_get_batch_replicate_summary_rejects_an_unreadable_directory(
@@ -17515,7 +17611,7 @@ A directory with no readable `manifest.json` is a clear error, not a crash.
 
 <a id="gui.test_app_api.test_get_initial_state_deme_pair_panel_names_the_requested_pair"></a>
 
-#### [test\_get\_initial\_state\_deme\_pair\_panel\_names\_the\_requested\_pair](./gui/test_app_api.py#L5433)
+#### [test\_get\_initial\_state\_deme\_pair\_panel\_names\_the\_requested\_pair](./gui/test_app_api.py#L5497)
 
 ```python
 def test_get_initial_state_deme_pair_panel_names_the_requested_pair() -> None
@@ -17525,7 +17621,7 @@ The Initial-state preview's on-demand pair view names its own axes.
 
 <a id="gui.test_app_api.test_get_initial_state_deme_pair_panel_permits_a_self_comparison"></a>
 
-#### [test\_get\_initial\_state\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5445)
+#### [test\_get\_initial\_state\_deme\_pair\_panel\_permits\_a\_self\_comparison](./gui/test_app_api.py#L5509)
 
 ```python
 def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None
@@ -17535,7 +17631,7 @@ def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None
 
 <a id="gui.test_app_api.test_get_batch_animation_frames_ships_client_ready_pooled_panels"></a>
 
-#### [test\_get\_batch\_animation\_frames\_ships\_client\_ready\_pooled\_panels](./gui/test_app_api.py#L5479)
+#### [test\_get\_batch\_animation\_frames\_ships\_client\_ready\_pooled\_panels](./gui/test_app_api.py#L5543)
 
 ```python
 def test_get_batch_animation_frames_ships_client_ready_pooled_panels(
@@ -17554,7 +17650,7 @@ logic.
 
 <a id="gui.test_app_api.test_build_menu_has_exactly_file_run_and_help"></a>
 
-#### [test\_build\_menu\_has\_exactly\_file\_run\_and\_help](./gui/test_app_api.py#L5539)
+#### [test\_build\_menu\_has\_exactly\_file\_run\_and\_help](./gui/test_app_api.py#L5603)
 
 ```python
 def test_build_menu_has_exactly_file_run_and_help() -> None
@@ -17575,7 +17671,7 @@ Configure/View included) was written under.
 
 <a id="gui.test_app_api.test_build_menu_dispatches_document_actions_to_workspace"></a>
 
-#### [test\_build\_menu\_dispatches\_document\_actions\_to\_workspace](./gui/test_app_api.py#L5589)
+#### [test\_build\_menu\_dispatches\_document\_actions\_to\_workspace](./gui/test_app_api.py#L5653)
 
 ```python
 def test_build_menu_dispatches_document_actions_to_workspace() -> None
@@ -17585,7 +17681,7 @@ Native document menu items dispatch through the workspace API.
 
 <a id="gui.test_app_api.test_no_menu_title_contains_a_paren"></a>
 
-#### [test\_no\_menu\_title\_contains\_a\_paren](./gui/test_app_api.py#L5640)
+#### [test\_no\_menu\_title\_contains\_a\_paren](./gui/test_app_api.py#L5704)
 
 ```python
 def test_no_menu_title_contains_a_paren() -> None
@@ -17609,7 +17705,7 @@ rather than crashing a real Linux build the same way.
 
 <a id="gui.test_app_api.test_open_external_link_opens_the_os_default_browser"></a>
 
-#### [test\_open\_external\_link\_opens\_the\_os\_default\_browser](./gui/test_app_api.py#L5665)
+#### [test\_open\_external\_link\_opens\_the\_os\_default\_browser](./gui/test_app_api.py#L5729)
 
 ```python
 def test_open_external_link_opens_the_os_default_browser(
@@ -17623,7 +17719,7 @@ follows for OS-dispatched actions — no real browser opens in a test.
 
 <a id="gui.test_app_api.test_get_about_info_reports_the_dev_checkout_commit"></a>
 
-#### [test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit](./gui/test_app_api.py#L5745)
+#### [test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit](./gui/test_app_api.py#L5809)
 
 ```python
 def test_get_about_info_reports_the_dev_checkout_commit(
@@ -17640,7 +17736,7 @@ process's own live value, so the assertion is exact either way.
 
 <a id="gui.test_app_api.test_main_returns_2_on_a_malformed_fim_log_level"></a>
 
-#### [test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level](./gui/test_app_api.py#L5804)
+#### [test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level](./gui/test_app_api.py#L5868)
 
 ```python
 def test_main_returns_2_on_a_malformed_fim_log_level(
@@ -17667,7 +17763,7 @@ testing standard forbids.
 
 <a id="gui.test_app_api.test_main_logging_config_flag_wins_over_fim_logging_config_env_var"></a>
 
-#### [test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var](./gui/test_app_api.py#L5862)
+#### [test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var](./gui/test_app_api.py#L5926)
 
 ```python
 def test_main_logging_config_flag_wins_over_fim_logging_config_env_var(
@@ -17682,7 +17778,7 @@ instead of successfully applying the flag's own valid one.
 
 <a id="gui.test_app_api.test_main_honors_fim_logging_config_env_var_with_no_flag"></a>
 
-#### [test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag](./gui/test_app_api.py#L5899)
+#### [test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag](./gui/test_app_api.py#L5963)
 
 ```python
 def test_main_honors_fim_logging_config_env_var_with_no_flag(
@@ -17701,7 +17797,7 @@ coverage for this exact call path.
 
 <a id="gui.test_app_api.test_main_applies_root_results_directory_log_directory_and_preferences_file"></a>
 
-#### [test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file](./gui/test_app_api.py#L5940)
+#### [test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file](./gui/test_app_api.py#L6004)
 
 ```python
 def test_main_applies_root_results_directory_log_directory_and_preferences_file(
@@ -17718,7 +17814,7 @@ just before that.
 
 <a id="gui.test_app_api.test_initial_window_size_is_the_largest_polite_16_by_9"></a>
 
-#### [test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9](./gui/test_app_api.py#L5988)
+#### [test\_initial\_window\_size\_is\_the\_largest\_polite\_16\_by\_9](./gui/test_app_api.py#L6052)
 
 ```python
 @pytest.mark.parametrize(
@@ -17739,7 +17835,7 @@ The window is 16:9, inside the display with a margin, and capped.
 
 <a id="gui.test_app_api.test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing"></a>
 
-#### [test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing](./gui/test_app_api.py#L6000)
+#### [test\_deleting\_a\_study\_leaves\_its\_experiment\_without\_a\_dangling\_listing](./gui/test_app_api.py#L6064)
 
 ```python
 def test_deleting_a_study_leaves_its_experiment_without_a_dangling_listing(
@@ -17750,7 +17846,7 @@ After a Study is deleted, its Experiment counts and lists only what exists.
 
 <a id="gui.test_app_api.test_list_studies_reports_closed_and_a_lifecycle_summary"></a>
 
-#### [test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary](./gui/test_app_api.py#L6017)
+#### [test\_list\_studies\_reports\_closed\_and\_a\_lifecycle\_summary](./gui/test_app_api.py#L6081)
 
 ```python
 def test_list_studies_reports_closed_and_a_lifecycle_summary(
@@ -17761,7 +17857,7 @@ Home receives each group's open/closed flag and its derived summary.
 
 <a id="gui.test_app_api.test_set_study_closed_reports_a_refusal_as_a_message"></a>
 
-#### [test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message](./gui/test_app_api.py#L6053)
+#### [test\_set\_study\_closed\_reports\_a\_refusal\_as\_a\_message](./gui/test_app_api.py#L6117)
 
 ```python
 def test_set_study_closed_reports_a_refusal_as_a_message(
@@ -17772,7 +17868,7 @@ A missing or default group is a message, never an exception.
 
 <a id="gui.test_app_api.test_list_experiments_heals_studies_deleted_by_the_old_behavior"></a>
 
-#### [test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior](./gui/test_app_api.py#L6072)
+#### [test\_list\_experiments\_heals\_studies\_deleted\_by\_the\_old\_behavior](./gui/test_app_api.py#L6136)
 
 ```python
 def test_list_experiments_heals_studies_deleted_by_the_old_behavior(
@@ -17783,7 +17879,7 @@ A manifest left naming a missing Study is repaired when Home lists it.
 
 <a id="gui.test_app_api.test_explore_predictions_count_individuals_and_multiply_by_ploidy"></a>
 
-#### [test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy](./gui/test_app_api.py#L6183)
+#### [test\_explore\_predictions\_count\_individuals\_and\_multiply\_by\_ploidy](./gui/test_app_api.py#L6247)
 
 ```python
 def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
@@ -17794,7 +17890,7 @@ def test_explore_predictions_count_individuals_and_multiply_by_ploidy(
 
 <a id="gui.test_app_api.test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning"></a>
 
-#### [test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning](./gui/test_app_api.py#L6195)
+#### [test\_explore\_ploidy\_defaults\_to\_haploid\_so\_older\_callers\_keep\_their\_meaning](./gui/test_app_api.py#L6259)
 
 ```python
 def test_explore_ploidy_defaults_to_haploid_so_older_callers_keep_their_meaning(
@@ -17805,7 +17901,7 @@ No ploidy argument means N is the gene-copy count, as before.
 
 <a id="gui.test_app_api.test_explore_rejects_a_ploidy_outside_one_to_four"></a>
 
-#### [test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four](./gui/test_app_api.py#L6207)
+#### [test\_explore\_rejects\_a\_ploidy\_outside\_one\_to\_four](./gui/test_app_api.py#L6271)
 
 ```python
 @pytest.mark.parametrize("bad", ["0", "5", "diploid", ""])
@@ -17816,7 +17912,7 @@ Every Explore method refuses an unusable ploidy with one message.
 
 <a id="gui.test_app_api.test_explore_sweeps_the_n_axis_in_individuals"></a>
 
-#### [test\_explore\_sweeps\_the\_n\_axis\_in\_individuals](./gui/test_app_api.py#L6222)
+#### [test\_explore\_sweeps\_the\_n\_axis\_in\_individuals](./gui/test_app_api.py#L6286)
 
 ```python
 def test_explore_sweeps_the_n_axis_in_individuals() -> None
@@ -17826,7 +17922,7 @@ The axis values are individuals; each is evaluated at value * ploidy.
 
 <a id="gui.test_app_api.test_explore_grid_and_sweep_evaluate_at_gene_copies"></a>
 
-#### [test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies](./gui/test_app_api.py#L6240)
+#### [test\_explore\_grid\_and\_sweep\_evaluate\_at\_gene\_copies](./gui/test_app_api.py#L6304)
 
 ```python
 def test_explore_grid_and_sweep_evaluate_at_gene_copies() -> None
@@ -17836,7 +17932,7 @@ The held N of a sweep or a grid is individuals times ploidy too.
 
 <a id="gui.test_app_api.test_list_studies_counts_only_the_member_runs_that_exist"></a>
 
-#### [test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist](./gui/test_app_api.py#L6255)
+#### [test\_list\_studies\_counts\_only\_the\_member\_runs\_that\_exist](./gui/test_app_api.py#L6319)
 
 ```python
 def test_list_studies_counts_only_the_member_runs_that_exist(
@@ -17847,7 +17943,7 @@ def test_list_studies_counts_only_the_member_runs_that_exist(
 
 <a id="gui.test_app_api.test_create_study_and_experiment_store_documentation_and_list_it"></a>
 
-#### [test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it](./gui/test_app_api.py#L6286)
+#### [test\_create\_study\_and\_experiment\_store\_documentation\_and\_list\_it](./gui/test_app_api.py#L6350)
 
 ```python
 def test_create_study_and_experiment_store_documentation_and_list_it(
@@ -17858,7 +17954,7 @@ Documentation given at creation is listed; blank text is stored as unset.
 
 <a id="gui.test_app_api.test_update_study_and_experiment_details_round_trip"></a>
 
-#### [test\_update\_study\_and\_experiment\_details\_round\_trip](./gui/test_app_api.py#L6308)
+#### [test\_update\_study\_and\_experiment\_details\_round\_trip](./gui/test_app_api.py#L6372)
 
 ```python
 def test_update_study_and_experiment_details_round_trip(
@@ -17869,7 +17965,7 @@ The details dialog's Save replaces name, description and documentation.
 
 <a id="gui.test_app_api.test_update_details_reports_a_blank_name_or_unknown_id"></a>
 
-#### [test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id](./gui/test_app_api.py#L6336)
+#### [test\_update\_details\_reports\_a\_blank\_name\_or\_unknown\_id](./gui/test_app_api.py#L6400)
 
 ```python
 def test_update_details_reports_a_blank_name_or_unknown_id(
@@ -17880,7 +17976,7 @@ A failed save leaves a message for the dialog, and changes nothing.
 
 <a id="gui.test_app_api.test_update_run_details_writes_the_sidecar_and_home_lists_it"></a>
 
-#### [test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it](./gui/test_app_api.py#L6360)
+#### [test\_update\_run\_details\_writes\_the\_sidecar\_and\_home\_lists\_it](./gui/test_app_api.py#L6424)
 
 ```python
 def test_update_run_details_writes_the_sidecar_and_home_lists_it(
@@ -17891,7 +17987,7 @@ A run's name and description are saved and shown in its Home row.
 
 <a id="gui.test_app_api.test_update_run_details_clears_with_blank_text_and_rejects_a_non_run"></a>
 
-#### [test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run](./gui/test_app_api.py#L6387)
+#### [test\_update\_run\_details\_clears\_with\_blank\_text\_and\_rejects\_a\_non\_run](./gui/test_app_api.py#L6451)
 
 ```python
 def test_update_run_details_clears_with_blank_text_and_rejects_a_non_run(
@@ -17902,7 +17998,7 @@ Blank clears a field; a directory with no manifest is not a run.
 
 <a id="gui.test_app_api.test_get_run_context_names_a_runs_study_and_experiment"></a>
 
-#### [test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment](./gui/test_app_api.py#L6405)
+#### [test\_get\_run\_context\_names\_a\_runs\_study\_and\_experiment](./gui/test_app_api.py#L6469)
 
 ```python
 def test_get_run_context_names_a_runs_study_and_experiment(
@@ -17913,7 +18009,7 @@ A run filed in a chosen Study is shown under it, not under the default.
 
 <a id="gui.test_app_api.test_get_run_context_before_a_run_uses_the_selected_or_default_study"></a>
 
-#### [test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study](./gui/test_app_api.py#L6431)
+#### [test\_get\_run\_context\_before\_a\_run\_uses\_the\_selected\_or\_default\_study](./gui/test_app_api.py#L6495)
 
 ```python
 def test_get_run_context_before_a_run_uses_the_selected_or_default_study(
@@ -17924,7 +18020,7 @@ With no run yet, the title names the chosen Study's Experiment.
 
 <a id="gui.test_app_api.test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest"></a>
 
-#### [test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest](./gui/test_app_api.py#L6454)
+#### [test\_attach\_finished\_run\_writes\_configures\_run\_name\_and\_keeps\_the\_rest](./gui/test_app_api.py#L6518)
 
 ```python
 def test_attach_finished_run_writes_configures_run_name_and_keeps_the_rest(
@@ -36994,7 +37090,7 @@ Unit tests for `fim.persistence.groups` (Study and Experiment manifests).
 
 <a id="persistence.test_groups.test_study_to_dict_from_dict_round_trips"></a>
 
-#### [test\_study\_to\_dict\_from\_dict\_round\_trips](./persistence/test_groups.py#L94)
+#### [test\_study\_to\_dict\_from\_dict\_round\_trips](./persistence/test_groups.py#L99)
 
 ```python
 def test_study_to_dict_from_dict_round_trips() -> None
@@ -37004,7 +37100,7 @@ A written-then-read Study manifest is field-for-field identical.
 
 <a id="persistence.test_groups.test_study_run_count_matches_run_directories"></a>
 
-#### [test\_study\_run\_count\_matches\_run\_directories](./persistence/test_groups.py#L101)
+#### [test\_study\_run\_count\_matches\_run\_directories](./persistence/test_groups.py#L106)
 
 ```python
 def test_study_run_count_matches_run_directories() -> None
@@ -37014,7 +37110,7 @@ def test_study_run_count_matches_run_directories() -> None
 
 <a id="persistence.test_groups.test_study_from_dict_rejects_a_missing_required_field"></a>
 
-#### [test\_study\_from\_dict\_rejects\_a\_missing\_required\_field](./persistence/test_groups.py#L107)
+#### [test\_study\_from\_dict\_rejects\_a\_missing\_required\_field](./persistence/test_groups.py#L112)
 
 ```python
 def test_study_from_dict_rejects_a_missing_required_field() -> None
@@ -37024,7 +37120,7 @@ A payload missing `name` is a clear error.
 
 <a id="persistence.test_groups.test_study_name_must_not_be_blank"></a>
 
-#### [test\_study\_name\_must\_not\_be\_blank](./persistence/test_groups.py#L116)
+#### [test\_study\_name\_must\_not\_be\_blank](./persistence/test_groups.py#L121)
 
 ```python
 def test_study_name_must_not_be_blank() -> None
@@ -37034,7 +37130,7 @@ A whitespace-only Study name is rejected.
 
 <a id="persistence.test_groups.test_study_sweep_spec_must_be_an_object_or_null"></a>
 
-#### [test\_study\_sweep\_spec\_must\_be\_an\_object\_or\_null](./persistence/test_groups.py#L122)
+#### [test\_study\_sweep\_spec\_must\_be\_an\_object\_or\_null](./persistence/test_groups.py#L127)
 
 ```python
 def test_study_sweep_spec_must_be_an_object_or_null() -> None
@@ -37044,7 +37140,7 @@ A non-object `sweep_spec` is rejected, not silently coerced.
 
 <a id="persistence.test_groups.test_experiment_to_dict_from_dict_round_trips"></a>
 
-#### [test\_experiment\_to\_dict\_from\_dict\_round\_trips](./persistence/test_groups.py#L131)
+#### [test\_experiment\_to\_dict\_from\_dict\_round\_trips](./persistence/test_groups.py#L136)
 
 ```python
 def test_experiment_to_dict_from_dict_round_trips() -> None
@@ -37054,7 +37150,7 @@ A written-then-read Experiment manifest is field-for-field identical.
 
 <a id="persistence.test_groups.test_experiment_study_count_matches_study_ids"></a>
 
-#### [test\_experiment\_study\_count\_matches\_study\_ids](./persistence/test_groups.py#L138)
+#### [test\_experiment\_study\_count\_matches\_study\_ids](./persistence/test_groups.py#L143)
 
 ```python
 def test_experiment_study_count_matches_study_ids() -> None
@@ -37064,7 +37160,7 @@ def test_experiment_study_count_matches_study_ids() -> None
 
 <a id="persistence.test_groups.test_write_study_manifest_round_trips_through_disk"></a>
 
-#### [test\_write\_study\_manifest\_round\_trips\_through\_disk](./persistence/test_groups.py#L144)
+#### [test\_write\_study\_manifest\_round\_trips\_through\_disk](./persistence/test_groups.py#L149)
 
 ```python
 def test_write_study_manifest_round_trips_through_disk(tmp_path: Path) -> None
@@ -37074,7 +37170,7 @@ def test_write_study_manifest_round_trips_through_disk(tmp_path: Path) -> None
 
 <a id="persistence.test_groups.test_write_experiment_manifest_round_trips_through_disk"></a>
 
-#### [test\_write\_experiment\_manifest\_round\_trips\_through\_disk](./persistence/test_groups.py#L154)
+#### [test\_write\_experiment\_manifest\_round\_trips\_through\_disk](./persistence/test_groups.py#L159)
 
 ```python
 def test_write_experiment_manifest_round_trips_through_disk(
@@ -37085,7 +37181,7 @@ def test_write_experiment_manifest_round_trips_through_disk(
 
 <a id="persistence.test_groups.test_create_study_writes_an_empty_study"></a>
 
-#### [test\_create\_study\_writes\_an\_empty\_study](./persistence/test_groups.py#L167)
+#### [test\_create\_study\_writes\_an\_empty\_study](./persistence/test_groups.py#L172)
 
 ```python
 def test_create_study_writes_an_empty_study(tmp_path: Path) -> None
@@ -37095,7 +37191,7 @@ A freshly created Study has no members yet.
 
 <a id="persistence.test_groups.test_create_study_rejects_a_blank_name"></a>
 
-#### [test\_create\_study\_rejects\_a\_blank\_name](./persistence/test_groups.py#L178)
+#### [test\_create\_study\_rejects\_a\_blank\_name](./persistence/test_groups.py#L183)
 
 ```python
 def test_create_study_rejects_a_blank_name(tmp_path: Path) -> None
@@ -37105,7 +37201,7 @@ A whitespace-only name is rejected before anything is written.
 
 <a id="persistence.test_groups.test_get_study_raises_for_an_unknown_id"></a>
 
-#### [test\_get\_study\_raises\_for\_an\_unknown\_id](./persistence/test_groups.py#L184)
+#### [test\_get\_study\_raises\_for\_an\_unknown\_id](./persistence/test_groups.py#L189)
 
 ```python
 def test_get_study_raises_for_an_unknown_id(tmp_path: Path) -> None
@@ -37115,7 +37211,7 @@ Looking up a Study that was never created is a clear error.
 
 <a id="persistence.test_groups.test_list_studies_returns_every_study_oldest_first"></a>
 
-#### [test\_list\_studies\_returns\_every\_study\_oldest\_first](./persistence/test_groups.py#L190)
+#### [test\_list\_studies\_returns\_every\_study\_oldest\_first](./persistence/test_groups.py#L195)
 
 ```python
 def test_list_studies_returns_every_study_oldest_first(tmp_path: Path) -> None
@@ -37125,7 +37221,7 @@ Listing order is creation order, for stable per-parent display ordinals.
 
 <a id="persistence.test_groups.test_list_studies_returns_empty_list_when_no_index_exists"></a>
 
-#### [test\_list\_studies\_returns\_empty\_list\_when\_no\_index\_exists](./persistence/test_groups.py#L203)
+#### [test\_list\_studies\_returns\_empty\_list\_when\_no\_index\_exists](./persistence/test_groups.py#L208)
 
 ```python
 def test_list_studies_returns_empty_list_when_no_index_exists(
@@ -37136,7 +37232,7 @@ A `results/` tree with no Study ever created lists as empty, not an error.
 
 <a id="persistence.test_groups.test_list_studies_skips_an_unreadable_manifest"></a>
 
-#### [test\_list\_studies\_skips\_an\_unreadable\_manifest](./persistence/test_groups.py#L208)
+#### [test\_list\_studies\_skips\_an\_unreadable\_manifest](./persistence/test_groups.py#L213)
 
 ```python
 def test_list_studies_skips_an_unreadable_manifest(tmp_path: Path) -> None
@@ -37146,7 +37242,7 @@ One malformed Study file does not hide the rest of the listing.
 
 <a id="persistence.test_groups.test_add_run_to_study_appends_a_reference"></a>
 
-#### [test\_add\_run\_to\_study\_appends\_a\_reference](./persistence/test_groups.py#L220)
+#### [test\_add\_run\_to\_study\_appends\_a\_reference](./persistence/test_groups.py#L225)
 
 ```python
 def test_add_run_to_study_appends_a_reference(tmp_path: Path) -> None
@@ -37156,7 +37252,7 @@ Adding a run records its directory name, without moving anything.
 
 <a id="persistence.test_groups.test_add_run_to_study_is_idempotent"></a>
 
-#### [test\_add\_run\_to\_study\_is\_idempotent](./persistence/test_groups.py#L231)
+#### [test\_add\_run\_to\_study\_is\_idempotent](./persistence/test_groups.py#L236)
 
 ```python
 def test_add_run_to_study_is_idempotent(tmp_path: Path) -> None
@@ -37166,7 +37262,7 @@ Adding the same run twice is a no-op, not a duplicate entry.
 
 <a id="persistence.test_groups.test_add_run_to_study_stores_an_absolute_path_outside_results"></a>
 
-#### [test\_add\_run\_to\_study\_stores\_an\_absolute\_path\_outside\_results](./persistence/test_groups.py#L242)
+#### [test\_add\_run\_to\_study\_stores\_an\_absolute\_path\_outside\_results](./persistence/test_groups.py#L247)
 
 ```python
 def test_add_run_to_study_stores_an_absolute_path_outside_results(
@@ -37175,9 +37271,24 @@ def test_add_run_to_study_stores_an_absolute_path_outside_results(
 
 A run published outside `results/` is stored as an absolute path.
 
+<a id="persistence.test_groups.test_add_run_to_study_refuses_a_path_with_no_manifest"></a>
+
+#### [test\_add\_run\_to\_study\_refuses\_a\_path\_with\_no\_manifest](./persistence/test_groups.py#L263)
+
+```python
+def test_add_run_to_study_refuses_a_path_with_no_manifest(
+        tmp_path: Path) -> None
+```
+
+A path with no `manifest.json` is never recorded as a Run reference.
+
+Regression test for the 2026-10-25 project review's finding G-2:
+`add_run_to_study(<any path>)` used to record any path at all,
+which a later `delete_study` would then trust outright (P-1).
+
 <a id="persistence.test_groups.test_add_run_to_study_raises_for_an_unknown_study"></a>
 
-#### [test\_add\_run\_to\_study\_raises\_for\_an\_unknown\_study](./persistence/test_groups.py#L258)
+#### [test\_add\_run\_to\_study\_raises\_for\_an\_unknown\_study](./persistence/test_groups.py#L280)
 
 ```python
 def test_add_run_to_study_raises_for_an_unknown_study(tmp_path: Path) -> None
@@ -37187,7 +37298,7 @@ Adding a run to a nonexistent Study is a clear error.
 
 <a id="persistence.test_groups.test_delete_study_removes_its_member_runs_by_default"></a>
 
-#### [test\_delete\_study\_removes\_its\_member\_runs\_by\_default](./persistence/test_groups.py#L266)
+#### [test\_delete\_study\_removes\_its\_member\_runs\_by\_default](./persistence/test_groups.py#L288)
 
 ```python
 def test_delete_study_removes_its_member_runs_by_default(
@@ -37198,7 +37309,7 @@ Deleting a Study deletes every Run it references (confirmed product decision).
 
 <a id="persistence.test_groups.test_delete_study_can_keep_its_runs"></a>
 
-#### [test\_delete\_study\_can\_keep\_its\_runs](./persistence/test_groups.py#L279)
+#### [test\_delete\_study\_can\_keep\_its\_runs](./persistence/test_groups.py#L301)
 
 ```python
 def test_delete_study_can_keep_its_runs(tmp_path: Path) -> None
@@ -37206,9 +37317,23 @@ def test_delete_study_can_keep_its_runs(tmp_path: Path) -> None
 
 `delete_runs=False` removes only the grouping, never the Run data.
 
+<a id="persistence.test_groups.test_preview_study_deletion_lists_without_deleting_anything"></a>
+
+#### [test\_preview\_study\_deletion\_lists\_without\_deleting\_anything](./persistence/test_groups.py#L312)
+
+```python
+def test_preview_study_deletion_lists_without_deleting_anything(
+        tmp_path: Path) -> None
+```
+
+`preview_study_deletion` reports exactly what a real delete would remove.
+
+`fim study delete --dry-run`'s own entry point (2026-10-25 project
+review, finding P-1).
+
 <a id="persistence.test_groups.test_delete_study_tolerates_an_already_missing_run_directory"></a>
 
-#### [test\_delete\_study\_tolerates\_an\_already\_missing\_run\_directory](./persistence/test_groups.py#L290)
+#### [test\_delete\_study\_tolerates\_an\_already\_missing\_run\_directory](./persistence/test_groups.py#L329)
 
 ```python
 def test_delete_study_tolerates_an_already_missing_run_directory(
@@ -37217,9 +37342,65 @@ def test_delete_study_tolerates_an_already_missing_run_directory(
 
 A run directory deleted out-of-band does not make Study deletion fail.
 
+<a id="persistence.test_groups.test_delete_study_still_deletes_a_run_published_outside_results"></a>
+
+#### [test\_delete\_study\_still\_deletes\_a\_run\_published\_outside\_results](./persistence/test_groups.py#L341)
+
+```python
+def test_delete_study_still_deletes_a_run_published_outside_results(
+        tmp_path: Path) -> None
+```
+
+A Study's own external-run reference is deleted along with it.
+
+Control for the 2026-10-25 project review's finding P-1: `fim run
+-o SOME/OTHER/PATH --study X` publishing a Run outside `results` on
+purpose (`test_add_run_to_study_stores_an_absolute_path_outside_
+results`, above) is existing, deliberate, tested product behavior
+(`test_study_create_add_run_list_delete`, `test/cli/test_cli.py`);
+P-1's fix must not regress it — only a reference with no
+corroborating `manifest.json`/`run.json` is ever refused (see the
+next two tests).
+
+<a id="persistence.test_groups.test_delete_study_never_deletes_a_reference_with_no_manifest"></a>
+
+#### [test\_delete\_study\_never\_deletes\_a\_reference\_with\_no\_manifest](./persistence/test_groups.py#L368)
+
+```python
+def test_delete_study_never_deletes_a_reference_with_no_manifest(
+        tmp_path: Path) -> None
+```
+
+A manifest entry naming a non-Run directory is refused, not deleted.
+
+Regression test for the 2026-10-25 project review's finding P-1:
+the manifest entry is the only thing `_delete_unshared_runs` used
+to trust, with no corroborating evidence the directory it names is
+actually a Run — exercised here via a hand-edited manifest, since
+no normal code path (`add_run_to_study`'s own G-2 check) ever
+writes such an entry itself.
+
+<a id="persistence.test_groups.test_delete_study_never_deletes_a_dotdot_escaping_reference_with_no_manifest"></a>
+
+#### [test\_delete\_study\_never\_deletes\_a\_dotdot\_escaping\_reference\_with\_no\_manifest](./persistence/test_groups.py#L399)
+
+```python
+def test_delete_study_never_deletes_a_dotdot_escaping_reference_with_no_manifest(
+        tmp_path: Path) -> None
+```
+
+A `..`-escaping entry is refused for the same reason: no `manifest.json`.
+
+Regression test for the 2026-10-25 project review's finding P-1's
+own "a relative entry with `..` resolves outside the root too" —
+the escape itself is not the problem (a `..`-relative entry that
+happens to resolve to a real Run is deleted, same as any other
+reference); the problem is a reference with nothing confirming it
+names a Run at all, regardless of how it is spelled.
+
 <a id="persistence.test_groups.test_copy_study_creates_an_independent_study_with_the_same_runs"></a>
 
-#### [test\_copy\_study\_creates\_an\_independent\_study\_with\_the\_same\_runs](./persistence/test_groups.py#L302)
+#### [test\_copy\_study\_creates\_an\_independent\_study\_with\_the\_same\_runs](./persistence/test_groups.py#L428)
 
 ```python
 def test_copy_study_creates_an_independent_study_with_the_same_runs(
@@ -37228,9 +37409,59 @@ def test_copy_study_creates_an_independent_study_with_the_same_runs(
 
 Copying a Study shares its run references without duplicating any data.
 
+<a id="persistence.test_groups.test_delete_runs_refuses_an_empty_string_entry"></a>
+
+#### [test\_delete\_runs\_refuses\_an\_empty\_string\_entry](./persistence/test_groups.py#L451)
+
+```python
+def test_delete_runs_refuses_an_empty_string_entry(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An empty-string entry is refused, never resolved to the working directory.
+
+Regression test for the 2026-10-25 project review's finding G-1:
+`Path("").is_dir()` is `True` (the current directory), so
+`delete_runs([""])` used to delete it outright.
+
+<a id="persistence.test_groups.test_delete_runs_refuses_a_directory_with_no_manifest"></a>
+
+#### [test\_delete\_runs\_refuses\_a\_directory\_with\_no\_manifest](./persistence/test_groups.py#L468)
+
+```python
+def test_delete_runs_refuses_a_directory_with_no_manifest(
+        tmp_path: Path) -> None
+```
+
+A directory with no `manifest.json`/`run.json` is never deleted this way.
+
+Regression test for the 2026-10-25 project review's finding G-1.
+A real Run outside `results` is deliberately still deletable (the
+external-run feature `test_delete_study_still_deletes_a_run_
+published_outside_results`, above, exercises for Study deletion);
+this is the actual defect: nothing confirmed `not_a_run` was a Run
+at all.
+
+<a id="persistence.test_groups.test_supersede_run_refuses_an_old_path_with_no_manifest"></a>
+
+#### [test\_supersede\_run\_refuses\_an\_old\_path\_with\_no\_manifest](./persistence/test_groups.py#L487)
+
+```python
+def test_supersede_run_refuses_an_old_path_with_no_manifest(
+        tmp_path: Path) -> None
+```
+
+A backstop: `supersede_run` refuses an `old` that is not a real Run.
+
+Every real caller only ever passes an `old` already found under
+`results` as an existing Run, so this should never fire in
+practice; it exercises the same safety gate `delete_study`/
+`delete_runs` share, directly, as this module's own defense in
+depth (2026-10-25 project review, finding P-1).
+
 <a id="persistence.test_groups.test_create_experiment_writes_an_empty_experiment"></a>
 
-#### [test\_create\_experiment\_writes\_an\_empty\_experiment](./persistence/test_groups.py#L325)
+#### [test\_create\_experiment\_writes\_an\_empty\_experiment](./persistence/test_groups.py#L509)
 
 ```python
 def test_create_experiment_writes_an_empty_experiment(tmp_path: Path) -> None
@@ -37240,7 +37471,7 @@ A freshly created Experiment has no member Studies yet.
 
 <a id="persistence.test_groups.test_add_study_to_experiment_appends_and_is_idempotent"></a>
 
-#### [test\_add\_study\_to\_experiment\_appends\_and\_is\_idempotent](./persistence/test_groups.py#L334)
+#### [test\_add\_study\_to\_experiment\_appends\_and\_is\_idempotent](./persistence/test_groups.py#L518)
 
 ```python
 def test_add_study_to_experiment_appends_and_is_idempotent(
@@ -37251,7 +37482,7 @@ Adding a Study to an Experiment behaves like `add_run_to_study` one level up.
 
 <a id="persistence.test_groups.test_add_study_to_experiment_raises_for_an_unknown_study"></a>
 
-#### [test\_add\_study\_to\_experiment\_raises\_for\_an\_unknown\_study](./persistence/test_groups.py#L347)
+#### [test\_add\_study\_to\_experiment\_raises\_for\_an\_unknown\_study](./persistence/test_groups.py#L531)
 
 ```python
 def test_add_study_to_experiment_raises_for_an_unknown_study(
@@ -37262,7 +37493,7 @@ An Experiment cannot reference a Study that does not exist.
 
 <a id="persistence.test_groups.test_ensure_default_study_creates_it_nested_in_the_default_experiment"></a>
 
-#### [test\_ensure\_default\_study\_creates\_it\_nested\_in\_the\_default\_experiment](./persistence/test_groups.py#L357)
+#### [test\_ensure\_default\_study\_creates\_it\_nested\_in\_the\_default\_experiment](./persistence/test_groups.py#L541)
 
 ```python
 def test_ensure_default_study_creates_it_nested_in_the_default_experiment(
@@ -37273,7 +37504,7 @@ A first call creates both the default Study and its own default Experiment.
 
 <a id="persistence.test_groups.test_ensure_default_study_is_idempotent"></a>
 
-#### [test\_ensure\_default\_study\_is\_idempotent](./persistence/test_groups.py#L371)
+#### [test\_ensure\_default\_study\_is\_idempotent](./persistence/test_groups.py#L555)
 
 ```python
 def test_ensure_default_study_is_idempotent(tmp_path: Path) -> None
@@ -37283,7 +37514,7 @@ A second call returns the identical, already-created Study, not a new one.
 
 <a id="persistence.test_groups.test_ensure_default_study_repairs_a_missing_experiment_link"></a>
 
-#### [test\_ensure\_default\_study\_repairs\_a\_missing\_experiment\_link](./persistence/test_groups.py#L381)
+#### [test\_ensure\_default\_study\_repairs\_a\_missing\_experiment\_link](./persistence/test_groups.py#L565)
 
 ```python
 def test_ensure_default_study_repairs_a_missing_experiment_link(
@@ -37294,7 +37525,7 @@ A default Study whose own Experiment link was lost gets it re-added.
 
 <a id="persistence.test_groups.test_ensure_default_study_after_deletion_creates_a_fresh_empty_one"></a>
 
-#### [test\_ensure\_default\_study\_after\_deletion\_creates\_a\_fresh\_empty\_one](./persistence/test_groups.py#L399)
+#### [test\_ensure\_default\_study\_after\_deletion\_creates\_a\_fresh\_empty\_one](./persistence/test_groups.py#L583)
 
 ```python
 def test_ensure_default_study_after_deletion_creates_a_fresh_empty_one(
@@ -37305,7 +37536,7 @@ Deleting the default Study like any other; the next call re-creates it, empty.
 
 <a id="persistence.test_groups.test_ensure_default_experiment_is_idempotent"></a>
 
-#### [test\_ensure\_default\_experiment\_is\_idempotent](./persistence/test_groups.py#L415)
+#### [test\_ensure\_default\_experiment\_is\_idempotent](./persistence/test_groups.py#L599)
 
 ```python
 def test_ensure_default_experiment_is_idempotent(tmp_path: Path) -> None
@@ -37315,7 +37546,7 @@ A second call returns the identical, already-created Experiment.
 
 <a id="persistence.test_groups.test_list_experiments_returns_every_experiment_oldest_first"></a>
 
-#### [test\_list\_experiments\_returns\_every\_experiment\_oldest\_first](./persistence/test_groups.py#L424)
+#### [test\_list\_experiments\_returns\_every\_experiment\_oldest\_first](./persistence/test_groups.py#L608)
 
 ```python
 def test_list_experiments_returns_every_experiment_oldest_first(
@@ -37326,7 +37557,7 @@ Listing order matches `list_studies`'s own oldest-first convention.
 
 <a id="persistence.test_groups.test_delete_experiment_cascades_to_studies_and_their_runs"></a>
 
-#### [test\_delete\_experiment\_cascades\_to\_studies\_and\_their\_runs](./persistence/test_groups.py#L438)
+#### [test\_delete\_experiment\_cascades\_to\_studies\_and\_their\_runs](./persistence/test_groups.py#L622)
 
 ```python
 def test_delete_experiment_cascades_to_studies_and_their_runs(
@@ -37337,7 +37568,7 @@ Deleting an Experiment deletes its Studies, and transitively their Runs.
 
 <a id="persistence.test_groups.test_delete_experiment_can_keep_its_studies"></a>
 
-#### [test\_delete\_experiment\_can\_keep\_its\_studies](./persistence/test_groups.py#L455)
+#### [test\_delete\_experiment\_can\_keep\_its\_studies](./persistence/test_groups.py#L639)
 
 ```python
 def test_delete_experiment_can_keep_its_studies(tmp_path: Path) -> None
@@ -37345,9 +37576,34 @@ def test_delete_experiment_can_keep_its_studies(tmp_path: Path) -> None
 
 `delete_studies=False` removes only the Experiment, never its Studies.
 
+<a id="persistence.test_groups.test_delete_experiment_can_keep_its_runs"></a>
+
+#### [test\_delete\_experiment\_can\_keep\_its\_runs](./persistence/test_groups.py#L650)
+
+```python
+def test_delete_experiment_can_keep_its_runs(tmp_path: Path) -> None
+```
+
+`delete_runs=False` removes the Experiment and its Studies, keeps Runs.
+
+`fim experiment delete --keep-runs` (2026-10-25 project review,
+finding P-1): unlike `delete_studies=False`, the Studies themselves
+are still removed -- only the Run data they held survives.
+
+<a id="persistence.test_groups.test_preview_experiment_deletion_lists_without_deleting_anything"></a>
+
+#### [test\_preview\_experiment\_deletion\_lists\_without\_deleting\_anything](./persistence/test_groups.py#L672)
+
+```python
+def test_preview_experiment_deletion_lists_without_deleting_anything(
+        tmp_path: Path) -> None
+```
+
+`preview_experiment_deletion` reports what a real delete would remove.
+
 <a id="persistence.test_groups.test_copy_experiment_creates_an_independent_experiment_with_the_same_studies"></a>
 
-#### [test\_copy\_experiment\_creates\_an\_independent\_experiment\_with\_the\_same\_studies](./persistence/test_groups.py#L466)
+#### [test\_copy\_experiment\_creates\_an\_independent\_experiment\_with\_the\_same\_studies](./persistence/test_groups.py#L692)
 
 ```python
 def test_copy_experiment_creates_an_independent_experiment_with_the_same_studies(
@@ -37358,7 +37614,7 @@ Copying an Experiment shares its study references without duplicating them.
 
 <a id="persistence.test_groups.test_resolve_run_directory_accepts_an_existing_directory"></a>
 
-#### [test\_resolve\_run\_directory\_accepts\_an\_existing\_directory](./persistence/test_groups.py#L485)
+#### [test\_resolve\_run\_directory\_accepts\_an\_existing\_directory](./persistence/test_groups.py#L711)
 
 ```python
 def test_resolve_run_directory_accepts_an_existing_directory(
@@ -37369,7 +37625,7 @@ A real run directory (relative to `results`) resolves to itself.
 
 <a id="persistence.test_groups.test_resolve_run_directory_accepts_an_absolute_directory_path"></a>
 
-#### [test\_resolve\_run\_directory\_accepts\_an\_absolute\_directory\_path](./persistence/test_groups.py#L492)
+#### [test\_resolve\_run\_directory\_accepts\_an\_absolute\_directory\_path](./persistence/test_groups.py#L718)
 
 ```python
 def test_resolve_run_directory_accepts_an_absolute_directory_path(
@@ -37380,7 +37636,7 @@ An absolute directory path resolves directly, bypassing `results` entirely.
 
 <a id="persistence.test_groups.test_resolve_run_directory_accepts_a_manifest_path"></a>
 
-#### [test\_resolve\_run\_directory\_accepts\_a\_manifest\_path](./persistence/test_groups.py#L504)
+#### [test\_resolve\_run\_directory\_accepts\_a\_manifest\_path](./persistence/test_groups.py#L730)
 
 ```python
 def test_resolve_run_directory_accepts_a_manifest_path(tmp_path: Path) -> None
@@ -37390,7 +37646,7 @@ A path directly to `manifest.json` resolves to its parent directory.
 
 <a id="persistence.test_groups.test_resolve_run_directory_raises_when_nothing_matches"></a>
 
-#### [test\_resolve\_run\_directory\_raises\_when\_nothing\_matches](./persistence/test_groups.py#L515)
+#### [test\_resolve\_run\_directory\_raises\_when\_nothing\_matches](./persistence/test_groups.py#L741)
 
 ```python
 def test_resolve_run_directory_raises_when_nothing_matches(
@@ -37401,7 +37657,7 @@ A reference matching no directory, manifest path, or run_id is a clear error.
 
 <a id="persistence.test_groups.test_delete_study_detaches_it_from_every_experiment"></a>
 
-#### [test\_delete\_study\_detaches\_it\_from\_every\_experiment](./persistence/test_groups.py#L521)
+#### [test\_delete\_study\_detaches\_it\_from\_every\_experiment](./persistence/test_groups.py#L747)
 
 ```python
 def test_delete_study_detaches_it_from_every_experiment(
@@ -37412,7 +37668,7 @@ An Experiment never keeps naming a Study that was deleted.
 
 <a id="persistence.test_groups.test_prune_missing_studies_repairs_an_experiment_with_dangling_ids"></a>
 
-#### [test\_prune\_missing\_studies\_repairs\_an\_experiment\_with\_dangling\_ids](./persistence/test_groups.py#L536)
+#### [test\_prune\_missing\_studies\_repairs\_an\_experiment\_with\_dangling\_ids](./persistence/test_groups.py#L762)
 
 ```python
 def test_prune_missing_studies_repairs_an_experiment_with_dangling_ids(
@@ -37423,7 +37679,7 @@ Studies deleted before detaching existed are dropped from the Experiment.
 
 <a id="persistence.test_groups.test_deleting_a_study_keeps_a_run_another_study_also_links"></a>
 
-#### [test\_deleting\_a\_study\_keeps\_a\_run\_another\_study\_also\_links](./persistence/test_groups.py#L585)
+#### [test\_deleting\_a\_study\_keeps\_a\_run\_another\_study\_also\_links](./persistence/test_groups.py#L811)
 
 ```python
 def test_deleting_a_study_keeps_a_run_another_study_also_links(
@@ -37434,7 +37690,7 @@ A Run is a link; deleting one Study never deletes a Run another links.
 
 <a id="persistence.test_groups.test_the_study_and_experiment_indexes_are_not_owner_only"></a>
 
-#### [test\_the\_study\_and\_experiment\_indexes\_are\_not\_owner\_only](./persistence/test_groups.py#L636)
+#### [test\_the\_study\_and\_experiment\_indexes\_are\_not\_owner\_only](./persistence/test_groups.py#L862)
 
 ```python
 def test_the_study_and_experiment_indexes_are_not_owner_only(
@@ -37445,7 +37701,7 @@ The index files are readable like any other file the user creates.
 
 <a id="persistence.test_groups.test_study_documentation_round_trips_through_dict"></a>
 
-#### [test\_study\_documentation\_round\_trips\_through\_dict](./persistence/test_groups.py#L656)
+#### [test\_study\_documentation\_round\_trips\_through\_dict](./persistence/test_groups.py#L882)
 
 ```python
 def test_study_documentation_round_trips_through_dict() -> None
@@ -37455,7 +37711,7 @@ A Study's documentation survives `to_dict`/`from_dict` unchanged.
 
 <a id="persistence.test_groups.test_experiment_documentation_round_trips_through_dict"></a>
 
-#### [test\_experiment\_documentation\_round\_trips\_through\_dict](./persistence/test_groups.py#L664)
+#### [test\_experiment\_documentation\_round\_trips\_through\_dict](./persistence/test_groups.py#L890)
 
 ```python
 def test_experiment_documentation_round_trips_through_dict() -> None
@@ -37465,7 +37721,7 @@ An Experiment's documentation survives `to_dict`/`from_dict` unchanged.
 
 <a id="persistence.test_groups.test_a_manifest_written_before_documentation_reads_back_without_it"></a>
 
-#### [test\_a\_manifest\_written\_before\_documentation\_reads\_back\_without\_it](./persistence/test_groups.py#L671)
+#### [test\_a\_manifest\_written\_before\_documentation\_reads\_back\_without\_it](./persistence/test_groups.py#L897)
 
 ```python
 def test_a_manifest_written_before_documentation_reads_back_without_it(
@@ -37476,7 +37732,7 @@ An older manifest, with no `documentation` key at all, still reads.
 
 <a id="persistence.test_groups.test_documentation_must_not_be_blank"></a>
 
-#### [test\_documentation\_must\_not\_be\_blank](./persistence/test_groups.py#L682)
+#### [test\_documentation\_must\_not\_be\_blank](./persistence/test_groups.py#L908)
 
 ```python
 def test_documentation_must_not_be_blank() -> None
@@ -37486,7 +37742,7 @@ Blank documentation is stored as unset (`None`), never as whitespace.
 
 <a id="persistence.test_groups.test_create_study_and_experiment_store_documentation"></a>
 
-#### [test\_create\_study\_and\_experiment\_store\_documentation](./persistence/test_groups.py#L690)
+#### [test\_create\_study\_and\_experiment\_store\_documentation](./persistence/test_groups.py#L916)
 
 ```python
 def test_create_study_and_experiment_store_documentation(
@@ -37497,7 +37753,7 @@ Documentation given at creation is written to disk.
 
 <a id="persistence.test_groups.test_copies_carry_documentation"></a>
 
-#### [test\_copies\_carry\_documentation](./persistence/test_groups.py#L706)
+#### [test\_copies\_carry\_documentation](./persistence/test_groups.py#L932)
 
 ```python
 def test_copies_carry_documentation(tmp_path: Path) -> None
@@ -37507,7 +37763,7 @@ Copying a Study or Experiment copies its documentation too.
 
 <a id="persistence.test_groups.test_update_study_details_replaces_all_three_fields"></a>
 
-#### [test\_update\_study\_details\_replaces\_all\_three\_fields](./persistence/test_groups.py#L723)
+#### [test\_update\_study\_details\_replaces\_all\_three\_fields](./persistence/test_groups.py#L949)
 
 ```python
 def test_update_study_details_replaces_all_three_fields(
@@ -37518,7 +37774,7 @@ Name, description and documentation are replaced together; runs are kept.
 
 <a id="persistence.test_groups.test_update_study_details_clears_blank_fields"></a>
 
-#### [test\_update\_study\_details\_clears\_blank\_fields](./persistence/test_groups.py#L747)
+#### [test\_update\_study\_details\_clears\_blank\_fields](./persistence/test_groups.py#L973)
 
 ```python
 def test_update_study_details_clears_blank_fields(tmp_path: Path) -> None
@@ -37528,7 +37784,7 @@ Blank description or documentation clears that field.
 
 <a id="persistence.test_groups.test_update_study_details_rejects_a_blank_name"></a>
 
-#### [test\_update\_study\_details\_rejects\_a\_blank\_name](./persistence/test_groups.py#L759)
+#### [test\_update\_study\_details\_rejects\_a\_blank\_name](./persistence/test_groups.py#L985)
 
 ```python
 def test_update_study_details_rejects_a_blank_name(tmp_path: Path) -> None
@@ -37538,7 +37794,7 @@ A Study always has a name.
 
 <a id="persistence.test_groups.test_update_experiment_details_replaces_all_three_fields"></a>
 
-#### [test\_update\_experiment\_details\_replaces\_all\_three\_fields](./persistence/test_groups.py#L773)
+#### [test\_update\_experiment\_details\_replaces\_all\_three\_fields](./persistence/test_groups.py#L999)
 
 ```python
 def test_update_experiment_details_replaces_all_three_fields(
@@ -37549,7 +37805,7 @@ The Experiment-level counterpart keeps the member Studies.
 
 <a id="persistence.test_groups.test_update_details_raise_for_an_unknown_id"></a>
 
-#### [test\_update\_details\_raise\_for\_an\_unknown\_id](./persistence/test_groups.py#L796)
+#### [test\_update\_details\_raise\_for\_an\_unknown\_id](./persistence/test_groups.py#L1022)
 
 ```python
 def test_update_details_raise_for_an_unknown_id(tmp_path: Path) -> None
@@ -37559,7 +37815,7 @@ Updating something that does not exist is an error, not a creation.
 
 <a id="persistence.test_groups.test_studies_containing_run_matches_relative_and_absolute_entries"></a>
 
-#### [test\_studies\_containing\_run\_matches\_relative\_and\_absolute\_entries](./persistence/test_groups.py#L816)
+#### [test\_studies\_containing\_run\_matches\_relative\_and\_absolute\_entries](./persistence/test_groups.py#L1042)
 
 ```python
 def test_studies_containing_run_matches_relative_and_absolute_entries(
@@ -37570,7 +37826,7 @@ A run is found whether its Study stores it by name or by absolute path.
 
 <a id="persistence.test_groups.test_experiments_containing_study_lists_each_holder"></a>
 
-#### [test\_experiments\_containing\_study\_lists\_each\_holder](./persistence/test_groups.py#L844)
+#### [test\_experiments\_containing\_study\_lists\_each\_holder](./persistence/test_groups.py#L1070)
 
 ```python
 def test_experiments_containing_study_lists_each_holder(

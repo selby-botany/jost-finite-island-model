@@ -2287,6 +2287,13 @@ def _compare_with_older(
                 # A read-only example is never deleted or relinked; the
                 # matching recomputed run simply lives beside it.
                 logger.info("kept read-only run %s: %s", older, error)
+            except groups.UnsafeRunReferenceError as error:
+                # Should never happen -- `older` always names a point's
+                # own existing run under `context.results` -- but every
+                # Study's own link was already replaced before this
+                # could raise, so the sweep continues; only the stale
+                # directory survives.
+                logger.warning("could not remove superseded run %s: %s", older, error)
         context.emit("point_recomputed", point, comparison.to_dict(), finish=True)
         return "recomputed"
     write_reproducibility_note(recomputed, comparison.to_dict())

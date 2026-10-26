@@ -1859,6 +1859,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Study/Experiment deletion and the GUI's bulk Run delete trusted any
+  path they were handed.** `fim study delete`, `fim experiment delete`,
+  the GUI's `delete_runs`/`delete_selected`, `supersede_run`, and
+  `add_run_to_study` all `shutil.rmtree`ed, or recorded for later
+  deletion, a directory with no check that it was actually a Run: a
+  Study/Experiment manifest entry pointing at an unrelated directory (a
+  `..`-escaping relative entry, or any other path) was deleted outright,
+  and an empty string resolved to, and deleted, the process's own
+  working directory (`delete_runs([""])`). Every one of those call
+  sites now requires the target to be an actual Run or Run object
+  (`manifest.json` or `run.json` present) before deleting it or
+  recording it into a Study; a target that fails this check is refused,
+  loudly, instead of silently deleted or silently skipped. A Run
+  published outside the results directory on purpose (`fim run -o
+  SOME/OTHER/PATH --study X`) is still deleted along with its Study,
+  exactly as before — that deliberate, tested feature is unaffected.
+  `fim study delete`/`fim experiment delete` also gained `--dry-run`
+  (print which run directories would be deleted; delete nothing) and
+  `--keep-runs` (delete only the grouping; keep every run it
+  referenced). New regression tests cover an empty-string entry, a
+  path with no manifest, and a `..`-escaping manifest entry, at both
+  the persistence layer and the GUI bridge.
 - **A legitimately configured run could abort at generation 0.** `G_ST`,
   `H_ST`, and `D` clamped their result to `[0, 1]` only within a flat
   `1e-12` margin, then raised `ArithmeticError` beyond it. $G_{ST}$'s
