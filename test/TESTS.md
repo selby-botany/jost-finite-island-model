@@ -23264,9 +23264,50 @@ had not actually flushed yet, so a later resume failed with
 the checkpoint". Same precedent and assertion shape as
 `test_launcher.py`'s own `start_new_session` tests for `--detach`.
 
+<a id="gui.test_job_events.test_start_child_job_uses_sys_argv_zero_when_frozen"></a>
+
+#### [test\_start\_child\_job\_uses\_sys\_argv\_zero\_when\_frozen](./gui/test_job_events.py#L121)
+
+```python
+def test_start_child_job_uses_sys_argv_zero_when_frozen(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A packaged (frozen) build spawns `[sys.argv[0], "--gui-job", ...]`.
+
+Regression test for a real incident: `start_child_job` used to
+build `[sys.executable, "-m", "fim.launcher", "--gui-job", ...]`
+unconditionally, the same mistake `fim.launcher.launch_gui`'s own
+`--detach` relaunch once made and was fixed for
+(`test_launcher.py`'s own identical pair of tests) -- in a frozen
+build `sys.executable` *is* the packaged executable itself, which
+has no `-m` flag of its own to understand. Confirmed live against a
+real packaged `.app`: with the unconditional `-m` form, the worker
+process exited at once with "fim: error: argument command: invalid
+choice: 'fim.launcher'" before ever reaching `fim.gui.job_worker`,
+so a saved run's Run object never left its `planned` state --
+reported live as "Run" appearing to start, then freezing, with no
+error ever shown (nothing reached the code that would have
+recorded one).
+
+<a id="gui.test_job_events.test_start_child_job_uses_python_module_when_not_frozen"></a>
+
+#### [test\_start\_child\_job\_uses\_python\_module\_when\_not\_frozen](./gui/test_job_events.py#L164)
+
+```python
+def test_start_child_job_uses_python_module_when_not_frozen(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Running from source still spawns `[sys.executable, "-m", "fim.launcher", ...]`.
+
+Control for the test above: `monkeypatch.delattr` guards against
+`sys.frozen` leaking in from another test or the interpreter
+actually running this suite.
+
 <a id="gui.test_job_events.test_worker_capacity_respects_reserve_and_one_slot_minimum"></a>
 
-#### [test\_worker\_capacity\_respects\_reserve\_and\_one\_slot\_minimum](./gui/test_job_events.py#L125)
+#### [test\_worker\_capacity\_respects\_reserve\_and\_one\_slot\_minimum](./gui/test_job_events.py#L204)
 
 ```python
 @pytest.mark.parametrize(
@@ -23281,7 +23322,7 @@ Injected CPU counts make reserve arithmetic deterministic.
 
 <a id="gui.test_job_events.test_worker_capacity_rejects_invalid_inputs"></a>
 
-#### [test\_worker\_capacity\_rejects\_invalid\_inputs](./gui/test_job_events.py#L132)
+#### [test\_worker\_capacity\_rejects\_invalid\_inputs](./gui/test_job_events.py#L211)
 
 ```python
 def test_worker_capacity_rejects_invalid_inputs() -> None
@@ -23291,7 +23332,7 @@ Invalid budgets fail explicitly instead of producing hidden capacity.
 
 <a id="gui.test_job_events.test_percentage_reserve_rounds_up_to_whole_cores"></a>
 
-#### [test\_percentage\_reserve\_rounds\_up\_to\_whole\_cores](./gui/test_job_events.py#L144)
+#### [test\_percentage\_reserve\_rounds\_up\_to\_whole\_cores](./gui/test_job_events.py#L223)
 
 ```python
 @pytest.mark.parametrize(
@@ -23307,7 +23348,7 @@ A fractional core reserve always rounds upward.
 
 <a id="gui.test_job_events.test_memory_reserve_modes_and_rounding"></a>
 
-#### [test\_memory\_reserve\_modes\_and\_rounding](./gui/test_job_events.py#L163)
+#### [test\_memory\_reserve\_modes\_and\_rounding](./gui/test_job_events.py#L242)
 
 ```python
 @pytest.mark.parametrize(
@@ -23328,7 +23369,7 @@ Automatic, GiB, and percentage reserves resolve to whole bytes.
 
 <a id="gui.test_job_events.test_memory_estimate_uses_child_and_vector_cost_per_worker_slot"></a>
 
-#### [test\_memory\_estimate\_uses\_child\_and\_vector\_cost\_per\_worker\_slot](./gui/test_job_events.py#L173)
+#### [test\_memory\_estimate\_uses\_child\_and\_vector\_cost\_per\_worker\_slot](./gui/test_job_events.py#L252)
 
 ```python
 def test_memory_estimate_uses_child_and_vector_cost_per_worker_slot() -> None
@@ -23338,7 +23379,7 @@ Batch slots account for child overhead and each known vector block.
 
 <a id="gui.test_job_events.test_child_memory_estimate_uses_largest_rss_or_fallback"></a>
 
-#### [test\_child\_memory\_estimate\_uses\_largest\_rss\_or\_fallback](./gui/test_job_events.py#L178)
+#### [test\_child\_memory\_estimate\_uses\_largest\_rss\_or\_fallback](./gui/test_job_events.py#L257)
 
 ```python
 def test_child_memory_estimate_uses_largest_rss_or_fallback(
@@ -23349,7 +23390,7 @@ Measured workers use the largest RSS; unmeasurable workers use fallback.
 
 <a id="gui.test_job_events.test_invalid_memory_reserves_are_rejected"></a>
 
-#### [test\_invalid\_memory\_reserves\_are\_rejected](./gui/test_job_events.py#L209)
+#### [test\_invalid\_memory\_reserves\_are\_rejected](./gui/test_job_events.py#L288)
 
 ```python
 def test_invalid_memory_reserves_are_rejected() -> None
@@ -23359,7 +23400,7 @@ Invalid memory settings cannot silently become a zero reserve.
 
 <a id="gui.test_job_events.test_pause_job_pauses_a_saved_run"></a>
 
-#### [test\_pause\_job\_pauses\_a\_saved\_run](./gui/test_job_events.py#L219)
+#### [test\_pause\_job\_pauses\_a\_saved\_run](./gui/test_job_events.py#L298)
 
 ```python
 def test_pause_job_pauses_a_saved_run(monkeypatch: pytest.MonkeyPatch) -> None
@@ -23369,7 +23410,7 @@ A memory warning's Pause action reaches the durable Run lifecycle.
 
 <a id="gui.test_job_events.test_pause_job_stops_a_sweep_at_a_resumable_point"></a>
 
-#### [test\_pause\_job\_stops\_a\_sweep\_at\_a\_resumable\_point](./gui/test_job_events.py#L234)
+#### [test\_pause\_job\_stops\_a\_sweep\_at\_a\_resumable\_point](./gui/test_job_events.py#L313)
 
 ```python
 def test_pause_job_stops_a_sweep_at_a_resumable_point() -> None
@@ -23379,7 +23420,7 @@ A sweep Pause request sets its cooperative checkpoint event.
 
 <a id="gui.test_job_events.test_admission_retains_effective_priority_in_job_snapshots"></a>
 
-#### [test\_admission\_retains\_effective\_priority\_in\_job\_snapshots](./gui/test_job_events.py#L245)
+#### [test\_admission\_retains\_effective\_priority\_in\_job\_snapshots](./gui/test_job_events.py#L324)
 
 ```python
 def test_admission_retains_effective_priority_in_job_snapshots() -> None
@@ -23389,7 +23430,7 @@ Changing preferences cannot change the priority of an admitted job.
 
 <a id="gui.test_job_events.test_admission_never_reserves_more_than_available_capacity"></a>
 
-#### [test\_admission\_never\_reserves\_more\_than\_available\_capacity](./gui/test_job_events.py#L264)
+#### [test\_admission\_never\_reserves\_more\_than\_available\_capacity](./gui/test_job_events.py#L343)
 
 ```python
 def test_admission_never_reserves_more_than_available_capacity() -> None
@@ -23399,7 +23440,7 @@ A refused reservation leaves the existing job and remaining budget intact.
 
 <a id="gui.test_job_events.test_concurrent_admission_cannot_overbook_worker_capacity"></a>
 
-#### [test\_concurrent\_admission\_cannot\_overbook\_worker\_capacity](./gui/test_job_events.py#L283)
+#### [test\_concurrent\_admission\_cannot\_overbook\_worker\_capacity](./gui/test_job_events.py#L362)
 
 ```python
 def test_concurrent_admission_cannot_overbook_worker_capacity() -> None
@@ -23409,7 +23450,7 @@ Simultaneous requests compete atomically for the final worker slot.
 
 <a id="gui.test_job_events.test_latest_sequence_is_none_before_any_push"></a>
 
-#### [test\_latest\_sequence\_is\_none\_before\_any\_push](./gui/test_job_events.py#L312)
+#### [test\_latest\_sequence\_is\_none\_before\_any\_push](./gui/test_job_events.py#L391)
 
 ```python
 def test_latest_sequence_is_none_before_any_push() -> None
@@ -23419,7 +23460,7 @@ A claimed job that has not pushed anything yet has no latest sequence.
 
 <a id="gui.test_job_events.test_forget_drops_the_bookkeeping"></a>
 
-#### [test\_forget\_drops\_the\_bookkeeping](./gui/test_job_events.py#L323)
+#### [test\_forget\_drops\_the\_bookkeeping](./gui/test_job_events.py#L402)
 
 ```python
 def test_forget_drops_the_bookkeeping() -> None
@@ -23429,7 +23470,7 @@ Forgetting a job's own id lets a later, unrelated use of it start fresh.
 
 <a id="gui.test_job_events.test_claim_run_mints_a_job_id_and_release_clears_it"></a>
 
-#### [test\_claim\_run\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L334)
+#### [test\_claim\_run\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L413)
 
 ```python
 def test_claim_run_mints_a_job_id_and_release_clears_it(
@@ -23440,7 +23481,7 @@ def test_claim_run_mints_a_job_id_and_release_clears_it(
 
 <a id="gui.test_job_events.test_claim_sweep_mints_a_job_id_and_release_clears_it"></a>
 
-#### [test\_claim\_sweep\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L348)
+#### [test\_claim\_sweep\_mints\_a\_job\_id\_and\_release\_clears\_it](./gui/test_job_events.py#L427)
 
 ```python
 def test_claim_sweep_mints_a_job_id_and_release_clears_it(
@@ -23451,7 +23492,7 @@ def test_claim_sweep_mints_a_job_id_and_release_clears_it(
 
 <a id="gui.test_job_events.test_a_finished_job_snapshot_survives_claim_release"></a>
 
-#### [test\_a\_finished\_job\_snapshot\_survives\_claim\_release](./gui/test_job_events.py#L361)
+#### [test\_a\_finished\_job\_snapshot\_survives\_claim\_release](./gui/test_job_events.py#L440)
 
 ```python
 def test_a_finished_job_snapshot_survives_claim_release(
@@ -23462,7 +23503,7 @@ Finished jobs remain available for page resynchronization.
 
 <a id="gui.test_job_events.test_closing_a_finished_job_document_forgets_its_snapshot"></a>
 
-#### [test\_closing\_a\_finished\_job\_document\_forgets\_its\_snapshot](./gui/test_job_events.py#L386)
+#### [test\_closing\_a\_finished\_job\_document\_forgets\_its\_snapshot](./gui/test_job_events.py#L465)
 
 ```python
 def test_closing_a_finished_job_document_forgets_its_snapshot(
@@ -23473,7 +23514,7 @@ Closing a document drops the finished job's retained event state.
 
 <a id="gui.test_job_events.test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id"></a>
 
-#### [test\_a\_run\_claim\_and\_a\_sweep\_claim\_each\_mint\_their\_own\_job\_id](./gui/test_job_events.py#L401)
+#### [test\_a\_run\_claim\_and\_a\_sweep\_claim\_each\_mint\_their\_own\_job\_id](./gui/test_job_events.py#L480)
 
 ```python
 def test_a_run_claim_and_a_sweep_claim_each_mint_their_own_job_id(
@@ -23484,7 +23525,7 @@ A run's own job id and a later sweep's own are never the same value.
 
 <a id="gui.test_job_events.test_get_job_snapshot_before_any_push"></a>
 
-#### [test\_get\_job\_snapshot\_before\_any\_push](./gui/test_job_events.py#L415)
+#### [test\_get\_job\_snapshot\_before\_any\_push](./gui/test_job_events.py#L494)
 
 ```python
 def test_get_job_snapshot_before_any_push(tmp_path: Path) -> None
@@ -23494,7 +23535,7 @@ A snapshot taken before the job has pushed anything reports sequence -1.
 
 <a id="gui.test_job_events.test_get_job_snapshot_reports_the_latest_assigned_sequence"></a>
 
-#### [test\_get\_job\_snapshot\_reports\_the\_latest\_assigned\_sequence](./gui/test_job_events.py#L432)
+#### [test\_get\_job\_snapshot\_reports\_the\_latest\_assigned\_sequence](./gui/test_job_events.py#L511)
 
 ```python
 def test_get_job_snapshot_reports_the_latest_assigned_sequence(
@@ -23505,7 +23546,7 @@ A snapshot reflects however many pushes `next_sequence` has already given out.
 
 <a id="gui.test_job_events.test_set_job_view_returns_latest_event_snapshot"></a>
 
-#### [test\_set\_job\_view\_returns\_latest\_event\_snapshot](./gui/test_job_events.py#L453)
+#### [test\_set\_job\_view\_returns\_latest\_event\_snapshot](./gui/test_job_events.py#L532)
 
 ```python
 def test_set_job_view_returns_latest_event_snapshot(tmp_path: Path) -> None
@@ -23515,7 +23556,7 @@ Changing the active job's view level returns its current event snapshot.
 
 <a id="gui.test_job_events.test_set_job_view_refuses_invalid_level"></a>
 
-#### [test\_set\_job\_view\_refuses\_invalid\_level](./gui/test_job_events.py#L477)
+#### [test\_set\_job\_view\_refuses\_invalid\_level](./gui/test_job_events.py#L556)
 
 ```python
 def test_set_job_view_refuses_invalid_level(tmp_path: Path) -> None
@@ -23525,7 +23566,7 @@ A bad view level is rejected without changing the active job.
 
 <a id="gui.test_job_events.test_get_job_snapshot_refuses_an_unknown_job_id"></a>
 
-#### [test\_get\_job\_snapshot\_refuses\_an\_unknown\_job\_id](./gui/test_job_events.py#L491)
+#### [test\_get\_job\_snapshot\_refuses\_an\_unknown\_job\_id](./gui/test_job_events.py#L570)
 
 ```python
 def test_get_job_snapshot_refuses_an_unknown_job_id(tmp_path: Path) -> None
@@ -23535,7 +23576,7 @@ A `jobId` nobody has claimed is refused, not reported as empty.
 
 <a id="gui.test_job_events.test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released"></a>
 
-#### [test\_get\_job\_snapshot\_refuses\_a\_job\_whose\_claim\_has\_been\_released](./gui/test_job_events.py#L500)
+#### [test\_get\_job\_snapshot\_refuses\_a\_job\_whose\_claim\_has\_been\_released](./gui/test_job_events.py#L579)
 
 ```python
 def test_get_job_snapshot_refuses_a_job_whose_claim_has_been_released(
@@ -23546,7 +23587,7 @@ A released claim's view and snapshot are not active job state.
 
 <a id="gui.test_job_events.test_the_addressed_push_rides_alongside_the_legacy_push_in_order"></a>
 
-#### [test\_the\_addressed\_push\_rides\_alongside\_the\_legacy\_push\_in\_order](./gui/test_job_events.py#L515)
+#### [test\_the\_addressed\_push\_rides\_alongside\_the\_legacy\_push\_in\_order](./gui/test_job_events.py#L594)
 
 ```python
 def test_the_addressed_push_rides_alongside_the_legacy_push_in_order() -> None
@@ -23561,7 +23602,7 @@ delivery order (`fim.gui.publisher`'s own module docstring).
 
 <a id="gui.test_job_events.test_one_sequence_per_job_and_jobs_never_cross"></a>
 
-#### [test\_one\_sequence\_per\_job\_and\_jobs\_never\_cross](./gui/test_job_events.py#L570)
+#### [test\_one\_sequence\_per\_job\_and\_jobs\_never\_cross](./gui/test_job_events.py#L649)
 
 ```python
 @pytest.mark.gui
@@ -23572,7 +23613,7 @@ Two jobs' own sequences are tracked independently, never conflated.
 
 <a id="gui.test_job_events.test_duplicate_and_stale_events_are_ignored"></a>
 
-#### [test\_duplicate\_and\_stale\_events\_are\_ignored](./gui/test_job_events.py#L608)
+#### [test\_duplicate\_and\_stale\_events\_are\_ignored](./gui/test_job_events.py#L687)
 
 ```python
 @pytest.mark.gui
@@ -23583,7 +23624,7 @@ A repeated or older sequence never re-applies, never regresses tracking.
 
 <a id="gui.test_job_events.test_a_jobs_first_ever_event_is_never_treated_as_a_gap"></a>
 
-#### [test\_a\_jobs\_first\_ever\_event\_is\_never\_treated\_as\_a\_gap](./gui/test_job_events.py#L653)
+#### [test\_a\_jobs\_first\_ever\_event\_is\_never\_treated\_as\_a\_gap](./gui/test_job_events.py#L732)
 
 ```python
 @pytest.mark.gui
@@ -23600,7 +23641,7 @@ leaving any other, already-tracked job untouched.
 
 <a id="gui.test_job_events.test_a_progress_gap_never_requests_a_snapshot"></a>
 
-#### [test\_a\_progress\_gap\_never\_requests\_a\_snapshot](./gui/test_job_events.py#L695)
+#### [test\_a\_progress\_gap\_never\_requests\_a\_snapshot](./gui/test_job_events.py#L774)
 
 ```python
 @pytest.mark.gui
@@ -23611,7 +23652,7 @@ A skipped progress sequence is routine (coalescing), not a loss.
 
 <a id="gui.test_job_events.test_a_gap_before_a_status_or_terminal_event_requests_a_snapshot"></a>
 
-#### [test\_a\_gap\_before\_a\_status\_or\_terminal\_event\_requests\_a\_snapshot](./gui/test_job_events.py#L733)
+#### [test\_a\_gap\_before\_a\_status\_or\_terminal\_event\_requests\_a\_snapshot](./gui/test_job_events.py#L812)
 
 ```python
 @pytest.mark.gui
@@ -23625,7 +23666,7 @@ stays at whatever it was before the gap was seen.
 
 <a id="gui.test_job_events.test_a_snapshot_resyncs_the_tracked_sequence"></a>
 
-#### [test\_a\_snapshot\_resyncs\_the\_tracked\_sequence](./gui/test_job_events.py#L778)
+#### [test\_a\_snapshot\_resyncs\_the\_tracked\_sequence](./gui/test_job_events.py#L857)
 
 ```python
 @pytest.mark.gui
@@ -23640,7 +23681,7 @@ docstring describes.
 
 <a id="gui.test_job_events.test_a_late_snapshot_does_not_overwrite_a_newer_event"></a>
 
-#### [test\_a\_late\_snapshot\_does\_not\_overwrite\_a\_newer\_event](./gui/test_job_events.py#L844)
+#### [test\_a\_late\_snapshot\_does\_not\_overwrite\_a\_newer\_event](./gui/test_job_events.py#L923)
 
 ```python
 @pytest.mark.gui
@@ -23651,7 +23692,7 @@ A delayed snapshot cannot move event tracking backward.
 
 <a id="gui.test_job_events.test_an_annotation_for_a_closed_document_is_dropped"></a>
 
-#### [test\_an\_annotation\_for\_a\_closed\_document\_is\_dropped](./gui/test_job_events.py#L903)
+#### [test\_an\_annotation\_for\_a\_closed\_document\_is\_dropped](./gui/test_job_events.py#L982)
 
 ```python
 @pytest.mark.gui
@@ -23662,7 +23703,7 @@ A late annotation cannot reach a document that has closed.
 
 <a id="gui.test_job_events.test_an_annotation_after_coalesced_progress_is_applied"></a>
 
-#### [test\_an\_annotation\_after\_coalesced\_progress\_is\_applied](./gui/test_job_events.py#L954)
+#### [test\_an\_annotation\_after\_coalesced\_progress\_is\_applied](./gui/test_job_events.py#L1033)
 
 ```python
 @pytest.mark.gui
@@ -23673,7 +23714,7 @@ Progress coalescing does not suppress the following annotation.
 
 <a id="gui.test_job_events.test_memory_warning_names_jobs_and_pause_button_refreshes_the_banner"></a>
 
-#### [test\_memory\_warning\_names\_jobs\_and\_pause\_button\_refreshes\_the\_banner](./gui/test_job_events.py#L1021)
+#### [test\_memory\_warning\_names\_jobs\_and\_pause\_button\_refreshes\_the\_banner](./gui/test_job_events.py#L1100)
 
 ```python
 @pytest.mark.gui
@@ -23685,7 +23726,7 @@ The page names each pressured job and wires Pause to the API.
 
 <a id="gui.test_job_events.test_legacy_terminal_pushes_are_suppressed_with_a_second_document_open"></a>
 
-#### [test\_legacy\_terminal\_pushes\_are\_suppressed\_with\_a\_second\_document\_open](./gui/test_job_events.py#L1120)
+#### [test\_legacy\_terminal\_pushes\_are\_suppressed\_with\_a\_second\_document\_open](./gui/test_job_events.py#L1199)
 
 ```python
 @pytest.mark.gui
@@ -23707,7 +23748,7 @@ on screen. Each is called here exactly as a real push would.
 
 <a id="gui.test_job_events.test_legacy_terminal_pushes_still_show_the_banner_with_one_document"></a>
 
-#### [test\_legacy\_terminal\_pushes\_still\_show\_the\_banner\_with\_one\_document](./gui/test_job_events.py#L1163)
+#### [test\_legacy\_terminal\_pushes\_still\_show\_the\_banner\_with\_one\_document](./gui/test_job_events.py#L1242)
 
 ```python
 @pytest.mark.gui

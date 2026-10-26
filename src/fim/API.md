@@ -15427,7 +15427,7 @@ Execution state and worker reservation for one admitted job.
 
 <a id="fim.gui.jobs.start_child_job"></a>
 
-#### [start\_child\_job](./gui/jobs.py#L233)
+#### [start\_child\_job](./gui/jobs.py#L261)
 
 ```python
 def start_child_job(object_id: str,
@@ -15442,7 +15442,7 @@ Start a worker executable and return its authenticated message channel.
 
 <a id="fim.gui.jobs.connect_message_channel"></a>
 
-#### [connect\_message\_channel](./gui/jobs.py#L292)
+#### [connect\_message\_channel](./gui/jobs.py#L318)
 
 ```python
 def connect_message_channel() -> Connection
@@ -15452,7 +15452,7 @@ Connect a GUI child worker to its parent's authenticated listener.
 
 <a id="fim.gui.jobs.forward_child_messages"></a>
 
-#### [forward\_child\_messages](./gui/jobs.py#L345)
+#### [forward\_child\_messages](./gui/jobs.py#L371)
 
 ```python
 def forward_child_messages(child: ChildJob,
@@ -15467,7 +15467,7 @@ Forward child messages until it exits, then report an unexpected exit.
 
 <a id="fim.gui.jobs.JobAdmission"></a>
 
-## [JobAdmission Objects](./gui/jobs.py#L389)
+## [JobAdmission Objects](./gui/jobs.py#L415)
 
 ```python
 class JobAdmission()
@@ -15483,7 +15483,7 @@ sections are short and must not call into the page.
 
 <a id="fim.gui.jobs.JobAdmission.admit"></a>
 
-#### [admit](./gui/jobs.py#L407)
+#### [admit](./gui/jobs.py#L433)
 
 ```python
 def admit(kind: JobKind,
@@ -15501,7 +15501,7 @@ unchanged available capacity when this request does not fit.
 
 <a id="fim.gui.jobs.JobAdmission.active_job"></a>
 
-#### [active\_job](./gui/jobs.py#L445)
+#### [active\_job](./gui/jobs.py#L471)
 
 ```python
 def active_job(job_id: str) -> JobRecord | None
@@ -15511,7 +15511,7 @@ Return the active record for `job_id`, if it still reserves capacity.
 
 <a id="fim.gui.jobs.JobAdmission.active_jobs"></a>
 
-#### [active\_jobs](./gui/jobs.py#L450)
+#### [active\_jobs](./gui/jobs.py#L476)
 
 ```python
 def active_jobs() -> tuple[JobRecord, ...]
@@ -15521,7 +15521,7 @@ Return a stable snapshot of all jobs that still reserve capacity.
 
 <a id="fim.gui.jobs.JobAdmission.available_cores"></a>
 
-#### [available\_cores](./gui/jobs.py#L455)
+#### [available\_cores](./gui/jobs.py#L481)
 
 ```python
 def available_cores(capacity: int) -> int
@@ -15531,7 +15531,7 @@ Return the unreserved worker capacity under the registry lock.
 
 <a id="fim.gui.jobs.JobAdmission.release"></a>
 
-#### [release](./gui/jobs.py#L461)
+#### [release](./gui/jobs.py#L487)
 
 ```python
 def release(job_id: str) -> JobRecord | None
@@ -15541,7 +15541,7 @@ Release one job's capacity while retaining its event snapshot.
 
 <a id="fim.gui.jobs.JobAdmission.new_job_id"></a>
 
-#### [new\_job\_id](./gui/jobs.py#L466)
+#### [new\_job\_id](./gui/jobs.py#L492)
 
 ```python
 def new_job_id() -> str
@@ -15561,7 +15561,7 @@ now.
 
 <a id="fim.gui.jobs.JobAdmission.view_level"></a>
 
-#### [view\_level](./gui/jobs.py#L484)
+#### [view\_level](./gui/jobs.py#L510)
 
 ```python
 def view_level(job_id: str) -> ViewLevel
@@ -15574,7 +15574,7 @@ document receive the full level rather than failing during shutdown.
 
 <a id="fim.gui.jobs.JobAdmission.set_view_level"></a>
 
-#### [set\_view\_level](./gui/jobs.py#L493)
+#### [set\_view\_level](./gui/jobs.py#L519)
 
 ```python
 def set_view_level(job_id: str, level: ViewLevel) -> bool
@@ -15584,7 +15584,7 @@ Set a claimed job's rendering level; return false if it is unknown.
 
 <a id="fim.gui.jobs.JobAdmission.record_event"></a>
 
-#### [record\_event](./gui/jobs.py#L501)
+#### [record\_event](./gui/jobs.py#L527)
 
 ```python
 def record_event(job_id: str, event_type: str, payload: Any) -> int
@@ -15594,7 +15594,7 @@ Assign an event sequence and retain its payload for snapshots.
 
 <a id="fim.gui.jobs.JobAdmission.snapshot"></a>
 
-#### [snapshot](./gui/jobs.py#L513)
+#### [snapshot](./gui/jobs.py#L539)
 
 ```python
 def snapshot(job_id: str) -> dict[str, Any] | None
@@ -15604,7 +15604,7 @@ Return the current view level and latest event for a retained job.
 
 <a id="fim.gui.jobs.JobAdmission.next_sequence"></a>
 
-#### [next\_sequence](./gui/jobs.py#L527)
+#### [next\_sequence](./gui/jobs.py#L553)
 
 ```python
 def next_sequence(job_id: str) -> int
@@ -15622,7 +15622,7 @@ is never reused across different claims.
 
 <a id="fim.gui.jobs.JobAdmission.latest_sequence"></a>
 
-#### [latest\_sequence](./gui/jobs.py#L543)
+#### [latest\_sequence](./gui/jobs.py#L569)
 
 ```python
 def latest_sequence(job_id: str) -> int | None
@@ -15637,7 +15637,7 @@ own "nothing yet" case, distinct from a real sequence of `0`.
 
 <a id="fim.gui.jobs.JobAdmission.forget"></a>
 
-#### [forget](./gui/jobs.py#L555)
+#### [forget](./gui/jobs.py#L581)
 
 ```python
 def forget(job_id: str) -> None

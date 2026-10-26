@@ -118,6 +118,85 @@ def test_start_child_job_gives_the_worker_its_own_session(
     assert popen_calls[0]["start_new_session"] is True
 
 
+def test_start_child_job_uses_sys_argv_zero_when_frozen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A packaged (frozen) build spawns `[sys.argv[0], "--gui-job", ...]`.
+
+    Regression test for a real incident: `start_child_job` used to
+    build `[sys.executable, "-m", "fim.launcher", "--gui-job", ...]`
+    unconditionally, the same mistake `fim.launcher.launch_gui`'s own
+    `--detach` relaunch once made and was fixed for
+    (`test_launcher.py`'s own identical pair of tests) -- in a frozen
+    build `sys.executable` *is* the packaged executable itself, which
+    has no `-m` flag of its own to understand. Confirmed live against a
+    real packaged `.app`: with the unconditional `-m` form, the worker
+    process exited at once with "fim: error: argument command: invalid
+    choice: 'fim.launcher'" before ever reaching `fim.gui.job_worker`,
+    so a saved run's Run object never left its `planned` state --
+    reported live as "Run" appearing to start, then freezing, with no
+    error ever shown (nothing reached the code that would have
+    recorded one).
+    """
+    popen_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class _FakePopen:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            popen_calls.append((args, kwargs))
+            self.stdin = None
+
+    monkeypatch.setattr(subprocess, "Popen", _FakePopen)
+    monkeypatch.setattr("sys.argv", ["/path/to/fim"])
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+
+    child = jobs_module.start_child_job("obj-test", results=None, pairwise_max_demes=64)
+    child.messages.close()
+
+    assert len(popen_calls) == 1
+    args, _kwargs = popen_calls[0]
+    command = args[0]
+    assert isinstance(command, list)
+    assert command[:3] == ["/path/to/fim", "--gui-job", "obj-test"]
+    assert "-m" not in command
+    assert "fim.launcher" not in command
+
+
+def test_start_child_job_uses_python_module_when_not_frozen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Running from source still spawns `[sys.executable, "-m", "fim.launcher", ...]`.
+
+    Control for the test above: `monkeypatch.delattr` guards against
+    `sys.frozen` leaking in from another test or the interpreter
+    actually running this suite.
+    """
+    popen_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class _FakePopen:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            popen_calls.append((args, kwargs))
+            self.stdin = None
+
+    monkeypatch.setattr(subprocess, "Popen", _FakePopen)
+    monkeypatch.setattr("sys.executable", "/path/to/python3")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    child = jobs_module.start_child_job("obj-test", results=None, pairwise_max_demes=64)
+    child.messages.close()
+
+    assert len(popen_calls) == 1
+    args, _kwargs = popen_calls[0]
+    command = args[0]
+    assert isinstance(command, list)
+    assert command[:5] == [
+        "/path/to/python3",
+        "-m",
+        "fim.launcher",
+        "--gui-job",
+        "obj-test",
+    ]
+
+
 @pytest.mark.parametrize(
     ("usable_cores", "reserved_cores", "expected"),
     [(1, 0, 1), (8, 0, 8), (8, 3, 5), (2, 9, 1)],

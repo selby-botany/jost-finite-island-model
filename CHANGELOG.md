@@ -2826,6 +2826,19 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   button on the Run card now opens Configure directly, shown whenever a
   run has not started or is showing results reused this way, hidden
   only while a run is actually in progress.
+- **Run simulation never started in a packaged desktop build.** Starting a
+  run (scalar or batch) from a built `.app`/`.exe` created the Run object
+  and then froze: the worker process that should carry it forward never
+  launched. The GUI always spawned its worker as `[sys.executable, "-m",
+  "fim.launcher", "--gui-job", object_id]`, but in a packaged build
+  `sys.executable` is the frozen executable itself, not a Python
+  interpreter, so `-m` is not a flag it understands — the relaunched
+  process exited immediately with `invalid choice: 'fim.launcher'` before
+  it ever reached the code that records a failure, leaving the Run stuck
+  in its initial `planned` state with no error shown. Confirmed against a
+  real packaged `.app` and fixed by mirroring the frozen-build detection
+  `fim.launcher.launch_gui` already uses for its own relaunch: a frozen
+  build now spawns `[sys.argv[0], "--gui-job", object_id]` instead.
 
 ---
 

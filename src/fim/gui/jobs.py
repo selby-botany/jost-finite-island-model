@@ -230,6 +230,34 @@ class JobRecord:
     live_deme_pair: tuple[int, int] | None = None
 
 
+def _gui_job_command(object_id: str) -> list[str]:
+    """Return the argv that re-launches this program as a `--gui-job` worker.
+
+    Mirrors `fim.launcher.launch_gui`'s own `--detach` relaunch branch
+    exactly, for the identical reason it already gives: in a packaged,
+    frozen build (`sys.frozen`), `sys.executable` *is* the frozen
+    executable itself, not a real Python interpreter, so `-m
+    fim.launcher` is not a flag it understands. Confirmed live against
+    a real packaged `.app`: `fim.launcher.main`'s own dispatcher (which
+    only recognizes `--gui-job` as `arguments[0]`) never saw it --
+    `sys.argv` there was `["-m", "fim.launcher", "--gui-job", ...]`, so
+    every branch fell through to the CLI parser, which exited at once
+    with "fim: error: argument command: invalid choice: 'fim.launcher'"
+    (status 2) -- reported live as "Run" appearing to start and then
+    freezing: the worker process never ran at all, so the Run object
+    never left its `planned` state (no `active_attempt_id`, no
+    `transition_history`), and no later error was ever recorded either,
+    since nothing reached the code that would have recorded one.
+    `sys.argv[0]` is the real, directly re-executable binary path in
+    that case; the plain source/wheel case still needs `-m`, for
+    `launch_gui`'s own reason (`sys.argv[0]` there is a bare source
+    file with no shebang of its own).
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.argv[0], "--gui-job", object_id]
+    return [sys.executable, "-m", "fim.launcher", "--gui-job", object_id]
+
+
 def start_child_job(
     object_id: str,
     *,
@@ -251,9 +279,7 @@ def start_child_job(
         }
     )
     worker_command = (
-        list(command)
-        if command is not None
-        else [sys.executable, "-m", "fim.launcher", "--gui-job", object_id]
+        list(command) if command is not None else _gui_job_command(object_id)
     )
     if results is not None:
         worker_command.extend(("--results-directory", str(results)))
