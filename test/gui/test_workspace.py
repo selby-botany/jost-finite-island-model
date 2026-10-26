@@ -665,6 +665,59 @@ def test_scrubber_and_graph_state_restore_for_each_document(
     assert state["label"] == "Generation 20"
 
 
+def test_a_new_document_starts_from_the_most_recently_chosen_run_card_layout(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A tab opened after a Run-card choice starts from that choice, not defaults.
+
+    Reported live: every document besides the very first one -- "+", a
+    saved run's own "Start", a reopened run -- ignored the graphs/
+    columns/scatter style the user had actually chosen and fell back to
+    this page's own hardcoded two-graph/one-column/`top-allele`
+    defaults, which can silently disagree with what the Run card's own
+    "Graphs (N)" picker still *reports* choosing (that text reads
+    Settings directly, not any one document's own, possibly-stale
+    `preferredGraphKeys`) -- a 4-graph choice drew only one graph, not a
+    2x2 grid. `setVisibleGraphs`/`setGraphColumns`/`setScatterStyle` are
+    the three functions that actually apply (and persist) a user's own
+    change, whichever of the Run card's "Graphs" menu, the column
+    selector, or the scatter-style selector it came from -- exercised
+    directly here rather than through their own DOM controls, since
+    `getGraphStageState`'s/`getScatterState`'s own lazy initializers
+    (what this test actually proves) read the identical cache either
+    way.
+    """
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            window.fim.setVisibleGraphs(
+                ['scatter', 'trajectory', 'alleleComposition', 'frequencySpectrum']
+            );
+            window.fim.setGraphColumns(2);
+            window.fim.setScatterStyle('density');
+            const second = workspace.createDocument();
+            const graphStage = workspace.get(second).graphStage;
+            return {
+                second,
+                preferredGraphKeys: graphStage.preferredGraphKeys,
+                graphColumns: graphStage.graphColumns,
+                scatterStyle: workspace.get(second).scatter.style,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["preferredGraphKeys"] == [
+        "scatter",
+        "trajectory",
+        "alleleComposition",
+        "frequencySpectrum",
+    ]
+    assert state["graphColumns"] == 2
+    assert state["scatterStyle"] == "density"
+
+
 def test_completed_view_state_restores_for_each_document(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

@@ -70,6 +70,25 @@ const RUN_GRAPHS = [
     },
 ];
 
+/**
+ * Merge a partial change into `window.fim._lastRunCardLayout`, the one
+ * cross-file cache of Settings' own saved Run-card choices
+ * (`getGraphStageState`/`scatter.js`'s own `getScatterState` both read
+ * it for a document created after the most recent update) -- creating
+ * it first if nothing has ever actually fetched it yet (a caller before
+ * `loadRunCardLayout` itself has ever resolved, in practice never
+ * reached live: every setter below runs well after that first fetch).
+ *
+ * @param {Record<string, unknown>} partial
+ * @returns {void}
+ */
+function updateLastRunCardLayoutCache(partial) {
+    window.fim._lastRunCardLayout = {
+        ...(window.fim._lastRunCardLayout || {}),
+        ...partial,
+    };
+}
+
 const graphRedrawers = new Map();
 function getGraphStageState(tabId = window.fim.workspace.selectedId()) {
     const documentState = window.fim.workspace.get(tabId);
@@ -77,12 +96,25 @@ function getGraphStageState(tabId = window.fim.workspace.selectedId()) {
         return null;
     }
     if (!documentState.graphStage) {
+        // `window.fim._lastRunCardLayout` (set by `loadRunCardLayout`,
+        // below, once Settings' own saved choices have actually been
+        // fetched): a document created *after* that first fetch starts
+        // from the user's own saved graphs/columns, not the hardcoded
+        // defaults below, which exist only for the narrow window before
+        // any fetch has resolved at all (reported live: every document
+        // opened after the first -- "+", a saved run's own "Start", a
+        // reopened run -- ignored Settings entirely and fell back to
+        // these two defaults, which can silently disagree with what the
+        // Run card's own "Graphs (N)" picker still *reports* choosing,
+        // since that text reads Settings directly rather than this
+        // document's own, now-wrong, `preferredGraphKeys`).
+        const cached = window.fim._lastRunCardLayout;
         documentState.graphStage = {
             availability: new Map(),
-            preferredGraphKeys: [...DEFAULT_GRAPH_KEYS],
+            preferredGraphKeys: cached ? [...cached.graphs] : [...DEFAULT_GRAPH_KEYS],
             visibleGraphKeys: [],
             focusedGraphKey: null,
-            graphColumns: DEFAULT_GRAPH_COLUMNS,
+            graphColumns: cached ? cached.columns : DEFAULT_GRAPH_COLUMNS,
             zoomedGraphKey: null,
             zoomScale: 1,
             redrawingActiveGraph: false,
@@ -507,6 +539,11 @@ window.fim.setVisibleGraphs = function setVisibleGraphs(keys) {
     state.preferredGraphKeys = chosen;
     syncRunGraphStage();
     saveRunCardChoice("set_run_graphs", chosen);
+    // Keeps a document created *after* this choice (not only one
+    // present when `loadRunCardLayout` last fetched Settings) starting
+    // from it too -- `getGraphStageState`'s own lazy initializer reads
+    // this same cache.
+    updateLastRunCardLayoutCache({ graphs: chosen });
 };
 
 /**
@@ -536,12 +573,12 @@ window.fim.setGraphColumns = function setGraphColumns(columns) {
     if (!activeGraphStage) {
         return;
     }
-    activeGraphStage.graphColumns = Math.max(
-        1,
-        Math.floor(columns) || DEFAULT_GRAPH_COLUMNS
-    );
+    const normalized = Math.max(1, Math.floor(columns) || DEFAULT_GRAPH_COLUMNS);
+    activeGraphStage.graphColumns = normalized;
     applyGraphLayout();
     window.fim.redrawActiveGraph();
+    // Same reasoning as `setVisibleGraphs`' own identical line, above.
+    updateLastRunCardLayoutCache({ columns: normalized });
 };
 
 /**
@@ -945,6 +982,13 @@ async function loadRunCardLayout() {
     const tabId = window.fim.workspace.selectedId();
     const state = getGraphStageState(tabId);
     const layout = await window.pywebview.api.get_run_card_layout();
+    // Cached regardless of whether `tabId`'s own document is still open
+    // below (`getGraphStageState`'s own lazy initializer reads this for
+    // every document created from here on, not only this one) -- this
+    // is the only place that ever actually fetches Settings' own saved
+    // choices, so every later document depends on this call having
+    // landed at least once.
+    window.fim._lastRunCardLayout = layout;
     if (!state || !window.fim.workspace.get(tabId)) {
         return;
     }

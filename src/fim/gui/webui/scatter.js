@@ -70,8 +70,17 @@ function getScatterState(tabId = window.fim.workspace.selectedId()) {
         return null;
     }
     if (!documentState.scatter) {
+        // `window.fim._lastRunCardLayout` (`run-graph-stage.js`'s own
+        // `loadRunCardLayout`, the one place Settings' saved choices are
+        // actually fetched): a document created after that first fetch
+        // starts from the user's own saved style, not this hardcoded
+        // default, which exists only for the window before any fetch
+        // has resolved -- `getGraphStageState`'s own identical reasoning
+        // for `preferredGraphKeys`/`graphColumns`, the reported defect
+        // this closes alongside.
+        const cached = window.fim._lastRunCardLayout;
         documentState.scatter = {
-            style: DEFAULT_SCATTER_STYLE,
+            style: cached ? cached.scatterStyle : DEFAULT_SCATTER_STYLE,
             currentPanel: null,
             zoomDomain: null,
             lastGeometry: null,
@@ -110,6 +119,14 @@ window.fim.setScatterStyle = function setScatterStyle(
         return;
     }
     state.style = style;
+    // Keeps a document created after this choice starting from it too
+    // (`run-graph-stage.js`'s own `updateLastRunCardLayoutCache`/
+    // `getGraphStageState`'s identical reasoning for graphs/columns;
+    // `getScatterState`'s own lazy initializer reads this same cache).
+    window.fim._lastRunCardLayout = {
+        ...(window.fim._lastRunCardLayout || {}),
+        scatterStyle: style,
+    };
     if (
         tabId === window.fim.workspace.selectedId() &&
         state.currentPanel &&
