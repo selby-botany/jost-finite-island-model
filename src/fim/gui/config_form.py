@@ -122,6 +122,27 @@ POPULATION_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("d", "d (demes)", "int"),
     FormField("seed", "seed", "int"),
     FormField("deme_weighting", "deme weighting", "choice", choices=("equal", "size")),
+    # `doc/configuration.md`'s own "Analysis and execution" section
+    # groups this beside `deme_weighting` (both are cross-locus/cross-
+    # deme statistic-combination choices), so it sits beside it here
+    # too. A real, scientific choice -- it changes D/G_ST and the run
+    # ID -- added because it was previously missing from this tuple
+    # entirely: `all_fields()` never named it, so loading a YAML that
+    # set it to anything but the default silently reverted to the
+    # default the moment the form rendered and resubmitted it (this
+    # project's own 2026-10-25 project review, finding G-4). A plain
+    # `FormField` with no live Configure widget of its own must also be
+    # a `DEFAULT_RUN_SETTING_FIELD_NAMES` member (below) -- otherwise
+    # `collectFormValues` (`config-modals.js`) never submits it at all
+    # (no DOM element names it) and every run submission fails with
+    # "missing field: locus_aggregation", a real regression this
+    # project's own G-4 fix first shipped with and then corrected.
+    FormField(
+        "locus_aggregation",
+        "locus aggregation",
+        "choice",
+        choices=("ratio_of_means", "mean_of_ratios"),
+    ),
     FormField("max_generations", "max generations", "auto_int"),
 )
 
@@ -235,6 +256,34 @@ BATCH_FIELDS: Final[tuple[FormField, ...]] = (
     ),
     FormField("trajectory_stride", "trajectory stride", "int"),
     FormField("trajectory_thinning_start", "thinning start", "auto_int"),
+    # `trajectory_keep_last`/`trajectory_keep_burn_in` matter only
+    # under `trajectory_retention: tapered`, and `history_format` is
+    # independent of retention entirely — but all three are real,
+    # loadable `SimulationParams` fields `configuration.md` documents
+    # (`doc/configuration.md`'s own "trajectory_retention, ..." and
+    # "history_format" sections), and were previously missing from
+    # this tuple entirely: a loaded YAML that set any of them was
+    # silently reverted to its default the moment the form rendered
+    # and resubmitted it (this project's own 2026-10-25 project
+    # review, finding G-4). Declared here, with no live Configure
+    # widget, the same way `jit`/`auto_vector_min_d`/`auto_vector_
+    # max_capacity` are, above -- and, like those three, also added to
+    # `DEFAULT_RUN_SETTING_FIELD_NAMES` below, which is the part that
+    # actually makes a widget-less field safe: `collectFormValues`
+    # (`config-modals.js`) builds a submission from `FormData`, so a
+    # name with no DOM element is simply absent from it, and only
+    # `Api._merge_default_run_settings` filling it back in from
+    # `DEFAULT_RUN_SETTING_FIELD_NAMES` keeps `form_values_to_payload`
+    # from raising "missing field" on every run. A plain `FormField`
+    # declared here without that second step is not a smaller version
+    # of this fix; it is a different bug (this project's own G-4 fix
+    # first shipped exactly that half-finished state, breaking every
+    # run submission, and then corrected it).
+    FormField("trajectory_keep_last", "trajectory keep last", "int"),
+    FormField("trajectory_keep_burn_in", "trajectory keep burn-in", "bool"),
+    FormField(
+        "history_format", "history format", "choice", choices=("exact", "compact")
+    ),
     FormField("replicate_minimum", "replicate minimum", "int"),
     FormField(
         "confidence",
@@ -1409,6 +1458,7 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "d": str(params.d),
         "seed": str(params.seed),
         "deme_weighting": params.deme_weighting,
+        "locus_aggregation": params.locus_aggregation,
         "max_generations": _auto_or_number(params, "max_generations"),
         "migrant_sampling": params.migrant_sampling,
         "mutation_model": params.mutation_model,
@@ -1429,6 +1479,11 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
             or params.trajectory_thinning_start == params.derived_thinning_start()
             else str(params.trajectory_thinning_start)
         ),
+        "trajectory_keep_last": str(params.trajectory_keep_last),
+        "trajectory_keep_burn_in": (
+            "true" if params.trajectory_keep_burn_in else "false"
+        ),
+        "history_format": params.history_format,
         "replicate_averaging_window": (
             str(params.replicate_averaging_window)
             if params.replicate_averaging_window
@@ -1486,6 +1541,23 @@ DEFAULT_RUN_SETTING_FIELD_NAMES: Final[tuple[str, ...]] = (
     "trajectory_retention",
     "trajectory_stride",
     "trajectory_thinning_start",
+    # `trajectory_keep_last`/`trajectory_keep_burn_in`/`history_format`
+    # and `locus_aggregation` (2026-10-25 project review, finding G-4):
+    # none of the four has a live Configure widget (`BATCH_FIELDS`/
+    # `POPULATION_FIELDS`'s own comments on each), so without a member
+    # here `Api._merge_default_run_settings` never fills one in and
+    # `form_values_to_payload` raises "missing field" on every run --
+    # not only one that loads a configuration setting a non-default
+    # value. Membership here is also what makes "Open configuration…"
+    # on a YAML that sets one of them actually take effect for that
+    # run: `applyLoadedRunSettings`/`perRunSettingValues` (`webui/
+    # screens/run-settings-notice.js`) carry a loaded configuration's
+    # own `DEFAULT_RUN_SETTING_FIELD_NAMES` values into every
+    # submission for that document, ahead of the Settings-wide default.
+    "trajectory_keep_last",
+    "trajectory_keep_burn_in",
+    "history_format",
+    "locus_aggregation",
     "jit",
     "auto_vector_min_d",
     "auto_vector_max_capacity",
@@ -1550,6 +1622,10 @@ RUN_SETTING_LABELS: Final[Mapping[str, str]] = {
     "trajectory_retention": "Trajectory retention",
     "trajectory_stride": "Trajectory stride",
     "trajectory_thinning_start": "Thinning start",
+    "trajectory_keep_last": "Trajectory keep last",
+    "trajectory_keep_burn_in": "Trajectory keep burn-in",
+    "history_format": "History format",
+    "locus_aggregation": "Locus aggregation",
     "jit": "JIT compilation",
     "auto_vector_min_d": "Auto-vector minimum demes",
     "auto_vector_max_capacity": "Auto-vector maximum capacity",

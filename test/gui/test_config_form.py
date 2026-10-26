@@ -86,7 +86,7 @@ def test_starter_form_values_rejects_an_invalid_overlay() -> None:
 
 
 def test_default_run_setting_field_names_excludes_scientific_per_run_fields() -> None:
-    """Execution/backend defaults are covered; per-run scientific choices are not.
+    """Execution/backend defaults are covered; per-experiment choices are not.
 
     A real, reported design decision: `convergence_statistic`/
     `convergence_combinator` are experimental, per-run choices with no
@@ -95,6 +95,14 @@ def test_default_run_setting_field_names_excludes_scientific_per_run_fields() ->
     unlike `engine_backend`/`n_replicates`/`max_generations`/the
     convergence-loop *timing* fields (statistic-agnostic) and the
     expert-level backend-tuning fields, which this tuple does cover.
+
+    `locus_aggregation` is also scientific (it changes `D`/`G_ST` and
+    the run ID) but, unlike which statistic to watch, is a stable,
+    lab-wide methodology choice most configurations share -- and, with
+    no live Configure widget of its own, membership here is what keeps
+    every run submission from failing outright with "missing field"
+    (2026-10-25 project review, finding G-4; `DEFAULT_RUN_SETTING_
+    FIELD_NAMES`'s own comment on the four fields G-4 added).
     """
     names = set(config_form.DEFAULT_RUN_SETTING_FIELD_NAMES)
 
@@ -108,6 +116,10 @@ def test_default_run_setting_field_names_excludes_scientific_per_run_fields() ->
     assert "auto_vector_min_d" in names
     assert "auto_vector_max_capacity" in names
     assert "max_concurrent_replicates" in names
+    assert "trajectory_keep_last" in names
+    assert "trajectory_keep_burn_in" in names
+    assert "history_format" in names
+    assert "locus_aggregation" in names
     assert "convergence_combinator" not in names
     for name in config_form.CONVERGENCE_STATISTIC_NAMES:
         assert f"cs_{name}" not in names
@@ -127,6 +139,7 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "d",
         "seed",
         "deme_weighting",
+        "locus_aggregation",
         "max_generations",
         "migrant_sampling",
         "mutation_model",
@@ -145,6 +158,9 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "trajectory_retention",
         "trajectory_stride",
         "trajectory_thinning_start",
+        "trajectory_keep_last",
+        "trajectory_keep_burn_in",
+        "history_format",
         "replicate_minimum",
         "confidence",
         "engine_backend",
@@ -161,6 +177,107 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
     assert "mu" not in names
     assert "convergence_statistic" not in names
     assert "p_0" not in names
+
+
+_NON_CONFIG_FIELD_NAMES = frozenset(
+    {
+        "gene_copies",  # `N`/`ploidy` convert into this; not a config key itself
+        "initial_frequencies",  # `p_0`'s own dataclass field; a composite
+        "read_only",  # an internal marker, not a tunable the form edits
+        "auto_derived",  # internal bookkeeping of which fields were auto-derived
+        "relaxation_time",  # derived, not a config key
+    }
+)
+"""`SimulationParams` fields with no config key of their own, or whose config
+key is handled entirely outside the plain-`FormField`/composite split below."""
+
+_COMPOSITE_CONFIG_FIELD_NAMES = frozenset(
+    {
+        "m",
+        "mu",
+        "loci",
+        "convergence_statistic",
+        "expert",
+        "equilibrium_convergence_window",
+        "equilibrium_convergence_tolerance",
+        "equilibrium_max_generations",
+    }
+)
+"""`SimulationParams` fields whose config key is a real, loadable setting but
+is marshaled by a dedicated composite function, never a plain `FormField`."""
+
+
+def test_all_fields_names_every_round_trippable_simulationparams_field() -> None:
+    """Every `SimulationParams` field is a plain field, a composite, or excluded.
+
+    Regression test for the 2026-10-25 project review's finding G-4:
+    `locus_aggregation`, `trajectory_keep_last`, `trajectory_keep_burn_in`,
+    and `history_format` were real, loadable `SimulationParams` fields
+    that `all_fields()` never named, so a loaded configuration that set
+    any of them was silently reverted to its default the moment the
+    form rendered and resubmitted it. A field later added to
+    `SimulationParams` with no matching `FormField`, composite
+    marshaler, or entry in this test's own exclusion sets now fails
+    here instead of silently dropping on the next load.
+    """
+    plain_names = {field.name for field in config_form.all_fields()}
+    accounted_for = (
+        plain_names | _COMPOSITE_CONFIG_FIELD_NAMES | _NON_CONFIG_FIELD_NAMES
+    )
+    missing = {
+        field.name
+        for field in fields(SimulationParams)
+        if field.name not in accounted_for
+    }
+    assert missing == set()
+
+
+def test_params_to_form_values_names_every_plain_field() -> None:
+    """`params_to_form_values` sets a value for every `all_fields()` entry.
+
+    `params_to_form_values` is a hand-written mapping, not a generic
+    loop over `all_fields()` the way `form_values_to_payload` is: a
+    field added to a tab's `FormField` tuple with no matching line
+    here would round-trip from form to payload but never back from a
+    loaded configuration to the form — finding G-4's failure mode, the
+    other half of it.
+    """
+    starter_params = SimulationParams.from_mapping(
+        {**yaml.safe_load(STARTER_CONFIG), "ploidy": "diploid"}
+    )
+    rendered = params_to_form_values(starter_params)
+    for field in config_form.all_fields():
+        assert field.name in rendered, (
+            f"{field.name} missing from params_to_form_values"
+        )
+
+
+def test_params_to_form_values_round_trips_a_non_default_configuration() -> None:
+    """A loaded configuration's own non-default settings survive the round trip.
+
+    Regression test for the 2026-10-25 project review's finding G-4:
+    "Open configuration…" on a YAML setting `locus_aggregation:
+    mean_of_ratios` used to silently run `ratio_of_means` instead,
+    changing both D/G_ST and the run ID with no warning;
+    `trajectory_keep_last`/`trajectory_keep_burn_in`/`history_format`
+    were dropped the same way.
+    """
+    base = SimulationParams.from_mapping(
+        {**yaml.safe_load(STARTER_CONFIG), "ploidy": "diploid"}
+    )
+    loaded = replace(
+        base,
+        locus_aggregation="mean_of_ratios",
+        trajectory_retention="tapered",
+        trajectory_keep_last=250,
+        trajectory_keep_burn_in=True,
+        history_format="compact",
+    )
+
+    values = params_to_form_values(loaded)
+    restored = SimulationParams.from_mapping(form_values_to_payload(values))
+
+    assert restored == loaded
 
 
 def test_config_form_round_trips_starter_config() -> None:

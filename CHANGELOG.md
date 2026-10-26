@@ -1859,6 +1859,33 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The desktop Configure form silently dropped four loaded configuration
+  settings — and, in between, "Run" stopped running anything at all.**
+  `locus_aggregation`, `trajectory_keep_last`, `trajectory_keep_burn_in`,
+  and `history_format` were real, loadable `SimulationParams` fields that
+  neither `all_fields()` nor `params_to_form_values` named, so "Open
+  configuration…" on a YAML file setting any of them rendered the form
+  with no error and then silently reverted the field to its default the
+  moment the form was submitted — for `locus_aggregation`, a
+  `D`/`G_ST`-changing, run-ID-changing difference with no warning at all,
+  contradicting `load_yaml`'s own "loads identically here, error for
+  error." All four are now plain form fields (`locus_aggregation` beside
+  `deme_weighting`; `trajectory_keep_last`/`trajectory_keep_burn_in`/
+  `history_format` beside the rest of the trajectory-retention cluster),
+  round-tripped by `params_to_form_values` the same way every other field
+  already was, and all four are also Settings-level run defaults
+  (`DEFAULT_RUN_SETTING_FIELD_NAMES`): none has a live Configure widget,
+  and a field without one needs that membership for its value to reach a
+  submission at all — `collectFormValues` builds a submission from the
+  `<form>`'s own `FormData`, so a name with no element is simply absent
+  from it, and a first attempt at this fix that added the four fields
+  without also adding them there briefly made every "Run" submission —
+  not only one touching a non-default value — fail validation silently,
+  redrawing the same screen with no visible error. New tests enumerate
+  every `SimulationParams` field against `all_fields()` and
+  `params_to_form_values` directly, and submit a form missing exactly
+  these four keys, the way the real page actually does, so both failure
+  modes are now caught by the suite.
 - **A saved run's checkpoint pointer could name a checkpoint already
   deleted.** `commit_checkpoint` deletes a run object's previous checkpoint
   right after writing `run.json`'s pointer to the new one, on the strength

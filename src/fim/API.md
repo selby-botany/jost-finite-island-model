@@ -14330,13 +14330,13 @@ instead of appearing in any `TabSpec.fields` tuple.
 
 <a id="fim.gui.config_form.EXPERT_PREFIX"></a>
 
-#### [EXPERT\_PREFIX](./gui/config_form.py#L278)
+#### [EXPERT\_PREFIX](./gui/config_form.py#L327)
 
 Prefix of the form-value key of each Expert Setting (`expert_batch_width`).
 
 <a id="fim.gui.config_form.EXPERT_FIELDS"></a>
 
-#### [EXPERT\_FIELDS](./gui/config_form.py#L281)
+#### [EXPERT\_FIELDS](./gui/config_form.py#L330)
 
 One field per Expert Setting, for the Settings dialog's Expert section.
 
@@ -14349,7 +14349,7 @@ to the manifest.
 
 <a id="fim.gui.config_form.CONVERGENCE_STATISTIC_NAMES"></a>
 
-#### [CONVERGENCE\_STATISTIC\_NAMES](./gui/config_form.py#L298)
+#### [CONVERGENCE\_STATISTIC\_NAMES](./gui/config_form.py#L347)
 
 Every checkbox the Structure panel's "convergence statistic(s)" group
 offers: every convergence-eligible statistic in `fim.statistics.catalog`,
@@ -14359,7 +14359,7 @@ checkbox.
 
 <a id="fim.gui.config_form.all_fields"></a>
 
-#### [all\_fields](./gui/config_form.py#L315)
+#### [all\_fields](./gui/config_form.py#L364)
 
 ```python
 def all_fields() -> tuple[FormField, ...]
@@ -14369,7 +14369,7 @@ Return every plain `FormField` across every tab, in tab order.
 
 <a id="fim.gui.config_form.tab_for_field"></a>
 
-#### [tab\_for\_field](./gui/config_form.py#L344)
+#### [tab\_for\_field](./gui/config_form.py#L393)
 
 ```python
 def tab_for_field(name: str) -> str | None
@@ -14391,7 +14391,7 @@ Return the `TabSpec.name` holding the given config-key field, if any.
 
 <a id="fim.gui.config_form.tab_for_error"></a>
 
-#### [tab\_for\_error](./gui/config_form.py#L364)
+#### [tab\_for\_error](./gui/config_form.py#L413)
 
 ```python
 def tab_for_error(message: str) -> str | None
@@ -14418,7 +14418,7 @@ Return the tab holding the field a validation error message names.
 
 <a id="fim.gui.config_form.field_for_error"></a>
 
-#### [field\_for\_error](./gui/config_form.py#L407)
+#### [field\_for\_error](./gui/config_form.py#L456)
 
 ```python
 def field_for_error(message: str) -> str | None
@@ -14442,7 +14442,7 @@ Return the form field name a validation error message names, if any.
 
 <a id="fim.gui.config_form.form_values_to_payload"></a>
 
-#### [form\_values\_to\_payload](./gui/config_form.py#L462)
+#### [form\_values\_to\_payload](./gui/config_form.py#L511)
 
 ```python
 def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14488,7 +14488,7 @@ Coerce the form's string values into a `from_mapping`-ready payload.
 
 <a id="fim.gui.config_form.form_values_to_draft_payload"></a>
 
-#### [form\_values\_to\_draft\_payload](./gui/config_form.py#L513)
+#### [form\_values\_to\_draft\_payload](./gui/config_form.py#L562)
 
 ```python
 def form_values_to_draft_payload(
@@ -14514,7 +14514,7 @@ field is left out.
 
 <a id="fim.gui.config_form.expert_to_payload"></a>
 
-#### [expert\_to\_payload](./gui/config_form.py#L564)
+#### [expert\_to\_payload](./gui/config_form.py#L613)
 
 ```python
 def expert_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14542,7 +14542,7 @@ existed) is left out, so the setting keeps its default.
 
 <a id="fim.gui.config_form.run_setting_error"></a>
 
-#### [run\_setting\_error](./gui/config_form.py#L619)
+#### [run\_setting\_error](./gui/config_form.py#L668)
 
 ```python
 def run_setting_error(name: str, text: str) -> str | None
@@ -14567,7 +14567,7 @@ valid saved default and name exactly the one that is not.
 
 <a id="fim.gui.config_form.validate_run_settings"></a>
 
-#### [validate\_run\_settings](./gui/config_form.py#L645)
+#### [validate\_run\_settings](./gui/config_form.py#L694)
 
 ```python
 def validate_run_settings(values: Mapping[str, str]) -> None
@@ -14601,7 +14601,7 @@ default the starter model itself cannot use.
 
 <a id="fim.gui.config_form.m_to_payload"></a>
 
-#### [m\_to\_payload](./gui/config_form.py#L704)
+#### [m\_to\_payload](./gui/config_form.py#L753)
 
 ```python
 def m_to_payload(
@@ -14642,7 +14642,7 @@ Build `m`'s payload from the selector's mode and its own sub-fields.
 
 <a id="fim.gui.config_form.m_from_params"></a>
 
-#### [m\_from\_params](./gui/config_form.py#L792)
+#### [m\_from\_params](./gui/config_form.py#L841)
 
 ```python
 def m_from_params(params: SimulationParams) -> dict[str, str]
@@ -14674,7 +14674,7 @@ Render `params.m` back into the selector's form-value keys.
 
 <a id="fim.gui.config_form.mu_to_payload"></a>
 
-#### [mu\_to\_payload](./gui/config_form.py#L835)
+#### [mu\_to\_payload](./gui/config_form.py#L884)
 
 ```python
 def mu_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14704,7 +14704,7 @@ Build `mu`'s or `mu_b`'s payload key from the selector's mode.
 
 <a id="fim.gui.config_form.mu_from_params"></a>
 
-#### [mu\_from\_params](./gui/config_form.py#L861)
+#### [mu\_from\_params](./gui/config_form.py#L910)
 
 ```python
 def mu_from_params(params: SimulationParams) -> dict[str, str]
@@ -14744,7 +14744,7 @@ Render `params.mu` back into the mu/mu_b selector's form-value keys.
 
 <a id="fim.gui.config_form.per_base_mutation_rate"></a>
 
-#### [per\_base\_mutation\_rate](./gui/config_form.py#L907)
+#### [per\_base\_mutation\_rate](./gui/config_form.py#L956)
 
 ```python
 def per_base_mutation_rate(rates: Sequence[float],
@@ -14778,7 +14778,7 @@ if it reproduces every rate within `_PER_BASE_RATE_RELATIVE_TOLERANCE`.
 
 <a id="fim.gui.config_form.initial_conditions_to_payload"></a>
 
-#### [initial\_conditions\_to\_payload](./gui/config_form.py#L1001)
+#### [initial\_conditions\_to\_payload](./gui/config_form.py#L1050)
 
 ```python
 def initial_conditions_to_payload(
@@ -14825,7 +14825,7 @@ Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
 
 <a id="fim.gui.config_form.initial_conditions_from_params"></a>
 
-#### [initial\_conditions\_from\_params](./gui/config_form.py#L1161)
+#### [initial\_conditions\_from\_params](./gui/config_form.py#L1210)
 
 ```python
 def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]
@@ -14862,7 +14862,7 @@ Render `params`'s starting-frequency fields into the selector's form-value keys.
 
 <a id="fim.gui.config_form.loci_to_payload"></a>
 
-#### [loci\_to\_payload](./gui/config_form.py#L1233)
+#### [loci\_to\_payload](./gui/config_form.py#L1282)
 
 ```python
 def loci_to_payload(values: Mapping[str, str]) -> dict[str, object]
@@ -14896,7 +14896,7 @@ Build `loci`'s (or `n_loci`/`locus_lengths`'s) payload from the selector's mode.
 
 <a id="fim.gui.config_form.loci_from_params"></a>
 
-#### [loci\_from\_params](./gui/config_form.py#L1304)
+#### [loci\_from\_params](./gui/config_form.py#L1353)
 
 ```python
 def loci_from_params(params: SimulationParams) -> dict[str, str]
@@ -14920,7 +14920,7 @@ Render `params.loci` back into the selector's form-value keys.
 
 <a id="fim.gui.config_form.convergence_statistic_to_payload"></a>
 
-#### [convergence\_statistic\_to\_payload](./gui/config_form.py#L1336)
+#### [convergence\_statistic\_to\_payload](./gui/config_form.py#L1385)
 
 ```python
 def convergence_statistic_to_payload(
@@ -14945,7 +14945,7 @@ Build `convergence_statistic`'s payload from the multi-select checkboxes.
 
 <a id="fim.gui.config_form.convergence_statistic_from_params"></a>
 
-#### [convergence\_statistic\_from\_params](./gui/config_form.py#L1356)
+#### [convergence\_statistic\_from\_params](./gui/config_form.py#L1405)
 
 ```python
 def convergence_statistic_from_params(
@@ -14956,7 +14956,7 @@ Render `params.convergence_statistic` back into the checkbox keys.
 
 <a id="fim.gui.config_form.params_to_form_values"></a>
 
-#### [params\_to\_form\_values](./gui/config_form.py#L1379)
+#### [params\_to\_form\_values](./gui/config_form.py#L1428)
 
 ```python
 def params_to_form_values(params: SimulationParams) -> dict[str, str]
@@ -14987,7 +14987,7 @@ Render a validated `SimulationParams` back into the form's fields.
 
 <a id="fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES"></a>
 
-#### [DEFAULT\_RUN\_SETTING\_FIELD\_NAMES](./gui/config_form.py#L1476)
+#### [DEFAULT\_RUN\_SETTING\_FIELD\_NAMES](./gui/config_form.py#L1531)
 
 Every `SimulationParams`-backed form-value key the Settings dialog's
 own execution defaults cover (`fim.gui.preferences.GuiPreferences.
@@ -15028,7 +15028,7 @@ derived from Settings' "Statistics shown", not saved as a run default
 
 <a id="fim.gui.config_form.RUN_SETTING_LABELS"></a>
 
-#### [RUN\_SETTING\_LABELS](./gui/config_form.py#L1540)
+#### [RUN\_SETTING\_LABELS](./gui/config_form.py#L1612)
 
 Plain-language names for `DEFAULT_RUN_SETTING_FIELD_NAMES`, used when
 the GUI tells a user how a loaded configuration's run settings differ
@@ -15038,7 +15038,7 @@ from the other.
 
 <a id="fim.gui.config_form.run_setting_display"></a>
 
-#### [run\_setting\_display](./gui/config_form.py#L1566)
+#### [run\_setting\_display](./gui/config_form.py#L1642)
 
 ```python
 def run_setting_display(name: str, text: str) -> str
@@ -15063,7 +15063,7 @@ an empty cell.
 
 <a id="fim.gui.config_form.run_setting_differences"></a>
 
-#### [run\_setting\_differences](./gui/config_form.py#L1605)
+#### [run\_setting\_differences](./gui/config_form.py#L1681)
 
 ```python
 def run_setting_differences(
@@ -15096,7 +15096,7 @@ adopt them. This is that comparison.
 
 <a id="fim.gui.config_form.starter_form_values"></a>
 
-#### [starter\_form\_values](./gui/config_form.py#L1649)
+#### [starter\_form\_values](./gui/config_form.py#L1725)
 
 ```python
 def starter_form_values(
@@ -15136,7 +15136,7 @@ Return the form's default values, from the CLI's own starter config.
 
 <a id="fim.gui.config_form.payload_to_yaml_text"></a>
 
-#### [payload\_to\_yaml\_text](./gui/config_form.py#L1755)
+#### [payload\_to\_yaml\_text](./gui/config_form.py#L1831)
 
 ```python
 def payload_to_yaml_text(payload: Mapping[str, object]) -> str

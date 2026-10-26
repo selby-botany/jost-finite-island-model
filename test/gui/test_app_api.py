@@ -51,6 +51,7 @@ from fim.gui.batch_runner import default_max_workers
 from fim.gui.config_form import (
     DEFAULT_RUN_SETTING_FIELD_NAMES,
     form_values_to_payload,
+    params_to_form_values,
     payload_to_yaml_text,
     starter_form_values,
 )
@@ -1539,6 +1540,76 @@ def test_validate_form_accepts_the_starter_values() -> None:
     # long the run is expected to take.
     assert result["note"].startswith("Convergence: burn-in ")
     assert "(derived; this model needs about" in result["note"]
+
+
+def test_validate_form_accepts_a_submission_missing_widgetless_fields() -> None:
+    """A submission with no DOM control for a widget-less field still validates.
+
+    Regression test for a real incident, not merely a hypothetical:
+    the 2026-10-25 project review's finding G-4 added `locus_
+    aggregation`/`trajectory_keep_last`/`trajectory_keep_burn_in`/
+    `history_format` to `all_fields()` with no live Configure widget
+    for any of them, but the fix's first commit did not also add them
+    to `DEFAULT_RUN_SETTING_FIELD_NAMES`. `collectFormValues`
+    (`config-modals.js`) builds a submission from `FormData`, so a
+    field with no DOM element is simply absent from it;
+    `form_values_to_payload`'s own `values[field.name]` then raised
+    "missing field" for every run submission, not only one touching a
+    non-default value for one of the four -- this is exactly the
+    shape of values a real submission sent the moment that gap
+    shipped, caught live in the desktop app rather than by this suite.
+    """
+    starter = _submittable_starter()
+    widgetless = {
+        "locus_aggregation",
+        "trajectory_keep_last",
+        "trajectory_keep_burn_in",
+        "history_format",
+    }
+    values = {key: value for key, value in starter.items() if key not in widgetless}
+
+    result = Api().validate_form(values)
+
+    assert result["ok"] is True
+
+
+def test_start_run_after_loading_a_non_default_locus_aggregation_uses_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A loaded configuration's own `locus_aggregation` survives to the run.
+
+    The full "Open configuration…" scenario the 2026-10-25 project
+    review's finding G-4 describes: a submission built the way the
+    real page builds one after a load (the DOM's own values, missing
+    every widget-less field, plus `perRunSettingValues`'s `DEFAULT_
+    RUN_SETTING_FIELD_NAMES` subset carried from the load) must still
+    carry the loaded, non-default choice through to the run, not
+    silently fall back to the Settings-wide default.
+    """
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    base = SimulationParams.from_mapping(
+        {**yaml.safe_load(cli.STARTER_CONFIG), "ploidy": "diploid"}
+    )
+    loaded = replace(base, locus_aggregation="mean_of_ratios")
+    loaded_values = params_to_form_values(loaded)
+
+    widgetless = {
+        "locus_aggregation",
+        "trajectory_keep_last",
+        "trajectory_keep_burn_in",
+        "history_format",
+    }
+    dom_values = {k: v for k, v in loaded_values.items() if k not in widgetless}
+    run_settings = api._loaded_run_settings(loaded_values)["runSettings"]
+    submitted = {**dom_values, **run_settings}
+
+    result = api.validate_form(submitted)
+
+    assert result["ok"] is True
+    merged = api._merge_default_run_settings(dict(submitted))
+    restored = SimulationParams.from_mapping(form_values_to_payload(merged))
+    assert restored.locus_aggregation == "mean_of_ratios"
 
 
 def test_validate_form_names_only_the_burn_in_when_the_cap_is_explicit() -> None:
