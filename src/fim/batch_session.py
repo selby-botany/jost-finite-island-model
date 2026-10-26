@@ -451,11 +451,22 @@ class BatchSession:
             fault=fault,
         )
 
-    def close(self) -> None:
-        """Release every lane's open files; idempotent."""
+    def close(self, *, canonicalize: bool = False) -> None:
+        """Release every lane's open files; idempotent.
+
+        Args:
+            canonicalize: `True` lets a still-open lane's log be rewritten
+                with canonical block boundaries, which moves the byte
+                offset any checkpoint already taken against it names.
+                Default `False`, so a close that is not `finalize`'s own —
+                pause, cancel, a failure the context manager closes on its
+                way out — never strands the batch's `latest_checkpoint`;
+                only a genuinely finished batch, which will never resume
+                from a checkpoint again, passes `True`.
+        """
         if not self._closed:
             self._closed = True
-            close_store(self._store)
+            close_store(self._store, canonicalize=canonicalize)
 
     def commit_logs(self) -> int:
         """Make every active lane's trajectory durable up to this tick.
@@ -512,14 +523,19 @@ class BatchSession:
         self._require_open()
         if not self.stopped:
             raise ValueError(f"the batch has not stopped after {self._ticks} tick(s)")
+        built = False
         try:
             kept = self._lanes
             if self._accepted_count is not None:
                 kept = self._lanes[: self._accepted_count]
                 self._discard_past_stop()
             results = tuple(_require_result(lane) for lane in kept)
+            built = True
         finally:
-            self.close()
+            # Canonicalize only once every result actually built: a
+            # failure here (an unfinished lane) leaves the batch
+            # resumable, exactly like `close`'s own default reasoning.
+            self.close(canonicalize=built)
         self._results = tuple(
             replace(
                 result,

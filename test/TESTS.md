@@ -9123,9 +9123,58 @@ def test_a_log_cut_down_after_its_checkpoint_resumes_by_content(
 
 The window between a lane stopping and the next checkpoint is safe.
 
+<a id="engine.test_batch_session._TickingClock"></a>
+
+## [\_TickingClock Objects](./engine/test_batch_session.py#L501)
+
+```python
+class _TickingClock()
+```
+
+A clock that advances a fixed step every call, never real time.
+
+<a id="engine.test_batch_session._TickingClock.__init__"></a>
+
+#### [\_\_init\_\_](./engine/test_batch_session.py#L504)
+
+```python
+def __init__(step: float = 0.3) -> None
+```
+
+Start at zero and advance by `step` on every call.
+
+<a id="engine.test_batch_session._TickingClock.__call__"></a>
+
+#### [\_\_call\_\_](./engine/test_batch_session.py#L509)
+
+```python
+def __call__() -> float
+```
+
+Advance and return the new reading.
+
+<a id="engine.test_batch_session.test_a_timed_block_seal_before_abandoning_still_resumes"></a>
+
+#### [test\_a\_timed\_block\_seal\_before\_abandoning\_still\_resumes](./engine/test_batch_session.py#L540)
+
+```python
+def test_a_timed_block_seal_before_abandoning_still_resumes(
+        tmp_path: Path) -> None
+```
+
+A checkpoint taken just after a timed block seal is still resumable.
+
+Closing a log that sealed a block on the clock used to rewrite it with
+canonical block boundaries, moving the byte offset a checkpoint just
+taken against it already named (`SessionRestoreError: ... no committed
+block ends at byte ...`) -- the exact failure reported from a real,
+paused batch. `BatchSession.close`'s default no longer canonicalizes,
+which is what the session's own `with` block (and `fim.run_service`'s
+pause) relies on.
+
 <a id="engine.test_batch_session.test_capture_and_commit_start_every_lane_before_waiting_on_any"></a>
 
-#### [test\_capture\_and\_commit\_start\_every\_lane\_before\_waiting\_on\_any](./engine/test_batch_session.py#L501)
+#### [test\_capture\_and\_commit\_start\_every\_lane\_before\_waiting\_on\_any](./engine/test_batch_session.py#L569)
 
 ```python
 def test_capture_and_commit_start_every_lane_before_waiting_on_any(
@@ -41657,9 +41706,71 @@ def test_a_checkpoint_position_is_a_plain_record_of_the_committed_end(
 
 The position names the committed end and matches a fresh scan of it.
 
+<a id="persistence.test_tlog_resume._FakeClock"></a>
+
+## [\_FakeClock Objects](./persistence/test_tlog_resume.py#L287)
+
+```python
+class _FakeClock()
+```
+
+A clock the test advances by hand.
+
+<a id="persistence.test_tlog_resume._FakeClock.__init__"></a>
+
+#### [\_\_init\_\_](./persistence/test_tlog_resume.py#L290)
+
+```python
+def __init__() -> None
+```
+
+Start at zero.
+
+<a id="persistence.test_tlog_resume._FakeClock.__call__"></a>
+
+#### [\_\_call\_\_](./persistence/test_tlog_resume.py#L294)
+
+```python
+def __call__() -> float
+```
+
+Return the current fake time.
+
+<a id="persistence.test_tlog_resume.test_a_checkpoint_survives_a_close_that_must_stay_resumable"></a>
+
+#### [test\_a\_checkpoint\_survives\_a\_close\_that\_must\_stay\_resumable](./persistence/test_tlog_resume.py#L299)
+
+```python
+def test_a_checkpoint_survives_a_close_that_must_stay_resumable(
+        tmp_path: Path) -> None
+```
+
+`close(canonicalize=False)` keeps a checkpoint valid past a timed seal.
+
+`_rewrite_canonically` moves every later byte offset once a time-sealed
+log is rewritten on close -- including the one a checkpoint taken just
+before that close already handed out. A caller that still means to
+resume (a pause, a cancel, a failure) closes with `canonicalize=False`
+so a timed seal never strands it.
+
+<a id="persistence.test_tlog_resume.test_a_canonicalizing_close_can_strand_a_checkpoint_taken_against_timed_seals"></a>
+
+#### [test\_a\_canonicalizing\_close\_can\_strand\_a\_checkpoint\_taken\_against\_timed\_seals](./persistence/test_tlog_resume.py#L341)
+
+```python
+def test_a_canonicalizing_close_can_strand_a_checkpoint_taken_against_timed_seals(
+        tmp_path: Path) -> None
+```
+
+The trade-off `canonicalize=False` exists for.
+
+Canonicalizing on close (the default) re-chunks a time-sealed log, so a
+checkpoint taken just beforehand can no longer be resumed from -- the
+exact failure `canonicalize=False` is for.
+
 <a id="persistence.test_tlog_resume.test_the_store_checkpoints_and_resumes"></a>
 
-#### [test\_the\_store\_checkpoints\_and\_resumes](./persistence/test_tlog_resume.py#L287)
+#### [test\_the\_store\_checkpoints\_and\_resumes](./persistence/test_tlog_resume.py#L382)
 
 ```python
 def test_the_store_checkpoints_and_resumes(tmp_path: Path) -> None
@@ -41669,7 +41780,7 @@ The same, through `BinaryLogStore`, reading rows back across the resume.
 
 <a id="persistence.test_tlog_resume.test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_log"></a>
 
-#### [test\_a\_process\_killed\_after\_a\_checkpoint\_resumes\_to\_the\_uninterrupted\_log](./persistence/test_tlog_resume.py#L343)
+#### [test\_a\_process\_killed\_after\_a\_checkpoint\_resumes\_to\_the\_uninterrupted\_log](./persistence/test_tlog_resume.py#L438)
 
 ```python
 def test_a_process_killed_after_a_checkpoint_resumes_to_the_uninterrupted_log(
@@ -41685,7 +41796,7 @@ written without interruption: byte for byte.
 
 <a id="persistence.test_tlog_resume.test_a_flush_begun_then_waited_commits_what_checkpoint_does"></a>
 
-#### [test\_a\_flush\_begun\_then\_waited\_commits\_what\_checkpoint\_does](./persistence/test_tlog_resume.py#L402)
+#### [test\_a\_flush\_begun\_then\_waited\_commits\_what\_checkpoint\_does](./persistence/test_tlog_resume.py#L497)
 
 ```python
 def test_a_flush_begun_then_waited_commits_what_checkpoint_does(
@@ -41699,7 +41810,7 @@ third writer's single `checkpoint` call commits for the same frames.
 
 <a id="persistence.test_tlog_resume.test_deferred_drive_flushes_become_one_full_sync"></a>
 
-#### [test\_deferred\_drive\_flushes\_become\_one\_full\_sync](./persistence/test_tlog_resume.py#L432)
+#### [test\_deferred\_drive\_flushes\_become\_one\_full\_sync](./persistence/test_tlog_resume.py#L527)
 
 ```python
 def test_deferred_drive_flushes_become_one_full_sync(tmp_path: Path) -> None

@@ -2374,14 +2374,25 @@ Capture the batch and publish it as the object's latest checkpoint.
 #### [close](./batch_session.py#L454)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = False) -> None
 ```
 
 Release every lane's open files; idempotent.
 
+**Arguments**:
+
+- `canonicalize` - `True` lets a still-open lane's log be rewritten
+  with canonical block boundaries, which moves the byte
+  offset any checkpoint already taken against it names.
+  Default `False`, so a close that is not `finalize`'s own —
+  pause, cancel, a failure the context manager closes on its
+  way out — never strands the batch's `latest_checkpoint`;
+  only a genuinely finished batch, which will never resume
+  from a checkpoint again, passes `True`.
+
 <a id="fim.batch_session.BatchSession.commit_logs"></a>
 
-#### [commit\_logs](./batch_session.py#L460)
+#### [commit\_logs](./batch_session.py#L471)
 
 ```python
 def commit_logs() -> int
@@ -2403,7 +2414,7 @@ tick count is what the lifecycle records as committed.
 
 <a id="fim.batch_session.BatchSession.finalize"></a>
 
-#### [finalize](./batch_session.py#L497)
+#### [finalize](./batch_session.py#L508)
 
 ```python
 def finalize() -> tuple[RunResult, ...]
@@ -2426,7 +2437,7 @@ discarded from the store first, as `fim.engine.run_batch` does.
 
 <a id="fim.batch_session.check_batch_session_support"></a>
 
-#### [check\_batch\_session\_support](./batch_session.py#L796)
+#### [check\_batch\_session\_support](./batch_session.py#L812)
 
 ```python
 def check_batch_session_support(params: SimulationParams) -> SessionBackend
@@ -9199,14 +9210,25 @@ Capture the session and publish it as the object's latest checkpoint.
 #### [close](./execution.py#L400)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = False) -> None
 ```
 
 Release the store's open files; idempotent.
 
+**Arguments**:
+
+- `canonicalize` - `True` lets a still-open log be rewritten with
+  canonical block boundaries, which moves the byte offset
+  any checkpoint already taken against it names. Default
+  `False`, so a close that is not `finalize`'s own — pause,
+  cancel, a failure the context manager closes on its way
+  out — never strands `latest_checkpoint`; only a genuinely
+  finished run, which will never resume from a checkpoint
+  again, passes `True`.
+
 <a id="fim.execution.ScalarSession.finalize"></a>
 
-#### [finalize](./execution.py#L406)
+#### [finalize](./execution.py#L417)
 
 ```python
 def finalize() -> RunResult
@@ -9227,7 +9249,7 @@ Build the run's result once it has stopped, and close the store.
 
 <a id="fim.execution.check_session_support"></a>
 
-#### [check\_session\_support](./execution.py#L444)
+#### [check\_session\_support](./execution.py#L460)
 
 ```python
 def check_session_support(params: SimulationParams) -> SessionBackend
@@ -9257,7 +9279,7 @@ configuration is reported without recording a failed attempt.
 
 <a id="fim.execution.check_backend_buildable"></a>
 
-#### [check\_backend\_buildable](./execution.py#L472)
+#### [check\_backend\_buildable](./execution.py#L488)
 
 ```python
 def check_backend_buildable(params: SimulationParams,
@@ -9278,7 +9300,7 @@ Refuse a backend the blocking call itself would refuse for `params`.
 
 <a id="fim.execution.export_lane"></a>
 
-#### [export\_lane](./execution.py#L499)
+#### [export\_lane](./execution.py#L515)
 
 ```python
 def export_lane(
@@ -9311,7 +9333,7 @@ log) first, so the positions recorded name data already on disk.
 
 <a id="fim.execution.resolve_session_backend"></a>
 
-#### [resolve\_session\_backend](./execution.py#L573)
+#### [resolve\_session\_backend](./execution.py#L589)
 
 ```python
 def resolve_session_backend(params: SimulationParams) -> SessionBackend
@@ -9339,7 +9361,7 @@ blocking call would.
 
 <a id="fim.execution.check_payload_identity"></a>
 
-#### [check\_payload\_identity](./execution.py#L605)
+#### [check\_payload\_identity](./execution.py#L621)
 
 ```python
 def check_payload_identity(
@@ -9373,7 +9395,7 @@ Check a payload is a session's of `kind`, taken under `params`.
 
 <a id="fim.execution.restore_lane"></a>
 
-#### [restore\_lane](./execution.py#L743)
+#### [restore\_lane](./execution.py#L759)
 
 ```python
 def restore_lane(params: SimulationParams,
@@ -9420,7 +9442,7 @@ the recorded positions.
 
 <a id="fim.execution.lane_generation"></a>
 
-#### [lane\_generation](./execution.py#L876)
+#### [lane\_generation](./execution.py#L892)
 
 ```python
 def lane_generation(lane: ReplicaLane) -> int
@@ -9433,7 +9455,7 @@ the run stops; the block holds the current generation.
 
 <a id="fim.execution.lane_state"></a>
 
-#### [lane\_state](./execution.py#L886)
+#### [lane\_state](./execution.py#L902)
 
 ```python
 def lane_state(lane: ReplicaLane) -> ModelState
@@ -17647,7 +17669,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 #### [close](./gui/store.py#L164)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = True) -> None
 ```
 
 Close the wrapped store's own resources (`ClosableStore`).
@@ -17791,7 +17813,7 @@ Delegate straight to the wrapped store; nothing to decorate here.
 #### [close](./gui/store.py#L292)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = True) -> None
 ```
 
 Close the wrapped store, then report the last generation it holds.
@@ -23593,7 +23615,7 @@ Closes the writer first (an open file blocks removal on Windows).
 
 <a id="fim.persistence.binary_store.BinaryLogStore.flush"></a>
 
-#### [flush](./persistence/binary_store.py#L470)
+#### [flush](./persistence/binary_store.py#L472)
 
 ```python
 def flush(*, sync: bool = False) -> None
@@ -23607,7 +23629,7 @@ Commit everything written so far (a barrier); optionally make it durable.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.snapshot"></a>
 
-#### [snapshot](./persistence/binary_store.py#L481)
+#### [snapshot](./persistence/binary_store.py#L483)
 
 ```python
 def snapshot() -> tuple[int, int, int]
@@ -23619,7 +23641,7 @@ Return `(committed generation, committed bytes, chain checksum)`.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.is_open"></a>
 
-#### [is\_open](./persistence/binary_store.py#L490)
+#### [is\_open](./persistence/binary_store.py#L492)
 
 ```python
 def is_open() -> bool
@@ -23629,19 +23651,26 @@ Whether this log's writer is currently open (for tests and diagnostics).
 
 <a id="fim.persistence.binary_store.BinaryLogStore.close"></a>
 
-#### [close](./persistence/binary_store.py#L494)
+#### [close](./persistence/binary_store.py#L496)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = True) -> None
 ```
 
 Commit and close the log, and its ancestral-phase companion if any.
 
 Idempotent. A closed store is finished: writing again raises.
 
+**Arguments**:
+
+- `canonicalize` - Forwarded to `tlog.LogWriter.close`; see there.
+  `False` keeps every offset a `checkpoint` already returned
+  valid, at the cost of a time-sealed log never being
+  rewritten with canonical block boundaries.
+
 <a id="fim.persistence.binary_store.BinaryLogStore.equilibrium_store"></a>
 
-#### [equilibrium\_store](./persistence/binary_store.py#L505)
+#### [equilibrium\_store](./persistence/binary_store.py#L513)
 
 ```python
 def equilibrium_store(run_id: str) -> BinaryLogStore
@@ -23655,7 +23684,7 @@ artifacts. One instance per store.
 
 <a id="fim.persistence.binary_store.BinaryLogStore.exists"></a>
 
-#### [exists](./persistence/binary_store.py#L562)
+#### [exists](./persistence/binary_store.py#L571)
 
 ```python
 def exists() -> bool
@@ -23665,7 +23694,7 @@ Whether the log file exists on disk.
 
 <a id="fim.persistence.binary_store.sync_store_drives"></a>
 
-#### [sync\_store\_drives](./persistence/binary_store.py#L567)
+#### [sync\_store\_drives](./persistence/binary_store.py#L576)
 
 ```python
 def sync_store_drives(stores: Sequence[BinaryLogStore]) -> None
@@ -29773,14 +29802,19 @@ closed store re-opens itself if written to again.
 #### [close](./persistence/store.py#L219)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = True) -> None
 ```
 
 Release whatever the store holds open; safe to call repeatedly.
 
+**Arguments**:
+
+- `canonicalize` - `False` keeps every byte offset a `checkpoint`
+  already returned valid; see `tlog.LogWriter.close`.
+
 <a id="fim.persistence.store.close_run_store"></a>
 
-#### [close\_run\_store](./persistence/store.py#L224)
+#### [close\_run\_store](./persistence/store.py#L229)
 
 ```python
 def close_run_store(store: TrajectoryStore, run_id: str) -> None
@@ -29796,10 +29830,10 @@ Close the resources one run of a multi-run store holds, if it can.
 
 <a id="fim.persistence.store.close_store"></a>
 
-#### [close\_store](./persistence/store.py#L237)
+#### [close\_store](./persistence/store.py#L242)
 
 ```python
-def close_store(store: TrajectoryStore) -> None
+def close_store(store: TrajectoryStore, *, canonicalize: bool = True) -> None
 ```
 
 Close `store`'s open resources when it has any; otherwise do nothing.
@@ -29807,10 +29841,11 @@ Close `store`'s open resources when it has any; otherwise do nothing.
 **Arguments**:
 
 - `store` - Any `TrajectoryStore`; only a `ClosableStore` is closed.
+- `canonicalize` - Forwarded to `ClosableStore.close`; see there.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore"></a>
 
-## [InMemoryTrajectoryStore Objects](./persistence/store.py#L247)
+## [InMemoryTrajectoryStore Objects](./persistence/store.py#L253)
 
 ```python
 class InMemoryTrajectoryStore()
@@ -29838,7 +29873,7 @@ running this.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/store.py#L269)
+#### [\_\_init\_\_](./persistence/store.py#L275)
 
 ```python
 def __init__() -> None
@@ -29848,7 +29883,7 @@ Initialize an empty store.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__getstate__"></a>
 
-#### [\_\_getstate\_\_](./persistence/store.py#L276)
+#### [\_\_getstate\_\_](./persistence/store.py#L282)
 
 ```python
 def __getstate__() -> dict[str, Any]
@@ -29866,7 +29901,7 @@ lock on the other side instead.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__setstate__"></a>
 
-#### [\_\_setstate\_\_](./persistence/store.py#L291)
+#### [\_\_setstate\_\_](./persistence/store.py#L297)
 
 ```python
 def __setstate__(state: dict[str, Any]) -> None
@@ -29876,7 +29911,7 @@ Restore everything but `_lock`, then rebuild a fresh one.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.write_generation"></a>
 
-#### [write\_generation](./persistence/store.py#L296)
+#### [write\_generation](./persistence/store.py#L302)
 
 ```python
 def write_generation(run_id: str,
@@ -29894,7 +29929,7 @@ internal row producers named there.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.begin_run"></a>
 
-#### [begin\_run](./persistence/store.py#L321)
+#### [begin\_run](./persistence/store.py#L327)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -29908,7 +29943,7 @@ Record `run_id`'s layout so `write_frame` can turn frames into rows.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.wants_frames"></a>
 
-#### [wants\_frames](./persistence/store.py#L332)
+#### [wants\_frames](./persistence/store.py#L338)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -29918,7 +29953,7 @@ Return `False`: rows are what this store keeps, so rows are cheaper.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.write_frame"></a>
 
-#### [write\_frame](./persistence/store.py#L337)
+#### [write\_frame](./persistence/store.py#L343)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -29933,7 +29968,7 @@ Append one generation given as a frame, as the rows it stands for.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.read"></a>
 
-#### [read](./persistence/store.py#L353)
+#### [read](./persistence/store.py#L359)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -29948,7 +29983,7 @@ torn read.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.discard"></a>
 
-#### [discard](./persistence/store.py#L365)
+#### [discard](./persistence/store.py#L371)
 
 ```python
 def discard(run_id: str) -> None
@@ -29963,10 +29998,10 @@ another thread can never interleave with this rebuild of `_rows`.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.close"></a>
 
-#### [close](./persistence/store.py#L376)
+#### [close](./persistence/store.py#L382)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = True) -> None
 ```
 
 Do nothing: rows live in memory, so there is nothing to release.
@@ -29976,7 +30011,7 @@ kind it has (`ClosableStore`).
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.equilibrium_store"></a>
 
-#### [equilibrium\_store](./persistence/store.py#L383)
+#### [equilibrium\_store](./persistence/store.py#L390)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -29991,7 +30026,7 @@ rows are told apart by `run_id`, exactly like its main rows
 
 <a id="fim.persistence.store.ReplicateFanoutStore"></a>
 
-## [ReplicateFanoutStore Objects](./persistence/store.py#L398)
+## [ReplicateFanoutStore Objects](./persistence/store.py#L405)
 
 ```python
 class ReplicateFanoutStore()
@@ -30026,7 +30061,7 @@ child stores' methods at once.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__init__"></a>
 
-#### [\_\_init\_\_](./persistence/store.py#L427)
+#### [\_\_init\_\_](./persistence/store.py#L434)
 
 ```python
 def __init__(store_factory: Callable[[str], TrajectoryStore]) -> None
@@ -30042,7 +30077,7 @@ Wrap a per-replicate store factory as one shared `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__getstate__"></a>
 
-#### [\_\_getstate\_\_](./persistence/store.py#L439)
+#### [\_\_getstate\_\_](./persistence/store.py#L446)
 
 ```python
 def __getstate__() -> dict[str, Any]
@@ -30053,7 +30088,7 @@ own identical method for why.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.__setstate__"></a>
 
-#### [\_\_setstate\_\_](./persistence/store.py#L446)
+#### [\_\_setstate\_\_](./persistence/store.py#L453)
 
 ```python
 def __setstate__(state: dict[str, Any]) -> None
@@ -30063,7 +30098,7 @@ Restore everything but `_lock`, then rebuild a fresh one.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.store_for"></a>
 
-#### [store\_for](./persistence/store.py#L451)
+#### [store\_for](./persistence/store.py#L458)
 
 ```python
 def store_for(run_id: str) -> TrajectoryStore
@@ -30073,7 +30108,7 @@ Return `run_id`'s own child store, building it on first use.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.write_generation"></a>
 
-#### [write\_generation](./persistence/store.py#L460)
+#### [write\_generation](./persistence/store.py#L467)
 
 ```python
 def write_generation(run_id: str,
@@ -30087,7 +30122,7 @@ Delegate to `run_id`'s own child store; see `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.begin_run"></a>
 
-#### [begin\_run](./persistence/store.py#L473)
+#### [begin\_run](./persistence/store.py#L480)
 
 ```python
 def begin_run(run_id: str, layout: FrameLayout) -> None
@@ -30097,7 +30132,7 @@ Tell `run_id`'s own child store its layout (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.wants_frames"></a>
 
-#### [wants\_frames](./persistence/store.py#L477)
+#### [wants\_frames](./persistence/store.py#L484)
 
 ```python
 def wants_frames(run_id: str) -> bool
@@ -30107,7 +30142,7 @@ Whether `run_id`'s own child store prefers frames (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.write_frame"></a>
 
-#### [write\_frame](./persistence/store.py#L481)
+#### [write\_frame](./persistence/store.py#L488)
 
 ```python
 def write_frame(run_id: str, frame: TrajectoryFrame) -> None
@@ -30121,7 +30156,7 @@ Delegate a frame to `run_id`'s own child store (`FrameStore`).
 
 <a id="fim.persistence.store.ReplicateFanoutStore.read"></a>
 
-#### [read](./persistence/store.py#L492)
+#### [read](./persistence/store.py#L499)
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
@@ -30131,7 +30166,7 @@ Delegate to `run_id`'s own child store; see `TrajectoryStore`.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.discard"></a>
 
-#### [discard](./persistence/store.py#L496)
+#### [discard](./persistence/store.py#L503)
 
 ```python
 def discard(run_id: str) -> None
@@ -30146,17 +30181,22 @@ child store to create just to immediately discard from.
 
 <a id="fim.persistence.store.ReplicateFanoutStore.close"></a>
 
-#### [close](./persistence/store.py#L508)
+#### [close](./persistence/store.py#L515)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = True) -> None
 ```
 
 Close every child store built so far (`ClosableStore`).
 
+**Arguments**:
+
+- `canonicalize` - Forwarded to each child's own `close`; see
+  `tlog.LogWriter.close`.
+
 <a id="fim.persistence.store.ReplicateFanoutStore.close_run"></a>
 
-#### [close\_run](./persistence/store.py#L515)
+#### [close\_run](./persistence/store.py#L527)
 
 ```python
 def close_run(run_id: str) -> None
@@ -30169,9 +30209,14 @@ batch holds open only the files of the replicates still running
 rather than one per replicate for the whole batch. A no-op for a
 run this store never saw; the child re-opens if written again.
 
+That replicate is done for good (its own result is captured from
+here on, not its trajectory log — `BatchSession.capture`), so
+this always canonicalizes, independently of whether the batch
+itself is still resumable.
+
 <a id="fim.persistence.store.ReplicateFanoutStore.equilibrium_store"></a>
 
-#### [equilibrium\_store](./persistence/store.py#L527)
+#### [equilibrium\_store](./persistence/store.py#L544)
 
 ```python
 def equilibrium_store(run_id: str) -> TrajectoryStore
@@ -30185,7 +30230,7 @@ own `trajectory.tlog`, in its own directory
 
 <a id="fim.persistence.store.normalize_row"></a>
 
-#### [normalize\_row](./persistence/store.py#L537)
+#### [normalize\_row](./persistence/store.py#L554)
 
 ```python
 def normalize_row(row: Mapping[str, Any],
@@ -31047,7 +31092,7 @@ Wait until everything queued so far is written (`flush`'s second half).
 #### [close](./persistence/tlog.py#L1147)
 
 ```python
-def close() -> None
+def close(*, canonicalize: bool = True) -> None
 ```
 
 Write the open block, sync, stop the thread and close the file.
@@ -31055,13 +31100,25 @@ Write the open block, sync, stop the thread and close the file.
 Safe to call twice. The file descriptor is closed even when an
 earlier write failed; the failure is then raised from here.
 
+**Arguments**:
+
+- `canonicalize` - Whether a time-sealed log may still be rewritten
+  with canonical block boundaries (`_rewrite_canonically`).
+  `False` for a close that must leave every byte offset a
+  `checkpoint` already handed out still valid — the rewrite
+  moves those offsets, so a caller that may still resume from
+  one (a pause, a cancel, a failure) closes with this `False`;
+  only a run that has truly finished, and so will never be
+  resumed from a checkpoint again, passes `True`.
+
+
 **Raises**:
 
 - `BaseException` - Whatever the writer thread raised.
 
 <a id="fim.persistence.tlog.LogWriter.snapshot"></a>
 
-#### [snapshot](./persistence/tlog.py#L1213)
+#### [snapshot](./persistence/tlog.py#L1223)
 
 ```python
 def snapshot() -> tuple[int, int, int]
@@ -31074,7 +31131,7 @@ so the three always describe the same block.
 
 <a id="fim.persistence.tlog.LogWriter.checkpoint"></a>
 
-#### [checkpoint](./persistence/tlog.py#L1234)
+#### [checkpoint](./persistence/tlog.py#L1244)
 
 ```python
 def checkpoint() -> LogPosition
@@ -31098,7 +31155,7 @@ that. Resuming from it later cuts the file back to this point.
 
 <a id="fim.persistence.tlog.LogWriter.position"></a>
 
-#### [position](./persistence/tlog.py#L1251)
+#### [position](./persistence/tlog.py#L1261)
 
 ```python
 def position() -> LogPosition
@@ -31111,7 +31168,7 @@ barrier that makes it everything submitted.
 
 <a id="fim.persistence.tlog.iter_frames"></a>
 
-#### [iter\_frames](./persistence/tlog.py#L1441)
+#### [iter\_frames](./persistence/tlog.py#L1451)
 
 ```python
 def iter_frames(path: Path | str,

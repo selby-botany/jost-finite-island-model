@@ -1144,11 +1144,21 @@ class LogWriter:
             self._work.join()
             self._raise_error()
 
-    def close(self) -> None:
+    def close(self, *, canonicalize: bool = True) -> None:
         """Write the open block, sync, stop the thread and close the file.
 
         Safe to call twice. The file descriptor is closed even when an
         earlier write failed; the failure is then raised from here.
+
+        Args:
+            canonicalize: Whether a time-sealed log may still be rewritten
+                with canonical block boundaries (`_rewrite_canonically`).
+                `False` for a close that must leave every byte offset a
+                `checkpoint` already handed out still valid — the rewrite
+                moves those offsets, so a caller that may still resume from
+                one (a pause, a cancel, a failure) closes with this `False`;
+                only a run that has truly finished, and so will never be
+                resumed from a checkpoint again, passes `True`.
 
         Raises:
             BaseException: Whatever the writer thread raised.
@@ -1170,7 +1180,7 @@ class LogWriter:
         finally:
             self._closed = True
             os.close(self._fd)
-        if self.canonical_on_close and self.stats.timed_seals:
+        if canonicalize and self.canonical_on_close and self.stats.timed_seals:
             self._rewrite_canonically()
 
     def _rewrite_canonically(self) -> None:

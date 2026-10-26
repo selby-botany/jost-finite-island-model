@@ -397,11 +397,22 @@ class ScalarSession:
             fault=fault,
         )
 
-    def close(self) -> None:
-        """Release the store's open files; idempotent."""
+    def close(self, *, canonicalize: bool = False) -> None:
+        """Release the store's open files; idempotent.
+
+        Args:
+            canonicalize: `True` lets a still-open log be rewritten with
+                canonical block boundaries, which moves the byte offset
+                any checkpoint already taken against it names. Default
+                `False`, so a close that is not `finalize`'s own — pause,
+                cancel, a failure the context manager closes on its way
+                out — never strands `latest_checkpoint`; only a genuinely
+                finished run, which will never resume from a checkpoint
+                again, passes `True`.
+        """
         if not self._closed:
             self._closed = True
-            close_store(self._store)
+            close_store(self._store, canonicalize=canonicalize)
 
     def finalize(self) -> RunResult:
         """Build the run's result once it has stopped, and close the store.
@@ -421,10 +432,15 @@ class ScalarSession:
             raise ValueError(
                 f"run {self.run_id} has not stopped at generation {self.generation}"
             )
+        built = False
         try:
             result = finalize_replica_lane(self._lane, self._clock, self._store)
+            built = True
         finally:
-            self.close()
+            # Canonicalize only once the result actually built: a failure
+            # here leaves the run resumable, exactly like `close`'s own
+            # default reasoning.
+            self.close(canonicalize=built)
         self._result = replace(
             result,
             manifest=replace(

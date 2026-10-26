@@ -284,6 +284,101 @@ def test_a_checkpoint_position_is_a_plain_record_of_the_committed_end(
     writer.close()
 
 
+class _FakeClock:
+    """A clock the test advances by hand."""
+
+    def __init__(self) -> None:
+        """Start at zero."""
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        """Return the current fake time."""
+        return self.now
+
+
+def test_a_checkpoint_survives_a_close_that_must_stay_resumable(tmp_path: Path) -> None:
+    """`close(canonicalize=False)` keeps a checkpoint valid past a timed seal.
+
+    `_rewrite_canonically` moves every later byte offset once a time-sealed
+    log is rewritten on close -- including the one a checkpoint taken just
+    before that close already handed out. A caller that still means to
+    resume (a pause, a cancel, a failure) closes with `canonicalize=False`
+    so a timed seal never strands it.
+    """
+    clock = _FakeClock()
+    frames = walk(23, change=0.1, seed=60)
+    path = tmp_path / "t.tlog"
+    writer = LogWriter(
+        path,
+        RUN_ID,
+        LAYOUT,
+        mode="sparse",
+        key_every=16,
+        block_generations=8,
+        block_seconds=2.0,
+        clock=clock,
+    )
+    for frame in frames:
+        writer.submit(frame)
+        clock.now += 1.0
+    position = writer.checkpoint()
+    assert writer.stats.timed_seals > 0
+    writer.close(canonicalize=False)
+
+    resumed = LogWriter(
+        path,
+        RUN_ID,
+        LAYOUT,
+        resume=position,
+        mode="sparse",
+        key_every=16,
+        block_generations=8,
+    )
+    assert resumed.committed_generation == position.generation
+    resumed.close(canonicalize=False)
+
+
+def test_a_canonicalizing_close_can_strand_a_checkpoint_taken_against_timed_seals(
+    tmp_path: Path,
+) -> None:
+    """The trade-off `canonicalize=False` exists for.
+
+    Canonicalizing on close (the default) re-chunks a time-sealed log, so a
+    checkpoint taken just beforehand can no longer be resumed from -- the
+    exact failure `canonicalize=False` is for.
+    """
+    clock = _FakeClock()
+    frames = walk(23, change=0.1, seed=61)
+    path = tmp_path / "t.tlog"
+    writer = LogWriter(
+        path,
+        RUN_ID,
+        LAYOUT,
+        mode="sparse",
+        key_every=16,
+        block_generations=8,
+        block_seconds=2.0,
+        clock=clock,
+    )
+    for frame in frames:
+        writer.submit(frame)
+        clock.now += 1.0
+    position = writer.checkpoint()
+    assert writer.stats.timed_seals > 0
+    writer.close()  # canonicalize=True, the default
+
+    with pytest.raises(ValueError, match="no committed block ends"):
+        LogWriter(
+            path,
+            RUN_ID,
+            LAYOUT,
+            resume=position,
+            mode="sparse",
+            key_every=16,
+            block_generations=8,
+        )
+
+
 def test_the_store_checkpoints_and_resumes(tmp_path: Path) -> None:
     """The same, through `BinaryLogStore`, reading rows back across the resume."""
     frames = walk(60, change=0.1, seed=52)

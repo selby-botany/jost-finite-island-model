@@ -450,7 +450,9 @@ class BinaryLogStore:
         """
         with self._lock:
             holds = self._run_id == run_id
-            self._close_writer(raise_errors=False)
+            # About to be unlinked (or already not this run's file): no
+            # reason to pay for a canonical rewrite either way.
+            self._close_writer(raise_errors=False, canonicalize=False)
             if not holds and self.path.is_file():
                 try:
                     holds = (
@@ -491,16 +493,22 @@ class BinaryLogStore:
         """Whether this log's writer is currently open (for tests and diagnostics)."""
         return self._writer is not None
 
-    def close(self) -> None:
+    def close(self, *, canonicalize: bool = True) -> None:
         """Commit and close the log, and its ancestral-phase companion if any.
 
         Idempotent. A closed store is finished: writing again raises.
+
+        Args:
+            canonicalize: Forwarded to `tlog.LogWriter.close`; see there.
+                `False` keeps every offset a `checkpoint` already returned
+                valid, at the cost of a time-sealed log never being
+                rewritten with canonical block boundaries.
         """
         with self._lock:
-            self._close_writer(raise_errors=True)
+            self._close_writer(raise_errors=True, canonicalize=canonicalize)
             equilibrium = self._equilibrium
         if equilibrium is not None:
-            equilibrium.close()
+            equilibrium.close(canonicalize=canonicalize)
 
     def equilibrium_store(self, run_id: str) -> BinaryLogStore:
         """Return the store of this run's ancestral phase, beside this file.
@@ -542,18 +550,19 @@ class BinaryLogStore:
         )
         return self._writer
 
-    def _close_writer(self, *, raise_errors: bool) -> None:
+    def _close_writer(self, *, raise_errors: bool, canonicalize: bool = True) -> None:
         """Close the writer, marking the store finished.
 
         Args:
             raise_errors: Whether a failure the writer thread stored is raised.
+            canonicalize: Forwarded to `tlog.LogWriter.close`; see there.
         """
         writer, self._writer = self._writer, None
         if writer is None:
             return
         self._finished = True
         try:
-            writer.close()
+            writer.close(canonicalize=canonicalize)
         except BaseException:
             if raise_errors:
                 raise

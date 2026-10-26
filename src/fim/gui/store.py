@@ -161,9 +161,9 @@ class GuiProgressStore:
         """Delegate straight to the wrapped store; nothing to decorate here."""
         self._inner.discard(run_id)
 
-    def close(self) -> None:
+    def close(self, *, canonicalize: bool = True) -> None:
         """Close the wrapped store's own resources (`ClosableStore`)."""
-        close_store(self._inner)
+        close_store(self._inner, canonicalize=canonicalize)
 
     def equilibrium_store(self, run_id: str) -> TrajectoryStore:
         """Return the wrapped store's own ancestral-phase companion, undecorated.
@@ -289,14 +289,14 @@ class LiveProgressStore:
         """Delegate straight to the wrapped store; nothing to decorate here."""
         self._inner.discard(run_id)
 
-    def close(self) -> None:
+    def close(self, *, canonicalize: bool = True) -> None:
         """Close the wrapped store, then report the last generation it holds.
 
         Closing commits everything, so the sidecar's final value is the
         last generation written, even though the watermark lagged behind it
         while the run was going.
         """
-        close_store(self._inner)
+        close_store(self._inner, canonicalize=canonicalize)
         if self._last_written > self._last_reported:
             write_progress_sidecar(self._progress_path, self._last_written)
             self._last_reported = self._last_written

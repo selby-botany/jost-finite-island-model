@@ -43,7 +43,7 @@ from fim.persistence.run_checkpoint import (
 )
 from fim.persistence.run_lifecycle import RunPhase
 from fim.persistence.store import InMemoryTrajectoryStore
-from fim.persistence.tlog import iter_frames
+from fim.persistence.tlog import iter_frames, recover
 
 AT = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
 
@@ -496,6 +496,74 @@ def test_a_log_cut_down_after_its_checkpoint_resumes_by_content(
 
     _assert_same_results(resumed, reference)
     _assert_same_logs(tmp_path / "whole", tmp_path / "a" / "logs")
+
+
+class _TickingClock:
+    """A clock that advances a fixed step every call, never real time."""
+
+    def __init__(self, step: float = 0.3) -> None:
+        """Start at zero and advance by `step` on every call."""
+        self.now = 0.0
+        self.step = step
+
+    def __call__(self) -> float:
+        """Advance and return the new reading."""
+        self.now += self.step
+        return self.now
+
+
+def _timed_factory(
+    directory: Path, clock: Callable[[], float]
+) -> Callable[[str], BinaryLogStore]:
+    """Return a store factory whose blocks can seal on `clock`, not only on count.
+
+    `block_generations`/`key_every` are set far past what any lane here
+    reaches, so the only way a lane's log holds more than one block is the
+    timer -- exactly what a real, slow-ticking run's default `LIVE_BLOCK_
+    SECONDS` does.
+    """
+
+    def build(run_id: str) -> BinaryLogStore:
+        (directory / run_id).mkdir(parents=True, exist_ok=True)
+        return BinaryLogStore(
+            directory / run_id / "trajectory.tlog",
+            background=False,
+            block_seconds=1.0,
+            block_generations=1000,
+            key_every=1000,
+            clock=clock,
+        )
+
+    return build
+
+
+def test_a_timed_block_seal_before_abandoning_still_resumes(tmp_path: Path) -> None:
+    """A checkpoint taken just after a timed block seal is still resumable.
+
+    Closing a log that sealed a block on the clock used to rewrite it with
+    canonical block boundaries, moving the byte offset a checkpoint just
+    taken against it already named (`SessionRestoreError: ... no committed
+    block ends at byte ...`) -- the exact failure reported from a real,
+    paused batch. `BatchSession.close`'s default no longer canonicalizes,
+    which is what the session's own `with` block (and `fim.run_service`'s
+    pause) relies on.
+    """
+    params = _params()
+    clock = _TickingClock()
+    factory = _timed_factory(tmp_path / "logs", clock)
+    with BatchSession.create(params, factory, clock=_clock) as session:
+        session.advance(5)
+        loaded = _publish(session, tmp_path / "object")
+    blocks = recover(
+        next((tmp_path / "logs").glob("*/trajectory.tlog")), truncate=False
+    ).blocks
+    assert len(blocks) > 1, "the clock never sealed a block early; nothing was tested"
+
+    with BatchSession.restore(params, loaded, factory, clock=_clock) as session:
+        session.advance()
+        results = session.finalize()
+
+    assert len(results) == params.n_replicates
 
 
 def test_capture_and_commit_start_every_lane_before_waiting_on_any(
