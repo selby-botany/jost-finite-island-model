@@ -830,6 +830,14 @@ function renderBatchProgress(state, payload, jobId = null) {
     progressBar.value = meanGeneration;
     progressLabel.textContent =
         `mean completed generation ${meanGeneration} of up to ${payload.maxGenerations}`;
+    // The parameter strip's own `alleles` slot: same reasoning as
+    // `renderRunProgress`'s own identical lines, above -- a pooled
+    // batch's own scatter dots, not the single-replicate founding count.
+    if (payload.currentAlleleCount !== undefined && window.fim.updateParameterStripFromSummary) {
+        window.fim.updateParameterStripFromSummary({
+            alleles: String(payload.currentAlleleCount),
+        });
+    }
     if (!state.liveDemeSelectorWired) {
         wireLiveDemePairSelector(payload.demeCount, state, jobId);
         state.liveDemeSelectorWired = true;

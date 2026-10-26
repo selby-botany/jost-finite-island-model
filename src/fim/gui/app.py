@@ -1380,49 +1380,35 @@ def _locus_length_text(params: SimulationParams) -> str:
     return f"avg {f'{average:.1f}'.removesuffix('.0')}"
 
 
-def _segregating_allele_count(state: ModelState) -> int:
-    """Count distinct (locus, allele) pairs currently at a positive frequency.
+def _panel_allele_count(panel: Mapping[str, object]) -> int:
+    """Count a scatter panel's own dots, excluding the origin pile.
 
-    Reported live: `_initial_allele_count_text`'s own "configured
-    starting count" is only ever that -- a starting point. Mutation
-    mints new allele IDs and drift carries old ones to extinction as a
-    run proceeds, so the population's own allele count moves over time,
-    not fixed at its founding value once any generation has actually
-    run. This counts what is *currently* present instead: one allele ID
-    at one locus, unioned across every deme (present in even one deme
-    counts; absent from all of them does not), the same (locus, allele)
-    pairing `fim.viz.scatter.frequency_points` already treats as "one
-    allele." `ModelState.frequency_map`'s own sparse representation
-    never stores a zero-frequency entry (`ModelState.support_sizes`'s
-    own docstring: "the set of alleles that actually have a nonzero
-    frequency"), so simply counting each locus's own present keys,
-    unioned across demes, is exactly "alleles with p > 0" — no
-    filtering needed.
+    Reported live, after an earlier version of this field counted every
+    allele at a positive frequency, unioned across every deme and locus
+    (`_initial_allele_count_text`'s own "configured starting count" is
+    only ever that, a starting point -- mutation mints new allele IDs
+    and drift carries old ones to extinction as a run proceeds): the
+    parameter strip's own number needs to read exactly like the scatter
+    plot next to it does, not a separate, invisible computation a reader
+    comparing the two has no way to reconcile. One dot is one allele --
+    `fim.viz.scatter.grouped_points` already merges every (locus,
+    allele) row that lands on the same coordinate into that one dot,
+    including two different replicates' own alleles in a pooled batch,
+    so counting dots reads the pool correctly for free, the same way
+    the plot's own "most frequent" markers already do (`_per_source_
+    highlighted_indices`). The origin pile at `(0, 0)` means "absent
+    from both demes this panel shows" -- real alleles, elsewhere, not
+    part of this particular comparison -- excluded the same way the
+    scatter's own origin badge already sets it apart from an ordinary
+    dot (`webui/scatter.js`'s own `drawOriginBadge`), not counted as one.
 
-    Used for the parameter strip's own `alleles` slot while a scalar
-    run is live or has just finished, or once a past one is reopened
-    (`webui/screens/run-view-running.js`'s own `renderProgress`,
-    `run-view-completed.js`'s own `enterCompletedState`) — each
-    overrides `configSummary`'s own founding count with this current
-    one for that one slot; `configSummary.alleles` itself keeps meaning
-    "what the run started with," a stable, comparable configuration
-    property Compare's and Home's own listings still want. Not yet
-    computed for a batch's own live/completed view: each replicate's
-    own current count can differ from every other's, the identical
-    ambiguity the scatter plot's own pooled "most frequent" marker had
-    before its own per-replicate fix, and resolving it the same way is
-    future work, not done here.
+    Args:
+        panel: One `deme_pair_panel`/`scatter_panels`-shaped entry --
+            only its own `points` list (`grouped_points`' `{x, y, count,
+            common}` entries) is read.
     """
-    return sum(
-        len(
-            {
-                allele_id
-                for deme_index in range(state.deme_count)
-                for allele_id in state.frequency_map(deme_index, locus_index)
-            }
-        )
-        for locus_index in range(state.locus_count)
-    )
+    points = cast("list[dict[str, object]]", panel["points"])
+    return sum(1 for point in points if (point["x"], point["y"]) != (0.0, 0.0))
 
 
 def _saved_run_config_summary(params: SimulationParams) -> dict[str, str]:
@@ -7795,6 +7781,7 @@ class Api:
             # method's own caller's point of view.
             return {"ok": False, "message": str(error)}
         report = reanalyzed.report
+        panels = scatter_panels(reanalyzed.state)
         return {
             "ok": True,
             "resourceKey": _run_resource_key(trajectory_path.parent),
@@ -7803,9 +7790,9 @@ class Api:
             "configSummary": _run_config_summary(reanalyzed.params),
             # The parameter strip's own `alleles` slot, overriding
             # `configSummary`'s own founding count with the reopened
-            # generation's own current one (`_segregating_allele_count`'s
-            # own docstring).
-            "currentAlleleCount": _segregating_allele_count(reanalyzed.state),
+            # generation's own scatter dots (`_panel_allele_count`'s own
+            # docstring) -- the identical panel `"panels"`, below, draws.
+            "currentAlleleCount": _panel_allele_count(panels[0]),
             # Sourced from the manifest, not `reanalyzed.params` directly
             # -- see `_derived_convergence_note_from_manifest`'s own
             # docstring for why a reopened run's own `params` alone
@@ -7814,7 +7801,7 @@ class Api:
                 reanalyzed.manifest, reanalyzed.params
             ),
             "report": report,
-            "panels": scatter_panels(reanalyzed.state),
+            "panels": panels,
             "statistics": {
                 name: format_report_statistic(report, name, self._significant_digits)
                 for name in _RESULT_STATISTIC_NAMES
@@ -9214,11 +9201,6 @@ def _drain_run_messages(
                     )
                     for name in _RESULT_STATISTIC_NAMES
                 },
-                # The parameter strip's own `alleles` slot while the run
-                # is live (`_segregating_allele_count`'s own docstring):
-                # `message[6]` is always this tick's own `ModelState`,
-                # unlike `message[2]`/`message[3]`/`message[5]` below.
-                "currentAlleleCount": _segregating_allele_count(message[6]),
             }
             if (
                 message[2] is not None
@@ -9228,6 +9210,24 @@ def _drain_run_messages(
                 progress_payload["maxGenerations"] = max_generations
                 progress_payload["demeCount"] = deme_count
                 progress_payload["panels"] = message[2]
+                # The parameter strip's own `alleles` slot while the run
+                # is live (`_panel_allele_count`'s own docstring) --
+                # the identical first panel `"panels"`, above, draws.
+                # Only available at this `view_level` (a `"summary"`
+                # tick carries no panel at all): `writeParameterStrip
+                # Slots`' own "a summary missing a key leaves that
+                # slot's text in place" contract means the strip simply
+                # keeps showing its last-known count on a summary tick,
+                # rather than this needing a separate, panel-less
+                # computation of its own. `message[2]` is guarded non-
+                # empty, not only non-`None`: `scatter_panels`/`panels_
+                # from_points` never actually return an empty list, but
+                # a synthetic message built directly (not through either)
+                # legitimately can.
+                if message[2]:
+                    progress_payload["currentAlleleCount"] = _panel_allele_count(
+                        message[2][0]
+                    )
                 progress_payload["literatureVisuals"] = message[5]
                 _attach_live_pair(
                     progress_payload, message, live_deme_pair(), deme_count, digits
@@ -9252,16 +9252,17 @@ def _drain_run_messages(
             )
         elif message[0] == "done":
             result = message[1]
+            panels = scatter_panels(result.final_state)
             payload = {
                 "runId": result.run_id,
                 "directoryName": output_directory.name,
                 "configSummary": _run_config_summary(result.params),
                 # The parameter strip's own `alleles` slot, overriding
                 # `configSummary`'s own founding count with the final
-                # state's own current one (`_segregating_allele_count`'s
-                # own docstring) — `enterCompletedState` (`webui/screens/
+                # state's own scatter dots (`_panel_allele_count`'s own
+                # docstring) — `enterCompletedState` (`webui/screens/
                 # run-view-completed.js`) applies the override.
-                "currentAlleleCount": _segregating_allele_count(result.final_state),
+                "currentAlleleCount": _panel_allele_count(panels[0]),
                 # The Run card's own consolidated message area (`webui/
                 # screens/run-view-completed.js`'s own `renderRunMessages`)
                 # -- `""` when the window/cap were both given explicitly,
@@ -9269,7 +9270,7 @@ def _drain_run_messages(
                 # convergence_note`'s own docstring already documents.
                 "convergenceNote": _derived_convergence_note(result.params),
                 "report": result.report,
-                "panels": scatter_panels(result.final_state),
+                "panels": panels,
                 "pairStatistics": _default_pair_statistics(result.final_state, digits),
                 "statistics": {
                     name: format_report_statistic(
@@ -9706,10 +9707,21 @@ def _push_batch_progress(
         "initialStatistics": initial_statistics,
     }
     if states:
+        # `panels` is non-empty exactly when `states` is (both come
+        # from the same `pooled_points is not None` check, above), so
+        # these three fields share one guard rather than three.
+        #
+        # The parameter strip's own `alleles` slot while the batch is
+        # live (`_panel_allele_count`'s own docstring) -- the identical
+        # pooled panel `"panels"`, above, draws, so this reads the pool
+        # correctly the same way the scatter's own "most frequent"
+        # markers already do (`_per_source_highlighted_indices`), not
+        # the single-replicate founding count `configSummary.alleles`
+        # still shows.
+        progress_payload["currentAlleleCount"] = _panel_allele_count(panels[0])
         progress_payload["literatureVisuals"] = pooled_literature_visual_payload(
             states, params
         )
-    if states:
         # The live batch trajectory panel's own x-axis (batch trajectory
         # panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
         # design.md`, `selby/restricted`, approach A): no single tick
@@ -10138,7 +10150,7 @@ def _pooled_batch_payload(
             "frequencySpectrum": {},
             "isolationByDistance": None,
         }
-    return {
+    payload: dict[str, Any] = {
         "runId": run_id,
         "directoryName": output_directory.name,
         "configSummary": _run_config_summary(params),
@@ -10154,6 +10166,15 @@ def _pooled_batch_payload(
         "literatureVisuals": literature_visuals,
         "batch": _batch_description_payload(params, len(replicate_ids)),
     }
+    if panels:
+        # The parameter strip's own `alleles` slot, overriding
+        # `configSummary`'s own single-replicate founding count with
+        # the pooled scatter's own dots (`_panel_allele_count`'s own
+        # docstring) -- a live batch's own "done" push, a reopened
+        # batch, and a reopened Study's own pooled payload all share
+        # this one function, so all three get it from this one place.
+        payload["currentAlleleCount"] = _panel_allele_count(panels[0])
+    return payload
 
 
 def _batch_description_payload(

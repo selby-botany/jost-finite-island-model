@@ -34,9 +34,11 @@ import pytest
 import webview
 from conftest import COMPLETION_BACKSTOP_SECONDS, backstop_message, wait_or_fail
 
+from fim.gui import app as app_module
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
+from fim.viz.scatter import pooled_scatter_panels
 
 from .conftest import wait_for_run_view_ready
 
@@ -127,6 +129,70 @@ def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message(
     # (results, tuple)` guard uses for the identical union.
     assert isinstance(results, tuple)
     assert len(results) == 2
+
+
+def test_parameter_strip_alleles_tracks_the_pooled_scatter_for_a_real_batch(
+    fast_batch_run_settings: Path,
+) -> None:
+    """A completed batch's own `alleles` slot shows the pooled scatter's own dots.
+
+    Reported botanist follow-up: the top line showed a single
+    replicate's own founding allele count while the pooled scatter
+    plainly had many more dots on it — `currentAlleleCount` overrides
+    `configSummary`'s own founding count with `_panel_allele_count`
+    applied to the pooled panel every replicate's own final state
+    produces together (`pooled_scatter_panels`), the same panel
+    `"panels"` in the same payload draws, not any one replicate's own
+    state in isolation. Proves the full stack — `Api`'s own batch
+    `"done"` push carries `currentAlleleCount`, and `run-view-
+    completed.js`'s own `enterCompletedState` applies it to the real
+    DOM — not only that the Python-level computation is correct in
+    isolation (`test_app_api.py`'s own `test_batch_done_payload_
+    carries_the_pooled_scatter_own_allele_count`).
+    """
+    done_event = threading.Event()
+    messages: list[RunMessage | BatchMessage] = []
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        messages.append(message)
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            wait_for_run_view_ready(window)
+            window.evaluate_js(
+                _SET_TINY_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            wait_or_fail(done_event, "batch (done, cancelled or error message)")
+            settled = window.evaluate_js(
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "stripAlleles: document.getElementById('parameter-strip-alleles')"
+                ".textContent"
+                "})"
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "completed"
+    assert messages[-1][0] == "done"
+    results = messages[-1][1]
+    assert isinstance(results, tuple)
+    panel = pooled_scatter_panels(
+        [result.final_state for result in results], results[0].params.d
+    )[0]
+    expected = app_module._panel_allele_count(panel)
+    assert settled["stripAlleles"] == str(expected)
 
 
 def _next_progress(progress_queue: queue.Queue[dict[str, Any]]) -> dict[str, Any]:

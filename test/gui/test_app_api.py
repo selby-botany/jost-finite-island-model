@@ -18,7 +18,7 @@ import webbrowser
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import numpy as np
 import pytest
@@ -2731,6 +2731,33 @@ def test_batch_done_payload_carries_p0_statistics(
         assert isinstance(p0[name], str)
 
 
+def test_batch_done_payload_carries_the_pooled_scatter_own_allele_count(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    batch_results: tuple[RunResult, ...],
+) -> None:
+    """`currentAlleleCount` matches the pooled scatter's own panel exactly.
+
+    Reported botanist follow-up (`alleles` showing a single replicate's
+    own founding count while the pooled scatter plainly had many more
+    dots): a completed batch's own parameter strip needs the identical
+    override a live batch's own progress push and a scalar run already
+    get -- overrides `configSummary`'s own founding count with the
+    pooled panel's own dots (`_panel_allele_count`), not read from any
+    one replicate's own state in isolation.
+    """
+    run_id = deterministic_run_id(batch_params)
+
+    payload = app_module._batch_done_payload(
+        batch_params, run_id, tmp_path, batch_results
+    )
+
+    panels = payload["panels"]
+    assert isinstance(panels, list)
+    assert len(panels) == 1
+    assert payload["currentAlleleCount"] == app_module._panel_allele_count(panels[0])
+
+
 def test_batch_done_payload_summary_matches_replicate_summary(
     tmp_path: Path,
     batch_params: SimulationParams,
@@ -3154,6 +3181,11 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     points = panels[0]["points"]
     assert isinstance(points, list)
     assert len(points) == 2
+    # The parameter strip's own `alleles` slot: the pooled panel's own
+    # two dots, neither at the origin -- `_panel_allele_count`'s own
+    # docstring, exercised here through the real batch-progress push
+    # rather than directly against a hand-built panel.
+    assert payload["currentAlleleCount"] == 2
     # `reports_summary` needs at least two reporting replicates to
     # define any interval — one reporting replicate summarizes to
     # nothing yet, not an error (see `reports_summary`'s own docstring).
@@ -3516,17 +3548,24 @@ def test_drain_run_messages_keeps_summary_progress_payload_compact() -> None:
     }.intersection(progress_payload)
 
 
-def test_drain_run_messages_reports_the_current_allele_count_every_tick() -> None:
-    """Every `"progress"` push carries the live state's own current allele count.
+@pytest.mark.parametrize("view_level", ["full", "summary"])
+def test_drain_run_messages_reports_the_current_allele_count_when_panels_ride(
+    view_level: str,
+) -> None:
+    """A `"full"` `"progress"` push carries the live panel's own dot count.
 
     Reported botanist follow-up: the parameter strip's own `alleles`
     slot used to show only the run's founding count, unchanged for its
     whole life — wrong once any generation has actually run, since
     alleles are minted and retired along the way. `currentAlleleCount`
-    rides every `"progress"` push, computed from that tick's own state
-    (`message[6]`, always present, unlike the panel/visual fields a
-    `"summary"` view level omits) so the strip can track it live, not
-    only once the run finishes.
+    rides a `"progress"` push alongside its own first panel, computed
+    from that panel's own dots (`_panel_allele_count`) the identical way
+    the scatter plot itself reads them — present only at `"full"` view
+    level, since a `"summary"` tick carries no panel to read at all;
+    `writeParameterStripSlots`' own "a missing key leaves that slot's
+    text in place" contract means the strip simply keeps its last-known
+    count on a summary tick, rather than this needing a panel-less
+    computation of its own.
     """
     state = ModelState(
         loci=(LocusSpec(1, 200),),
@@ -3554,7 +3593,7 @@ def test_drain_run_messages_reports_the_current_allele_count_every_tick() -> Non
             3,
             params,
             run_id="run-1",
-            view_level="summary",
+            view_level=cast("Literal['full', 'summary']", view_level),
         )
     )
     message_queue.put(("cancelled", 3))
@@ -3575,10 +3614,12 @@ def test_drain_run_messages_reports_the_current_allele_count_every_tick() -> Non
     assert publisher.stop(COMPLETION_BACKSTOP_SECONDS) is True
 
     progress_payload = _one_call_payload(window, "onRunProgress")
-    # Alleles 0, 1, 2 across the two demes -- three distinct, not four
-    # (summing each deme's own count) and not one (only what both agree
-    # on): `test_segregating_allele_count_unions_demes_and_sums_loci`'s
-    # own identical union rule.
+    if view_level == "summary":
+        assert "currentAlleleCount" not in progress_payload
+        return
+    # Points at (0.5, 0.0), (0.5, 0.25), (0.0, 0.75) -- three dots, none
+    # at the origin: `test_panel_allele_count_excludes_the_origin_pile`'s
+    # own identical rule.
     assert progress_payload["currentAlleleCount"] == 3
 
 
@@ -4103,40 +4144,34 @@ def test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run(
         )
 
 
-def test_segregating_allele_count_unions_demes_and_sums_loci() -> None:
-    """Counts distinct present alleles per locus, unioned across demes.
+def test_panel_allele_count_excludes_the_origin_pile() -> None:
+    """Counts a scatter panel's own dots, not the origin pile among them.
 
     Reported botanist follow-up: alleles are minted and retired as a run
     proceeds, so `configSummary["alleles"]` (the founding count,
     `_initial_allele_count_text`) goes stale the moment any generation
-    actually runs — `_segregating_allele_count` is the live replacement,
-    read straight off a state's own sparse frequency maps rather than
-    the configuration that produced it.
+    actually runs — `_panel_allele_count` is the live replacement, and
+    reads exactly what the scatter plot next to the strip draws: one dot
+    is one allele (`fim.viz.scatter.grouped_points` already merges every
+    coincident row, including a pooled batch's own several replicates
+    landing on one point, into that one dot — `count` plays no further
+    part here), and the origin pile means "absent from both demes this
+    panel shows," excluded the same way the plot's own origin badge sets
+    it apart from an ordinary dot.
 
-    Two loci, two demes: locus 1 has alleles {0, 1} in deme 1 and {1, 2}
-    in deme 2 — three distinct alleles once unioned (0, 1, and 2), not
-    four (naively summing each deme's own count) and not two (only
-    counting what both demes agree on). Locus 2 has a single allele
-    fixed identically in both demes — one distinct allele, not two. The
-    total is the *sum* across loci (3 + 1 = 4), since the same allele id
-    at two different loci is two different alleles, not one
-    (`fim.viz.scatter.frequency_points`'s own identical (locus, allele)
-    pairing).
+    Four points: three ordinary dots (one with `count: 5`, proving the
+    count itself is irrelevant -- a merged dot is still one dot) and one
+    at `(0, 0)`. Three, not four.
     """
-    state = ModelState(
-        loci=(LocusSpec(1, 200), LocusSpec(2, 50)),
-        frequencies=(
-            (
-                {AlleleId(0): 0.5, AlleleId(1): 0.5},
-                {AlleleId(0): 1.0},
-            ),
-            (
-                {AlleleId(1): 0.5, AlleleId(2): 0.5},
-                {AlleleId(0): 1.0},
-            ),
-        ),
-    )
-    assert app_module._segregating_allele_count(state) == 4
+    panel = {
+        "points": [
+            {"x": 0.5, "y": 0.0, "count": 1, "common": True},
+            {"x": 0.5, "y": 0.25, "count": 5, "common": False},
+            {"x": 0.0, "y": 0.75, "count": 1, "common": False},
+            {"x": 0.0, "y": 0.0, "count": 12, "common": False},
+        ]
+    }
+    assert app_module._panel_allele_count(panel) == 3
 
 
 def test_list_home_runs_attaches_a_confidence_interval_per_statistic_for_a_batch_run(
