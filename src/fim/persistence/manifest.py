@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, NoReturn, TypedDict
 
 from fim.model.params import SimulationParams
+from fim.paths import write_text_atomically
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +282,7 @@ def read_manifest(path: Path | str) -> RunManifest:
 
 
 def write_manifest(path: Path | str, manifest: RunManifest) -> None:
-    """Write a manifest deterministically, replacing any prior file.
+    """Write a manifest atomically and deterministically, replacing any prior file.
 
     "Deterministically" here means the same fixed formatting
     `fim.persistence.report.write_report` uses (sorted keys, a single
@@ -289,19 +290,19 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None:
     function's own docstring for why this matters. This is the one
     function that actually creates `manifest.json` on disk; everywhere
     else in the project works with the in-memory `RunManifest` object.
+
+    Atomic (`paths.write_text_atomically`), not an in-place truncate
+    and rewrite: `fim.sweep_compact.compact_run`/`_compact_replicate`
+    call this on an already-published, live run directory, so a crash
+    mid-write used to leave a truncated `manifest.json` behind instead
+    of either the old manifest or the new one (this project's own
+    2026-10-25 project review, finding P-4).
     """
-    manifest_path = Path(path)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    with manifest_path.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(
-            manifest.to_dict(),
-            handle,
-            indent=2,
-            sort_keys=True,
-            allow_nan=False,
-        )
-        handle.write("\n")
-    logger.debug("wrote manifest: %s", manifest_path)
+    text = (
+        json.dumps(manifest.to_dict(), indent=2, sort_keys=True, allow_nan=False) + "\n"
+    )
+    write_text_atomically(Path(path), text, prefix=".manifest.")
+    logger.debug("wrote manifest: %s", path)
 
 
 def verify_trajectory_integrity(
@@ -481,22 +482,17 @@ def read_batch_manifest(path: Path | str) -> BatchManifest:
 
 
 def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None:
-    """Write a batch manifest deterministically, replacing any prior file.
+    """Write a batch manifest atomically and deterministically.
 
-    The batch-level counterpart to `write_manifest`, above.
+    Replaces any prior file. The batch-level counterpart to
+    `write_manifest`, above, including
+    its own reason for writing atomically rather than in place.
     """
-    manifest_path = Path(path)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    with manifest_path.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(
-            manifest.to_dict(),
-            handle,
-            indent=2,
-            sort_keys=True,
-            allow_nan=False,
-        )
-        handle.write("\n")
-    logger.debug("wrote batch manifest: %s", manifest_path)
+    text = (
+        json.dumps(manifest.to_dict(), indent=2, sort_keys=True, allow_nan=False) + "\n"
+    )
+    write_text_atomically(Path(path), text, prefix=".batch-manifest.")
+    logger.debug("wrote batch manifest: %s", path)
 
 
 def _optional_artifacts(

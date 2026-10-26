@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -99,6 +100,24 @@ def test_valid_configuration_creates_a_planned_object(tmp_path: Path) -> None:
     assert record.kind is RunKind.SCALAR
     assert created.labels.name == "Baseline"
     assert (created.directory / CONFIG_FILE_NAME).read_text(encoding="utf-8") == text
+
+
+def test_run_json_is_written_durably(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`run.json` is flushed to disk, not only atomically renamed into place.
+
+    Regression test for the 2026-10-25 project review's finding P-3:
+    `commit_checkpoint` deletes the previous checkpoint right after
+    committing the new `latest_checkpoint` pointer here, trusting that
+    the pointer is already durable by then.
+    """
+    calls: list[int] = []
+    monkeypatch.setattr(os, "fsync", calls.append)
+
+    create_run_object(_text(), results=tmp_path, clock=_clock, id_factory=_ids())
+
+    assert len(calls) >= 2  # the temp file, then its parent directory
 
 
 @pytest.mark.parametrize(

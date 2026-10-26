@@ -470,10 +470,20 @@ def validate_configuration_text(
 
 
 def write_run_record(directory: Path, record: RunLifecycleRecord) -> None:
-    """Write `run.json` deterministically and atomically."""
+    """Write `run.json` deterministically, atomically, and durably.
+
+    `durable=True` (this project's own 2026-10-25 project review,
+    finding P-3): `commit_checkpoint` deletes the previous checkpoint
+    right after this write, trusting a comment that used to be
+    aspirational rather than true. Without the flush this adds, power
+    loss in that window could leave `run.json` still naming the
+    checkpoint that write just deleted, on a filesystem that had not
+    yet persisted the rename -- an unresumable object, contradicting
+    "Recovery after a crash or power failure" (`doc/run-lifecycle.md`).
+    """
     text = json.dumps(record.to_dict(), indent=2, sort_keys=True, allow_nan=False)
     write_text_atomically(
-        directory / RUN_LIFECYCLE_FILE_NAME, text + "\n", prefix=".run."
+        directory / RUN_LIFECYCLE_FILE_NAME, text + "\n", prefix=".run.", durable=True
     )
 
 

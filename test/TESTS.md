@@ -2868,7 +2868,7 @@ atomic-publish resolution.
 
 <a id="test.test_paths.test_project_root_falls_back_to_working_directory"></a>
 
-#### [test\_project\_root\_falls\_back\_to\_working\_directory](./test_paths.py#L18)
+#### [test\_project\_root\_falls\_back\_to\_working\_directory](./test_paths.py#L19)
 
 ```python
 def test_project_root_falls_back_to_working_directory(
@@ -2888,7 +2888,7 @@ before the extraction.
 
 <a id="test.test_paths.test_project_root_falls_back_to_home_when_frozen_and_uninstalled"></a>
 
-#### [test\_project\_root\_falls\_back\_to\_home\_when\_frozen\_and\_uninstalled](./test_paths.py#L45)
+#### [test\_project\_root\_falls\_back\_to\_home\_when\_frozen\_and\_uninstalled](./test_paths.py#L46)
 
 ```python
 def test_project_root_falls_back_to_home_when_frozen_and_uninstalled(
@@ -2912,7 +2912,7 @@ really ignores it rather than merely happening to agree with it.
 
 <a id="test.test_paths.test_project_root_finds_the_real_checkout"></a>
 
-#### [test\_project\_root\_finds\_the\_real\_checkout](./test_paths.py#L80)
+#### [test\_project\_root\_finds\_the\_real\_checkout](./test_paths.py#L81)
 
 ```python
 def test_project_root_finds_the_real_checkout() -> None
@@ -2922,7 +2922,7 @@ A real checkout resolves to the directory containing pyproject.toml.
 
 <a id="test.test_paths.test_project_root_honors_the_root_override"></a>
 
-#### [test\_project\_root\_honors\_the\_root\_override](./test_paths.py#L85)
+#### [test\_project\_root\_honors\_the\_root\_override](./test_paths.py#L86)
 
 ```python
 def test_project_root_honors_the_root_override(
@@ -2933,7 +2933,7 @@ def test_project_root_honors_the_root_override(
 
 <a id="test.test_paths.test_project_root_honors_fim_home"></a>
 
-#### [test\_project\_root\_honors\_fim\_home](./test_paths.py#L95)
+#### [test\_project\_root\_honors\_fim\_home](./test_paths.py#L96)
 
 ```python
 def test_project_root_honors_fim_home(tmp_path: Path,
@@ -2944,7 +2944,7 @@ def test_project_root_honors_fim_home(tmp_path: Path,
 
 <a id="test.test_paths.test_project_root_override_wins_over_fim_home"></a>
 
-#### [test\_project\_root\_override\_wins\_over\_fim\_home](./test_paths.py#L105)
+#### [test\_project\_root\_override\_wins\_over\_fim\_home](./test_paths.py#L106)
 
 ```python
 def test_project_root_override_wins_over_fim_home(
@@ -2955,7 +2955,7 @@ The programmatic override outranks the environment variable.
 
 <a id="test.test_paths.test_set_root_override_round_trips_through_the_getter"></a>
 
-#### [test\_set\_root\_override\_round\_trips\_through\_the\_getter](./test_paths.py#L116)
+#### [test\_set\_root\_override\_round\_trips\_through\_the\_getter](./test_paths.py#L117)
 
 ```python
 def test_set_root_override_round_trips_through_the_getter(
@@ -2966,7 +2966,7 @@ def test_set_root_override_round_trips_through_the_getter(
 
 <a id="test.test_paths.test_results_directory_defaults_to_project_root_slash_results"></a>
 
-#### [test\_results\_directory\_defaults\_to\_project\_root\_slash\_results](./test_paths.py#L127)
+#### [test\_results\_directory\_defaults\_to\_project\_root\_slash\_results](./test_paths.py#L128)
 
 ```python
 def test_results_directory_defaults_to_project_root_slash_results() -> None
@@ -2976,7 +2976,7 @@ def test_results_directory_defaults_to_project_root_slash_results() -> None
 
 <a id="test.test_paths.test_results_directory_accepts_a_root_override"></a>
 
-#### [test\_results\_directory\_accepts\_a\_root\_override](./test_paths.py#L132)
+#### [test\_results\_directory\_accepts\_a\_root\_override](./test_paths.py#L133)
 
 ```python
 def test_results_directory_accepts_a_root_override(tmp_path: Path) -> None
@@ -2986,7 +2986,7 @@ An explicit root bypasses `project_root` entirely.
 
 <a id="test.test_paths.test_results_directory_honors_its_own_override"></a>
 
-#### [test\_results\_directory\_honors\_its\_own\_override](./test_paths.py#L137)
+#### [test\_results\_directory\_honors\_its\_own\_override](./test_paths.py#L138)
 
 ```python
 def test_results_directory_honors_its_own_override(
@@ -2997,7 +2997,7 @@ def test_results_directory_honors_its_own_override(
 
 <a id="test.test_paths.test_results_directory_honors_its_own_env_var"></a>
 
-#### [test\_results\_directory\_honors\_its\_own\_env\_var](./test_paths.py#L147)
+#### [test\_results\_directory\_honors\_its\_own\_env\_var](./test_paths.py#L148)
 
 ```python
 def test_results_directory_honors_its_own_env_var(
@@ -3008,7 +3008,7 @@ def test_results_directory_honors_its_own_env_var(
 
 <a id="test.test_paths.test_results_directory_override_wins_over_its_own_env_var"></a>
 
-#### [test\_results\_directory\_override\_wins\_over\_its\_own\_env\_var](./test_paths.py#L157)
+#### [test\_results\_directory\_override\_wins\_over\_its\_own\_env\_var](./test_paths.py#L158)
 
 ```python
 def test_results_directory_override_wins_over_its_own_env_var(
@@ -3019,7 +3019,7 @@ The programmatic override outranks the location's own environment variable.
 
 <a id="test.test_paths.test_results_directory_explicit_root_wins_over_its_own_override"></a>
 
-#### [test\_results\_directory\_explicit\_root\_wins\_over\_its\_own\_override](./test_paths.py#L170)
+#### [test\_results\_directory\_explicit\_root\_wins\_over\_its\_own\_override](./test_paths.py#L171)
 
 ```python
 def test_results_directory_explicit_root_wins_over_its_own_override(
@@ -3030,7 +3030,7 @@ An explicit `root` argument still outranks the results-specific override.
 
 <a id="test.test_paths.test_results_directory_own_override_wins_over_the_bulk_root_override"></a>
 
-#### [test\_results\_directory\_own\_override\_wins\_over\_the\_bulk\_root\_override](./test_paths.py#L180)
+#### [test\_results\_directory\_own\_override\_wins\_over\_the\_bulk\_root\_override](./test_paths.py#L181)
 
 ```python
 def test_results_directory_own_override_wins_over_the_bulk_root_override(
@@ -3041,7 +3041,7 @@ A location-specific override outranks the bulk `FIM_HOME`-style root override.
 
 <a id="test.test_paths.test_fim_index_directory_defaults_to_results_directory_slash_dot_fim"></a>
 
-#### [test\_fim\_index\_directory\_defaults\_to\_results\_directory\_slash\_dot\_fim](./test_paths.py#L191)
+#### [test\_fim\_index\_directory\_defaults\_to\_results\_directory\_slash\_dot\_fim](./test_paths.py#L192)
 
 ```python
 def test_fim_index_directory_defaults_to_results_directory_slash_dot_fim(
@@ -3052,7 +3052,7 @@ def test_fim_index_directory_defaults_to_results_directory_slash_dot_fim(
 
 <a id="test.test_paths.test_fim_index_directory_accepts_a_results_override"></a>
 
-#### [test\_fim\_index\_directory\_accepts\_a\_results\_override](./test_paths.py#L196)
+#### [test\_fim\_index\_directory\_accepts\_a\_results\_override](./test_paths.py#L197)
 
 ```python
 def test_fim_index_directory_accepts_a_results_override(
@@ -3063,7 +3063,7 @@ An explicit results override bypasses `results_directory` entirely.
 
 <a id="test.test_paths.test_studies_directory_sits_under_the_fim_index_directory"></a>
 
-#### [test\_studies\_directory\_sits\_under\_the\_fim\_index\_directory](./test_paths.py#L201)
+#### [test\_studies\_directory\_sits\_under\_the\_fim\_index\_directory](./test_paths.py#L202)
 
 ```python
 def test_studies_directory_sits_under_the_fim_index_directory(
@@ -3074,7 +3074,7 @@ def test_studies_directory_sits_under_the_fim_index_directory(
 
 <a id="test.test_paths.test_experiments_directory_sits_under_the_fim_index_directory"></a>
 
-#### [test\_experiments\_directory\_sits\_under\_the\_fim\_index\_directory](./test_paths.py#L206)
+#### [test\_experiments\_directory\_sits\_under\_the\_fim\_index\_directory](./test_paths.py#L207)
 
 ```python
 def test_experiments_directory_sits_under_the_fim_index_directory(
@@ -3085,7 +3085,7 @@ def test_experiments_directory_sits_under_the_fim_index_directory(
 
 <a id="test.test_paths.test_default_output_directory_uses_microsecond_timestamp"></a>
 
-#### [test\_default\_output\_directory\_uses\_microsecond\_timestamp](./test_paths.py#L213)
+#### [test\_default\_output\_directory\_uses\_microsecond\_timestamp](./test_paths.py#L214)
 
 ```python
 def test_default_output_directory_uses_microsecond_timestamp(
@@ -3096,7 +3096,7 @@ Default output names include microseconds to prevent same-second collisions.
 
 <a id="test.test_paths.test_default_output_directory_retries_existing_timestamped_name"></a>
 
-#### [test\_default\_output\_directory\_retries\_existing\_timestamped\_name](./test_paths.py#L226)
+#### [test\_default\_output\_directory\_retries\_existing\_timestamped\_name](./test_paths.py#L227)
 
 ```python
 def test_default_output_directory_retries_existing_timestamped_name(
@@ -3107,7 +3107,7 @@ An existing automatic name receives a deterministic numeric suffix.
 
 <a id="test.test_paths.test_allocate_output_directories_reserves_distinct_names_with_one_clock"></a>
 
-#### [test\_allocate\_output\_directories\_reserves\_distinct\_names\_with\_one\_clock](./test_paths.py#L241)
+#### [test\_allocate\_output\_directories\_reserves\_distinct\_names\_with\_one\_clock](./test_paths.py#L242)
 
 ```python
 def test_allocate_output_directories_reserves_distinct_names_with_one_clock(
@@ -3118,7 +3118,7 @@ A fixed timestamp still gets a unique name while earlier names are held.
 
 <a id="test.test_paths.test_default_output_directory_uses_results_directory_by_default"></a>
 
-#### [test\_default\_output\_directory\_uses\_results\_directory\_by\_default](./test_paths.py#L260)
+#### [test\_default\_output\_directory\_uses\_results\_directory\_by\_default](./test_paths.py#L261)
 
 ```python
 def test_default_output_directory_uses_results_directory_by_default() -> None
@@ -3128,7 +3128,7 @@ Omitting `results` falls back to `results_directory()`.
 
 <a id="test.test_paths.test_log_directory_defaults_to_project_root_slash_logs"></a>
 
-#### [test\_log\_directory\_defaults\_to\_project\_root\_slash\_logs](./test_paths.py#L267)
+#### [test\_log\_directory\_defaults\_to\_project\_root\_slash\_logs](./test_paths.py#L268)
 
 ```python
 def test_log_directory_defaults_to_project_root_slash_logs() -> None
@@ -3138,7 +3138,7 @@ def test_log_directory_defaults_to_project_root_slash_logs() -> None
 
 <a id="test.test_paths.test_log_directory_accepts_a_root_override"></a>
 
-#### [test\_log\_directory\_accepts\_a\_root\_override](./test_paths.py#L272)
+#### [test\_log\_directory\_accepts\_a\_root\_override](./test_paths.py#L273)
 
 ```python
 def test_log_directory_accepts_a_root_override(tmp_path: Path) -> None
@@ -3148,7 +3148,7 @@ An explicit root bypasses `project_root` entirely.
 
 <a id="test.test_paths.test_log_directory_honors_its_own_override"></a>
 
-#### [test\_log\_directory\_honors\_its\_own\_override](./test_paths.py#L277)
+#### [test\_log\_directory\_honors\_its\_own\_override](./test_paths.py#L278)
 
 ```python
 def test_log_directory_honors_its_own_override(
@@ -3159,7 +3159,7 @@ def test_log_directory_honors_its_own_override(
 
 <a id="test.test_paths.test_log_directory_honors_its_own_env_var"></a>
 
-#### [test\_log\_directory\_honors\_its\_own\_env\_var](./test_paths.py#L287)
+#### [test\_log\_directory\_honors\_its\_own\_env\_var](./test_paths.py#L288)
 
 ```python
 def test_log_directory_honors_its_own_env_var(
@@ -3170,7 +3170,7 @@ def test_log_directory_honors_its_own_env_var(
 
 <a id="test.test_paths.test_log_directory_override_wins_over_its_own_env_var"></a>
 
-#### [test\_log\_directory\_override\_wins\_over\_its\_own\_env\_var](./test_paths.py#L297)
+#### [test\_log\_directory\_override\_wins\_over\_its\_own\_env\_var](./test_paths.py#L298)
 
 ```python
 def test_log_directory_override_wins_over_its_own_env_var(
@@ -3181,7 +3181,7 @@ The programmatic override outranks the location's own environment variable.
 
 <a id="test.test_paths.test_log_directory_explicit_root_wins_over_its_own_override"></a>
 
-#### [test\_log\_directory\_explicit\_root\_wins\_over\_its\_own\_override](./test_paths.py#L308)
+#### [test\_log\_directory\_explicit\_root\_wins\_over\_its\_own\_override](./test_paths.py#L309)
 
 ```python
 def test_log_directory_explicit_root_wins_over_its_own_override(
@@ -3192,7 +3192,7 @@ An explicit `root` argument still outranks the log-specific override.
 
 <a id="test.test_paths.test_default_log_file_is_fim_log_under_the_log_directory"></a>
 
-#### [test\_default\_log\_file\_is\_fim\_log\_under\_the\_log\_directory](./test_paths.py#L318)
+#### [test\_default\_log\_file\_is\_fim\_log\_under\_the\_log\_directory](./test_paths.py#L319)
 
 ```python
 def test_default_log_file_is_fim_log_under_the_log_directory(
@@ -3203,7 +3203,7 @@ def test_default_log_file_is_fim_log_under_the_log_directory(
 
 <a id="test.test_paths.test_atomic_directory_rejects_an_existing_target"></a>
 
-#### [test\_atomic\_directory\_rejects\_an\_existing\_target](./test_paths.py#L323)
+#### [test\_atomic\_directory\_rejects\_an\_existing\_target](./test_paths.py#L324)
 
 ```python
 def test_atomic_directory_rejects_an_existing_target(tmp_path: Path) -> None
@@ -3222,7 +3222,7 @@ change).
 
 <a id="test.test_paths.test_atomic_directory_publishes_via_one_rename_on_success"></a>
 
-#### [test\_atomic\_directory\_publishes\_via\_one\_rename\_on\_success](./test_paths.py#L345)
+#### [test\_atomic\_directory\_publishes\_via\_one\_rename\_on\_success](./test_paths.py#L346)
 
 ```python
 def test_atomic_directory_publishes_via_one_rename_on_success(
@@ -3233,7 +3233,7 @@ A successful block's contents land at `target` via a single rename.
 
 <a id="test.test_paths.test_atomic_directory_discards_the_temporary_directory_on_failure"></a>
 
-#### [test\_atomic\_directory\_discards\_the\_temporary\_directory\_on\_failure](./test_paths.py#L359)
+#### [test\_atomic\_directory\_discards\_the\_temporary\_directory\_on\_failure](./test_paths.py#L360)
 
 ```python
 def test_atomic_directory_discards_the_temporary_directory_on_failure(
@@ -3244,7 +3244,7 @@ A raised exception leaves neither the target nor an orphaned temp dir.
 
 <a id="test.test_paths.test_atomic_directory_holds_an_owner_lock_that_is_never_published"></a>
 
-#### [test\_atomic\_directory\_holds\_an\_owner\_lock\_that\_is\_never\_published](./test_paths.py#L376)
+#### [test\_atomic\_directory\_holds\_an\_owner\_lock\_that\_is\_never\_published](./test_paths.py#L377)
 
 ```python
 def test_atomic_directory_holds_an_owner_lock_that_is_never_published(
@@ -3255,7 +3255,7 @@ The staging owner lock proves life while building, then disappears.
 
 <a id="test.test_paths.test_atomic_directory_rolls_back_on_sigterm_exit"></a>
 
-#### [test\_atomic\_directory\_rolls\_back\_on\_sigterm\_exit](./test_paths.py#L390)
+#### [test\_atomic\_directory\_rolls\_back\_on\_sigterm\_exit](./test_paths.py#L391)
 
 ```python
 def test_atomic_directory_rolls_back_on_sigterm_exit(tmp_path: Path) -> None
@@ -3265,7 +3265,7 @@ def test_atomic_directory_rolls_back_on_sigterm_exit(tmp_path: Path) -> None
 
 <a id="test.test_paths.test_replace_with_retry_rides_out_transient_permission_errors"></a>
 
-#### [test\_replace\_with\_retry\_rides\_out\_transient\_permission\_errors](./test_paths.py#L418)
+#### [test\_replace\_with\_retry\_rides\_out\_transient\_permission\_errors](./test_paths.py#L419)
 
 ```python
 def test_replace_with_retry_rides_out_transient_permission_errors(
@@ -3276,7 +3276,7 @@ A rename refused a few times, then allowed, succeeds.
 
 <a id="test.test_paths.test_replace_with_retry_gives_up_after_a_bounded_number_of_attempts"></a>
 
-#### [test\_replace\_with\_retry\_gives\_up\_after\_a\_bounded\_number\_of\_attempts](./test_paths.py#L430)
+#### [test\_replace\_with\_retry\_gives\_up\_after\_a\_bounded\_number\_of\_attempts](./test_paths.py#L431)
 
 ```python
 def test_replace_with_retry_gives_up_after_a_bounded_number_of_attempts(
@@ -3287,7 +3287,7 @@ A target that stays locked raises the original error, not a hang.
 
 <a id="test.test_paths.test_replace_with_retry_really_replaces_a_file"></a>
 
-#### [test\_replace\_with\_retry\_really\_replaces\_a\_file](./test_paths.py#L443)
+#### [test\_replace\_with\_retry\_really\_replaces\_a\_file](./test_paths.py#L444)
 
 ```python
 def test_replace_with_retry_really_replaces_a_file(tmp_path: Path) -> None
@@ -3297,7 +3297,7 @@ The happy path on a real filesystem: content is swapped in.
 
 <a id="test.test_paths.test_default_modes_follow_the_process_umask"></a>
 
-#### [test\_default\_modes\_follow\_the\_process\_umask](./test_paths.py#L461)
+#### [test\_default\_modes\_follow\_the\_process\_umask](./test_paths.py#L462)
 
 ```python
 def test_default_modes_follow_the_process_umask() -> None
@@ -3307,7 +3307,7 @@ Files get 666 and directories 777 minus the umask (usually 644 and 755).
 
 <a id="test.test_paths.test_write_text_atomically_creates_an_ordinarily_readable_file"></a>
 
-#### [test\_write\_text\_atomically\_creates\_an\_ordinarily\_readable\_file](./test_paths.py#L467)
+#### [test\_write\_text\_atomically\_creates\_an\_ordinarily\_readable\_file](./test_paths.py#L468)
 
 ```python
 def test_write_text_atomically_creates_an_ordinarily_readable_file(
@@ -3318,7 +3318,7 @@ The index files are not owner-only, which is what `mkstemp` would give.
 
 <a id="test.test_paths.test_write_text_atomically_replaces_an_existing_file"></a>
 
-#### [test\_write\_text\_atomically\_replaces\_an\_existing\_file](./test_paths.py#L480)
+#### [test\_write\_text\_atomically\_replaces\_an\_existing\_file](./test_paths.py#L481)
 
 ```python
 def test_write_text_atomically_replaces_an_existing_file(
@@ -3329,7 +3329,7 @@ A second write replaces the first completely.
 
 <a id="test.test_paths.test_write_text_atomically_leaves_no_temp_file_after_a_failure"></a>
 
-#### [test\_write\_text\_atomically\_leaves\_no\_temp\_file\_after\_a\_failure](./test_paths.py#L491)
+#### [test\_write\_text\_atomically\_leaves\_no\_temp\_file\_after\_a\_failure](./test_paths.py#L492)
 
 ```python
 def test_write_text_atomically_leaves_no_temp_file_after_a_failure(
@@ -3338,9 +3338,37 @@ def test_write_text_atomically_leaves_no_temp_file_after_a_failure(
 
 A failed replace removes its temporary file and keeps the old contents.
 
+<a id="test.test_paths.test_write_text_atomically_is_not_durable_by_default"></a>
+
+#### [test\_write\_text\_atomically\_is\_not\_durable\_by\_default](./test_paths.py#L510)
+
+```python
+def test_write_text_atomically_is_not_durable_by_default(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Without `durable`, no fsync happens -- the ordinary, cheaper path.
+
+<a id="test.test_paths.test_write_text_atomically_durable_fsyncs_the_file_and_its_directory"></a>
+
+#### [test\_write\_text\_atomically\_durable\_fsyncs\_the\_file\_and\_its\_directory](./test_paths.py#L524)
+
+```python
+def test_write_text_atomically_durable_fsyncs_the_file_and_its_directory(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`durable=True` flushes the temp file, then the parent directory's entry.
+
+Regression test for the 2026-10-25 project review's finding P-3:
+without this, a pointer written here (`run.json`'s own reference
+to the latest checkpoint) could still be unflushed when whatever
+it replaces is deleted right after, so a crash in that window left
+the pointer potentially naming a checkpoint that was already gone.
+
 <a id="test.test_paths.test_a_published_run_directory_has_ordinary_permissions"></a>
 
-#### [test\_a\_published\_run\_directory\_has\_ordinary\_permissions](./test_paths.py#L509)
+#### [test\_a\_published\_run\_directory\_has\_ordinary\_permissions](./test_paths.py#L545)
 
 ```python
 def test_a_published_run_directory_has_ordinary_permissions(
@@ -4992,7 +5020,7 @@ Tests for `fim.sweep_compact`: making a finished sweep smaller afterwards.
 
 <a id="test.test_sweep_compact.results"></a>
 
-#### [results](./test_sweep_compact.py#L54)
+#### [results](./test_sweep_compact.py#L60)
 
 ```python
 @pytest.fixture
@@ -5001,9 +5029,30 @@ def results(tmp_path: Path) -> Iterator[Path]
 
 Point the results directory at a temporary one for the test.
 
+<a id="test.test_sweep_compact.test_compact_recovers_from_a_crash_between_tapering_and_the_manifest"></a>
+
+#### [test\_compact\_recovers\_from\_a\_crash\_between\_tapering\_and\_the\_manifest](./test_sweep_compact.py#L210)
+
+```python
+def test_compact_recovers_from_a_crash_between_tapering_and_the_manifest(
+        results: Path) -> None
+```
+
+Re-running compaction repairs a run left between its old and new state.
+
+Regression test for the 2026-10-25 project review's finding P-4:
+`_compact_replicate` tapers the trajectory before writing the
+manifest, so a crash in between (simulated here by doing exactly
+what that step does, directly) leaves the manifest's own recorded
+digest no longer matching the trajectory file it names --
+`verify_trajectory_integrity` refuses it. `compact_run`'s own
+docstring claims "running compaction again finishes the job"; this
+confirms it actually does, rather than raising on an
+already-tapered file it was not expecting.
+
 <a id="test.test_sweep_compact.test_compact_then_resume_finds_nothing_pending"></a>
 
-#### [test\_compact\_then\_resume\_finds\_nothing\_pending](./test_sweep_compact.py#L207)
+#### [test\_compact\_then\_resume\_finds\_nothing\_pending](./test_sweep_compact.py#L256)
 
 ```python
 def test_compact_then_resume_finds_nothing_pending(results: Path) -> None
@@ -39666,7 +39715,7 @@ commit. Labels with a `class` are checked against the test fixture file.
 
 <a id="persistence.test_run_objects.test_valid_configuration_creates_a_planned_object"></a>
 
-#### [test\_valid\_configuration\_creates\_a\_planned\_object](./persistence/test_run_objects.py#L90)
+#### [test\_valid\_configuration\_creates\_a\_planned\_object](./persistence/test_run_objects.py#L91)
 
 ```python
 def test_valid_configuration_creates_a_planned_object(tmp_path: Path) -> None
@@ -39674,9 +39723,25 @@ def test_valid_configuration_creates_a_planned_object(tmp_path: Path) -> None
 
 A valid document is `planned` with its digest and scientific run ID.
 
+<a id="persistence.test_run_objects.test_run_json_is_written_durably"></a>
+
+#### [test\_run\_json\_is\_written\_durably](./persistence/test_run_objects.py#L105)
+
+```python
+def test_run_json_is_written_durably(tmp_path: Path,
+                                     monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`run.json` is flushed to disk, not only atomically renamed into place.
+
+Regression test for the 2026-10-25 project review's finding P-3:
+`commit_checkpoint` deletes the previous checkpoint right after
+committing the new `latest_checkpoint` pointer here, trusting that
+the pointer is already durable by then.
+
 <a id="persistence.test_run_objects.test_invalid_configuration_is_saved_as_a_draft"></a>
 
-#### [test\_invalid\_configuration\_is\_saved\_as\_a\_draft](./persistence/test_run_objects.py#L114)
+#### [test\_invalid\_configuration\_is\_saved\_as\_a\_draft](./persistence/test_run_objects.py#L133)
 
 ```python
 @pytest.mark.parametrize(
@@ -39697,7 +39762,7 @@ Any invalid document persists as a draft holding its exact text.
 
 <a id="persistence.test_run_objects.test_yaml_error_is_located"></a>
 
-#### [test\_yaml\_error\_is\_located](./persistence/test_run_objects.py#L128)
+#### [test\_yaml\_error\_is\_located](./persistence/test_run_objects.py#L147)
 
 ```python
 def test_yaml_error_is_located(tmp_path: Path) -> None
@@ -39707,7 +39772,7 @@ A YAML syntax error records its line and column.
 
 <a id="persistence.test_run_objects.test_saves_move_between_draft_and_planned"></a>
 
-#### [test\_saves\_move\_between\_draft\_and\_planned](./persistence/test_run_objects.py#L135)
+#### [test\_saves\_move\_between\_draft\_and\_planned](./persistence/test_run_objects.py#L154)
 
 ```python
 def test_saves_move_between_draft_and_planned(tmp_path: Path) -> None
@@ -39717,7 +39782,7 @@ Fixing promotes to planned; breaking demotes to draft; ID is stable.
 
 <a id="persistence.test_run_objects.test_editing_parameters_changes_the_scientific_identity"></a>
 
-#### [test\_editing\_parameters\_changes\_the\_scientific\_identity](./persistence/test_run_objects.py#L164)
+#### [test\_editing\_parameters\_changes\_the\_scientific\_identity](./persistence/test_run_objects.py#L183)
 
 ```python
 def test_editing_parameters_changes_the_scientific_identity(
@@ -39728,7 +39793,7 @@ A planned edit keeps the object ID and changes digest and run ID.
 
 <a id="persistence.test_run_objects.test_labels_are_not_part_of_the_scientific_identity"></a>
 
-#### [test\_labels\_are\_not\_part\_of\_the\_scientific\_identity](./persistence/test_run_objects.py#L181)
+#### [test\_labels\_are\_not\_part\_of\_the\_scientific\_identity](./persistence/test_run_objects.py#L200)
 
 ```python
 def test_labels_are_not_part_of_the_scientific_identity(
@@ -39739,7 +39804,7 @@ Renaming a planned Run leaves its run ID unchanged.
 
 <a id="persistence.test_run_objects.test_kind_follows_the_saved_replicate_count"></a>
 
-#### [test\_kind\_follows\_the\_saved\_replicate\_count](./persistence/test_run_objects.py#L197)
+#### [test\_kind\_follows\_the\_saved\_replicate\_count](./persistence/test_run_objects.py#L216)
 
 ```python
 def test_kind_follows_the_saved_replicate_count(tmp_path: Path) -> None
@@ -39749,7 +39814,7 @@ Editing a scalar into a batch updates the object's kind.
 
 <a id="persistence.test_run_objects.test_stale_save_is_rejected_and_changes_nothing"></a>
 
-#### [test\_stale\_save\_is\_rejected\_and\_changes\_nothing](./persistence/test_run_objects.py#L212)
+#### [test\_stale\_save\_is\_rejected\_and\_changes\_nothing](./persistence/test_run_objects.py#L231)
 
 ```python
 def test_stale_save_is_rejected_and_changes_nothing(tmp_path: Path) -> None
@@ -39759,7 +39824,7 @@ A save based on an old revision fails without writing anything.
 
 <a id="persistence.test_run_objects.test_started_object_refuses_saves_and_deletion"></a>
 
-#### [test\_started\_object\_refuses\_saves\_and\_deletion](./persistence/test_run_objects.py#L245)
+#### [test\_started\_object\_refuses\_saves\_and\_deletion](./persistence/test_run_objects.py#L264)
 
 ```python
 def test_started_object_refuses_saves_and_deletion(tmp_path: Path) -> None
@@ -39769,7 +39834,7 @@ Configuration is fixed and deletion refused once execution starts.
 
 <a id="persistence.test_run_objects.test_delete_removes_drafts_and_planned_objects"></a>
 
-#### [test\_delete\_removes\_drafts\_and\_planned\_objects](./persistence/test_run_objects.py#L263)
+#### [test\_delete\_removes\_drafts\_and\_planned\_objects](./persistence/test_run_objects.py#L282)
 
 ```python
 def test_delete_removes_drafts_and_planned_objects(tmp_path: Path) -> None
@@ -39779,7 +39844,7 @@ Deleting a draft removes it from disk and from discovery.
 
 <a id="persistence.test_run_objects.test_clone_copies_only_the_configuration"></a>
 
-#### [test\_clone\_copies\_only\_the\_configuration](./persistence/test_run_objects.py#L276)
+#### [test\_clone\_copies\_only\_the\_configuration](./persistence/test_run_objects.py#L295)
 
 ```python
 def test_clone_copies_only_the_configuration(tmp_path: Path) -> None
@@ -39789,7 +39854,7 @@ A clone of a draft is a new draft with provenance.
 
 <a id="persistence.test_run_objects.test_listing_reports_unreadable_objects_without_inventing_them"></a>
 
-#### [test\_listing\_reports\_unreadable\_objects\_without\_inventing\_them](./persistence/test_run_objects.py#L291)
+#### [test\_listing\_reports\_unreadable\_objects\_without\_inventing\_them](./persistence/test_run_objects.py#L310)
 
 ```python
 def test_listing_reports_unreadable_objects_without_inventing_them(
@@ -39800,7 +39865,7 @@ Corrupt, foreign, and hidden entries never become objects.
 
 <a id="persistence.test_run_objects.test_objects_are_invisible_to_legacy_result_discovery"></a>
 
-#### [test\_objects\_are\_invisible\_to\_legacy\_result\_discovery](./persistence/test_run_objects.py#L314)
+#### [test\_objects\_are\_invisible\_to\_legacy\_result\_discovery](./persistence/test_run_objects.py#L333)
 
 ```python
 def test_objects_are_invisible_to_legacy_result_discovery(
@@ -39811,7 +39876,7 @@ Legacy scans of `results/*/manifest.json` find no object.
 
 <a id="persistence.test_run_objects.test_object_ids_cannot_escape_the_namespace"></a>
 
-#### [test\_object\_ids\_cannot\_escape\_the\_namespace](./persistence/test_run_objects.py#L320)
+#### [test\_object\_ids\_cannot\_escape\_the\_namespace](./persistence/test_run_objects.py#L339)
 
 ```python
 def test_object_ids_cannot_escape_the_namespace(tmp_path: Path) -> None
@@ -39821,7 +39886,7 @@ A malformed object ID is refused before touching the file system.
 
 <a id="persistence.test_run_objects.test_lock_excludes_a_second_holder"></a>
 
-#### [test\_lock\_excludes\_a\_second\_holder](./persistence/test_run_objects.py#L328)
+#### [test\_lock\_excludes\_a\_second\_holder](./persistence/test_run_objects.py#L347)
 
 ```python
 def test_lock_excludes_a_second_holder(tmp_path: Path) -> None

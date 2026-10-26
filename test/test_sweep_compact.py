@@ -12,12 +12,18 @@ import pytest
 
 from fim import cli, paths
 from fim.persistence import groups
+from fim.persistence.binary_store import log_options
 from fim.persistence.history import read_history_columns
-from fim.persistence.manifest import hash_file, read_manifest
+from fim.persistence.manifest import (
+    hash_file,
+    read_manifest,
+    verify_trajectory_integrity,
+)
 from fim.persistence.object_lock import exclusive_lock
 from fim.persistence.retention import tapered_generations
 from fim.persistence.run_lifecycle import RunKind
 from fim.persistence.run_receipt import receipt_problem
+from fim.persistence.taper import taper_log
 from fim.persistence.tlog import iter_frames
 from fim.sweep import SweepSpec, enumerate_points, expand_axis
 from fim.sweep_compact import (
@@ -199,6 +205,49 @@ def test_compacting_twice_changes_nothing_the_second_time(results: Path) -> None
         r.run_id: (r.directory / "trajectory.tlog").read_bytes()
         for r in _rows(study_id)
     }
+
+
+def test_compact_recovers_from_a_crash_between_tapering_and_the_manifest(
+    results: Path,
+) -> None:
+    """Re-running compaction repairs a run left between its old and new state.
+
+    Regression test for the 2026-10-25 project review's finding P-4:
+    `_compact_replicate` tapers the trajectory before writing the
+    manifest, so a crash in between (simulated here by doing exactly
+    what that step does, directly) leaves the manifest's own recorded
+    digest no longer matching the trajectory file it names --
+    `verify_trajectory_integrity` refuses it. `compact_run`'s own
+    docstring claims "running compaction again finishes the job"; this
+    confirms it actually does, rather than raising on an
+    already-tapered file it was not expecting.
+    """
+    study_id = _sweep()
+    row = next(iter(_rows(study_id)))
+    directory = row.directory
+    manifest = read_manifest(directory / "manifest.json")
+    target = CompactTarget(level="tapered", keep_last=6)
+
+    # Reproduce exactly what `_compact_replicate` does before it writes
+    # the manifest -- the crash leaves the files at this point.
+    taper_log(
+        directory / "trajectory.tlog",
+        tapered_generations(
+            manifest.generation,
+            target.keep_last,
+            manifest.params().convergence_burn_in,
+            keep_burn_in=target.keep_burn_in,
+        ),
+        options=log_options(manifest.params().expert),
+    )
+    with pytest.raises(ValueError, match="does not match its manifest"):
+        verify_trajectory_integrity(directory / "trajectory.tlog", manifest)
+
+    report = compact_sweep(study_id, target=target)
+
+    assert row.run_id in report.changed
+    repaired = read_manifest(directory / "manifest.json")
+    verify_trajectory_integrity(directory / "trajectory.tlog", repaired)  # no raise
     # A lighter target still reduces what is already tapered.
     lighter = compact_sweep(study_id)
     assert len(lighter.changed) == 4

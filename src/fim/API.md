@@ -22659,7 +22659,11 @@ Return the permission bits an ordinary new directory gets (usually `0o755`).
 #### [write\_text\_atomically](./paths.py#L167)
 
 ```python
-def write_text_atomically(path: Path, text: str, *, prefix: str) -> None
+def write_text_atomically(path: Path,
+                          text: str,
+                          *,
+                          prefix: str,
+                          durable: bool = False) -> None
 ```
 
 Write `text` to `path` so a reader sees the old file or the new one, never half.
@@ -22677,10 +22681,20 @@ unreadable to anyone but the owner.
 - `text` - The complete new contents.
 - `prefix` - Prefix for the temporary file's name, which shows what was
   being written if a crash leaves one behind.
+- `durable` - Flush the temporary file to disk before the rename, and
+  the parent directory's own entry after it, so the new content
+  survives a crash or power loss right at that instant, not only
+  an ordinary process death (`fim.persistence.run_checkpoint.
+  publish_checkpoint`'s own identical pair of flushes does the
+  same for a checkpoint's files). Costs a disk flush on every
+  call, so it is for a file whose own staleness after power loss
+  is itself the defect worth paying for -- `run.json`'s pointer
+  to the checkpoint `fim object resume` will read, not every
+  caller of this function.
 
 <a id="fim.paths.replace_with_retry"></a>
 
-#### [replace\_with\_retry](./paths.py#L202)
+#### [replace\_with\_retry](./paths.py#L239)
 
 ```python
 def replace_with_retry(source: Path, target: Path) -> None
@@ -22712,13 +22726,13 @@ for the whole window still raises the original error.
 
 <a id="fim.paths.STAGING_LOCK_FILENAME"></a>
 
-#### [STAGING\_LOCK\_FILENAME](./paths.py#L235)
+#### [STAGING\_LOCK\_FILENAME](./paths.py#L272)
 
 The owner lock `atomic_directory` holds inside its staging directory.
 
 <a id="fim.paths.atomic_directory"></a>
 
-#### [atomic\_directory](./paths.py#L240)
+#### [atomic\_directory](./paths.py#L277)
 
 ```python
 @contextlib.contextmanager
@@ -22750,7 +22764,7 @@ so this does not guarantee data durability after power loss.
 
 <a id="fim.paths.default_output_directory"></a>
 
-#### [default\_output\_directory](./paths.py#L316)
+#### [default\_output\_directory](./paths.py#L353)
 
 ```python
 def default_output_directory(results: Path | None = None,
@@ -22790,7 +22804,7 @@ existing name without replacing any run data.
 
 <a id="fim.paths.allocate_output_directory"></a>
 
-#### [allocate\_output\_directory](./paths.py#L355)
+#### [allocate\_output\_directory](./paths.py#L392)
 
 ```python
 def allocate_output_directory(
@@ -22825,7 +22839,7 @@ must remove the reservation after publication or failure.
 
 <a id="fim.paths.project_root"></a>
 
-#### [project\_root](./paths.py#L395)
+#### [project\_root](./paths.py#L432)
 
 ```python
 def project_root() -> Path
@@ -22894,7 +22908,7 @@ more specific overrides — see each one's own docstring.
 
 <a id="fim.paths.results_directory"></a>
 
-#### [results\_directory](./paths.py#L475)
+#### [results\_directory](./paths.py#L512)
 
 ```python
 def results_directory(root: Path | None = None) -> Path
@@ -22928,7 +22942,7 @@ out the full precedence across all three location-specific chains.
 
 <a id="fim.paths.log_directory"></a>
 
-#### [log\_directory](./paths.py#L509)
+#### [log\_directory](./paths.py#L546)
 
 ```python
 def log_directory(root: Path | None = None) -> Path
@@ -22957,7 +22971,7 @@ override`, and `FIM_LOG_DIRECTORY` compose in the identical order
 
 <a id="fim.paths.default_log_file"></a>
 
-#### [default\_log\_file](./paths.py#L538)
+#### [default\_log\_file](./paths.py#L575)
 
 ```python
 def default_log_file(root: Path | None = None) -> Path
@@ -22978,7 +22992,7 @@ Return the default operational log file path.
 
 <a id="fim.paths.fim_index_directory"></a>
 
-#### [fim\_index\_directory](./paths.py#L552)
+#### [fim\_index\_directory](./paths.py#L589)
 
 ```python
 def fim_index_directory(results: Path | None = None) -> Path
@@ -23004,7 +23018,7 @@ where any individual run's own output lives.
 
 <a id="fim.paths.studies_directory"></a>
 
-#### [studies\_directory](./paths.py#L572)
+#### [studies\_directory](./paths.py#L609)
 
 ```python
 def studies_directory(results: Path | None = None) -> Path
@@ -23024,7 +23038,7 @@ Return the directory holding every `StudyManifest` JSON file.
 
 <a id="fim.paths.experiments_directory"></a>
 
-#### [experiments\_directory](./paths.py#L585)
+#### [experiments\_directory](./paths.py#L622)
 
 ```python
 def experiments_directory(results: Path | None = None) -> Path
@@ -25783,7 +25797,7 @@ artifact bytes against the recorded digests.
 
 <a id="fim.persistence.manifest.ArtifactDigest"></a>
 
-## [ArtifactDigest Objects](./persistence/manifest.py#L46)
+## [ArtifactDigest Objects](./persistence/manifest.py#L47)
 
 ```python
 class ArtifactDigest(TypedDict)
@@ -25800,7 +25814,7 @@ previously recorded one has definitely been altered since.
 
 <a id="fim.persistence.manifest.hash_file"></a>
 
-#### [hash\_file](./persistence/manifest.py#L61)
+#### [hash\_file](./persistence/manifest.py#L62)
 
 ```python
 def hash_file(path: Path | str) -> ArtifactDigest
@@ -25828,7 +25842,7 @@ file never requires holding the whole thing in memory simultaneously.
 
 <a id="fim.persistence.manifest.RunManifest"></a>
 
-## [RunManifest Objects](./persistence/manifest.py#L90)
+## [RunManifest Objects](./persistence/manifest.py#L91)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -25862,7 +25876,7 @@ these fields indicates a manifest written before they were added.
 
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/manifest.py#L137)
+#### [\_\_post\_init\_\_](./persistence/manifest.py#L138)
 
 ```python
 def __post_init__() -> None
@@ -25872,7 +25886,7 @@ Validate required manifest identity, terminal, and digest fields.
 
 <a id="fim.persistence.manifest.RunManifest.params"></a>
 
-#### [params](./persistence/manifest.py#L156)
+#### [params](./persistence/manifest.py#L157)
 
 ```python
 def params() -> SimulationParams
@@ -25891,7 +25905,7 @@ config file to still exist.
 
 <a id="fim.persistence.manifest.RunManifest.to_dict"></a>
 
-#### [to\_dict](./persistence/manifest.py#L170)
+#### [to\_dict](./persistence/manifest.py#L171)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -25905,7 +25919,7 @@ writes to `manifest.json`, and that `from_dict` reads back.
 
 <a id="fim.persistence.manifest.RunManifest.from_dict"></a>
 
-#### [from\_dict](./persistence/manifest.py#L212)
+#### [from\_dict](./persistence/manifest.py#L213)
 
 ```python
 @classmethod
@@ -25922,7 +25936,7 @@ and well-formed and reconstructs the equivalent `RunManifest`.
 
 <a id="fim.persistence.manifest.read_manifest"></a>
 
-#### [read\_manifest](./persistence/manifest.py#L266)
+#### [read\_manifest](./persistence/manifest.py#L267)
 
 ```python
 def read_manifest(path: Path | str) -> RunManifest
@@ -25937,13 +25951,13 @@ from_dict`, above, which does the actual field-by-field validation
 
 <a id="fim.persistence.manifest.write_manifest"></a>
 
-#### [write\_manifest](./persistence/manifest.py#L283)
+#### [write\_manifest](./persistence/manifest.py#L284)
 
 ```python
 def write_manifest(path: Path | str, manifest: RunManifest) -> None
 ```
 
-Write a manifest deterministically, replacing any prior file.
+Write a manifest atomically and deterministically, replacing any prior file.
 
 "Deterministically" here means the same fixed formatting
 `fim.persistence.report.write_report` uses (sorted keys, a single
@@ -25952,9 +25966,16 @@ function's own docstring for why this matters. This is the one
 function that actually creates `manifest.json` on disk; everywhere
 else in the project works with the in-memory `RunManifest` object.
 
+Atomic (`paths.write_text_atomically`), not an in-place truncate
+and rewrite: `fim.sweep_compact.compact_run`/`_compact_replicate`
+call this on an already-published, live run directory, so a crash
+mid-write used to leave a truncated `manifest.json` behind instead
+of either the old manifest or the new one (this project's own
+2026-10-25 project review, finding P-4).
+
 <a id="fim.persistence.manifest.verify_trajectory_integrity"></a>
 
-#### [verify\_trajectory\_integrity](./persistence/manifest.py#L307)
+#### [verify\_trajectory\_integrity](./persistence/manifest.py#L308)
 
 ```python
 def verify_trajectory_integrity(trajectory_path: Path,
@@ -25985,7 +26006,7 @@ proceeding with an unverified artifact.
 
 <a id="fim.persistence.manifest.BatchManifest"></a>
 
-## [BatchManifest Objects](./persistence/manifest.py#L356)
+## [BatchManifest Objects](./persistence/manifest.py#L357)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -26000,7 +26021,7 @@ each replicate's `manifest.json`.
 
 <a id="fim.persistence.manifest.BatchManifest.__post_init__"></a>
 
-#### [\_\_post\_init\_\_](./persistence/manifest.py#L373)
+#### [\_\_post\_init\_\_](./persistence/manifest.py#L374)
 
 ```python
 def __post_init__() -> None
@@ -26010,7 +26031,7 @@ Validate required batch-manifest identity and digest fields.
 
 <a id="fim.persistence.manifest.BatchManifest.replicate_count"></a>
 
-#### [replicate\_count](./persistence/manifest.py#L390)
+#### [replicate\_count](./persistence/manifest.py#L391)
 
 ```python
 @property
@@ -26026,7 +26047,7 @@ how many of them actually completed and were published.
 
 <a id="fim.persistence.manifest.BatchManifest.params"></a>
 
-#### [params](./persistence/manifest.py#L400)
+#### [params](./persistence/manifest.py#L401)
 
 ```python
 def params() -> SimulationParams
@@ -26039,7 +26060,7 @@ that method's own docstring for what this reconstructs and why.
 
 <a id="fim.persistence.manifest.BatchManifest.to_dict"></a>
 
-#### [to\_dict](./persistence/manifest.py#L408)
+#### [to\_dict](./persistence/manifest.py#L409)
 
 ```python
 def to_dict() -> dict[str, object]
@@ -26051,7 +26072,7 @@ The batch-level counterpart to `RunManifest.to_dict`, above.
 
 <a id="fim.persistence.manifest.BatchManifest.from_dict"></a>
 
-#### [from\_dict](./persistence/manifest.py#L430)
+#### [from\_dict](./persistence/manifest.py#L431)
 
 ```python
 @classmethod
@@ -26064,7 +26085,7 @@ The batch-level counterpart to `RunManifest.from_dict`, above.
 
 <a id="fim.persistence.manifest.read_batch_manifest"></a>
 
-#### [read\_batch\_manifest](./persistence/manifest.py#L469)
+#### [read\_batch\_manifest](./persistence/manifest.py#L470)
 
 ```python
 def read_batch_manifest(path: Path | str) -> BatchManifest
@@ -26076,15 +26097,17 @@ The batch-level counterpart to `read_manifest`, above.
 
 <a id="fim.persistence.manifest.write_batch_manifest"></a>
 
-#### [write\_batch\_manifest](./persistence/manifest.py#L483)
+#### [write\_batch\_manifest](./persistence/manifest.py#L484)
 
 ```python
 def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None
 ```
 
-Write a batch manifest deterministically, replacing any prior file.
+Write a batch manifest atomically and deterministically.
 
-The batch-level counterpart to `write_manifest`, above.
+Replaces any prior file. The batch-level counterpart to
+`write_manifest`, above, including
+its own reason for writing atomically rather than in place.
 
 <a id="fim.persistence.object_lock"></a>
 
@@ -28443,7 +28466,16 @@ it. Every failure becomes a `ValidationIssue`.
 def write_run_record(directory: Path, record: RunLifecycleRecord) -> None
 ```
 
-Write `run.json` deterministically and atomically.
+Write `run.json` deterministically, atomically, and durably.
+
+`durable=True` (this project's own 2026-10-25 project review,
+finding P-3): `commit_checkpoint` deletes the previous checkpoint
+right after this write, trusting a comment that used to be
+aspirational rather than true. Without the flush this adds, power
+loss in that window could leave `run.json` still naming the
+checkpoint that write just deleted, on a filesystem that had not
+yet persisted the rename -- an unresumable object, contradicting
+"Recovery after a crash or power failure" (`doc/run-lifecycle.md`).
 
 <a id="fim.persistence.run_ownership"></a>
 

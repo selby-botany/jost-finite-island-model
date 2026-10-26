@@ -164,7 +164,9 @@ def default_directory_mode() -> int:
     return 0o777 & ~_UMASK
 
 
-def write_text_atomically(path: Path, text: str, *, prefix: str) -> None:
+def write_text_atomically(
+    path: Path, text: str, *, prefix: str, durable: bool = False
+) -> None:
     """Write `text` to `path` so a reader sees the old file or the new one, never half.
 
     The text goes to a temporary file in the same directory, which is given
@@ -179,6 +181,16 @@ def write_text_atomically(path: Path, text: str, *, prefix: str) -> None:
         text: The complete new contents.
         prefix: Prefix for the temporary file's name, which shows what was
             being written if a crash leaves one behind.
+        durable: Flush the temporary file to disk before the rename, and
+            the parent directory's own entry after it, so the new content
+            survives a crash or power loss right at that instant, not only
+            an ordinary process death (`fim.persistence.run_checkpoint.
+            publish_checkpoint`'s own identical pair of flushes does the
+            same for a checkpoint's files). Costs a disk flush on every
+            call, so it is for a file whose own staleness after power loss
+            is itself the defect worth paying for -- `run.json`'s pointer
+            to the checkpoint `fim object resume` will read, not every
+            caller of this function.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temp_name = tempfile.mkstemp(dir=path.parent, prefix=prefix)
@@ -186,11 +198,36 @@ def write_text_atomically(path: Path, text: str, *, prefix: str) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as temp_file:
             temp_file.write(text)
+            if durable:
+                temp_file.flush()
+                os.fsync(temp_file.fileno())
         temp_path.chmod(default_file_mode())
         replace_with_retry(temp_path, path)
+        if durable:
+            _fsync_directory(path.parent)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Flush a directory entry to disk where the platform allows it.
+
+    A rename is atomic the instant it happens, but the directory entry
+    recording it can itself still sit unflushed in a write-back cache;
+    this is the second flush `write_text_atomically`'s own `durable`
+    makes, after the file's. Best-effort: suppressed rather than
+    raised, since a platform or filesystem that refuses to open a
+    directory for this (older Windows versions, some network mounts)
+    was never going to make the stronger promise `durable` asks for,
+    and that is not a reason to fail the write that already succeeded.
+    """
+    with contextlib.suppress(OSError):
+        descriptor = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 # Bounded, fixed retry for `replace_with_retry`: 10 attempts 20 ms apart,

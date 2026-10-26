@@ -3,6 +3,7 @@ atomic-publish resolution."""
 
 from __future__ import annotations
 
+import os
 import stat
 import sys
 from datetime import UTC, datetime
@@ -504,6 +505,41 @@ def test_write_text_atomically_leaves_no_temp_file_after_a_failure(
 
     assert target.read_text(encoding="utf-8") == "keep me"
     assert list(tmp_path.iterdir()) == [target]
+
+
+def test_write_text_atomically_is_not_durable_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without `durable`, no fsync happens -- the ordinary, cheaper path."""
+    calls: list[int] = []
+    monkeypatch.setattr(os, "fsync", calls.append)
+    target = tmp_path / "index.json"
+
+    paths.write_text_atomically(target, "value", prefix=".test-")
+
+    assert calls == []
+    assert target.read_text(encoding="utf-8") == "value"
+
+
+def test_write_text_atomically_durable_fsyncs_the_file_and_its_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`durable=True` flushes the temp file, then the parent directory's entry.
+
+    Regression test for the 2026-10-25 project review's finding P-3:
+    without this, a pointer written here (`run.json`'s own reference
+    to the latest checkpoint) could still be unflushed when whatever
+    it replaces is deleted right after, so a crash in that window left
+    the pointer potentially naming a checkpoint that was already gone.
+    """
+    calls: list[int] = []
+    monkeypatch.setattr(os, "fsync", calls.append)
+    target = tmp_path / "index.json"
+
+    paths.write_text_atomically(target, "value", prefix=".test-", durable=True)
+
+    assert len(calls) == 2  # the temp file, then the parent directory
+    assert target.read_text(encoding="utf-8") == "value"
 
 
 def test_a_published_run_directory_has_ordinary_permissions(tmp_path: Path) -> None:

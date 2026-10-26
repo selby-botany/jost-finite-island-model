@@ -1859,6 +1859,33 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A saved run's checkpoint pointer could name a checkpoint already
+  deleted.** `commit_checkpoint` deletes a run object's previous checkpoint
+  right after writing `run.json`'s pointer to the new one, on the strength
+  of a comment claiming the pointer was already durable at that point — it
+  was only atomically renamed, never flushed to disk. Power loss in that
+  narrow window could leave `run.json` still naming the just-deleted
+  checkpoint, making the object unresumable. `run.json` is now written
+  with the same flush-then-rename-then-flush-the-directory durability
+  `publish_checkpoint` already gives a checkpoint's own files
+  (`paths.write_text_atomically`'s new `durable` flag). New tests confirm
+  the flush actually happens, by intercepting it, at both layers.
+- **Compacting a sweep could leave a run's manifest truncated, or stale
+  relative to its own trajectory.** `write_manifest`/`write_batch_manifest`
+  wrote `manifest.json` in place (`open("w")` then `json.dump`); a crash
+  mid-write left a truncated file, and `fim sweep compact`'s own
+  `compact_run`/`_compact_replicate` call these on an already-published,
+  live run directory, not a fresh one about to be renamed into place.
+  Both now write through `paths.write_text_atomically`, so a reader always
+  sees the old manifest or the new one, never a half-written one. A
+  narrower, inherent gap remains between tapering a trajectory (its own
+  atomic rename) and writing the manifest that names its new digest: a
+  crash in between still leaves the manifest's recorded digest stale
+  against the already-tapered file, which `verify_trajectory_integrity`
+  then (correctly) refuses. A new regression test confirms the documented
+  recovery holds: re-running compaction on a run left in exactly that
+  state repairs it, rather than raising on a file it did not expect to
+  already be tapered.
 - **`fim sweep resume` recomputed every point `fim sweep compact` had just
   reduced.** A compacted point's run holds less than the sweep's own
   `recording:` block still asked for (compaction never touched it), so
