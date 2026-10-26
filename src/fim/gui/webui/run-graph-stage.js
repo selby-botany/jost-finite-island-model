@@ -108,13 +108,31 @@ function getGraphStageState(tabId = window.fim.workspace.selectedId()) {
         // Run card's own "Graphs (N)" picker still *reports* choosing,
         // since that text reads Settings directly rather than this
         // document's own, now-wrong, `preferredGraphKeys`).
+        //
+        // `cached.graphs`/`cached.columns` are each checked on their own,
+        // not merely `cached` itself: `updateLastRunCardLayoutCache`
+        // merges in only the one key its own caller just changed
+        // (`setVisibleGraphs` writes `graphs`, `setGraphColumns` writes
+        // `columns`), so a cache already created by one of them alone --
+        // reachable before `loadRunCardLayout`'s own fetch has resolved,
+        // the identical race this comment already names -- holds only
+        // that one key. Spreading the other (`[...cached.graphs]` where
+        // `cached` is truthy but `cached.graphs` is `undefined`) crashed
+        // with "Spread syntax requires ...iterable not be null or
+        // undefined" the moment a test (or a fast enough real session)
+        // called `setGraphColumns` before ever choosing graphs and then
+        // opened a second document.
         const cached = window.fim._lastRunCardLayout;
         documentState.graphStage = {
             availability: new Map(),
-            preferredGraphKeys: cached ? [...cached.graphs] : [...DEFAULT_GRAPH_KEYS],
+            preferredGraphKeys:
+                cached && cached.graphs ? [...cached.graphs] : [...DEFAULT_GRAPH_KEYS],
             visibleGraphKeys: [],
             focusedGraphKey: null,
-            graphColumns: cached ? cached.columns : DEFAULT_GRAPH_COLUMNS,
+            graphColumns:
+                cached && cached.columns != null
+                    ? cached.columns
+                    : DEFAULT_GRAPH_COLUMNS,
             zoomedGraphKey: null,
             zoomScale: 1,
             redrawingActiveGraph: false,

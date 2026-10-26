@@ -31263,9 +31263,37 @@ directly here rather than through their own DOM controls, since
 (what this test actually proves) read the identical cache either
 way.
 
+<a id="gui.test_workspace.test_a_new_document_survives_a_cache_with_only_one_run_card_key"></a>
+
+#### [test\_a\_new\_document\_survives\_a\_cache\_with\_only\_one\_run\_card\_key](./gui/test_workspace.py#L721)
+
+```python
+def test_a_new_document_survives_a_cache_with_only_one_run_card_key(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A Run-card cache holding only `columns` (or only `graphs`) is not fatal.
+
+Regression test for a real incident: `updateLastRunCardLayoutCache`
+merges in only the one key its own caller just changed
+(`setGraphColumns` writes `columns` alone, never touching
+`graphs`), so `window.fim._lastRunCardLayout` can legitimately hold
+only one of the two keys -- reachable before `loadRunCardLayout`'s
+own initial fetch has resolved (a real, if narrow, race against a
+fast caller), and exercised deterministically here by clearing the
+cache first rather than relying on winning that race. `getGraphStage
+State`'s own lazy initializer used to assume both keys arrived
+together and crashed opening a second document -- `[...cached.
+graphs]` where `cached` was truthy but `cached.graphs` was
+`undefined` -- with "Spread syntax requires ...iterable not be null
+or undefined", caught live by a CI run of `test_scrubber_and_graph_
+state_restore_for_each_document` (which calls `showGraph`, not
+`setVisibleGraphs`, so never writes `graphs` to the cache at all)
+losing that same race.
+
 <a id="gui.test_workspace.test_completed_view_state_restores_for_each_document"></a>
 
-#### [test\_completed\_view\_state\_restores\_for\_each\_document](./gui/test_workspace.py#L721)
+#### [test\_completed\_view\_state\_restores\_for\_each\_document](./gui/test_workspace.py#L766)
 
 ```python
 def test_completed_view_state_restores_for_each_document(
@@ -31276,7 +31304,7 @@ Completed statistics and trajectory choices survive document switches.
 
 <a id="gui.test_workspace.test_completed_pair_batch_and_saved_note_are_document_local"></a>
 
-#### [test\_completed\_pair\_batch\_and\_saved\_note\_are\_document\_local](./gui/test_workspace.py#L817)
+#### [test\_completed\_pair\_batch\_and\_saved\_note\_are\_document\_local](./gui/test_workspace.py#L862)
 
 ```python
 def test_completed_pair_batch_and_saved_note_are_document_local(
@@ -31287,7 +31315,7 @@ Switching documents restores each batch's pair and saved-result note.
 
 <a id="gui.test_workspace.test_live_progress_is_owned_by_the_addressed_document"></a>
 
-#### [test\_live\_progress\_is\_owned\_by\_the\_addressed\_document](./gui/test_workspace.py#L907)
+#### [test\_live\_progress\_is\_owned\_by\_the\_addressed\_document](./gui/test_workspace.py#L952)
 
 ```python
 def test_live_progress_is_owned_by_the_addressed_document(
@@ -31298,7 +31326,7 @@ Background scalar and batch progress changes only their owner model.
 
 <a id="gui.test_workspace.test_run_controls_title_settings_and_saved_run_are_document_local"></a>
 
-#### [test\_run\_controls\_title\_settings\_and\_saved\_run\_are\_document\_local](./gui/test_workspace.py#L1018)
+#### [test\_run\_controls\_title\_settings\_and\_saved\_run\_are\_document\_local](./gui/test_workspace.py#L1063)
 
 ```python
 def test_run_controls_title_settings_and_saved_run_are_document_local(
@@ -31309,7 +31337,7 @@ Run metadata, overrides, title, and saved-run editing follow tabs.
 
 <a id="gui.test_workspace.test_configure_form_and_composite_editors_restore_per_document"></a>
 
-#### [test\_configure\_form\_and\_composite\_editors\_restore\_per\_document](./gui/test_workspace.py#L1107)
+#### [test\_configure\_form\_and\_composite\_editors\_restore\_per\_document](./gui/test_workspace.py#L1152)
 
 ```python
 def test_configure_form_and_composite_editors_restore_per_document(
@@ -31320,7 +31348,7 @@ Form values and composite-editor modes follow the selected document.
 
 <a id="gui.test_workspace.test_close_other_documents_uses_close_guard_and_keeps_the_chosen_document"></a>
 
-#### [test\_close\_other\_documents\_uses\_close\_guard\_and\_keeps\_the\_chosen\_document](./gui/test_workspace.py#L1220)
+#### [test\_close\_other\_documents\_uses\_close\_guard\_and\_keeps\_the\_chosen\_document](./gui/test_workspace.py#L1265)
 
 ```python
 def test_close_other_documents_uses_close_guard_and_keeps_the_chosen_document(
@@ -31331,7 +31359,7 @@ Bulk close asks about dirty tabs and continues when one is kept.
 
 <a id="gui.test_workspace.test_close_all_results_closes_run_and_sweep_results_only"></a>
 
-#### [test\_close\_all\_results\_closes\_run\_and\_sweep\_results\_only](./gui/test_workspace.py#L1274)
+#### [test\_close\_all\_results\_closes\_run\_and\_sweep\_results\_only](./gui/test_workspace.py#L1319)
 
 ```python
 def test_close_all_results_closes_run_and_sweep_results_only(
@@ -31342,7 +31370,7 @@ Close all results preserves drafts and saved-run documents.
 
 <a id="gui.test_workspace.test_document_context_menu_and_soft_limit_close_actions"></a>
 
-#### [test\_document\_context\_menu\_and\_soft\_limit\_close\_actions](./gui/test_workspace.py#L1305)
+#### [test\_document\_context\_menu\_and\_soft\_limit\_close\_actions](./gui/test_workspace.py#L1350)
 
 ```python
 def test_document_context_menu_and_soft_limit_close_actions(

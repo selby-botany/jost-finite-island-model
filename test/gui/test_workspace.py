@@ -718,6 +718,51 @@ def test_a_new_document_starts_from_the_most_recently_chosen_run_card_layout(
     assert state["scatterStyle"] == "density"
 
 
+def test_a_new_document_survives_a_cache_with_only_one_run_card_key(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A Run-card cache holding only `columns` (or only `graphs`) is not fatal.
+
+    Regression test for a real incident: `updateLastRunCardLayoutCache`
+    merges in only the one key its own caller just changed
+    (`setGraphColumns` writes `columns` alone, never touching
+    `graphs`), so `window.fim._lastRunCardLayout` can legitimately hold
+    only one of the two keys -- reachable before `loadRunCardLayout`'s
+    own initial fetch has resolved (a real, if narrow, race against a
+    fast caller), and exercised deterministically here by clearing the
+    cache first rather than relying on winning that race. `getGraphStage
+    State`'s own lazy initializer used to assume both keys arrived
+    together and crashed opening a second document -- `[...cached.
+    graphs]` where `cached` was truthy but `cached.graphs` was
+    `undefined` -- with "Spread syntax requires ...iterable not be null
+    or undefined", caught live by a CI run of `test_scrubber_and_graph_
+    state_restore_for_each_document` (which calls `showGraph`, not
+    `setVisibleGraphs`, so never writes `graphs` to the cache at all)
+    losing that same race.
+    """
+    state = drive(
+        window,
+        trigger="""window.__fimTestResult = (() => {
+            const workspace = window.fim.workspace;
+            window.fim._lastRunCardLayout = undefined;
+            window.fim.setGraphColumns(3);
+            const second = workspace.createDocument();
+            const graphStage = workspace.get(second).graphStage;
+            return {
+                second,
+                preferredGraphKeys: graphStage.preferredGraphKeys,
+                defaultGraphKeys: DEFAULT_GRAPH_KEYS,
+                graphColumns: graphStage.graphColumns,
+            };
+        })();""",
+        read="window.__fimTestResult",
+    )
+
+    assert state["second"] is not None
+    assert state["graphColumns"] == 3
+    assert state["preferredGraphKeys"] == state["defaultGraphKeys"]
+
+
 def test_completed_view_state_restores_for_each_document(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

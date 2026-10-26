@@ -1859,6 +1859,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Opening a second document could crash the page outright.** A Run-card
+  cache (`window.fim._lastRunCardLayout`) is updated one key at a time —
+  `setGraphColumns` writes `columns` alone, `setVisibleGraphs` writes
+  `graphs` alone — so the cache could legitimately hold only one of the
+  two keys at once, reachable in the narrow window before the page's own
+  initial Settings fetch (`loadRunCardLayout`) has resolved. Opening a
+  second document while the cache was in that state (`columns` set,
+  `graphs` never touched — `showGraph`, unlike `setVisibleGraphs`, does
+  not update the cache at all) threw `TypeError: Spread syntax requires
+  ...iterable not be null or undefined` and left the page dead, caught
+  live by CI (`test_scrubber_and_graph_state_restore_for_each_document`).
+  `getGraphStageState`'s own lazy initializer now checks `graphs` and
+  `columns` independently rather than assuming a truthy cache always
+  carries both, falling each back to its own default on its own. A new
+  deterministic regression test forces exactly this partial-cache state
+  (rather than relying on winning the same race CI happened to lose) and
+  confirms opening a second document no longer crashes.
 - **The desktop Configure form silently dropped four loaded configuration
   settings — and, in between, "Run" stopped running anything at all.**
   `locus_aggregation`, `trajectory_keep_last`, `trajectory_keep_burn_in`,
